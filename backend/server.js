@@ -154,8 +154,42 @@ app.post("/api/settings", async (req, res) => {
   }
 });
 
-const LIDARR_URL = process.env.LIDARR_URL || "http://localhost:8686";
+let lidarrUrl = (process.env.LIDARR_URL || "http://localhost:8686").replace(/\/+$/, '');
+let lidarrBasepathDetected = false;
 const LIDARR_API_KEY = process.env.LIDARR_API_KEY || "";
+
+// Probe Lidarr URL and auto-detect basepath if needed
+const probeLidarrUrl = async () => {
+  if (!LIDARR_API_KEY) return;
+
+  const basePaths = ['', '/lidarr'];
+  const originalUrl = lidarrUrl;
+
+  for (const basePath of basePaths) {
+    const testUrl = basePath ? `${originalUrl}${basePath}` : originalUrl;
+    try {
+      const response = await axios.get(`${testUrl}/api/v1/system/status`, {
+        headers: { 'X-Api-Key': LIDARR_API_KEY },
+        timeout: 5000,
+      });
+
+      // Check if we got JSON with Lidarr's signature
+      if (response.data?.appName === 'Lidarr') {
+        if (basePath) {
+          console.log(`Lidarr basepath auto-detected: ${basePath}`);
+          lidarrUrl = testUrl;
+          lidarrBasepathDetected = true;
+        }
+        return true;
+      }
+    } catch (error) {
+      // Continue to next basepath
+    }
+  }
+
+  console.warn('WARNING: Could not connect to Lidarr at configured URL or with /lidarr basepath');
+  return false;
+};
 
 const MUSICBRAINZ_API = "https://musicbrainz.org/ws/2";
 const LASTFM_API = "https://ws.audioscrobbler.com/2.0/";
@@ -230,7 +264,7 @@ const lidarrRequest = async (endpoint, method = "GET", data = null, silent = fal
   try {
     const config = {
       method,
-      url: `${LIDARR_URL}/api/v1${endpoint}`,
+      url: `${lidarrUrl}/api/v1${endpoint}`,
       headers: {
         "X-Api-Key": LIDARR_API_KEY,
       },
@@ -241,6 +275,17 @@ const lidarrRequest = async (endpoint, method = "GET", data = null, silent = fal
     }
 
     const response = await axios(config);
+
+    // Detect HTML response (indicates wrong URL/basepath)
+    if (typeof response.data === 'string' && response.data.includes('<!doctype html>')) {
+      const error = new Error(
+        'Lidarr returned HTML instead of JSON. ' +
+        'If Lidarr is behind a basepath, add it to LIDARR_URL (e.g., http://host:8686/lidarr)'
+      );
+      error.isBasepathError = true;
+      throw error;
+    }
+
     return response.data;
   } catch (error) {
     if (!silent) {
@@ -267,6 +312,8 @@ app.get("/api/health", async (req, res) => {
     status: "ok",
     lidarrConfigured: !!LIDARR_API_KEY,
     lidarrStatus,
+    lidarrUrl: LIDARR_API_KEY ? lidarrUrl : null,
+    lidarrBasepathDetected,
     lastfmConfigured: !!LASTFM_API_KEY,
     discovery: {
       lastUpdated: discoveryCache?.lastUpdated || null,
@@ -545,7 +592,7 @@ app.get("/api/lidarr/mediacover/:artistId/:filename", async (req, res) => {
     const coverType = filename.split(".")[0];
 
     const imageResponse = await axios.get(
-      `${LIDARR_URL}/api/v1/mediacover/${artistId}/${coverType}`,
+      `${lidarrUrl}/api/v1/mediacover/${artistId}/${coverType}`,
       {
         headers: {
           "X-Api-Key": LIDARR_API_KEY,
@@ -1416,9 +1463,17 @@ app.get("/api/discover/by-tag", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`Lidarr URL: ${LIDARR_URL}`);
+  console.log(`Lidarr URL (configured): ${process.env.LIDARR_URL || "http://localhost:8686"}`);
   console.log(`Lidarr API Key configured: ${!!LIDARR_API_KEY}`);
+
+  // Probe Lidarr URL on startup
+  if (LIDARR_API_KEY) {
+    await probeLidarrUrl();
+    if (lidarrBasepathDetected) {
+      console.log(`Lidarr URL (resolved): ${lidarrUrl}`);
+    }
+  }
 });
 
