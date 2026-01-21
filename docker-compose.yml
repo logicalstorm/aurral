@@ -23,28 +23,8 @@ services:
       - SETUID
       - SETGID
       - CHOWN
-
-  frontend:
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - CHOWN
-      - SETUID
-      - SETGID
-      - NET_BIND_SERVICE
-
-networks:
     networks:
       - aurral-network
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - SETUID
-      - SETGID
 
   frontend:
     image: ghcr.io/lklynet/aurral-frontend:latest
@@ -64,6 +44,7 @@ networks:
       - CHOWN
       - SETUID
       - SETGID
+      - NET_BIND_SERVICE
 
 networks:
   aurral-network:
