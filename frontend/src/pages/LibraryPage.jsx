@@ -19,6 +19,8 @@ function LibraryPage() {
   const [deletingArtist, setDeletingArtist] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("name");
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 24;
   const navigate = useNavigate();
   const { showSuccess, showError } = useToast();
 
@@ -90,6 +92,17 @@ function LibraryPage() {
   };
 
   const filteredArtists = getFilteredAndSortedArtists();
+  const totalPages = Math.ceil(filteredArtists.length / ITEMS_PER_PAGE);
+  
+  const currentArtists = filteredArtists.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  // Reset page when search/sort changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, sortBy]);
 
   const getArtistImage = (artist) => {
     if (artist.images && artist.images.length > 0) {
@@ -148,7 +161,7 @@ function LibraryPage() {
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search artists..."
+              placeholder="Search library..."
               className="input"
             />
           </div>
@@ -207,7 +220,7 @@ function LibraryPage() {
         </div>
       )}
 
-      {!loading && !error && filteredArtists.length > 0 && (
+      {!loading && !error && currentArtists.length > 0 && (
         <div className="animate-slide-up">
           {searchTerm && (
             <div className="mb-4 text-gray-600 dark:text-gray-400">
@@ -216,7 +229,7 @@ function LibraryPage() {
           )}
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredArtists.map((artist) => {
+            {currentArtists.map((artist) => {
               const image = getArtistImage(artist);
               const status = getMonitoringStatus(artist);
 
@@ -322,6 +335,28 @@ function LibraryPage() {
               );
             })}
           </div>
+
+          {totalPages > 1 && (
+            <div className="flex justify-center mt-8 space-x-2">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="btn btn-secondary disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <span className="flex items-center px-4 text-gray-700 dark:text-gray-300">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="btn btn-secondary disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          )}
         </div>
       )}
 
