@@ -26,6 +26,7 @@ services:
     cap_add:
       - SETUID
       - SETGID
+      - CHOWN
 
   frontend:
     build:
@@ -47,7 +48,9 @@ services:
       - CHOWN
       - SETUID
       - SETGID
+      - NET_BIND_SERVICE
 
 networks:
   aurral-network-dev:
     driver: bridge
+
