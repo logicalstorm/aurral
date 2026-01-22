@@ -263,13 +263,72 @@ export const updateDiscoveryCache = async () => {
           }
           
           try {
+            const axios = (await import("axios")).default;
+            const artistName = item.name || item.artistName;
+            
+            if (artistName) {
+              try {
+                const searchResponse = await axios.get(
+                  `https://api.deezer.com/search/artist`,
+                  {
+                    params: { q: artistName, limit: 1 },
+                    timeout: 2000
+                  }
+                ).catch(() => null);
+
+                if (searchResponse?.data?.data?.[0]?.picture_xl || searchResponse?.data?.data?.[0]?.picture_big) {
+                  const artist = searchResponse.data.data[0];
+                  item.image = artist.picture_xl || artist.picture_big;
+                  return;
+                }
+              } catch (e) {
+              }
+            }
+
             const { musicbrainzRequest } = await import("./apiClients.js");
+            
             const artistData = await musicbrainzRequest(`/artist/${item.id}`, {
+              inc: "url-rels",
+            }).catch(() => null);
+
+            if (artistData) {
+              let deezerId = null;
+              if (artistData.relations) {
+                const deezerRelation = artistData.relations.find(
+                  rel => rel.type === "streaming music" && 
+                         (rel.url?.resource?.includes("deezer.com/artist") || 
+                          rel["target-type"] === "url" && rel.url?.resource?.includes("deezer.com/artist"))
+                );
+                if (deezerRelation?.url?.resource) {
+                  const match = deezerRelation.url.resource.match(/deezer\.com\/artist\/(\d+)/);
+                  if (match) {
+                    deezerId = match[1];
+                  }
+                }
+              }
+
+              if (deezerId) {
+                try {
+                  const deezerResponse = await axios.get(
+                    `https://api.deezer.com/artist/${deezerId}`,
+                    { timeout: 2000 }
+                  ).catch(() => null);
+
+                  if (deezerResponse?.data?.picture_xl || deezerResponse?.data?.picture_big) {
+                    item.image = deezerResponse.data.picture_xl || deezerResponse.data.picture_big;
+                    return;
+                  }
+                } catch (e) {
+                }
+              }
+            }
+
+            const artistDataWithRGs = await musicbrainzRequest(`/artist/${item.id}`, {
               inc: "release-groups",
             }).catch(() => null);
 
-            if (artistData?.["release-groups"] && artistData["release-groups"].length > 0) {
-              const releaseGroups = artistData["release-groups"]
+            if (artistDataWithRGs?.["release-groups"] && artistDataWithRGs["release-groups"].length > 0) {
+              const releaseGroups = artistDataWithRGs["release-groups"]
                 .filter(rg => rg["primary-type"] === "Album" || rg["primary-type"] === "EP")
                 .sort((a, b) => {
                   const dateA = a["first-release-date"] || "";
@@ -277,9 +336,8 @@ export const updateDiscoveryCache = async () => {
                   return dateB.localeCompare(dateA);
                 });
 
-              for (const rg of releaseGroups.slice(0, 2)) {
+              for (const rg of releaseGroups.slice(0, 1)) {
                 try {
-                  const axios = (await import("axios")).default;
                   const coverArtJson = await axios.get(
                     `https://coverartarchive.org/release-group/${rg.id}`,
                     {
