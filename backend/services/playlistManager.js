@@ -3,12 +3,12 @@ import { NavidromeClient } from './navidrome.js';
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export class PlaylistManager {
-  constructor(db, lidarrRequest, lastfmRequest) {
+  constructor(db, lidarrRequest, musicbrainzRequest, lastfmRequest) {
     this.db = db;
     this.lidarrRequest = lidarrRequest;
+    this.musicbrainzRequest = musicbrainzRequest;
     this.lastfmRequest = lastfmRequest;
     
-    // Start scheduler
     this.startScheduler();
   }
 
@@ -17,7 +17,6 @@ export class PlaylistManager {
     return new NavidromeClient(s?.url, s?.username, s?.password);
   }
 
-  // Helper to ensure 'flows' structure exists in DB
   initDb() {
     if (!this.db.data.flows) {
       this.db.data.flows = {
@@ -29,7 +28,6 @@ export class PlaylistManager {
         }
       };
     }
-    // Ensure enabled key exists for existing dbs
     if (this.db.data.flows.weekly.enabled === undefined) {
         this.db.data.flows.weekly.enabled = false;
     }
@@ -40,7 +38,6 @@ export class PlaylistManager {
       this.db.data.flows.weekly.enabled = !!enabled;
       await this.db.write();
       
-      // If enabling, run a check immediately
       if (enabled) {
           this.checkSchedule();
       }
@@ -64,13 +61,10 @@ export class PlaylistManager {
   async generateWeeklyFlow() {
     this.initDb();
     
-    // 1. Cleanup old ephemeral items
     await this.cleanupOldItems();
 
-    // 2. Get Recommendations
     const recommendations = await this.fetchRecommendations(20);
 
-    // 3. Process each recommendation
     const tagId = await this.getDiscoveryTagId();
     const newItems = [];
     
@@ -90,7 +84,6 @@ export class PlaylistManager {
       }
     }
 
-    // 4. Update DB
     this.db.data.flows.weekly.items = [
       ...this.db.data.flows.weekly.items,
       ...newItems
@@ -111,9 +104,6 @@ export class PlaylistManager {
 
     for (const item of items) {
       try {
-        // Try to find the song in Navidrome
-        // Note: This relies on Lidarr having downloaded and imported it, 
-        // and Navidrome having scanned it.
         const song = await navidrome.findSong(item.trackName, item.artistName);
         if (song) {
           songIds.push(song.id);
@@ -137,7 +127,6 @@ export class PlaylistManager {
     const keepItems = [];
     const deleteItems = [];
 
-    // Separate items
     for (const item of items) {
       if (!item.isEphemeral) {
         keepItems.push(item);
@@ -146,12 +135,9 @@ export class PlaylistManager {
       }
     }
 
-    // Remove from Lidarr (SAFEGUARDED)
     for (const item of deleteItems) {
       if (item.lidarrArtistId) {
         try {
-          // SAFETY CHECK: Does the artist have the 'aurral-discovery' tag?
-          // If the user removed the tag in Lidarr, they claimed ownership -> DO NOT DELETE.
           const artist = await this.lidarrRequest(`/artist/${item.lidarrArtistId}`);
           const tagId = await this.getDiscoveryTagId();
           const hasTag = artist.tags && artist.tags.includes(tagId);
@@ -163,7 +149,6 @@ export class PlaylistManager {
             console.log(`Skipping deletion of ${item.artistName}: Tag missing, assumed kept by user.`);
           }
         } catch (e) {
-           // If 404, it's already gone, so just ignore
            if (e.response?.status !== 404) {
                console.error(`Failed to remove ${item.artistName} from Lidarr:`, e.message);
            }
@@ -176,17 +161,8 @@ export class PlaylistManager {
   }
 
   async fetchRecommendations(limit = 20) {
-    // Strategy:
-    // 1. Get existing artists from Lidarr to base recommendations on.
-    //    We prioritize recently added or highly rated if possible, but random sample is good for variety.
-    // 2. Use Last.fm or MusicBrainz to find similar artists.
-    // 3. Filter out what is already in Lidarr.
-    
-    // Use the existing discovery cache logic which does exactly this (Lidarr -> Similar)
     const discovery = this.db.data.discovery;
     
-    // If cache is empty or stale, we might rely on it being refreshed by the main server loop.
-    // But let's check if we have recommendations ready.
     if (!discovery?.recommendations || discovery.recommendations.length === 0) {
         console.warn("No discovery recommendations available. Waiting for cache refresh.");
         return [];
@@ -199,16 +175,13 @@ export class PlaylistManager {
 
     const selected = [];
     
-    // Shuffle candidates to not always pick the top scored ones if the cache is static
     const shuffled = [...candidates].sort(() => 0.5 - Math.random());
     
     for (const rec of shuffled) {
       if (selected.length >= limit) break;
       if (existingIds.has(rec.id)) continue;
-      if (processedIds.has(rec.id)) continue; // Don't recommend again immediately
+      if (processedIds.has(rec.id)) continue;
 
-      // We need a specific TRACK for the playlist.
-      // Fetch top track for this artist.
       let topTrack = null;
       try {
         if (this.lastfmRequest) {
@@ -221,11 +194,6 @@ export class PlaylistManager {
         }
         
         if (!topTrack) {
-            // Fallback: If no top track info (no Last.fm), we can still add the artist.
-            // But for the playlist feature we really want a track name to verify the download against.
-            // Without a track name, we can't ensure the "single" or correct album is grabbed easily.
-            // However, we can try to grab the "most popular release" later.
-            // Let's skip for now to ensure quality.
             continue; 
         }
 
@@ -235,7 +203,6 @@ export class PlaylistManager {
             trackName: topTrack.name
         });
         
-        // Add to history
         processedIds.add(rec.id);
 
       } catch (e) {
@@ -243,19 +210,16 @@ export class PlaylistManager {
       }
     }
 
-    // Update history (keep last 200)
     this.db.data.flows.weekly.history = [...processedIds].slice(-200);
     
     return selected;
   }
 
   async addToLidarr(item, tagId) {
-    // 1. Add Artist (Monitored: false, so we don't grab everything)
     const rootFolders = await this.lidarrRequest('/rootfolder');
     const qualityProfiles = await this.lidarrRequest('/qualityprofile');
     const metadataProfiles = await this.lidarrRequest('/metadataprofile');
     
-    // Use tag if provided
     const tags = tagId ? [tagId] : [];
 
     const artistPayload = {
@@ -264,7 +228,7 @@ export class PlaylistManager {
         qualityProfileId: qualityProfiles[0].id,
         metadataProfileId: metadataProfiles[0].id,
         rootFolderPath: rootFolders[0].path,
-        monitored: false, // Important! We will manually select the album
+        monitored: false,
         albumFolder: true,
         tags: tags,
         addOptions: { searchForMissingAlbums: false }
@@ -272,25 +236,18 @@ export class PlaylistManager {
 
     const artist = await this.lidarrRequest('/artist', 'POST', artistPayload);
     
-    // Step 2: Find the album for the track
-    // HACK: We will queue a background check to monitor the album once metadata is there.
     this.queueAlbumSelection(artist.id, item.trackName);
 
     return {
         lidarrArtistId: artist.id,
-        // lidarrAlbumId: null // Unknown yet
     };
   }
   
   async queueAlbumSelection(artistId, trackName) {
-      // This would ideally be a job queue. 
-      // We will just set a timeout for demonstration purposes or check on next "tick"
-      // Realistically, Lidarr needs 10-30s to fetch metadata.
       setTimeout(async () => {
           try {
               const albums = await this.lidarrRequest(`/album?artistId=${artistId}`);
               
-              // Let's look for a Single with the track name
               const match = albums.find(a => 
                   a.title.toLowerCase() === trackName.toLowerCase()
               );
@@ -298,21 +255,17 @@ export class PlaylistManager {
               let albumToMonitor = match;
               
               if (!albumToMonitor) {
-                  // Fallback: Pick the most popular/rated album or just the first one
-                  // that is a Studio Album.
                   albumToMonitor = albums.find(a => a.albumType === 'Album') || albums[0];
               }
               
               if (albumToMonitor) {
                   console.log(`Monitoring Album ${albumToMonitor.title} for Artist ${artistId}`);
                   
-                  // Monitor the album
                   await this.lidarrRequest(`/album/monitor`, 'PUT', {
                       albumIds: [albumToMonitor.id],
                       monitored: true
                   });
                   
-                  // Trigger search
                   await this.lidarrRequest('/command', 'POST', {
                       name: 'AlbumSearch',
                       albumIds: [albumToMonitor.id]
@@ -321,10 +274,9 @@ export class PlaylistManager {
           } catch (e) {
               console.error(`Background album selection failed: ${e.message}`);
           }
-      }, 45000); // Wait 45s for metadata
+      }, 45000);
   }
 
-  // User Actions
   async keepItem(mbid) {
     this.initDb();
     const items = this.db.data.flows.weekly.items;
@@ -337,13 +289,12 @@ export class PlaylistManager {
           try {
              const artist = await this.lidarrRequest(`/artist/${item.lidarrArtistId}`);
              
-             // Remove the discovery tag so we don't delete it later
              const tagId = await this.getDiscoveryTagId();
              if (artist.tags && artist.tags.includes(tagId)) {
                  artist.tags = artist.tags.filter(t => t !== tagId);
              }
              
-             artist.monitored = true; // Start monitoring permanently
+             artist.monitored = true;
              await this.lidarrRequest(`/artist/${item.lidarrArtistId}`, 'PUT', artist);
           } catch(e) { console.error('Failed to update Lidarr artist monitor status'); }
       }
@@ -365,8 +316,6 @@ export class PlaylistManager {
       
       if (item.isEphemeral && item.lidarrArtistId) {
           try {
-              // Ensure we only delete if tagged (extra safety, though explicit user action overrides)
-              // Actually for explicit "remove", we just do it.
               await this.lidarrRequest(`/artist/${item.lidarrArtistId}?deleteFiles=true`, 'DELETE');
           } catch(e) { console.error('Failed to delete from Lidarr'); }
       }
@@ -375,14 +324,11 @@ export class PlaylistManager {
     return false;
   }
 
-  // Automation
   startScheduler() {
-      // Check every hour
       setInterval(() => {
           this.checkSchedule();
       }, 60 * 60 * 1000); 
 
-      // Initial check after 1 min
       setTimeout(() => this.checkSchedule(), 60000);
   }
 
@@ -390,17 +336,13 @@ export class PlaylistManager {
       this.initDb();
       if (!this.db.data.flows.weekly.enabled) return;
 
-      // 1. Sync to Navidrome (Hourly)
       console.log('Running scheduled Navidrome sync...');
       await this.syncToNavidrome();
 
-      // 2. Weekly Rotation (Mondays)
       const now = new Date();
-      // 1 = Monday
       if (now.getDay() === 1) { 
           const lastUpdate = this.db.data.flows.weekly.updatedAt;
           if (!lastUpdate) {
-               // Never run before? Run it.
                console.log('Generating initial weekly flow...');
                await this.generateWeeklyFlow();
           } else {
@@ -409,7 +351,6 @@ export class PlaylistManager {
                                 lastDate.getMonth() === now.getMonth() &&
                                 lastDate.getFullYear() === now.getFullYear();
               
-              // If not updated today, update it
               if (!isSameDay) {
                   console.log('Rotating weekly flow...');
                   await this.generateWeeklyFlow();

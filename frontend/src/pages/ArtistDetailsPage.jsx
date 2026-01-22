@@ -117,17 +117,14 @@ function ArtistDetailsPage() {
           const lookup = await lookupArtistInLidarr(mbid);
           setExistsInLidarr(lookup.exists);
         if (lookup.exists && lookup.artist) {
-            // Fetch full artist details to get addOptions including monitor setting
             try {
               const fullArtist = await getLidarrArtist(lookup.artist.id);
               setLidarrArtist(fullArtist);
             } catch (err) {
-              // Fallback to the lookup artist if full fetch fails
               console.error("Failed to fetch full artist details:", err);
               setLidarrArtist(lookup.artist);
             }
             
-            // Fetch metadata profiles to display the profile name
             try {
               const profiles = await getLidarrMetadataProfiles();
               setMetadataProfiles(profiles);
@@ -185,12 +182,10 @@ function ArtistDetailsPage() {
       setExistsInLidarr(true);
       showSuccess(`Successfully added ${artist.name} to Lidarr!`);
       
-      // Refresh artist data
       setTimeout(async () => {
         try {
           const lookup = await lookupArtistInLidarr(mbid);
           if (lookup.exists && lookup.artist) {
-            // Fetch full artist details to get addOptions including monitor setting
             try {
               const fullArtist = await getLidarrArtist(lookup.artist.id);
               setLidarrArtist(fullArtist);
@@ -201,7 +196,6 @@ function ArtistDetailsPage() {
             const albums = await getLidarrAlbums(lookup.artist.id);
             setLidarrAlbums(albums);
             
-            // Fetch metadata profiles
             try {
               const profiles = await getLidarrMetadataProfiles();
               setMetadataProfiles(profiles);
@@ -228,7 +222,6 @@ function ArtistDetailsPage() {
       await refreshLidarrArtist(lidarrArtist.id);
       showSuccess("Artist refresh initiated. This may take a few moments.");
       
-      // Refresh albums after a delay
       setTimeout(async () => {
         try {
           const albums = await getLidarrAlbums(lidarrArtist.id);
@@ -299,7 +292,6 @@ function ArtistDetailsPage() {
       };
       await updateLidarrArtist(lidarrArtist.id, updatedArtist);
       
-      // Update local state
       setLidarrArtist(updatedArtist);
       setShowMonitorOptionMenu(false);
       setShowRemoveDropdown(false);
@@ -324,15 +316,12 @@ function ArtistDetailsPage() {
   };
 
   const getCurrentMonitorOption = () => {
-    // Check multiple possible locations for monitor option
     if (lidarrArtist?.addOptions?.monitor) {
       return lidarrArtist.addOptions.monitor;
     }
-    // Lidarr might store it as monitorNewItems
     if (lidarrArtist?.monitorNewItems) {
       return lidarrArtist.monitorNewItems;
     }
-    // Default to none if not found
     return "none";
   };
 
@@ -349,7 +338,6 @@ function ArtistDetailsPage() {
   };
 
   const handleAddSuccess = async (addedArtist) => {
-    // This is for similar artists modal
     setArtistToAdd(null);
     showSuccess(`Successfully added ${addedArtist.name} to Lidarr!`);
     
@@ -440,7 +428,6 @@ function ArtistDetailsPage() {
       setRemovingAlbum(albumId);
       await deleteAlbumFromLidarr(lidarrAlbum.id, deleteAlbumFiles);
 
-      // Remove album from local state
       setLidarrAlbums((prev) =>
         prev.filter((a) => a.id !== lidarrAlbum.id),
       );
@@ -465,12 +452,10 @@ function ArtistDetailsPage() {
     
     const allowedTypes = appSettings.metadataProfileReleaseTypes;
     
-    // Check primary type
     if (!allowedTypes.includes(releaseGroup["primary-type"])) {
       return false;
     }
     
-    // Check secondary types - all must be in allowed list
     if (releaseGroup["secondary-types"] && releaseGroup["secondary-types"].length > 0) {
       return releaseGroup["secondary-types"].every(secondaryType => 
         allowedTypes.includes(secondaryType)
@@ -483,7 +468,6 @@ function ArtistDetailsPage() {
   const handleMonitorAll = async () => {
     if (!lidarrAlbums.length) return;
 
-    // Filter albums to only include those currently visible/matching release types if filtered
     const visibleReleaseGroups = artist["release-groups"].filter(matchesMetadataProfile);
     
     const visibleMbids = new Set(visibleReleaseGroups.map(rg => rg.id));
@@ -774,7 +758,7 @@ function ArtistDetailsPage() {
                                   <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
                                     Monitor Option
                                   </span>
-                                  <div className="w-16" /> {/* Spacer for centering */}
+                                  <div className="w-16" />
                                 </div>
                                 {[
                                   { value: "none", label: "None (Artist Only)" },
@@ -885,37 +869,37 @@ function ArtistDetailsPage() {
             </div>
           </div>
         </div>
-      </div>
 
-      {((artist.tags && artist.tags.length > 0) ||
-        (artist.genres && artist.genres.length > 0)) && (
-        <div className="card mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4 flex items-center">
-            <Tag className="w-6 h-6 mr-2" />
-            Tags & Genres
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {artist.genres &&
-              artist.genres.map((genre, idx) => (
-                <span
-                  key={`genre-${idx}`}
-                  className="badge badge-primary text-sm px-3 py-1"
-                >
-                  {genre.name}
-                </span>
-              ))}
-            {artist.tags &&
-              artist.tags.map((tag, idx) => (
-                <span
-                  key={`tag-${idx}`}
-                  className="badge bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm px-3 py-1"
-                >
-                  {tag.name}
-                </span>
-              ))}
+        {((artist.tags && artist.tags.length > 0) ||
+          (artist.genres && artist.genres.length > 0)) && (
+          <div className="mt-3 pt-3">
+            <div className="flex flex-wrap gap-2">
+              {artist.genres &&
+                artist.genres.map((genre, idx) => (
+                  <button
+                    key={`genre-${idx}`}
+                    onClick={() => navigate(`/search?q=${encodeURIComponent(genre.name)}&type=tag`)}
+                    className="badge badge-primary text-sm px-3 py-1 hover:opacity-80 cursor-pointer transition-opacity"
+                    title={`View artists with genre: ${genre.name}`}
+                  >
+                    {genre.name}
+                  </button>
+                ))}
+              {artist.tags &&
+                artist.tags.map((tag, idx) => (
+                  <button
+                    key={`tag-${idx}`}
+                    onClick={() => navigate(`/search?q=${encodeURIComponent(tag.name)}&type=tag`)}
+                    className="badge bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm px-3 py-1 hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer transition-colors"
+                    title={`View artists with tag: ${tag.name}`}
+                  >
+                    {tag.name}
+                  </button>
+                ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {artist["release-groups"] && artist["release-groups"].length > 0 && (
         <div className="card">
@@ -1169,10 +1153,8 @@ function ArtistDetailsPage() {
                     </div>
                   </div>
 
-                  {/* Expanded Album Content */}
                   {isExpanded && status?.lidarrId && (
                     <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-4 bg-gray-100 dark:bg-gray-900/50">
-                      {/* Album Info */}
                       {albumInfo && (
                         <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
                           <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center">
@@ -1224,7 +1206,6 @@ function ArtistDetailsPage() {
                         </div>
                       )}
 
-                      {/* Tracks List */}
                       <div>
                         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
                           Tracks
@@ -1274,29 +1255,6 @@ function ArtistDetailsPage() {
                 </div>
                 );
               })}
-          </div>
-        </div>
-      )}
-
-      {artist.aliases && artist.aliases.length > 0 && (
-        <div className="card mt-8">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">
-            Also Known As
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-            {artist.aliases.slice(0, 12).map((alias, idx) => (
-              <div
-                key={idx}
-                className="text-gray-700 dark:text-gray-300 p-2 bg-gray-50 dark:bg-gray-800 rounded"
-              >
-                {alias.name}
-                {alias.locale && (
-                  <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
-                    ({alias.locale})
-                  </span>
-                )}
-              </div>
-            ))}
           </div>
         </div>
       )}
@@ -1428,7 +1386,6 @@ function ArtistDetailsPage() {
         </div>
       )}
 
-      {/* Delete Album Confirmation Modal */}
       {showDeleteAlbumModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">

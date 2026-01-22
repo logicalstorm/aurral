@@ -71,7 +71,6 @@ function SettingsPage() {
       ]);
       setHealth(healthData);
       
-      // Ensure we have release types even if DB is older
       const updatedSettings = {
           ...savedSettings,
           metadataProfileReleaseTypes: savedSettings.metadataProfileReleaseTypes || allReleaseTypes
@@ -180,7 +179,6 @@ function SettingsPage() {
 
     setOptimizing(true);
     try {
-      // First save the current selection to app settings
       await updateAppSettings(settings);
 
       const result = await applyLidarrOptimizations({

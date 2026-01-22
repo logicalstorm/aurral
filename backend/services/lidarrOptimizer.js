@@ -1,15 +1,6 @@
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 export const applyOptimalLidarrSettings = async (lidarrRequest, options = {}) => {
   try {
     console.log("Starting Lidarr optimization process...", options);
-
-    // --- 1. Custom Formats ---
     const customFormats = [
       {
         name: "Preferred Groups",
@@ -116,15 +107,11 @@ export const applyOptimalLidarrSettings = async (lidarrRequest, options = {}) =>
       cfMap[cf.name] = cfId;
     }
 
-    // --- 2. Quality Profile "Aurral - HQ" ---
     console.log("Configuring 'Aurral - HQ' Profile...");
     const qualityProfiles = await lidarrRequest("/qualityprofile");
     let profile = qualityProfiles.find((p) => p.name === "Aurral - HQ") || qualityProfiles.find((p) => p.name === "High Quality");
     
-    // We need to fetch the schema to understand the structure of a new profile
     const profileSchema = await lidarrRequest("/qualityprofile/schema");
-    
-    // Map required formats to scores as per guide
     const formatScores = [
       { formatId: cfMap["Preferred Groups"], score: 100 },
       { formatId: cfMap["Lossless"], score: 1 },
@@ -134,10 +121,8 @@ export const applyOptimalLidarrSettings = async (lidarrRequest, options = {}) =>
 
     ];
 
-    // Helper to find quality and return the top-level item and the quality ID
     const findAndEnableQuality = (items, name) => {
         for (const item of items) {
-            // Check standalone
             if (item.quality?.name?.toLowerCase().replace(/[- ]/g, '') === name.toLowerCase().replace(/[- ]/g, '')) {
                 item.allowed = true;
                 return { 
@@ -145,7 +130,6 @@ export const applyOptimalLidarrSettings = async (lidarrRequest, options = {}) =>
                   qualityId: item.quality.id 
                 };
             }
-            // Check groups
             if (item.items && item.items.length > 0) {
                 for (const subItem of item.items) {
                     if (subItem.quality?.name?.toLowerCase().replace(/[- ]/g, '') === name.toLowerCase().replace(/[- ]/g, '')) {
@@ -164,7 +148,6 @@ export const applyOptimalLidarrSettings = async (lidarrRequest, options = {}) =>
     
     let itemsToConfigure = profile ? profile.items : profileSchema.items;
 
-    // Reset all
     const resetAllowed = (items) => {
         items.forEach(item => {
             item.allowed = false;
@@ -173,11 +156,9 @@ export const applyOptimalLidarrSettings = async (lidarrRequest, options = {}) =>
     };
     resetAllowed(itemsToConfigure);
 
-    // Enable FLAC and MP3 320
     const flacResult = findAndEnableQuality(itemsToConfigure, "FLAC");
     const mp3320Result = findAndEnableQuality(itemsToConfigure, "MP3 320") || findAndEnableQuality(itemsToConfigure, "MP3 320kbps");
 
-    // Reorder items to bring allowed ones to the top
     itemsToConfigure.sort((a, b) => {
         if (a.allowed && !b.allowed) return -1;
         if (!a.allowed && b.allowed) return 1;
@@ -197,14 +178,11 @@ export const applyOptimalLidarrSettings = async (lidarrRequest, options = {}) =>
       minFormatScore: 1 
     };
     
-    // Ensure we preserve ID if updating
     if (profile) {
       profileData.id = profile.id;
       await lidarrRequest(`/qualityprofile/${profile.id}`, "PUT", profileData);
       console.log(`Updated '${profileData.name}' profile.`);
     } else {
-        // Create new
-       // Remove ID from schema if present to avoid conflicts on creation
        delete profileData.id; 
 
 
@@ -214,7 +192,6 @@ export const applyOptimalLidarrSettings = async (lidarrRequest, options = {}) =>
        console.log("Created 'Aurral - HQ' profile.");
     }
 
-    // --- 3. Naming Config ---
     console.log("Updating Naming Configuration...");
     const namingConfig = await lidarrRequest("/config/naming");
     await lidarrRequest("/config/naming", "PUT", {
@@ -226,7 +203,6 @@ export const applyOptimalLidarrSettings = async (lidarrRequest, options = {}) =>
       artistFolderFormat: "{Artist Name}",
     });
 
-    // --- 4. Metadata Profile ---
     let standardProfileId = null;
     if (options.enableMetadataProfile && options.releaseTypes) {
       console.log("Updating Metadata Profile 'Aurral - Standard'...");
@@ -244,7 +220,6 @@ export const applyOptimalLidarrSettings = async (lidarrRequest, options = {}) =>
                   }
               });
               
-              // Ensure name is set to Aurral - Standard even if it was "Standard" before
               standardProfile.name = "Aurral - Standard";
 
               await lidarrRequest(`/metadataprofile/${standardProfile.id}`, "PUT", standardProfile);
@@ -254,7 +229,6 @@ export const applyOptimalLidarrSettings = async (lidarrRequest, options = {}) =>
       }
     } else {
       console.log("Skipping Metadata Profile update (not requested or no types provided).");
-      // Still try to find the ID if it exists for default setting purposes
       const metadataProfiles = await lidarrRequest("/metadataprofile");
       const standardProfile = metadataProfiles.find((p) => p.name === "Aurral - Standard") || metadataProfiles.find((p) => p.name === "Standard");
       if (standardProfile) standardProfileId = standardProfile.id;
