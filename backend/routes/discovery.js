@@ -23,29 +23,33 @@ router.post("/refresh", (req, res) => {
 });
 
 router.post("/clear", async (req, res) => {
-  db.data = {
-    discovery: {
-      recommendations: [],
-      globalTop: [],
-      basedOn: [],
-      topTags: [],
-      topGenres: [],
-      lastUpdated: null,
-    },
-    images: {},
-    requests: db.data.requests || [],
+  const { clearImages = true } = req.body;
+  
+  db.data.discovery = {
+    recommendations: [],
+    globalTop: [],
+    basedOn: [],
+    topTags: [],
+    topGenres: [],
+    lastUpdated: null,
   };
+  
+  if (clearImages) {
+    db.data.images = {};
+  }
+  
   await db.write();
   const discoveryCache = getDiscoveryCache();
   Object.assign(discoveryCache, {
     ...db.data.discovery,
     isUpdating: false,
   });
-  res.json({ message: "Discovery cache and image cache cleared" });
+  res.json({ message: clearImages ? "Discovery cache and image cache cleared" : "Discovery cache cleared" });
 });
 
 router.get("/", (req, res) => {
   const discoveryCache = getDiscoveryCache();
+  res.set("Cache-Control", "public, max-age=300");
   res.json({
     recommendations: discoveryCache.recommendations,
     globalTop: discoveryCache.globalTop,

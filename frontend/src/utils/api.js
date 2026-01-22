@@ -64,6 +64,11 @@ export const getArtistCover = async (mbid) => {
   return response.data;
 };
 
+export const getReleaseGroupCover = async (mbid) => {
+  const response = await api.get(`/artists/release-group/${mbid}/cover`);
+  return response.data;
+};
+
 export const getSimilarArtistsForArtist = async (mbid, limit = 20) => {
   const response = await api.get(`/artists/${mbid}/similar`, {
     params: { limit },

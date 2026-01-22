@@ -151,10 +151,11 @@ function DiscoverPage() {
         className="relative aspect-square mb-3 overflow-hidden rounded-xl bg-gray-200 dark:bg-gray-800 cursor-pointer shadow-sm group-hover:shadow-md transition-all"
       >
         <ArtistImage
-          src={artist.image}
+          src={artist.image || artist.imageUrl}
           mbid={artist.id}
           alt={artist.name}
           className="h-full w-full group-hover:scale-105 transition-transform duration-300"
+          showLoading={false}
         />
 
         {status && (

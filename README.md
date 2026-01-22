@@ -59,60 +59,37 @@ Aurral makes expanding your music collection effortless.
 
 ## Quick Start
 
-The fastest way to get Aurral running is using Docker Compose.
+### Docker Compose (Recommended)
 
-### 1. Setup Environment
 ```bash
 git clone https://github.com/lklynet/aurral.git
 cd aurral
-cp .env.example .env
-```
-
-### 2. Configure
-Edit the `.env` file with your Lidarr details:
-```env
-LIDARR_URL=http://192.168.1.50:8686
-LIDARR_API_KEY=your_api_key_here
-CONTACT_EMAIL=your@email.com
-```
-
-### 3. Launch
-```bash
 docker-compose up -d
 ```
-This will pull the latest pre-built images from the GitHub Container Registry (GHCR). Access the UI at `http://localhost:3000`.
 
----
+Access the UI at `http://localhost:3001`. Configuration is done through the web interface - no environment variables needed!
 
-## Installation
+### Manual Installation
 
-### Prerequisites
-- **Lidarr:** A running instance with API access.
-- **Node.js:** v18 or later (for manual installs).
-- **Docker:** Recommended for production.
-
-### Manual Setup (Development)
-
-#### Docker (Recommended for Dev)
-If you want to build and run from source:
 ```bash
-docker-compose -f docker-compose.dev.yml up --build
-```
-
-#### Local Node.js
-```bash
-cd backend
-npm install
-# Create/edit .env with Lidarr credentials
+git clone https://github.com/lklynet/aurral.git
+cd aurral
+npm run install:all
+npm run build
 npm start
 ```
 
-#### Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
+Access at `http://localhost:3001`.
+
+---
+
+## Configuration
+
+All configuration is done through the web interface at `/settings`. No environment variables are required, but you can optionally set:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | Server port | `3001` |
 
 ---
 
@@ -127,25 +104,12 @@ Aurral features a discovery system that helps you find new music based on what y
 
 ---
 
-## Configuration
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `LIDARR_URL` | Full URL to your Lidarr instance | `http://localhost:8686` |
-| `LIDARR_API_KEY` | Your Lidarr API Key | `REQUIRED` |
-| `CONTACT_EMAIL` | Required for MusicBrainz API User-Agent | `REQUIRED` |
-| `PORT` | Backend API port | `3001` |
-| `LASTFM_API_KEY`| (Optional) For enhanced artist images & discovery | `null` |
-| `AUTH_PASSWORD` | (Optional) Password for basic authentication protection. Comma-separated for multiple passwords. | `null` |
-
----
-
 ## Troubleshooting
 
-- **401 Unauthorized:** Check that your `LIDARR_API_KEY` is correct in the `.env` file.
-- **Connection Refused:** Ensure the `LIDARR_URL` is reachable from the container/server running Aurral.
+- **401 Unauthorized:** Configure your Lidarr API key in the Settings page.
+- **Connection Refused:** Ensure Lidarr is reachable from the server running Aurral.
 - **Slow Discovery:** The MusicBrainz API is rate-limited to 1 request per second. Aurral respects this limit, so discovery may take 10-20 seconds depending on library size.
-- **Missing Images:** Provide a `LASTFM_API_KEY` in your configuration for significantly better artist imagery coverage.
+- **Missing Images:** Configure a Last.fm API key in Settings for better artist imagery coverage.
 
 ---
 

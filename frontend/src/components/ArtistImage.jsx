@@ -4,7 +4,7 @@ import { getArtistCover } from "../utils/api";
 
 const queue = [];
 let active = 0;
-const MAX_CONCURRENT = 3;
+const MAX_CONCURRENT = 4;
 
 const processQueue = () => {
   if (active >= MAX_CONCURRENT || queue.length === 0) return;
@@ -42,29 +42,56 @@ const ArtistImage = ({
   const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
-    setCurrentSrc(src);
-    setHasError(false);
-    setIsLoading(true);
+    setCurrentSrc(src || null);
+    if (src) {
+      setHasError(false);
+      setIsLoading(true);
+    }
   }, [src, mbid]);
 
   useEffect(() => {
-    if (!src && mbid) {
+    if (src) {
+      setIsLoading(true);
+      setHasError(false);
+    } else if (mbid) {
       fetchBackendCover();
-    } else if (!src && !mbid) {
+    } else {
       setIsLoading(false);
       setHasError(true);
     }
   }, [src, mbid]);
 
   const fetchBackendCover = async () => {
-    try {
-      if (!currentSrc) setIsLoading(true);
+    if (!mbid) {
+      setHasError(true);
+      setIsLoading(false);
+      return;
+    }
 
-      const data = await scheduleFetch(() => getArtistCover(mbid));
-      if (data.images && data.images.length > 0) {
+    if (currentSrc) return;
+
+    try {
+      setIsLoading(true);
+      setHasError(false);
+
+      const data = await scheduleFetch(() => 
+        Promise.race([
+          getArtistCover(mbid),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("Timeout")), 10000)
+          )
+        ])
+      );
+      if (data?.images && data.images.length > 0) {
         const front = data.images.find((img) => img.front) || data.images[0];
         const url = front.image;
-        setCurrentSrc(url);
+        if (url) {
+          setCurrentSrc(url);
+          setHasError(false);
+        } else {
+          setHasError(true);
+          setIsLoading(false);
+        }
       } else {
         setHasError(true);
         setIsLoading(false);
@@ -80,13 +107,8 @@ const ArtistImage = ({
   };
 
   const handleError = () => {
-    if (currentSrc === src && mbid) {
-      setCurrentSrc(null);
-      fetchBackendCover();
-    } else {
-      setHasError(true);
-      setIsLoading(false);
-    }
+    setHasError(true);
+    setIsLoading(false);
   };
 
   if (hasError) {
@@ -99,25 +121,42 @@ const ArtistImage = ({
     );
   }
 
+  if (!currentSrc && !isLoading && !hasError) {
+    return (
+      <div
+        className={`relative overflow-hidden bg-gray-200 dark:bg-gray-800 ${className}`}
+      >
+        {showLoading && (
+          <div className="absolute inset-0 flex items-center justify-center z-10 bg-gray-200 dark:bg-gray-800">
+            <Loader className="w-6 h-6 text-primary-500 animate-spin" />
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       className={`relative overflow-hidden bg-gray-200 dark:bg-gray-800 ${className}`}
     >
       {isLoading && showLoading && (
         <div className="absolute inset-0 flex items-center justify-center z-10 bg-gray-200 dark:bg-gray-800">
-          <Loader className="w-8 h-8 text-primary-500 animate-spin" />
+          <Loader className="w-6 h-6 text-primary-500 animate-spin" />
         </div>
       )}
       {currentSrc && (
         <img
           src={currentSrc}
           alt={alt || "Artist cover"}
-          className={`w-full h-full object-cover transition-opacity duration-500 ${
+          className={`w-full h-full object-cover transition-opacity duration-100 ${
             isLoading ? "opacity-0" : "opacity-100"
           }`}
           onLoad={handleLoad}
           onError={handleError}
           loading="lazy"
+          decoding="async"
+          fetchpriority={showLoading ? "high" : "auto"}
+          style={{ contentVisibility: "auto" }}
         />
       )}
     </div>
