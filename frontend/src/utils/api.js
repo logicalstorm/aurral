@@ -103,6 +103,13 @@ export const deleteArtistFromLidarr = async (id, deleteFiles = false) => {
   return response.data;
 };
 
+export const deleteAlbumFromLidarr = async (id, deleteFiles = false) => {
+  const response = await api.delete(`/lidarr/albums/${id}`, {
+    params: { deleteFiles },
+  });
+  return response.data;
+};
+
 export const getLidarrRootFolders = async () => {
   const response = await api.get("/lidarr/rootfolder");
   return response.data;
@@ -125,13 +132,38 @@ export const getLidarrAlbums = async (artistId) => {
   return response.data;
 };
 
+export const getLidarrTracks = async (albumId) => {
+  const response = await api.get("/lidarr/tracks", {
+    params: { albumId },
+  });
+  return response.data;
+};
+
 export const updateLidarrAlbum = async (id, data) => {
   const response = await api.put(`/lidarr/albums/${id}`, data);
   return response.data;
 };
 
+export const updateLidarrAlbumsMonitor = async (albumIds, monitored) => {
+  const response = await api.put("/lidarr/albums/monitor", {
+    albumIds,
+    monitored,
+  });
+  return response.data;
+};
+
+export const updateLidarrArtist = async (id, data) => {
+  const response = await api.put(`/lidarr/artists/${id}`, data);
+  return response.data;
+};
+
 export const searchLidarrAlbum = async (albumIds) => {
   const response = await api.post("/lidarr/command/albumsearch", { albumIds });
+  return response.data;
+};
+
+export const refreshLidarrArtist = async (artistId) => {
+  const response = await api.post("/lidarr/command/refreshartist", { artistId });
   return response.data;
 };
 
@@ -200,6 +232,41 @@ export const getAppSettings = async () => {
 
 export const updateAppSettings = async (settings) => {
   const response = await api.post("/settings", settings);
+  return response.data;
+};
+
+export const applyLidarrOptimizations = async (options) => {
+  const response = await api.post("/lidarr/optimize", options);
+  return response.data;
+};
+
+export const getWeeklyFlow = async () => {
+  const response = await api.get("/playlists/weekly");
+  return response.data;
+};
+
+export const toggleWeeklyFlow = async (enabled) => {
+  const response = await api.post("/api/playlists/weekly/toggle", { enabled });
+  return response.data;
+};
+
+export const generateWeeklyFlow = async () => {
+  const response = await api.post("/playlists/weekly/generate");
+  return response.data;
+};
+
+export const syncWeeklyFlowToNavidrome = async () => {
+  const response = await api.post("/playlists/weekly/sync");
+  return response.data;
+};
+
+export const keepFlowItem = async (mbid) => {
+  const response = await api.post(`/playlists/items/${mbid}/keep`);
+  return response.data;
+};
+
+export const removeFlowItem = async (mbid) => {
+  const response = await api.delete(`/playlists/items/${mbid}`);
   return response.data;
 };
 

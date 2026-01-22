@@ -10,6 +10,7 @@ import {
   X,
   History,
   LogOut,
+  Play
 } from "lucide-react";
 import { useTheme } from "../contexts/ThemeContext";
 import { useAuth } from "../contexts/AuthContext";
@@ -32,6 +33,7 @@ function Sidebar({
 
   const navItems = [
     { path: "/discover", label: "Discover", icon: Sparkles },
+    { path: "/flow", label: "Weekly Flow", icon: Play },
     { path: "/library", label: "Library", icon: Library },
     { path: "/requests", label: "Requests", icon: History },
     { path: "/settings", label: "Settings", icon: Settings },

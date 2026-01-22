@@ -21,7 +21,7 @@ function AddArtistModal({ artist, onClose, onSuccess }) {
   const [selectedQualityProfile, setSelectedQualityProfile] = useState("");
   const [selectedMetadataProfile, setSelectedMetadataProfile] = useState("");
   const [monitored, setMonitored] = useState(true);
-  const [monitorOption, setMonitorOption] = useState("all");
+  const [monitorOption, setMonitorOption] = useState("none");
   const [searchForMissingAlbums, setSearchForMissingAlbums] = useState(false);
   const [albumFolders, setAlbumFolders] = useState(true);
 

@@ -11,16 +11,32 @@ import {
   MapPin,
   Tag,
   Sparkles,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
+  Trash2,
+  Radio,
+  FileMusic,
 } from "lucide-react";
 import {
   getArtistDetails,
   getArtistCover,
   lookupArtistInLidarr,
   getLidarrAlbums,
+  getLidarrTracks,
   updateLidarrAlbum,
+  updateLidarrAlbumsMonitor,
   searchLidarrAlbum,
   getSimilarArtistsForArtist,
   lookupArtistsInLidarrBatch,
+  getAppSettings,
+  refreshLidarrArtist,
+  getLidarrMetadataProfiles,
+  addArtistToLidarr,
+  deleteArtistFromLidarr,
+  deleteAlbumFromLidarr,
+  updateLidarrArtist,
+  getLidarrArtist,
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
 import AddArtistModal from "../components/AddArtistModal";
@@ -38,9 +54,29 @@ function ArtistDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [existsInLidarr, setExistsInLidarr] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
   const [artistToAdd, setArtistToAdd] = useState(null);
   const [requestingAlbum, setRequestingAlbum] = useState(null);
+  const [removingAlbum, setRemovingAlbum] = useState(null);
+  const [albumDropdownOpen, setAlbumDropdownOpen] = useState(null);
+  const [showDeleteAlbumModal, setShowDeleteAlbumModal] = useState(null);
+  const [deleteAlbumFiles, setDeleteAlbumFiles] = useState(false);
+  const [processingBulk, setProcessingBulk] = useState(false);
+  const [expandedAlbum, setExpandedAlbum] = useState(null);
+  const [albumTracks, setAlbumTracks] = useState({});
+  const [loadingTracks, setLoadingTracks] = useState({});
+  const [filterByMetadata, setFilterByMetadata] = useState(true);
+  const [appSettings, setAppSettings] = useState(null);
+  const [refreshingArtist, setRefreshingArtist] = useState(false);
+  const [metadataProfiles, setMetadataProfiles] = useState([]);
+  const [addingArtist, setAddingArtist] = useState(false);
+  const [showMonitorDropdown, setShowMonitorDropdown] = useState(false);
+  const [monitorOption, setMonitorOption] = useState("none");
+  const [showRemoveDropdown, setShowRemoveDropdown] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteFiles, setDeleteFiles] = useState(false);
+  const [deletingArtist, setDeletingArtist] = useState(false);
+  const [showMonitorOptionMenu, setShowMonitorOptionMenu] = useState(false);
+  const [updatingMonitor, setUpdatingMonitor] = useState(false);
   const { showSuccess, showError } = useToast();
 
   useEffect(() => {
@@ -49,8 +85,12 @@ function ArtistDetailsPage() {
       setError(null);
 
       try {
-        const artistData = await getArtistDetails(mbid);
+        const [artistData, settings] = await Promise.all([
+          getArtistDetails(mbid),
+          getAppSettings()
+        ]);
         setArtist(artistData);
+        setAppSettings(settings);
 
         try {
           const similarData = await getSimilarArtistsForArtist(mbid);
@@ -72,11 +112,29 @@ function ArtistDetailsPage() {
         } catch (err) {
           console.log("No cover art available");
         }
-                      try {
-        const lookup = await lookupArtistInLidarr(mbid);
+        
+        try {
+          const lookup = await lookupArtistInLidarr(mbid);
           setExistsInLidarr(lookup.exists);
         if (lookup.exists && lookup.artist) {
-            setLidarrArtist(lookup.artist);
+            // Fetch full artist details to get addOptions including monitor setting
+            try {
+              const fullArtist = await getLidarrArtist(lookup.artist.id);
+              setLidarrArtist(fullArtist);
+            } catch (err) {
+              // Fallback to the lookup artist if full fetch fails
+              console.error("Failed to fetch full artist details:", err);
+              setLidarrArtist(lookup.artist);
+            }
+            
+            // Fetch metadata profiles to display the profile name
+            try {
+              const profiles = await getLidarrMetadataProfiles();
+              setMetadataProfiles(profiles);
+            } catch (err) {
+              console.error("Failed to fetch metadata profiles:", err);
+            }
+            
             setTimeout(async () => {
     try {
                 const albums = await getLidarrAlbums(lookup.artist.id);
@@ -107,35 +165,197 @@ function ArtistDetailsPage() {
 
     fetchArtistData();
   }, [mbid]);
-  const handleAddArtistClick = () => {
-    setShowAddModal(true);
+  const handleAddArtist = async () => {
+    if (!artist || !appSettings) return;
+    
+    setAddingArtist(true);
+    try {
+      await addArtistToLidarr({
+        foreignArtistId: artist.id,
+        artistName: artist.name,
+        qualityProfileId: appSettings.qualityProfileId,
+        metadataProfileId: appSettings.metadataProfileId,
+        rootFolderPath: appSettings.rootFolderPath,
+        monitored: appSettings.monitored ?? false,
+        monitor: monitorOption,
+        searchForMissingAlbums: appSettings.searchForMissingAlbums ?? false,
+        albumFolders: appSettings.albumFolders ?? true,
+      });
+
+      setExistsInLidarr(true);
+      showSuccess(`Successfully added ${artist.name} to Lidarr!`);
+      
+      // Refresh artist data
+      setTimeout(async () => {
+        try {
+          const lookup = await lookupArtistInLidarr(mbid);
+          if (lookup.exists && lookup.artist) {
+            // Fetch full artist details to get addOptions including monitor setting
+            try {
+              const fullArtist = await getLidarrArtist(lookup.artist.id);
+              setLidarrArtist(fullArtist);
+            } catch (err) {
+              console.error("Failed to fetch full artist details:", err);
+              setLidarrArtist(lookup.artist);
+            }
+            const albums = await getLidarrAlbums(lookup.artist.id);
+            setLidarrAlbums(albums);
+            
+            // Fetch metadata profiles
+            try {
+              const profiles = await getLidarrMetadataProfiles();
+              setMetadataProfiles(profiles);
+            } catch (err) {
+              console.error("Failed to fetch metadata profiles:", err);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to refresh Lidarr data", err);
+        }
+      }, 1500);
+    } catch (err) {
+      showError(`Failed to add artist: ${err.response?.data?.message || err.message}`);
+    } finally {
+      setAddingArtist(false);
+    }
+  };
+
+  const handleRefreshArtist = async () => {
+    if (!lidarrArtist?.id) return;
+    
+    setRefreshingArtist(true);
+    try {
+      await refreshLidarrArtist(lidarrArtist.id);
+      showSuccess("Artist refresh initiated. This may take a few moments.");
+      
+      // Refresh albums after a delay
+      setTimeout(async () => {
+        try {
+          const albums = await getLidarrAlbums(lidarrArtist.id);
+          setLidarrAlbums(albums);
+        } catch (err) {
+          console.error("Failed to refresh albums:", err);
+        }
+      }, 2000);
+    } catch (err) {
+      showError(`Failed to refresh artist: ${err.message}`);
+    } finally {
+      setRefreshingArtist(false);
+    }
+  };
+
+  const getMetadataProfileName = () => {
+    if (!lidarrArtist?.metadataProfileId || !metadataProfiles.length) return null;
+    const profile = metadataProfiles.find(p => p.id === lidarrArtist.metadataProfileId);
+    return profile?.name || null;
+  };
+
+  const handleDeleteClick = () => {
+    setShowDeleteModal(true);
+    setDeleteFiles(false);
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteModal(false);
+    setDeleteFiles(false);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!lidarrArtist?.id) return;
+
+    setDeletingArtist(true);
+    try {
+      await deleteArtistFromLidarr(lidarrArtist.id, deleteFiles);
+      setExistsInLidarr(false);
+      setLidarrArtist(null);
+      setLidarrAlbums([]);
+      showSuccess(
+        `Successfully removed ${artist?.name || 'artist'} from Lidarr${
+          deleteFiles ? " and deleted files" : ""
+        }`,
+      );
+      setShowDeleteModal(false);
+      setDeleteFiles(false);
+    } catch (err) {
+      showError(
+        `Failed to delete artist: ${err.response?.data?.message || err.message}`,
+      );
+    } finally {
+      setDeletingArtist(false);
+    }
+  };
+
+  const handleUpdateMonitorOption = async (newMonitorOption) => {
+    if (!lidarrArtist?.id) return;
+
+    setUpdatingMonitor(true);
+    try {
+      const updatedArtist = {
+        ...lidarrArtist,
+        addOptions: {
+          ...lidarrArtist.addOptions,
+          monitor: newMonitorOption,
+        },
+      };
+      await updateLidarrArtist(lidarrArtist.id, updatedArtist);
+      
+      // Update local state
+      setLidarrArtist(updatedArtist);
+      setShowMonitorOptionMenu(false);
+      setShowRemoveDropdown(false);
+      
+      const monitorLabels = {
+        none: "None (Artist Only)",
+        all: "All Albums",
+        future: "Future Albums",
+        missing: "Missing Albums",
+        latest: "Latest Album",
+        first: "First Album",
+      };
+      
+      showSuccess(`Monitor option updated to: ${monitorLabels[newMonitorOption]}`);
+    } catch (err) {
+      showError(
+        `Failed to update monitor option: ${err.response?.data?.message || err.message}`,
+      );
+    } finally {
+      setUpdatingMonitor(false);
+    }
+  };
+
+  const getCurrentMonitorOption = () => {
+    // Check multiple possible locations for monitor option
+    if (lidarrArtist?.addOptions?.monitor) {
+      return lidarrArtist.addOptions.monitor;
+    }
+    // Lidarr might store it as monitorNewItems
+    if (lidarrArtist?.monitorNewItems) {
+      return lidarrArtist.monitorNewItems;
+    }
+    // Default to none if not found
+    return "none";
+  };
+
+  const getMonitorOptionLabel = (option) => {
+    const labels = {
+      none: "None (Artist Only)",
+      all: "All Albums",
+      future: "Future Albums",
+      missing: "Missing Albums",
+      latest: "Latest Album",
+      first: "First Album",
+    };
+    return labels[option] || "None (Artist Only)";
   };
 
   const handleAddSuccess = async (addedArtist) => {
-    if (!artistToAdd) {
-      setExistsInLidarr(true);
-    }
-
-    setShowAddModal(false);
+    // This is for similar artists modal
     setArtistToAdd(null);
     showSuccess(`Successfully added ${addedArtist.name} to Lidarr!`);
     
     if (addedArtist.id) {
       setExistingSimilar((prev) => ({ ...prev, [addedArtist.id]: true }));
     }
-
-    setTimeout(async () => {
-        try {
-        const lookup = await lookupArtistInLidarr(mbid);
-        if (lookup.exists && lookup.artist) {
-          setLidarrArtist(lookup.artist);
-          const albums = await getLidarrAlbums(lookup.artist.id);
-          setLidarrAlbums(albums);
-        }
-        } catch (err) {
-        console.error("Failed to refresh Lidarr data", err);
-        }
-    }, 1500);
   };
 
   const handleRequestAlbum = async (albumId, title) => {
@@ -143,7 +363,7 @@ function ArtistDetailsPage() {
     try {
       const lidarrAlbum = lidarrAlbums.find(
         (a) => a.foreignAlbumId === albumId,
-    );
+      );
 
       if (!lidarrAlbum) {
         throw new Error("Album not found in Lidarr");
@@ -162,11 +382,135 @@ function ArtistDetailsPage() {
         ),
     );
 
-      showSuccess(`Requested album: ${title}`);
+      showSuccess(`Added album: ${title}`);
     } catch (err) {
-      showError(`Failed to request album: ${err.message}`);
+      showError(`Failed to add album: ${err.message}`);
     } finally {
       setRequestingAlbum(null);
+    }
+  };
+
+  const handleAlbumClick = async (releaseGroupId, lidarrAlbumId) => {
+    if (expandedAlbum === releaseGroupId) {
+      setExpandedAlbum(null);
+      return;
+    }
+
+    setExpandedAlbum(releaseGroupId);
+
+    if (lidarrAlbumId && !albumTracks[lidarrAlbumId]) {
+      setLoadingTracks((prev) => ({ ...prev, [lidarrAlbumId]: true }));
+      try {
+        const tracks = await getLidarrTracks(lidarrAlbumId);
+        setAlbumTracks((prev) => ({ ...prev, [lidarrAlbumId]: tracks }));
+      } catch (err) {
+        console.error("Failed to fetch tracks:", err);
+        showError("Failed to fetch track list");
+      } finally {
+        setLoadingTracks((prev) => ({ ...prev, [lidarrAlbumId]: false }));
+      }
+    }
+  };
+
+  const handleDeleteAlbumClick = (albumId, title) => {
+    setShowDeleteAlbumModal({ id: albumId, title });
+    setDeleteAlbumFiles(false);
+    setAlbumDropdownOpen(null);
+  };
+
+  const handleDeleteAlbumCancel = () => {
+    setShowDeleteAlbumModal(null);
+    setDeleteAlbumFiles(false);
+  };
+
+  const handleDeleteAlbumConfirm = async () => {
+    if (!showDeleteAlbumModal) return;
+
+    const { id: albumId, title } = showDeleteAlbumModal;
+    
+    try {
+      const lidarrAlbum = lidarrAlbums.find(
+        (a) => a.foreignAlbumId === albumId,
+      );
+
+      if (!lidarrAlbum) {
+        throw new Error("Album not found in Lidarr");
+      }
+
+      setRemovingAlbum(albumId);
+      await deleteAlbumFromLidarr(lidarrAlbum.id, deleteAlbumFiles);
+
+      // Remove album from local state
+      setLidarrAlbums((prev) =>
+        prev.filter((a) => a.id !== lidarrAlbum.id),
+      );
+
+      showSuccess(
+        `Successfully deleted ${title}${deleteAlbumFiles ? " and files" : ""}`,
+      );
+      setShowDeleteAlbumModal(null);
+      setDeleteAlbumFiles(false);
+    } catch (err) {
+      showError(
+        `Failed to delete album: ${err.response?.data?.message || err.message}`,
+      );
+    } finally {
+      setRemovingAlbum(null);
+    }
+  };
+
+  // Helper function to check if a release group matches metadata profile filters
+  const matchesMetadataProfile = (releaseGroup) => {
+    if (!filterByMetadata || !appSettings?.metadataProfileReleaseTypes) return true;
+    
+    const allowedTypes = appSettings.metadataProfileReleaseTypes;
+    
+    // Check primary type
+    if (!allowedTypes.includes(releaseGroup["primary-type"])) {
+      return false;
+    }
+    
+    // Check secondary types - all must be in allowed list
+    if (releaseGroup["secondary-types"] && releaseGroup["secondary-types"].length > 0) {
+      return releaseGroup["secondary-types"].every(secondaryType => 
+        allowedTypes.includes(secondaryType)
+      );
+    }
+    
+    return true;
+  };
+
+  const handleMonitorAll = async () => {
+    if (!lidarrAlbums.length) return;
+
+    // Filter albums to only include those currently visible/matching release types if filtered
+    const visibleReleaseGroups = artist["release-groups"].filter(matchesMetadataProfile);
+    
+    const visibleMbids = new Set(visibleReleaseGroups.map(rg => rg.id));
+
+    const unmonitored = lidarrAlbums.filter((a) => !a.monitored && visibleMbids.has(a.foreignAlbumId));
+
+    if (unmonitored.length === 0) {
+      showSuccess("No new unmonitored albums in current view!");
+      return;
+    }
+
+    setProcessingBulk(true);
+    try {
+      const ids = unmonitored.map((a) => a.id);
+      await updateLidarrAlbumsMonitor(ids, true);
+      await searchLidarrAlbum(ids);
+
+      setLidarrAlbums((prev) =>
+        prev.map((a) => (ids.includes(a.id) ? { ...a, monitored: true } : a)),
+      );
+
+      showSuccess(`Added ${ids.length} albums to monitor`);
+    } catch (err) {
+      console.error(err);
+      showError("Failed to add albums");
+    } finally {
+      setProcessingBulk(false);
     }
   };
 
@@ -179,19 +523,17 @@ function ArtistDetailsPage() {
       return null;
     }
 
-    if (album.monitored) {
-      if (album.statistics?.percentOfTracks === 100) {
-        return { status: "available", label: "Available" };
-      }
-      return { status: "processing", label: "Processing" };
-    }
+    const isAvailable = album.monitored && album.statistics?.percentOfTracks === 100;
+    const isProcessing = album.monitored && !isAvailable;
 
-    return { status: "unmonitored", label: "Not Monitored" };
+    return { 
+      status: isAvailable ? "available" : (isProcessing ? "processing" : "unmonitored"), 
+      label: isAvailable ? "Available" : (isProcessing ? "Processing" : "Not Monitored"),
+      lidarrId: album.id,
+      albumInfo: album
+    };
   };
 
-  const handleModalClose = () => {
-    setShowAddModal(false);
-  };
 
   const formatLifeSpan = (lifeSpan) => {
     if (!lifeSpan) return null;
@@ -271,7 +613,21 @@ function ArtistDetailsPage() {
         Back
       </button>
 
-      <div className="card mb-8">
+      <div className="card mb-8 relative">
+        {existsInLidarr && (
+          <button
+            onClick={handleRefreshArtist}
+            disabled={refreshingArtist}
+            className="absolute top-4 right-4 btn btn-secondary btn-sm p-2"
+            title="Refresh & Scan Artist"
+          >
+            {refreshingArtist ? (
+              <Loader className="w-5 h-5 animate-spin" />
+            ) : (
+              <RefreshCw className="w-5 h-5" />
+            )}
+          </button>
+        )}
         <div className="flex flex-col md:flex-row gap-6">
           <div className="w-full md:w-64 h-64 flex-shrink-0 bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden">
             {coverImage ? (
@@ -336,32 +692,195 @@ function ArtistDetailsPage() {
                   <span>{artist.area.name}</span>
                 </div>
               )}
+
+              {existsInLidarr && getMetadataProfileName() && (
+                <div className="flex items-center text-gray-700 dark:text-gray-300">
+                  <Tag className="w-5 h-5 mr-2 text-gray-400 dark:text-gray-500" />
+                  <span className="font-medium mr-2">Metadata Profile:</span>
+                  <span>{getMetadataProfileName()}</span>
+                </div>
+              )}
+
+              {existsInLidarr && (
+                <div className="flex items-center text-gray-700 dark:text-gray-300">
+                  <Radio className="w-5 h-5 mr-2 text-gray-400 dark:text-gray-500" />
+                  <span className="font-medium mr-2">Monitoring:</span>
+                  <span>{getMonitorOptionLabel(getCurrentMonitorOption())}</span>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-wrap gap-3">
               {existsInLidarr ? (
-                <button className="btn btn-success inline-flex items-center cursor-default">
-                  <CheckCircle className="w-5 h-5 mr-2" />
-                  In Your Library
-                </button>
+                <>
+                  <div className="relative inline-flex">
+                    <button className="btn btn-success inline-flex items-center rounded-r-none border-r border-green-400 dark:border-green-600">
+                      <CheckCircle className="w-5 h-5 mr-2" />
+                      In Your Library
+                    </button>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowRemoveDropdown(!showRemoveDropdown)}
+                        className="btn btn-success inline-flex items-center rounded-l-none px-2 border-l border-green-400 dark:border-green-600 hover:bg-green-600"
+                        title="Options"
+                      >
+                        <ChevronDown className={`w-4 h-7 transition-transform ${showRemoveDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showRemoveDropdown && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setShowRemoveDropdown(false)}
+                          />
+                          <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-20 py-1">
+                            {!showMonitorOptionMenu ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowMonitorOptionMenu(true);
+                                  }}
+                                  disabled={updatingMonitor}
+                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between"
+                                >
+                                  <span>Change Monitor Option</span>
+                                  <ChevronDown className="w-4 h-4" />
+                                </button>
+                                <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleDeleteClick();
+                                    setShowRemoveDropdown(false);
+                                  }}
+                                  className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center"
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Remove from Lidarr
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowMonitorOptionMenu(false)}
+                                    className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 flex items-center"
+                                  >
+                                    <ArrowLeft className="w-4 h-4 mr-1" />
+                                    Back
+                                  </button>
+                                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                    Monitor Option
+                                  </span>
+                                  <div className="w-16" /> {/* Spacer for centering */}
+                                </div>
+                                {[
+                                  { value: "none", label: "None (Artist Only)" },
+                                  { value: "all", label: "All Albums" },
+                                  { value: "future", label: "Future Albums" },
+                                  { value: "missing", label: "Missing Albums" },
+                                  { value: "latest", label: "Latest Album" },
+                                  { value: "first", label: "First Album" },
+                                ].map((option) => (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => handleUpdateMonitorOption(option.value)}
+                                    disabled={updatingMonitor}
+                                    className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
+                                      getCurrentMonitorOption() === option.value
+                                        ? "bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 font-medium"
+                                        : "text-gray-700 dark:text-gray-300"
+                                    }`}
+                                  >
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </>
               ) : (
-                <button
-                  onClick={handleAddArtistClick}
-                  className="btn btn-primary inline-flex items-center"
-                >
-                  <Plus className="w-5 h-5 mr-2" />
-                  Add to Lidarr
-                </button>
+                <div className="relative inline-flex">
+                  <button
+                    onClick={handleAddArtist}
+                    disabled={addingArtist || !appSettings}
+                    className="btn btn-primary inline-flex items-center rounded-r-none border-r border-primary-400 dark:border-primary-600"
+                  >
+                    {addingArtist ? (
+                      <Loader className="w-5 h-5 mr-2 animate-spin" />
+                    ) : (
+                      <Plus className="w-5 h-5 mr-2" />
+                    )}
+                    Add to Lidarr
+                  </button>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowMonitorDropdown(!showMonitorDropdown)}
+                      disabled={addingArtist || !appSettings}
+                      className="btn btn-primary inline-flex items-center rounded-l-none px-2 border-l border-primary-400 dark:border-primary-600 hover:bg-primary-600"
+                      title="Monitor Options"
+                    >
+                      <ChevronDown className={`w-4 h-7 transition-transform ${showMonitorDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showMonitorDropdown && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-10"
+                          onClick={() => setShowMonitorDropdown(false)}
+                        />
+                        <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-20 py-1">
+                          <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                              Monitor Option
+                            </p>
+                          </div>
+                          {[
+                            { value: "none", label: "None (Artist Only)" },
+                            { value: "all", label: "All Albums" },
+                            { value: "future", label: "Future Albums" },
+                            { value: "missing", label: "Missing Albums" },
+                            { value: "latest", label: "Latest Album" },
+                            { value: "first", label: "First Album" },
+                          ].map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => {
+                                setMonitorOption(option.value);
+                                setShowMonitorDropdown(false);
+                              }}
+                              className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
+                                monitorOption === option.value
+                                  ? "bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 font-medium"
+                                  : "text-gray-700 dark:text-gray-300"
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
               )}
 
               <a
-                href={`https://musicbrainz.org/artist/${mbid}`}
+                href={`https://www.last.fm/music/${encodeURIComponent(artist.name)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn btn-secondary inline-flex items-center"
               >
                 <ExternalLink className="w-5 h-5 mr-2" />
-                View on MusicBrainz
+                View on Last.fm
               </a>
             </div>
           </div>
@@ -400,11 +919,49 @@ function ArtistDetailsPage() {
 
       {artist["release-groups"] && artist["release-groups"].length > 0 && (
         <div className="card">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">
-            Albums & Releases ({artist["release-groups"].length})
-          </h2>
-          <div className="space-y-3 max-h-96 overflow-y-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              Albums & Releases ({
+                artist["release-groups"].filter(matchesMetadataProfile).length
+              })
+            </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center space-x-2 bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors mr-2">
+                <input
+                  type="checkbox"
+                  checked={filterByMetadata}
+                  onChange={(e) => setFilterByMetadata(e.target.checked)}
+                  className="form-checkbox h-4 w-4 text-primary-600 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700"
+                />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                  Filter by Metadata Profile
+                </span>
+              </label>
+
+              {existsInLidarr && (
+                <button
+                  onClick={handleMonitorAll}
+                  disabled={processingBulk}
+                  className="btn btn-outline-primary btn-sm flex items-center justify-center"
+                >
+                  {processingBulk ? (
+                    <>
+                      <Loader className="w-4 h-4 animate-spin mr-2" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add All Filtered
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
             {artist["release-groups"]
+              .filter(matchesMetadataProfile)
               .sort((a, b) => {
                 const dateA = a["first-release-date"] || "";
                 const dateB = b["first-release-date"] || "";
@@ -412,62 +969,191 @@ function ArtistDetailsPage() {
               })
               .map((releaseGroup) => {
                 const status = getAlbumStatus(releaseGroup.id);
+                const isExpanded = expandedAlbum === releaseGroup.id;
+                const lidarrAlbumId = status?.lidarrId;
+                const tracks = lidarrAlbumId ? albumTracks[lidarrAlbumId] : null;
+                const isLoadingTracks = lidarrAlbumId ? loadingTracks[lidarrAlbumId] : false;
+                const albumInfo = status?.albumInfo;
+                
                 return (
                   <div
                     key={releaseGroup.id}
-                    className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    className="bg-gray-50 dark:bg-gray-800/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors overflow-hidden"
                   >
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 dark:text-gray-100">
-                        {releaseGroup.title}
-                      </h3>
-                      <div className="flex items-center gap-3 mt-1 text-sm text-gray-600 dark:text-gray-400">
-                        {releaseGroup["first-release-date"] && (
-                          <span>
-                            {releaseGroup["first-release-date"].split("-")[0]}
-                          </span>
+                    <div
+                      className="flex items-center justify-between p-4 cursor-pointer"
+                      onClick={() => status?.lidarrId && handleAlbumClick(releaseGroup.id, status.lidarrId)}
+                    >
+                      <div className="flex-1 flex items-center gap-3">
+                        {status?.lidarrId && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAlbumClick(releaseGroup.id, status.lidarrId);
+                            }}
+                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                          >
+                            {isExpanded ? (
+                              <ChevronUp className="w-4 h-4" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4" />
+                            )}
+                          </button>
                         )}
-                        {releaseGroup["primary-type"] && (
-                          <span className="badge badge-primary text-xs">
-                            {releaseGroup["primary-type"]}
-                          </span>
-                        )}
-                        {releaseGroup["secondary-types"] &&
-                          releaseGroup["secondary-types"].length > 0 && (
-                            <span className="badge bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs">
-                              {releaseGroup["secondary-types"].join(", ")}
-                            </span>
-                          )}
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                            {releaseGroup.title}
+                          </h3>
+                          <div className="flex items-center gap-3 mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            {releaseGroup["first-release-date"] && (
+                              <span>
+                                {releaseGroup["first-release-date"].split("-")[0]}
+                              </span>
+                            )}
+                            {releaseGroup["primary-type"] && (
+                              <span className="badge badge-primary text-xs">
+                                {releaseGroup["primary-type"]}
+                              </span>
+                            )}
+                            {releaseGroup["secondary-types"] &&
+                              releaseGroup["secondary-types"].length > 0 && (
+                                <span className="badge bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs">
+                                  {releaseGroup["secondary-types"].join(", ")}
+                                </span>
+                              )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
 
                     <div className="flex items-center gap-2">
                       {status ? (
                         status.status === "available" ? (
-                          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 cursor-default">
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            Available
-                          </span>
+                          <>
+                            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 cursor-default">
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              Available
+                            </span>
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAlbumDropdownOpen(albumDropdownOpen === releaseGroup.id ? null : releaseGroup.id);
+                                }}
+                                className="btn btn-secondary btn-sm p-2"
+                                title="Options"
+                              >
+                                <ChevronDown className={`w-4 h-4 transition-transform ${albumDropdownOpen === releaseGroup.id ? 'rotate-180' : ''}`} />
+                              </button>
+                              {albumDropdownOpen === releaseGroup.id && (
+                                <>
+                                  <div
+                                    className="fixed inset-0 z-10"
+                                    onClick={() => setAlbumDropdownOpen(null)}
+                                  />
+                                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-20 py-1">
+                                    <a
+                                      href={`https://www.last.fm/music/${encodeURIComponent(artist.name)}/${encodeURIComponent(releaseGroup.title)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center"
+                                      onClick={() => setAlbumDropdownOpen(null)}
+                                    >
+                                      <ExternalLink className="w-4 h-4 mr-2" />
+                                      View on Last.fm
+                                    </a>
+                                    <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteAlbumClick(
+                                          releaseGroup.id,
+                                          releaseGroup.title,
+                                        );
+                                      }}
+                                      className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center"
+                                    >
+                                      <Trash2 className="w-4 h-4 mr-2" />
+                                      Delete Album
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </>
                         ) : status.status === "processing" ? (
-                          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 cursor-default">
-                            <Loader className="w-3.5 h-3.5 animate-spin" />
-                            Processing
-                          </span>
+                          <>
+                            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 cursor-default">
+                              <Loader className="w-3.5 h-3.5 animate-spin" />
+                              Processing
+                            </span>
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAlbumDropdownOpen(albumDropdownOpen === releaseGroup.id ? null : releaseGroup.id);
+                                }}
+                                className="btn btn-secondary btn-sm p-2"
+                                title="Options"
+                              >
+                                <ChevronDown className={`w-4 h-4 transition-transform ${albumDropdownOpen === releaseGroup.id ? 'rotate-180' : ''}`} />
+                              </button>
+                              {albumDropdownOpen === releaseGroup.id && (
+                                <>
+                                  <div
+                                    className="fixed inset-0 z-10"
+                                    onClick={() => setAlbumDropdownOpen(null)}
+                                  />
+                                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-20 py-1">
+                                    <a
+                                      href={`https://www.last.fm/music/${encodeURIComponent(artist.name)}/${encodeURIComponent(releaseGroup.title)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center"
+                                      onClick={() => setAlbumDropdownOpen(null)}
+                                    >
+                                      <ExternalLink className="w-4 h-4 mr-2" />
+                                      View on Last.fm
+                                    </a>
+                                    <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteAlbumClick(
+                                          releaseGroup.id,
+                                          releaseGroup.title,
+                                        );
+                                      }}
+                                      className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center"
+                                    >
+                                      <Trash2 className="w-4 h-4 mr-2" />
+                                      Delete Album
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </>
                         ) : (
                           <button
-                            onClick={() =>
+                            onClick={(e) => {
+                              e.stopPropagation();
                               handleRequestAlbum(
                                 releaseGroup.id,
                                 releaseGroup.title,
-                              )
-                            }
+                              );
+                            }}
                             disabled={requestingAlbum === releaseGroup.id}
                             className="btn btn-primary btn-sm"
                           >
                             {requestingAlbum === releaseGroup.id ? (
                               <Loader className="w-4 h-4 animate-spin" />
                             ) : (
-                              "Request"
+                              "Add"
                             )}
                           </button>
                         )
@@ -480,17 +1166,112 @@ function ArtistDetailsPage() {
                           Add Artist First
                         </span>
                       )}
-
-                      <a
-                        href={`https://musicbrainz.org/release-group/${releaseGroup.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn btn-secondary btn-sm ml-2"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
                     </div>
                   </div>
+
+                  {/* Expanded Album Content */}
+                  {isExpanded && status?.lidarrId && (
+                    <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-4 bg-gray-100 dark:bg-gray-900/50">
+                      {/* Album Info */}
+                      {albumInfo && (
+                        <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+                          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center">
+                            <FileMusic className="w-4 h-4 mr-2" />
+                            Album Information
+                          </h4>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                            {albumInfo.statistics && (
+                              <>
+                                <div>
+                                  <span className="text-gray-600 dark:text-gray-400">Tracks:</span>
+                                  <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                                    {albumInfo.statistics.trackCount || 0}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-600 dark:text-gray-400">Size:</span>
+                                  <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                                    {albumInfo.statistics.sizeOnDisk
+                                      ? `${(albumInfo.statistics.sizeOnDisk / 1024 / 1024).toFixed(2)} MB`
+                                      : "N/A"}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-600 dark:text-gray-400">Completion:</span>
+                                  <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                                    {albumInfo.statistics.percentOfTracks || 0}%
+                                  </span>
+                                </div>
+                              </>
+                            )}
+                            {albumInfo.releaseDate && (
+                              <div>
+                                <span className="text-gray-600 dark:text-gray-400">Release Date:</span>
+                                <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                                  {albumInfo.releaseDate}
+                                </span>
+                              </div>
+                            )}
+                            {albumInfo.albumType && (
+                              <div>
+                                <span className="text-gray-600 dark:text-gray-400">Type:</span>
+                                <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                                  {albumInfo.albumType}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Tracks List */}
+                      <div>
+                        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                          Tracks
+                        </h4>
+                        {isLoadingTracks ? (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader className="w-6 h-6 text-primary-600 animate-spin" />
+                          </div>
+                        ) : tracks && tracks.length > 0 ? (
+                          <div className="space-y-1 max-h-64 overflow-y-auto">
+                            {tracks.map((track, idx) => (
+                              <div
+                                key={track.id || idx}
+                                className="flex items-center justify-between p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                              >
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  <span className="text-xs text-gray-500 dark:text-gray-400 w-6 flex-shrink-0">
+                                    {track.trackNumber || idx + 1}
+                                  </span>
+                                  <span className="text-sm text-gray-900 dark:text-gray-100 truncate">
+                                    {track.title || "Unknown Track"}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  {track.duration && (
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                                      {Math.floor(track.duration / 60)}:{(track.duration % 60).toString().padStart(2, '0')}
+                                    </span>
+                                  )}
+                                  {track.hasFile ? (
+                                    <CheckCircle className="w-4 h-4 text-green-500" />
+                                  ) : (
+                                    <span className="text-xs text-gray-400">Missing</span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500 dark:text-gray-400 italic py-4">
+                            No tracks available
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
                 );
               })}
           </div>
@@ -576,20 +1357,6 @@ function ArtistDetailsPage() {
         </div>
       )}
 
-      {showAddModal && artist && (
-        <AddArtistModal
-          artist={{
-            id: mbid,
-            name: artist.name,
-            type: artist.type,
-            country: artist.country,
-            "life-span": artist["life-span"],
-          }}
-          onClose={handleModalClose}
-          onSuccess={handleAddSuccess}
-        />
-      )}
-
       {artistToAdd && (
         <AddArtistModal
           artist={{
@@ -600,9 +1367,130 @@ function ArtistDetailsPage() {
           onSuccess={handleAddSuccess}
         />
       )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && lidarrArtist && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
+              Remove Artist from Lidarr
+            </h3>
+            <p className="text-gray-700 dark:text-gray-300 mb-6">
+              Are you sure you want to remove{" "}
+              <span className="font-semibold">{artist?.name || lidarrArtist.artistName}</span>{" "}
+              from Lidarr?
+            </p>
+
+            <div className="mb-6">
+              <label className="flex items-start space-x-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={deleteFiles}
+                  onChange={(e) => setDeleteFiles(e.target.checked)}
+                  className="mt-1 form-checkbox h-5 w-5 text-primary-600 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700"
+                />
+                <div className="flex-1">
+                  <span className="text-gray-900 dark:text-gray-100 font-medium">
+                    Delete artist folder and files
+                  </span>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    This will permanently delete the artist's folder and all music
+                    files from your disk. This action cannot be undone.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={handleDeleteCancel}
+                disabled={deletingArtist}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={deletingArtist}
+                className="btn btn-danger"
+              >
+                {deletingArtist ? (
+                  <>
+                    <Loader className="w-4 h-4 mr-2 animate-spin" />
+                    Removing...
+                  </>
+                ) : (
+                  "Remove Artist"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Album Confirmation Modal */}
+      {showDeleteAlbumModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
+              Delete Album from Lidarr
+            </h3>
+            <p className="text-gray-700 dark:text-gray-300 mb-6">
+              Are you sure you want to delete{" "}
+              <span className="font-semibold">{showDeleteAlbumModal.title}</span>{" "}
+              from Lidarr?
+            </p>
+
+            <div className="mb-6">
+              <label className="flex items-start space-x-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={deleteAlbumFiles}
+                  onChange={(e) => setDeleteAlbumFiles(e.target.checked)}
+                  className="mt-1 form-checkbox h-5 w-5 text-primary-600 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700"
+                />
+                <div className="flex-1">
+                  <span className="text-gray-900 dark:text-gray-100 font-medium">
+                    Delete album folder and files
+                  </span>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    This will permanently delete the album's folder and all music
+                    files from your disk. This action cannot be undone.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={handleDeleteAlbumCancel}
+                disabled={!!removingAlbum}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAlbumConfirm}
+                disabled={!!removingAlbum}
+                className="btn btn-danger"
+              >
+                {removingAlbum ? (
+                  <>
+                    <Loader className="w-4 h-4 mr-2 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  "Delete Album"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 export default ArtistDetailsPage;
+
 
