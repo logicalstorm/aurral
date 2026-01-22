@@ -1,0 +1,35 @@
+import basicAuth from "express-basic-auth";
+import { db } from "../config/db.js";
+
+export const getAuthUser = () => {
+  return db.data.settings.integrations?.general?.authUser || process.env.AUTH_USER || "admin";
+};
+
+export const getAuthPassword = () => {
+  const dbPass = db.data.settings.integrations?.general?.authPassword;
+  if (dbPass) return [dbPass];
+  return process.env.AUTH_PASSWORD ? process.env.AUTH_PASSWORD.split(",").map(p => p.trim()) : [];
+};
+
+export const createAuthMiddleware = () => {
+  const passwords = getAuthPassword();
+  if (passwords.length === 0) {
+    return (req, res, next) => next();
+  }
+
+  const auth = basicAuth({
+    authorizer: (username, password) => {
+      const userMatches = basicAuth.safeCompare(username, getAuthUser());
+      const passwordMatches = passwords.some((p) =>
+        basicAuth.safeCompare(password, p),
+      );
+      return userMatches && passwordMatches;
+    },
+    challenge: false,
+  });
+
+  return (req, res, next) => {
+    if (req.path === "/api/health") return next();
+    return auth(req, res, next);
+  };
+};

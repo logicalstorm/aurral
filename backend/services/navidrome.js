@@ -52,7 +52,6 @@ export class NavidromeClient {
   }
 
   async findSong(title, artist) {
-    // Navidrome/Subsonic search is sometimes fuzzy, we need to be careful
     const data = await this.request('search3', {
       query: `${artist} ${title}`,
       songCount: 5,
@@ -61,7 +60,6 @@ export class NavidromeClient {
     });
 
     const songs = data.searchResult3?.song || [];
-    // Strict filtering
     const match = songs.find(s => 
       s.title.toLowerCase() === title.toLowerCase() && 
       s.artist.toLowerCase() === artist.toLowerCase()
@@ -78,14 +76,10 @@ export class NavidromeClient {
   async createPlaylist(name, songIds) {
     if (!songIds || songIds.length === 0) return null;
 
-    // Check if exists first to update instead of duplicate
     const playlists = await this.getPlaylists();
     const existing = playlists.find(p => p.name === name);
 
     if (existing) {
-      // Update existing: We usually want to replace contents for "Weekly" lists
-      // Subsonic doesn't have a "replace" easily, so we usually delete and recreate
-      // OR we can clear it. Let's delete and recreate to be safe and clean.
       await this.deletePlaylist(existing.id);
     }
 

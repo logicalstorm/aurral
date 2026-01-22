@@ -7,6 +7,7 @@ import {
   Trash2,
   AlertCircle,
   RefreshCw,
+  ChevronDown,
 } from "lucide-react";
 import { getLidarrArtists, deleteArtistFromLidarr } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
@@ -22,6 +23,7 @@ function LibraryPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("name");
   const [currentPage, setCurrentPage] = useState(1);
+  const [dropdownOpen, setDropdownOpen] = useState(null);
   const ITEMS_PER_PAGE = 50;
   const navigate = useNavigate();
   const { showSuccess, showError } = useToast();
@@ -113,7 +115,6 @@ function LibraryPage() {
     currentPage * ITEMS_PER_PAGE
   );
 
-  // Reset page when search/sort changes
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, sortBy]);
@@ -252,7 +253,6 @@ function LibraryPage() {
                   key={artist.id}
                   className="card hover:shadow-md transition-shadow group p-3"
                 >
-                  {/* Artist Image */}
                   <div
                     className="w-full aspect-square bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden cursor-pointer mb-2"
                     onClick={() =>
@@ -278,14 +278,13 @@ function LibraryPage() {
                     {artist.artistName}
                   </h3>
 
-                  {/* Stats */}
                   <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400 mb-2">
                     <span>{artist.statistics?.albumCount || 0} albums</span>
                     <span>{artist.statistics?.trackCount || 0} tracks</span>
                   </div>
 
-                  {/* Status Badge */}
-                  <div className="mb-2">
+                  {/* Status Badge and Actions */}
+                  <div className="flex items-center justify-between">
                     <span
                       className={`badge text-xs ${
                         status.color === "green"
@@ -295,42 +294,59 @@ function LibraryPage() {
                     >
                       {status.label}
                     </span>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex items-center gap-1.5 pt-2 border-t border-gray-100 dark:border-gray-800">
-                    <button
-                      onClick={() =>
-                        navigate(`/artist/${artist.foreignArtistId}`)
-                      }
-                      className="flex-1 btn btn-secondary text-xs py-1 px-2"
-                      title="View Details"
-                    >
-                      View
-                    </button>
-
-                    <a
-                      href={`https://musicbrainz.org/artist/${artist.foreignArtistId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-secondary text-xs py-1 px-2"
-                      title="View on MusicBrainz"
-                    >
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-
-                    <button
-                      onClick={() => handleDeleteClick(artist)}
-                      disabled={deletingArtist === artist.id}
-                      className="btn btn-danger text-xs py-1 px-2 disabled:opacity-50"
-                      title="Remove from Lidarr"
-                    >
-                      {deletingArtist === artist.id ? (
-                        <Loader className="w-3 h-3 animate-spin" />
-                      ) : (
-                        <Trash2 className="w-3 h-3" />
+                    <div className="relative">
+                      <button
+                        onClick={() =>
+                          setDropdownOpen(
+                            dropdownOpen === artist.id ? null : artist.id
+                          )
+                        }
+                        className="btn btn-secondary text-xs py-1 px-2"
+                        title="Options"
+                      >
+                        <ChevronDown
+                          className={`w-3 h-3 transition-transform ${
+                            dropdownOpen === artist.id ? "rotate-180" : ""
+                          }`}
+                        />
+                      </button>
+                      {dropdownOpen === artist.id && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setDropdownOpen(null)}
+                          />
+                          <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-20 py-1">
+                            <a
+                              href={`https://musicbrainz.org/artist/${artist.foreignArtistId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={() => setDropdownOpen(null)}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center"
+                            >
+                              <ExternalLink className="w-4 h-4 mr-2" />
+                              View on MusicBrainz
+                            </a>
+                            <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
+                            <button
+                              onClick={() => {
+                                handleDeleteClick(artist);
+                                setDropdownOpen(null);
+                              }}
+                              disabled={deletingArtist === artist.id}
+                              className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center disabled:opacity-50"
+                            >
+                              {deletingArtist === artist.id ? (
+                                <Loader className="w-4 h-4 mr-2 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-4 h-4 mr-2" />
+                              )}
+                              Remove from Lidarr
+                            </button>
+                          </div>
+                        </>
                       )}
-                    </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -382,7 +398,6 @@ function LibraryPage() {
           </div>
         )}
 
-      {/* Delete Confirmation Modal */}
       {artistToDelete && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
