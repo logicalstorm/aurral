@@ -31,12 +31,20 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    outDir: "dist",
+    emptyOutDir: true,
+  },
   server: {
     port: 3000,
     proxy: {
       "/api": {
         target: "http://localhost:3001",
         changeOrigin: true,
+        secure: false,
+        ws: true,
+        timeout: 10000,
+        proxyTimeout: 10000,
       },
     },
   },

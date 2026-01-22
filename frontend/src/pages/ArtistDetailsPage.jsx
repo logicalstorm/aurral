@@ -21,6 +21,7 @@ import {
 import {
   getArtistDetails,
   getArtistCover,
+  getReleaseGroupCover,
   lookupArtistInLidarr,
   getLidarrAlbums,
   getLidarrTracks,
@@ -77,6 +78,7 @@ function ArtistDetailsPage() {
   const [deletingArtist, setDeletingArtist] = useState(false);
   const [showMonitorOptionMenu, setShowMonitorOptionMenu] = useState(false);
   const [updatingMonitor, setUpdatingMonitor] = useState(false);
+  const [albumCovers, setAlbumCovers] = useState({});
   const { showSuccess, showError } = useToast();
 
   useEffect(() => {
@@ -89,6 +91,10 @@ function ArtistDetailsPage() {
           getArtistDetails(mbid),
           getAppSettings()
         ]);
+        console.log("Artist data received:", artistData);
+        if (!artistData || !artistData.id) {
+          throw new Error("Invalid artist data received");
+        }
         setArtist(artistData);
         setAppSettings(settings);
 
@@ -111,6 +117,33 @@ function ArtistDetailsPage() {
           }
         } catch (err) {
           console.log("No cover art available");
+        }
+
+        if (artistData["release-groups"] && artistData["release-groups"].length > 0) {
+          const releaseGroupIds = artistData["release-groups"]
+            .filter(rg => rg["primary-type"] === "Album" || rg["primary-type"] === "EP")
+            .slice(0, 30)
+            .map(rg => rg.id);
+          
+          const coverPromises = releaseGroupIds.map(async (rgId) => {
+            try {
+              const coverData = await getReleaseGroupCover(rgId);
+              if (coverData.images && coverData.images.length > 0) {
+                const front = coverData.images.find(img => img.front) || coverData.images[0];
+                return { id: rgId, url: front.image };
+              }
+            } catch (err) {
+            }
+            return null;
+          });
+          
+          Promise.all(coverPromises).then(results => {
+            const covers = {};
+            results.forEach(result => {
+              if (result) covers[result.id] = result.url;
+            });
+            setAlbumCovers(prev => ({ ...prev, ...covers }));
+          }).catch(() => {});
         }
         
         try {
@@ -152,8 +185,11 @@ function ArtistDetailsPage() {
           console.error("Failed to lookup artist in Lidarr:", err);
         }
       } catch (err) {
+        console.error("Error fetching artist data:", err);
+        console.error("Error response:", err.response);
+        console.error("Error message:", err.message);
         setError(
-          err.response?.data?.message || "Failed to fetch artist details",
+          err.response?.data?.message || err.response?.data?.error || err.message || "Failed to fetch artist details",
         );
       } finally {
         setLoading(false);
@@ -447,10 +483,33 @@ function ArtistDetailsPage() {
   };
 
   // Helper function to check if a release group matches metadata profile filters
-  const matchesMetadataProfile = (releaseGroup) => {
-    if (!filterByMetadata || !appSettings?.metadataProfileReleaseTypes) return true;
+  const getArtistMetadataProfileTypes = () => {
+    if (!lidarrArtist?.metadataProfileId || !metadataProfiles.length) {
+      return appSettings?.metadataProfileReleaseTypes || null;
+    }
     
-    const allowedTypes = appSettings.metadataProfileReleaseTypes;
+    const profile = metadataProfiles.find(p => p.id === lidarrArtist.metadataProfileId);
+    if (!profile) {
+      return appSettings?.metadataProfileReleaseTypes || null;
+    }
+    
+    const allowedTypes = [];
+    if (profile.primaryAlbumTypes) {
+      profile.primaryAlbumTypes.forEach(typeObj => {
+        if (typeObj.allowed && typeObj.albumType?.name) {
+          allowedTypes.push(typeObj.albumType.name);
+        }
+      });
+    }
+    
+    return allowedTypes.length > 0 ? allowedTypes : (appSettings?.metadataProfileReleaseTypes || null);
+  };
+
+  const matchesMetadataProfile = (releaseGroup) => {
+    if (!filterByMetadata) return true;
+    
+    const allowedTypes = getArtistMetadataProfileTypes();
+    if (!allowedTypes || allowedTypes.length === 0) return true;
     
     if (!allowedTypes.includes(releaseGroup["primary-type"])) {
       return false;
@@ -984,6 +1043,19 @@ function ArtistDetailsPage() {
                               <ChevronDown className="w-4 h-4" />
                             )}
                           </button>
+                        )}
+                        {albumCovers[releaseGroup.id] ? (
+                          <img
+                            src={albumCovers[releaseGroup.id]}
+                            alt={releaseGroup.title}
+                            className="w-12 h-12 flex-shrink-0 rounded object-cover"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 flex-shrink-0 rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                            <Music className="w-6 h-6 text-gray-400 dark:text-gray-500" />
+                          </div>
                         )}
                         <div className="flex-1">
                           <h3 className="font-semibold text-gray-900 dark:text-gray-100">

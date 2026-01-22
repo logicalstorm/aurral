@@ -12,7 +12,30 @@ const router = express.Router();
 router.get("/artists", async (req, res) => {
   try {
     const artists = await getCachedLidarrArtists();
-    res.json(artists);
+    
+    const artistsWithImages = artists.map(artist => {
+      const artistCopy = { ...artist };
+      
+      if (artist.images && artist.images.length > 0) {
+        const posterImage = artist.images.find(
+          img => img.coverType === "poster" || img.coverType === "fanart"
+        ) || artist.images[0];
+        
+        if (posterImage && artist.id) {
+          const coverType = posterImage.coverType || "poster";
+          artistCopy.imageUrl = `/api/lidarr/mediacover/${artist.id}/${coverType}.jpg`;
+        }
+      }
+      
+      if (artist.foreignArtistId && db.data.images && db.data.images[artist.foreignArtistId] && db.data.images[artist.foreignArtistId] !== "NOT_FOUND") {
+        artistCopy.imageUrl = db.data.images[artist.foreignArtistId];
+      }
+      
+      return artistCopy;
+    });
+    
+    res.set("Cache-Control", "public, max-age=300");
+    res.json(artistsWithImages);
   } catch (error) {
     res.status(500).json({
       error: "Failed to fetch Lidarr artists",
@@ -41,7 +64,8 @@ router.get("/mediacover/:artistId/:filename", async (req, res) => {
     );
 
     res.set("Content-Type", imageResponse.headers["content-type"]);
-    res.set("Cache-Control", "public, max-age=86400");
+    res.set("Cache-Control", "public, max-age=31536000, immutable");
+    res.set("ETag", `"${req.params.artistId}-${req.params.filename}"`);
     res.send(imageResponse.data);
   } catch (error) {
     console.error(
@@ -244,7 +268,29 @@ router.get("/recent", async (req, res) => {
     const artists = await getCachedLidarrArtists();
     const recent = [...artists]
       .sort((a, b) => new Date(b.added) - new Date(a.added))
-      .slice(0, 20);
+      .slice(0, 20)
+      .map(artist => {
+        const artistCopy = { ...artist };
+        
+        if (artist.images && artist.images.length > 0) {
+          const posterImage = artist.images.find(
+            img => img.coverType === "poster" || img.coverType === "fanart"
+          ) || artist.images[0];
+          
+          if (posterImage && artist.id) {
+            const coverType = posterImage.coverType || "poster";
+            artistCopy.imageUrl = `/api/lidarr/mediacover/${artist.id}/${coverType}.jpg`;
+          }
+        }
+        
+        if (artist.foreignArtistId && db.data.images && db.data.images[artist.foreignArtistId] && db.data.images[artist.foreignArtistId] !== "NOT_FOUND") {
+          artistCopy.imageUrl = db.data.images[artist.foreignArtistId];
+        }
+        
+        return artistCopy;
+      });
+    
+    res.set("Cache-Control", "public, max-age=300");
     res.json(recent);
   } catch (error) {
     res

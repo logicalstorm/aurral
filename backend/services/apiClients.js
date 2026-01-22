@@ -52,13 +52,13 @@ export const getMusicBrainzContact = () => {
 };
 
 const mbLimiter = new Bottleneck({
-  maxConcurrent: 1,
-  minTime: 1100,
+  maxConcurrent: 3,
+  minTime: 350,
 });
 
 const lastfmLimiter = new Bottleneck({
-  maxConcurrent: 30,
-  minTime: 33,
+  maxConcurrent: 5,
+  minTime: 200,
 });
 
 const musicbrainzRequestWithRetry = async (endpoint, params = {}, retryCount = 0) => {
@@ -121,7 +121,6 @@ export const lastfmRequest = lastfmLimiter.wrap(async (method, params = {}) => {
   const apiKey = getLastfmApiKey();
   if (!apiKey) return null;
 
-  console.log(`Last.fm Request: ${method}`);
   try {
     const response = await axios.get(LASTFM_API, {
       params: {
@@ -130,11 +129,13 @@ export const lastfmRequest = lastfmLimiter.wrap(async (method, params = {}) => {
         format: "json",
         ...params,
       },
-      timeout: 5000,
+      timeout: 3000,
     });
     return response.data;
   } catch (error) {
-    console.error(`Last.fm API error (${method}):`, error.message);
+    if (error.code !== 'ECONNABORTED') {
+      console.error(`Last.fm API error (${method}):`, error.message);
+    }
     return null;
   }
 });

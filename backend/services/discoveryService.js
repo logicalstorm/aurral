@@ -1,8 +1,6 @@
 import { db } from "../config/db.js";
 import { GENRE_KEYWORDS } from "../config/constants.js";
-import { getCachedLidarrArtists } from "./lidarrCache.js";
 import { lastfmRequest, getLastfmApiKey } from "./apiClients.js";
-import { getArtistImage } from "./imageService.js";
 
 let discoveryCache = {
   ...db.data.discovery,
@@ -12,12 +10,22 @@ let discoveryCache = {
 export const getDiscoveryCache = () => discoveryCache;
 
 export const updateDiscoveryCache = async () => {
-  if (discoveryCache.isUpdating) return;
+  if (discoveryCache.isUpdating) {
+    console.log("Discovery update already in progress, skipping...");
+    return;
+  }
   discoveryCache.isUpdating = true;
   console.log("Starting background update of discovery recommendations...");
 
   try {
-    const lidarrArtists = await getCachedLidarrArtists(true);
+    let lidarrArtists = [];
+    try {
+      const { getCachedLidarrArtists } = await import("./lidarrCache.js");
+      lidarrArtists = await getCachedLidarrArtists(true);
+    } catch (error) {
+      console.warn("Failed to fetch Lidarr artists for discovery:", error.message);
+      lidarrArtists = [];
+    }
     console.log(`Found ${lidarrArtists.length} artists in Lidarr.`);
 
     const existingArtistIds = new Set(
@@ -40,6 +48,7 @@ export const updateDiscoveryCache = async () => {
 
     console.log(`Sampling tags/genres from ${profileSample.length} artists...`);
 
+    let tagsFound = 0;
     await Promise.all(
       profileSample.map(async (artist) => {
         let foundTags = false;
@@ -62,6 +71,7 @@ export const updateDiscoveryCache = async () => {
                   genreCounts.set(t.name, (genreCounts.get(t.name) || 0) + 1);
               });
               foundTags = true;
+              tagsFound++;
             }
           } catch (e) {
             console.warn(
@@ -71,6 +81,7 @@ export const updateDiscoveryCache = async () => {
         }
       }),
     );
+    console.log(`Found tags for ${tagsFound} out of ${profileSample.length} artists`);
 
     discoveryCache.topTags = Array.from(tagCounts.entries())
       .sort((a, b) => b[1] - a[1])
@@ -133,6 +144,8 @@ export const updateDiscoveryCache = async () => {
     );
 
     if (getLastfmApiKey()) {
+      let successCount = 0;
+      let errorCount = 0;
       await Promise.all(
         recSample.map(async (artist) => {
           try {
@@ -184,14 +197,19 @@ export const updateDiscoveryCache = async () => {
                   });
                 }
               }
+              successCount++;
+            } else {
+              errorCount++;
             }
           } catch (e) {
+            errorCount++;
             console.warn(
               `Error getting similar artists for ${artist.artistName}: ${e.message}`,
             );
           }
         }),
       );
+      console.log(`Recommendation generation: ${successCount} succeeded, ${errorCount} failed`);
     } else {
       console.warn("Last.fm API key required for similar artist discovery.");
     }
@@ -226,12 +244,63 @@ export const updateDiscoveryCache = async () => {
     ].filter((a) => !a.image);
     console.log(`Hydrating images for ${allToHydrate.length} artists...`);
     
+    const { getCachedLidarrArtists: getCachedLidarrArtistsForImages } = await import("./lidarrCache.js");
+    const artists = await getCachedLidarrArtistsForImages().catch(() => []);
+
     await Promise.all(
       allToHydrate.map(async (item) => {
         try {
-          const res = await getArtistImage(item.id);
-          if (res.url) {
-            item.image = res.url;
+          const lidarrArtist = artists.find(a => a.foreignArtistId === item.id);
+          if (lidarrArtist && lidarrArtist.id) {
+            const posterImage = lidarrArtist.images?.find(
+              img => img.coverType === "poster" || img.coverType === "fanart"
+            ) || lidarrArtist.images?.[0];
+            if (posterImage) {
+              const coverType = posterImage.coverType || "poster";
+              item.image = `/api/lidarr/mediacover/${lidarrArtist.id}/${coverType}.jpg`;
+              return;
+            }
+          }
+          
+          try {
+            const { musicbrainzRequest } = await import("./apiClients.js");
+            const artistData = await musicbrainzRequest(`/artist/${item.id}`, {
+              inc: "release-groups",
+            }).catch(() => null);
+
+            if (artistData?.["release-groups"] && artistData["release-groups"].length > 0) {
+              const releaseGroups = artistData["release-groups"]
+                .filter(rg => rg["primary-type"] === "Album" || rg["primary-type"] === "EP")
+                .sort((a, b) => {
+                  const dateA = a["first-release-date"] || "";
+                  const dateB = b["first-release-date"] || "";
+                  return dateB.localeCompare(dateA);
+                });
+
+              for (const rg of releaseGroups.slice(0, 2)) {
+                try {
+                  const axios = (await import("axios")).default;
+                  const coverArtJson = await axios.get(
+                    `https://coverartarchive.org/release-group/${rg.id}`,
+                    {
+                      headers: { Accept: "application/json" },
+                      timeout: 2000,
+                    }
+                  ).catch(() => null);
+
+                  if (coverArtJson?.data?.images) {
+                    const frontImage = coverArtJson.data.images.find(img => img.front) || coverArtJson.data.images[0];
+                    if (frontImage?.thumbnails?.["500"] || frontImage?.image) {
+                      item.image = frontImage.thumbnails?.["500"] || frontImage.image;
+                      break;
+                    }
+                  }
+                } catch (e) {
+                  continue;
+                }
+              }
+            }
+          } catch (e) {
           }
         } catch (e) {}
       }),
@@ -240,8 +309,10 @@ export const updateDiscoveryCache = async () => {
     await db.write();
 
     console.log("Discovery cache updated successfully.");
+    console.log(`Summary: ${recommendationsArray.length} recommendations, ${discoveryCache.topGenres.length} genres, ${discoveryCache.globalTop.length} trending artists`);
   } catch (error) {
     console.error("Failed to update discovery cache:", error.message);
+    console.error("Stack trace:", error.stack);
   } finally {
     discoveryCache.isUpdating = false;
   }

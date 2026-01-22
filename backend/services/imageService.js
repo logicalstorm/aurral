@@ -1,16 +1,13 @@
 import { db } from "../config/db.js";
-import { lastfmRequest } from "./apiClients.js";
+import { lastfmRequest, getLastfmApiKey } from "./apiClients.js";
 
 const negativeImageCache = new Set();
 const pendingImageRequests = new Map();
 
-export const getArtistImage = async (mbid) => {
+export const getArtistImage = async (mbid, forceRefresh = false) => {
   if (!mbid) return { url: null, images: [] };
 
-  if (db.data.images[mbid]) {
-    if (db.data.images[mbid] === "NOT_FOUND") {
-      return { url: null, images: [] };
-    }
+  if (!forceRefresh && db.data.images[mbid] && db.data.images[mbid] !== "NOT_FOUND") {
     return {
       url: db.data.images[mbid],
       images: [
@@ -23,8 +20,19 @@ export const getArtistImage = async (mbid) => {
     };
   }
 
-  if (negativeImageCache.has(mbid)) {
-    return { url: null, images: [] };
+  if (!forceRefresh && db.data.images[mbid] === "NOT_FOUND") {
+    if (!getLastfmApiKey()) {
+      return { url: null, images: [] };
+    }
+    delete db.data.images[mbid];
+    negativeImageCache.delete(mbid);
+  }
+
+  if (!forceRefresh && negativeImageCache.has(mbid)) {
+    if (!getLastfmApiKey()) {
+      return { url: null, images: [] };
+    }
+    negativeImageCache.delete(mbid);
   }
 
   if (pendingImageRequests.has(mbid)) {
@@ -32,9 +40,14 @@ export const getArtistImage = async (mbid) => {
   }
 
   const fetchPromise = (async () => {
-    if (lastfmRequest) {
+    if (getLastfmApiKey()) {
       try {
-        const lastfmData = await lastfmRequest("artist.getInfo", { mbid });
+        const lastfmData = await Promise.race([
+          lastfmRequest("artist.getInfo", { mbid }),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("Last.fm timeout")), 5000)
+          )
+        ]);
         if (lastfmData?.artist?.image) {
           const images = lastfmData.artist.image
             .filter(
@@ -62,17 +75,25 @@ export const getArtistImage = async (mbid) => {
             );
 
             db.data.images[mbid] = images[0].image;
-            await db.write();
+            db.write().catch(e => {
+              console.error("Error saving image to database:", e.message);
+            });
 
             return { url: images[0].image, images };
           }
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn(`Failed to fetch image for ${mbid} from Last.fm:`, e.message);
+      }
     }
 
-    negativeImageCache.add(mbid);
-    db.data.images[mbid] = "NOT_FOUND";
-    await db.write();
+    if (getLastfmApiKey()) {
+      negativeImageCache.add(mbid);
+      db.data.images[mbid] = "NOT_FOUND";
+      db.write().catch(e => {
+        console.error("Error saving image cache to database:", e.message);
+      });
+    }
 
     return { url: null, images: [] };
   })();

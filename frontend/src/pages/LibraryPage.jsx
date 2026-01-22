@@ -120,6 +120,10 @@ function LibraryPage() {
   }, [searchTerm, sortBy]);
 
   const getArtistImage = (artist) => {
+    if (artist.imageUrl) {
+      return artist.imageUrl;
+    }
+    
     if (artist.images && artist.images.length > 0) {
       const posterImage = artist.images.find(
         (img) => img.coverType === "poster" || img.coverType === "fanart",
@@ -260,10 +264,11 @@ function LibraryPage() {
                     }
                   >
                     <ArtistImage
-                      src={image}
+                      src={image || artist.imageUrl}
                       mbid={artist.foreignArtistId}
                       alt={artist.artistName}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                      showLoading={false}
                     />
                   </div>
 
