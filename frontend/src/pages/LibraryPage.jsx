@@ -17,10 +17,12 @@ function LibraryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deletingArtist, setDeletingArtist] = useState(null);
+  const [artistToDelete, setArtistToDelete] = useState(null);
+  const [deleteFiles, setDeleteFiles] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("name");
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 24;
+  const ITEMS_PER_PAGE = 50;
   const navigate = useNavigate();
   const { showSuccess, showError } = useToast();
 
@@ -43,18 +45,30 @@ function LibraryPage() {
     fetchArtists();
   }, []);
 
-  const handleDeleteArtist = async (artist) => {
-    const confirmDelete = window.confirm(
-      `Are you sure you want to remove "${artist.artistName}" from Lidarr?\n\nThis will not delete the artist's files.`,
-    );
+  const handleDeleteClick = (artist) => {
+    setArtistToDelete(artist);
+    setDeleteFiles(false);
+  };
 
-    if (!confirmDelete) return;
+  const handleDeleteCancel = () => {
+    setArtistToDelete(null);
+    setDeleteFiles(false);
+  };
 
-    setDeletingArtist(artist.id);
+  const handleDeleteConfirm = async () => {
+    if (!artistToDelete) return;
+
+    setDeletingArtist(artistToDelete.id);
     try {
-      await deleteArtistFromLidarr(artist.id, false);
-      setArtists((prev) => prev.filter((a) => a.id !== artist.id));
-      showSuccess(`Successfully removed ${artist.artistName} from Lidarr`);
+      await deleteArtistFromLidarr(artistToDelete.id, deleteFiles);
+      setArtists((prev) => prev.filter((a) => a.id !== artistToDelete.id));
+      showSuccess(
+        `Successfully removed ${artistToDelete.artistName} from Lidarr${
+          deleteFiles ? " and deleted files" : ""
+        }`,
+      );
+      setArtistToDelete(null);
+      setDeleteFiles(false);
     } catch (err) {
       showError(
         `Failed to delete artist: ${err.response?.data?.message || err.message}`,
@@ -131,13 +145,13 @@ function LibraryPage() {
 
   return (
     <div className="animate-fade-in">
-      <div className="card mb-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+      <div className="card mb-4 p-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">
               Your Library
             </h1>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
               {loading
                 ? "Loading..."
                 : `${artists.length} artist${artists.length !== 1 ? "s" : ""} in your collection`}
@@ -146,30 +160,30 @@ function LibraryPage() {
           <button
             onClick={fetchArtists}
             disabled={loading}
-            className="btn btn-secondary mt-4 md:mt-0 disabled:opacity-50"
+            className="btn btn-secondary btn-sm mt-2 md:mt-0 disabled:opacity-50"
           >
             <RefreshCw
-              className={`w-5 h-5 mr-2 ${loading ? "animate-spin" : ""}`}
+              className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`}
             />
             Refresh
           </button>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex flex-col sm:flex-row gap-2">
           <div className="flex-1">
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search library..."
-              className="input"
+              className="input input-sm"
             />
           </div>
-          <div className="sm:w-48">
+          <div className="sm:w-40">
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="input"
+              className="input input-sm"
             >
               <option value="name">Sort by Name</option>
               <option value="added">Sort by Date Added</option>
@@ -223,12 +237,12 @@ function LibraryPage() {
       {!loading && !error && currentArtists.length > 0 && (
         <div className="animate-slide-up">
           {searchTerm && (
-            <div className="mb-4 text-gray-600 dark:text-gray-400">
+            <div className="mb-3 text-sm text-gray-600 dark:text-gray-400">
               Showing {filteredArtists.length} of {artists.length} artists
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
             {currentArtists.map((artist) => {
               const image = getArtistImage(artist);
               const status = getMonitoringStatus(artist);
@@ -236,98 +250,85 @@ function LibraryPage() {
               return (
                 <div
                   key={artist.id}
-                  className="card hover:shadow-md transition-shadow group min-w-0"
+                  className="card hover:shadow-md transition-shadow group p-3"
                 >
-                  <div className="flex gap-4 min-w-0">
-                    {/* Artist Image */}
-                    <div
-                      className="w-24 h-24 flex-shrink-0 bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden cursor-pointer"
-                      onClick={() =>
-                        navigate(`/artist/${artist.foreignArtistId}`)
-                      }
-                    >
-                      <ArtistImage
-                        src={image}
-                        mbid={artist.foreignArtistId}
-                        alt={artist.artistName}
-                        className="w-full h-full group-hover:scale-105 transition-transform"
-                      />
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <h3
-                        className="text-lg font-semibold text-gray-900 dark:text-gray-100 group-hover:text-primary-500 transition-colors cursor-pointer truncate"
-                        onClick={() =>
-                          navigate(`/artist/${artist.foreignArtistId}`)
-                        }
-                      >
-                        {artist.artistName}
-                      </h3>
-
-                      <div className="mt-2 space-y-1">
-                        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 min-w-0">
-                          <span className="font-medium mr-2 flex-shrink-0">
-                            Albums:
-                          </span>
-                          <span className="truncate">
-                            {artist.statistics?.albumCount || 0}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 min-w-0">
-                          <span className="font-medium mr-2 flex-shrink-0">
-                            Tracks:
-                          </span>
-                          <span className="truncate">
-                            {artist.statistics?.trackCount || 0}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2 mt-2">
-                          <span
-                            className={`badge ${
-                              status.color === "green"
-                                ? "badge-success"
-                                : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
-                            }`}
-                          >
-                            {status.label}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                  {/* Artist Image */}
+                  <div
+                    className="w-full aspect-square bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden cursor-pointer mb-2"
+                    onClick={() =>
+                      navigate(`/artist/${artist.foreignArtistId}`)
+                    }
+                  >
+                    <ArtistImage
+                      src={image}
+                      mbid={artist.foreignArtistId}
+                      alt={artist.artistName}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                    />
                   </div>
 
-                  <div className="flex items-center gap-2 mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 min-w-0">
+                  {/* Artist Name */}
+                  <h3
+                    className="text-sm font-semibold text-gray-900 dark:text-gray-100 group-hover:text-primary-500 transition-colors cursor-pointer truncate mb-1.5"
+                    onClick={() =>
+                      navigate(`/artist/${artist.foreignArtistId}`)
+                    }
+                    title={artist.artistName}
+                  >
+                    {artist.artistName}
+                  </h3>
+
+                  {/* Stats */}
+                  <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400 mb-2">
+                    <span>{artist.statistics?.albumCount || 0} albums</span>
+                    <span>{artist.statistics?.trackCount || 0} tracks</span>
+                  </div>
+
+                  {/* Status Badge */}
+                  <div className="mb-2">
+                    <span
+                      className={`badge text-xs ${
+                        status.color === "green"
+                          ? "badge-success"
+                          : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                      }`}
+                    >
+                      {status.label}
+                    </span>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-1.5 pt-2 border-t border-gray-100 dark:border-gray-800">
                     <button
                       onClick={() =>
                         navigate(`/artist/${artist.foreignArtistId}`)
                       }
-                      className="btn btn-secondary flex-1 text-sm"
+                      className="flex-1 btn btn-secondary text-xs py-1 px-2"
+                      title="View Details"
                     >
-                      View Details
+                      View
                     </button>
 
                     <a
                       href={`https://musicbrainz.org/artist/${artist.foreignArtistId}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="btn btn-secondary text-sm"
+                      className="btn btn-secondary text-xs py-1 px-2"
                       title="View on MusicBrainz"
                     >
-                      <ExternalLink className="w-4 h-4" />
+                      <ExternalLink className="w-3 h-3" />
                     </a>
 
                     <button
-                      onClick={() => handleDeleteArtist(artist)}
+                      onClick={() => handleDeleteClick(artist)}
                       disabled={deletingArtist === artist.id}
-                      className="btn btn-danger text-sm disabled:opacity-50"
+                      className="btn btn-danger text-xs py-1 px-2 disabled:opacity-50"
                       title="Remove from Lidarr"
                     >
                       {deletingArtist === artist.id ? (
-                        <Loader className="w-4 h-4 animate-spin" />
+                        <Loader className="w-3 h-3 animate-spin" />
                       ) : (
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3 h-3" />
                       )}
                     </button>
                   </div>
@@ -337,21 +338,21 @@ function LibraryPage() {
           </div>
 
           {totalPages > 1 && (
-            <div className="flex justify-center mt-8 space-x-2">
+            <div className="flex justify-center mt-6 space-x-2">
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="btn btn-secondary disabled:opacity-50"
+                className="btn btn-secondary btn-sm disabled:opacity-50"
               >
                 Previous
               </button>
-              <span className="flex items-center px-4 text-gray-700 dark:text-gray-300">
+              <span className="flex items-center px-4 text-sm text-gray-700 dark:text-gray-300">
                 Page {currentPage} of {totalPages}
               </span>
               <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
-                className="btn btn-secondary disabled:opacity-50"
+                className="btn btn-secondary btn-sm disabled:opacity-50"
               >
                 Next
               </button>
@@ -380,6 +381,66 @@ function LibraryPage() {
             </button>
           </div>
         )}
+
+      {/* Delete Confirmation Modal */}
+      {artistToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
+              Remove Artist from Lidarr
+            </h3>
+            <p className="text-gray-700 dark:text-gray-300 mb-6">
+              Are you sure you want to remove{" "}
+              <span className="font-semibold">{artistToDelete.artistName}</span>{" "}
+              from Lidarr?
+            </p>
+
+            <div className="mb-6">
+              <label className="flex items-start space-x-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={deleteFiles}
+                  onChange={(e) => setDeleteFiles(e.target.checked)}
+                  className="mt-1 form-checkbox h-5 w-5 text-primary-600 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700"
+                />
+                <div className="flex-1">
+                  <span className="text-gray-900 dark:text-gray-100 font-medium">
+                    Delete artist folder and files
+                  </span>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    This will permanently delete the artist's folder and all music
+                    files from your disk. This action cannot be undone.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={handleDeleteCancel}
+                disabled={deletingArtist === artistToDelete.id}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={deletingArtist === artistToDelete.id}
+                className="btn btn-danger"
+              >
+                {deletingArtist === artistToDelete.id ? (
+                  <>
+                    <Loader className="w-4 h-4 mr-2 animate-spin" />
+                    Removing...
+                  </>
+                ) : (
+                  "Remove Artist"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

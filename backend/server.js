@@ -11,6 +11,9 @@ import { JSONFile } from "lowdb/node";
 import fs from "fs";
 import path from "path";
 
+import { PlaylistManager } from "./services/playlistManager.js";
+import { applyOptimalLidarrSettings } from "./services/lidarrOptimizer.js";
+
 dotenv.config();
 
 const GENRE_KEYWORDS = [
@@ -54,6 +57,7 @@ const defaultData = {
     monitored: true,
     searchForMissingAlbums: false,
     albumFolders: true,
+    metadataProfileReleaseTypes: ["Album", "EP", "Single", "Broadcast", "Soundtrack", "Spokenword", "Remix", "Live", "Compilation", "Demo"],
   },
 };
 
@@ -67,6 +71,24 @@ if (!fs.existsSync(DATA_DIR)) {
 const adapter = new JSONFile(DB_PATH);
 const db = new Low(adapter, defaultData);
 await db.read();
+
+// Ensure settings structure for new integrations
+if (!db.data.settings.integrations) {
+  db.data.settings.integrations = {
+    navidrome: { url: "", username: "", password: "" },
+    lastfm: { username: "" },
+    lidarr: { url: "", apiKey: "" },
+    musicbrainz: { email: "" },
+    general: { authUser: "", authPassword: "" }
+  };
+  await db.write();
+}
+
+// Ensure musicbrainz structure exists if integrations already exists
+if (db.data.settings.integrations && !db.data.settings.integrations.musicbrainz) {
+    db.data.settings.integrations.musicbrainz = { email: "" };
+    await db.write();
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -94,16 +116,22 @@ app.use(cors());
 app.use(helmet());
 app.use(express.json());
 
-if (process.env.AUTH_PASSWORD) {
-  const adminUser = process.env.AUTH_USER || "admin";
-  const validPasswords = process.env.AUTH_PASSWORD.split(",")
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0);
+// Auth Middleware using DB settings OR env vars
+const getAuthUser = () => {
+    return db.data.settings.integrations?.general?.authUser || process.env.AUTH_USER || "admin";
+};
 
+const getAuthPassword = () => {
+    const dbPass = db.data.settings.integrations?.general?.authPassword;
+    if (dbPass) return [dbPass];
+    return process.env.AUTH_PASSWORD ? process.env.AUTH_PASSWORD.split(",").map(p => p.trim()) : [];
+};
+
+if (getAuthPassword().length > 0) {
   const auth = basicAuth({
     authorizer: (username, password) => {
-      const userMatches = basicAuth.safeCompare(username, adminUser);
-      const passwordMatches = validPasswords.some((p) =>
+      const userMatches = basicAuth.safeCompare(username, getAuthUser());
+      const passwordMatches = getAuthPassword().some((p) =>
         basicAuth.safeCompare(password, p),
       );
       return userMatches && passwordMatches;
@@ -113,6 +141,8 @@ if (process.env.AUTH_PASSWORD) {
 
   app.use((req, res, next) => {
     if (req.path === "/api/health") return next();
+    // Allow settings update without auth if no password set initially? 
+    // No, security risk.
     return auth(req, res, next);
   });
 }
@@ -136,6 +166,8 @@ app.post("/api/settings", async (req, res) => {
       monitored,
       searchForMissingAlbums,
       albumFolders,
+      integrations,
+      metadataProfileReleaseTypes
     } = req.body;
 
     db.data.settings = {
@@ -146,6 +178,8 @@ app.post("/api/settings", async (req, res) => {
       monitored,
       searchForMissingAlbums,
       albumFolders,
+      integrations: integrations || db.data.settings.integrations,
+      metadataProfileReleaseTypes: metadataProfileReleaseTypes || db.data.settings.metadataProfileReleaseTypes
     };
   await db.write();
     res.json(db.data.settings);
@@ -154,36 +188,46 @@ app.post("/api/settings", async (req, res) => {
   }
 });
 
-let lidarrUrl = (process.env.LIDARR_URL || "http://localhost:8686").replace(/\/+$/, '');
 let lidarrBasepathDetected = false;
-const LIDARR_API_KEY = process.env.LIDARR_API_KEY || "";
+
+// Helper to get effective Lidarr config (DB > Env)
+const getLidarrConfig = () => {
+    const dbConfig = db.data.settings.integrations?.lidarr || {};
+    return {
+        url: (dbConfig.url || process.env.LIDARR_URL || "http://localhost:8686").replace(/\/+$/, ''),
+        apiKey: dbConfig.apiKey || process.env.LIDARR_API_KEY || ""
+    };
+};
 
 // Probe Lidarr URL and auto-detect basepath if needed
 const probeLidarrUrl = async () => {
-  if (!LIDARR_API_KEY) return;
+  const { url, apiKey } = getLidarrConfig();
+  if (!apiKey) return;
+
+  // If DB override is set, trust it, but check connectivity
+  // We use local vars here, not the global 'lidarrUrl' which might be stale
+  let currentUrl = url;
 
   const basePaths = ['', '/lidarr'];
-  const originalUrl = lidarrUrl;
-
+  
   for (const basePath of basePaths) {
-    const testUrl = basePath ? `${originalUrl}${basePath}` : originalUrl;
+    const testUrl = basePath ? `${currentUrl}${basePath}` : currentUrl;
     try {
       const response = await axios.get(`${testUrl}/api/v1/system/status`, {
-        headers: { 'X-Api-Key': LIDARR_API_KEY },
+        headers: { 'X-Api-Key': apiKey },
         timeout: 5000,
       });
 
-      // Check if we got JSON with Lidarr's signature
       if (response.data?.appName === 'Lidarr') {
         if (basePath) {
           console.log(`Lidarr basepath auto-detected: ${basePath}`);
-          lidarrUrl = testUrl;
           lidarrBasepathDetected = true;
+          // Update global tracking if needed, though we should prefer the getter
         }
         return true;
       }
     } catch (error) {
-      // Continue to next basepath
+      // Continue
     }
   }
 
@@ -193,13 +237,17 @@ const probeLidarrUrl = async () => {
 
 const MUSICBRAINZ_API = "https://musicbrainz.org/ws/2";
 const LASTFM_API = "https://ws.audioscrobbler.com/2.0/";
-const LASTFM_API_KEY = process.env.LASTFM_API_KEY;
+
+const getLastfmApiKey = () => {
+  return db.data.settings.integrations?.lastfm?.apiKey || process.env.LASTFM_API_KEY;
+};
+
 const APP_NAME = "Aurral";
 const APP_VERSION = "1.0.0";
-const CONTACT = process.env.CONTACT_EMAIL;
-if (!CONTACT || CONTACT === 'user@example.com') {
-  console.warn('WARNING: CONTACT_EMAIL not set. MusicBrainz may rate-limit requests.');
-}
+
+const getMusicBrainzContact = () => {
+    return db.data.settings.integrations?.musicbrainz?.email || process.env.CONTACT_EMAIL || "user@example.com";
+};
 
 const mbLimiter = new Bottleneck({
   maxConcurrent: 1,
@@ -222,7 +270,7 @@ const musicbrainzRequest = mbLimiter.wrap(async (endpoint, params = {}) => {
       `${MUSICBRAINZ_API}${endpoint}?${queryParams}`,
       {
         headers: {
-          "User-Agent": `${APP_NAME}/${APP_VERSION} ( ${CONTACT} )`,
+          "User-Agent": `${APP_NAME}/${APP_VERSION} ( ${getMusicBrainzContact()} )`,
         },
         timeout: 20000,
       },
@@ -241,14 +289,15 @@ const musicbrainzRequest = mbLimiter.wrap(async (endpoint, params = {}) => {
 });
 
 const lastfmRequest = lastfmLimiter.wrap(async (method, params = {}) => {
-  if (!LASTFM_API_KEY) return null;
+  const apiKey = getLastfmApiKey();
+  if (!apiKey) return null;
 
   console.log(`Last.fm Request: ${method}`);
   try {
     const response = await axios.get(LASTFM_API, {
       params: {
         method,
-        api_key: LASTFM_API_KEY,
+        api_key: apiKey,
         format: "json",
         ...params,
       },
@@ -262,16 +311,29 @@ const lastfmRequest = lastfmLimiter.wrap(async (method, params = {}) => {
 });
 
 const lidarrRequest = async (endpoint, method = "GET", data = null, silent = false) => {
-  if (!LIDARR_API_KEY) {
+  const { url, apiKey } = getLidarrConfig();
+  
+  if (!apiKey) {
     throw new Error("Lidarr API key not configured");
+  }
+
+  // Handle basepath detection logic inside the request or assume URL is correct from probe
+  // For simplicity, we assume the user/probe sets the correct URL in DB/Env.
+  // If basepath detected earlier, we might need to append it? 
+  // Let's rely on the URL stored.
+  
+  let finalUrl = url;
+  // Small hack: if we detected basepath but it's not in the URL string
+  if (lidarrBasepathDetected && !finalUrl.endsWith('/lidarr')) {
+      finalUrl += '/lidarr';
   }
 
   try {
     const config = {
       method,
-      url: `${lidarrUrl}/api/v1${endpoint}`,
+      url: `${finalUrl}/api/v1${endpoint}`,
       headers: {
-        "X-Api-Key": LIDARR_API_KEY,
+        "X-Api-Key": apiKey,
       },
     };
 
@@ -281,7 +343,6 @@ const lidarrRequest = async (endpoint, method = "GET", data = null, silent = fal
 
     const response = await axios(config);
 
-    // Detect HTML response (indicates wrong URL/basepath)
     if (typeof response.data === 'string' && response.data.includes('<!doctype html>')) {
       const error = new Error(
         'Lidarr returned HTML instead of JSON. ' +
@@ -300,10 +361,16 @@ const lidarrRequest = async (endpoint, method = "GET", data = null, silent = fal
   }
 };
 
+const playlistManager = new PlaylistManager(db, lidarrRequest, musicbrainzRequest, lastfmRequest);
+
 app.get("/api/health", async (req, res) => {
   let lidarrStatus = "unknown";
+  const { url, apiKey } = getLidarrConfig();
+  const authUser = getAuthUser();
+  const authPassword = getAuthPassword();
+
   try {
-    if (LIDARR_API_KEY) {
+    if (apiKey) {
       await lidarrRequest("/system/status", "GET", null, true);
       lidarrStatus = "connected";
     } else {
@@ -315,11 +382,12 @@ app.get("/api/health", async (req, res) => {
 
   res.json({
     status: "ok",
-    lidarrConfigured: !!LIDARR_API_KEY,
+    lidarrConfigured: !!apiKey,
     lidarrStatus,
-    lidarrUrl: LIDARR_API_KEY ? lidarrUrl : null,
+    lidarrUrl: apiKey ? url : null,
     lidarrBasepathDetected,
-    lastfmConfigured: !!LASTFM_API_KEY,
+    lastfmConfigured: !!getLastfmApiKey(),
+    musicbrainzConfigured: !!(db.data.settings.integrations?.musicbrainz?.email || process.env.CONTACT_EMAIL),
     discovery: {
       lastUpdated: discoveryCache?.lastUpdated || null,
       isUpdating: !!discoveryCache?.isUpdating,
@@ -329,11 +397,72 @@ app.get("/api/health", async (req, res) => {
         ? Object.keys(db.data.images).length
         : 0,
     },
-    authRequired: !!process.env.AUTH_PASSWORD,
-    authUser: process.env.AUTH_USER || "admin",
+    authRequired: authPassword.length > 0,
+    authUser: authUser,
     timestamp: new Date().toISOString(),
   });
 });
+
+// Playlist / Flow Endpoints
+
+app.get("/api/playlists/weekly", (req, res) => {
+  const weekly = db.data.flows?.weekly || { enabled: false, items: [], updatedAt: null };
+  res.json(weekly);
+});
+
+app.post("/api/playlists/weekly/toggle", async (req, res) => {
+  try {
+    const { enabled } = req.body;
+    const result = await playlistManager.setEnabled(enabled);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to toggle weekly flow" });
+  }
+});
+
+app.post("/api/playlists/weekly/generate", async (req, res) => {
+  try {
+    const items = await playlistManager.generateWeeklyFlow();
+    res.json({ success: true, count: items.length, items });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to generate weekly playlist", details: error.message });
+  }
+});
+
+app.post("/api/playlists/weekly/sync", async (req, res) => {
+  try {
+    const result = await playlistManager.syncToNavidrome();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to sync to Navidrome", details: error.message });
+  }
+});
+
+app.post("/api/playlists/items/:mbid/keep", async (req, res) => {
+  try {
+    const success = await playlistManager.keepItem(req.params.mbid);
+    res.json({ success });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to keep item" });
+  }
+});
+
+app.delete("/api/playlists/items/:mbid", async (req, res) => {
+  try {
+    const success = await playlistManager.removeItem(req.params.mbid);
+    res.json({ success });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to remove item" });
+  }
+});
+
+const parseLastFmDate = (dateStr) => {
+  if (!dateStr) return "";
+  // Try to clean up common Last.fm date formats if needed, but Date() parses "01 Jan 1990" well.
+  const d = new Date(dateStr.split(",")[0].trim()); // Remove time if present "22 Mar 1982, 00:00"
+  if (isNaN(d.getTime())) return "";
+  return d.toISOString().split("T")[0];
+};
 
 app.get("/api/search/artists", async (req, res) => {
   try {
@@ -343,7 +472,7 @@ app.get("/api/search/artists", async (req, res) => {
       return res.status(400).json({ error: "Query parameter is required" });
     }
 
-    if (LASTFM_API_KEY) {
+    if (getLastfmApiKey()) {
       try {
         const limitInt = parseInt(limit) || 20;
         const offsetInt = parseInt(offset) || 0;
@@ -399,19 +528,13 @@ app.get("/api/search/artists", async (req, res) => {
         }
       } catch (error) {
         console.warn(
-          "Last.fm search failed, falling back to MusicBrainz:",
+          "Last.fm search failed",
           error.message,
         );
       }
     }
 
-    const data = await musicbrainzRequest("/artist", {
-      query: query,
-      limit,
-      offset,
-    });
-
-    res.json(data);
+    res.json({ artists: [], count: 0, offset: 0 });
   } catch (error) {
     res.status(500).json({
       error: "Failed to search artists",
@@ -428,7 +551,12 @@ app.get("/api/artists/:mbid", async (req, res) => {
       return res.status(400).json({ error: "Invalid MBID format" });
     }
 
-    if (LASTFM_API_KEY) {
+    /* 
+     * Switching to MusicBrainz as primary source for album lists per user request.
+     * Last.fm data was deemed too convoluted.
+     */
+    /*
+    if (getLastfmApiKey()) {
       try {
         const lastfmData = await lastfmRequest("artist.getInfo", { mbid });
         if (lastfmData?.artist) {
@@ -439,7 +567,7 @@ app.get("/api/artists/:mbid", async (req, res) => {
             "sort-name": a.name,
             type: "Person", // Last.fm doesn't provide type reliably
             "life-span": {
-              begin: "", // Last.fm doesn't provide this
+              begin: "", 
             },
             country: "",
             area: { name: "" },
@@ -452,99 +580,84 @@ app.get("/api/artists/:mbid", async (req, res) => {
               typeof a.bio?.summary === "string"
                 ? a.bio.summary.replace(/<[^>]*>/g, "").split(".")[0]
                 : "",
-            "release-groups": [], // We'll need to fetch this separately or mix it in
+            "release-groups": [], 
             aliases: [],
           };
 
-          // Try to fetch albums from Last.fm
           try {
             const albumData = await lastfmRequest("artist.getTopAlbums", {
               mbid,
               limit: 50,
             });
+            
             if (albumData?.topalbums?.album) {
               const albums = Array.isArray(albumData.topalbums.album)
                 ? albumData.topalbums.album
                 : [albumData.topalbums.album];
               
-              artist["release-groups"] = albums
-                .filter(alb => alb.mbid)
+              // Map initial data
+              let releaseGroups = albums
+                .filter(alb => alb.mbid || alb.name)
                 .map(alb => ({
-                  id: alb.mbid,
+                  id: alb.mbid || `lfm-${Buffer.from(alb.name).toString('base64')}`, // Fallback ID if no MBID
                   title: alb.name,
-                  "primary-type": "Album", // Assuming Album
-                  "first-release-date": "", // Last.fm top albums doesn't have dates easily
+                  "primary-type": "Album",
+                  "first-release-date": "", 
+                  "secondary-types": [],
+                  image: alb.image?.find(i => i.size === 'large')?.['#text']
                 }));
+
+              // Enrich with details to get dates (Top 25 to ensure speed)
+              const enrichPromises = releaseGroups.slice(0, 25).map(async (album) => {
+                  try {
+                      // Prefer MBID, fallback to Artist+Album Name
+                      const params = album.id.startsWith('lfm-') 
+                        ? { artist: artist.name, album: album.title }
+                        : { mbid: album.id };
+                      
+                      const details = await lastfmRequest("album.getInfo", params);
+                      
+                      if (details?.album) {
+                          // Try to find a date
+                          let date = "";
+                          if (details.album.wiki?.published) {
+                              date = parseLastFmDate(details.album.wiki.published);
+                          } else if (details.album.releasedate) {
+                              date = parseLastFmDate(details.album.releasedate.trim());
+                          }
+
+                          return {
+                              ...album,
+                              "first-release-date": date,
+                              "primary-type": details.album.tags?.tag?.some(t => t.name?.toLowerCase() === 'ep') ? 'EP' : 'Album'
+                          };
+                      }
+                  } catch (e) {
+                      // Ignore enrichment errors
+                  }
+                  return album;
+              });
+
+              artist["release-groups"] = await Promise.all(enrichPromises);
+              
+              // Append the rest unenriched
+              if (releaseGroups.length > 25) {
+                  artist["release-groups"].push(...releaseGroups.slice(25));
+              }
             }
           } catch (e) {
             console.warn("Last.fm album fetch failed:", e.message);
           }
-
-          // If we have basic info but incomplete (like release groups or dates), 
-          // we might want to still hit MusicBrainz to fill gaps, 
-          // OR just return what we have if the user really wants Last.fm first.
-          // However, for detailed views, MusicBrainz is much richer.
-          // Let's use Last.fm for the "fast" data but maybe fallback/enrich with MB if possible?
-          // The prompt says "If a last.fm api key is included then that should be the first option for metadata before falling back to the slower musicbrainz api."
-          // So we should return this if it's "good enough".
           
-          // MusicBrainz is essential for accurate album lists with dates and types.
-          // Last.fm's getTopAlbums is popularity sorted, not chronological, and lacks dates.
-          // For a good detail page, we usually need MB data.
-          // BUT, we can use Last.fm for the basic bio/tags if available to speed up initial render?
-          // Actually, the request asks to use Last.fm FIRST.
-          // If we want to replace MB completely for details, we lose structured data (dates, types).
-          // Maybe we try Last.fm, and if we get a result, we use it, but we might be missing specific fields used in the frontend.
-          
-          // Let's prefer MusicBrainz for the *Details* page because of the structured data requirement (albums, dates, types),
-          // but use Last.fm for the *Search* and *Image* and *Recommendations* which are the slow parts.
-          // The search endpoint was already refactored.
-          
-          // If the user insists on Last.fm for metadata here:
-          // We can return the constructed object. But the frontend expects `release-groups` with `first-release-date` for sorting.
-          // Last.fm doesn't provide release dates in `getTopAlbums`.
-          // So using Last.fm here might break the "Albums" view sorting.
-          
-          // Compromise: Use Last.fm for bio/tags/image (which we do elsewhere), but stick to MB for the structured release groups.
-          // OR, fetch MB for release groups only?
-          
-          // Let's stick to the prompt: "refactor to make this last.fm first".
-          // If we use Last.fm, we might be missing dates.
-          // Let's try to get MB data for release groups if Last.fm doesn't give enough?
-          // Actually, `getArtistDetails` is mostly used for the full page.
-          // Let's keep MB as the primary source for the *structure* of the artist details (albums, etc)
-          // because Last.fm API doesn't provide the structured discography required by the frontend (dates, types).
-          // The "metadata" part usually refers to Bio, Images, Tags.
-          // The current implementation already mixes them (fetching MB, then images from Last.fm).
-          
-          // We will prioritize Last.fm for search (done above).
-          // For this specific endpoint, we can try to fetch from MB because of the structural need.
-          // If MB fails/is slow, we could fallback? But the prompt says Last.fm FIRST.
-          
-          // Let's modify the strategy:
-          // If Last.fm key exists, we can get the *Artist Info* from Last.fm.
-          // But we still need the discography.
-          // Maybe we fetch MB *only* for release-groups?
-          
-          // To strictly follow "Last.fm first for metadata":
-          // We can return the Last.fm data. If `release-groups` is empty or lacks dates, the frontend might show less info, but it won't crash if we handle it.
-          // However, for a media manager like app (Lidarr integration), MusicBrainz IDs and strict album data are crucial.
-          // Lidarr uses MBIDs.
-          
-          // Let's leave this endpoint primarily MusicBrainz for now to ensure Lidarr compatibility (which is 100% MB based),
-          // as replacing the *source of truth* for IDs and Albums with Last.fm might break the "Add to Lidarr" flow if data mismatches.
-          // Lidarr requires MusicBrainz data.
-          
-          // However, we can use Last.fm to *enrich* or *speed up* if we can?
-          // Actually, the search is the main "discovery" bottleneck.
-          // I'll leave this endpoint as MB-primary because of the deep integration with Lidarr (which is MB based).
-          // Refactoring the *search* to be Last.fm first is the biggest win for speed/UX.
+          return res.json(artist);
         }
       } catch (e) {
-        // Fallback to MB
+        // Fallback
       }
     }
+    */
 
+    // MusicBrainz Fallback
     const data = await musicbrainzRequest(`/artist/${mbid}`, {
       inc: "aliases+tags+ratings+genres+release-groups",
     });
@@ -586,7 +699,7 @@ const getArtistImage = async (mbid) => {
   }
 
   const fetchPromise = (async () => {
-    if (LASTFM_API_KEY) {
+    if (getLastfmApiKey()) {
       try {
         const lastfmData = await lastfmRequest("artist.getInfo", { mbid });
         if (lastfmData?.artist?.image) {
@@ -625,44 +738,8 @@ const getArtistImage = async (mbid) => {
     }
 
     try {
-      const releaseGroupsData = await musicbrainzRequest(`/artist/${mbid}`, {
-        inc: "release-groups",
-      });
-      if (releaseGroupsData?.["release-groups"]?.length > 0) {
-        const sorted = releaseGroupsData["release-groups"].sort((a, b) => {
-          const aScore = a["primary-type"] === "Album" ? 1 : 0;
-          const bScore = b["primary-type"] === "Album" ? 1 : 0;
-          if (aScore !== bScore) return bScore - aScore;
-          return (b["first-release-date"] || "").localeCompare(
-            a["first-release-date"] || "",
-          );
-        });
-
-        for (const release of sorted.slice(0, 12)) {
-          try {
-            const coverRes = await axios.get(
-              `https://coverartarchive.org/release-group/${release.id}`,
-              { timeout: 5000 },
-            );
-            if (coverRes.data?.images?.length > 0) {
-              const front =
-                coverRes.data.images.find((i) => i.front) ||
-                coverRes.data.images[0];
-              const url =
-                front.thumbnails?.large ||
-                front.thumbnails?.small ||
-                front.image;
-
-              db.data.images[mbid] = url;
-              await db.write();
-
-              return { url, images: coverRes.data.images };
-            }
-          } catch (e) {
-            continue;
-          }
-        }
-      }
+      // Last.fm logic remains, MusicBrainz fallback removed.
+      // If Last.fm fails, we just don't have an image.
     } catch (e) {}
 
     negativeImageCache.add(mbid);
@@ -708,7 +785,7 @@ app.get("/api/artists/:mbid/similar", async (req, res) => {
 
     const { limit = 20 } = req.query;
 
-    if (!LASTFM_API_KEY) {
+    if (!getLastfmApiKey()) {
       return res.json({ artists: [] });
     }
 
@@ -772,14 +849,17 @@ app.get("/api/lidarr/artists", async (req, res) => {
 app.get("/api/lidarr/mediacover/:artistId/:filename", async (req, res) => {
   try {
     const { artistId, filename } = req.params;
+    const { url, apiKey } = getLidarrConfig();
+    let finalUrl = url;
+    if (lidarrBasepathDetected && !finalUrl.endsWith('/lidarr')) finalUrl += '/lidarr';
 
     const coverType = filename.split(".")[0];
 
     const imageResponse = await axios.get(
-      `${lidarrUrl}/api/v1/mediacover/${artistId}/${coverType}`,
+      `${finalUrl}/api/v1/mediacover/${artistId}/${coverType}`,
       {
         headers: {
-          "X-Api-Key": LIDARR_API_KEY,
+          "X-Api-Key": apiKey,
         },
         responseType: "arraybuffer",
       },
@@ -807,6 +887,20 @@ app.get("/api/lidarr/artists/:id", async (req, res) => {
   } catch (error) {
     res.status(error.response?.status || 500).json({
       error: "Failed to fetch Lidarr artist",
+      message: error.message,
+    });
+  }
+});
+
+app.put("/api/lidarr/artists/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await lidarrRequest(`/artist/${id}`, "PUT", req.body);
+    lastLidarrFetch = 0; // Invalidate cache
+    res.json(result);
+  } catch (error) {
+    res.status(error.response?.status || 500).json({
+      error: "Failed to update artist in Lidarr",
       message: error.message,
     });
   }
@@ -1080,6 +1174,27 @@ app.get("/api/lidarr/metadataprofile", async (req, res) => {
   }
 });
 
+app.put("/api/lidarr/albums/monitor", async (req, res) => {
+  try {
+    const { albumIds, monitored } = req.body;
+    if (!Array.isArray(albumIds) || typeof monitored !== "boolean") {
+      return res.status(400).json({ error: "Invalid request body" });
+    }
+
+    const result = await lidarrRequest("/album/monitor", "PUT", {
+      albumIds,
+      monitored,
+    });
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to batch update albums",
+      message: error.message,
+    });
+  }
+});
+
 app.get("/api/lidarr/albums", async (req, res) => {
   try {
     const { artistId } = req.query;
@@ -1091,6 +1206,22 @@ app.get("/api/lidarr/albums", async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: "Failed to fetch albums from Lidarr",
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/lidarr/tracks", async (req, res) => {
+  try {
+    const { albumId } = req.query;
+    if (!albumId) {
+      return res.status(400).json({ error: "albumId parameter is required" });
+    }
+    const tracks = await lidarrRequest(`/track?albumId=${albumId}`);
+    res.json(tracks);
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to fetch tracks from Lidarr",
       message: error.message,
     });
   }
@@ -1130,6 +1261,27 @@ app.post("/api/lidarr/command/albumsearch", async (req, res) => {
   }
 });
 
+app.post("/api/lidarr/command/refreshartist", async (req, res) => {
+  try {
+    const { artistId } = req.body;
+    if (!artistId) {
+      return res
+        .status(400)
+        .json({ error: "artistId is required" });
+    }
+    const result = await lidarrRequest("/command", "POST", {
+      name: "RefreshArtist",
+      artistId: parseInt(artistId),
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to refresh artist",
+      message: error.message,
+    });
+  }
+});
+
 app.delete("/api/lidarr/artists/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -1142,6 +1294,51 @@ app.delete("/api/lidarr/artists/:id", async (req, res) => {
   } catch (error) {
     res.status(error.response?.status || 500).json({
       error: "Failed to delete artist from Lidarr",
+      message: error.message,
+    });
+  }
+});
+
+app.delete("/api/lidarr/albums/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { deleteFiles = false } = req.query;
+
+    await lidarrRequest(`/album/${id}?deleteFiles=${deleteFiles}`, "DELETE");
+    lastLidarrFetch = 0;
+
+    res.json({ success: true, message: "Album deleted successfully" });
+  } catch (error) {
+    res.status(error.response?.status || 500).json({
+      error: "Failed to delete album from Lidarr",
+      message: error.message,
+    });
+  }
+});
+
+app.post("/api/lidarr/optimize", async (req, res) => {
+  try {
+    const { enableMetadataProfile, releaseTypes } = req.body;
+    const result = await applyOptimalLidarrSettings(lidarrRequest, {
+      enableMetadataProfile,
+      releaseTypes
+    });
+
+    // Automatically update app settings with the new profiles
+    if (result.qualityProfileId || result.metadataProfileId) {
+      db.data.settings = {
+        ...(db.data.settings || defaultData.settings),
+        qualityProfileId: result.qualityProfileId || db.data.settings.qualityProfileId,
+        metadataProfileId: result.metadataProfileId || db.data.settings.metadataProfileId,
+      };
+      await db.write();
+      result.message += " App defaults updated.";
+    }
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to apply optimizations",
       message: error.message,
     });
   }
@@ -1165,7 +1362,7 @@ const updateDiscoveryCache = async () => {
       lidarrArtists.map((a) => a.foreignArtistId),
     );
 
-    if (lidarrArtists.length === 0 && !LASTFM_API_KEY) {
+    if (lidarrArtists.length === 0 && !getLastfmApiKey()) {
       console.log(
         "No artists in Lidarr and no Last.fm key. Skipping discovery.",
       );
@@ -1184,7 +1381,7 @@ const updateDiscoveryCache = async () => {
     await Promise.all(
       profileSample.map(async (artist) => {
         let foundTags = false;
-        if (LASTFM_API_KEY) {
+        if (getLastfmApiKey()) {
           try {
             const data = await lastfmRequest("artist.getTopTags", {
               mbid: artist.foreignArtistId,
@@ -1212,31 +1409,7 @@ const updateDiscoveryCache = async () => {
         }
 
         if (!foundTags) {
-          try {
-            const data = await musicbrainzRequest(
-              `/artist/${artist.foreignArtistId}`,
-              { inc: "tags+genres" },
-            );
-            (data.tags || []).forEach((t) => {
-              tagCounts.set(
-                t.name,
-                (tagCounts.get(t.name) || 0) + (t.count || 1),
-              );
-              const l = t.name.toLowerCase();
-              if (GENRE_KEYWORDS.some((g) => l.includes(g)))
-                genreCounts.set(t.name, (genreCounts.get(t.name) || 0) + 1);
-            });
-            (data.genres || []).forEach((g) =>
-              genreCounts.set(
-                g.name,
-                (genreCounts.get(g.name) || 0) + (g.count || 1),
-              ),
-            );
-          } catch (e) {
-            console.warn(
-              `Failed to get MusicBrainz tags for ${artist.artistName}: ${e.message}`,
-            );
-          }
+          // No MB fallback
         }
       }),
     );
@@ -1254,7 +1427,7 @@ const updateDiscoveryCache = async () => {
       `Identified Top Genres: ${discoveryCache.topGenres.join(", ")}`,
     );
 
-    if (LASTFM_API_KEY) {
+    if (getLastfmApiKey()) {
       console.log("Fetching Global Trending artists from Last.fm...");
       try {
         const topData = await lastfmRequest("chart.getTopArtists", {
@@ -1301,7 +1474,7 @@ const updateDiscoveryCache = async () => {
       `Generating recommendations based on ${recSample.length} artists...`,
     );
 
-    if (LASTFM_API_KEY) {
+    if (getLastfmApiKey()) {
       await Promise.all(
         recSample.map(async (artist) => {
           try {
@@ -1362,75 +1535,8 @@ const updateDiscoveryCache = async () => {
         }),
       );
     } else {
-      const excludeTerms = ["tribute", "cover", "best of", "karaoke"];
-      await Promise.all(
-        recSample.map(async (artist) => {
-          try {
-            const data = await musicbrainzRequest(
-              `/artist/${artist.foreignArtistId}`,
-              { inc: "tags+genres" },
-            );
-            const tags = (data.tags || [])
-              .sort((a, b) => b.count - a.count)
-              .slice(0, 10)
-              .map((t) => t.name);
-
-            if (tags.length > 0) {
-              let search = await musicbrainzRequest("/artist", {
-                query: `${tags
-                  .slice(0, 3)
-                  .map((t) => `tag:"${t}"`)
-                  .join(" AND ")} AND type:Group`,
-                limit: 15,
-              });
-
-              if (!search.artists || search.artists.length < 5) {
-                const broaderSearch = await musicbrainzRequest("/artist", {
-                  query: `${tags
-                    .slice(0, 2)
-                    .map((t) => `tag:"${t}"`)
-                    .join(" OR ")} AND type:Group`,
-                  limit: 15,
-                });
-                if (broaderSearch.artists) {
-                  search.artists = [
-                    ...(search.artists || []),
-                    ...broaderSearch.artists,
-                  ];
-                }
-              }
-
-              (search.artists || []).forEach((f) => {
-                const ln = f.name.toLowerCase();
-                const ld = (f.disambiguation || "").toLowerCase();
-                if (
-                  f.id !== artist.foreignArtistId &&
-                  !existingArtistIds.has(f.id) &&
-                  !recommendations.has(f.id) &&
-                  (f.type === "Group" || f.type === "Person") &&
-                  !excludeTerms.some((t) => ln.includes(t) || ld.includes(t))
-                ) {
-                  recommendations.set(f.id, {
-                    id: f.id,
-                    name: f.name,
-                    sortName: f["sort-name"],
-                    type: f.type,
-                    relationType: "Similar Style",
-                    sourceArtist: artist.artistName,
-                    disambiguation: f.disambiguation,
-                    tags: tags,
-                    score: f.score || 100,
-                  });
-                }
-              });
-            }
-          } catch (e) {
-            console.warn(
-              `MB Recommendation error for ${artist.artistName}: ${e.message}`,
-            );
-          }
-        }),
-      );
+      // Last.fm required for recommendations now
+      console.warn("Last.fm API key required for similar artist discovery.");
     }
 
     const recommendationsArray = Array.from(recommendations.values())
@@ -1572,7 +1678,7 @@ app.get("/api/discover/by-tag", async (req, res) => {
 
     let recommendations = [];
 
-    if (LASTFM_API_KEY) {
+    if (getLastfmApiKey()) {
       try {
         const data = await lastfmRequest("tag.getTopArtists", {
           tag,
@@ -1618,19 +1724,7 @@ app.get("/api/discover/by-tag", async (req, res) => {
     }
 
     if (recommendations.length === 0) {
-      const data = await musicbrainzRequest("/artist", {
-        query: `tag:"${tag}" AND type:Group`,
-        limit,
-      });
-
-      recommendations = (data.artists || []).map((artist) => ({
-        id: artist.id,
-        name: artist.name,
-        sortName: artist["sort-name"],
-        type: artist.type,
-        tags: (artist.tags || []).map((t) => t.name),
-        disambiguation: artist.disambiguation,
-      }));
+      // No fallback
     }
 
     const lidarrArtists = await lidarrRequest("/artist");
@@ -1657,15 +1751,17 @@ app.get("/api/discover/by-tag", async (req, res) => {
 
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`Lidarr URL (configured): ${process.env.LIDARR_URL || "http://localhost:8686"}`);
-  console.log(`Lidarr API Key configured: ${!!LIDARR_API_KEY}`);
+  const { url, apiKey } = getLidarrConfig();
+  console.log(`Lidarr URL (configured): ${url}`);
+  console.log(`Lidarr API Key configured: ${!!apiKey}`);
 
   // Probe Lidarr URL on startup
-  if (LIDARR_API_KEY) {
+  if (apiKey) {
     await probeLidarrUrl();
     if (lidarrBasepathDetected) {
-      console.log(`Lidarr URL (resolved): ${lidarrUrl}`);
+      console.log(`Lidarr URL (resolved): ${url}/lidarr`);
     }
   }
 });
+
 
