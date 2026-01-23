@@ -55,7 +55,7 @@ const ArtistImage = ({
         Promise.race([
           getArtistCover(mbidToFetch),
           new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("Timeout")), 10000)
+            setTimeout(() => reject(new Error("Timeout")), 5000)
           )
         ])
       );

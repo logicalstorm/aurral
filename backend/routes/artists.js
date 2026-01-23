@@ -2,6 +2,7 @@ import express from "express";
 import axios from "axios";
 import { UUID_REGEX } from "../config/constants.js";
 import { musicbrainzRequest, getLastfmApiKey, lastfmRequest } from "../services/apiClients.js";
+import { imagePrefetchService } from "../services/imagePrefetchService.js";
 
 const router = express.Router();
 
@@ -76,6 +77,9 @@ const handleSearch = async (req, res) => {
             });
 
           if (formattedArtists.length > 0) {
+            // Pre-fetch images for search results in background
+            imagePrefetchService.prefetchSearchResults(formattedArtists).catch(() => {});
+            
             return res.json({
               artists: formattedArtists,
               count: parseInt(
@@ -288,8 +292,87 @@ router.get("/:mbid", async (req, res) => {
 
 const pendingCoverRequests = new Map();
 
+// Background fetch function (doesn't block)
+const fetchCoverInBackground = async (mbid) => {
+  if (pendingCoverRequests.has(mbid)) return;
+  
+  const fetchPromise = (async () => {
+    try {
+      const { db } = await import("../config/db.js");
+      const { libraryManager } = await import("../services/libraryManager.js");
+      const libraryArtist = libraryManager.getArtist(mbid);
+      let artistName = libraryArtist?.artistName || null;
+
+      const [mbResult, deezerResult] = await Promise.allSettled([
+        !artistName ? Promise.race([
+          musicbrainzRequest(`/artist/${mbid}`, {}),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("MusicBrainz timeout")), 2000)
+          )
+        ]).catch(() => null) : Promise.resolve(null),
+        artistName ? axios.get(
+          `https://api.deezer.com/search/artist`,
+          {
+            params: { q: artistName, limit: 1 },
+            timeout: 2000
+          }
+        ).catch(() => null) : Promise.resolve(null)
+      ]);
+
+      if (!artistName && mbResult.status === 'fulfilled' && mbResult.value?.name) {
+        artistName = mbResult.value.name;
+        if (artistName) {
+          try {
+            const searchResponse = await axios.get(
+              `https://api.deezer.com/search/artist`,
+              {
+                params: { q: artistName, limit: 1 },
+                timeout: 2000
+              }
+            ).catch(() => null);
+
+            if (searchResponse?.data?.data?.[0]?.picture_xl || searchResponse?.data?.data?.[0]?.picture_big) {
+              const artist = searchResponse.data.data[0];
+              const imageUrl = artist.picture_xl || artist.picture_big;
+              if (!db.data.images) db.data.images = {};
+              if (!db.data.imageCacheAge) db.data.imageCacheAge = {};
+              db.data.images[mbid] = imageUrl;
+              db.data.imageCacheAge[mbid] = Date.now();
+              db.write().catch(() => {});
+              return;
+            }
+          } catch (e) {}
+        }
+      }
+
+      if (deezerResult.status === 'fulfilled' && deezerResult.value?.data?.data?.[0]) {
+        const artist = deezerResult.value.data.data[0];
+        if (artist.picture_xl || artist.picture_big) {
+          const imageUrl = artist.picture_xl || artist.picture_big;
+          if (!db.data.images) db.data.images = {};
+          if (!db.data.imageCacheAge) db.data.imageCacheAge = {};
+          db.data.images[mbid] = imageUrl;
+          db.data.imageCacheAge[mbid] = Date.now();
+          db.write().catch(() => {});
+          return;
+        }
+      }
+    } catch (e) {
+      // Silent fail for background updates
+    }
+  })();
+  
+  pendingCoverRequests.set(mbid, fetchPromise);
+  try {
+    await fetchPromise;
+  } finally {
+    pendingCoverRequests.delete(mbid);
+  }
+};
+
 router.get("/:mbid/cover", async (req, res) => {
   const { mbid } = req.params;
+  const { refresh = false } = req.query;
   
   try {
     if (!UUID_REGEX.test(mbid)) {
@@ -303,10 +386,22 @@ router.get("/:mbid/cover", async (req, res) => {
     }
 
     const { db } = await import("../config/db.js");
-    if (db.data.images && db.data.images[mbid] && db.data.images[mbid] !== "NOT_FOUND") {
+    
+    // Optimistic response: return cached data immediately if available
+    if (!refresh && db.data.images && db.data.images[mbid] && db.data.images[mbid] !== "NOT_FOUND") {
       console.log(`[Cover Route] Cache hit for ${mbid}`);
       const cachedUrl = db.data.images[mbid];
       res.set("Cache-Control", "public, max-age=31536000, immutable");
+      
+      // Trigger background refresh if cache is old (older than 7 days)
+      const cacheAge = db.data.imageCacheAge?.[mbid];
+      const shouldRefresh = !cacheAge || (Date.now() - cacheAge > 7 * 24 * 60 * 60 * 1000);
+      
+      if (shouldRefresh) {
+        // Don't await - let it run in background
+        fetchCoverInBackground(mbid).catch(() => {});
+      }
+      
       return res.json({
         images: [{
           image: cachedUrl,
@@ -316,9 +411,15 @@ router.get("/:mbid/cover", async (req, res) => {
       });
     }
 
-    if (db.data.images && db.data.images[mbid] === "NOT_FOUND") {
+    if (!refresh && db.data.images && db.data.images[mbid] === "NOT_FOUND") {
       console.log(`[Cover Route] NOT_FOUND cache for ${mbid}`);
       res.set("Cache-Control", "public, max-age=3600");
+      
+      // Try again in background after some time (maybe new images available)
+      setTimeout(() => {
+        fetchCoverInBackground(mbid).catch(() => {});
+      }, 60000); // Try again after 1 minute
+      
       return res.json({ images: [] });
     }
 
@@ -330,143 +431,144 @@ router.get("/:mbid/cover", async (req, res) => {
         const { libraryManager } = await import("../services/libraryManager.js");
         const libraryArtist = libraryManager.getArtist(mbid);
 
-        // Try to get artist name from library first (no API call needed)
+        // Try to get artist name from library first (fastest, no API call)
         let artistName = libraryArtist?.artistName || null;
-        
-        // If not in library, get name from MusicBrainz (minimal call, no relationships)
-        if (!artistName) {
-          try {
-            const artistData = await Promise.race([
-              musicbrainzRequest(`/artist/${mbid}`, {}),
-              new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("MusicBrainz timeout")), 5000)
-              )
-            ]).catch((e) => {
-              console.log(`[Cover Route] MusicBrainz failed for ${mbid}:`, e.message);
-              return null;
-            });
-            artistName = artistData?.name || null;
-          } catch (e) {
-            console.log(`[Cover Route] Failed to get artist name for ${mbid}:`, e.message);
-          }
-        }
 
-        // Search Deezer directly by artist name
-        if (artistName) {
-          try {
-            const searchResponse = await axios.get(
-              `https://api.deezer.com/search/artist`,
-              {
-                params: { q: artistName, limit: 1 },
-                timeout: 3000
-              }
-            ).catch(() => null);
-
-            if (searchResponse?.data?.data?.[0]?.picture_xl || searchResponse?.data?.data?.[0]?.picture_big) {
-              const artist = searchResponse.data.data[0];
-              const imageUrl = artist.picture_xl || artist.picture_big;
-              console.log(`[Cover Route] Found Deezer image for ${mbid} via name search`);
-              const result = {
-                images: [{
-                  image: imageUrl,
-                  front: true,
-                  types: ["Front"],
-                }]
-              };
-              if (!db.data.images) db.data.images = {};
-              db.data.images[mbid] = imageUrl;
-              db.write().catch(e => console.error("Error saving image to database:", e.message));
-              return result;
-            }
-          } catch (e) {
-            console.log(`[Cover Route] Deezer search failed for ${mbid}:`, e.message);
-          }
-        }
-
-        // Fallback: Try Cover Art Archive (only if Deezer search failed)
-        try {
-          const artistData = await Promise.race([
-            musicbrainzRequest(`/artist/${mbid}`, {
-              inc: "release-groups",
-            }),
+        // Parallel strategy: try MusicBrainz (if needed) and Deezer simultaneously
+        const [mbResult, deezerResult] = await Promise.allSettled([
+          // Only fetch from MusicBrainz if we don't have the name
+          !artistName ? Promise.race([
+            musicbrainzRequest(`/artist/${mbid}`, {}),
             new Promise((_, reject) => 
-              setTimeout(() => reject(new Error("MusicBrainz timeout")), 5000)
+              setTimeout(() => reject(new Error("MusicBrainz timeout")), 2000)
             )
-          ]).catch((e) => {
-            console.log(`[Cover Route] MusicBrainz failed for release-groups ${mbid}:`, e.message);
-            return null;
-          });
+          ]).catch(() => null) : Promise.resolve(null),
+          // Try Deezer search if we have a name
+          artistName ? axios.get(
+            `https://api.deezer.com/search/artist`,
+            {
+              params: { q: artistName, limit: 1 },
+              timeout: 2000
+            }
+          ).catch(() => null) : Promise.resolve(null)
+        ]);
 
-          if (artistData?.["release-groups"] && artistData["release-groups"].length > 0) {
-            const releaseGroups = artistData["release-groups"]
+        // Extract artist name from MusicBrainz if we got it
+        if (!artistName && mbResult.status === 'fulfilled' && mbResult.value?.name) {
+          artistName = mbResult.value.name;
+          
+          // Now try Deezer with the name we just got
+          if (artistName) {
+            try {
+              const searchResponse = await axios.get(
+                `https://api.deezer.com/search/artist`,
+                {
+                  params: { q: artistName, limit: 1 },
+                  timeout: 2000
+                }
+              ).catch(() => null);
+
+              if (searchResponse?.data?.data?.[0]?.picture_xl || searchResponse?.data?.data?.[0]?.picture_big) {
+                const artist = searchResponse.data.data[0];
+                const imageUrl = artist.picture_xl || artist.picture_big;
+                if (!db.data.images) db.data.images = {};
+                db.data.images[mbid] = imageUrl;
+                db.write().catch(e => console.error("Error saving image to database:", e.message));
+                return {
+                  images: [{
+                    image: imageUrl,
+                    front: true,
+                    types: ["Front"],
+                  }]
+                };
+              }
+            } catch (e) {
+              // Continue to fallback
+            }
+          }
+        }
+
+        // Check if Deezer search succeeded
+        if (deezerResult.status === 'fulfilled' && deezerResult.value?.data?.data?.[0]) {
+          const artist = deezerResult.value.data.data[0];
+          if (artist.picture_xl || artist.picture_big) {
+            const imageUrl = artist.picture_xl || artist.picture_big;
+            if (!db.data.images) db.data.images = {};
+            if (!db.data.imageCacheAge) db.data.imageCacheAge = {};
+            db.data.images[mbid] = imageUrl;
+            db.data.imageCacheAge[mbid] = Date.now();
+            db.write().catch(e => console.error("Error saving image to database:", e.message));
+            return {
+              images: [{
+                image: imageUrl,
+                front: true,
+                types: ["Front"],
+              }]
+            };
+          }
+        }
+
+        // Fallback: Try Cover Art Archive (parallel fetch for multiple release groups)
+        try {
+          const artistDataForRG = mbResult.status === 'fulfilled' && mbResult.value?.["release-groups"] 
+            ? mbResult.value 
+            : await Promise.race([
+                musicbrainzRequest(`/artist/${mbid}`, { inc: "release-groups" }),
+                new Promise((_, reject) => 
+                  setTimeout(() => reject(new Error("MusicBrainz timeout")), 2000)
+                )
+              ]).catch(() => null);
+
+          if (artistDataForRG?.["release-groups"]?.length > 0) {
+            const releaseGroups = artistDataForRG["release-groups"]
               .filter(rg => rg["primary-type"] === "Album" || rg["primary-type"] === "EP")
               .sort((a, b) => {
                 const dateA = a["first-release-date"] || "";
                 const dateB = b["first-release-date"] || "";
                 return dateB.localeCompare(dateA);
-              });
+              })
+              .slice(0, 2); // Only check top 2
 
-            console.log(`[Cover Route] Found ${releaseGroups.length} release groups for ${mbid}, checking top 2`);
-
-            const coverArtPromises = releaseGroups.slice(0, 2).map(async (rg, idx) => {
-              try {
-                const result = await axios.get(
+            // Try cover art in parallel
+            const coverArtResults = await Promise.allSettled(
+              releaseGroups.map(rg => 
+                axios.get(
                   `https://coverartarchive.org/release-group/${rg.id}`,
                   {
                     headers: { Accept: "application/json" },
-                    timeout: 4000,
+                    timeout: 2000,
                   }
-                );
-                console.log(`[Cover Route] Cover Art Archive success for ${mbid} (RG ${rg.id}, attempt ${idx + 1})`);
-                return result;
-              } catch (e) {
-                if (e.response?.status === 404) {
-                  return null;
-                }
-                console.log(`[Cover Route] Cover Art Archive failed for ${mbid} (RG ${rg.id}, attempt ${idx + 1}):`, e.message);
-                return null;
-              }
-            });
+                ).catch(() => null)
+              )
+            );
 
-            const coverArtResults = await Promise.all(coverArtPromises);
-            
-            for (const coverArtJson of coverArtResults) {
-              if (!coverArtJson) continue;
-              
-              if (coverArtJson?.data?.images && coverArtJson.data.images.length > 0) {
-                const frontImage = coverArtJson.data.images.find(img => img.front) || coverArtJson.data.images[0];
+            for (const result of coverArtResults) {
+              if (result.status === 'fulfilled' && result.value?.data?.images?.length > 0) {
+                const frontImage = result.value.data.images.find(img => img.front) || result.value.data.images[0];
                 if (frontImage) {
                   const imageUrl = frontImage.thumbnails?.["500"] || frontImage.thumbnails?.["large"] || frontImage.image;
                   if (imageUrl) {
-                    console.log(`[Cover Route] Successfully found cover for ${mbid}`);
-                    const result = {
+                    if (!db.data.images) db.data.images = {};
+                    if (!db.data.imageCacheAge) db.data.imageCacheAge = {};
+                    db.data.images[mbid] = imageUrl;
+                    db.data.imageCacheAge[mbid] = Date.now();
+                    db.write().catch(e => console.error("Error saving image to database:", e.message));
+                    return {
                       images: [{
                         image: imageUrl,
                         front: true,
                         types: frontImage.types || ["Front"],
                       }]
                     };
-                    if (!db.data.images) db.data.images = {};
-                    db.data.images[mbid] = imageUrl;
-                    db.write().catch(e => console.error("Error saving image to database:", e.message));
-                    return result;
                   }
                 }
               }
             }
-            if (coverArtResults.some(r => r !== null)) {
-              console.log(`[Cover Route] No valid images in Cover Art Archive responses for ${mbid}`);
-            } else {
-              console.log(`[Cover Route] No covers found in Cover Art Archive for ${mbid}`);
-            }
-          } else {
-            console.log(`[Cover Route] No release groups found for ${mbid}`);
           }
         } catch (e) {
-          console.log(`[Cover Route] Error in cover fetch for ${mbid}:`, e.message);
+          // Continue to negative cache
         }
 
-        console.log(`[Cover Route] Returning empty images for ${mbid}`);
         return { images: [] };
       } catch (error) {
         console.error(`Error fetching cover for ${mbid}:`, error.message);

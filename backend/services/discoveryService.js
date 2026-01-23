@@ -311,8 +311,12 @@ export const updateDiscoveryCache = async () => {
     console.log(`Hydrating images for ${allToHydrate.length} artists...`);
     
     // Images are now handled through the image service, no need for library lookup here
-    await Promise.all(
-      allToHydrate.map(async (item) => {
+    // Process in batches to avoid overwhelming APIs
+    const batchSize = 10;
+    for (let i = 0; i < allToHydrate.length; i += batchSize) {
+      const batch = allToHydrate.slice(i, i + batchSize);
+      await Promise.all(
+        batch.map(async (item) => {
         try {
           
           try {
@@ -322,13 +326,18 @@ export const updateDiscoveryCache = async () => {
             // Search Deezer directly by artist name (no MusicBrainz relationship lookup needed)
             if (artistName) {
               try {
-                const searchResponse = await axios.get(
-                  `https://api.deezer.com/search/artist`,
-                  {
-                    params: { q: artistName, limit: 1 },
-                    timeout: 2000
-                  }
-                ).catch(() => null);
+                const searchResponse = await Promise.race([
+                  axios.get(
+                    `https://api.deezer.com/search/artist`,
+                    {
+                      params: { q: artistName, limit: 1 },
+                      timeout: 1500
+                    }
+                  ),
+                  new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error("Deezer timeout")), 1500)
+                  )
+                ]).catch(() => null);
 
                 if (searchResponse?.data?.data?.[0]?.picture_xl || searchResponse?.data?.data?.[0]?.picture_big) {
                   const artist = searchResponse.data.data[0];
@@ -339,9 +348,14 @@ export const updateDiscoveryCache = async () => {
               }
             }
 
-            const artistDataWithRGs = await musicbrainzRequest(`/artist/${item.id}`, {
-              inc: "release-groups",
-            }).catch(() => null);
+            const artistDataWithRGs = await Promise.race([
+              musicbrainzRequest(`/artist/${item.id}`, {
+                inc: "release-groups",
+              }),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error("MusicBrainz timeout")), 2000)
+              )
+            ]).catch(() => null);
 
             if (artistDataWithRGs?.["release-groups"] && artistDataWithRGs["release-groups"].length > 0) {
               const releaseGroups = artistDataWithRGs["release-groups"]
@@ -352,33 +366,49 @@ export const updateDiscoveryCache = async () => {
                   return dateB.localeCompare(dateA);
                 });
 
-              for (const rg of releaseGroups.slice(0, 1)) {
-                try {
-                  const coverArtJson = await axios.get(
+              // Try top 2 release groups in parallel
+              const coverArtPromises = releaseGroups.slice(0, 2).map(rg =>
+                Promise.race([
+                  axios.get(
                     `https://coverartarchive.org/release-group/${rg.id}`,
                     {
                       headers: { Accept: "application/json" },
-                      timeout: 2000,
+                      timeout: 1500,
                     }
-                  ).catch(() => null);
+                  ),
+                  new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error("Cover Art timeout")), 1500)
+                  )
+                ]).catch(() => null)
+              );
 
-                  if (coverArtJson?.data?.images) {
-                    const frontImage = coverArtJson.data.images.find(img => img.front) || coverArtJson.data.images[0];
-                    if (frontImage?.thumbnails?.["500"] || frontImage?.image) {
-                      item.image = frontImage.thumbnails?.["500"] || frontImage.image;
-                      break;
-                    }
+              const coverArtResults = await Promise.allSettled(coverArtPromises);
+              
+              for (const result of coverArtResults) {
+                if (result.status !== 'fulfilled' || !result.value) continue;
+                
+                const coverArtJson = result.value;
+
+                if (coverArtJson?.data?.images) {
+                  const frontImage = coverArtJson.data.images.find(img => img.front) || coverArtJson.data.images[0];
+                  if (frontImage?.thumbnails?.["500"] || frontImage?.image) {
+                    item.image = frontImage.thumbnails?.["500"] || frontImage.image;
+                    break;
                   }
-                } catch (e) {
-                  continue;
                 }
               }
             }
           } catch (e) {
           }
         } catch (e) {}
-      }),
-    );
+        }),
+      );
+      
+      // Small delay between batches
+      if (i + batchSize < allToHydrate.length) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    }
 
     await db.write();
 

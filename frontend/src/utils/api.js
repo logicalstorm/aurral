@@ -65,7 +65,9 @@ export const getReleaseGroupTracks = async (mbid) => {
 };
 
 export const getArtistCover = async (mbid) => {
-  const response = await api.get(`/artists/${mbid}/cover`);
+  const response = await api.get(`/artists/${mbid}/cover`, {
+    timeout: 4000, // Reduced timeout for faster failure
+  });
   return response.data;
 };
 
