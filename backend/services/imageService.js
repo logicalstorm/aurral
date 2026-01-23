@@ -1,5 +1,6 @@
 import { db } from "../config/db.js";
-import { lastfmRequest, getLastfmApiKey } from "./apiClients.js";
+import { musicbrainzRequest } from "./apiClients.js";
+import axios from "axios";
 
 const negativeImageCache = new Set();
 const pendingImageRequests = new Map();
@@ -21,17 +22,11 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
   }
 
   if (!forceRefresh && db.data.images[mbid] === "NOT_FOUND") {
-    if (!getLastfmApiKey()) {
-      return { url: null, images: [] };
-    }
     delete db.data.images[mbid];
     negativeImageCache.delete(mbid);
   }
 
   if (!forceRefresh && negativeImageCache.has(mbid)) {
-    if (!getLastfmApiKey()) {
-      return { url: null, images: [] };
-    }
     negativeImageCache.delete(mbid);
   }
 
@@ -40,60 +35,57 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
   }
 
   const fetchPromise = (async () => {
-    if (getLastfmApiKey()) {
-      try {
-        const lastfmData = await Promise.race([
-          lastfmRequest("artist.getInfo", { mbid }),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("Last.fm timeout")), 5000)
-          )
-        ]);
-        if (lastfmData?.artist?.image) {
-          const images = lastfmData.artist.image
-            .filter(
-              (img) =>
-                img["#text"] &&
-                !img["#text"].includes("2a96cbd8b46e442fc41c2b86b821562f"),
-            )
-            .map((img) => ({
-              image: img["#text"],
-              front: true,
-              types: ["Front"],
-              size: img.size,
-            }));
+    try {
+      // Get artist name from MusicBrainz (minimal call, no relationships needed)
+      const artistData = await Promise.race([
+        musicbrainzRequest(`/artist/${mbid}`, {}),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("MusicBrainz timeout")), 5000)
+        )
+      ]).catch(() => null);
 
-          if (images.length > 0) {
-            const sizeOrder = {
-              mega: 4,
-              extralarge: 3,
-              large: 2,
-              medium: 1,
-              small: 0,
-            };
-            images.sort(
-              (a, b) => (sizeOrder[b.size] || 0) - (sizeOrder[a.size] || 0),
-            );
+      // Search Deezer directly by artist name (no relationship lookup needed)
+      if (artistData?.name) {
+        try {
+          const searchResponse = await axios.get(
+            `https://api.deezer.com/search/artist`,
+            {
+              params: { q: artistData.name, limit: 1 },
+              timeout: 3000
+            }
+          ).catch(() => null);
 
-            db.data.images[mbid] = images[0].image;
+          if (searchResponse?.data?.data?.[0]?.picture_xl || searchResponse?.data?.data?.[0]?.picture_big) {
+            const artist = searchResponse.data.data[0];
+            const imageUrl = artist.picture_xl || artist.picture_big;
+            db.data.images[mbid] = imageUrl;
             db.write().catch(e => {
               console.error("Error saving image to database:", e.message);
             });
 
-            return { url: images[0].image, images };
+            return {
+              url: imageUrl,
+              images: [{
+                image: imageUrl,
+                front: true,
+                types: ["Front"],
+              }]
+            };
           }
+        } catch (e) {
+          console.warn(`Failed to search Deezer for ${mbid}:`, e.message);
         }
-      } catch (e) {
-        console.warn(`Failed to fetch image for ${mbid} from Last.fm:`, e.message);
       }
+    } catch (e) {
+      console.warn(`Failed to fetch image for ${mbid}:`, e.message);
     }
 
-    if (getLastfmApiKey()) {
-      negativeImageCache.add(mbid);
-      db.data.images[mbid] = "NOT_FOUND";
-      db.write().catch(e => {
-        console.error("Error saving image cache to database:", e.message);
-      });
-    }
+    // Cache negative result
+    negativeImageCache.add(mbid);
+    db.data.images[mbid] = "NOT_FOUND";
+    db.write().catch(e => {
+      console.error("Error saving image cache to database:", e.message);
+    });
 
     return { url: null, images: [] };
   })();

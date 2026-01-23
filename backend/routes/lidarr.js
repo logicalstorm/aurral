@@ -11,7 +11,9 @@ const router = express.Router();
 
 router.get("/artists", async (req, res) => {
   try {
-    const artists = await getCachedLidarrArtists();
+    // Check if force refresh is requested
+    const forceRefresh = req.query.refresh === "true";
+    const artists = await getCachedLidarrArtists(forceRefresh);
     
     const artistsWithImages = artists.map(artist => {
       const artistCopy = { ...artist };
@@ -81,7 +83,32 @@ router.get("/mediacover/:artistId/:filename", async (req, res) => {
 router.get("/artists/:id", async (req, res) => {
   try {
     const { id } = req.params;
+    const forceRefresh = req.query.refresh === "true";
+    
+    // Always fetch fresh from Lidarr - no cache for individual artist
+    // But invalidate the list cache if refresh is requested
+    if (forceRefresh) {
+      invalidateLidarrCache();
+    }
+    
     const artist = await lidarrRequest(`/artist/${id}`);
+    
+    // Debug logging to see what Lidarr returns - log ALL fields that might relate to monitoring
+    console.log(`[Lidarr Artist ${id}] Full artist object keys:`, Object.keys(artist));
+    console.log(`[Lidarr Artist ${id}] Monitoring-related fields:`, {
+      monitorNewItems: artist.monitorNewItems,
+      monitored: artist.monitored,
+      addOptions: artist.addOptions,
+      artistName: artist.artistName,
+      // Check for any other monitoring-related fields
+      monitor: artist.monitor,
+      albumMonitor: artist.albumMonitor,
+      albumMonitoring: artist.albumMonitoring,
+    });
+    // Log a sample of the full artist object to see structure
+    const artistSample = JSON.stringify(artist).substring(0, 2000);
+    console.log(`[Lidarr Artist ${id}] Artist data sample:`, artistSample);
+    
     res.json(artist);
   } catch (error) {
     res.status(error.response?.status || 500).json({
@@ -94,10 +121,26 @@ router.get("/artists/:id", async (req, res) => {
 router.put("/artists/:id", async (req, res) => {
   try {
     const { id } = req.params;
+    console.log(`[Lidarr Update] Updating artist ${id}`);
+    console.log(`[Lidarr Update] Request body keys:`, Object.keys(req.body));
+    console.log(`[Lidarr Update] monitorNewItems:`, req.body.monitorNewItems);
+    console.log(`[Lidarr Update] Full request body (first 500 chars):`, JSON.stringify(req.body).substring(0, 500));
+    
+    // Send the update to Lidarr
     const result = await lidarrRequest(`/artist/${id}`, "PUT", req.body);
+    
+    console.log(`[Lidarr Update] Response monitorNewItems:`, result.monitorNewItems);
+    console.log(`[Lidarr Update] Response keys:`, Object.keys(result).slice(0, 20));
+    
+    // Invalidate cache so subsequent fetches get fresh data
     invalidateLidarrCache();
+    // Return the result from Lidarr (which should have the updated data)
     res.json(result);
   } catch (error) {
+    console.error(`[Lidarr Update] Error:`, error.response?.data || error.message);
+    if (error.response?.data) {
+      console.error(`[Lidarr Update] Error details:`, JSON.stringify(error.response.data).substring(0, 500));
+    }
     res.status(error.response?.status || 500).json({
       error: "Failed to update artist in Lidarr",
       message: error.message,
@@ -108,12 +151,13 @@ router.put("/artists/:id", async (req, res) => {
 router.get("/lookup/:mbid", async (req, res) => {
   try {
     const { mbid } = req.params;
+    const forceRefresh = req.query.refresh === "true";
 
     if (!UUID_REGEX.test(mbid)) {
       return res.status(400).json({ error: "Invalid MBID format" });
     }
 
-    const artists = await getCachedLidarrArtists();
+    const artists = await getCachedLidarrArtists(forceRefresh);
 
     const existingArtist = artists.find(
       (artist) => artist.foreignArtistId === mbid,

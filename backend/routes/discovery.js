@@ -48,16 +48,45 @@ router.post("/clear", async (req, res) => {
 });
 
 router.get("/", (req, res) => {
+  // Always read directly from database as source of truth
+  const dbData = db.data.discovery || {};
   const discoveryCache = getDiscoveryCache();
+  
+  // Ensure we have arrays (not undefined)
+  const recommendations = Array.isArray(dbData.recommendations) ? dbData.recommendations : (Array.isArray(discoveryCache.recommendations) ? discoveryCache.recommendations : []);
+  const globalTop = Array.isArray(dbData.globalTop) ? dbData.globalTop : (Array.isArray(discoveryCache.globalTop) ? discoveryCache.globalTop : []);
+  const basedOn = Array.isArray(dbData.basedOn) ? dbData.basedOn : (Array.isArray(discoveryCache.basedOn) ? discoveryCache.basedOn : []);
+  const topTags = Array.isArray(dbData.topTags) ? dbData.topTags : (Array.isArray(discoveryCache.topTags) ? discoveryCache.topTags : []);
+  const topGenres = Array.isArray(dbData.topGenres) ? dbData.topGenres : (Array.isArray(discoveryCache.topGenres) ? discoveryCache.topGenres : []);
+  const lastUpdated = dbData.lastUpdated || discoveryCache.lastUpdated || null;
+  const isUpdating = discoveryCache.isUpdating || false;
+  
+  // Debug logging
+  console.log(`[Discovery Route] DB data: recommendations=${recommendations.length}, globalTop=${globalTop.length}, topGenres=${topGenres.length}, topTags=${topTags.length}`);
+  console.log(`[Discovery Route] DB lastUpdated: ${lastUpdated}`);
+  
+  // Sync cache from database
+  if (recommendations.length > 0 || globalTop.length > 0 || topGenres.length > 0) {
+    Object.assign(discoveryCache, {
+      recommendations,
+      globalTop,
+      basedOn,
+      topTags,
+      topGenres,
+      lastUpdated,
+      isUpdating: false,
+    });
+  }
+  
   res.set("Cache-Control", "public, max-age=300");
   res.json({
-    recommendations: discoveryCache.recommendations,
-    globalTop: discoveryCache.globalTop,
-    basedOn: discoveryCache.basedOn,
-    topTags: discoveryCache.topTags,
-    topGenres: discoveryCache.topGenres,
-    lastUpdated: discoveryCache.lastUpdated,
-    isUpdating: discoveryCache.isUpdating,
+    recommendations,
+    globalTop,
+    basedOn,
+    topTags,
+    topGenres,
+    lastUpdated,
+    isUpdating,
   });
 });
 

@@ -28,11 +28,11 @@ function LibraryPage() {
   const navigate = useNavigate();
   const { showSuccess, showError } = useToast();
 
-  const fetchArtists = async () => {
+  const fetchArtists = async (forceRefresh = false) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getLidarrArtists();
+      const data = await getLidarrArtists(forceRefresh);
       setArtists(data);
     } catch (err) {
       setError(
@@ -142,10 +142,30 @@ function LibraryPage() {
   };
 
   const getMonitoringStatus = (artist) => {
-    if (artist.monitored) {
-      return { label: "Monitored", color: "green" };
+    // Get the monitoring option (none, all, future, missing, latest, first)
+    const monitorOption = artist.addOptions?.monitor || artist.monitorNewItems || "none";
+    
+    const monitorLabels = {
+      none: "None (Artist Only)",
+      all: "All Albums",
+      future: "Future Albums",
+      missing: "Missing Albums",
+      latest: "Latest Album",
+      first: "First Album",
+    };
+    
+    const label = monitorLabels[monitorOption] || "Unknown";
+    
+    // Color based on whether artist is monitored and what the option is
+    if (!artist.monitored) {
+      return { label: "Unmonitored", color: "gray", option: monitorOption };
     }
-    return { label: "Unmonitored", color: "gray" };
+    
+    if (monitorOption === "none") {
+      return { label, color: "gray", option: monitorOption };
+    }
+    
+    return { label, color: "green", option: monitorOption };
   };
 
   return (
@@ -163,7 +183,7 @@ function LibraryPage() {
             </p>
           </div>
           <button
-            onClick={fetchArtists}
+            onClick={() => fetchArtists(true)}
             disabled={loading}
             className="btn btn-secondary btn-sm mt-2 md:mt-0 disabled:opacity-50"
           >
@@ -247,7 +267,7 @@ function LibraryPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
             {currentArtists.map((artist) => {
               const image = getArtistImage(artist);
               const status = getMonitoringStatus(artist);
@@ -296,6 +316,7 @@ function LibraryPage() {
                           ? "badge-success"
                           : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
                       }`}
+                      title={status.option ? `Monitoring: ${status.option}` : status.label}
                     >
                       {status.label}
                     </span>
