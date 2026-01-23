@@ -118,7 +118,7 @@ function Sidebar({ isOpen, onClose }) {
           isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
       >
-        <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200 dark:border-b-gray-800">
+        <div className="h-16 flex items-center justify-center px-4 border-b border-gray-200 dark:border-b-gray-800">
           <Link to="/" className="flex items-center space-x-2 group">
             <img
               src="/arralogo.svg"
