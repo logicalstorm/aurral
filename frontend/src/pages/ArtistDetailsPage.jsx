@@ -104,7 +104,6 @@ function ArtistDetailsPage() {
           getArtistDetails(mbid),
           getAppSettings(),
         ]);
-        console.log("Artist data received:", artistData);
 
         // Initialize release type filters from settings (but don't use settings for filtering anymore)
         // Always start with all types selected
@@ -125,7 +124,6 @@ function ArtistDetailsPage() {
             }
           })
           .catch((err) => {
-            console.log("No cover art available");
           })
           .finally(() => setLoadingCover(false));
 
@@ -191,7 +189,6 @@ function ArtistDetailsPage() {
                   return lookup.artist;
                 }),
               ]).then(([fullArtist]) => {
-                console.log("Full library artist data:", fullArtist);
                 setLibraryArtist(fullArtist);
                 return fullArtist.id || lookup.artist.id;
               });
@@ -204,11 +201,9 @@ function ArtistDetailsPage() {
               setTimeout(() => {
                 getLibraryAlbums(artistId)
                   .then((albums) => {
-                    console.log("Library Albums:", albums);
                     setLibraryAlbums(albums);
                   })
                   .catch((err) => {
-                    console.log("Retrying album fetch...");
                     setTimeout(() => {
                       getLibraryAlbums(artistId)
                         .then((albums) => setLibraryAlbums(albums))
@@ -324,25 +319,13 @@ function ArtistDetailsPage() {
       delete updatedArtist.images;
       delete updatedArtist.links;
 
-      console.log("Updating artist with:", {
-        mbid: libraryArtist.mbid,
-        monitored: updatedArtist.monitored,
-        monitorOption: newMonitorOption,
-      });
-
       const result = await updateLibraryArtist(
         libraryArtist.mbid,
         updatedArtist,
       );
-      console.log("Update result from library:", result);
 
       // Refetch the artist from library to get the actual updated data
       const refreshedArtist = await getLibraryArtist(libraryArtist.mbid);
-      console.log("Refreshed artist after update:", {
-        monitored: refreshedArtist.monitored,
-        monitorOption:
-          refreshedArtist.monitorOption || refreshedArtist.addOptions?.monitor,
-      });
       setLibraryArtist(refreshedArtist);
 
       setShowRemoveDropdown(false);

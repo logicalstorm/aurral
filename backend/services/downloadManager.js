@@ -108,14 +108,8 @@ export class DownloadManager {
       completeDir = path.join(process.env.SLSKD_DOWNLOAD_DIR, 'complete');
     }
     
-    // Debug: log what we found
-    console.log(`Environment check - SLSKD_DOWNLOAD_DIR: ${process.env.SLSKD_DOWNLOAD_DIR || 'not set'}`);
-    console.log(`Environment check - SLSKD_COMPLETE_DIR: ${process.env.SLSKD_COMPLETE_DIR || 'not set'}`);
-    console.log(`Resolved complete directory: ${completeDir || 'not set'}`);
-    
     if (completeDir) {
       this.slskdDownloadDir = completeDir; // Store the complete directory path
-      console.log(`✓ Using slskd complete directory: ${this.slskdDownloadDir}`);
     } else {
       // Try to get download directory from slskd API
       if (slskdClient.isConfigured()) {
@@ -123,7 +117,6 @@ export class DownloadManager {
           const dir = await slskdClient.getDownloadDirectory();
           if (dir) {
             this.slskdDownloadDir = dir;
-            console.log(`✓ Using slskd download directory from API: ${this.slskdDownloadDir}`);
           }
         } catch (error) {
           console.warn('Could not get download directory from slskd:', error.message);
@@ -135,8 +128,6 @@ export class DownloadManager {
         const homeDir = process.env.HOME || process.env.USERPROFILE || '';
         const defaultDownloadsDir = homeDir ? path.join(homeDir, '.slskd', 'downloads') : '/tmp';
         this.slskdDownloadDir = path.join(defaultDownloadsDir, 'complete');
-        console.log(`⚠ Using default slskd complete directory: ${this.slskdDownloadDir}`);
-        console.log(`  (Set SLSKD_COMPLETE_DIR or SLSKD_DOWNLOAD_DIR in backend/.env to override)`);
       }
     }
   }
@@ -187,7 +178,6 @@ export class DownloadManager {
           }
           if (flattened.length > 0) {
             downloads = flattened;
-            console.log(`Flattened ${downloads.length} downloads from nested structure`);
           }
         }
       }
@@ -198,7 +188,6 @@ export class DownloadManager {
       // Check for completed downloads that we haven't processed yet
       const trackedCount = trackedDownloads.length;
       libraryMonitor.log('debug', 'download', `Checking ${downloads.length} downloads from slskd (${trackedCount} tracked as downloading)`);
-      console.log(`Checking ${downloads.length} downloads from slskd (${trackedCount} tracked as downloading)...`);
       let completedCount = 0;
       let processedCount = 0;
       
@@ -210,16 +199,9 @@ export class DownloadManager {
           const state = download.state || download.status || download.State || download.Status || 'unknown';
           stateCounts[state] = (stateCounts[state] || 0) + 1;
         }
-        if (Object.keys(stateCounts).length > 0) {
-          console.log(`Download states from slskd:`, stateCounts);
-          // If all are unknown, log a sample download to see structure
-          if (stateCounts.unknown === downloads.length && downloads.length > 0) {
-            console.log(`⚠ All downloads show as 'unknown' state. Sample download structure:`, {
-              id: downloads[0].id,
-              keys: Object.keys(downloads[0]),
-              sample: JSON.stringify(downloads[0]).substring(0, 500),
-            });
-          }
+        // If all are unknown, log a warning
+        if (stateCounts.unknown === downloads.length && downloads.length > 0) {
+          console.warn(`⚠ All downloads show as 'unknown' state. Check slskd API response structure.`);
         }
       }
 
@@ -247,16 +229,12 @@ export class DownloadManager {
               filename: download.filename || 'unknown',
               state: state,
             });
-            console.log(`Found unprocessed completed download: ${download.id}, filename: ${download.filename || 'unknown'}, state: ${state}`);
             await this.handleCompletedDownload(download);
             processedCount++;
           }
         }
       }
       
-      if (completedCount > 0 || processedCount > 0) {
-        console.log(`Found ${completedCount} completed downloads, processed ${processedCount} new ones`);
-      }
       
       // Check for failed/stalled downloads and handle retries
       for (const trackedDownload of trackedDownloads) {
@@ -363,7 +341,6 @@ export class DownloadManager {
         filename: download.filename,
         username: download.username,
       });
-      console.log(`Processing completed download: ${download.id}`);
       
       // slskd download object structure may vary
       // Try multiple possible path fields
@@ -462,7 +439,6 @@ export class DownloadManager {
             try {
               await fs.access(dir);
               incompleteDir = dir;
-              console.log(`✓ Found incomplete directory: ${incompleteDir}`);
               break;
             } catch (err) {
               // Doesn't exist, try next
@@ -470,14 +446,12 @@ export class DownloadManager {
           }
           
           if (!incompleteDir) {
-            console.log(`⚠ Incomplete directory not found. Tried: ${possibleIncompleteDirs.join(', ')}`);
           }
         }
         
         // Cache it for next time
         this.slskdDownloadDir = slskdDownloadDir;
         
-        console.log(`Using slskd complete directory: ${slskdDownloadDir}`);
         
         // Try multiple possible path structures
         // slskdDownloadDir now points directly to the complete folder
@@ -512,9 +486,6 @@ export class DownloadManager {
           incompleteDir && download.username ? path.join(incompleteDir, download.username, cleanPath) : null,
         ].filter(Boolean);
         
-        console.log(`Trying to locate file "${justFilename}" (from "${filename}") in ${possiblePaths.length} possible paths`);
-        console.log(`Using complete directory: ${slskdDownloadDir}`);
-        console.log(`First path to try: ${possiblePaths[0]}`);
         
         // Try to find the file
         for (const possiblePath of possiblePaths) {
@@ -524,7 +495,6 @@ export class DownloadManager {
             const stats = await fs.stat(possiblePath);
             if (stats.isFile()) {
               sourcePath = possiblePath;
-              console.log(`✓ Found downloaded file at: ${sourcePath} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
               break;
             }
           } catch (err) {
@@ -536,7 +506,6 @@ export class DownloadManager {
                 const stats = await fs.stat(mappedPath);
                 if (stats.isFile()) {
                   sourcePath = mappedPath;
-                  console.log(`✓ Found downloaded file at mapped path: ${sourcePath} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
                   break;
                 }
               } catch (mappedErr) {
@@ -549,20 +518,9 @@ export class DownloadManager {
         // If still not found, try recursive search in downloads directory
         if (!sourcePath) {
           try {
-            console.log(`File not found in direct paths, trying recursive search for "${justFilename}" in ${slskdDownloadDir}...`);
             const foundFile = await this.findFileRecursively(slskdDownloadDir, justFilename);
             if (foundFile) {
               sourcePath = foundFile;
-              console.log(`✓ Found downloaded file via recursive search: ${sourcePath}`);
-            } else {
-              console.log(`Recursive search did not find "${justFilename}" in ${slskdDownloadDir}`);
-              // Try listing the directory to see what's actually there
-              try {
-                const entries = await fs.readdir(slskdDownloadDir, { withFileTypes: true });
-                console.log(`Directory contents (${entries.length} items):`, entries.slice(0, 10).map(e => e.isDirectory() ? `[DIR] ${e.name}` : e.name));
-              } catch (listErr) {
-                console.warn(`Could not list directory ${slskdDownloadDir}:`, listErr.message);
-              }
             }
           } catch (searchErr) {
             console.warn(`Recursive search failed:`, searchErr.message);
@@ -572,50 +530,24 @@ export class DownloadManager {
         // Also try recursive search in incomplete directory if it exists
         if (!sourcePath && incompleteDir) {
           try {
-            console.log(`File not found in complete directory, trying recursive search in incomplete directory: ${incompleteDir}...`);
             // Check if incomplete directory exists
             try {
               await fs.access(incompleteDir);
               const foundFile = await this.findFileRecursively(incompleteDir, justFilename);
               if (foundFile) {
                 sourcePath = foundFile;
-                console.log(`✓ Found downloaded file in incomplete directory via recursive search: ${sourcePath}`);
-              } else {
-                console.log(`Recursive search in incomplete directory did not find "${justFilename}"`);
-                // List what's actually in the incomplete directory
-                try {
-                  const entries = await fs.readdir(incompleteDir, { withFileTypes: true });
-                  console.log(`Incomplete directory contents (${entries.length} items):`, entries.slice(0, 10).map(e => e.isDirectory() ? `[DIR] ${e.name}` : e.name));
-                } catch (listErr) {
-                  console.warn(`Could not list incomplete directory:`, listErr.message);
-                }
               }
             } catch (accessErr) {
-              console.log(`Incomplete directory ${incompleteDir} does not exist or is not accessible`);
+              // Incomplete directory doesn't exist or isn't accessible
             }
           } catch (searchErr) {
             console.warn(`Recursive search in incomplete directory failed:`, searchErr.message);
           }
         }
         
-        // If still not found, log for debugging
+        // If still not found, log warning
         if (!sourcePath) {
-          console.warn(`Could not locate downloaded file. Tried paths:`, possiblePaths.slice(0, 5));
-          console.warn(`Download object:`, JSON.stringify({
-            id: download.id,
-            filename: download.filename,
-            username: download.username,
-            state: download.state,
-            filePath: download.filePath,
-            destinationPath: download.destinationPath,
-            path: download.path,
-          }, null, 2));
-          
-          // Check if slskd might have a different complete directory structure
-          // Some versions store files in subdirectories matching the remote path
-          console.warn(`Note: slskd may store files preserving the remote directory structure.`);
-          console.warn(`If the file exists, it might be in a subdirectory matching: ${cleanPath}`);
-          console.warn(`Incomplete directory checked: ${incompleteDir || 'not found'}`);
+          console.warn(`Could not locate downloaded file: ${justFilename}`);
         }
       }
       
