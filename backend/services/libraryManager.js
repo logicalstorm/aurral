@@ -204,14 +204,54 @@ export class LibraryManager {
 
   async updateArtist(mbid, updates) {
     this.initDb();
-    const artist = this.getArtist(mbid);
+    // Find the artist directly in the database array, not via getArtist which returns a copy
+    const artist = (db.data?.library?.artists || []).find(a => a.mbid === mbid);
     if (!artist) {
       throw new Error('Artist not found');
     }
 
-    Object.assign(artist, updates);
-    await db.write();
-    return artist;
+    // Handle nested objects properly (merge instead of replace)
+    if (updates.addOptions) {
+      if (!artist.addOptions) {
+        artist.addOptions = {};
+      }
+      Object.assign(artist.addOptions, updates.addOptions);
+      // Don't delete from updates - Object.assign will overwrite, but we've already merged
+      // So we'll delete it to prevent overwriting our merged version
+      const { addOptions, ...restUpdates } = updates;
+      Object.assign(artist, restUpdates);
+    } else {
+      // Apply all updates directly
+      Object.assign(artist, updates);
+    }
+    
+    try {
+      await db.write();
+    } catch (error) {
+      console.error(`[LibraryManager] Error writing database:`, error);
+      throw error;
+    }
+    
+    // If monitoring option was changed and artist is now monitored, trigger monitoring immediately
+    if (updates.monitored !== undefined || updates.monitorOption !== undefined) {
+      const isNowMonitored = artist.monitored && artist.monitorOption && artist.monitorOption !== 'none';
+      if (isNowMonitored) {
+        // Trigger monitoring check for this artist in background (don't wait)
+        import('../services/monitoringService.js').then(({ monitoringService }) => {
+          monitoringService.processArtistMonitoring(artist).catch(err => {
+            console.error(`[LibraryManager] Error triggering monitoring for ${artist.artistName}:`, err.message);
+          });
+        }).catch(err => {
+          console.error(`[LibraryManager] Failed to import monitoring service:`, err.message);
+        });
+      }
+    }
+    
+    // Return formatted version for frontend compatibility
+    return {
+      ...artist,
+      foreignArtistId: artist.foreignArtistId || artist.mbid,
+    };
   }
 
   async deleteArtist(mbid, deleteFiles = false) {

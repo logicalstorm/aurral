@@ -198,6 +198,35 @@ export class MonitoringService {
           // Update album to monitored
           await libraryManager.updateAlbum(album.id, { ...album, monitored: true });
 
+          // Create album request entry (so it appears in Requests page)
+          if (!db.data.albumRequests) {
+            db.data.albumRequests = [];
+          }
+          
+          const existingRequest = db.data.albumRequests.find(
+            r => r.albumId === album.id || (r.albumMbid === album.mbid && r.artistMbid === artist.mbid)
+          );
+          
+          if (!existingRequest) {
+            db.data.albumRequests.push({
+              id: libraryManager.generateId(),
+              artistId: artist.id,
+              artistMbid: artist.mbid,
+              artistName: artist.artistName,
+              albumId: album.id,
+              albumMbid: album.mbid,
+              albumName: album.albumName,
+              status: 'processing',
+              requestedAt: new Date().toISOString(),
+            });
+            await db.write();
+            libraryMonitor.log('info', 'request', 'Album request created (auto-monitored)', {
+              albumId: album.id,
+              albumName: album.albumName,
+              artistName: artist.artistName,
+            });
+          }
+
           // Start download in background
           downloadManager.downloadAlbum(artist.id, album.id).catch(err => {
             console.error(`[MonitoringService] Failed to auto-download album ${album.albumName}:`, err.message);
