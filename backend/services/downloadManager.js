@@ -116,14 +116,21 @@ export class DownloadManager {
         try {
           const dir = await slskdClient.getDownloadDirectory();
           if (dir) {
-            this.slskdDownloadDir = dir;
+            // Check if the directory ends with 'complete' - if not, append it
+            // slskd API might return base directory or complete directory
+            if (dir.endsWith('complete') || dir.endsWith('complete/')) {
+              this.slskdDownloadDir = dir;
+            } else {
+              // API returned base directory, append /complete
+              this.slskdDownloadDir = path.join(dir, 'complete');
+            }
           }
         } catch (error) {
           console.warn('Could not get download directory from slskd:', error.message);
         }
       }
       
-      // Final fallback
+      // Final fallback (for Docker, this won't be used if API works)
       if (!this.slskdDownloadDir) {
         const homeDir = process.env.HOME || process.env.USERPROFILE || '';
         const defaultDownloadsDir = homeDir ? path.join(homeDir, '.slskd', 'downloads') : '/tmp';
@@ -355,8 +362,15 @@ export class DownloadManager {
         if (!slskdDownloadDir) {
           // Try to get it from API if we haven't cached it yet
           try {
-            slskdDownloadDir = await slskdClient.getDownloadDirectory();
-            if (slskdDownloadDir) {
+            const dir = await slskdClient.getDownloadDirectory();
+            if (dir) {
+              // Check if the directory ends with 'complete' - if not, append it
+              if (dir.endsWith('complete') || dir.endsWith('complete/')) {
+                slskdDownloadDir = dir;
+              } else {
+                // API returned base directory, append /complete
+                slskdDownloadDir = path.join(dir, 'complete');
+              }
               this.slskdDownloadDir = slskdDownloadDir;
             }
           } catch (error) {
