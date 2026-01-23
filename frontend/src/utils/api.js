@@ -76,19 +76,31 @@ export const getSimilarArtistsForArtist = async (mbid, limit = 20) => {
   return response.data;
 };
 
-export const getLidarrArtists = async () => {
-  const response = await api.get("/lidarr/artists");
+export const getLidarrArtists = async (forceRefresh = false) => {
+  const response = await api.get("/lidarr/artists", {
+    params: forceRefresh ? { refresh: "true" } : {},
+  });
   return response.data;
 };
 
-export const getLidarrArtist = async (id) => {
-  const response = await api.get(`/lidarr/artists/${id}`);
+export const getLidarrArtist = async (id, forceRefresh = false) => {
+  const response = await api.get(`/lidarr/artists/${id}`, {
+    params: forceRefresh ? { refresh: "true" } : {},
+  });
   return response.data;
 };
 
-export const lookupArtistInLidarr = async (mbid) => {
-  const response = await api.get(`/lidarr/lookup/${mbid}`);
+export const lookupArtistInLidarr = async (mbid, forceRefresh = false) => {
+  const response = await api.get(`/lidarr/lookup/${mbid}`, {
+    params: forceRefresh ? { refresh: "true" } : {},
+  });
   return response.data;
+};
+
+export const invalidateLidarrCache = async () => {
+  // This is a no-op on the frontend, but we can call the backend to invalidate
+  // The backend route doesn't exist yet, but we can add it if needed
+  return Promise.resolve();
 };
 
 export const lookupArtistsInLidarrBatch = async (mbids) => {

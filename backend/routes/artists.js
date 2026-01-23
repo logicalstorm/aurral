@@ -281,91 +281,72 @@ router.get("/:mbid/cover", async (req, res) => {
           }
         }
 
+        // Try to get artist name from Lidarr first (no API call needed)
+        let artistName = lidarrArtist?.artistName || null;
+        
+        // If not in Lidarr, get name from MusicBrainz (minimal call, no relationships)
+        if (!artistName) {
+          try {
+            const artistData = await Promise.race([
+              musicbrainzRequest(`/artist/${mbid}`, {}),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error("MusicBrainz timeout")), 5000)
+              )
+            ]).catch((e) => {
+              console.log(`[Cover Route] MusicBrainz failed for ${mbid}:`, e.message);
+              return null;
+            });
+            artistName = artistData?.name || null;
+          } catch (e) {
+            console.log(`[Cover Route] Failed to get artist name for ${mbid}:`, e.message);
+          }
+        }
+
+        // Search Deezer directly by artist name
+        if (artistName) {
+          try {
+            const searchResponse = await axios.get(
+              `https://api.deezer.com/search/artist`,
+              {
+                params: { q: artistName, limit: 1 },
+                timeout: 3000
+              }
+            ).catch(() => null);
+
+            if (searchResponse?.data?.data?.[0]?.picture_xl || searchResponse?.data?.data?.[0]?.picture_big) {
+              const artist = searchResponse.data.data[0];
+              const imageUrl = artist.picture_xl || artist.picture_big;
+              console.log(`[Cover Route] Found Deezer image for ${mbid} via name search`);
+              const result = {
+                images: [{
+                  image: imageUrl,
+                  front: true,
+                  types: ["Front"],
+                }]
+              };
+              if (!db.data.images) db.data.images = {};
+              db.data.images[mbid] = imageUrl;
+              db.write().catch(e => console.error("Error saving image to database:", e.message));
+              return result;
+            }
+          } catch (e) {
+            console.log(`[Cover Route] Deezer search failed for ${mbid}:`, e.message);
+          }
+        }
+
+        // Fallback: Try Cover Art Archive (only if Deezer search failed)
         try {
           const artistData = await Promise.race([
             musicbrainzRequest(`/artist/${mbid}`, {
-              inc: "release-groups+url-rels",
+              inc: "release-groups",
             }),
             new Promise((_, reject) => 
-              setTimeout(() => reject(new Error("MusicBrainz timeout")), 8000)
+              setTimeout(() => reject(new Error("MusicBrainz timeout")), 5000)
             )
           ]).catch((e) => {
-            console.log(`[Cover Route] MusicBrainz failed for ${mbid}:`, e.message);
+            console.log(`[Cover Route] MusicBrainz failed for release-groups ${mbid}:`, e.message);
             return null;
           });
-
-          if (artistData) {
-            let deezerId = null;
-            if (artistData.relations) {
-              const deezerRelation = artistData.relations.find(
-                rel => rel.type === "streaming music" && 
-                       (rel.url?.resource?.includes("deezer.com/artist") || 
-                        rel["target-type"] === "url" && rel.url?.resource?.includes("deezer.com/artist"))
-              );
-              if (deezerRelation?.url?.resource) {
-                const match = deezerRelation.url.resource.match(/deezer\.com\/artist\/(\d+)/);
-                if (match) {
-                  deezerId = match[1];
-                }
-              }
-            }
-
-            if (deezerId) {
-              try {
-                const deezerResponse = await axios.get(
-                  `https://api.deezer.com/artist/${deezerId}`,
-                  { timeout: 3000 }
-                ).catch(() => null);
-
-                if (deezerResponse?.data?.picture_xl || deezerResponse?.data?.picture_big) {
-                  const imageUrl = deezerResponse.data.picture_xl || deezerResponse.data.picture_big;
-                  console.log(`[Cover Route] Found Deezer image for ${mbid} via relationship`);
-                  const result = {
-                    images: [{
-                      image: imageUrl,
-                      front: true,
-                      types: ["Front"],
-                    }]
-                  };
-                  if (!db.data.images) db.data.images = {};
-                  db.data.images[mbid] = imageUrl;
-                  db.write().catch(e => console.error("Error saving image to database:", e.message));
-                  return result;
-                }
-              } catch (e) {
-                console.log(`[Cover Route] Deezer API failed for ${mbid}:`, e.message);
-              }
-            } else if (artistData.name) {
-              try {
-                const searchResponse = await axios.get(
-                  `https://api.deezer.com/search/artist`,
-                  {
-                    params: { q: artistData.name, limit: 1 },
-                    timeout: 3000
-                  }
-                ).catch(() => null);
-
-                if (searchResponse?.data?.data?.[0]?.picture_xl || searchResponse?.data?.data?.[0]?.picture_big) {
-                  const artist = searchResponse.data.data[0];
-                  const imageUrl = artist.picture_xl || artist.picture_big;
-                  console.log(`[Cover Route] Found Deezer image for ${mbid} via name search`);
-                  const result = {
-                    images: [{
-                      image: imageUrl,
-                      front: true,
-                      types: ["Front"],
-                    }]
-                  };
-                  if (!db.data.images) db.data.images = {};
-                  db.data.images[mbid] = imageUrl;
-                  db.write().catch(e => console.error("Error saving image to database:", e.message));
-                  return result;
-                }
-              } catch (e) {
-                console.log(`[Cover Route] Deezer search failed for ${mbid}:`, e.message);
-              }
-            }
-          }
 
           if (artistData?.["release-groups"] && artistData["release-groups"].length > 0) {
             const releaseGroups = artistData["release-groups"]

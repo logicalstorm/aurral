@@ -7,7 +7,26 @@ let discoveryCache = {
   isUpdating: false,
 };
 
-export const getDiscoveryCache = () => discoveryCache;
+export const getDiscoveryCache = () => {
+  // Ensure cache is synced with database on access
+  if (db.data.discovery) {
+    const dbData = db.data.discovery;
+    // Only sync if database has more data than cache
+    if ((dbData.recommendations?.length > 0 && (!discoveryCache.recommendations || discoveryCache.recommendations.length === 0)) ||
+        (dbData.globalTop?.length > 0 && (!discoveryCache.globalTop || discoveryCache.globalTop.length === 0)) ||
+        (dbData.topGenres?.length > 0 && (!discoveryCache.topGenres || discoveryCache.topGenres.length === 0))) {
+      Object.assign(discoveryCache, {
+        recommendations: dbData.recommendations || discoveryCache.recommendations || [],
+        globalTop: dbData.globalTop || discoveryCache.globalTop || [],
+        basedOn: dbData.basedOn || discoveryCache.basedOn || [],
+        topTags: dbData.topTags || discoveryCache.topTags || [],
+        topGenres: dbData.topGenres || discoveryCache.topGenres || [],
+        lastUpdated: dbData.lastUpdated || discoveryCache.lastUpdated || null,
+      });
+    }
+  }
+  return discoveryCache;
+};
 
 export const updateDiscoveryCache = async () => {
   if (discoveryCache.isUpdating) {
@@ -236,7 +255,12 @@ export const updateDiscoveryCache = async () => {
 
     Object.assign(discoveryCache, discoveryData);
     db.data.discovery = discoveryData;
-    await db.write();
+    try {
+      await db.write();
+      console.log(`Discovery data written to database: ${discoveryData.recommendations.length} recommendations, ${discoveryData.topGenres.length} genres, ${discoveryData.globalTop.length} trending`);
+    } catch (error) {
+      console.error("Failed to write discovery data to database:", error.message);
+    }
 
     const allToHydrate = [
       ...(discoveryCache.globalTop || []),
@@ -266,6 +290,7 @@ export const updateDiscoveryCache = async () => {
             const axios = (await import("axios")).default;
             const artistName = item.name || item.artistName;
             
+            // Search Deezer directly by artist name (no MusicBrainz relationship lookup needed)
             if (artistName) {
               try {
                 const searchResponse = await axios.get(
@@ -282,44 +307,6 @@ export const updateDiscoveryCache = async () => {
                   return;
                 }
               } catch (e) {
-              }
-            }
-
-            const { musicbrainzRequest } = await import("./apiClients.js");
-            
-            const artistData = await musicbrainzRequest(`/artist/${item.id}`, {
-              inc: "url-rels",
-            }).catch(() => null);
-
-            if (artistData) {
-              let deezerId = null;
-              if (artistData.relations) {
-                const deezerRelation = artistData.relations.find(
-                  rel => rel.type === "streaming music" && 
-                         (rel.url?.resource?.includes("deezer.com/artist") || 
-                          rel["target-type"] === "url" && rel.url?.resource?.includes("deezer.com/artist"))
-                );
-                if (deezerRelation?.url?.resource) {
-                  const match = deezerRelation.url.resource.match(/deezer\.com\/artist\/(\d+)/);
-                  if (match) {
-                    deezerId = match[1];
-                  }
-                }
-              }
-
-              if (deezerId) {
-                try {
-                  const deezerResponse = await axios.get(
-                    `https://api.deezer.com/artist/${deezerId}`,
-                    { timeout: 2000 }
-                  ).catch(() => null);
-
-                  if (deezerResponse?.data?.picture_xl || deezerResponse?.data?.picture_big) {
-                    item.image = deezerResponse.data.picture_xl || deezerResponse.data.picture_big;
-                    return;
-                  }
-                } catch (e) {
-                }
               }
             }
 
