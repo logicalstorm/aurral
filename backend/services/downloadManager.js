@@ -1079,9 +1079,12 @@ export class DownloadManager {
       
       // Search and download with tracklist for matching
       // This will download multiple tracks (one per track in tracklist)
+      // Use quality from artist settings or fall back to global settings
+      const quality = artist.quality || db.data?.settings?.quality || 'standard';
       const downloadResults = await slskdClient.downloadAlbum(artist.artistName, album.albumName, {
         tracklist: tracklist,
         albumMbid: album.mbid,
+        quality: quality,
       });
       
       // Store download references for tracking

@@ -38,6 +38,7 @@ import {
   downloadTrack,
   refreshLibraryArtist,
   getDownloadStatus,
+  addArtistToLibrary,
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
 import ArtistImage from "../components/ArtistImage";
@@ -407,6 +408,46 @@ function ArtistDetailsPage() {
       first: "First Album",
     };
     return labels[option] || "None (Artist Only)";
+  };
+
+  const handleAddToLibrary = async () => {
+    if (!artist) {
+      showError("Artist information not available");
+      return;
+    }
+
+    try {
+      // Add artist to library
+      await addArtistToLibrary({
+        foreignArtistId: artist.id,
+        artistName: artist.name,
+        quality: appSettings?.quality || "standard",
+        rootFolderPath: appSettings?.rootFolderPath,
+      });
+
+      // Refresh library data
+      const lookup = await lookupArtistInLibrary(artist.id);
+      if (lookup.exists && lookup.artist) {
+        const fullArtist = await getLibraryArtist(
+          lookup.artist.mbid || lookup.artist.foreignArtistId,
+        );
+        setLibraryArtist(fullArtist);
+        setExistsInLibrary(true);
+
+        // Fetch albums for this artist
+        await refreshLibraryArtist(
+          fullArtist.mbid || fullArtist.foreignArtistId,
+        );
+        const albums = await getLibraryAlbums(fullArtist.id);
+        setLibraryAlbums(albums);
+      }
+
+      showSuccess(`${artist.name} added to library successfully!`);
+    } catch (err) {
+      showError(
+        `Failed to add artist to library: ${err.response?.data?.message || err.message}`,
+      );
+    }
   };
 
   const handleRequestAlbum = async (albumId, title) => {
@@ -971,10 +1012,14 @@ function ArtistDetailsPage() {
                             className="fixed inset-0 z-10"
                             onClick={() => setShowRemoveDropdown(false)}
                           />
-                          <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 shadow-lg border border-gray-200 dark:border-gray-700 z-20 py-1">
+                          <div 
+                            className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 shadow-lg border border-gray-200 dark:border-gray-700 z-20 py-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <button
                               type="button"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setShowMonitorOptionMenu(
                                   !showMonitorOptionMenu,
                                 );
@@ -1005,9 +1050,11 @@ function ArtistDetailsPage() {
                                   <button
                                     key={option.value}
                                     type="button"
-                                    onClick={() => {
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       handleUpdateMonitorOption(option.value);
                                       setShowMonitorOptionMenu(false);
+                                      setShowRemoveDropdown(false);
                                     }}
                                     disabled={updatingMonitor}
                                     className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
@@ -1040,7 +1087,15 @@ function ArtistDetailsPage() {
                     </div>
                   </div>
                 </>
-              ) : null}
+              ) : (
+                <button
+                  onClick={handleAddToLibrary}
+                  className="btn btn-primary inline-flex items-center"
+                >
+                  <Plus className="w-5 h-5 mr-2" />
+                  Add to Library
+                </button>
+              )}
 
               <a
                 href={`https://www.last.fm/music/${encodeURIComponent(artist.name)}`}
