@@ -130,11 +130,18 @@ export class DownloadManager {
         }
       }
       
-      // Final fallback (for Docker, this won't be used if API works)
+      // Final fallback: default to /downloads for Docker compatibility
+      // Users can map their slskd downloads to /downloads without setting env var
       if (!this.slskdDownloadDir) {
         const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-        const defaultDownloadsDir = homeDir ? path.join(homeDir, '.slskd', 'downloads') : '/tmp';
-        this.slskdDownloadDir = path.join(defaultDownloadsDir, 'complete');
+        if (homeDir) {
+          // Local development: use home directory
+          const defaultDownloadsDir = path.join(homeDir, '.slskd', 'downloads');
+          this.slskdDownloadDir = path.join(defaultDownloadsDir, 'complete');
+        } else {
+          // Docker/production: default to /downloads
+          this.slskdDownloadDir = '/downloads';
+        }
       }
     }
   }
@@ -406,11 +413,17 @@ export class DownloadManager {
             }
           }
           
-          // Final fallback
+          // Final fallback: default to /downloads for Docker compatibility
           if (!completeDir) {
             const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-            const defaultDownloadsDir = homeDir ? path.join(homeDir, '.slskd', 'downloads') : '/tmp';
-            completeDir = path.join(defaultDownloadsDir, 'complete');
+            if (homeDir) {
+              // Local development: use home directory
+              const defaultDownloadsDir = path.join(homeDir, '.slskd', 'downloads');
+              completeDir = path.join(defaultDownloadsDir, 'complete');
+            } else {
+              // Docker/production: default to /downloads
+              completeDir = '/downloads';
+            }
           }
           
           slskdDownloadDir = completeDir;
@@ -559,14 +572,29 @@ export class DownloadManager {
           }
         }
         
-        // If still not found, log warning
+        // If still not found, log warning with helpful message
         if (!sourcePath) {
           console.warn(`Could not locate downloaded file: ${justFilename}`);
+          if (!this.slskdDownloadDir) {
+            console.warn('SLSKD_COMPLETE_DIR not set. For Docker, map slskd downloads and set: -e SLSKD_COMPLETE_DIR=/downloads');
+            console.warn('Example: docker run -v /your/slskd/downloads/complete:/downloads -e SLSKD_COMPLETE_DIR=/downloads ...');
+          } else {
+            console.warn(`Searched in: ${this.slskdDownloadDir}`);
+            console.warn('If file exists elsewhere, set SLSKD_COMPLETE_DIR to the correct path');
+          }
         }
       }
       
       if (!sourcePath) {
-        console.warn('Download completed but no file path available. Download object:', JSON.stringify(download, null, 2));
+        console.warn('Download completed but no file path available.');
+        console.warn('Set SLSKD_COMPLETE_DIR environment variable to the path where slskd stores completed downloads.');
+        console.warn('For Docker: docker run -v /your/slskd/downloads/complete:/downloads -e SLSKD_COMPLETE_DIR=/downloads ...');
+        console.warn('Download object:', JSON.stringify({
+          id: download.id,
+          filename: download.filename,
+          username: download.username,
+          state: download.state,
+        }, null, 2));
         return;
       }
 
@@ -878,11 +906,27 @@ export class DownloadManager {
     // Move file (rename is atomic on same filesystem)
     try {
       await fs.rename(sourcePath, destinationPath);
+      // Rename succeeded - file is moved, source is automatically gone
     } catch (error) {
       // If rename fails (different filesystems), copy and delete
       if (error.code === 'EXDEV') {
+        // Copy file to destination
         await fs.copyFile(sourcePath, destinationPath);
-        await fs.unlink(sourcePath);
+        
+        // Verify copy succeeded before deleting source
+        try {
+          const destStats = await fs.stat(destinationPath);
+          const sourceStats = await fs.stat(sourcePath);
+          if (destStats.size === sourceStats.size) {
+            // Copy verified - safe to delete source
+            await fs.unlink(sourcePath);
+          } else {
+            throw new Error(`Copy verification failed: destination size (${destStats.size}) doesn't match source (${sourceStats.size})`);
+          }
+        } catch (deleteError) {
+          console.error(`Failed to delete source file from slskd directory after copy: ${sourcePath}`, deleteError.message);
+          // Don't throw - file is copied successfully, we'll try to clean up later if needed
+        }
       } else {
         throw error;
       }
@@ -926,11 +970,27 @@ export class DownloadManager {
     // Move file
     try {
       await fs.rename(sourcePath, finalDestination);
+      // Rename succeeded - file is moved, source is automatically gone
     } catch (error) {
       // If rename fails (different filesystems), copy and delete
       if (error.code === 'EXDEV') {
+        // Copy file to destination
         await fs.copyFile(sourcePath, finalDestination);
-        await fs.unlink(sourcePath);
+        
+        // Verify copy succeeded before deleting source
+        try {
+          const destStats = await fs.stat(finalDestination);
+          const sourceStats = await fs.stat(sourcePath);
+          if (destStats.size === sourceStats.size) {
+            // Copy verified - safe to delete source
+            await fs.unlink(sourcePath);
+          } else {
+            throw new Error(`Copy verification failed: destination size (${destStats.size}) doesn't match source (${sourceStats.size})`);
+          }
+        } catch (deleteError) {
+          console.error(`Failed to delete source file from slskd directory after copy: ${sourcePath}`, deleteError.message);
+          // Don't throw - file is copied successfully, we'll try to clean up later if needed
+        }
       } else {
         throw error;
       }
@@ -975,10 +1035,11 @@ export class DownloadManager {
       // Update status to "searching" when we start searching
       this.updateDownloadStatus(albumId, 'searching');
       
-      // Get the album's tracklist from MusicBrainz for matching
+      // Get the album's tracklist from MusicBrainz for matching (optional - download will proceed without it)
       let tracklist = [];
       if (album.mbid) {
         try {
+          // First try to get tracks from database (fastest, no API call)
           const tracks = libraryManager.getTracks(albumId);
           if (tracks && tracks.length > 0) {
             // Use existing tracks from database
@@ -988,38 +1049,54 @@ export class DownloadManager {
               mbid: t.mbid,
             }));
           } else {
-            // Fetch tracklist from MusicBrainz if not in database
+            // Try to fetch tracklist from MusicBrainz if not in database
+            // Use a timeout to avoid blocking if MusicBrainz is slow/unavailable
             const { musicbrainzRequest } = await import('./apiClients.js');
-            const rgData = await musicbrainzRequest(`/release-group/${album.mbid}`, {
-              inc: 'releases',
-            });
-            
-            if (rgData.releases && rgData.releases.length > 0) {
-              const releaseId = rgData.releases[0].id;
-              const releaseData = await musicbrainzRequest(`/release/${releaseId}`, {
-                inc: 'recordings',
+            const tracklistPromise = (async () => {
+              const rgData = await musicbrainzRequest(`/release-group/${album.mbid}`, {
+                inc: 'releases',
               });
               
-              if (releaseData.media && releaseData.media.length > 0) {
-                for (const medium of releaseData.media) {
-                  if (medium.tracks) {
-                    for (const track of medium.tracks) {
-                      const recording = track.recording;
-                      if (recording) {
-                        tracklist.push({
-                          title: recording.title,
-                          position: track.position || 0,
-                          mbid: recording.id,
-                        });
+              if (rgData.releases && rgData.releases.length > 0) {
+                const releaseId = rgData.releases[0].id;
+                const releaseData = await musicbrainzRequest(`/release/${releaseId}`, {
+                  inc: 'recordings',
+                });
+                
+                if (releaseData.media && releaseData.media.length > 0) {
+                  for (const medium of releaseData.media) {
+                    if (medium.tracks) {
+                      for (const track of medium.tracks) {
+                        const recording = track.recording;
+                        if (recording) {
+                          tracklist.push({
+                            title: recording.title,
+                            position: track.position || 0,
+                            mbid: recording.id,
+                          });
+                        }
                       }
                     }
                   }
                 }
               }
+            })();
+            
+            // Wait max 5 seconds for tracklist, then proceed without it
+            try {
+              await Promise.race([
+                tracklistPromise,
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+              ]);
+            } catch (timeoutError) {
+              // Timeout or error - proceed without tracklist
+              console.warn(`Tracklist fetch timed out or failed for album ${album.mbid}, proceeding without it`);
             }
           }
         } catch (error) {
+          // MusicBrainz unavailable - proceed without tracklist matching
           console.warn(`Could not fetch tracklist for album ${album.mbid}:`, error.message);
+          console.warn('Proceeding with download - files will be selected without tracklist matching');
         }
       }
       
