@@ -5,7 +5,6 @@ import {
   Music,
   Sparkles,
   TrendingUp,
-  Plus,
   ExternalLink,
   CheckCircle,
   Tag,
@@ -15,13 +14,11 @@ import {
 } from "lucide-react";
 import {
   getDiscovery,
-  lookupArtistsInLibraryBatch,
   getRequests,
   getRecentlyAdded,
   getAllDownloadStatus,
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
-import AddArtistModal from "../components/AddArtistModal";
 import ArtistImage from "../components/ArtistImage";
 
 function DiscoverPage() {
@@ -30,8 +27,6 @@ function DiscoverPage() {
   const [recentlyAdded, setRecentlyAdded] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [existingArtists, setExistingArtists] = useState({});
-  const [artistToAdd, setArtistToAdd] = useState(null);
   const [downloadStatuses, setDownloadStatuses] = useState({});
   const navigate = useNavigate();
   const { showSuccess } = useToast();
@@ -51,25 +46,6 @@ function DiscoverPage() {
         setRequests(requestsData);
         setRecentlyAdded(recentlyAddedData);
         setLoading(false);
-
-        // Get artist MBIDs for checking if artists are in library
-        const artistMbids = [
-          ...new Set([
-            ...(discoveryData.recommendations || []).map((a) => a.id),
-            ...(discoveryData.globalTop || []).map((a) => a.id),
-            ...requestsData.map((r) => r.artistMbid || r.mbid), // Use artistMbid for album requests
-            ...recentlyAddedData.map((a) => a.mbid || a.foreignArtistId),
-          ]),
-        ].filter(Boolean);
-
-        if (artistMbids.length > 0) {
-          try {
-            const existingMap = await lookupArtistsInLibraryBatch(artistMbids);
-            setExistingArtists(existingMap);
-          } catch (err) {
-            console.error("Failed to batch lookup artists:", err);
-          }
-        }
       } catch (err) {
         setError(
           err.response?.data?.message || "Failed to load discovery data",
@@ -79,7 +55,7 @@ function DiscoverPage() {
     };
 
     fetchData();
-    
+
     // Poll download status every 5 seconds
     const pollDownloadStatus = async () => {
       try {
@@ -89,26 +65,12 @@ function DiscoverPage() {
         console.error("Failed to fetch download status:", error);
       }
     };
-    
+
     pollDownloadStatus();
     const interval = setInterval(pollDownloadStatus, 5000);
-    
+
     return () => clearInterval(interval);
   }, []);
-
-  const handleAddArtistClick = (artist) => {
-    setArtistToAdd(artist);
-  };
-
-  const handleAddSuccess = (artist) => {
-    setExistingArtists((prev) => ({
-      ...prev,
-      [artist.id]: true,
-    }));
-    setArtistToAdd(null);
-    getRequests().then(setRequests).catch(console.error);
-    showSuccess(`Successfully added ${artist.name} to library!`);
-  };
 
   const getLibraryArtistImage = (artist) => {
     if (artist.images && artist.images.length > 0) {
@@ -150,8 +112,8 @@ function DiscoverPage() {
 
       if (genreArtists.length >= 4) {
         const selectedArtists = genreArtists.slice(0, 6);
-        
-        selectedArtists.forEach(artist => usedArtistIds.add(artist.id));
+
+        selectedArtists.forEach((artist) => usedArtistIds.add(artist.id));
 
         sections.push({
           genre,
@@ -164,95 +126,71 @@ function DiscoverPage() {
   }, [data]);
 
   const ArtistCard = ({ artist, status }) => {
-    // Check if artist is in library - use artistMbid if provided, otherwise use artist.id
-    const artistMbid = artist.artistMbid || artist.id;
-    const isArtistInLibrary = artist.isArtistInLibrary !== undefined 
-      ? artist.isArtistInLibrary 
-      : existingArtists[artistMbid];
-    
     // For album requests, navigate to artist page; otherwise use artist.id
     const navigateTo = artist.navigateTo || artist.id;
-    
+
     return (
-    <div className="group relative flex flex-col w-full min-w-0">
-      <div
-        onClick={() => navigate(`/artist/${navigateTo}`)}
-        className="relative aspect-square mb-3 overflow-hidden rounded-xl bg-gray-200 dark:bg-gray-800 cursor-pointer shadow-sm group-hover:shadow-md transition-all"
-      >
-        <ArtistImage
-          src={artist.image || artist.imageUrl}
-          mbid={artist.id}
-          alt={artist.name}
-          className="h-full w-full group-hover:scale-105 transition-transform duration-300"
-          showLoading={false}
-        />
+      <div className="group relative flex flex-col w-full min-w-0">
+        <div
+          onClick={() => navigate(`/artist/${navigateTo}`)}
+          className="relative aspect-square mb-3 overflow-hidden bg-gray-200 dark:bg-gray-800 cursor-pointer shadow-sm group-hover:shadow-md transition-all"
+        >
+          <ArtistImage
+            src={artist.image || artist.imageUrl}
+            mbid={artist.id}
+            alt={artist.name}
+            className="h-full w-full group-hover:scale-105 transition-transform duration-300"
+            showLoading={false}
+          />
 
-        {status && (
-          <div
-            className={`absolute bottom-2 left-2 right-2 py-1 px-2 rounded text-[10px] font-bold uppercase text-center backdrop-blur-md shadow-lg ${
-              status === "available"
-                ? "bg-green-500/90 text-white"
-                : status === "processing"
-                  ? "bg-blue-500/90 text-white"
-                  : "bg-yellow-500/90 text-white"
-            }`}
-          >
-            {status}
-          </div>
-        )}
+          {status && (
+            <div
+              className={`absolute bottom-2 left-2 right-2 py-1 px-2 rounded text-[10px] font-bold uppercase text-center backdrop-blur-md shadow-lg ${
+                status === "available"
+                  ? "bg-green-500/90 text-white"
+                  : status === "processing"
+                    ? "bg-blue-500/90 text-white"
+                    : "bg-yellow-500/90 text-white"
+              }`}
+            >
+              {status}
+            </div>
+          )}
 
-        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-          {!isArtistInLibrary && (
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleAddArtistClick(artist);
+                navigate(`/artist/${navigateTo}`);
               }}
-              className="p-2 bg-primary-500 text-white rounded-full hover:bg-primary-600 hover:scale-110 transition-all shadow-lg"
-              title="Add to Library"
+              className="p-2 bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 hover:scale-110 transition-all"
+              title="View Details"
             >
-              <Plus className="w-5 h-5" />
+              <ExternalLink className="w-5 h-5" />
             </button>
-          )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              navigate(`/artist/${navigateTo}`);
-            }}
-            className="p-2 bg-white/20 backdrop-blur-sm text-white rounded-full hover:bg-white/30 hover:scale-110 transition-all"
-            title="View Details"
-          >
-            <ExternalLink className="w-5 h-5" />
-          </button>
-        </div>
-
-        {isArtistInLibrary && !status && (
-          <div className="absolute top-2 right-2 bg-green-500 text-white p-1 rounded-full shadow-md">
-            <CheckCircle className="w-3 h-3" />
           </div>
-        )}
-      </div>
+        </div>
 
-      <div className="flex flex-col min-w-0">
-        <h3
-          onClick={() => navigate(`/artist/${navigateTo}`)}
-          className="font-semibold text-gray-900 dark:text-gray-100 truncate hover:text-primary-500 cursor-pointer"
-        >
-          {artist.name}
-        </h3>
         <div className="flex flex-col min-w-0">
-          <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-            {artist.type === "Person" ? "Artist" : artist.type}
-            {artist.sourceArtist && ` • Similar to ${artist.sourceArtist}`}
-          </p>
-          {artist.subtitle && (
-            <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
-              {artist.subtitle}
+          <h3
+            onClick={() => navigate(`/artist/${navigateTo}`)}
+            className="font-semibold text-gray-900 dark:text-gray-100 truncate hover:text-primary-500 cursor-pointer"
+          >
+            {artist.name}
+          </h3>
+          <div className="flex flex-col min-w-0">
+            <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+              {artist.type === "Person" ? "Artist" : artist.type}
+              {artist.sourceArtist && ` • Similar to ${artist.sourceArtist}`}
             </p>
-          )}
+            {artist.subtitle && (
+              <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
+                {artist.subtitle}
+              </p>
+            )}
+          </div>
         </div>
       </div>
-    </div>
     );
   };
 
@@ -273,7 +211,7 @@ function DiscoverPage() {
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="bg-red-100 dark:bg-red-900/20 p-4 rounded-full mb-4">
+        <div className="bg-red-100 dark:bg-red-900/20 p-4 mb-4">
           <Sparkles className="w-8 h-8 text-red-500" />
         </div>
         <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
@@ -304,10 +242,13 @@ function DiscoverPage() {
   } = data || {};
 
   // Show configuration message if discovery isn't set up
-  if (!configured || (!recommendations.length && !globalTop.length && !topGenres.length)) {
+  if (
+    !configured ||
+    (!recommendations.length && !globalTop.length && !topGenres.length)
+  ) {
     return (
       <div className="flex flex-col items-center justify-center py-32 text-center">
-        <div className="bg-primary-100 dark:bg-primary-900/20 p-4 rounded-full mb-4">
+        <div className="bg-primary-100 dark:bg-primary-900/20 p-4 mb-4">
           <Sparkles className="w-12 h-12 text-primary-500" />
         </div>
         <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
@@ -338,9 +279,9 @@ function DiscoverPage() {
 
   return (
     <div className="space-y-10 pb-12">
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary-50 via-white to-primary-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 text-gray-900 dark:text-white shadow-sm dark:shadow-xl border border-primary-100/50 dark:border-transparent">
-        <div className="absolute top-0 right-0 -mt-20 -mr-20 h-96 w-96 rounded-full bg-primary-500/10 dark:bg-primary-500/20 blur-3xl"></div>
-        <div className="absolute bottom-0 left-0 -mb-20 -ml-20 h-96 w-96 rounded-full bg-blue-500/10 dark:bg-blue-500/20 blur-3xl"></div>
+      <section className="relative overflow-hidden bg-gradient-to-br from-primary-50 via-white to-primary-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 text-gray-900 dark:text-white shadow-sm dark:shadow-xl border border-primary-100/50 dark:border-transparent">
+        <div className="absolute top-0 right-0 -mt-20 -mr-20 h-96 w-96 bg-primary-500/10 dark:bg-primary-500/20 blur-3xl"></div>
+        <div className="absolute bottom-0 left-0 -mb-20 -ml-20 h-96 w-96 bg-blue-500/10 dark:bg-blue-500/20 blur-3xl"></div>
 
         <div className="relative p-8 md:p-12">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-8">
@@ -360,7 +301,7 @@ function DiscoverPage() {
 
             <div className="flex flex-col items-end gap-2">
               {lastUpdated && (
-                <div className="flex items-center text-sm text-gray-500 dark:text-gray-400 bg-white/50 dark:bg-black/20 px-3 py-1 rounded-full backdrop-blur-md border border-gray-200 dark:border-transparent shadow-sm">
+                <div className="flex items-center text-sm text-gray-500 dark:text-gray-400 bg-white/50 dark:bg-black/20 px-3 py-1 backdrop-blur-md border border-gray-200 dark:border-transparent shadow-sm">
                   <Clock className="w-3 h-3 mr-1.5" />
                   Updated {new Date(lastUpdated).toLocaleDateString()}
                   {isUpdating && (
@@ -385,7 +326,7 @@ function DiscoverPage() {
                         `/search?q=${encodeURIComponent(genre)}&type=tag`,
                       )
                     }
-                    className="px-4 py-2 rounded-full bg-white dark:bg-white/10 hover:bg-gray-50 dark:hover:bg-white/20 border border-gray-200 dark:border-white/10 transition-colors text-sm font-medium text-gray-700 dark:text-white shadow-sm dark:shadow-none"
+                    className="px-4 py-2 bg-white dark:bg-white/10 hover:bg-gray-50 dark:hover:bg-white/20 border border-gray-200 dark:border-white/10 transition-colors text-sm font-medium text-gray-700 dark:text-white shadow-sm dark:shadow-none"
                   >
                     {genre}
                   </button>
@@ -409,7 +350,7 @@ function DiscoverPage() {
         </div>
       </section>
 
-      {requests.filter(r => r.status !== 'available').length > 0 && (
+      {requests.filter((r) => r.status !== "available").length > 0 && (
         <section className="animate-slide-up">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
@@ -425,36 +366,42 @@ function DiscoverPage() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-            {requests.filter(r => r.status !== 'available').slice(0, 6).map((request) => {
-              // Check if artist is in library using artistMbid
-              const artistMbid = request.artistMbid || request.mbid;
-              const isArtistInLibrary = existingArtists[artistMbid];
-              
-              return (
-                <ArtistCard
-                  key={request.id || request.mbid}
-                  status={request.status}
-                  artist={{
-                    id: request.albumMbid || request.mbid, // Use album MBID for image lookup
-                    name: request.type === 'album' ? request.albumName : request.name, // Show album name if album request
-                    image: request.image,
-                    subtitle: request.type === 'album' 
-                      ? `${request.artistName} • ${new Date(request.requestedAt).toLocaleDateString()}`
-                      : `Requested ${new Date(request.requestedAt).toLocaleDateString()}`,
-                    // Pass artistMbid for checking if artist is in library and for navigation
-                    artistMbid: artistMbid,
-                    isArtistInLibrary: isArtistInLibrary,
-                    // For album requests, navigate to artist page
-                    navigateTo: request.type === 'album' ? artistMbid : (request.albumMbid || request.mbid),
-                  }}
-                />
-              );
-            })}
+            {requests
+              .filter((r) => r.status !== "available")
+              .slice(0, 6)
+              .map((request) => {
+                const artistMbid = request.artistMbid || request.mbid;
+
+                return (
+                  <ArtistCard
+                    key={request.id || request.mbid}
+                    status={request.status}
+                    artist={{
+                      id: request.albumMbid || request.mbid, // Use album MBID for image lookup
+                      name:
+                        request.type === "album"
+                          ? request.albumName
+                          : request.name, // Show album name if album request
+                      image: request.image,
+                      subtitle:
+                        request.type === "album"
+                          ? `${request.artistName} • ${new Date(request.requestedAt).toLocaleDateString()}`
+                          : `Requested ${new Date(request.requestedAt).toLocaleDateString()}`,
+                      // For album requests, navigate to artist page
+                      navigateTo:
+                        request.type === "album"
+                          ? artistMbid
+                          : request.albumMbid || request.mbid,
+                    }}
+                  />
+                );
+              })}
           </div>
         </section>
       )}
 
-      {(recentlyAdded.length > 0 || requests.filter(r => r.status === 'available').length > 0) && (
+      {(recentlyAdded.length > 0 ||
+        requests.filter((r) => r.status === "available").length > 0) && (
         <section
           className="animate-slide-up"
           style={{ animationDelay: "0.1s" }}
@@ -469,38 +416,45 @@ function DiscoverPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
             {/* Show completed album requests first */}
             {requests
-              .filter(r => r.status === 'available')
+              .filter((r) => r.status === "available")
               .slice(0, 6)
               .map((request) => {
                 const artistMbid = request.artistMbid || request.mbid;
-                const isArtistInLibrary = existingArtists[artistMbid];
-                
+
                 return (
                   <ArtistCard
                     key={`request-${request.id || request.mbid}`}
                     status="available"
                     artist={{
                       id: request.albumMbid || request.mbid, // Use album MBID for image lookup
-                      name: request.type === 'album' ? request.albumName : request.name,
+                      name:
+                        request.type === "album"
+                          ? request.albumName
+                          : request.name,
                       image: request.image,
-                      subtitle: request.type === 'album' 
-                        ? `${request.artistName} • ${new Date(request.requestedAt).toLocaleDateString()}`
-                        : `Added ${new Date(request.requestedAt).toLocaleDateString()}`,
-                      artistMbid: artistMbid,
-                      isArtistInLibrary: isArtistInLibrary,
+                      subtitle:
+                        request.type === "album"
+                          ? `${request.artistName} • ${new Date(request.requestedAt).toLocaleDateString()}`
+                          : `Added ${new Date(request.requestedAt).toLocaleDateString()}`,
                       // For album requests, navigate to artist page
-                      navigateTo: request.type === 'album' ? artistMbid : (request.albumMbid || request.mbid),
+                      navigateTo:
+                        request.type === "album"
+                          ? artistMbid
+                          : request.albumMbid || request.mbid,
                     }}
                   />
                 );
               })}
             {/* Then show recently added artists (if any slots remaining) */}
             {recentlyAdded
-              .slice(0, Math.max(0, 6 - requests.filter(r => r.status === 'available').length))
+              .slice(
+                0,
+                Math.max(
+                  0,
+                  6 - requests.filter((r) => r.status === "available").length,
+                ),
+              )
               .map((artist) => {
-                const artistMbid = artist.mbid || artist.foreignArtistId;
-                const isArtistInLibrary = existingArtists[artistMbid];
-                
                 return (
                   <ArtistCard
                     key={`artist-${artist.id}`}
@@ -511,8 +465,6 @@ function DiscoverPage() {
                       image: getLibraryArtistImage(artist),
                       type: "Artist",
                       subtitle: `Added ${new Date(artist.added || artist.addedAt).toLocaleDateString()}`,
-                      artistMbid: artistMbid,
-                      isArtistInLibrary: isArtistInLibrary,
                     }}
                   />
                 );
@@ -536,7 +488,7 @@ function DiscoverPage() {
             ))}
           </div>
         ) : (
-          <div className="text-center py-12 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800">
+          <div className="text-center py-12 bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800">
             <Music className="w-12 h-12 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500">
               Not enough data to generate recommendations yet.
@@ -593,7 +545,7 @@ function DiscoverPage() {
       ))}
 
       {topTags.length > 0 && (
-        <section className="bg-gray-50 dark:bg-gray-900 rounded-2xl p-8 border border-gray-100 dark:border-gray-800">
+        <section className="bg-gray-50 dark:bg-gray-900 p-8 border border-gray-100 dark:border-gray-800">
           <div className="flex items-center mb-6">
             <Tag className="w-5 h-5 text-gray-400 mr-2" />
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -607,21 +559,13 @@ function DiscoverPage() {
                 onClick={() =>
                   navigate(`/search?q=${encodeURIComponent(tag)}&type=tag`)
                 }
-                className="px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-600 dark:text-gray-400 hover:border-primary-300 hover:text-primary-600 transition-colors"
+                className="px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-primary-300 hover:text-primary-600 transition-colors"
               >
                 #{tag}
               </button>
             ))}
           </div>
         </section>
-      )}
-
-      {artistToAdd && (
-        <AddArtistModal
-          artist={artistToAdd}
-          onClose={() => setArtistToAdd(null)}
-          onSuccess={handleAddSuccess}
-        />
       )}
     </div>
   );

@@ -71,9 +71,7 @@ function SettingsPage() {
 
       const updatedSettings = {
         ...savedSettings,
-        releaseTypes:
-          savedSettings.releaseTypes ||
-          allReleaseTypes,
+        releaseTypes: savedSettings.releaseTypes || allReleaseTypes,
         quality: savedSettings.quality || "standard",
       };
       setSettings(updatedSettings);
@@ -587,7 +585,7 @@ function SettingsPage() {
                 </div>
               ) : health ? (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800">
                     <span className="font-medium text-gray-700 dark:text-gray-300">
                       Backend API
                     </span>
@@ -610,7 +608,7 @@ function SettingsPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800">
                     <span className="font-medium text-gray-700 dark:text-gray-300">
                       slskd Connection
                     </span>
@@ -633,7 +631,7 @@ function SettingsPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800">
                     <span className="font-medium text-gray-700 dark:text-gray-300">
                       MusicBrainz API
                     </span>
@@ -656,7 +654,7 @@ function SettingsPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800">
                     <span className="font-medium text-gray-700 dark:text-gray-300">
                       Last.fm API
                     </span>
@@ -680,7 +678,7 @@ function SettingsPage() {
                   </div>
 
                   {health.timestamp && (
-                    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800">
                       <span className="font-medium text-gray-700 dark:text-gray-300">
                         Last Checked
                       </span>
@@ -728,7 +726,7 @@ function SettingsPage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-                  <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                  <div className="p-3 bg-gray-50 dark:bg-gray-800">
                     <div className="flex items-center text-gray-500 dark:text-gray-400 text-xs mb-1">
                       <Sparkles className="w-3 h-3 mr-1" /> Recommendations
                     </div>
@@ -737,7 +735,7 @@ function SettingsPage() {
                     </div>
                   </div>
 
-                  <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                  <div className="p-3 bg-gray-50 dark:bg-gray-800">
                     <div className="flex items-center text-gray-500 dark:text-gray-400 text-xs mb-1">
                       <TrendingUp className="w-3 h-3 mr-1" /> Global Top
                     </div>
@@ -746,7 +744,7 @@ function SettingsPage() {
                     </div>
                   </div>
 
-                  <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                  <div className="p-3 bg-gray-50 dark:bg-gray-800">
                     <div className="flex items-center text-gray-500 dark:text-gray-400 text-xs mb-1">
                       <Image className="w-3 h-3 mr-1" /> Cached Images
                     </div>
@@ -862,7 +860,7 @@ function SettingsPage() {
                   }}
                   onClick={() => setActiveTab(tab.id)}
                   onMouseEnter={() => setHoveredTabIndex(index)}
-                  className={`relative z-20 flex items-center space-x-2 px-4 py-2.5 rounded-lg font-medium transition-all duration-200 text-sm ${
+                  className={`relative z-20 flex items-center space-x-2 px-4 py-2.5 font-medium transition-all duration-200 text-sm ${
                     isActive
                       ? "text-gray-800 dark:text-gray-800"
                       : "text-gray-400 dark:text-gray-500 hover:text-gray-300 dark:hover:text-gray-400"

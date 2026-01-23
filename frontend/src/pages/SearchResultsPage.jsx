@@ -1,13 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Loader, Music, ExternalLink, CheckCircle, Plus } from "lucide-react";
+import { Loader, Music, ExternalLink } from "lucide-react";
 import {
   searchArtists,
-  lookupArtistsInLibraryBatch,
   getArtistCover,
   searchArtistsByTag,
 } from "../utils/api";
-import AddArtistModal from "../components/AddArtistModal";
 import ArtistImage from "../components/ArtistImage";
 import { useToast } from "../contexts/ToastContext";
 
@@ -18,8 +16,6 @@ function SearchResultsPage() {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [existingArtists, setExistingArtists] = useState({});
-  const [artistToAdd, setArtistToAdd] = useState(null);
   const [artistImages, setArtistImages] = useState({});
   const navigate = useNavigate();
   const { showSuccess } = useToast();
@@ -47,7 +43,7 @@ function SearchResultsPage() {
 
         // Remove duplicates by MBID (keep first occurrence)
         const seen = new Set();
-        const uniqueArtists = artists.filter(artist => {
+        const uniqueArtists = artists.filter((artist) => {
           if (!artist.id) return false; // Skip artists without MBID
           if (seen.has(artist.id)) return false;
           seen.add(artist.id);
@@ -65,16 +61,6 @@ function SearchResultsPage() {
             }
           });
           setArtistImages(imagesMap);
-
-          try {
-            const mbids = uniqueArtists.map((a) => a.id).filter(Boolean);
-            if (mbids.length > 0) {
-              const existingMap = await lookupArtistsInLibraryBatch(mbids);
-              setExistingArtists(existingMap);
-            }
-          } catch (err) {
-            console.error("Failed to batch lookup artists:", err);
-          }
         }
       } catch (err) {
         setError(
@@ -89,27 +75,6 @@ function SearchResultsPage() {
 
     performSearch();
   }, [query, type]);
-
-  const handleAddArtistClick = (artist) => {
-    setArtistToAdd(artist);
-  };
-
-  const handleAddSuccess = (artist) => {
-    setExistingArtists((prev) => ({
-      ...prev,
-
-      [artist.id]: true,
-    }));
-
-    setArtistToAdd(null);
-
-
-    showSuccess(`Successfully added ${artist.name} to library!`);
-  };
-
-  const handleModalClose = () => {
-    setArtistToAdd(null);
-  };
 
   const getArtistType = (type) => {
     const types = {
@@ -152,7 +117,7 @@ function SearchResultsPage() {
       </div>
 
       {error && (
-        <div className="mb-6 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-500/20 rounded-lg p-4">
+        <div className="mb-6 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-500/20 p-4">
           <p className="text-red-800 dark:text-red-400">{error}</p>
         </div>
       )}
@@ -185,7 +150,7 @@ function SearchResultsPage() {
                 </h2>
               </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
                 {results.map((artist, index) => (
                   <div
                     key={artist.id || `artist-${index}`}
@@ -193,85 +158,63 @@ function SearchResultsPage() {
                   >
                     <div
                       onClick={() => navigate(`/artist/${artist.id}`)}
-                      className="relative aspect-square mb-3 overflow-hidden rounded-xl bg-gray-200 dark:bg-gray-800 cursor-pointer shadow-sm group-hover:shadow-md transition-all"
+                      className="relative aspect-square mb-3 overflow-hidden bg-gray-200 dark:bg-gray-800 cursor-pointer shadow-sm group-hover:shadow-md transition-all"
                     >
                       {/* Artist Image */}
-                        <ArtistImage
-                          src={artistImages[artist.id] || artist.image || artist.imageUrl}
-                          mbid={artist.id}
-                          alt={artist.name}
-                          className="h-full w-full group-hover:scale-105 transition-transform duration-300"
-                          showLoading={false}
-                        />
+                      <ArtistImage
+                        src={
+                          artistImages[artist.id] ||
+                          artist.image ||
+                          artist.imageUrl
+                        }
+                        mbid={artist.id}
+                        alt={artist.name}
+                        className="h-full w-full group-hover:scale-105 transition-transform duration-300"
+                        showLoading={false}
+                      />
 
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                          {!existingArtists[artist.id] && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAddArtistClick(artist);
-                              }}
-                              className="p-2 bg-primary-500 text-white rounded-full hover:bg-primary-600 hover:scale-110 transition-all shadow-lg"
-                              title="Add to Library"
-                            >
-                              <Plus className="w-5 h-5" />
-                            </button>
-                          )}
-                          <a
-                            href={`https://musicbrainz.org/artist/${artist.id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="p-2 bg-white/20 backdrop-blur-sm text-white rounded-full hover:bg-white/30 hover:scale-110 transition-all"
-                            title="View on MusicBrainz"
-                          >
-                            <ExternalLink className="w-5 h-5" />
-                          </a>
-                        </div>
-                        
-                        {existingArtists[artist.id] && (
-                          <div className="absolute top-2 right-2 bg-green-500 text-white p-1 rounded-full shadow-md">
-                            <CheckCircle className="w-3 h-3" />
-                          </div>
-                        )}
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/artist/${artist.id}`);
+                          }}
+                          className="p-2 bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 hover:scale-110 transition-all"
+                          title="View Details"
+                        >
+                          <ExternalLink className="w-5 h-5" />
+                        </button>
+                      </div>
                     </div>
 
                     <div className="flex flex-col min-w-0">
-                        <h3 
-                          onClick={() => navigate(`/artist/${artist.id}`)}
-                          className="font-semibold text-gray-900 dark:text-gray-100 truncate hover:text-primary-500 cursor-pointer"
-                        >
-                          {artist.name}
-                        </h3>
-                        
-                        <div className="flex flex-col min-w-0 text-sm text-gray-500 dark:text-gray-400">
-                          {artist.type && (
-                             <p className="truncate">
-                              {getArtistType(artist.type)}
-                            </p>
-                          )}
-                          
-                          {artist.country && (
-                            <p className="truncate text-xs opacity-80">
-                              {artist.country}
-                            </p>
-                          )}
-                        </div>
+                      <h3
+                        onClick={() => navigate(`/artist/${artist.id}`)}
+                        className="font-semibold text-gray-900 dark:text-gray-100 truncate hover:text-primary-500 cursor-pointer"
+                      >
+                        {artist.name}
+                      </h3>
+
+                      <div className="flex flex-col min-w-0 text-sm text-gray-500 dark:text-gray-400">
+                        {artist.type && (
+                          <p className="truncate">
+                            {getArtistType(artist.type)}
+                          </p>
+                        )}
+
+                        {artist.country && (
+                          <p className="truncate text-xs opacity-80">
+                            {artist.country}
+                          </p>
+                        )}
                       </div>
+                    </div>
                   </div>
                 ))}
               </div>
             </>
           )}
         </div>
-      )}
-
-      {artistToAdd && (
-        <AddArtistModal
-          artist={artistToAdd}
-          onClose={handleModalClose}
-          onSuccess={handleAddSuccess}
-        />
       )}
     </div>
   );

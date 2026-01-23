@@ -1,13 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { Loader, Music, AlertCircle, RefreshCw, Search } from "lucide-react";
 import {
-  Loader,
-  Music,
-  AlertCircle,
-  RefreshCw,
-  Search,
-} from "lucide-react";
-import { getLibraryArtists, scanLibrary, getAllDownloadStatus } from "../utils/api";
+  getLibraryArtists,
+  scanLibrary,
+  getAllDownloadStatus,
+} from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
 import { useToast } from "../contexts/ToastContext";
 
@@ -41,7 +39,7 @@ function LibraryPage() {
 
   useEffect(() => {
     fetchArtists();
-    
+
     // Poll download status every 5 seconds
     const pollDownloadStatus = async () => {
       try {
@@ -51,31 +49,32 @@ function LibraryPage() {
         console.error("Failed to fetch download status:", error);
       }
     };
-    
+
     pollDownloadStatus();
     const interval = setInterval(pollDownloadStatus, 5000);
-    
+
     // Refresh artists list periodically to catch deletions
     const refreshInterval = setInterval(() => {
       fetchArtists();
     }, 10000); // Refresh every 10 seconds
-    
+
     return () => {
       clearInterval(interval);
       clearInterval(refreshInterval);
     };
   }, []);
 
-
   const handleDiscoverAndScan = async () => {
     if (scanning) return;
-    
+
     setScanning(true);
     try {
-      showInfo("Discovering artists from your music folder... This may take a few minutes.");
+      showInfo(
+        "Discovering artists from your music folder... This may take a few minutes.",
+      );
       const result = await scanLibrary(true);
       showSuccess(
-        `Discovery complete! Found ${result.artists || 0} artists, ${result.filesScanned || 0} files scanned.`
+        `Discovery complete! Found ${result.artists || 0} artists, ${result.filesScanned || 0} files scanned.`,
       );
       // Refresh the library
       await fetchArtists(true);
@@ -117,10 +116,10 @@ function LibraryPage() {
 
   const filteredArtists = getFilteredAndSortedArtists();
   const totalPages = Math.ceil(filteredArtists.length / ITEMS_PER_PAGE);
-  
+
   const currentArtists = filteredArtists.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+    currentPage * ITEMS_PER_PAGE,
   );
 
   useEffect(() => {
@@ -131,7 +130,7 @@ function LibraryPage() {
     if (artist.imageUrl) {
       return artist.imageUrl;
     }
-    
+
     if (artist.images && artist.images.length > 0) {
       const posterImage = artist.images.find(
         (img) => img.coverType === "poster" || img.coverType === "fanart",
@@ -149,7 +148,6 @@ function LibraryPage() {
     }
     return null;
   };
-
 
   return (
     <div className="animate-fade-in">
@@ -222,7 +220,7 @@ function LibraryPage() {
       )}
 
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-500/20 rounded-lg p-6">
+        <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-500/20 p-6">
           <div className="flex items-center">
             <AlertCircle className="w-6 h-6 text-red-500 mr-3" />
             <div>
@@ -245,7 +243,8 @@ function LibraryPage() {
             No Artists in Library
           </h3>
           <p className="text-gray-500 dark:text-gray-400 mb-6">
-            Your library is empty. Discover artists from your music folder or search and add them manually.
+            Your library is empty. Discover artists from your music folder or
+            search and add them manually.
           </p>
           <div className="flex gap-3 justify-center">
             <button
@@ -280,16 +279,17 @@ function LibraryPage() {
             {currentArtists.map((artist) => {
               const image = getArtistImage(artist);
               // Check if artist is monitored (monitored = true and monitorOption !== 'none')
-              const monitorOption = artist.addOptions?.monitor || artist.monitorNewItems || artist.monitorOption || "none";
+              const monitorOption =
+                artist.addOptions?.monitor ||
+                artist.monitorNewItems ||
+                artist.monitorOption ||
+                "none";
               const isMonitored = artist.monitored && monitorOption !== "none";
 
               return (
-                <div
-                  key={artist.id}
-                  className="group relative"
-                >
+                <div key={artist.id} className="group relative">
                   <div
-                    className="relative aspect-square bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden cursor-pointer mb-2 shadow-sm group-hover:shadow-md transition-all"
+                    className="relative aspect-square bg-gray-200 dark:bg-gray-800 overflow-hidden cursor-pointer mb-2 shadow-sm group-hover:shadow-md transition-all"
                     onClick={() =>
                       navigate(`/artist/${artist.foreignArtistId}`)
                     }
@@ -301,14 +301,12 @@ function LibraryPage() {
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                       showLoading={false}
                     />
-                    
+
                     {/* Monitoring dot indicator */}
                     <div className="absolute top-2 right-2">
                       <div
-                        className={`w-3 h-3 rounded-full ${
-                          isMonitored
-                            ? "bg-green-500"
-                            : "bg-gray-400"
+                        className={`w-3 h-3 ${
+                          isMonitored ? "bg-green-500" : "bg-gray-400"
                         } shadow-md`}
                         title={isMonitored ? "Monitored" : "Unmonitored"}
                       />
@@ -343,7 +341,9 @@ function LibraryPage() {
                 Page {currentPage} of {totalPages}
               </span>
               <button
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() =>
+                  setCurrentPage((p) => Math.min(totalPages, p + 1))
+                }
                 disabled={currentPage === totalPages}
                 className="btn btn-secondary btn-sm disabled:opacity-50"
               >

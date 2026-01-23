@@ -164,7 +164,7 @@ function Sidebar({ isOpen, onClose }) {
                     }}
                     to={item.path}
                     onMouseEnter={() => setHoveredIndex(index)}
-                    className={`relative z-20 flex items-center space-x-2.5 px-4 py-2.5 rounded-lg font-medium transition-all duration-200 text-sm ${
+                    className={`relative z-20 flex items-center space-x-2.5 px-4 py-2.5 font-medium transition-all duration-200 text-sm ${
                       active
                         ? "text-gray-800 dark:text-gray-800"
                         : "text-gray-400 dark:text-gray-500 hover:text-gray-300 dark:hover:text-gray-400"
@@ -189,7 +189,7 @@ function Sidebar({ isOpen, onClose }) {
           <div className="p-3 border-t border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
             <button
               onClick={logout}
-              className="flex items-center justify-center w-full px-3 py-2 space-x-2 text-xs font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors shadow-sm"
+              className="flex items-center justify-center w-full px-3 py-2 space-x-2 text-xs font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
             >
               <LogOut className="w-4 h-4" />
               <span>Logout</span>

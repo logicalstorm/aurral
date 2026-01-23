@@ -7,20 +7,24 @@ import {
   Music,
   CheckCircle,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
 } from "lucide-react";
 import {
   getWeeklyFlow,
   toggleWeeklyFlow,
   generateWeeklyFlow,
   keepFlowItem,
-  removeFlowItem
+  removeFlowItem,
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
 import ArtistImage from "../components/ArtistImage";
 
 function FlowPage() {
-  const [flow, setFlow] = useState({ enabled: false, items: [], updatedAt: null });
+  const [flow, setFlow] = useState({
+    enabled: false,
+    items: [],
+    updatedAt: null,
+  });
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -46,8 +50,12 @@ function FlowPage() {
     const newState = !flow.enabled;
     try {
       await toggleWeeklyFlow(newState);
-      setFlow(prev => ({ ...prev, enabled: newState }));
-      showSuccess(newState ? "Weekly Discovery enabled. It will run automatically." : "Weekly Discovery disabled.");
+      setFlow((prev) => ({ ...prev, enabled: newState }));
+      showSuccess(
+        newState
+          ? "Weekly Discovery enabled. It will run automatically."
+          : "Weekly Discovery disabled.",
+      );
     } catch (err) {
       showError("Failed to update settings");
     } finally {
@@ -58,9 +66,11 @@ function FlowPage() {
   const handleKeep = async (mbid) => {
     try {
       await keepFlowItem(mbid);
-      setFlow(prev => ({
+      setFlow((prev) => ({
         ...prev,
-        items: prev.items.map(i => i.mbid === mbid ? { ...i, isEphemeral: false } : i)
+        items: prev.items.map((i) =>
+          i.mbid === mbid ? { ...i, isEphemeral: false } : i,
+        ),
       }));
       showSuccess("Artist kept permanently!");
     } catch (err) {
@@ -72,9 +82,9 @@ function FlowPage() {
     if (!window.confirm("Remove this artist and delete files?")) return;
     try {
       await removeFlowItem(mbid);
-      setFlow(prev => ({
+      setFlow((prev) => ({
         ...prev,
-        items: prev.items.filter(i => i.mbid !== mbid)
+        items: prev.items.filter((i) => i.mbid !== mbid),
       }));
       showSuccess("Item removed.");
     } catch (err) {
@@ -98,7 +108,7 @@ function FlowPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <div className="animate-spin h-12 w-12 border-b-2 border-primary-600"></div>
       </div>
     );
   }
@@ -112,7 +122,8 @@ function FlowPage() {
             Weekly Discovery
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Automated weekly rotation. "Ephemeral" items are deleted next week unless kept.
+            Automated weekly rotation. "Ephemeral" items are deleted next week
+            unless kept.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -124,7 +135,11 @@ function FlowPage() {
             disabled={toggling}
             className={`text-4xl transition-colors ${flow.enabled ? "text-primary-600" : "text-gray-400"}`}
           >
-            {flow.enabled ? <ToggleRight className="w-10 h-10 fill-current" /> : <ToggleLeft className="w-10 h-10" />}
+            {flow.enabled ? (
+              <ToggleRight className="w-10 h-10 fill-current" />
+            ) : (
+              <ToggleLeft className="w-10 h-10" />
+            )}
           </button>
         </div>
       </div>
@@ -150,22 +165,23 @@ function FlowPage() {
           </button>
         </div>
       ) : flow.items.length === 0 ? (
-         <div className="card text-center py-12">
+        <div className="card text-center py-12">
           <Music className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
           <h3 className="text-xl font-medium text-gray-900 dark:text-gray-100 mb-2">
             No playlist yet
           </h3>
           <p className="text-gray-500 dark:text-gray-400 mb-6">
-            Generate your first weekly discovery playlist now, or wait for automatic generation on Monday.
+            Generate your first weekly discovery playlist now, or wait for
+            automatic generation on Monday.
           </p>
-          <button 
-            onClick={handleGenerate} 
+          <button
+            onClick={handleGenerate}
             disabled={generating}
             className="btn btn-primary"
           >
             {generating ? (
               <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2 inline-block"></div>
+                <div className="animate-spin h-4 w-4 border-b-2 border-white mr-2 inline-block"></div>
                 Generating...
               </>
             ) : (
@@ -185,19 +201,25 @@ function FlowPage() {
                 !item.isEphemeral ? "border-green-500/20 bg-green-50/10" : ""
               }`}
             >
-              <div className="aspect-square relative rounded-lg overflow-hidden mb-4 bg-gray-100 dark:bg-gray-800">
-                <ArtistImage mbid={item.mbid} name={item.artistName} className="w-full h-full object-cover" />
+              <div className="aspect-square relative overflow-hidden mb-4 bg-gray-100 dark:bg-gray-800">
+                <ArtistImage
+                  mbid={item.mbid}
+                  name={item.artistName}
+                  className="w-full h-full object-cover"
+                />
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                   <button
                     onClick={() => handleKeep(item.mbid)}
-                    className={`p-3 rounded-full backdrop-blur-sm transition-transform hover:scale-110 ${
+                    className={`p-3 backdrop-blur-sm transition-transform hover:scale-110 ${
                       !item.isEphemeral
                         ? "bg-green-500 text-white"
                         : "bg-white/20 text-white hover:bg-green-500"
                     }`}
                     title={item.isEphemeral ? "Keep permanently" : "Kept"}
                   >
-                    <Heart className={`w-6 h-6 ${!item.isEphemeral ? "fill-current" : ""}`} />
+                    <Heart
+                      className={`w-6 h-6 ${!item.isEphemeral ? "fill-current" : ""}`}
+                    />
                   </button>
                 </div>
               </div>
@@ -210,23 +232,23 @@ function FlowPage() {
                   {item.artistName}
                 </p>
                 <div className="flex items-center justify-between mt-3">
-                   <div className="flex items-center gap-2">
-                      {item.isEphemeral ? (
-                        <span className="text-xs px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 flex items-center">
-                          <Clock className="w-3 h-3 mr-1" /> Ephemeral
-                        </span>
-                      ) : (
-                         <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 flex items-center">
-                          <CheckCircle className="w-3 h-3 mr-1" /> Kept
-                        </span>
-                      )}
-                   </div>
-                   <button 
-                     onClick={() => handleRemove(item.mbid)}
-                     className="text-gray-400 hover:text-red-500 transition-colors p-1"
-                   >
-                     <Trash2 className="w-4 h-4" />
-                   </button>
+                  <div className="flex items-center gap-2">
+                    {item.isEphemeral ? (
+                      <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 flex items-center">
+                        <Clock className="w-3 h-3 mr-1" /> Ephemeral
+                      </span>
+                    ) : (
+                      <span className="text-xs px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 flex items-center">
+                        <CheckCircle className="w-3 h-3 mr-1" /> Kept
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleRemove(item.mbid)}
+                    className="text-gray-400 hover:text-red-500 transition-colors p-1"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             </div>
