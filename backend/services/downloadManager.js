@@ -21,6 +21,46 @@ export class DownloadManager {
     this.initializeDownloadDirectory();
   }
 
+  // Remove empty directories up to the slskd download root
+  async removeEmptyDirectories(filePath) {
+    if (!this.slskdDownloadDir) {
+      return;
+    }
+
+    try {
+      let currentDir = path.dirname(filePath);
+      const downloadRoot = path.resolve(this.slskdDownloadDir);
+
+      // Only remove directories within the slskd download directory
+      while (currentDir && currentDir !== downloadRoot && currentDir.startsWith(downloadRoot)) {
+        try {
+          const entries = await fs.readdir(currentDir);
+          
+          // If directory is empty, remove it
+          if (entries.length === 0) {
+            await fs.rmdir(currentDir);
+            // Move up to parent directory
+            currentDir = path.dirname(currentDir);
+          } else {
+            // Directory has contents, stop here
+            break;
+          }
+        } catch (error) {
+          // Directory might have been removed already or doesn't exist
+          if (error.code === 'ENOENT' || error.code === 'ENOTEMPTY') {
+            break;
+          }
+          // For other errors, log but don't throw
+          console.warn(`Error checking/removing directory ${currentDir}:`, error.message);
+          break;
+        }
+      }
+    } catch (error) {
+      // Don't throw - this is cleanup, not critical
+      console.warn(`Error removing empty directories for ${filePath}:`, error.message);
+    }
+  }
+
   // Recursively search for a file in a directory
   async findFileRecursively(dir, filename, maxDepth = 5, currentDepth = 0) {
     if (currentDepth >= maxDepth) {
@@ -889,6 +929,8 @@ export class DownloadManager {
         // Delete the source file since we don't need it
         try {
           await fs.unlink(sourcePath);
+          // Clean up empty directories after deleting file
+          await this.removeEmptyDirectories(sourcePath);
         } catch (error) {
           console.warn(`Could not delete source file ${sourcePath}:`, error.message);
         }
@@ -907,6 +949,8 @@ export class DownloadManager {
     try {
       await fs.rename(sourcePath, destinationPath);
       // Rename succeeded - file is moved, source is automatically gone
+      // Clean up empty directories after moving file
+      await this.removeEmptyDirectories(sourcePath);
     } catch (error) {
       // If rename fails (different filesystems), copy and delete
       if (error.code === 'EXDEV') {
@@ -920,6 +964,8 @@ export class DownloadManager {
           if (destStats.size === sourceStats.size) {
             // Copy verified - safe to delete source
             await fs.unlink(sourcePath);
+            // Clean up empty directories after deleting file
+            await this.removeEmptyDirectories(sourcePath);
           } else {
             throw new Error(`Copy verification failed: destination size (${destStats.size}) doesn't match source (${sourceStats.size})`);
           }
@@ -971,6 +1017,8 @@ export class DownloadManager {
     try {
       await fs.rename(sourcePath, finalDestination);
       // Rename succeeded - file is moved, source is automatically gone
+      // Clean up empty directories after moving file
+      await this.removeEmptyDirectories(sourcePath);
     } catch (error) {
       // If rename fails (different filesystems), copy and delete
       if (error.code === 'EXDEV') {
@@ -984,6 +1032,8 @@ export class DownloadManager {
           if (destStats.size === sourceStats.size) {
             // Copy verified - safe to delete source
             await fs.unlink(sourcePath);
+            // Clean up empty directories after deleting file
+            await this.removeEmptyDirectories(sourcePath);
           } else {
             throw new Error(`Copy verification failed: destination size (${destStats.size}) doesn't match source (${sourceStats.size})`);
           }
