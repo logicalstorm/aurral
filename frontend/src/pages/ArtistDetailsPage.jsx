@@ -76,8 +76,37 @@ function ArtistDetailsPage() {
     "Spokenword",
   ];
   const allReleaseTypes = [...primaryReleaseTypes, ...secondaryReleaseTypes];
+  
+  // Load filter settings from localStorage on mount
+  const loadFilterSettings = () => {
+    try {
+      const saved = localStorage.getItem('artistDetailsFilterSettings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Validate that all saved types are valid release types
+        const validTypes = parsed.filter(type => allReleaseTypes.includes(type));
+        // If we have valid types and they're not empty, use them; otherwise use all
+        if (validTypes.length > 0) {
+          return validTypes;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load filter settings from localStorage:', e);
+    }
+    return allReleaseTypes;
+  };
+
   const [selectedReleaseTypes, setSelectedReleaseTypes] =
-    useState(allReleaseTypes);
+    useState(loadFilterSettings);
+
+  // Save filter settings to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem('artistDetailsFilterSettings', JSON.stringify(selectedReleaseTypes));
+    } catch (e) {
+      console.warn('Failed to save filter settings to localStorage:', e);
+    }
+  }, [selectedReleaseTypes]);
   const [showMonitorDropdown, setShowMonitorDropdown] = useState(false);
   const [monitorOption, setMonitorOption] = useState("none");
   const [showRemoveDropdown, setShowRemoveDropdown] = useState(false);
@@ -105,9 +134,8 @@ function ArtistDetailsPage() {
           getAppSettings(),
         ]);
 
-        // Initialize release type filters from settings (but don't use settings for filtering anymore)
-        // Always start with all types selected
-        setSelectedReleaseTypes(allReleaseTypes);
+        // Filter settings are loaded from localStorage in useState initialization
+        // No need to reset them here
         if (!artistData || !artistData.id) {
           throw new Error("Invalid artist data received");
         }
@@ -627,22 +655,25 @@ function ArtistDetailsPage() {
     // If no filters selected, show all
     if (!selectedReleaseTypes || selectedReleaseTypes.length === 0) return true;
 
-    // Check primary type
-    if (selectedReleaseTypes.includes(releaseGroup["primary-type"])) {
-      return true;
+    const primaryType = releaseGroup["primary-type"];
+    const secondaryTypes = releaseGroup["secondary-types"] || [];
+
+    // Primary type must be in selected types
+    if (!selectedReleaseTypes.includes(primaryType)) {
+      return false;
     }
 
-    // Check secondary types
-    if (
-      releaseGroup["secondary-types"] &&
-      releaseGroup["secondary-types"].length > 0
-    ) {
-      return releaseGroup["secondary-types"].some((secondaryType) =>
+    // If there are secondary types, ALL of them must be in selected types
+    // This means if you only select "Album", you won't see "Album, Live" or "Album, Remix"
+    // You need to also select "Live" or "Remix" to see those combinations
+    if (secondaryTypes.length > 0) {
+      return secondaryTypes.every((secondaryType) =>
         selectedReleaseTypes.includes(secondaryType),
       );
     }
 
-    return false;
+    // Primary type matches and no secondary types - show it
+    return true;
   };
 
   // Check if any filters are active

@@ -4,6 +4,7 @@ import { lastfmRequest, getLastfmApiKey } from "../services/apiClients.js";
 import { libraryManager } from "../services/libraryManager.js";
 import { db } from "../config/db.js";
 import { defaultData } from "../config/constants.js";
+import { imagePrefetchService } from "../services/imagePrefetchService.js";
 
 const router = express.Router();
 
@@ -128,6 +129,14 @@ router.get("/", async (req, res) => {
     });
   }
   
+  // Trigger background pre-fetching of images for visible artists
+  if (recommendations.length > 0 || globalTop.length > 0) {
+    imagePrefetchService.prefetchDiscoveryImages({
+      recommendations,
+      globalTop
+    }).catch(() => {}); // Don't block response
+  }
+
   res.set("Cache-Control", "public, max-age=300");
   res.json({
     recommendations,
