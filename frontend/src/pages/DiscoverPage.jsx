@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, memo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Loader,
@@ -28,6 +28,7 @@ function DiscoverPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [downloadStatuses, setDownloadStatuses] = useState({});
+  const downloadStatusesRef = useRef({});
   const navigate = useNavigate();
   const { showSuccess } = useToast();
 
@@ -45,6 +46,7 @@ function DiscoverPage() {
         setData(discoveryData);
         setRequests(requestsData);
         setRecentlyAdded(recentlyAddedData);
+        downloadStatusesRef.current = {};
         setLoading(false);
       } catch (err) {
         setError(
@@ -56,11 +58,35 @@ function DiscoverPage() {
 
     fetchData();
 
-    // Poll download status every 5 seconds
+    // Poll download status every 5 seconds, but only update if changed
     const pollDownloadStatus = async () => {
       try {
         const statuses = await getAllDownloadStatus();
-        setDownloadStatuses(statuses);
+        // Only update if the statuses actually changed (shallow comparison of keys and values)
+        const prev = downloadStatusesRef.current;
+        const prevKeys = Object.keys(prev).sort().join(',');
+        const newKeys = Object.keys(statuses).sort().join(',');
+        
+        if (prevKeys !== newKeys) {
+          downloadStatusesRef.current = statuses;
+          setDownloadStatuses(statuses);
+          return;
+        }
+        
+        // Check if any values changed
+        let hasChanges = false;
+        for (const key in statuses) {
+          if (prev[key] !== statuses[key]) {
+            hasChanges = true;
+            break;
+          }
+        }
+        
+        if (hasChanges) {
+          downloadStatusesRef.current = statuses;
+          setDownloadStatuses(statuses);
+        }
+        // If no changes, don't update state to prevent re-render
       } catch (error) {
         console.error("Failed to fetch download status:", error);
       }
@@ -96,9 +122,12 @@ function DiscoverPage() {
     const sections = [];
     const usedArtistIds = new Set();
 
-    const shuffledGenres = [...data.topGenres].sort(() => 0.5 - Math.random());
+    // Use a stable sort based on genre name instead of random to prevent re-renders
+    const sortedGenres = [...data.topGenres].sort((a, b) => 
+      a.localeCompare(b)
+    );
 
-    for (const genre of shuffledGenres) {
+    for (const genre of sortedGenres) {
       if (sections.length >= 4) break;
 
       const genreArtists = data.recommendations.filter((artist) => {
@@ -125,14 +154,19 @@ function DiscoverPage() {
     return sections;
   }, [data]);
 
-  const ArtistCard = ({ artist, status }) => {
+  const ArtistCard = memo(({ artist, status }) => {
     // For album requests, navigate to artist page; otherwise use artist.id
     const navigateTo = artist.navigateTo || artist.id;
+    const handleClick = useCallback(() => navigate(`/artist/${navigateTo}`), [navigateTo]);
+    const handleButtonClick = useCallback((e) => {
+      e.stopPropagation();
+      navigate(`/artist/${navigateTo}`);
+    }, [navigateTo]);
 
     return (
       <div className="group relative flex flex-col w-full min-w-0">
         <div
-          onClick={() => navigate(`/artist/${navigateTo}`)}
+          onClick={handleClick}
           className="relative aspect-square mb-3 overflow-hidden bg-gray-200 dark:bg-gray-800 cursor-pointer shadow-sm group-hover:shadow-md transition-all"
         >
           <ArtistImage
@@ -159,10 +193,7 @@ function DiscoverPage() {
 
           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate(`/artist/${navigateTo}`);
-              }}
+              onClick={handleButtonClick}
               className="p-2 bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 hover:scale-110 transition-all"
               title="View Details"
             >
@@ -173,7 +204,7 @@ function DiscoverPage() {
 
         <div className="flex flex-col min-w-0">
           <h3
-            onClick={() => navigate(`/artist/${navigateTo}`)}
+            onClick={handleClick}
             className="font-semibold text-gray-900 dark:text-gray-100 truncate hover:text-primary-500 cursor-pointer"
           >
             {artist.name}
@@ -192,7 +223,16 @@ function DiscoverPage() {
         </div>
       </div>
     );
-  };
+  }, (prevProps, nextProps) => {
+    // Custom comparison: only re-render if artist id, image, name, or status actually changed
+    return (
+      prevProps.artist.id === nextProps.artist.id &&
+      prevProps.artist.image === nextProps.artist.image &&
+      prevProps.artist.imageUrl === nextProps.artist.imageUrl &&
+      prevProps.artist.name === nextProps.artist.name &&
+      prevProps.status === nextProps.status
+    );
+  });
 
   if (loading) {
     return (

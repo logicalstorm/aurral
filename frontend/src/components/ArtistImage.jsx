@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Music, Loader } from "lucide-react";
 import { getArtistCover } from "../utils/api";
 
@@ -40,43 +40,20 @@ const ArtistImage = ({
   const [currentSrc, setCurrentSrc] = useState(src);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const fetchingRef = useRef(false);
 
-  useEffect(() => {
-    setCurrentSrc(src || null);
-    if (src) {
-      setHasError(false);
-      setIsLoading(true);
-    }
-  }, [src, mbid]);
-
-  useEffect(() => {
-    if (src) {
-      setIsLoading(true);
-      setHasError(false);
-    } else if (mbid) {
-      fetchBackendCover();
-    } else {
-      setIsLoading(false);
-      setHasError(true);
-    }
-  }, [src, mbid]);
-
-  const fetchBackendCover = async () => {
-    if (!mbid) {
-      setHasError(true);
-      setIsLoading(false);
+  const fetchBackendCover = useCallback(async (mbidToFetch) => {
+    if (!mbidToFetch || fetchingRef.current) {
       return;
     }
 
-    if (currentSrc) return;
-
+    fetchingRef.current = true;
     try {
-      setIsLoading(true);
       setHasError(false);
 
       const data = await scheduleFetch(() => 
         Promise.race([
-          getArtistCover(mbid),
+          getArtistCover(mbidToFetch),
           new Promise((_, reject) => 
             setTimeout(() => reject(new Error("Timeout")), 10000)
           )
@@ -88,6 +65,7 @@ const ArtistImage = ({
         if (url) {
           setCurrentSrc(url);
           setHasError(false);
+          // Don't set isLoading to false here - let onLoad handle it
         } else {
           setHasError(true);
           setIsLoading(false);
@@ -99,8 +77,30 @@ const ArtistImage = ({
     } catch (err) {
       setHasError(true);
       setIsLoading(false);
+    } finally {
+      fetchingRef.current = false;
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // Reset state when src or mbid changes
+    fetchingRef.current = false;
+    
+    if (src) {
+      setCurrentSrc(src);
+      setHasError(false);
+      setIsLoading(true);
+    } else if (mbid) {
+      setCurrentSrc(null);
+      setHasError(false);
+      setIsLoading(true);
+      fetchBackendCover(mbid);
+    } else {
+      setCurrentSrc(null);
+      setIsLoading(false);
+      setHasError(true);
+    }
+  }, [src, mbid, fetchBackendCover]);
 
   const handleLoad = () => {
     setIsLoading(false);
@@ -148,7 +148,7 @@ const ArtistImage = ({
         <img
           src={currentSrc}
           alt={alt || "Artist cover"}
-          className={`w-full h-full object-cover transition-opacity duration-100 ${
+          className={`w-full h-full object-cover transition-opacity duration-200 ${
             isLoading ? "opacity-0" : "opacity-100"
           }`}
           onLoad={handleLoad}
