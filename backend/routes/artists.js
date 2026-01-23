@@ -1,7 +1,7 @@
 import express from "express";
 import axios from "axios";
 import { UUID_REGEX } from "../config/constants.js";
-import { musicbrainzRequest, getLidarrConfig, getLastfmApiKey, lastfmRequest } from "../services/apiClients.js";
+import { musicbrainzRequest, getLastfmApiKey, lastfmRequest } from "../services/apiClients.js";
 
 const router = express.Router();
 
@@ -13,7 +13,8 @@ const parseLastFmDate = (dateStr) => {
   return d.toISOString().split("T")[0];
 };
 
-router.get("/search", async (req, res) => {
+// Handle both /search and /artists endpoints for search
+const handleSearch = async (req, res) => {
   try {
     const { query, limit = 20, offset = 0 } = req.query;
 
@@ -99,6 +100,18 @@ router.get("/search", async (req, res) => {
       message: error.message,
     });
   }
+};
+
+// Register search handler for both /search and /artists
+router.get("/search", handleSearch);
+router.get("/artists", handleSearch);
+
+// Root route - return 404 for /api/artists without MBID
+router.get("/", async (req, res) => {
+  res.status(404).json({ 
+    error: "Not found",
+    message: "Use /api/artists/:mbid to get artist details, or /api/search/artists to search"
+  });
 });
 
 router.get("/release-group/:mbid/cover", async (req, res) => {
@@ -173,15 +186,75 @@ router.get("/release-group/:mbid/cover", async (req, res) => {
   }
 });
 
+// Get release group tracks from MusicBrainz
+router.get("/release-group/:mbid/tracks", async (req, res) => {
+  try {
+    const { mbid } = req.params;
+    if (!UUID_REGEX.test(mbid)) {
+      return res.status(400).json({ error: "Invalid MBID format" });
+    }
+
+    // Get release group to find a release
+    const rgData = await musicbrainzRequest(`/release-group/${mbid}`, {
+      inc: 'releases',
+    });
+    
+    if (!rgData.releases || rgData.releases.length === 0) {
+      return res.json([]);
+    }
+    
+    // Get first release to get tracks
+    const releaseId = rgData.releases[0].id;
+    const releaseData = await musicbrainzRequest(`/release/${releaseId}`, {
+      inc: 'recordings',
+    });
+    
+    const tracks = [];
+    if (releaseData.media && releaseData.media.length > 0) {
+      for (const medium of releaseData.media) {
+        if (medium.tracks) {
+          for (const track of medium.tracks) {
+            const recording = track.recording;
+            if (recording) {
+              tracks.push({
+                id: recording.id,
+                mbid: recording.id,
+                title: recording.title,
+                trackName: recording.title,
+                trackNumber: track.position || 0,
+                position: track.position || 0,
+                length: recording.length || null,
+              });
+            }
+          }
+        }
+      }
+    }
+    
+    res.json(tracks);
+  } catch (error) {
+    console.error("Error fetching release group tracks:", error);
+    res.status(500).json({
+      error: "Failed to fetch tracks",
+      message: error.message,
+    });
+  }
+});
+
 router.get("/:mbid", async (req, res) => {
   try {
     const { mbid } = req.params;
-    console.log(`[Artists Route] Fetching artist details for MBID: ${mbid}`);
-
+    
+    // Validate MBID format early to catch invalid requests
     if (!UUID_REGEX.test(mbid)) {
       console.log(`[Artists Route] Invalid MBID format: ${mbid}`);
-      return res.status(400).json({ error: "Invalid MBID format" });
+      return res.status(400).json({ 
+        error: "Invalid MBID format",
+        message: `"${mbid}" is not a valid MusicBrainz ID. MBIDs must be UUIDs.`
+      });
     }
+    
+    console.log(`[Artists Route] Fetching artist details for MBID: ${mbid}`);
 
     try {
       console.log(`[Artists Route] Calling MusicBrainz for ${mbid}`);
@@ -254,37 +327,13 @@ router.get("/:mbid/cover", async (req, res) => {
     const fetchPromise = (async () => {
       try {
         const { db } = await import("../config/db.js");
-        const { getCachedLidarrArtists } = await import("../services/lidarrCache.js");
-        const artists = await getCachedLidarrArtists().catch(() => []);
-        const lidarrArtist = artists.find(a => a.foreignArtistId === mbid);
+        const { libraryManager } = await import("../services/libraryManager.js");
+        const libraryArtist = libraryManager.getArtist(mbid);
 
-        if (lidarrArtist && lidarrArtist.id) {
-          const posterImage = lidarrArtist.images?.find(
-            img => img.coverType === "poster" || img.coverType === "fanart"
-          ) || lidarrArtist.images?.[0];
-
-          if (posterImage && lidarrArtist.id) {
-            console.log(`[Cover Route] Found Lidarr image for ${mbid}`);
-            const coverType = posterImage.coverType || "poster";
-            const imageUrl = `/api/lidarr/mediacover/${lidarrArtist.id}/${coverType}.jpg`;
-            const result = {
-              images: [{
-                image: imageUrl,
-                front: true,
-                types: ["Front"],
-              }]
-            };
-            if (!db.data.images) db.data.images = {};
-            db.data.images[mbid] = imageUrl;
-            db.write().catch(e => console.error("Error saving image to database:", e.message));
-            return result;
-          }
-        }
-
-        // Try to get artist name from Lidarr first (no API call needed)
-        let artistName = lidarrArtist?.artistName || null;
+        // Try to get artist name from library first (no API call needed)
+        let artistName = libraryArtist?.artistName || null;
         
-        // If not in Lidarr, get name from MusicBrainz (minimal call, no relationships)
+        // If not in library, get name from MusicBrainz (minimal call, no relationships)
         if (!artistName) {
           try {
             const artistData = await Promise.race([

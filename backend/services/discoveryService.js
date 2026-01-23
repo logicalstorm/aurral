@@ -2,14 +2,38 @@ import { db } from "../config/db.js";
 import { GENRE_KEYWORDS } from "../config/constants.js";
 import { lastfmRequest, getLastfmApiKey } from "./apiClients.js";
 
+// Initialize cache - but check if discovery is actually configured first
 let discoveryCache = {
-  ...db.data.discovery,
+  recommendations: [],
+  globalTop: [],
+  basedOn: [],
+  topTags: [],
+  topGenres: [],
+  lastUpdated: null,
   isUpdating: false,
 };
 
+// Only load from database if it exists and has data
+if (db.data?.discovery) {
+  const dbData = db.data.discovery;
+  // Only use database data if it has actual content
+  if (dbData.recommendations?.length > 0 || dbData.globalTop?.length > 0 || dbData.topGenres?.length > 0) {
+    discoveryCache = {
+      recommendations: dbData.recommendations || [],
+      globalTop: dbData.globalTop || [],
+      basedOn: dbData.basedOn || [],
+      topTags: dbData.topTags || [],
+      topGenres: dbData.topGenres || [],
+      lastUpdated: dbData.lastUpdated || null,
+      isUpdating: false,
+    };
+  }
+}
+
 export const getDiscoveryCache = () => {
-  // Ensure cache is synced with database on access
-  if (db.data.discovery) {
+  // Don't check configuration here - let the route handle it
+  // Just sync cache with database if it exists
+  if (db.data?.discovery) {
     const dbData = db.data.discovery;
     // Only sync if database has more data than cache
     if ((dbData.recommendations?.length > 0 && (!discoveryCache.recommendations || discoveryCache.recommendations.length === 0)) ||
@@ -37,31 +61,49 @@ export const updateDiscoveryCache = async () => {
   console.log("Starting background update of discovery recommendations...");
 
   try {
-    let lidarrArtists = [];
-    try {
-      const { getCachedLidarrArtists } = await import("./lidarrCache.js");
-      lidarrArtists = await getCachedLidarrArtists(true);
-    } catch (error) {
-      console.warn("Failed to fetch Lidarr artists for discovery:", error.message);
-      lidarrArtists = [];
-    }
-    console.log(`Found ${lidarrArtists.length} artists in Lidarr.`);
+    const { libraryManager } = await import("./libraryManager.js");
+    const libraryArtists = libraryManager.getAllArtists();
+    console.log(`Found ${libraryArtists.length} artists in library.`);
 
     const existingArtistIds = new Set(
-      lidarrArtists.map((a) => a.foreignArtistId),
+      libraryArtists.map((a) => a.mbid),
     );
 
-    if (lidarrArtists.length === 0 && !getLastfmApiKey()) {
+    if (libraryArtists.length === 0 && !getLastfmApiKey()) {
       console.log(
-        "No artists in Lidarr and no Last.fm key. Skipping discovery.",
+        "No artists in library and no Last.fm key. Skipping discovery and clearing cache.",
       );
+      // Clear discovery cache if nothing is configured
+      discoveryCache.recommendations = [];
+      discoveryCache.globalTop = [];
+      discoveryCache.basedOn = [];
+      discoveryCache.topTags = [];
+      discoveryCache.topGenres = [];
+      discoveryCache.lastUpdated = null;
       discoveryCache.isUpdating = false;
+      
+      // Also clear from database
+      if (db.data) {
+        db.data.discovery = {
+          recommendations: [],
+          globalTop: [],
+          basedOn: [],
+          topTags: [],
+          topGenres: [],
+          lastUpdated: null,
+        };
+        try {
+          await db.write();
+        } catch (error) {
+          console.error("Failed to clear discovery cache:", error.message);
+        }
+      }
       return;
     }
 
     const tagCounts = new Map();
     const genreCounts = new Map();
-    const profileSample = [...lidarrArtists]
+    const profileSample = [...libraryArtists]
       .sort(() => 0.5 - Math.random())
       .slice(0, 25);
 
@@ -74,7 +116,7 @@ export const updateDiscoveryCache = async () => {
         if (getLastfmApiKey()) {
           try {
             const data = await lastfmRequest("artist.getTopTags", {
-              mbid: artist.foreignArtistId,
+              mbid: artist.mbid,
             });
             if (data?.toptags?.tag) {
               const tags = Array.isArray(data.toptags.tag)
@@ -152,8 +194,8 @@ export const updateDiscoveryCache = async () => {
       }
     }
 
-    const recSampleSize = Math.min(25, lidarrArtists.length);
-    const recSample = [...lidarrArtists]
+    const recSampleSize = Math.min(25, libraryArtists.length);
+    const recSample = [...libraryArtists]
       .sort(() => 0.5 - Math.random())
       .slice(0, recSampleSize);
     const recommendations = new Map();
@@ -170,7 +212,7 @@ export const updateDiscoveryCache = async () => {
           try {
             let sourceTags = [];
             const tagData = await lastfmRequest("artist.getTopTags", {
-              mbid: artist.foreignArtistId,
+              mbid: artist.mbid,
             });
             if (tagData?.toptags?.tag) {
               const allTags = Array.isArray(tagData.toptags.tag)
@@ -180,7 +222,7 @@ export const updateDiscoveryCache = async () => {
             }
 
             const similar = await lastfmRequest("artist.getSimilar", {
-              mbid: artist.foreignArtistId,
+              mbid: artist.mbid,
               limit: 25,
             });
             if (similar?.similarartists?.artist) {
@@ -245,7 +287,7 @@ export const updateDiscoveryCache = async () => {
       recommendations: recommendationsArray,
       basedOn: recSample.map((a) => ({
         name: a.artistName,
-        id: a.foreignArtistId,
+        id: a.mbid,
       })),
       topTags: discoveryCache.topTags || [],
       topGenres: discoveryCache.topGenres || [],
@@ -268,23 +310,10 @@ export const updateDiscoveryCache = async () => {
     ].filter((a) => !a.image);
     console.log(`Hydrating images for ${allToHydrate.length} artists...`);
     
-    const { getCachedLidarrArtists: getCachedLidarrArtistsForImages } = await import("./lidarrCache.js");
-    const artists = await getCachedLidarrArtistsForImages().catch(() => []);
-
+    // Images are now handled through the image service, no need for library lookup here
     await Promise.all(
       allToHydrate.map(async (item) => {
         try {
-          const lidarrArtist = artists.find(a => a.foreignArtistId === item.id);
-          if (lidarrArtist && lidarrArtist.id) {
-            const posterImage = lidarrArtist.images?.find(
-              img => img.coverType === "poster" || img.coverType === "fanart"
-            ) || lidarrArtist.images?.[0];
-            if (posterImage) {
-              const coverType = posterImage.coverType || "poster";
-              item.image = `/api/lidarr/mediacover/${lidarrArtist.id}/${coverType}.jpg`;
-              return;
-            }
-          }
           
           try {
             const axios = (await import("axios")).default;

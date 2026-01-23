@@ -3,46 +3,6 @@ import Bottleneck from "bottleneck";
 import { db } from "../config/db.js";
 import { MUSICBRAINZ_API, LASTFM_API, APP_NAME, APP_VERSION } from "../config/constants.js";
 
-let lidarrBasepathDetected = false;
-
-export const getLidarrConfig = () => {
-  const dbConfig = db.data.settings.integrations?.lidarr || {};
-  return {
-    url: (dbConfig.url || process.env.LIDARR_URL || "http://localhost:8686").replace(/\/+$/, ''),
-    apiKey: dbConfig.apiKey || process.env.LIDARR_API_KEY || ""
-  };
-};
-
-export const probeLidarrUrl = async () => {
-  const { url, apiKey } = getLidarrConfig();
-  if (!apiKey) return;
-
-  let currentUrl = url;
-  const basePaths = ['', '/lidarr'];
-  
-  for (const basePath of basePaths) {
-    const testUrl = basePath ? `${currentUrl}${basePath}` : currentUrl;
-    try {
-      const response = await axios.get(`${testUrl}/api/v1/system/status`, {
-        headers: { 'X-Api-Key': apiKey },
-        timeout: 5000,
-      });
-
-      if (response.data?.appName === 'Lidarr') {
-        if (basePath) {
-          console.log(`Lidarr basepath auto-detected: ${basePath}`);
-          lidarrBasepathDetected = true;
-        }
-        return true;
-      }
-    } catch (error) {
-    }
-  }
-
-  console.warn('WARNING: Could not connect to Lidarr at configured URL or with /lidarr basepath');
-  return false;
-};
-
 export const getLastfmApiKey = () => {
   return db.data.settings.integrations?.lastfm?.apiKey || process.env.LASTFM_API_KEY;
 };
@@ -139,50 +99,3 @@ export const lastfmRequest = lastfmLimiter.wrap(async (method, params = {}) => {
     return null;
   }
 });
-
-export const lidarrRequest = async (endpoint, method = "GET", data = null, silent = false) => {
-  const { url, apiKey } = getLidarrConfig();
-  
-  if (!apiKey) {
-    throw new Error("Lidarr API key not configured");
-  }
-
-  let finalUrl = url;
-  if (lidarrBasepathDetected && !finalUrl.endsWith('/lidarr')) {
-    finalUrl += '/lidarr';
-  }
-
-  try {
-    const config = {
-      method,
-      url: `${finalUrl}/api/v1${endpoint}`,
-      headers: {
-        "X-Api-Key": apiKey,
-      },
-    };
-
-    if (data) {
-      config.data = data;
-    }
-
-    const response = await axios(config);
-
-    if (typeof response.data === 'string' && response.data.includes('<!doctype html>')) {
-      const error = new Error(
-        'Lidarr returned HTML instead of JSON. ' +
-        'If Lidarr is behind a basepath, add it to LIDARR_URL (e.g., http://host:8686/lidarr)'
-      );
-      error.isBasepathError = true;
-      throw error;
-    }
-
-    return response.data;
-  } catch (error) {
-    if (!silent) {
-      console.error("Lidarr API error:", error.response?.data || error.message);
-    }
-    throw error;
-  }
-};
-
-export const getLidarrBasepathDetected = () => lidarrBasepathDetected;

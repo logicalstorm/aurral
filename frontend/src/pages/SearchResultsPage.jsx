@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Loader, Music, ExternalLink, CheckCircle, Plus } from "lucide-react";
 import {
   searchArtists,
-  lookupArtistsInLidarrBatch,
+  lookupArtistsInLibraryBatch,
   getArtistCover,
   searchArtistsByTag,
 } from "../utils/api";
@@ -45,22 +45,31 @@ function SearchResultsPage() {
           artists = data.artists || [];
         }
 
-        setResults(artists);
+        // Remove duplicates by MBID (keep first occurrence)
+        const seen = new Set();
+        const uniqueArtists = artists.filter(artist => {
+          if (!artist.id) return false; // Skip artists without MBID
+          if (seen.has(artist.id)) return false;
+          seen.add(artist.id);
+          return true;
+        });
 
-        if (artists.length > 0) {
+        setResults(uniqueArtists);
+
+        if (uniqueArtists.length > 0) {
           const imagesMap = {};
 
-          artists.forEach((artist) => {
-            if (artist.image) {
+          uniqueArtists.forEach((artist) => {
+            if (artist.image && artist.id) {
               imagesMap[artist.id] = artist.image;
             }
           });
           setArtistImages(imagesMap);
 
           try {
-            const mbids = artists.map((a) => a.id).filter(Boolean);
+            const mbids = uniqueArtists.map((a) => a.id).filter(Boolean);
             if (mbids.length > 0) {
-              const existingMap = await lookupArtistsInLidarrBatch(mbids);
+              const existingMap = await lookupArtistsInLibraryBatch(mbids);
               setExistingArtists(existingMap);
             }
           } catch (err) {
@@ -95,7 +104,7 @@ function SearchResultsPage() {
     setArtistToAdd(null);
 
 
-    showSuccess(`Successfully added ${artist.name} to Lidarr!`);
+    showSuccess(`Successfully added ${artist.name} to library!`);
   };
 
   const handleModalClose = () => {
@@ -177,9 +186,9 @@ function SearchResultsPage() {
               </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-                {results.map((artist) => (
+                {results.map((artist, index) => (
                   <div
-                    key={artist.id}
+                    key={artist.id || `artist-${index}`}
                     className="group relative flex flex-col w-full min-w-0"
                   >
                     <div
@@ -203,7 +212,7 @@ function SearchResultsPage() {
                                 handleAddArtistClick(artist);
                               }}
                               className="p-2 bg-primary-500 text-white rounded-full hover:bg-primary-600 hover:scale-110 transition-all shadow-lg"
-                              title="Add to Lidarr"
+                              title="Add to Library"
                             >
                               <Plus className="w-5 h-5" />
                             </button>

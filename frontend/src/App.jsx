@@ -40,8 +40,8 @@ const ProtectedRoute = ({ children }) => {
 
 function AppContent() {
   const [isHealthy, setIsHealthy] = useState(null);
-  const [lidarrConfigured, setLidarrConfigured] = useState(false);
-  const [lidarrStatus, setLidarrStatus] = useState("unknown");
+  const [rootFolderConfigured, setRootFolderConfigured] = useState(false);
+  const [slskdConfigured, setSlskdConfigured] = useState(false);
   const { isAuthenticated, authRequired } = useAuth();
 
   useEffect(() => {
@@ -49,12 +49,11 @@ function AppContent() {
       try {
         const health = await checkHealth();
         setIsHealthy(health.status === "ok");
-        setLidarrConfigured(health.lidarrConfigured);
-        setLidarrStatus(health.lidarrStatus || "unknown");
+        setRootFolderConfigured(health.rootFolderConfigured || false);
+        setSlskdConfigured(health.slskdConfigured || false);
       } catch (error) {
         console.error("Health check failed:", error);
         setIsHealthy(false);
-        setLidarrStatus("unknown");
       }
     };
 
@@ -66,7 +65,7 @@ function AppContent() {
   return (
         <Router>
       <ProtectedRoute>
-        <Layout isHealthy={isHealthy} lidarrConfigured={lidarrConfigured} lidarrStatus={lidarrStatus}>
+        <Layout isHealthy={isHealthy} rootFolderConfigured={rootFolderConfigured} slskdConfigured={slskdConfigured}>
           {isHealthy === false && (
             <div className="mb-6 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-500/20 rounded-xl p-4">
               <div className="flex items-center">
@@ -89,7 +88,7 @@ function AppContent() {
             </div>
           )}
 
-          {isHealthy && !lidarrConfigured && (
+          {isHealthy && !rootFolderConfigured && (
             <div className="mb-6 bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-500/20 rounded-xl p-4">
               <div className="flex items-center">
                 <svg
@@ -104,8 +103,7 @@ function AppContent() {
                   />
                 </svg>
                 <p className="text-yellow-800 dark:text-yellow-400 font-medium">
-                  Lidarr is not configured. Please add your Lidarr API key in
-                  the backend settings.
+                  Root folder is not configured. Please configure your music library root folder in settings.
                 </p>
               </div>
             </div>

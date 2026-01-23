@@ -1,11 +1,8 @@
 import { useState, useEffect } from "react";
 
-import { X, Loader, CheckCircle, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { X, Loader, CheckCircle, AlertCircle } from "lucide-react";
 import {
-  getLidarrRootFolders,
-  getLidarrQualityProfiles,
-  getLidarrMetadataProfiles,
-  addArtistToLidarr,
+  addArtistToLibrary,
   getAppSettings,
 } from "../utils/api";
 
@@ -13,17 +10,7 @@ function AddArtistModal({ artist, onClose, onSuccess }) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
-  const [showOptions, setShowOptions] = useState(false);
-  const [rootFolders, setRootFolders] = useState([]);
-  const [qualityProfiles, setQualityProfiles] = useState([]);
-  const [metadataProfiles, setMetadataProfiles] = useState([]);
-  const [selectedRootFolder, setSelectedRootFolder] = useState("");
-  const [selectedQualityProfile, setSelectedQualityProfile] = useState("");
-  const [selectedMetadataProfile, setSelectedMetadataProfile] = useState("");
-  const [monitored, setMonitored] = useState(true);
-  const [monitorOption, setMonitorOption] = useState("none");
-  const [searchForMissingAlbums, setSearchForMissingAlbums] = useState(false);
-  const [albumFolders, setAlbumFolders] = useState(true);
+  const [selectedQuality, setSelectedQuality] = useState("standard");
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -38,29 +25,8 @@ function AddArtistModal({ artist, onClose, onSuccess }) {
       setError(null);
 
       try {
-        const [folders, quality, metadata, savedSettings] = await Promise.all([
-          getLidarrRootFolders(),
-          getLidarrQualityProfiles(),
-          getLidarrMetadataProfiles(),
-          getAppSettings(),
-        ]);
-
-        setRootFolders(folders);
-        setQualityProfiles(quality);
-        setMetadataProfiles(metadata);
-
-        setSelectedRootFolder(
-          savedSettings.rootFolderPath || (folders[0]?.path ?? ""),
-        );
-        setSelectedQualityProfile(
-          savedSettings.qualityProfileId || (quality[0]?.id ?? ""),
-        );
-        setSelectedMetadataProfile(
-          savedSettings.metadataProfileId || (metadata[0]?.id ?? ""),
-        );
-        setMonitored(savedSettings.monitored ?? true);
-        setSearchForMissingAlbums(savedSettings.searchForMissingAlbums ?? false);
-        setAlbumFolders(savedSettings.albumFolders ?? true);
+        const savedSettings = await getAppSettings();
+        setSelectedQuality(savedSettings.quality || "standard");
       } catch (err) {
         setError(
           err.response?.data?.message || "Failed to load configuration options",
@@ -76,34 +42,19 @@ function AddArtistModal({ artist, onClose, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (
-      !selectedRootFolder ||
-      !selectedQualityProfile ||
-      !selectedMetadataProfile
-    ) {
-      setError("Please select all required options");
-      return;
-    }
-
     setSubmitting(true);
     setError(null);
 
     try {
-      await addArtistToLidarr({
+      await addArtistToLibrary({
         foreignArtistId: artist.id,
         artistName: artist.name,
-        qualityProfileId: parseInt(selectedQualityProfile),
-        metadataProfileId: parseInt(selectedMetadataProfile),
-        rootFolderPath: selectedRootFolder,
-        monitored,
-        monitor: monitorOption,
-        searchForMissingAlbums,
-        albumFolders,
+        quality: selectedQuality,
       });
 
       onSuccess(artist);
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to add artist to Lidarr");
+      setError(err.response?.data?.message || "Failed to add artist to library");
     } finally {
       setSubmitting(false);
     }
@@ -116,7 +67,7 @@ function AddArtistModal({ artist, onClose, onSuccess }) {
         <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-4 flex items-center justify-between rounded-t-xl z-10">
           <div>
             <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              Add Artist to Lidarr
+              Add Artist to Library
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               {artist.name}
@@ -150,219 +101,63 @@ function AddArtistModal({ artist, onClose, onSuccess }) {
               </div>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="flex gap-3">
+            <form onSubmit={handleSubmit} className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Music Library Path
+                    </label>
+                    <div className="input bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 cursor-not-allowed">
+                      /data
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Music library is stored at <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded">/data</code>. 
+                      In Docker, remap this path using volume mounts: <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded">/your/path:/data</code>
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Quality Preset
+                    </label>
+                    <select
+                      value={selectedQuality}
+                      onChange={(e) => setSelectedQuality(e.target.value)}
+                      className="input"
+                      disabled={submitting}
+                    >
+                      <option value="low">Low (MP3 192-320kbps)</option>
+                      <option value="standard">Standard (MP3 320kbps, FLAC) - Recommended</option>
+                      <option value="max">Max (FLAC only)</option>
+                    </select>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Standard uses optimization settings: Preferred Groups (DeVOiD, PERFECT, ENRiCH), prefers CD/WEB, avoids Vinyl
+                    </p>
+                  </div>
+
+              <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-800">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="btn btn-secondary flex-1"
+                  disabled={submitting}
+                >
+                  Cancel
+                </button>
                 <button
                   type="submit"
-                  className="btn btn-primary flex-1 disabled:opacity-50 h-12"
+                  className="btn btn-primary flex-1"
                   disabled={submitting}
                 >
                   {submitting ? (
                     <>
-                      <Loader className="w-5 h-5 animate-spin mr-2" />
-                      Adding to Lidarr...
+                      <Loader className="w-4 h-4 mr-2 animate-spin" />
+                      Adding...
                     </>
                   ) : (
-                    <>
-                      <CheckCircle className="w-5 h-5 mr-2" />
-                      Add to Lidarr
-                    </>
+                    "Add Artist"
                   )}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setShowOptions(!showOptions)}
-                  className="btn btn-secondary flex items-center justify-center px-4"
-                  title="Advanced Options"
-                  disabled={submitting}
-                >
-                  {showOptions ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                </button>
               </div>
-
-              {showOptions && (
-                <div className="space-y-6 pt-4 border-t border-gray-200 dark:border-gray-800">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Root Folder <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={selectedRootFolder}
-                      onChange={(e) => setSelectedRootFolder(e.target.value)}
-                      className="input"
-                      required
-                      disabled={submitting}
-                    >
-                      {rootFolders.map((folder) => (
-                        <option key={folder.id} value={folder.path}>
-                          {folder.path}
-                          {folder.freeSpace &&
-                            ` (${(folder.freeSpace / 1024 / 1024 / 1024).toFixed(2)} GB free)`}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Quality Profile <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={selectedQualityProfile}
-                      onChange={(e) => setSelectedQualityProfile(e.target.value)}
-                      className="input"
-                      required
-                      disabled={submitting}
-                    >
-                      {qualityProfiles.map((profile) => (
-                        <option key={profile.id} value={profile.id}>
-                          {profile.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Metadata Profile <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={selectedMetadataProfile}
-                      onChange={(e) => setSelectedMetadataProfile(e.target.value)}
-                      className="input"
-                      required
-                      disabled={submitting}
-                    >
-                      {metadataProfiles.map((profile) => (
-                        <option key={profile.id} value={profile.id}>
-                          {profile.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-800">
-                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">
-                      Options
-                    </h3>
-
-                    <div className="flex items-start">
-                      <div className="flex items-center h-5">
-                        <input
-                          type="checkbox"
-                          id="monitored"
-                          checked={monitored}
-                          onChange={(e) => setMonitored(e.target.checked)}
-                          className="w-4 h-4 text-primary-600 border-gray-300 dark:border-gray-600 dark:bg-gray-800 rounded focus:ring-primary-500"
-                          disabled={submitting}
-                        />
-                      </div>
-                      <div className="ml-3">
-                        <label
-                          htmlFor="monitored"
-                          className="font-medium text-gray-700 dark:text-gray-300"
-                        >
-                          Monitor Artist
-                        </label>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          Lidarr will search for and download new releases
-                        </p>
-                      </div>
-                    </div>
-
-                    {monitored && (
-                        <div className="ml-8 mb-4">
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Monitor Option
-                          </label>
-                          <select
-                            value={monitorOption}
-                            onChange={(e) => setMonitorOption(e.target.value)}
-                            className="input text-sm"
-                            disabled={submitting}
-                          >
-                             <option value="all">All Albums</option>
-                             <option value="future">Future Albums</option>
-                             <option value="missing">Missing Albums</option>
-                             <option value="latest">Latest Album</option>
-                             <option value="first">First Album</option>
-                             <option value="none">None (Artist Only)</option>
-                          </select>
-                        </div>
-                    )}
-
-                    <div className="flex items-start">
-                      <div className="flex items-center h-5">
-                        <input
-                          type="checkbox"
-                          id="searchForMissingAlbums"
-                          checked={searchForMissingAlbums}
-                          onChange={(e) =>
-                            setSearchForMissingAlbums(e.target.checked)
-                          }
-                          className="w-4 h-4 text-primary-600 border-gray-300 dark:border-gray-600 dark:bg-gray-800 rounded focus:ring-primary-500"
-                          disabled={submitting}
-                        />
-                      </div>
-                      <div className="ml-3">
-                        <label
-                          htmlFor="searchForMissingAlbums"
-                          className="font-medium text-gray-700 dark:text-gray-300"
-                        >
-                          Search for Missing Albums on Add
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start">
-                      <div className="flex items-center h-5">
-                        <input
-                          type="checkbox"
-                          id="albumFolders"
-                          checked={albumFolders}
-                          onChange={(e) => setAlbumFolders(e.target.checked)}
-                          className="w-4 h-4 text-primary-600 border-gray-300 dark:border-gray-600 dark:bg-gray-800 rounded focus:ring-primary-500"
-                          disabled={submitting}
-                        />
-                      </div>
-                      <div className="ml-3">
-                        <label
-                          htmlFor="albumFolders"
-                          className="font-medium text-gray-700 dark:text-gray-300"
-                        >
-                          Create Album Folders
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {!showOptions && (
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="btn btn-secondary flex-1"
-                    disabled={submitting}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
-
-              {showOptions && (
-                 <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-800">
-                    <button
-                      type="button"
-                      onClick={onClose}
-                      className="btn btn-secondary flex-1"
-                      disabled={submitting}
-                    >
-                      Cancel
-                    </button>
-                 </div>
-              )}
             </form>
           )}
         </div>

@@ -25,11 +25,19 @@ try {
   db.data = defaultData;
 }
 
+if (!db.data) {
+  db.data = defaultData;
+}
+
+if (!db.data.settings) {
+  db.data.settings = defaultData.settings;
+}
+
 if (!db.data.settings.integrations) {
   db.data.settings.integrations = {
     navidrome: { url: "", username: "", password: "" },
     lastfm: { username: "" },
-    lidarr: { url: "", apiKey: "" },
+    slskd: { url: "", apiKey: "" },
     musicbrainz: { email: "" },
     general: { authUser: "", authPassword: "" }
   };

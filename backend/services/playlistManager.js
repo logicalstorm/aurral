@@ -1,11 +1,12 @@
 import { NavidromeClient } from './navidrome.js';
+import { libraryManager } from './libraryManager.js';
+import { slskdClient } from './slskdClient.js';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export class PlaylistManager {
-  constructor(db, lidarrRequest, musicbrainzRequest, lastfmRequest) {
+  constructor(db, musicbrainzRequest, lastfmRequest) {
     this.db = db;
-    this.lidarrRequest = lidarrRequest;
     this.musicbrainzRequest = musicbrainzRequest;
     this.lastfmRequest = lastfmRequest;
     
@@ -39,24 +40,20 @@ export class PlaylistManager {
       await this.db.write();
       
       if (enabled) {
-          this.checkSchedule();
+          // Generate immediately if no items exist (first time setup)
+          const hasItems = this.db.data.flows.weekly.items && this.db.data.flows.weekly.items.length > 0;
+          const lastUpdate = this.db.data.flows.weekly.updatedAt;
+          if (!lastUpdate && !hasItems) {
+              console.log('Generating initial weekly flow on enable...');
+              await this.generateWeeklyFlow();
+          } else {
+              this.checkSchedule();
+          }
       }
       return this.db.data.flows.weekly;
   }
 
-  async getDiscoveryTagId() {
-    try {
-      const tags = await this.lidarrRequest('/tag');
-      const existing = tags.find(t => t.label === 'aurral-discovery');
-      if (existing) return existing.id;
-
-      const newTag = await this.lidarrRequest('/tag', 'POST', { label: 'aurral-discovery' });
-      return newTag.id;
-    } catch (e) {
-      console.error("Failed to get/create Lidarr tag:", e.message);
-      return null;
-    }
-  }
+  // No longer need tags - we track ephemeral items in the flow data
 
   async generateWeeklyFlow() {
     this.initDb();
@@ -65,12 +62,11 @@ export class PlaylistManager {
 
     const recommendations = await this.fetchRecommendations(20);
 
-    const tagId = await this.getDiscoveryTagId();
     const newItems = [];
     
     for (const rec of recommendations) {
       try {
-        const result = await this.addToLidarr(rec, tagId);
+        const result = await this.addToLibrary(rec);
         if (result) {
           newItems.push({
             ...rec,
@@ -136,22 +132,22 @@ export class PlaylistManager {
     }
 
     for (const item of deleteItems) {
-      if (item.lidarrArtistId) {
+      if (item.artistId) {
         try {
-          const artist = await this.lidarrRequest(`/artist/${item.lidarrArtistId}`);
-          const tagId = await this.getDiscoveryTagId();
-          const hasTag = artist.tags && artist.tags.includes(tagId);
-
-          if (hasTag) {
-            console.log(`Removing ephemeral artist: ${item.artistName}`);
-            await this.lidarrRequest(`/artist/${item.lidarrArtistId}?deleteFiles=true`, 'DELETE');
-          } else {
-            console.log(`Skipping deletion of ${item.artistName}: Tag missing, assumed kept by user.`);
+          const artist = libraryManager.getArtistById(item.artistId);
+          if (artist) {
+            // Check if artist is still ephemeral (only in weekly flow)
+            const isOnlyInFlow = !this.db.data.requests?.find(r => r.mbid === artist.mbid && r.status === 'available');
+            
+            if (isOnlyInFlow) {
+              console.log(`Removing ephemeral artist: ${item.artistName}`);
+              await libraryManager.deleteArtist(artist.mbid, true);
+            } else {
+              console.log(`Skipping deletion of ${item.artistName}: Assumed kept by user.`);
+            }
           }
         } catch (e) {
-           if (e.response?.status !== 404) {
-               console.error(`Failed to remove ${item.artistName} from Lidarr:`, e.message);
-           }
+          console.error(`Failed to remove ${item.artistName} from library:`, e.message);
         }
       }
     }
@@ -169,8 +165,8 @@ export class PlaylistManager {
     }
 
     const candidates = discovery.recommendations;
-    const existingLidarrArtists = await this.lidarrRequest('/artist');
-    const existingIds = new Set(existingLidarrArtists.map(a => a.foreignArtistId));
+    const existingLibraryArtists = libraryManager.getAllArtists();
+    const existingIds = new Set(existingLibraryArtists.map(a => a.mbid));
     const processedIds = new Set(this.db.data.flows.weekly.history || []);
 
     const selected = [];
@@ -215,66 +211,46 @@ export class PlaylistManager {
     return selected;
   }
 
-  async addToLidarr(item, tagId) {
-    const rootFolders = await this.lidarrRequest('/rootfolder');
-    const qualityProfiles = await this.lidarrRequest('/qualityprofile');
-    const metadataProfiles = await this.lidarrRequest('/metadataprofile');
-    
-    const tags = tagId ? [tagId] : [];
-
-    const artistPayload = {
-        foreignArtistId: item.mbid,
-        artistName: item.artistName,
-        qualityProfileId: qualityProfiles[0].id,
-        metadataProfileId: metadataProfiles[0].id,
-        rootFolderPath: rootFolders[0].path,
+  async addToLibrary(item) {
+    try {
+      const artist = await libraryManager.addArtist(item.mbid, item.artistName, {
         monitored: false,
-        albumFolder: true,
-        tags: tags,
-        addOptions: { searchForMissingAlbums: false }
-    };
+        albumFolders: true,
+      });
+      
+      // Queue track download
+      this.queueTrackDownload(artist.id, item.trackName);
 
-    const artist = await this.lidarrRequest('/artist', 'POST', artistPayload);
-    
-    this.queueAlbumSelection(artist.id, item.trackName);
-
-    return {
-        lidarrArtistId: artist.id,
-    };
+      return {
+        artistId: artist.id,
+      };
+    } catch (error) {
+      console.error(`Failed to add artist ${item.artistName} to library:`, error.message);
+      throw error;
+    }
   }
   
-  async queueAlbumSelection(artistId, trackName) {
-      setTimeout(async () => {
-          try {
-              const albums = await this.lidarrRequest(`/album?artistId=${artistId}`);
-              
-              const match = albums.find(a => 
-                  a.title.toLowerCase() === trackName.toLowerCase()
-              );
-              
-              let albumToMonitor = match;
-              
-              if (!albumToMonitor) {
-                  albumToMonitor = albums.find(a => a.albumType === 'Album') || albums[0];
-              }
-              
-              if (albumToMonitor) {
-                  console.log(`Monitoring Album ${albumToMonitor.title} for Artist ${artistId}`);
-                  
-                  await this.lidarrRequest(`/album/monitor`, 'PUT', {
-                      albumIds: [albumToMonitor.id],
-                      monitored: true
-                  });
-                  
-                  await this.lidarrRequest('/command', 'POST', {
-                      name: 'AlbumSearch',
-                      albumIds: [albumToMonitor.id]
-                  });
-              }
-          } catch (e) {
-              console.error(`Background album selection failed: ${e.message}`);
-          }
-      }, 45000);
+  async queueTrackDownload(artistId, trackName) {
+    setTimeout(async () => {
+      try {
+        const { downloadManager } = await import('./downloadManager.js');
+        const artist = libraryManager.getArtistById(artistId);
+        if (!artist) return;
+
+        // Find or create a track entry for this
+        // For now, just trigger the download - we'll handle track creation later
+        const { slskdClient } = await import('./slskdClient.js');
+        if (!slskdClient.isConfigured()) {
+          console.warn('slskd not configured, skipping track download');
+          return;
+        }
+
+        await slskdClient.downloadTrack(artist.artistName, trackName);
+        console.log(`Queued track download: ${artist.artistName} - ${trackName}`);
+      } catch (e) {
+        console.error(`Background track download failed: ${e.message}`);
+      }
+    }, 5000);
   }
 
   async keepItem(mbid) {
@@ -285,19 +261,8 @@ export class PlaylistManager {
       item.isEphemeral = false;
       await this.db.write();
       
-      if (item.lidarrArtistId) {
-          try {
-             const artist = await this.lidarrRequest(`/artist/${item.lidarrArtistId}`);
-             
-             const tagId = await this.getDiscoveryTagId();
-             if (artist.tags && artist.tags.includes(tagId)) {
-                 artist.tags = artist.tags.filter(t => t !== tagId);
-             }
-             
-             artist.monitored = true;
-             await this.lidarrRequest(`/artist/${item.lidarrArtistId}`, 'PUT', artist);
-          } catch(e) { console.error('Failed to update Lidarr artist monitor status'); }
-      }
+      // Artist is already in library, no need to update anything
+      // User can manage monitoring settings through the library interface
       
       return true;
     }
@@ -314,10 +279,15 @@ export class PlaylistManager {
       items.splice(itemIndex, 1);
       await this.db.write();
       
-      if (item.isEphemeral && item.lidarrArtistId) {
-          try {
-              await this.lidarrRequest(`/artist/${item.lidarrArtistId}?deleteFiles=true`, 'DELETE');
-          } catch(e) { console.error('Failed to delete from Lidarr'); }
+      if (item.isEphemeral && item.artistId) {
+        try {
+          const artist = libraryManager.getArtistById(item.artistId);
+          if (artist) {
+            await libraryManager.deleteArtist(artist.mbid, true);
+          }
+        } catch(e) { 
+          console.error('Failed to delete from library:', e.message); 
+        }
       }
       return true;
     }
@@ -340,8 +310,18 @@ export class PlaylistManager {
       await this.syncToNavidrome();
 
       const now = new Date();
+      const lastUpdate = this.db.data.flows.weekly.updatedAt;
+      const hasItems = this.db.data.flows.weekly.items && this.db.data.flows.weekly.items.length > 0;
+      
+      // Generate immediately if enabled but no items exist (first time setup)
+      if (!lastUpdate && !hasItems) {
+          console.log('Generating initial weekly flow...');
+          await this.generateWeeklyFlow();
+          return;
+      }
+      
+      // Otherwise, only generate on Mondays
       if (now.getDay() === 1) { 
-          const lastUpdate = this.db.data.flows.weekly.updatedAt;
           if (!lastUpdate) {
                console.log('Generating initial weekly flow...');
                await this.generateWeeklyFlow();

@@ -1,11 +1,11 @@
 import express from "express";
 import { PlaylistManager } from "../services/playlistManager.js";
 import { db } from "../config/db.js";
-import { lidarrRequest, musicbrainzRequest, lastfmRequest } from "../services/apiClients.js";
+import { musicbrainzRequest, lastfmRequest } from "../services/apiClients.js";
 
 const router = express.Router();
 
-const playlistManager = new PlaylistManager(db, lidarrRequest, musicbrainzRequest, lastfmRequest);
+const playlistManager = new PlaylistManager(db, musicbrainzRequest, lastfmRequest);
 
 router.get("/weekly", (req, res) => {
   const weekly = db.data.flows?.weekly || { enabled: false, items: [], updatedAt: null };

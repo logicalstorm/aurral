@@ -23,22 +23,23 @@ import {
   getArtistDetails,
   getArtistCover,
   getReleaseGroupCover,
-  lookupArtistInLidarr,
-  getLidarrAlbums,
-  getLidarrTracks,
-  updateLidarrAlbum,
-  updateLidarrAlbumsMonitor,
-  searchLidarrAlbum,
+  lookupArtistInLibrary,
+  getLibraryAlbums,
+  getLibraryTracks,
+  getReleaseGroupTracks,
+  updateLibraryAlbum,
   getSimilarArtistsForArtist,
-  lookupArtistsInLidarrBatch,
+  lookupArtistsInLibraryBatch,
   getAppSettings,
-  refreshLidarrArtist,
-  getLidarrMetadataProfiles,
-  addArtistToLidarr,
-  deleteArtistFromLidarr,
-  deleteAlbumFromLidarr,
-  updateLidarrArtist,
-  getLidarrArtist,
+  addArtistToLibrary,
+  deleteArtistFromLibrary,
+  deleteAlbumFromLibrary,
+  updateLibraryArtist,
+  getLibraryArtist,
+  downloadAlbum,
+  downloadTrack,
+  refreshLibraryArtist,
+  getDownloadStatus,
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
 import AddArtistModal from "../components/AddArtistModal";
@@ -49,13 +50,13 @@ function ArtistDetailsPage() {
   const navigate = useNavigate();
   const [artist, setArtist] = useState(null);
   const [coverImages, setCoverImages] = useState([]);
-  const [lidarrArtist, setLidarrArtist] = useState(null);
-  const [lidarrAlbums, setLidarrAlbums] = useState([]);
+  const [libraryArtist, setLibraryArtist] = useState(null);
+  const [libraryAlbums, setLibraryAlbums] = useState([]);
   const [similarArtists, setSimilarArtists] = useState([]);
   const [existingSimilar, setExistingSimilar] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [existsInLidarr, setExistsInLidarr] = useState(false);
+  const [existsInLibrary, setExistsInLibrary] = useState(false);
   const [artistToAdd, setArtistToAdd] = useState(null);
   const [requestingAlbum, setRequestingAlbum] = useState(null);
   const [removingAlbum, setRemovingAlbum] = useState(null);
@@ -66,10 +67,12 @@ function ArtistDetailsPage() {
   const [expandedAlbum, setExpandedAlbum] = useState(null);
   const [albumTracks, setAlbumTracks] = useState({});
   const [loadingTracks, setLoadingTracks] = useState({});
-  const [filterByMetadata, setFilterByMetadata] = useState(true);
   const [appSettings, setAppSettings] = useState(null);
   const [refreshingArtist, setRefreshingArtist] = useState(false);
-  const [metadataProfiles, setMetadataProfiles] = useState([]);
+  const primaryReleaseTypes = ["Album", "EP", "Single"];
+  const secondaryReleaseTypes = ["Live", "Remix", "Compilation", "Demo", "Broadcast", "Soundtrack", "Spokenword"];
+  const allReleaseTypes = [...primaryReleaseTypes, ...secondaryReleaseTypes];
+  const [selectedReleaseTypes, setSelectedReleaseTypes] = useState(allReleaseTypes);
   const [addingArtist, setAddingArtist] = useState(false);
   const [showMonitorDropdown, setShowMonitorDropdown] = useState(false);
   const [monitorOption, setMonitorOption] = useState("none");
@@ -80,9 +83,10 @@ function ArtistDetailsPage() {
   const [showMonitorOptionMenu, setShowMonitorOptionMenu] = useState(false);
   const [updatingMonitor, setUpdatingMonitor] = useState(false);
   const [albumCovers, setAlbumCovers] = useState({});
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [loadingCover, setLoadingCover] = useState(true);
   const [loadingSimilar, setLoadingSimilar] = useState(true);
-  const [loadingLidarr, setLoadingLidarr] = useState(true);
+  const [loadingLibrary, setLoadingLibrary] = useState(true);
   const { showSuccess, showError } = useToast();
 
   useEffect(() => {
@@ -97,6 +101,10 @@ function ArtistDetailsPage() {
           getAppSettings()
         ]);
         console.log("Artist data received:", artistData);
+        
+        // Initialize release type filters from settings (but don't use settings for filtering anymore)
+        // Always start with all types selected
+        setSelectedReleaseTypes(allReleaseTypes);
         if (!artistData || !artistData.id) {
           throw new Error("Invalid artist data received");
         }
@@ -124,7 +132,7 @@ function ArtistDetailsPage() {
             setSimilarArtists(similarData.artists || []);
             if (similarData.artists?.length > 0) {
               const similarMbids = similarData.artists.map((a) => a.id);
-              return lookupArtistsInLidarrBatch(similarMbids);
+              return lookupArtistsInLibraryBatch(similarMbids);
             }
             return {};
           })
@@ -166,49 +174,39 @@ function ArtistDetailsPage() {
           }).catch(() => {});
         }
         
-        // Load Lidarr data in background - always fetch fresh data to get latest monitoring status
-        setLoadingLidarr(true);
-        lookupArtistInLidarr(mbid, true) // Force refresh to bypass cache
+        // Load library data in background
+        setLoadingLibrary(true);
+        lookupArtistInLibrary(mbid)
           .then(lookup => {
-            setExistsInLidarr(lookup.exists);
+            setExistsInLibrary(lookup.exists);
             if (lookup.exists && lookup.artist) {
               return Promise.all([
-                getLidarrArtist(lookup.artist.id, true).catch(err => { // Force refresh to get latest data
+                getLibraryArtist(lookup.artist.mbid || lookup.artist.foreignArtistId).catch(err => {
                   console.error("Failed to fetch full artist details:", err);
                   return lookup.artist;
                 }),
-                getLidarrMetadataProfiles().catch(err => {
-                  console.error("Failed to fetch metadata profiles:", err);
-                  return [];
-                })
-              ]).then(([fullArtist, profiles]) => {
-                console.log("Full Lidarr artist data:", fullArtist);
-                console.log("Monitoring fields:", {
-                  monitorNewItems: fullArtist.monitorNewItems,
-                  addOptions: fullArtist.addOptions,
-                  monitored: fullArtist.monitored,
-                });
-                setLidarrArtist(fullArtist);
-                setMetadataProfiles(profiles);
-                return lookup.artist.id;
+              ]).then(([fullArtist]) => {
+                console.log("Full library artist data:", fullArtist);
+                setLibraryArtist(fullArtist);
+                return fullArtist.id || lookup.artist.id;
               });
             }
             return null;
           })
           .then(artistId => {
             if (artistId) {
-              // Wait a bit for Lidarr to sync, then fetch albums
+              // Fetch albums
               setTimeout(() => {
-                getLidarrAlbums(artistId)
+                getLibraryAlbums(artistId)
                   .then(albums => {
-                    console.log("Lidarr Albums:", albums);
-                    setLidarrAlbums(albums);
+                    console.log("Library Albums:", albums);
+                    setLibraryAlbums(albums);
                   })
                   .catch(err => {
                     console.log("Retrying album fetch...");
                     setTimeout(() => {
-                      getLidarrAlbums(artistId)
-                        .then(albums => setLidarrAlbums(albums))
+                      getLibraryAlbums(artistId)
+                        .then(albums => setLibraryAlbums(albums))
                         .catch(e => {});
                     }, 2000);
                   });
@@ -216,9 +214,9 @@ function ArtistDetailsPage() {
             }
           })
           .catch(err => {
-            console.error("Failed to lookup artist in Lidarr:", err);
+            console.error("Failed to lookup artist in library:", err);
           })
-          .finally(() => setLoadingLidarr(false));
+          .finally(() => setLoadingLibrary(false));
       } catch (err) {
         console.error("Error fetching artist data:", err);
         console.error("Error response:", err.response);
@@ -237,44 +235,33 @@ function ArtistDetailsPage() {
     
     setAddingArtist(true);
     try {
-      await addArtistToLidarr({
+      await addArtistToLibrary({
         foreignArtistId: artist.id,
         artistName: artist.name,
-        qualityProfileId: appSettings.qualityProfileId,
-        metadataProfileId: appSettings.metadataProfileId,
+        quality: appSettings.quality || 'standard',
         rootFolderPath: appSettings.rootFolderPath,
-        monitored: appSettings.monitored ?? false,
-        monitor: monitorOption,
-        searchForMissingAlbums: appSettings.searchForMissingAlbums ?? false,
-        albumFolders: appSettings.albumFolders ?? true,
       });
 
-      setExistsInLidarr(true);
-      showSuccess(`Successfully added ${artist.name} to Lidarr!`);
+      setExistsInLibrary(true);
+      showSuccess(`Successfully added ${artist.name} to library!`);
       
       setTimeout(async () => {
         try {
-          const lookup = await lookupArtistInLidarr(mbid, true); // Force refresh
+          const lookup = await lookupArtistInLibrary(mbid);
           if (lookup.exists && lookup.artist) {
             try {
-              const fullArtist = await getLidarrArtist(lookup.artist.id, true); // Force refresh
-              setLidarrArtist(fullArtist);
+              const fullArtist = await getLibraryArtist(lookup.artist.mbid || lookup.artist.foreignArtistId);
+              setLibraryArtist(fullArtist);
             } catch (err) {
               console.error("Failed to fetch full artist details:", err);
-              setLidarrArtist(lookup.artist);
+              setLibraryArtist(lookup.artist);
             }
-            const albums = await getLidarrAlbums(lookup.artist.id);
-            setLidarrAlbums(albums);
+            const albums = await getLibraryAlbums(lookup.artist.id);
+            setLibraryAlbums(albums);
             
-            try {
-              const profiles = await getLidarrMetadataProfiles();
-              setMetadataProfiles(profiles);
-            } catch (err) {
-              console.error("Failed to fetch metadata profiles:", err);
-            }
           }
         } catch (err) {
-          console.error("Failed to refresh Lidarr data", err);
+          console.error("Failed to refresh library data", err);
         }
       }, 1500);
     } catch (err) {
@@ -285,19 +272,20 @@ function ArtistDetailsPage() {
   };
 
   const handleRefreshArtist = async () => {
-    if (!lidarrArtist?.id) return;
+    if (!libraryArtist?.mbid && !libraryArtist?.foreignArtistId) return;
     
     setRefreshingArtist(true);
     try {
-      await refreshLidarrArtist(lidarrArtist.id);
+      const mbid = libraryArtist.mbid || libraryArtist.foreignArtistId;
+      await refreshLibraryArtist(mbid);
       
-      // Refetch the artist data to get latest monitoring status
+      // Refetch the artist data
       setTimeout(async () => {
         try {
-          const refreshedArtist = await getLidarrArtist(lidarrArtist.id, true);
-          setLidarrArtist(refreshedArtist);
-          const albums = await getLidarrAlbums(lidarrArtist.id);
-          setLidarrAlbums(albums);
+          const refreshedArtist = await getLibraryArtist(mbid);
+          setLibraryArtist(refreshedArtist);
+          const albums = await getLibraryAlbums(refreshedArtist.id);
+          setLibraryAlbums(albums);
           showSuccess("Artist data refreshed successfully.");
         } catch (err) {
           console.error("Failed to refresh artist data:", err);
@@ -312,11 +300,6 @@ function ArtistDetailsPage() {
     }
   };
 
-  const getMetadataProfileName = () => {
-    if (!lidarrArtist?.metadataProfileId || !metadataProfiles.length) return null;
-    const profile = metadataProfiles.find(p => p.id === lidarrArtist.metadataProfileId);
-    return profile?.name || null;
-  };
 
   const handleDeleteClick = () => {
     setShowDeleteModal(true);
@@ -329,16 +312,16 @@ function ArtistDetailsPage() {
   };
 
   const handleDeleteConfirm = async () => {
-    if (!lidarrArtist?.id) return;
+    if (!libraryArtist?.id) return;
 
     setDeletingArtist(true);
     try {
-      await deleteArtistFromLidarr(lidarrArtist.id, deleteFiles);
-      setExistsInLidarr(false);
-      setLidarrArtist(null);
-      setLidarrAlbums([]);
+      await deleteArtistFromLibrary(libraryArtist.mbid, deleteFiles);
+      setExistsInLibrary(false);
+      setLibraryArtist(null);
+      setLibraryAlbums([]);
       showSuccess(
-        `Successfully removed ${artist?.name || 'artist'} from Lidarr${
+        `Successfully removed ${artist?.name || 'artist'} from library${
           deleteFiles ? " and deleted files" : ""
         }`,
       );
@@ -354,16 +337,19 @@ function ArtistDetailsPage() {
   };
 
   const handleUpdateMonitorOption = async (newMonitorOption) => {
-    if (!lidarrArtist?.id) return;
+    if (!libraryArtist?.id) return;
 
     setUpdatingMonitor(true);
     try {
-      // For existing artists, Lidarr uses monitorNewItems field
-      // Send the full artist object with the updated monitorNewItems
-      // Lidarr requires all fields to be present in PUT requests
+      // Update monitoring option
       const updatedArtist = {
-        ...lidarrArtist,
-        monitorNewItems: newMonitorOption, // This is the key field for monitoring option
+        ...libraryArtist,
+        monitored: newMonitorOption !== "none",
+        monitorOption: newMonitorOption,
+        addOptions: {
+          ...(libraryArtist.addOptions || {}),
+          monitor: newMonitorOption,
+        },
       };
       
       // Remove any fields that shouldn't be sent in updates
@@ -372,23 +358,22 @@ function ArtistDetailsPage() {
       delete updatedArtist.links;
       
       console.log("Updating artist with:", {
-        id: lidarrArtist.id,
-        monitorNewItems: newMonitorOption,
-        currentValue: lidarrArtist.monitorNewItems,
+        mbid: libraryArtist.mbid,
+        monitored: updatedArtist.monitored,
+        monitorOption: newMonitorOption,
       });
       
-      const result = await updateLidarrArtist(lidarrArtist.id, updatedArtist);
-      console.log("Update result from Lidarr:", result);
+      const result = await updateLibraryArtist(libraryArtist.mbid, updatedArtist);
+      console.log("Update result from library:", result);
       
-      // Refetch the artist from Lidarr to get the actual updated data
-      const refreshedArtist = await getLidarrArtist(lidarrArtist.id, true);
+      // Refetch the artist from library to get the actual updated data
+      const refreshedArtist = await getLibraryArtist(libraryArtist.mbid);
       console.log("Refreshed artist after update:", {
-        monitorNewItems: refreshedArtist.monitorNewItems,
-        addOptions: refreshedArtist.addOptions,
+        monitored: refreshedArtist.monitored,
+        monitorOption: refreshedArtist.monitorOption || refreshedArtist.addOptions?.monitor,
       });
-      setLidarrArtist(refreshedArtist);
+      setLibraryArtist(refreshedArtist);
       
-      setShowMonitorOptionMenu(false);
       setShowRemoveDropdown(false);
       
       const monitorLabels = {
@@ -412,27 +397,26 @@ function ArtistDetailsPage() {
   };
 
   const getCurrentMonitorOption = () => {
-    if (!lidarrArtist) return "none";
+    if (!libraryArtist) return "none";
     
-    // If artist is not monitored at all, return "none" regardless of monitorNewItems
-    // (Lidarr API sometimes returns stale monitorNewItems values)
-    if (lidarrArtist.monitored === false) {
+    // Check monitored status first
+    if (libraryArtist.monitored === false) {
       return "none";
     }
     
-    // For existing artists, Lidarr uses monitorNewItems field
-    // This is an enum: "all", "none", "new", etc.
-    if (lidarrArtist.monitorNewItems !== undefined && lidarrArtist.monitorNewItems !== null) {
-      return lidarrArtist.monitorNewItems;
+    // Get the actual monitor option from the artist data
+    // Check multiple possible locations for the monitor option
+    const monitorOption = libraryArtist.monitorOption || 
+                         libraryArtist.addOptions?.monitor || 
+                         libraryArtist.monitorNewItems;
+    
+    // If we have a valid monitor option, return it
+    if (monitorOption && ["none", "all", "future", "missing", "latest", "first"].includes(monitorOption)) {
+      return monitorOption;
     }
     
-    // Fallback to addOptions.monitor (used when adding new artists)
-    if (lidarrArtist.addOptions?.monitor) {
-      return lidarrArtist.addOptions.monitor;
-    }
-    
-    // Default to "none" if not set
-    return "none";
+    // Default to "all" if monitored but no specific option set
+    return libraryArtist.monitored ? "all" : "none";
   };
 
   const getMonitorOptionLabel = (option) => {
@@ -449,7 +433,7 @@ function ArtistDetailsPage() {
 
   const handleAddSuccess = async (addedArtist) => {
     setArtistToAdd(null);
-    showSuccess(`Successfully added ${addedArtist.name} to Lidarr!`);
+      showSuccess(`Successfully added ${addedArtist.name} to library!`);
     
     if (addedArtist.id) {
       setExistingSimilar((prev) => ({ ...prev, [addedArtist.id]: true }));
@@ -459,28 +443,88 @@ function ArtistDetailsPage() {
   const handleRequestAlbum = async (albumId, title) => {
     setRequestingAlbum(albumId);
     try {
-      const lidarrAlbum = lidarrAlbums.find(
-        (a) => a.foreignAlbumId === albumId,
-      );
-
-      if (!lidarrAlbum) {
-        throw new Error("Album not found in Lidarr");
+      // If artist is not in library, add them first
+      if (!existsInLibrary || !libraryArtist?.id) {
+        if (!artist) {
+          showError("Artist information not available");
+          return;
+        }
+        
+        // Add artist to library first (this just saves them, doesn't create folders)
+        await addArtistToLibrary({
+          foreignArtistId: artist.id,
+          artistName: artist.name,
+          quality: appSettings?.quality || 'standard',
+          rootFolderPath: appSettings?.rootFolderPath,
+        });
+        
+        // Refresh library data
+        const lookup = await lookupArtistInLibrary(artist.id);
+        if (lookup.exists && lookup.artist) {
+          const fullArtist = await getLibraryArtist(lookup.artist.mbid || lookup.artist.foreignArtistId);
+          setLibraryArtist(fullArtist);
+          setExistsInLibrary(true);
+          
+          // Fetch albums for this artist
+          await refreshLibraryArtist(fullArtist.mbid || fullArtist.foreignArtistId);
+          const albums = await getLibraryAlbums(fullArtist.id);
+          setLibraryAlbums(albums);
+        }
       }
 
-      await updateLidarrAlbum(lidarrAlbum.id, {
-        ...lidarrAlbum,
+      // Now get the library artist (should exist now)
+      const currentLibraryArtist = libraryArtist || (await lookupArtistInLibrary(artist.id).then(l => l.artist ? getLibraryArtist(l.artist.mbid || l.artist.foreignArtistId) : null));
+      if (!currentLibraryArtist?.id) {
+        throw new Error("Failed to get library artist");
+      }
+
+      // Find album by MBID, but ensure it belongs to the current artist
+      let libraryAlbum = libraryAlbums.find(
+        (a) => (a.mbid === albumId || a.foreignAlbumId === albumId) && a.artistId === currentLibraryArtist.id,
+      );
+
+      // If album doesn't exist, create it
+      if (!libraryAlbum) {
+        // Add album to library first
+        const { addLibraryAlbum } = await import("../utils/api");
+        try {
+          libraryAlbum = await addLibraryAlbum(currentLibraryArtist.id, albumId, title);
+          setLibraryAlbums((prev) => [...prev, libraryAlbum]);
+        } catch (err) {
+          // If that fails, try to refresh artist to get albums
+          await refreshLibraryArtist(currentLibraryArtist.mbid || currentLibraryArtist.foreignArtistId);
+          const albums = await getLibraryAlbums(currentLibraryArtist.id);
+          setLibraryAlbums(albums);
+          libraryAlbum = albums.find(a => 
+            (a.mbid === albumId || a.foreignAlbumId === albumId) && 
+            a.artistId === currentLibraryArtist.id
+          );
+          
+          if (!libraryAlbum) {
+            throw new Error("Album not found for this artist. Please try again.");
+          }
+        }
+      }
+
+      // Monitor and download (this will create folders when files are downloaded)
+      await updateLibraryAlbum(libraryAlbum.id, {
+        ...libraryAlbum,
         monitored: true,
       });
 
-      await searchLidarrAlbum([lidarrAlbum.id]);
+      // Download album - pass artist info in case artist was just added
+      await downloadAlbum(currentLibraryArtist.id, libraryAlbum.id, {
+        artistMbid: currentLibraryArtist.mbid || currentLibraryArtist.foreignArtistId,
+        artistName: currentLibraryArtist.artistName,
+      });
 
-      setLidarrAlbums((prev) =>
+      setLibraryAlbums((prev) =>
         prev.map((a) =>
-          a.id === lidarrAlbum.id ? { ...a, monitored: true } : a,
+          a.id === libraryAlbum.id ? { ...a, monitored: true } : a,
         ),
     );
 
-      showSuccess(`Added album: ${title}`);
+      showSuccess(`Downloading album: ${title}`);
     } catch (err) {
       showError(`Failed to add album: ${err.message}`);
     } finally {
@@ -488,7 +532,7 @@ function ArtistDetailsPage() {
     }
   };
 
-  const handleAlbumClick = async (releaseGroupId, lidarrAlbumId) => {
+  const handleAlbumClick = async (releaseGroupId, libraryAlbumId) => {
     if (expandedAlbum === releaseGroupId) {
       setExpandedAlbum(null);
       return;
@@ -496,17 +540,25 @@ function ArtistDetailsPage() {
 
     setExpandedAlbum(releaseGroupId);
 
-    // Only fetch Lidarr tracks if the album is in Lidarr
-    if (lidarrAlbumId && !albumTracks[lidarrAlbumId]) {
-      setLoadingTracks((prev) => ({ ...prev, [lidarrAlbumId]: true }));
+    // Fetch tracks - from library if available, otherwise from MusicBrainz
+    const trackKey = libraryAlbumId || releaseGroupId;
+    if (!albumTracks[trackKey]) {
+      setLoadingTracks((prev) => ({ ...prev, [trackKey]: true }));
       try {
-        const tracks = await getLidarrTracks(lidarrAlbumId);
-        setAlbumTracks((prev) => ({ ...prev, [lidarrAlbumId]: tracks }));
+        if (libraryAlbumId) {
+          // Album is in library - fetch from library
+          const tracks = await getLibraryTracks(libraryAlbumId);
+          setAlbumTracks((prev) => ({ ...prev, [trackKey]: tracks }));
+        } else {
+          // Album not in library - fetch from MusicBrainz
+          const tracks = await getReleaseGroupTracks(releaseGroupId);
+          setAlbumTracks((prev) => ({ ...prev, [trackKey]: tracks }));
+        }
       } catch (err) {
         console.error("Failed to fetch tracks:", err);
         showError("Failed to fetch track list");
       } finally {
-        setLoadingTracks((prev) => ({ ...prev, [lidarrAlbumId]: false }));
+        setLoadingTracks((prev) => ({ ...prev, [trackKey]: false }));
       }
     }
   };
@@ -528,19 +580,19 @@ function ArtistDetailsPage() {
     const { id: albumId, title } = showDeleteAlbumModal;
     
     try {
-      const lidarrAlbum = lidarrAlbums.find(
+      const libraryAlbum = libraryAlbums.find(
         (a) => a.foreignAlbumId === albumId,
       );
 
-      if (!lidarrAlbum) {
-        throw new Error("Album not found in Lidarr");
+      if (!libraryAlbum) {
+        throw new Error("Album not found in library");
       }
 
       setRemovingAlbum(albumId);
-      await deleteAlbumFromLidarr(lidarrAlbum.id, deleteAlbumFiles);
+      await deleteAlbumFromLibrary(libraryAlbum.id, deleteAlbumFiles);
 
-      setLidarrAlbums((prev) =>
-        prev.filter((a) => a.id !== lidarrAlbum.id),
+      setLibraryAlbums((prev) =>
+        prev.filter((a) => a.id !== libraryAlbum.id),
       );
 
       showSuccess(
@@ -557,56 +609,44 @@ function ArtistDetailsPage() {
     }
   };
 
-  // Helper function to check if a release group matches metadata profile filters
-  const getArtistMetadataProfileTypes = () => {
-    if (!lidarrArtist?.metadataProfileId || !metadataProfiles.length) {
-      return appSettings?.metadataProfileReleaseTypes || null;
+  // Check if a release group matches the selected release type filters
+  const matchesReleaseTypeFilter = (releaseGroup) => {
+    // If no filters selected, show all
+    if (!selectedReleaseTypes || selectedReleaseTypes.length === 0) return true;
+    
+    // Check primary type
+    if (selectedReleaseTypes.includes(releaseGroup["primary-type"])) {
+      return true;
     }
     
-    const profile = metadataProfiles.find(p => p.id === lidarrArtist.metadataProfileId);
-    if (!profile) {
-      return appSettings?.metadataProfileReleaseTypes || null;
-    }
-    
-    const allowedTypes = [];
-    if (profile.primaryAlbumTypes) {
-      profile.primaryAlbumTypes.forEach(typeObj => {
-        if (typeObj.allowed && typeObj.albumType?.name) {
-          allowedTypes.push(typeObj.albumType.name);
-        }
-      });
-    }
-    
-    return allowedTypes.length > 0 ? allowedTypes : (appSettings?.metadataProfileReleaseTypes || null);
-  };
-
-  const matchesMetadataProfile = (releaseGroup) => {
-    if (!filterByMetadata) return true;
-    
-    const allowedTypes = getArtistMetadataProfileTypes();
-    if (!allowedTypes || allowedTypes.length === 0) return true;
-    
-    if (!allowedTypes.includes(releaseGroup["primary-type"])) {
-      return false;
-    }
-    
+    // Check secondary types
     if (releaseGroup["secondary-types"] && releaseGroup["secondary-types"].length > 0) {
-      return releaseGroup["secondary-types"].every(secondaryType => 
-        allowedTypes.includes(secondaryType)
+      return releaseGroup["secondary-types"].some(secondaryType => 
+        selectedReleaseTypes.includes(secondaryType)
       );
     }
     
-    return true;
+    return false;
+  };
+  
+  // Check if any filters are active
+  const hasActiveFilters = () => {
+    // If selected types don't match all types, filters are active
+    if (selectedReleaseTypes.length !== allReleaseTypes.length) {
+      return true;
+    }
+    // Check if all types are included (order doesn't matter)
+    return !allReleaseTypes.every(type => selectedReleaseTypes.includes(type));
   };
 
   const handleMonitorAll = async () => {
-    if (!lidarrAlbums.length) return;
+    if (!libraryAlbums.length) return;
 
-    const visibleReleaseGroups = artist["release-groups"].filter(matchesMetadataProfile);
+    const visibleReleaseGroups = artist["release-groups"].filter(matchesReleaseTypeFilter);
     
     const visibleMbids = new Set(visibleReleaseGroups.map(rg => rg.id));
 
-    const unmonitored = lidarrAlbums.filter((a) => !a.monitored && visibleMbids.has(a.foreignAlbumId));
+    const unmonitored = libraryAlbums.filter((a) => !a.monitored && visibleMbids.has(a.mbid));
 
     if (unmonitored.length === 0) {
       showSuccess("No new unmonitored albums in current view!");
@@ -616,10 +656,16 @@ function ArtistDetailsPage() {
     setProcessingBulk(true);
     try {
       const ids = unmonitored.map((a) => a.id);
-      await updateLidarrAlbumsMonitor(ids, true);
-      await searchLidarrAlbum(ids);
+      // Monitor albums and trigger downloads
+      for (const id of ids) {
+        const album = libraryAlbums.find(a => a.id === id);
+        if (album) {
+          await updateLibraryAlbum(id, { ...album, monitored: true });
+          await downloadAlbum(libraryArtist.id, id);
+        }
+      }
 
-      setLidarrAlbums((prev) =>
+      setLibraryAlbums((prev) =>
         prev.map((a) => (ids.includes(a.id) ? { ...a, monitored: true } : a)),
       );
 
@@ -632,13 +678,63 @@ function ArtistDetailsPage() {
     }
   };
 
-  const getAlbumStatus = (releaseGroupId) => {
-    if (!existsInLidarr || lidarrAlbums.length === 0) return null;
+  const [downloadStatuses, setDownloadStatuses] = useState({});
 
-    const album = lidarrAlbums.find((a) => a.foreignAlbumId === releaseGroupId);
+  useEffect(() => {
+    // Poll download status every 5 seconds if we have albums
+    if (!libraryAlbums.length) return;
+    
+    const pollDownloadStatus = async () => {
+      try {
+        const albumIds = libraryAlbums.map(a => a.id).filter(Boolean);
+        if (albumIds.length > 0) {
+          const statuses = await getDownloadStatus(albumIds);
+          setDownloadStatuses(statuses);
+        }
+      } catch (error) {
+        console.error("Failed to fetch download status:", error);
+      }
+    };
+    
+    // Poll immediately, then every 5 seconds
+    pollDownloadStatus();
+    const interval = setInterval(pollDownloadStatus, 5000);
+    
+    return () => clearInterval(interval);
+  }, [libraryAlbums]);
+
+  const getAlbumStatus = (releaseGroupId) => {
+    // If artist is not in library, album is not in library
+    if (!existsInLibrary || !libraryArtist || libraryAlbums.length === 0) {
+      return null;
+    }
+
+    const album = libraryAlbums.find((a) => 
+      a.mbid === releaseGroupId || a.foreignAlbumId === releaseGroupId
+    );
 
     if (!album) {
       return null;
+    }
+
+    // Check download status first
+    const downloadStatus = downloadStatuses[album.id];
+    if (downloadStatus) {
+      const statusLabels = {
+        adding: "Adding...",
+        searching: "Searching...",
+        downloading: "Downloading...",
+        moving: "Moving files...",
+        added: "Added",
+      };
+      
+      return {
+        status: downloadStatus.status,
+        label: statusLabels[downloadStatus.status] || downloadStatus.status,
+        libraryId: album.id,
+        albumInfo: album,
+        downloadStatus: downloadStatus,
+      };
     }
 
     const isComplete = album.statistics?.percentOfTracks === 100;
@@ -648,7 +744,7 @@ function ArtistDetailsPage() {
     return { 
       status: isAvailable ? "available" : (isProcessing ? "processing" : "unmonitored"), 
       label: isAvailable ? "Available" : (isProcessing ? "Processing" : "Not Monitored"),
-      lidarrId: album.id,
+      libraryId: album.id,
       albumInfo: album
     };
   };
@@ -733,7 +829,7 @@ function ArtistDetailsPage() {
       </button>
 
       <div className="card mb-8 relative">
-        {existsInLidarr && (
+        {existsInLibrary && (
           <button
             onClick={handleRefreshArtist}
             disabled={refreshingArtist}
@@ -816,27 +912,14 @@ function ArtistDetailsPage() {
                 </div>
               )}
 
-              {loadingLidarr && existsInLidarr ? (
-                <div className="flex items-center text-gray-700 dark:text-gray-300">
-                  <Tag className="w-5 h-5 mr-2 text-gray-400 dark:text-gray-500" />
-                  <span className="font-medium mr-2">Metadata Profile:</span>
-                  <Loader className="w-4 h-4 animate-spin text-primary-600" />
-                </div>
-              ) : existsInLidarr && getMetadataProfileName() && (
-                <div className="flex items-center text-gray-700 dark:text-gray-300">
-                  <Tag className="w-5 h-5 mr-2 text-gray-400 dark:text-gray-500" />
-                  <span className="font-medium mr-2">Metadata Profile:</span>
-                  <span>{getMetadataProfileName()}</span>
-                </div>
-              )}
 
-              {loadingLidarr && existsInLidarr ? (
+              {loadingLibrary && existsInLibrary ? (
                 <div className="flex items-center text-gray-700 dark:text-gray-300">
                   <Radio className="w-5 h-5 mr-2 text-gray-400 dark:text-gray-500" />
                   <span className="font-medium mr-2">Monitoring:</span>
                   <Loader className="w-4 h-4 animate-spin text-primary-600" />
                 </div>
-              ) : existsInLidarr && (
+              ) : existsInLibrary && (
                 <div className="flex items-center text-gray-700 dark:text-gray-300">
                   <Radio className="w-5 h-5 mr-2 text-gray-400 dark:text-gray-500" />
                   <span className="font-medium mr-2">Monitoring:</span>
@@ -846,12 +929,12 @@ function ArtistDetailsPage() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              {loadingLidarr ? (
+              {loadingLibrary ? (
                 <div className="btn btn-secondary inline-flex items-center" disabled>
                   <Loader className="w-5 h-5 mr-2 animate-spin" />
                   Loading...
                 </div>
-              ) : existsInLidarr ? (
+              ) : existsInLibrary ? (
                 <>
                   <div className="relative inline-flex">
                     <button className="btn btn-success inline-flex items-center rounded-r-none border-r border-green-400 dark:border-green-600">
@@ -874,48 +957,21 @@ function ArtistDetailsPage() {
                             onClick={() => setShowRemoveDropdown(false)}
                           />
                           <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-20 py-1">
-                            {!showMonitorOptionMenu ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowMonitorOptionMenu(!showMonitorOptionMenu);
+                              }}
+                              disabled={updatingMonitor}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between"
+                            >
+                              <span>Change Monitor Option</span>
+                              <ChevronDown className={`w-4 h-4 transition-transform ${showMonitorOptionMenu ? 'rotate-180' : ''}`} />
+                            </button>
+                            
+                            {showMonitorOptionMenu && (
                               <>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setShowMonitorOptionMenu(true);
-                                  }}
-                                  disabled={updatingMonitor}
-                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between"
-                                >
-                                  <span>Change Monitor Option</span>
-                                  <ChevronDown className="w-4 h-4" />
-                                </button>
                                 <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    handleDeleteClick();
-                                    setShowRemoveDropdown(false);
-                                  }}
-                                  className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center"
-                                >
-                                  <Trash2 className="w-4 h-4 mr-2" />
-                                  Remove from Lidarr
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                                  <button
-                                    type="button"
-                                    onClick={() => setShowMonitorOptionMenu(false)}
-                                    className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 flex items-center"
-                                  >
-                                    <ArrowLeft className="w-4 h-4 mr-1" />
-                                    Back
-                                  </button>
-                                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                    Monitor Option
-                                  </span>
-                                  <div className="w-16" />
-                                </div>
                                 {[
                                   { value: "none", label: "None (Artist Only)" },
                                   { value: "all", label: "All Albums" },
@@ -927,7 +983,10 @@ function ArtistDetailsPage() {
                                   <button
                                     key={option.value}
                                     type="button"
-                                    onClick={() => handleUpdateMonitorOption(option.value)}
+                                    onClick={() => {
+                                      handleUpdateMonitorOption(option.value);
+                                      setShowMonitorOptionMenu(false);
+                                    }}
                                     disabled={updatingMonitor}
                                     className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
                                       getCurrentMonitorOption() === option.value
@@ -940,6 +999,19 @@ function ArtistDetailsPage() {
                                 ))}
                               </>
                             )}
+                            
+                            <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleDeleteClick();
+                                setShowRemoveDropdown(false);
+                              }}
+                              className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Remove from Library
+                            </button>
                           </div>
                         </>
                       )}
@@ -958,7 +1030,7 @@ function ArtistDetailsPage() {
                     ) : (
                       <Plus className="w-5 h-5 mr-2" />
                     )}
-                    Add to Lidarr
+                    Add to Library
                   </button>
                   <div className="relative">
                     <button
@@ -978,7 +1050,7 @@ function ArtistDetailsPage() {
                         />
                         <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-20 py-1">
                           <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
-                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 text-center">
                               Monitor Option
                             </p>
                           </div>
@@ -1062,37 +1134,140 @@ function ArtistDetailsPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
               Albums & Releases ({
-                artist["release-groups"].filter(matchesMetadataProfile).length
+                artist["release-groups"].filter(matchesReleaseTypeFilter).length
               })
             </h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="flex items-center space-x-2 bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors mr-2">
-                <input
-                  type="checkbox"
-                  checked={filterByMetadata}
-                  onChange={(e) => setFilterByMetadata(e.target.checked)}
-                  className="form-checkbox h-4 w-4 text-primary-600 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700"
-                />
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                  Filter by Metadata Profile
-                </span>
-              </label>
+            <div className="flex items-center gap-3">
+              {/* Filter Dropdown Button */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                  className="btn btn-outline-secondary btn-sm flex items-center gap-2 px-3 py-2"
+                >
+                  <Tag className="w-4 h-4" />
+                  <span className="text-sm">Filter</span>
+                  {hasActiveFilters() && (
+                    <span className="bg-primary-500 text-white text-xs rounded-full px-1.5 py-0.5 min-w-[18px] h-[18px] flex items-center justify-center">
+                      {allReleaseTypes.length - selectedReleaseTypes.length}
+                    </span>
+                  )}
+                  <ChevronDown className={`w-4 h-4 transition-transform ${showFilterDropdown ? 'rotate-180' : ''}`} />
+                </button>
 
-              {existsInLidarr && (
+                {/* Filter Dropdown Panel */}
+                {showFilterDropdown && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-10" 
+                      onClick={() => setShowFilterDropdown(false)}
+                    />
+                    <div className="absolute right-0 top-full mt-2 z-20 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-4 min-w-[280px]">
+                      <div className="space-y-4">
+                        {/* Primary Types */}
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            Primary Types
+                          </h3>
+                          <div className="space-y-2">
+                            {primaryReleaseTypes.map((type) => (
+                              <label
+                                key={type}
+                                className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 px-2 py-1.5 rounded transition-colors"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedReleaseTypes.includes(type)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedReleaseTypes([...selectedReleaseTypes, type]);
+                                    } else {
+                                      setSelectedReleaseTypes(selectedReleaseTypes.filter(t => t !== type));
+                                    }
+                                  }}
+                                  className="form-checkbox h-4 w-4 text-primary-600 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700"
+                                />
+                                <span className="text-sm text-gray-700 dark:text-gray-300">
+                                  {type}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Divider */}
+                        <div className="border-t border-gray-200 dark:border-gray-700" />
+
+                        {/* Secondary Types */}
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            Secondary Types
+                          </h3>
+                          <div className="space-y-2">
+                            {secondaryReleaseTypes.map((type) => (
+                              <label
+                                key={type}
+                                className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 px-2 py-1.5 rounded transition-colors"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedReleaseTypes.includes(type)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedReleaseTypes([...selectedReleaseTypes, type]);
+                                    } else {
+                                      setSelectedReleaseTypes(selectedReleaseTypes.filter(t => t !== type));
+                                    }
+                                  }}
+                                  className="form-checkbox h-4 w-4 text-primary-600 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700"
+                                />
+                                <span className="text-sm text-gray-700 dark:text-gray-300">
+                                  {type}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Quick Actions */}
+                        <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setSelectedReleaseTypes(allReleaseTypes)}
+                              className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
+                            >
+                              Select All
+                            </button>
+                            <span className="text-gray-300 dark:text-gray-600">|</span>
+                            <button
+                              onClick={() => setSelectedReleaseTypes([])}
+                              className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
+                            >
+                              Clear All
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Add All Button */}
+              {existsInLibrary && (
                 <button
                   onClick={handleMonitorAll}
                   disabled={processingBulk}
-                  className="btn btn-outline-primary btn-sm flex items-center justify-center"
+                  className="btn btn-outline-primary btn-sm flex items-center gap-2 px-4 py-2"
                 >
                   {processingBulk ? (
                     <>
-                      <Loader className="w-4 h-4 animate-spin mr-2" />
-                      Processing...
+                      <Loader className="w-4 h-4 animate-spin" />
+                      <span className="text-sm">Processing...</span>
                     </>
                   ) : (
                     <>
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add All Filtered
+                      <Plus className="w-4 h-4" />
+                      <span className="text-sm">{hasActiveFilters() ? "Add All Filtered" : "Add All"}</span>
                     </>
                   )}
                 </button>
@@ -1101,7 +1276,7 @@ function ArtistDetailsPage() {
           </div>
           <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
             {artist["release-groups"]
-              .filter(matchesMetadataProfile)
+              .filter(matchesReleaseTypeFilter)
               .sort((a, b) => {
                 const dateA = a["first-release-date"] || "";
                 const dateB = b["first-release-date"] || "";
@@ -1110,9 +1285,10 @@ function ArtistDetailsPage() {
               .map((releaseGroup) => {
                 const status = getAlbumStatus(releaseGroup.id);
                 const isExpanded = expandedAlbum === releaseGroup.id;
-                const lidarrAlbumId = status?.lidarrId;
-                const tracks = lidarrAlbumId ? albumTracks[lidarrAlbumId] : null;
-                const isLoadingTracks = lidarrAlbumId ? loadingTracks[lidarrAlbumId] : false;
+                const libraryAlbumId = status?.libraryId;
+                const trackKey = libraryAlbumId || releaseGroup.id;
+                const tracks = albumTracks[trackKey] || null;
+                const isLoadingTracks = loadingTracks[trackKey] || false;
                 const albumInfo = status?.albumInfo;
                 
                 return (
@@ -1122,14 +1298,14 @@ function ArtistDetailsPage() {
                   >
                     <div
                       className={`flex items-center justify-between p-4 cursor-pointer ${!isExpanded ? 'rounded-lg' : 'rounded-t-lg'}`}
-                      onClick={() => handleAlbumClick(releaseGroup.id, status?.lidarrId)}
+                      onClick={() => handleAlbumClick(releaseGroup.id, status?.libraryId)}
                     >
                       <div className="flex-1 flex items-center gap-3">
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleAlbumClick(releaseGroup.id, status?.lidarrId);
+                            handleAlbumClick(releaseGroup.id, status?.libraryId);
                           }}
                           className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                         >
@@ -1179,11 +1355,11 @@ function ArtistDetailsPage() {
 
                     <div className="flex items-center gap-2">
                       {status ? (
-                        status.status === "available" ? (
+                        status.status === "available" || status.status === "added" ? (
                           <>
                             <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 cursor-default">
                               <CheckCircle className="w-3.5 h-3.5" />
-                              Available
+                              {status.label || "Available"}
                             </span>
                             <div className="relative overflow-visible">
                               <button
@@ -1237,11 +1413,11 @@ function ArtistDetailsPage() {
                               )}
                             </div>
                           </>
-                        ) : status.status === "processing" ? (
+                        ) : status.status === "processing" || status.status === "adding" || status.status === "searching" || status.status === "downloading" || status.status === "moving" ? (
                           <>
                             <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 cursor-default">
                               <Loader className="w-3.5 h-3.5 animate-spin" />
-                              Processing
+                              {status.label || "Processing"}
                             </span>
                             <div className="relative overflow-visible">
                               <button
@@ -1314,21 +1490,31 @@ function ArtistDetailsPage() {
                             )}
                           </button>
                         )
-                      ) : existsInLidarr ? (
-                        <span className="text-xs text-gray-400 italic">
-                          Not in Lidarr
-                        </span>
                       ) : (
-                        <span className="text-xs text-gray-400 italic">
-                          Add Artist First
-                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRequestAlbum(
+                              releaseGroup.id,
+                              releaseGroup.title,
+                            );
+                          }}
+                          disabled={requestingAlbum === releaseGroup.id}
+                          className="btn btn-primary btn-sm"
+                        >
+                          {requestingAlbum === releaseGroup.id ? (
+                            <Loader className="w-4 h-4 animate-spin" />
+                          ) : (
+                            "Add"
+                          )}
+                        </button>
                       )}
                     </div>
                   </div>
 
                   {isExpanded && (
                     <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-4 bg-gray-100 dark:bg-gray-900/50 overflow-hidden rounded-b-lg">
-                      {/* Show Lidarr album info if available */}
+                      {/* Show library album info if available */}
                       {albumInfo && (
                         <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
                           <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center">
@@ -1380,8 +1566,8 @@ function ArtistDetailsPage() {
                         </div>
                       )}
 
-                      {/* Show release group info from MusicBrainz if not in Lidarr */}
-                      {!status?.lidarrId && (
+                      {/* Show release group info from MusicBrainz if not in library */}
+                      {!status?.libraryId && (
                         <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
                           <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center">
                             <FileMusic className="w-4 h-4 mr-2" />
@@ -1413,61 +1599,54 @@ function ArtistDetailsPage() {
                               </div>
                             )}
                           </div>
-                          {!existsInLidarr && (
-                            <p className="text-sm text-gray-500 dark:text-gray-400 italic mt-3">
-                              Add this artist to your library to see track information and download albums.
-                            </p>
-                          )}
                         </div>
                       )}
 
-                      {/* Show Lidarr tracks if available */}
-                      {status?.lidarrId && (
-                        <div>
-                          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
-                            Tracks
-                          </h4>
-                          {isLoadingTracks ? (
-                            <div className="flex items-center justify-center py-8">
-                              <Loader className="w-6 h-6 text-primary-600 animate-spin" />
-                            </div>
-                          ) : tracks && tracks.length > 0 ? (
-                            <div className="space-y-1 max-h-64 overflow-y-auto">
-                              {tracks.map((track, idx) => (
-                                <div
-                                  key={track.id || idx}
-                                  className="flex items-center justify-between p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
-                                >
-                                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                                    <span className="text-xs text-gray-500 dark:text-gray-400 w-6 flex-shrink-0">
-                                      {track.trackNumber || idx + 1}
-                                    </span>
-                                    <span className="text-sm text-gray-900 dark:text-gray-100 truncate">
-                                      {track.title || "Unknown Track"}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-2 flex-shrink-0">
-                                    {track.duration && (
-                                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                                        {Math.floor(track.duration / 60)}:{(track.duration % 60).toString().padStart(2, '0')}
-                                      </span>
-                                    )}
-                                    {track.hasFile ? (
-                                      <CheckCircle className="w-4 h-4 text-green-500" />
-                                    ) : (
-                                      <span className="text-xs text-gray-400">Missing</span>
-                                    )}
-                                  </div>
+                      {/* Show tracks (from library or MusicBrainz) */}
+                      <div>
+                        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                          Tracks
+                        </h4>
+                        {isLoadingTracks ? (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader className="w-6 h-6 text-primary-600 animate-spin" />
+                          </div>
+                        ) : tracks && tracks.length > 0 ? (
+                          <div className="space-y-1 max-h-64 overflow-y-auto">
+                            {tracks.map((track, idx) => (
+                              <div
+                                key={track.id || track.mbid || idx}
+                                className="flex items-center justify-between p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                              >
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  <span className="text-xs text-gray-500 dark:text-gray-400 w-6 flex-shrink-0">
+                                    {track.trackNumber || track.position || idx + 1}
+                                  </span>
+                                  <span className="text-sm text-gray-900 dark:text-gray-100 truncate">
+                                    {track.title || track.trackName || "Unknown Track"}
+                                  </span>
                                 </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-gray-500 dark:text-gray-400 italic py-4">
-                              No tracks available
-                            </p>
-                          )}
-                        </div>
-                      )}
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  {track.length && (
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                                      {Math.floor(track.length / 60000)}:{(Math.floor((track.length % 60000) / 1000)).toString().padStart(2, '0')}
+                                    </span>
+                                  )}
+                                  {track.hasFile ? (
+                                    <CheckCircle className="w-4 h-4 text-green-500" />
+                                  ) : status?.libraryId ? (
+                                    <span className="text-xs text-gray-400">Missing</span>
+                                  ) : null}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500 dark:text-gray-400 italic py-4">
+                            No tracks available
+                          </p>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1554,16 +1733,16 @@ function ArtistDetailsPage() {
       )}
 
       {/* Delete Confirmation Modal */}
-      {showDeleteModal && lidarrArtist && (
+      {showDeleteModal && libraryArtist && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
             <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
-              Remove Artist from Lidarr
+              Remove Artist from Library
             </h3>
             <p className="text-gray-700 dark:text-gray-300 mb-6">
               Are you sure you want to remove{" "}
-              <span className="font-semibold">{artist?.name || lidarrArtist.artistName}</span>{" "}
-              from Lidarr?
+              <span className="font-semibold">{artist?.name || libraryArtist.artistName}</span>{" "}
+              from library?
             </p>
 
             <div className="mb-6">
@@ -1617,12 +1796,12 @@ function ArtistDetailsPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
             <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
-              Delete Album from Lidarr
+              Delete Album from Library
             </h3>
             <p className="text-gray-700 dark:text-gray-300 mb-6">
               Are you sure you want to delete{" "}
               <span className="font-semibold">{showDeleteAlbumModal.title}</span>{" "}
-              from Lidarr?
+              from library?
             </p>
 
             <div className="mb-6">

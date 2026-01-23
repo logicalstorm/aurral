@@ -1,7 +1,7 @@
 import express from "express";
 import { getDiscoveryCache, updateDiscoveryCache } from "../services/discoveryService.js";
 import { lastfmRequest, getLastfmApiKey } from "../services/apiClients.js";
-import { lidarrRequest } from "../services/apiClients.js";
+import { libraryManager } from "../services/libraryManager.js";
 import { db } from "../config/db.js";
 import { defaultData } from "../config/constants.js";
 
@@ -47,9 +47,63 @@ router.post("/clear", async (req, res) => {
   res.json({ message: clearImages ? "Discovery cache and image cache cleared" : "Discovery cache cleared" });
 });
 
-router.get("/", (req, res) => {
+router.get("/", async (req, res) => {
+  // Check if discovery is configured
+  const hasLastfm = !!getLastfmApiKey();
+  const libraryArtists = libraryManager.getAllArtists();
+  const hasArtists = libraryArtists.length > 0;
+  
+  // If nothing is configured, clear any existing data and return empty
+  if (!hasLastfm && !hasArtists) {
+    // Clear database if it has old data
+    if (db.data?.discovery && (
+      (db.data.discovery.recommendations?.length > 0) ||
+      (db.data.discovery.globalTop?.length > 0) ||
+      (db.data.discovery.topGenres?.length > 0) ||
+      (db.data.discovery.basedOn?.length > 0)
+    )) {
+      db.data.discovery = {
+        recommendations: [],
+        globalTop: [],
+        basedOn: [],
+        topTags: [],
+        topGenres: [],
+        lastUpdated: null,
+      };
+      try {
+        await db.write();
+      } catch (error) {
+        console.error("Failed to clear discovery data:", error.message);
+      }
+    }
+    
+    // Clear cache
+    const discoveryCache = getDiscoveryCache();
+    Object.assign(discoveryCache, {
+      recommendations: [],
+      globalTop: [],
+      basedOn: [],
+      topTags: [],
+      topGenres: [],
+      lastUpdated: null,
+      isUpdating: false,
+    });
+    
+    res.set("Cache-Control", "public, max-age=300");
+    return res.json({
+      recommendations: [],
+      globalTop: [],
+      basedOn: [],
+      topTags: [],
+      topGenres: [],
+      lastUpdated: null,
+      isUpdating: false,
+      configured: false,
+    });
+  }
+  
   // Always read directly from database as source of truth
-  const dbData = db.data.discovery || {};
+  const dbData = db.data?.discovery || {};
   const discoveryCache = getDiscoveryCache();
   
   // Ensure we have arrays (not undefined)
@@ -60,10 +114,6 @@ router.get("/", (req, res) => {
   const topGenres = Array.isArray(dbData.topGenres) ? dbData.topGenres : (Array.isArray(discoveryCache.topGenres) ? discoveryCache.topGenres : []);
   const lastUpdated = dbData.lastUpdated || discoveryCache.lastUpdated || null;
   const isUpdating = discoveryCache.isUpdating || false;
-  
-  // Debug logging
-  console.log(`[Discovery Route] DB data: recommendations=${recommendations.length}, globalTop=${globalTop.length}, topGenres=${topGenres.length}, topTags=${topTags.length}`);
-  console.log(`[Discovery Route] DB lastUpdated: ${lastUpdated}`);
   
   // Sync cache from database
   if (recommendations.length > 0 || globalTop.length > 0 || topGenres.length > 0) {
@@ -87,6 +137,7 @@ router.get("/", (req, res) => {
     topGenres,
     lastUpdated,
     isUpdating,
+    configured: true,
   });
 });
 
@@ -164,9 +215,9 @@ router.get("/by-tag", async (req, res) => {
       }
     }
 
-    const lidarrArtists = await lidarrRequest("/artist");
+    const libraryArtists = libraryManager.getAllArtists();
     const existingArtistIds = new Set(
-      lidarrArtists.map((a) => a.foreignArtistId),
+      libraryArtists.map((a) => a.mbid),
     );
 
     const filtered = recommendations
