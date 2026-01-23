@@ -10,6 +10,8 @@ import {
   History,
   LogOut,
   Play,
+  Github,
+  Heart,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -196,6 +198,27 @@ function Sidebar({ isOpen, onClose }) {
             </button>
           </div>
         )}
+
+        <div className="p-3 border-t border-gray-200 dark:border-gray-800 flex items-center justify-center space-x-3">
+          <a
+            href="https://github.com/lklynet/aurral"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+            aria-label="GitHub Repository"
+          >
+            <Github className="w-4 h-4" />
+          </a>
+          <a
+            href="https://github.com/sponsors/lklynet/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+            aria-label="GitHub Sponsors"
+          >
+            <Heart className="w-4 h-4" />
+          </a>
+        </div>
       </aside>
     </>
   );
