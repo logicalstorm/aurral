@@ -19,14 +19,15 @@ export function Toast({ toast, onDismiss }) {
   };
 
   const styles = {
-    success: "border-green-200 bg-green-50 dark:bg-green-900/80 dark:border-green-900/50",
+    success:
+      "border-green-200 bg-green-50 dark:bg-green-900/80 dark:border-green-900/50",
     error: "border-red-200 bg-red-50 dark:bg-red-900/80 dark:border-red-900/50",
     info: "border-blue-200 bg-blue-50 dark:bg-blue-900/80 dark:border-blue-900/50",
   };
 
   return (
     <div
-      className={`flex items-center w-full max-w-sm p-4 mb-4 text-gray-900 bg-white rounded-lg shadow-lg dark:bg-gray-800 dark:text-gray-300 border ${
+      className={`flex items-center w-full max-w-sm p-4 mb-4 text-gray-900 bg-white shadow-lg dark:bg-gray-800 dark:text-gray-300 border ${
         styles[type] || styles.info
       } animate-slide-in-right transition-all duration-300`}
       role="alert"
@@ -35,7 +36,7 @@ export function Toast({ toast, onDismiss }) {
       <div className="ml-3 text-sm font-normal">{message}</div>
       <button
         type="button"
-        className="ml-auto -mx-1.5 -my-1.5 bg-transparent text-gray-400 hover:text-gray-900 rounded-lg focus:ring-2 focus:ring-gray-300 p-1.5 hover:bg-gray-100 inline-flex h-8 w-8 dark:text-gray-500 dark:hover:text-white dark:hover:bg-gray-700"
+        className="ml-auto -mx-1.5 -my-1.5 bg-transparent text-gray-400 hover:text-gray-900 focus:ring-2 focus:ring-gray-300 p-1.5 hover:bg-gray-100 inline-flex h-8 w-8 dark:text-gray-500 dark:hover:text-white dark:hover:bg-gray-700"
         onClick={() => onDismiss(id)}
         aria-label="Close"
       >
