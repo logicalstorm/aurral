@@ -279,8 +279,8 @@ function SettingsPage() {
                   <option value="max">Max (FLAC only)</option>
                 </select>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Standard uses optimization settings: Preferred Groups (DeVOiD,
-                  PERFECT, ENRiCH), prefers CD/WEB, avoids Vinyl
+                  Quality presets filter downloads by format: Standard allows MP3 320kbps and FLAC, Max allows FLAC only. 
+                  These settings are applied when searching and downloading from slskd.
                 </p>
               </div>
 
