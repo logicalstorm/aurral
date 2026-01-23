@@ -81,7 +81,6 @@ export class SlskdClient {
 
       const response = await axios(config);
       this.authMethod = 'X-API-Key';
-      console.log(`✓ Detected slskd auth method: X-API-Key`);
       return this.authMethod;
     } catch (error) {
       // If 401 and Bearer in www-authenticate, try Bearer token
@@ -100,7 +99,6 @@ export class SlskdClient {
 
           const response = await axios(config);
           this.authMethod = 'Bearer';
-          console.log(`✓ Detected slskd auth method: Bearer token`);
           return this.authMethod;
         } catch (bearerError) {
           // Both failed, default to X-API-Key
@@ -220,7 +218,6 @@ export class SlskdClient {
           };
 
           const response = await axios(config);
-          console.log(`✓ slskd API detected: ${test.version} (${test.path}) with ${auth.name} auth`);
           
           // Cache the detected version and auth method
           this.apiVersion = test.version;
@@ -396,8 +393,6 @@ export class SlskdClient {
     }
 
     const fullUrl = `${this.config.url}${basePath}/searches`;
-    console.log(`Attempting slskd search at: ${fullUrl}`);
-    console.log(`Search data:`, JSON.stringify(searchData, null, 2));
 
     // Ensure auth method is detected
     await this.detectAuthMethod(basePath);
@@ -512,7 +507,6 @@ export class SlskdClient {
     }
 
     const fullUrl = `${this.config.url}${basePath}${endpoint}`;
-    console.log(`Initiating download: ${filename} from ${username} via ${fullUrl}`);
 
     // Ensure auth method is detected
     await this.detectAuthMethod(basePath);
@@ -542,7 +536,6 @@ export class SlskdClient {
         }
         
         const downloadObj = responseData.enqueued[0];
-        console.log(`✓ Download enqueued: ID ${downloadObj.id}, ${filename} from ${username}`);
         
         return {
           id: downloadObj.id,
@@ -555,7 +548,6 @@ export class SlskdClient {
       
       // API v1/v2 might return the download object directly
       if (responseData && responseData.id) {
-        console.log(`✓ Download initiated: ID ${responseData.id}, ${filename} from ${username}`);
         return {
           id: responseData.id,
           username: username,
@@ -566,7 +558,6 @@ export class SlskdClient {
       }
       
       // Fallback: return response as-is
-      console.log(`✓ Download initiated: ${filename} from ${username}`);
       return {
         username: username,
         filename: filename,
@@ -663,7 +654,6 @@ export class SlskdClient {
         
         if (downloadDir) {
           this.downloadDirectory = downloadDir;
-          console.log(`✓ Found slskd download directory: ${downloadDir}`);
           return downloadDir;
         }
       } catch (error) {
@@ -760,7 +750,6 @@ export class SlskdClient {
         
         // Log if we flattened anything (for debugging)
         if (flattened !== data && Array.isArray(flattened)) {
-          console.log(`Flattened ${flattened.length} downloads from nested structure`);
         }
         
         return flattened;
@@ -808,7 +797,6 @@ export class SlskdClient {
       
       // Check if responses are already in the initial search result (some API versions include them)
       if (searchResult.responses && Array.isArray(searchResult.responses) && searchResult.responses.length > 0) {
-        console.log(`✓ Search result already contains ${searchResult.responses.length} responses, using them directly`);
       } else if (
         basePath === "/api/v0" &&
         searchResult.id &&
@@ -873,7 +861,6 @@ export class SlskdClient {
                   const firstItem = statusData[key][0];
                   if (firstItem && typeof firstItem === 'object' && (firstItem.username || firstItem.user || firstItem.files)) {
                     searchResult.responses = statusData[key];
-                    console.log(`✓ Found responses in property '${key}' (${statusData[key].length} items)`);
                     break;
                   }
                 }
@@ -962,9 +949,7 @@ export class SlskdClient {
             };
             
             if (attempts === 0) {
-              console.log(`Making final request with includeResponses=true to get responses...`);
             } else {
-              console.log(`Retrying final request (attempt ${attempts + 1}/${maxFinalAttempts})...`);
               // Wait a bit before retrying
               await new Promise(resolve => setTimeout(resolve, 2000));
             }
@@ -976,7 +961,6 @@ export class SlskdClient {
             const responses = finalData.responses || finalData.Responses;
             if (responses && Array.isArray(responses) && responses.length > 0) {
               finalData.responses = responses; // Normalize to lowercase
-              console.log(`✓ Got ${responses.length} responses on attempt ${attempts + 1}`);
               break;
             }
             
@@ -987,7 +971,6 @@ export class SlskdClient {
                   const firstItem = finalData[key][0];
                   if (firstItem && typeof firstItem === 'object' && (firstItem.username || firstItem.user || firstItem.files)) {
                     finalData.responses = finalData[key];
-                    console.log(`✓ Found ${finalData[key].length} responses in property '${key}'`);
                     break;
                   }
                 }
@@ -1002,7 +985,6 @@ export class SlskdClient {
             if (finalData.responseCount > 0 && (!responses || (Array.isArray(responses) && responses.length === 0))) {
               attempts++;
               if (attempts < maxFinalAttempts) {
-                console.log(`Responses array is empty but responseCount=${finalData.responseCount}, state=${finalData.state}, retrying...`);
                 continue;
               }
             } else {
@@ -1039,7 +1021,6 @@ export class SlskdClient {
             responseStructure.responsesSample = JSON.stringify(finalData.responses).substring(0, 1000);
           }
           
-          console.log(`Final response structure:`, responseStructure);
           
           // Also check if responses might be under a different case (case-insensitive check)
           // C# JSON serialization might use PascalCase
@@ -1047,13 +1028,11 @@ export class SlskdClient {
             k.toLowerCase() === 'responses' && k !== 'responses'
           );
           if (responsesKey && !finalData.responses) {
-            console.log(`Found responses under different case: '${responsesKey}'`);
             finalData.responses = finalData[responsesKey];
           }
           
           // Check for PascalCase (C# style) - Responses with capital R
           if (!finalData.responses && finalData.Responses) {
-            console.log(`Found Responses (PascalCase) - converting to lowercase`);
             finalData.responses = finalData.Responses;
           }
           
@@ -1062,11 +1041,9 @@ export class SlskdClient {
             // Check if responses is actually populated
             if (Array.isArray(finalData.responses) && finalData.responses.length > 0) {
               searchResult.responses = finalData.responses;
-              console.log(`✓ Final request returned ${finalData.responses.length} responses`);
             } else if (typeof finalData.responses === 'object' && !Array.isArray(finalData.responses)) {
               // Responses might be an object/dictionary
               const responseKeys = Object.keys(finalData.responses);
-              console.log(`Responses is an object with ${responseKeys.length} keys: ${responseKeys.slice(0, 10).join(', ')}...`);
               
               // Try to extract arrays from the object
               const allResponses = [];
@@ -1081,7 +1058,6 @@ export class SlskdClient {
               
               if (allResponses.length > 0) {
                 searchResult.responses = allResponses;
-                console.log(`✓ Extracted ${allResponses.length} responses from object structure`);
               }
             }
           }
@@ -1099,7 +1075,6 @@ export class SlskdClient {
       
       // Check if we already have responses from the search result
       if (searchResult.responses && Array.isArray(searchResult.responses) && searchResult.responses.length > 0) {
-        console.log(`Using ${searchResult.responses.length} responses from search result`);
       } else if (
         basePath === "/api/v0" &&
         searchResult.id &&
@@ -1177,7 +1152,6 @@ export class SlskdClient {
             );
           } else {
             // Try alternative: fetch files directly
-            console.log("No responses from paginated endpoint, trying files endpoint...");
             throw new Error("No responses found, trying files endpoint");
           }
         } catch (fetchError) {
@@ -1224,10 +1198,8 @@ export class SlskdClient {
               console.log(`✓ Fetched ${files.length} files directly from API`);
             } else if (filesResponse.data && filesResponse.data.files) {
               files = filesResponse.data.files;
-              console.log(`✓ Fetched ${files.length} files from nested property`);
             } else if (filesResponse.data && filesResponse.data.items) {
               files = filesResponse.data.items;
-              console.log(`✓ Fetched ${files.length} files from items property`);
             }
           } catch (filesError) {
             console.warn(
@@ -1272,7 +1244,6 @@ export class SlskdClient {
                 if (altResponse.data?.responses) {
                   if (Array.isArray(altResponse.data.responses) && altResponse.data.responses.length > 0) {
                     searchResult.responses = altResponse.data.responses;
-                    console.log(`✓ Got ${searchResult.responses.length} responses from ${altEndpoint.name}`);
                     break;
                   } else if (typeof altResponse.data.responses === 'object' && !Array.isArray(altResponse.data.responses)) {
                     // Responses might be an object with nested arrays or a dictionary
@@ -1282,7 +1253,6 @@ export class SlskdClient {
                     for (const key of responseKeys) {
                       if (Array.isArray(altResponse.data.responses[key])) {
                         searchResult.responses = altResponse.data.responses[key];
-                        console.log(`✓ Got ${searchResult.responses.length} responses from ${altEndpoint.name} (key: ${key})`);
                         break;
                       }
                     }
@@ -1307,7 +1277,6 @@ export class SlskdClient {
                 if (altResponse.data?.files) {
                   if (Array.isArray(altResponse.data.files) && altResponse.data.files.length > 0) {
                     files = altResponse.data.files;
-                    console.log(`✓ Got ${files.length} files from ${altEndpoint.name}`);
                     break;
                   }
                 }
@@ -1327,7 +1296,6 @@ export class SlskdClient {
                       const firstItem = value[0];
                       if (firstItem && typeof firstItem === 'object' && (firstItem.username || firstItem.user || firstItem.files)) {
                         searchResult.responses = value;
-                        console.log(`✓ Found ${value.length} responses in property '${key}'`);
                         break;
                       }
                     }
@@ -1869,7 +1837,6 @@ export class SlskdClient {
           );
         }
         
-        console.log(`Downloading file: ${filename} from user: ${username} (size: ${size} bytes)`);
 
         const downloadResult = await this.downloadFile(username, filename, size);
         
@@ -1960,7 +1927,6 @@ export class SlskdClient {
     const cleanArtist = artistName.replace(/[^\w\s]/g, ' ').trim();
     const cleanAlbum = albumName.replace(/[^\w\s]/g, ' ').trim();
     const query = `${cleanArtist} ${cleanAlbum}`.trim();
-    console.log(`Searching Soulseek for album: "${query}"`);
     
     // For album downloads, prefer individual tracks over full album files
     // Pass tracklist if available for matching against MusicBrainz official tracklist
