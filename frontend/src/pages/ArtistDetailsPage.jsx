@@ -1143,6 +1143,331 @@ function ArtistDetailsPage() {
         )}
       </div>
 
+      {/* Albums in Library Section */}
+      {existsInLibrary && libraryAlbums && libraryAlbums.length > 0 && (() => {
+        // Filter to only show albums that have been downloaded (have files)
+        const downloadedAlbums = libraryAlbums.filter((album) => {
+          // Show if album has any tracks with files (percentOfTracks > 0) or has size on disk
+          return (
+            (album.statistics?.percentOfTracks > 0) ||
+            (album.statistics?.sizeOnDisk > 0) ||
+            downloadStatuses[album.id] // Also show if currently downloading
+          );
+        });
+
+        if (downloadedAlbums.length === 0) return null;
+
+        return (
+          <div className="card mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
+                <FileMusic className="w-6 h-6 mr-2 text-primary-500" />
+                Albums in Your Library ({downloadedAlbums.length})
+              </h2>
+            </div>
+            <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+              {downloadedAlbums
+                .sort((a, b) => {
+                  const dateA = a.releaseDate || "";
+                  const dateB = b.releaseDate || "";
+                  return dateB.localeCompare(dateA);
+                })
+                .map((libraryAlbum) => {
+                const isExpanded = expandedAlbum === libraryAlbum.mbid || expandedAlbum === libraryAlbum.foreignAlbumId;
+                const trackKey = libraryAlbum.id;
+                const tracks = albumTracks[trackKey] || null;
+                const isLoadingTracks = loadingTracks[trackKey] || false;
+                const downloadStatus = downloadStatuses[libraryAlbum.id];
+                const isComplete = libraryAlbum.statistics?.percentOfTracks === 100;
+
+                return (
+                  <div
+                    key={libraryAlbum.id}
+                    className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <div
+                      className={`flex items-center justify-between p-4 cursor-pointer`}
+                      onClick={() =>
+                        handleAlbumClick(libraryAlbum.mbid || libraryAlbum.foreignAlbumId, libraryAlbum.id)
+                      }
+                    >
+                      <div className="flex-1 flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAlbumClick(
+                              libraryAlbum.mbid || libraryAlbum.foreignAlbumId,
+                              libraryAlbum.id,
+                            );
+                          }}
+                          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          )}
+                        </button>
+                        {albumCovers[libraryAlbum.mbid || libraryAlbum.foreignAlbumId] ? (
+                          <img
+                            src={albumCovers[libraryAlbum.mbid || libraryAlbum.foreignAlbumId]}
+                            alt={libraryAlbum.albumName}
+                            className="w-12 h-12 flex-shrink-0 object-cover"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 flex-shrink-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                            <Music className="w-6 h-6 text-gray-400 dark:text-gray-500" />
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                            {libraryAlbum.albumName}
+                          </h3>
+                          <div className="flex items-center gap-3 mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            {libraryAlbum.releaseDate && (
+                              <span>
+                                {libraryAlbum.releaseDate.split("-")[0]}
+                              </span>
+                            )}
+                            {libraryAlbum.albumType && (
+                              <span className="badge badge-primary text-xs">
+                                {libraryAlbum.albumType}
+                              </span>
+                            )}
+                            {libraryAlbum.statistics && (
+                              <span className="text-xs">
+                                {libraryAlbum.statistics.trackCount || 0} tracks
+                                {libraryAlbum.statistics.percentOfTracks !== undefined && (
+                                  <span className="ml-1">
+                                    ({libraryAlbum.statistics.percentOfTracks}% complete)
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {downloadStatus ? (
+                          downloadStatus.status === "added" || downloadStatus.status === "available" ? (
+                            <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 cursor-default">
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              Added
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 cursor-default">
+                              <Loader className="w-3.5 h-3.5 animate-spin" />
+                              {downloadStatus.status === "adding" ? "Adding..." :
+                               downloadStatus.status === "searching" ? "Searching..." :
+                               downloadStatus.status === "downloading" ? "Downloading..." :
+                               downloadStatus.status === "moving" ? "Moving..." :
+                               downloadStatus.status}
+                            </span>
+                          )
+                        ) : isComplete ? (
+                          <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 cursor-default">
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            Complete
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 cursor-default">
+                            Incomplete
+                          </span>
+                        )}
+                        <div className="relative overflow-visible">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAlbumDropdownOpen(
+                                albumDropdownOpen === (libraryAlbum.mbid || libraryAlbum.foreignAlbumId)
+                                  ? null
+                                  : (libraryAlbum.mbid || libraryAlbum.foreignAlbumId),
+                              );
+                            }}
+                            className="btn btn-secondary btn-sm p-2"
+                            title="Options"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                          {albumDropdownOpen === (libraryAlbum.mbid || libraryAlbum.foreignAlbumId) && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-10"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAlbumDropdownOpen(null);
+                                }}
+                              />
+                              <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-800 shadow-lg border border-gray-200 dark:border-gray-700 z-20 py-1">
+                                <a
+                                  href={`https://www.last.fm/music/${encodeURIComponent(artist.name)}/${encodeURIComponent(libraryAlbum.albumName)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center"
+                                  onClick={() =>
+                                    setAlbumDropdownOpen(null)
+                                  }
+                                >
+                                  <ExternalLink className="w-4 h-4 mr-2" />
+                                  View on Last.fm
+                                </a>
+                                <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteAlbumClick(
+                                      libraryAlbum.mbid || libraryAlbum.foreignAlbumId,
+                                      libraryAlbum.albumName,
+                                    );
+                                  }}
+                                  className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center"
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Delete Album
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-4 bg-gray-100 dark:bg-gray-900/50 overflow-hidden">
+                        {/* Show library album info */}
+                        <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+                          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center">
+                            <FileMusic className="w-4 h-4 mr-2" />
+                            Album Information
+                          </h4>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                            {libraryAlbum.statistics && (
+                              <>
+                                <div>
+                                  <span className="text-gray-600 dark:text-gray-400">
+                                    Tracks:
+                                  </span>
+                                  <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                                    {libraryAlbum.statistics.trackCount || 0}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-600 dark:text-gray-400">
+                                    Size:
+                                  </span>
+                                  <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                                    {libraryAlbum.statistics.sizeOnDisk
+                                      ? `${(libraryAlbum.statistics.sizeOnDisk / 1024 / 1024).toFixed(2)} MB`
+                                      : "N/A"}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-600 dark:text-gray-400">
+                                    Completion:
+                                  </span>
+                                  <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                                    {libraryAlbum.statistics.percentOfTracks ||
+                                      0}
+                                    %
+                                  </span>
+                                </div>
+                              </>
+                            )}
+                            {libraryAlbum.releaseDate && (
+                              <div>
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  Release Date:
+                                </span>
+                                <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                                  {libraryAlbum.releaseDate}
+                                </span>
+                              </div>
+                            )}
+                            {libraryAlbum.albumType && (
+                              <div>
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  Type:
+                                </span>
+                                <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                                  {libraryAlbum.albumType}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Show tracks */}
+                        <div>
+                          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                            Tracks
+                          </h4>
+                          {isLoadingTracks ? (
+                            <div className="flex items-center justify-center py-8">
+                              <Loader className="w-6 h-6 text-primary-600 animate-spin" />
+                            </div>
+                          ) : tracks && tracks.length > 0 ? (
+                            <div className="space-y-1 max-h-64 overflow-y-auto">
+                              {tracks.map((track, idx) => (
+                                <div
+                                  key={track.id || track.mbid || idx}
+                                  className="flex items-center justify-between p-2 hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                                >
+                                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                                    <span className="text-xs text-gray-500 dark:text-gray-400 w-6 flex-shrink-0">
+                                      {track.trackNumber ||
+                                        track.position ||
+                                        idx + 1}
+                                    </span>
+                                    <span className="text-sm text-gray-900 dark:text-gray-100 truncate">
+                                      {track.title ||
+                                        track.trackName ||
+                                        "Unknown Track"}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    {track.length && (
+                                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                                        {Math.floor(track.length / 60000)}:
+                                        {Math.floor(
+                                          (track.length % 60000) / 1000,
+                                        )
+                                          .toString()
+                                          .padStart(2, "0")}
+                                      </span>
+                                    )}
+                                    {track.hasFile ? (
+                                      <CheckCircle className="w-4 h-4 text-green-500" />
+                                    ) : (
+                                      <span className="text-xs text-gray-400">
+                                        Missing
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-500 dark:text-gray-400 italic py-4">
+                              No tracks available
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {artist["release-groups"] && artist["release-groups"].length > 0 && (
         <div className="card">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">

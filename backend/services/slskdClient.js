@@ -1761,9 +1761,9 @@ export class SlskdClient {
           return downloadResult;
         }
         
-        // Download all selected tracks
+        // Download all selected tracks sequentially (slskd API only allows one concurrent operation)
         console.log(
-          `Downloading ${tracksToDownload.length} tracks for album...`,
+          `Queueing ${tracksToDownload.length} tracks for download...`,
         );
         const downloadResults = [];
         
@@ -1779,29 +1779,49 @@ export class SlskdClient {
             continue;
           }
           
-          try {
-            console.log(
-              `Downloading track ${track.position}: "${track.title}" from ${username}`,
-            );
-            const downloadResult = await this.downloadFile(username, filename, size);
-            
-            if (downloadResult && typeof downloadResult === 'object') {
-              downloadResult.username = username;
-              downloadResult.filename = filename;
-              downloadResult.track = track;
+          let retries = 3;
+          let downloadResult = null;
+          
+          while (retries > 0) {
+            try {
+              downloadResult = await this.downloadFile(username, filename, size);
+              
+              if (downloadResult && typeof downloadResult === 'object') {
+                downloadResult.username = username;
+                downloadResult.filename = filename;
+                downloadResult.track = track;
+              }
+              
+              downloadResults.push(downloadResult);
+              break; // Success, exit retry loop
+            } catch (error) {
+              // Check if it's a 429 rate limit error (concurrent operation not allowed)
+              const isRateLimit = error.response?.status === 429 || 
+                                 error.message?.includes('concurrent operation') ||
+                                 error.response?.data?.error?.includes('concurrent operation');
+              
+              if (isRateLimit) {
+                retries--;
+                if (retries > 0) {
+                  // Wait longer before retrying (slskd needs time to process the previous request)
+                  const waitTime = (4 - retries) * 200; // Exponential backoff: 200ms, 400ms, 600ms
+                  await new Promise((resolve) => setTimeout(resolve, waitTime));
+                  continue;
+                }
+              }
+              
+              // Not a rate limit error, or out of retries
+              console.error(
+                `Failed to queue track "${track.title}":`,
+                error.message,
+              );
+              break;
             }
-            
-            downloadResults.push(downloadResult);
-            
-            // Small delay between downloads to avoid overwhelming the system
-            await new Promise((resolve) => setTimeout(resolve, 500));
-          } catch (error) {
-            console.error(
-              `Failed to download track "${track.title}":`,
-              error.message,
-            );
-            // Continue with other tracks even if one fails
           }
+          
+          // Delay between requests to avoid overwhelming slskd API
+          // slskd needs time to process each download request
+          await new Promise((resolve) => setTimeout(resolve, 150));
         }
         
         if (downloadResults.length === 0) {
