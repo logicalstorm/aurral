@@ -12,6 +12,7 @@ import {
 import {
   getWeeklyFlow,
   toggleWeeklyFlow,
+  generateWeeklyFlow,
   keepFlowItem,
   removeFlowItem
 } from "../utils/api";
@@ -22,6 +23,7 @@ function FlowPage() {
   const [flow, setFlow] = useState({ enabled: false, items: [], updatedAt: null });
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const { showSuccess, showError } = useToast();
 
   const fetchFlow = async () => {
@@ -77,6 +79,19 @@ function FlowPage() {
       showSuccess("Item removed.");
     } catch (err) {
       showError("Failed to remove item");
+    }
+  };
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const result = await generateWeeklyFlow();
+      await fetchFlow();
+      showSuccess(`Generated ${result.count || 0} new recommendations!`);
+    } catch (err) {
+      showError(err.response?.data?.details || "Failed to generate playlist");
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -136,13 +151,30 @@ function FlowPage() {
         </div>
       ) : flow.items.length === 0 ? (
          <div className="card text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-4"></div>
+          <Music className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
           <h3 className="text-xl font-medium text-gray-900 dark:text-gray-100 mb-2">
-            Waiting for next cycle...
+            No playlist yet
           </h3>
-          <p className="text-gray-500 dark:text-gray-400">
-            Your playlist will be generated shortly.
+          <p className="text-gray-500 dark:text-gray-400 mb-6">
+            Generate your first weekly discovery playlist now, or wait for automatic generation on Monday.
           </p>
+          <button 
+            onClick={handleGenerate} 
+            disabled={generating}
+            className="btn btn-primary"
+          >
+            {generating ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2 inline-block"></div>
+                Generating...
+              </>
+            ) : (
+              <>
+                <Play className="w-4 h-4 mr-2 inline" />
+                Generate Now
+              </>
+            )}
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

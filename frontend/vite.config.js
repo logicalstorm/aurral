@@ -11,7 +11,7 @@ export default defineConfig({
       manifest: {
         name: "Aurral - Artist Request Manager",
         short_name: "Aurral",
-        description: "Simple and elegant artist request manager for Lidarr",
+        description: "Simple and elegant artist request manager",
         theme_color: "#ffffff",
         background_color: "#ffffff",
         display: "standalone",

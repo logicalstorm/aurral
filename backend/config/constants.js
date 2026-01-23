@@ -26,8 +26,6 @@ export const LASTFM_API = "https://ws.audioscrobbler.com/2.0/";
 export const APP_NAME = "Aurral";
 export const APP_VERSION = "1.0.0";
 
-export const LIDARR_CACHE_TTL = 5 * 60 * 1000;
-
 export const defaultData = {
   discovery: {
     recommendations: [],
@@ -38,14 +36,39 @@ export const defaultData = {
     lastUpdated: null,
   },
   images: {},
-  requests: [],
+  requests: [], // Legacy artist-based requests (kept for backward compatibility)
+  albumRequests: [], // New album-based requests
+  library: {
+    artists: [],
+    albums: [],
+    tracks: [],
+    rootFolder: null,
+    lastScan: null,
+  },
+  qualityProfiles: [],
+  customFormats: [],
   settings: {
     rootFolderPath: null,
-    qualityProfileId: null,
-    metadataProfileId: null,
-    monitored: true,
-    searchForMissingAlbums: false,
-    albumFolders: true,
-    metadataProfileReleaseTypes: ["Album", "EP", "Single", "Broadcast", "Soundtrack", "Spokenword", "Remix", "Live", "Compilation", "Demo"],
+    quality: "standard", // "low", "standard", "max"
+    releaseTypes: ["Album", "EP", "Single", "Broadcast", "Soundtrack", "Spokenword", "Remix", "Live", "Compilation", "Demo"],
+    integrations: {
+      navidrome: { url: "", username: "", password: "" },
+      lastfm: { username: "" },
+      slskd: { url: "", apiKey: "" },
+      musicbrainz: { email: "" },
+      general: { authUser: "", authPassword: "" },
+    },
+    queueCleaner: {
+      enabled: true,
+      blocklist: true,
+      remove: false,
+      rename: true,
+      cleanImports: "missing", // "missing", "incomplete", "always"
+      retryFindingRelease: true,
+      retryDelayMinutes: 5,
+      maxRetries: 3,
+    },
   },
+  blocklist: [],
+  activityLog: [], // Activity log for tracking all operations
 };

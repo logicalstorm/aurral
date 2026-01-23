@@ -11,7 +11,7 @@ import {
   ArrowLeft,
   RefreshCw,
 } from "lucide-react";
-import { getRequests, deleteRequest } from "../utils/api";
+import { getRequests, deleteRequest, getAllDownloadStatus } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
 import { useToast } from "../contexts/ToastContext";
 
@@ -20,6 +20,7 @@ function RequestsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [downloadStatuses, setDownloadStatuses] = useState({});
   const navigate = useNavigate();
   const { showError } = useToast();
 
@@ -42,6 +43,21 @@ function RequestsPage() {
 
   useEffect(() => {
     fetchRequests();
+    
+    // Poll download status every 5 seconds
+    const pollDownloadStatus = async () => {
+      try {
+        const statuses = await getAllDownloadStatus();
+        setDownloadStatuses(statuses);
+      } catch (error) {
+        console.error("Failed to fetch download status:", error);
+      }
+    };
+    
+    pollDownloadStatus();
+    const interval = setInterval(pollDownloadStatus, 5000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const handleDelete = async (mbid, name) => {
@@ -59,30 +75,43 @@ function RequestsPage() {
     }
   };
 
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case "available":
-        return (
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            Available
-          </span>
-        );
-      case "processing":
-        return (
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-            <Loader className="w-3.5 h-3.5 animate-spin" />
-            Processing
-          </span>
-        );
-      default:
-        return (
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
-            <Clock className="w-3.5 h-3.5" />
-            Requested
-          </span>
-        );
+  const getStatusBadge = (request) => {
+    // Check if there are any active downloads for this artist's albums
+    const artistDownloadStatuses = Object.values(downloadStatuses).filter(
+      (status) => {
+        // We'd need to match by artistId, but downloadStatuses are keyed by albumId
+        // For now, just show request status
+        return status && (status.status === "adding" || status.status === "searching" || 
+                          status.status === "downloading" || status.status === "moving");
+      }
+    );
+    
+    const hasActiveDownloads = artistDownloadStatuses.length > 0;
+    
+    if (request.status === "available") {
+      return (
+        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+          <CheckCircle2 className="w-3.5 h-3.5" />
+          Available
+        </span>
+      );
     }
+    
+    if (request.status === "processing" || hasActiveDownloads) {
+      return (
+        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+          <Loader className="w-3.5 h-3.5 animate-spin" />
+          {hasActiveDownloads ? "Downloading..." : "Processing"}
+        </span>
+      );
+    }
+    
+    return (
+      <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+        <Clock className="w-3.5 h-3.5" />
+        Requested
+      </span>
+    );
   };
 
   if (loading) {
@@ -111,7 +140,7 @@ function RequestsPage() {
               Requests
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              Track your artist requests and their availability
+              Track your album requests and their availability
             </p>
           </div>
         </div>
@@ -142,7 +171,7 @@ function RequestsPage() {
             No Requests Found
           </h3>
           <p className="text-gray-500 dark:text-gray-400 mb-6">
-            You haven't requested any artists yet.
+            You haven't requested any albums yet.
           </p>
           <button onClick={() => navigate("/")} className="btn btn-primary">
             Start Discovering
@@ -150,19 +179,26 @@ function RequestsPage() {
         </div>
       ) : (
         <div className="grid gap-4">
-          {requests.map((request) => (
+          {requests.map((request) => {
+            const isAlbum = request.type === 'album';
+            const displayName = isAlbum ? request.albumName : request.name;
+            const artistName = isAlbum ? request.artistName : null;
+            const mbid = isAlbum ? (request.albumMbid || request.mbid) : request.mbid;
+            const artistMbid = isAlbum ? request.artistMbid : request.mbid;
+            
+            return (
             <div
-              key={request.mbid}
+              key={request.id || request.mbid}
               className="card group hover:shadow-md transition-all border border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row items-center gap-4 sm:gap-6 min-w-0"
             >
               <div
                 className="w-24 h-24 flex-shrink-0 bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden cursor-pointer"
-                onClick={() => navigate(`/artist/${request.mbid}`)}
+                onClick={() => navigate(isAlbum ? `/artist/${artistMbid}` : `/artist/${request.mbid}`)}
               >
                 <ArtistImage
                   src={request.image}
-                  mbid={request.mbid}
-                  alt={request.name}
+                  mbid={artistMbid}
+                  alt={displayName}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                 />
               </div>
@@ -171,16 +207,22 @@ function RequestsPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-1 min-w-0">
                   <h3
                     className="text-xl font-bold text-gray-900 dark:text-gray-100 hover:text-primary-500 cursor-pointer truncate"
-                    onClick={() => navigate(`/artist/${request.mbid}`)}
+                    onClick={() => navigate(isAlbum ? `/artist/${artistMbid}` : `/artist/${request.mbid}`)}
                   >
-                    {request.name}
+                    {displayName}
                   </h3>
                   <div className="flex justify-center sm:justify-start">
-                    {getStatusBadge(request.status)}
+                    {getStatusBadge(request)}
                   </div>
                 </div>
 
                 <div className="text-sm text-gray-500 dark:text-gray-400 flex flex-col sm:flex-row sm:items-center gap-x-4 gap-y-1 min-w-0">
+                  {isAlbum && artistName && (
+                    <span className="flex items-center justify-center sm:justify-start gap-1 truncate">
+                      <Music className="w-3.5 h-3.5" />
+                      {artistName}
+                    </span>
+                  )}
                   <span className="flex items-center justify-center sm:justify-start gap-1 truncate">
                     <Clock className="w-3.5 h-3.5" />
                     Requested on{" "}
@@ -198,14 +240,24 @@ function RequestsPage() {
 
               <div className="flex items-center gap-2 mt-2 sm:mt-0">
                 <button
-                  onClick={() => navigate(`/artist/${request.mbid}`)}
+                  onClick={() => navigate(isAlbum ? `/artist/${artistMbid}` : `/artist/${request.mbid}`)}
                   className="p-2.5 text-gray-500 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-all"
-                  title="View Artist"
+                  title={isAlbum ? "View Artist" : "View Artist"}
                 >
                   <ExternalLink className="w-5 h-5" />
                 </button>
                 <button
-                  onClick={() => handleDelete(request.mbid, request.name)}
+                  onClick={() => {
+                    if (isAlbum && request.albumId) {
+                      deleteRequest(request.albumId).then(() => {
+                        fetchRequests(true);
+                      }).catch(err => {
+                        showError("Failed to delete request");
+                      });
+                    } else {
+                      handleDelete(request.mbid, displayName);
+                    }
+                  }}
                   className="p-2.5 text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
                   title="Remove from history"
                 >
@@ -213,7 +265,8 @@ function RequestsPage() {
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -225,14 +278,14 @@ function RequestsPage() {
           <div className="flex gap-2 text-gray-600 dark:text-gray-400">
             <div className="w-2 h-2 rounded-full bg-yellow-500 mt-1.5 shrink-0"></div>
             <p>
-              <strong>Requested:</strong> Artist has been added to Lidarr and is
+              <strong>Requested:</strong> Artist has been added to library and is
               awaiting monitoring/search.
             </p>
           </div>
           <div className="flex gap-2 text-gray-600 dark:text-gray-400">
             <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0"></div>
             <p>
-              <strong>Processing:</strong> Lidarr has found the artist but
+              <strong>Processing:</strong> Artist is in library but
               content is still being downloaded.
             </p>
           </div>

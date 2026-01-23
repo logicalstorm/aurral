@@ -1,48 +1,81 @@
 import express from "express";
 import { UUID_REGEX } from "../config/constants.js";
-import { getCachedLidarrArtists } from "../services/lidarrCache.js";
+import { libraryManager } from "../services/libraryManager.js";
 import { db } from "../config/db.js";
 
 const router = express.Router();
 
 router.get("/", async (req, res) => {
   try {
-    const requests = db.data.requests || [];
-    let lidarrArtists = [];
-    try {
-      lidarrArtists = await getCachedLidarrArtists();
-    } catch (e) {
-      console.error("Failed to fetch Lidarr artists for requests sync", e);
-    }
+    // Get album-based requests (new system)
+    const albumRequests = db.data.albumRequests || [];
+    const libraryArtists = libraryManager.getAllArtists();
 
     let changed = false;
-    const updatedRequests = requests.map((req) => {
-      const lidarrArtist = lidarrArtists.find(
-        (a) => a.foreignArtistId === req.mbid,
-      );
-      let newStatus = req.status;
-      let lidarrId = req.lidarrId;
+    const updatedAlbumRequests = albumRequests
+      .map((req) => {
+        const album = libraryManager.getAlbumById(req.albumId);
+        if (!album) {
+          // Album not in library anymore - remove request
+          return null;
+        }
 
-      if (lidarrArtist) {
-        lidarrId = lidarrArtist.id;
-        const isAvailable =
-          lidarrArtist.statistics && lidarrArtist.statistics.sizeOnDisk > 0;
-        newStatus = isAvailable ? "available" : "processing";
-      }
+        const artist = libraryManager.getArtistById(req.artistId);
+        if (!artist) {
+          // Artist not in library anymore - remove request
+          return null;
+        }
 
-      if (newStatus !== req.status || lidarrId !== req.lidarrId) {
-        changed = true;
-        return { ...req, status: newStatus, lidarrId };
-      }
-      return req;
-    });
+        // Check if album has files on disk
+        let hasFiles = false;
+        const tracks = libraryManager.getTracks(album.id);
+        const tracksWithFiles = tracks.filter(t => t.hasFile && t.path);
+        
+        if (tracksWithFiles.length > 0) {
+          hasFiles = true;
+        }
+        
+        // Check if album is complete (all tracks have files)
+        const isComplete = tracks.length > 0 && tracksWithFiles.length === tracks.length;
+        const newStatus = isComplete ? "available" : (hasFiles ? "processing" : "processing");
+
+        if (newStatus !== req.status) {
+          changed = true;
+          return { ...req, status: newStatus };
+        }
+        return req;
+      })
+      .filter(Boolean); // Remove null entries (deleted albums/artists)
 
     if (changed) {
-      db.data.requests = updatedRequests;
+      db.data.albumRequests = updatedAlbumRequests;
       await db.write();
     }
 
-    const sortedRequests = [...updatedRequests].sort(
+    // Format for frontend - include album and artist info
+    const formattedRequests = updatedAlbumRequests.map(req => {
+      const album = libraryManager.getAlbumById(req.albumId);
+      const artist = libraryManager.getArtistById(req.artistId);
+      
+      return {
+        id: req.id,
+        type: 'album',
+        albumId: req.albumId,
+        albumMbid: req.albumMbid,
+        albumName: req.albumName || album?.albumName,
+        artistId: req.artistId,
+        artistMbid: req.artistMbid,
+        artistName: req.artistName || artist?.artistName,
+        status: req.status,
+        requestedAt: req.requestedAt,
+        // For backward compatibility with frontend
+        mbid: req.artistMbid, // Use artist MBID for image lookup
+        name: req.albumName || album?.albumName, // Show album name
+        image: null, // Will be fetched by frontend
+      };
+    });
+
+    const sortedRequests = [...formattedRequests].sort(
       (a, b) => new Date(b.requestedAt) - new Date(a.requestedAt),
     );
 
@@ -53,6 +86,22 @@ router.get("/", async (req, res) => {
   }
 });
 
+// Delete request by album ID (new album-based system)
+router.delete("/album/:albumId", async (req, res) => {
+  const { albumId } = req.params;
+
+  if (!albumId) {
+    return res.status(400).json({ error: "albumId is required" });
+  }
+
+  if (db.data.albumRequests) {
+    db.data.albumRequests = db.data.albumRequests.filter((r) => r.albumId !== albumId && r.id !== albumId);
+    await db.write();
+  }
+  res.json({ success: true });
+});
+
+// Delete request by MBID (legacy artist-based system)
 router.delete("/:mbid", async (req, res) => {
   const { mbid } = req.params;
 
@@ -60,7 +109,14 @@ router.delete("/:mbid", async (req, res) => {
     return res.status(400).json({ error: "Invalid MBID format" });
   }
 
+  // Remove from legacy requests
   db.data.requests = (db.data.requests || []).filter((r) => r.mbid !== mbid);
+  
+  // Also remove from album requests if it matches artist MBID
+  if (db.data.albumRequests) {
+    db.data.albumRequests = db.data.albumRequests.filter((r) => r.artistMbid !== mbid);
+  }
+  
   await db.write();
   res.json({ success: true });
 });

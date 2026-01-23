@@ -15,9 +15,10 @@ import {
 } from "lucide-react";
 import {
   getDiscovery,
-  lookupArtistsInLidarrBatch,
+  lookupArtistsInLibraryBatch,
   getRequests,
   getRecentlyAdded,
+  getAllDownloadStatus,
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
 import AddArtistModal from "../components/AddArtistModal";
@@ -31,6 +32,7 @@ function DiscoverPage() {
   const [error, setError] = useState(null);
   const [existingArtists, setExistingArtists] = useState({});
   const [artistToAdd, setArtistToAdd] = useState(null);
+  const [downloadStatuses, setDownloadStatuses] = useState({});
   const navigate = useNavigate();
   const { showSuccess } = useToast();
 
@@ -50,18 +52,19 @@ function DiscoverPage() {
         setRecentlyAdded(recentlyAddedData);
         setLoading(false);
 
-        const mbids = [
+        // Get artist MBIDs for checking if artists are in library
+        const artistMbids = [
           ...new Set([
             ...(discoveryData.recommendations || []).map((a) => a.id),
             ...(discoveryData.globalTop || []).map((a) => a.id),
-            ...requestsData.map((r) => r.mbid),
-            ...recentlyAddedData.map((a) => a.foreignArtistId),
+            ...requestsData.map((r) => r.artistMbid || r.mbid), // Use artistMbid for album requests
+            ...recentlyAddedData.map((a) => a.mbid || a.foreignArtistId),
           ]),
         ].filter(Boolean);
 
-        if (mbids.length > 0) {
+        if (artistMbids.length > 0) {
           try {
-            const existingMap = await lookupArtistsInLidarrBatch(mbids);
+            const existingMap = await lookupArtistsInLibraryBatch(artistMbids);
             setExistingArtists(existingMap);
           } catch (err) {
             console.error("Failed to batch lookup artists:", err);
@@ -76,6 +79,21 @@ function DiscoverPage() {
     };
 
     fetchData();
+    
+    // Poll download status every 5 seconds
+    const pollDownloadStatus = async () => {
+      try {
+        const statuses = await getAllDownloadStatus();
+        setDownloadStatuses(statuses);
+      } catch (error) {
+        console.error("Failed to fetch download status:", error);
+      }
+    };
+    
+    pollDownloadStatus();
+    const interval = setInterval(pollDownloadStatus, 5000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const handleAddArtistClick = (artist) => {
@@ -89,10 +107,10 @@ function DiscoverPage() {
     }));
     setArtistToAdd(null);
     getRequests().then(setRequests).catch(console.error);
-    showSuccess(`Successfully added ${artist.name} to Lidarr!`);
+    showSuccess(`Successfully added ${artist.name} to library!`);
   };
 
-  const getLidarrArtistImage = (artist) => {
+  const getLibraryArtistImage = (artist) => {
     if (artist.images && artist.images.length > 0) {
       const posterImage = artist.images.find(
         (img) => img.coverType === "poster" || img.coverType === "fanart",
@@ -102,7 +120,8 @@ function DiscoverPage() {
       if (image && artist.id) {
         const coverType = image.coverType || "poster";
         const filename = `${coverType}.jpg`;
-        return `/api/lidarr/mediacover/${artist.id}/${filename}`;
+        // Images are handled through the image service
+        return null;
       }
       return image?.remoteUrl || image?.url || null;
     }
@@ -144,10 +163,20 @@ function DiscoverPage() {
     return sections;
   }, [data]);
 
-  const ArtistCard = ({ artist, status }) => (
+  const ArtistCard = ({ artist, status }) => {
+    // Check if artist is in library - use artistMbid if provided, otherwise use artist.id
+    const artistMbid = artist.artistMbid || artist.id;
+    const isArtistInLibrary = artist.isArtistInLibrary !== undefined 
+      ? artist.isArtistInLibrary 
+      : existingArtists[artistMbid];
+    
+    // For album requests, navigate to artist page; otherwise use artist.id
+    const navigateTo = artist.navigateTo || artist.id;
+    
+    return (
     <div className="group relative flex flex-col w-full min-w-0">
       <div
-        onClick={() => navigate(`/artist/${artist.id}`)}
+        onClick={() => navigate(`/artist/${navigateTo}`)}
         className="relative aspect-square mb-3 overflow-hidden rounded-xl bg-gray-200 dark:bg-gray-800 cursor-pointer shadow-sm group-hover:shadow-md transition-all"
       >
         <ArtistImage
@@ -173,14 +202,14 @@ function DiscoverPage() {
         )}
 
         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-          {!existingArtists[artist.id] && (
+          {!isArtistInLibrary && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 handleAddArtistClick(artist);
               }}
               className="p-2 bg-primary-500 text-white rounded-full hover:bg-primary-600 hover:scale-110 transition-all shadow-lg"
-              title="Add to Lidarr"
+              title="Add to Library"
             >
               <Plus className="w-5 h-5" />
             </button>
@@ -188,7 +217,7 @@ function DiscoverPage() {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              navigate(`/artist/${artist.id}`);
+              navigate(`/artist/${navigateTo}`);
             }}
             className="p-2 bg-white/20 backdrop-blur-sm text-white rounded-full hover:bg-white/30 hover:scale-110 transition-all"
             title="View Details"
@@ -197,7 +226,7 @@ function DiscoverPage() {
           </button>
         </div>
 
-        {existingArtists[artist.id] && !status && (
+        {isArtistInLibrary && !status && (
           <div className="absolute top-2 right-2 bg-green-500 text-white p-1 rounded-full shadow-md">
             <CheckCircle className="w-3 h-3" />
           </div>
@@ -206,7 +235,7 @@ function DiscoverPage() {
 
       <div className="flex flex-col min-w-0">
         <h3
-          onClick={() => navigate(`/artist/${artist.id}`)}
+          onClick={() => navigate(`/artist/${navigateTo}`)}
           className="font-semibold text-gray-900 dark:text-gray-100 truncate hover:text-primary-500 cursor-pointer"
         >
           {artist.name}
@@ -224,7 +253,8 @@ function DiscoverPage() {
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -270,7 +300,41 @@ function DiscoverPage() {
     basedOn = [],
     lastUpdated,
     isUpdating,
+    configured = true,
   } = data || {};
+
+  // Show configuration message if discovery isn't set up
+  if (!configured || (!recommendations.length && !globalTop.length && !topGenres.length)) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 text-center">
+        <div className="bg-primary-100 dark:bg-primary-900/20 p-4 rounded-full mb-4">
+          <Sparkles className="w-12 h-12 text-primary-500" />
+        </div>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+          Discovery Not Configured
+        </h2>
+        <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto mb-6">
+          To see music recommendations, you need to either:
+        </p>
+        <ul className="text-left text-gray-600 dark:text-gray-400 max-w-md mx-auto mb-6 space-y-2">
+          <li className="flex items-start gap-2">
+            <span className="text-primary-500 mt-1">•</span>
+            <span>Add artists to your library, or</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-primary-500 mt-1">•</span>
+            <span>Configure Last.fm integration in Settings</span>
+          </li>
+        </ul>
+        <button
+          onClick={() => navigate("/settings")}
+          className="btn btn-primary"
+        >
+          Go to Settings
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10 pb-12">
@@ -289,7 +353,7 @@ function DiscoverPage() {
                 Music Discovery
               </h1>
               <p className="text-gray-600 dark:text-gray-300 max-w-xl text-lg">
-                Curated recommendations updated daily based on your Lidarr
+                Curated recommendations updated daily based on your library
                 library.
               </p>
             </div>
@@ -345,7 +409,7 @@ function DiscoverPage() {
         </div>
       </section>
 
-      {requests.length > 0 && (
+      {requests.filter(r => r.status !== 'available').length > 0 && (
         <section className="animate-slide-up">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
@@ -361,25 +425,36 @@ function DiscoverPage() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-            {requests.slice(0, 6).map((request) => (
-              <ArtistCard
-                key={request.mbid}
-                status={request.status}
-                artist={{
-                  id: request.mbid,
-                  name: request.name,
-                  image: request.image,
-                  subtitle: `Requested ${new Date(
-                    request.requestedAt,
-                  ).toLocaleDateString()}`,
-                }}
-              />
-            ))}
+            {requests.filter(r => r.status !== 'available').slice(0, 6).map((request) => {
+              // Check if artist is in library using artistMbid
+              const artistMbid = request.artistMbid || request.mbid;
+              const isArtistInLibrary = existingArtists[artistMbid];
+              
+              return (
+                <ArtistCard
+                  key={request.id || request.mbid}
+                  status={request.status}
+                  artist={{
+                    id: request.albumMbid || request.mbid, // Use album MBID for image lookup
+                    name: request.type === 'album' ? request.albumName : request.name, // Show album name if album request
+                    image: request.image,
+                    subtitle: request.type === 'album' 
+                      ? `${request.artistName} • ${new Date(request.requestedAt).toLocaleDateString()}`
+                      : `Requested ${new Date(request.requestedAt).toLocaleDateString()}`,
+                    // Pass artistMbid for checking if artist is in library and for navigation
+                    artistMbid: artistMbid,
+                    isArtistInLibrary: isArtistInLibrary,
+                    // For album requests, navigate to artist page
+                    navigateTo: request.type === 'album' ? artistMbid : (request.albumMbid || request.mbid),
+                  }}
+                />
+              );
+            })}
           </div>
         </section>
       )}
 
-      {recentlyAdded.length > 0 && (
+      {(recentlyAdded.length > 0 || requests.filter(r => r.status === 'available').length > 0) && (
         <section
           className="animate-slide-up"
           style={{ animationDelay: "0.1s" }}
@@ -392,19 +467,56 @@ function DiscoverPage() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-            {recentlyAdded.slice(0, 6).map((artist) => (
-              <ArtistCard
-                key={artist.id}
-                status="available"
-                artist={{
-                  id: artist.foreignArtistId,
-                  name: artist.artistName,
-                  image: getLidarrArtistImage(artist),
-                  type: "Artist",
-                  subtitle: `Added ${new Date(artist.added).toLocaleDateString()}`,
-                }}
-              />
-            ))}
+            {/* Show completed album requests first */}
+            {requests
+              .filter(r => r.status === 'available')
+              .slice(0, 6)
+              .map((request) => {
+                const artistMbid = request.artistMbid || request.mbid;
+                const isArtistInLibrary = existingArtists[artistMbid];
+                
+                return (
+                  <ArtistCard
+                    key={`request-${request.id || request.mbid}`}
+                    status="available"
+                    artist={{
+                      id: request.albumMbid || request.mbid, // Use album MBID for image lookup
+                      name: request.type === 'album' ? request.albumName : request.name,
+                      image: request.image,
+                      subtitle: request.type === 'album' 
+                        ? `${request.artistName} • ${new Date(request.requestedAt).toLocaleDateString()}`
+                        : `Added ${new Date(request.requestedAt).toLocaleDateString()}`,
+                      artistMbid: artistMbid,
+                      isArtistInLibrary: isArtistInLibrary,
+                      // For album requests, navigate to artist page
+                      navigateTo: request.type === 'album' ? artistMbid : (request.albumMbid || request.mbid),
+                    }}
+                  />
+                );
+              })}
+            {/* Then show recently added artists (if any slots remaining) */}
+            {recentlyAdded
+              .slice(0, Math.max(0, 6 - requests.filter(r => r.status === 'available').length))
+              .map((artist) => {
+                const artistMbid = artist.mbid || artist.foreignArtistId;
+                const isArtistInLibrary = existingArtists[artistMbid];
+                
+                return (
+                  <ArtistCard
+                    key={`artist-${artist.id}`}
+                    status="available"
+                    artist={{
+                      id: artist.foreignArtistId || artist.mbid,
+                      name: artist.artistName,
+                      image: getLibraryArtistImage(artist),
+                      type: "Artist",
+                      subtitle: `Added ${new Date(artist.added || artist.addedAt).toLocaleDateString()}`,
+                      artistMbid: artistMbid,
+                      isArtistInLibrary: isArtistInLibrary,
+                    }}
+                  />
+                );
+              })}
           </div>
         </section>
       )}

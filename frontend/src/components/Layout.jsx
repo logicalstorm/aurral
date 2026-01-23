@@ -3,7 +3,12 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Search, Menu } from "lucide-react";
 import Sidebar from "./Sidebar";
 
-function Layout({ children, isHealthy, lidarrConfigured, lidarrStatus }) {
+function Layout({
+  children,
+  isHealthy,
+  rootFolderConfigured,
+  slskdConfigured,
+}) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
@@ -23,16 +28,10 @@ function Layout({ children, isHealthy, lidarrConfigured, lidarrStatus }) {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-sans antialiased transition-colors duration-200">
-      <Sidebar
-        isHealthy={isHealthy}
-        lidarrConfigured={lidarrConfigured}
-        lidarrStatus={lidarrStatus}
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-      />
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
-      <div className="md:ml-64 flex flex-col min-h-screen transition-all duration-300 ease-in-out">
-        <header className="sticky top-0 z-30 px-4 py-3 md:px-6 bg-gray-50/90 dark:bg-gray-950/90 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 flex items-center gap-4">
+      <div className="md:ml-52 flex flex-col min-h-screen transition-all duration-300 ease-in-out">
+        <header className="sticky h-16 top-0 z-30 px-4 py-3 md:px-6 bg-gray-50/90 dark:bg-gray-950/90 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 flex items-center gap-4">
           <button
             onClick={() => setIsSidebarOpen(true)}
             className="p-2 -ml-2 text-gray-500 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-800 rounded-lg md:hidden"
@@ -40,7 +39,7 @@ function Layout({ children, isHealthy, lidarrConfigured, lidarrStatus }) {
           >
             <Menu className="w-5 h-5" />
           </button>
-          
+
           <form onSubmit={handleSearch} className="relative w-full">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-5 w-5 text-gray-400 dark:text-gray-500" />
@@ -63,14 +62,6 @@ function Layout({ children, isHealthy, lidarrConfigured, lidarrStatus }) {
           <div className="max-w-[1600px] mx-auto px-6 md:px-8 lg:px-10 flex flex-col md:flex-row justify-between items-center text-sm text-gray-500 dark:text-gray-400">
             <p>&copy; {new Date().getFullYear()} Aurral.</p>
             <div className="flex items-center space-x-6 mt-4 md:mt-0">
-              <a
-                href="https://github.com/Lidarr/Lidarr"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-primary-500 transition-colors"
-              >
-                Lidarr Project
-              </a>
               <a
                 href="https://musicbrainz.org"
                 target="_blank"

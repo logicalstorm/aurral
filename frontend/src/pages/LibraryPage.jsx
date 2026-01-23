@@ -3,13 +3,11 @@ import { useNavigate } from "react-router-dom";
 import {
   Loader,
   Music,
-  ExternalLink,
-  Trash2,
   AlertCircle,
   RefreshCw,
-  ChevronDown,
+  Search,
 } from "lucide-react";
-import { getLidarrArtists, deleteArtistFromLidarr } from "../utils/api";
+import { getLibraryArtists, scanLibrary, getAllDownloadStatus } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
 import { useToast } from "../contexts/ToastContext";
 
@@ -17,26 +15,24 @@ function LibraryPage() {
   const [artists, setArtists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [deletingArtist, setDeletingArtist] = useState(null);
-  const [artistToDelete, setArtistToDelete] = useState(null);
-  const [deleteFiles, setDeleteFiles] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("name");
   const [currentPage, setCurrentPage] = useState(1);
-  const [dropdownOpen, setDropdownOpen] = useState(null);
+  const [scanning, setScanning] = useState(false);
+  const [downloadStatuses, setDownloadStatuses] = useState({});
   const ITEMS_PER_PAGE = 50;
   const navigate = useNavigate();
-  const { showSuccess, showError } = useToast();
+  const { showSuccess, showError, showInfo } = useToast();
 
   const fetchArtists = async (forceRefresh = false) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getLidarrArtists(forceRefresh);
+      const data = await getLibraryArtists();
       setArtists(data);
     } catch (err) {
       setError(
-        err.response?.data?.message || "Failed to fetch artists from Lidarr",
+        err.response?.data?.message || "Failed to fetch artists from library",
       );
     } finally {
       setLoading(false);
@@ -45,38 +41,50 @@ function LibraryPage() {
 
   useEffect(() => {
     fetchArtists();
+    
+    // Poll download status every 5 seconds
+    const pollDownloadStatus = async () => {
+      try {
+        const statuses = await getAllDownloadStatus();
+        setDownloadStatuses(statuses);
+      } catch (error) {
+        console.error("Failed to fetch download status:", error);
+      }
+    };
+    
+    pollDownloadStatus();
+    const interval = setInterval(pollDownloadStatus, 5000);
+    
+    // Refresh artists list periodically to catch deletions
+    const refreshInterval = setInterval(() => {
+      fetchArtists();
+    }, 10000); // Refresh every 10 seconds
+    
+    return () => {
+      clearInterval(interval);
+      clearInterval(refreshInterval);
+    };
   }, []);
 
-  const handleDeleteClick = (artist) => {
-    setArtistToDelete(artist);
-    setDeleteFiles(false);
-  };
 
-  const handleDeleteCancel = () => {
-    setArtistToDelete(null);
-    setDeleteFiles(false);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!artistToDelete) return;
-
-    setDeletingArtist(artistToDelete.id);
+  const handleDiscoverAndScan = async () => {
+    if (scanning) return;
+    
+    setScanning(true);
     try {
-      await deleteArtistFromLidarr(artistToDelete.id, deleteFiles);
-      setArtists((prev) => prev.filter((a) => a.id !== artistToDelete.id));
+      showInfo("Discovering artists from your music folder... This may take a few minutes.");
+      const result = await scanLibrary(true);
       showSuccess(
-        `Successfully removed ${artistToDelete.artistName} from Lidarr${
-          deleteFiles ? " and deleted files" : ""
-        }`,
+        `Discovery complete! Found ${result.artists || 0} artists, ${result.filesScanned || 0} files scanned.`
       );
-      setArtistToDelete(null);
-      setDeleteFiles(false);
+      // Refresh the library
+      await fetchArtists(true);
     } catch (err) {
       showError(
-        `Failed to delete artist: ${err.response?.data?.message || err.message}`,
+        `Failed to discover library: ${err.response?.data?.message || err.message}`,
       );
     } finally {
-      setDeletingArtist(null);
+      setScanning(false);
     }
   };
 
@@ -133,7 +141,8 @@ function LibraryPage() {
       if (image && artist.id) {
         const coverType = image.coverType || "poster";
         const filename = `${coverType}.jpg`;
-        return `/api/lidarr/mediacover/${artist.id}/${filename}`;
+        // Images are handled through the image service
+        return null;
       }
 
       return image?.remoteUrl || image?.url || null;
@@ -141,32 +150,6 @@ function LibraryPage() {
     return null;
   };
 
-  const getMonitoringStatus = (artist) => {
-    // Get the monitoring option (none, all, future, missing, latest, first)
-    const monitorOption = artist.addOptions?.monitor || artist.monitorNewItems || "none";
-    
-    const monitorLabels = {
-      none: "None (Artist Only)",
-      all: "All Albums",
-      future: "Future Albums",
-      missing: "Missing Albums",
-      latest: "Latest Album",
-      first: "First Album",
-    };
-    
-    const label = monitorLabels[monitorOption] || "Unknown";
-    
-    // Color based on whether artist is monitored and what the option is
-    if (!artist.monitored) {
-      return { label: "Unmonitored", color: "gray", option: monitorOption };
-    }
-    
-    if (monitorOption === "none") {
-      return { label, color: "gray", option: monitorOption };
-    }
-    
-    return { label, color: "green", option: monitorOption };
-  };
 
   return (
     <div className="animate-fade-in">
@@ -182,16 +165,30 @@ function LibraryPage() {
                 : `${artists.length} artist${artists.length !== 1 ? "s" : ""} in your collection`}
             </p>
           </div>
-          <button
-            onClick={() => fetchArtists(true)}
-            disabled={loading}
-            className="btn btn-secondary btn-sm mt-2 md:mt-0 disabled:opacity-50"
-          >
-            <RefreshCw
-              className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`}
-            />
-            Refresh
-          </button>
+          <div className="flex gap-2 mt-2 md:mt-0">
+            {artists.length === 0 && (
+              <button
+                onClick={handleDiscoverAndScan}
+                disabled={scanning || loading}
+                className="btn btn-primary btn-sm disabled:opacity-50"
+              >
+                <Search
+                  className={`w-4 h-4 mr-2 ${scanning ? "animate-spin" : ""}`}
+                />
+                {scanning ? "Discovering..." : "Discover from Files"}
+              </button>
+            )}
+            <button
+              onClick={() => fetchArtists(true)}
+              disabled={loading}
+              className="btn btn-secondary btn-sm disabled:opacity-50"
+            >
+              <RefreshCw
+                className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`}
+              />
+              Refresh
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-2">
@@ -248,14 +245,26 @@ function LibraryPage() {
             No Artists in Library
           </h3>
           <p className="text-gray-500 dark:text-gray-400 mb-6">
-            Your Lidarr library is empty. Start by searching and adding artists.
+            Your library is empty. Discover artists from your music folder or search and add them manually.
           </p>
-          <button
-            onClick={() => navigate("/search")}
-            className="btn btn-primary"
-          >
-            Search for Artists
-          </button>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={handleDiscoverAndScan}
+              disabled={scanning}
+              className="btn btn-primary"
+            >
+              <Search
+                className={`w-4 h-4 mr-2 ${scanning ? "animate-spin" : ""}`}
+              />
+              {scanning ? "Discovering..." : "Discover from Files"}
+            </button>
+            <button
+              onClick={() => navigate("/search")}
+              className="btn btn-secondary"
+            >
+              Search for Artists
+            </button>
+          </div>
         </div>
       )}
 
@@ -267,18 +276,20 @@ function LibraryPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
             {currentArtists.map((artist) => {
               const image = getArtistImage(artist);
-              const status = getMonitoringStatus(artist);
+              // Check if artist is monitored (monitored = true and monitorOption !== 'none')
+              const monitorOption = artist.addOptions?.monitor || artist.monitorNewItems || artist.monitorOption || "none";
+              const isMonitored = artist.monitored && monitorOption !== "none";
 
               return (
                 <div
                   key={artist.id}
-                  className="card hover:shadow-md transition-shadow group p-3"
+                  className="group relative"
                 >
                   <div
-                    className="w-full aspect-square bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden cursor-pointer mb-2"
+                    className="relative aspect-square bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden cursor-pointer mb-2 shadow-sm group-hover:shadow-md transition-all"
                     onClick={() =>
                       navigate(`/artist/${artist.foreignArtistId}`)
                     }
@@ -290,11 +301,23 @@ function LibraryPage() {
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                       showLoading={false}
                     />
+                    
+                    {/* Monitoring dot indicator */}
+                    <div className="absolute top-2 right-2">
+                      <div
+                        className={`w-3 h-3 rounded-full ${
+                          isMonitored
+                            ? "bg-green-500"
+                            : "bg-gray-400"
+                        } shadow-md`}
+                        title={isMonitored ? "Monitored" : "Unmonitored"}
+                      />
+                    </div>
                   </div>
 
                   {/* Artist Name */}
                   <h3
-                    className="text-sm font-semibold text-gray-900 dark:text-gray-100 group-hover:text-primary-500 transition-colors cursor-pointer truncate mb-1.5"
+                    className="text-sm font-semibold text-gray-900 dark:text-gray-100 group-hover:text-primary-500 transition-colors cursor-pointer truncate text-center"
                     onClick={() =>
                       navigate(`/artist/${artist.foreignArtistId}`)
                     }
@@ -302,78 +325,6 @@ function LibraryPage() {
                   >
                     {artist.artistName}
                   </h3>
-
-                  <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400 mb-2">
-                    <span>{artist.statistics?.albumCount || 0} albums</span>
-                    <span>{artist.statistics?.trackCount || 0} tracks</span>
-                  </div>
-
-                  {/* Status Badge and Actions */}
-                  <div className="flex items-center justify-between">
-                    <span
-                      className={`badge text-xs ${
-                        status.color === "green"
-                          ? "badge-success"
-                          : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
-                      }`}
-                      title={status.option ? `Monitoring: ${status.option}` : status.label}
-                    >
-                      {status.label}
-                    </span>
-                    <div className="relative">
-                      <button
-                        onClick={() =>
-                          setDropdownOpen(
-                            dropdownOpen === artist.id ? null : artist.id
-                          )
-                        }
-                        className="btn btn-secondary text-xs py-1 px-2"
-                        title="Options"
-                      >
-                        <ChevronDown
-                          className={`w-3 h-3 transition-transform ${
-                            dropdownOpen === artist.id ? "rotate-180" : ""
-                          }`}
-                        />
-                      </button>
-                      {dropdownOpen === artist.id && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-10"
-                            onClick={() => setDropdownOpen(null)}
-                          />
-                          <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-20 py-1">
-                            <a
-                              href={`https://musicbrainz.org/artist/${artist.foreignArtistId}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={() => setDropdownOpen(null)}
-                              className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center"
-                            >
-                              <ExternalLink className="w-4 h-4 mr-2" />
-                              View on MusicBrainz
-                            </a>
-                            <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
-                            <button
-                              onClick={() => {
-                                handleDeleteClick(artist);
-                                setDropdownOpen(null);
-                              }}
-                              disabled={deletingArtist === artist.id}
-                              className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center disabled:opacity-50"
-                            >
-                              {deletingArtist === artist.id ? (
-                                <Loader className="w-4 h-4 mr-2 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-4 h-4 mr-2" />
-                              )}
-                              Remove from Lidarr
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
                 </div>
               );
             })}
@@ -423,65 +374,6 @@ function LibraryPage() {
             </button>
           </div>
         )}
-
-      {artistToDelete && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
-            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
-              Remove Artist from Lidarr
-            </h3>
-            <p className="text-gray-700 dark:text-gray-300 mb-6">
-              Are you sure you want to remove{" "}
-              <span className="font-semibold">{artistToDelete.artistName}</span>{" "}
-              from Lidarr?
-            </p>
-
-            <div className="mb-6">
-              <label className="flex items-start space-x-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={deleteFiles}
-                  onChange={(e) => setDeleteFiles(e.target.checked)}
-                  className="mt-1 form-checkbox h-5 w-5 text-primary-600 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700"
-                />
-                <div className="flex-1">
-                  <span className="text-gray-900 dark:text-gray-100 font-medium">
-                    Delete artist folder and files
-                  </span>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    This will permanently delete the artist's folder and all music
-                    files from your disk. This action cannot be undone.
-                  </p>
-                </div>
-              </label>
-            </div>
-
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={handleDeleteCancel}
-                disabled={deletingArtist === artistToDelete.id}
-                className="btn btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteConfirm}
-                disabled={deletingArtist === artistToDelete.id}
-                className="btn btn-danger"
-              >
-                {deletingArtist === artistToDelete.id ? (
-                  <>
-                    <Loader className="w-4 h-4 mr-2 animate-spin" />
-                    Removing...
-                  </>
-                ) : (
-                  "Remove Artist"
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

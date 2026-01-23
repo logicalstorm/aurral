@@ -59,6 +59,11 @@ export const getArtistDetails = async (mbid) => {
   return response.data;
 };
 
+export const getReleaseGroupTracks = async (mbid) => {
+  const response = await api.get(`/artists/release-group/${mbid}/tracks`);
+  return response.data;
+};
+
 export const getArtistCover = async (mbid) => {
   const response = await api.get(`/artists/${mbid}/cover`);
   return response.data;
@@ -76,126 +81,166 @@ export const getSimilarArtistsForArtist = async (mbid, limit = 20) => {
   return response.data;
 };
 
-export const getLidarrArtists = async (forceRefresh = false) => {
-  const response = await api.get("/lidarr/artists", {
-    params: forceRefresh ? { refresh: "true" } : {},
-  });
+// Library API functions
+export const getLibraryArtists = async () => {
+  const response = await api.get("/library/artists");
   return response.data;
 };
 
-export const getLidarrArtist = async (id, forceRefresh = false) => {
-  const response = await api.get(`/lidarr/artists/${id}`, {
-    params: forceRefresh ? { refresh: "true" } : {},
-  });
-  return response.data;
-};
-
-export const lookupArtistInLidarr = async (mbid, forceRefresh = false) => {
-  const response = await api.get(`/lidarr/lookup/${mbid}`, {
-    params: forceRefresh ? { refresh: "true" } : {},
-  });
-  return response.data;
-};
-
-export const invalidateLidarrCache = async () => {
-  // This is a no-op on the frontend, but we can call the backend to invalidate
-  // The backend route doesn't exist yet, but we can add it if needed
-  return Promise.resolve();
-};
-
-export const lookupArtistsInLidarrBatch = async (mbids) => {
-  const response = await api.post("/lidarr/lookup/batch", { mbids });
-  return response.data;
-};
-
-export const addArtistToLidarr = async (artistData) => {
-  const response = await api.post("/lidarr/artists", artistData);
-  return response.data;
-};
-
-export const deleteArtistFromLidarr = async (id, deleteFiles = false) => {
-  const response = await api.delete(`/lidarr/artists/${id}`, {
+export const clearLibrary = async (deleteFiles = false) => {
+  const response = await api.delete("/library/clear", {
     params: { deleteFiles },
   });
   return response.data;
 };
 
-export const deleteAlbumFromLidarr = async (id, deleteFiles = false) => {
-  const response = await api.delete(`/lidarr/albums/${id}`, {
+export const getLibraryArtist = async (mbid) => {
+  const response = await api.get(`/library/artists/${mbid}`);
+  const artist = response.data;
+  // Ensure foreignArtistId is set for compatibility
+  if (artist && !artist.foreignArtistId) {
+    artist.foreignArtistId = artist.mbid;
+  }
+  return artist;
+};
+
+export const lookupArtistInLibrary = async (mbid) => {
+  const response = await api.get(`/library/lookup/${mbid}`);
+  return response.data;
+};
+
+export const lookupArtistsInLibraryBatch = async (mbids) => {
+  const response = await api.post("/library/lookup/batch", { mbids });
+  return response.data;
+};
+
+export const addArtistToLibrary = async (artistData) => {
+  const response = await api.post("/library/artists", artistData);
+  return response.data;
+};
+
+export const deleteArtistFromLibrary = async (mbid, deleteFiles = false) => {
+  const response = await api.delete(`/library/artists/${mbid}`, {
     params: { deleteFiles },
   });
   return response.data;
 };
 
-export const getLidarrRootFolders = async () => {
-  const response = await api.get("/lidarr/rootfolder");
+export const deleteAlbumFromLibrary = async (id, deleteFiles = false) => {
+  const response = await api.delete(`/library/albums/${id}`, {
+    params: { deleteFiles },
+  });
   return response.data;
 };
 
-export const getLidarrQualityProfiles = async () => {
-  const response = await api.get("/lidarr/qualityprofile");
+export const getLibraryRootFolders = async () => {
+  const response = await api.get("/library/rootfolder");
   return response.data;
 };
 
-export const getLidarrMetadataProfiles = async () => {
-  const response = await api.get("/lidarr/metadataprofile");
+export const getLibraryQualityProfiles = async () => {
+  const response = await api.get("/library/qualityprofile");
   return response.data;
 };
 
-export const getLidarrAlbums = async (artistId) => {
-  const response = await api.get("/lidarr/albums", {
+
+export const getLibraryAlbums = async (artistId) => {
+  const response = await api.get("/library/albums", {
     params: { artistId },
   });
+  // Ensure foreignAlbumId is set
+  return response.data.map(album => ({
+    ...album,
+    foreignAlbumId: album.foreignAlbumId || album.mbid,
+  }));
+};
+
+export const addLibraryAlbum = async (artistId, releaseGroupMbid, albumName) => {
+  const response = await api.post("/library/albums", {
+    artistId,
+    releaseGroupMbid,
+    albumName,
+  });
   return response.data;
 };
 
-export const getLidarrTracks = async (albumId) => {
-  const response = await api.get("/lidarr/tracks", {
+export const getLibraryTracks = async (albumId) => {
+  const response = await api.get("/library/tracks", {
     params: { albumId },
   });
   return response.data;
 };
 
-export const updateLidarrAlbum = async (id, data) => {
-  const response = await api.put(`/lidarr/albums/${id}`, data);
+export const updateLibraryAlbum = async (id, data) => {
+  const response = await api.put(`/library/albums/${id}`, data);
   return response.data;
 };
 
-export const updateLidarrAlbumsMonitor = async (albumIds, monitored) => {
-  const response = await api.put("/lidarr/albums/monitor", {
-    albumIds,
-    monitored,
+export const updateLibraryArtist = async (mbid, data) => {
+  const response = await api.put(`/library/artists/${mbid}`, data);
+  return response.data;
+};
+
+export const downloadAlbum = async (artistId, albumId, options = {}) => {
+  const response = await api.post("/library/downloads/album", { 
+    artistId, 
+    albumId,
+    artistMbid: options.artistMbid,
+    artistName: options.artistName,
   });
   return response.data;
 };
 
-export const updateLidarrArtist = async (id, data) => {
-  const response = await api.put(`/lidarr/artists/${id}`, data);
+export const downloadTrack = async (artistId, trackId) => {
+  const response = await api.post("/library/downloads/track", { artistId, trackId });
   return response.data;
 };
 
-export const searchLidarrAlbum = async (albumIds) => {
-  const response = await api.post("/lidarr/command/albumsearch", { albumIds });
+export const getDownloadStatus = async (albumIds) => {
+  const ids = Array.isArray(albumIds) ? albumIds.join(',') : albumIds;
+  const response = await api.get(`/library/downloads/status?albumIds=${ids}`);
   return response.data;
 };
 
-export const refreshLidarrArtist = async (artistId) => {
-  const response = await api.post("/lidarr/command/refreshartist", { artistId });
+export const getAllDownloadStatus = async () => {
+  const response = await api.get("/library/downloads/status/all");
   return response.data;
 };
+
+export const scanLibrary = async (discover = false) => {
+  const response = await api.post("/library/scan", { discover });
+  return response.data;
+};
+
+export const refreshLibraryArtist = async (mbid) => {
+  const response = await api.post(`/library/artists/${mbid}/refresh`);
+  return response.data;
+};
+
 
 export const getRequests = async () => {
   const response = await api.get("/requests");
   return response.data;
 };
 
-export const deleteRequest = async (mbid) => {
-  const response = await api.delete(`/requests/${mbid}`);
-  return response.data;
+export const deleteRequest = async (id) => {
+  // Check if it's a UUID (MBID format) or an album ID
+  // UUID format: 8-4-4-4-12 hex characters
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  
+  if (uuidRegex.test(id)) {
+    // It's a UUID/MBID - use the legacy endpoint
+    const response = await api.delete(`/requests/${id}`);
+    return response.data;
+  } else {
+    // It's an album ID - use the album endpoint
+    const response = await api.delete(`/requests/album/${id}`);
+    return response.data;
+  }
 };
 
 export const getRecentlyAdded = async () => {
-  const response = await api.get("/lidarr/recent");
+  const response = await api.get("/library/recent");
   return response.data;
 };
 
@@ -252,10 +297,6 @@ export const updateAppSettings = async (settings) => {
   return response.data;
 };
 
-export const applyLidarrOptimizations = async (options) => {
-  const response = await api.post("/lidarr/optimize", options);
-  return response.data;
-};
 
 export const getWeeklyFlow = async () => {
   const response = await api.get("/playlists/weekly");
@@ -263,7 +304,7 @@ export const getWeeklyFlow = async () => {
 };
 
 export const toggleWeeklyFlow = async (enabled) => {
-  const response = await api.post("/api/playlists/weekly/toggle", { enabled });
+  const response = await api.post("/playlists/weekly/toggle", { enabled });
   return response.data;
 };
 

@@ -1,30 +1,26 @@
 import { Link, useLocation } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
 import {
   Library,
   Settings,
   Sparkles,
-  Moon,
-  Sun,
   Music,
   Menu,
   X,
   History,
   LogOut,
-  Play
+  Play,
 } from "lucide-react";
-import { useTheme } from "../contexts/ThemeContext";
 import { useAuth } from "../contexts/AuthContext";
 
-function Sidebar({
-  isHealthy,
-  lidarrConfigured,
-  lidarrStatus,
-  isOpen,
-  onClose,
-}) {
+function Sidebar({ isOpen, onClose }) {
   const location = useLocation();
-  const { theme, toggleTheme } = useTheme();
   const { authRequired, logout } = useAuth();
+  const navRef = useRef(null);
+  const activeBubbleRef = useRef(null);
+  const hoverBubbleRef = useRef(null);
+  const [hoveredIndex, setHoveredIndex] = useState(null);
+  const linkRefs = useRef({});
 
   const isActive = (path) => {
     if (path === "/discover" && location.pathname === "/") return true;
@@ -39,6 +35,75 @@ function Sidebar({
     { path: "/settings", label: "Settings", icon: Settings },
   ];
 
+  // Update bubble position for active link
+  useEffect(() => {
+    const updateBubblePosition = () => {
+      if (!navRef.current || !activeBubbleRef.current) return;
+
+      const activeIndex = navItems.findIndex((item) => isActive(item.path));
+      if (activeIndex === -1) {
+        // Hide bubble if no active item
+        activeBubbleRef.current.style.opacity = "0";
+        return;
+      }
+
+      const activeLink = linkRefs.current[activeIndex];
+      if (!activeLink) {
+        // Wait a bit for DOM to update
+        setTimeout(updateBubblePosition, 50);
+        return;
+      }
+
+      const navRect = navRef.current.getBoundingClientRect();
+      const linkRect = activeLink.getBoundingClientRect();
+
+      activeBubbleRef.current.style.left = `${linkRect.left - navRect.left}px`;
+      activeBubbleRef.current.style.top = `${linkRect.top - navRect.top}px`;
+      activeBubbleRef.current.style.width = `${linkRect.width}px`;
+      activeBubbleRef.current.style.height = `${linkRect.height}px`;
+      activeBubbleRef.current.style.opacity = "1";
+    };
+
+    // Initial update with slight delay to ensure DOM is ready
+    const timeoutId = setTimeout(updateBubblePosition, 10);
+    window.addEventListener("resize", updateBubblePosition);
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener("resize", updateBubblePosition);
+    };
+  }, [location.pathname, navItems, isOpen]);
+
+  // Update hover bubble position
+  useEffect(() => {
+    const updateHoverBubble = () => {
+      if (!navRef.current || !hoverBubbleRef.current) return;
+
+      if (hoveredIndex === null) {
+        // Cover entire nav container when not hovering - more subtle/washed out
+        hoverBubbleRef.current.style.left = "0px";
+        hoverBubbleRef.current.style.top = "0px";
+        hoverBubbleRef.current.style.width = "100%";
+        hoverBubbleRef.current.style.height = "100%";
+        hoverBubbleRef.current.style.opacity = "0.6";
+        return;
+      }
+
+      const hoveredLink = linkRefs.current[hoveredIndex];
+      if (!hoveredLink) return;
+
+      const navRect = navRef.current.getBoundingClientRect();
+      const linkRect = hoveredLink.getBoundingClientRect();
+
+      hoverBubbleRef.current.style.left = `${linkRect.left - navRect.left}px`;
+      hoverBubbleRef.current.style.top = `${linkRect.top - navRect.top}px`;
+      hoverBubbleRef.current.style.width = `${linkRect.width}px`;
+      hoverBubbleRef.current.style.height = `${linkRect.height}px`;
+      hoverBubbleRef.current.style.opacity = "1";
+    };
+
+    updateHoverBubble();
+  }, [hoveredIndex]);
+
   return (
     <>
       {isOpen && (
@@ -49,120 +114,88 @@ function Sidebar({
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col border-r border-gray-200 dark:border-gray-800 transition-transform duration-300 ease-in-out pl-safe pt-safe pb-safe ${
+        className={`fixed inset-y-0 left-0 z-50 w-52 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col border-r border-gray-200 dark:border-gray-800 transition-transform duration-300 ease-in-out pl-safe pt-safe pb-safe ${
           isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
       >
-        <div className="h-16 flex items-center justify-between px-6 border-b border-gray-200 dark:border-b-gray-800">
-          <Link to="/" className="flex items-center space-x-3 group">
+        <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200 dark:border-b-gray-800">
+          <Link to="/" className="flex items-center space-x-2 group">
             <img
               src="/arralogo.svg"
               alt="Aurral Logo"
-              className="w-8 h-8 transition-transform group-hover:scale-110"
+              className="w-7 h-7 transition-transform group-hover:scale-110"
             />
-            <span className="text-xl font-bold tracking-tight text-gray-900 dark:text-gray-100 group-hover:text-primary-500 transition-colors">
+            <span className="text-lg font-bold tracking-tight text-gray-900 dark:text-gray-100 group-hover:text-primary-500 transition-colors">
               Aurral
             </span>
           </Link>
-          <button
-            onClick={onClose}
-            className="md:hidden p-2 -mr-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
-            aria-label="Close navigation"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item.path);
+        <div className="flex-1 px-3 py-6 overflow-y-auto flex items-start justify-center">
+          <div
+            ref={navRef}
+            className="relative bg-gray-100 dark:bg-gray-900 p-1.5"
+          >
+            {/* Active bubble */}
+            <div
+              ref={activeBubbleRef}
+              className="absolute bg-gray-100 dark:bg-gray-400 transition-all duration-300 ease-out z-10 opacity-0"
+            />
 
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`flex items-center space-x-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 group ${
-                  active
-                    ? "bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-500/20"
-                    : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 border border-transparent"
-                }`}
-              >
-                <Icon
-                  className={`w-5 h-5 transition-transform group-hover:scale-110 ${
-                    active
-                      ? "text-primary-600 dark:text-primary-400"
-                      : "text-gray-500 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-gray-100"
-                  }`}
-                />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
+            {/* Hover bubble - covers entire nav by default, shrinks to hovered link */}
+            <div
+              ref={hoverBubbleRef}
+              className="absolute bg-gray-200 dark:bg-gray-800 transition-all duration-200 ease-out z-0"
+            />
 
-        <div className="p-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
-          <div className="flex flex-col space-y-4">
-            <div className="flex items-center justify-between px-2">
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                System Status
-              </span>
-              <div className="flex items-center space-x-2">
-                <div
-                  className={`w-2 h-2 rounded-full ${
-                    isHealthy === null
-                      ? "bg-gray-400 dark:bg-gray-500"
-                      : isHealthy && lidarrConfigured && lidarrStatus === "connected"
-                        ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"
-                        : isHealthy && lidarrConfigured && lidarrStatus !== "connected"
-                           ? "bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]"
-                        : isHealthy
-                          ? "bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)]"
-                          : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]"
-                  }`}
-                />
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  {isHealthy === null
-                    ? "Checking..."
-                    : isHealthy && lidarrConfigured && lidarrStatus === "connected"
-                      ? "Online"
-                       : isHealthy && lidarrConfigured && lidarrStatus !== "connected"
-                        ? "Lidarr Down"
-                      : isHealthy
-                        ? "Config"
-                        : "Offline"}
-                </span>
-              </div>
-            </div>
-
-            <button
-              onClick={toggleTheme}
-              className="flex items-center justify-center w-full px-4 py-2 space-x-2 text-sm font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors shadow-sm"
+            <nav
+              className="relative flex flex-col space-y-1"
+              onMouseLeave={() => setHoveredIndex(null)}
             >
-              {theme === "dark" ? (
-                <>
-                  <Sun className="w-4 h-4" />
-                  <span>Light Mode</span>
-                </>
-              ) : (
-                <>
-                  <Moon className="w-4 h-4" />
-                  <span>Dark Mode</span>
-                </>
-              )}
-            </button>
-            
-            {authRequired && (
-              <button
-                onClick={logout}
-                className="flex items-center justify-center w-full px-4 py-2 space-x-2 text-sm font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors shadow-sm"
-              >
-                <LogOut className="w-4 h-4" />
-                <span>Logout</span>
-              </button>
-            )}
+              {navItems.map((item, index) => {
+                const Icon = item.icon;
+                const active = isActive(item.path);
+
+                return (
+                  <Link
+                    key={item.path}
+                    ref={(el) => {
+                      if (el) linkRefs.current[index] = el;
+                    }}
+                    to={item.path}
+                    onMouseEnter={() => setHoveredIndex(index)}
+                    className={`relative z-20 flex items-center space-x-2.5 px-4 py-2.5 rounded-lg font-medium transition-all duration-200 text-sm ${
+                      active
+                        ? "text-gray-800 dark:text-gray-800"
+                        : "text-gray-400 dark:text-gray-500 hover:text-gray-300 dark:hover:text-gray-400"
+                    }`}
+                  >
+                    <Icon
+                      className={`w-4 h-4 transition-transform group-hover:scale-110 flex-shrink-0 ${
+                        active
+                          ? "text-gray-800 dark:text-gray-800"
+                          : "text-gray-400 dark:text-gray-500"
+                      }`}
+                    />
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
           </div>
         </div>
+
+        {authRequired && (
+          <div className="p-3 border-t border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
+            <button
+              onClick={logout}
+              className="flex items-center justify-center w-full px-3 py-2 space-x-2 text-xs font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors shadow-sm"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Logout</span>
+            </button>
+          </div>
+        )}
       </aside>
     </>
   );

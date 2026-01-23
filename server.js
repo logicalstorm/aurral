@@ -9,18 +9,22 @@ import { fileURLToPath } from "url";
 
 import { db } from "./backend/config/db.js";
 import { createAuthMiddleware } from "./backend/middleware/auth.js";
-import { probeLidarrUrl } from "./backend/services/apiClients.js";
 import { updateDiscoveryCache, getDiscoveryCache } from "./backend/services/discoveryService.js";
 
 import settingsRouter from "./backend/routes/settings.js";
 import artistsRouter from "./backend/routes/artists.js";
-import lidarrRouter from "./backend/routes/lidarr.js";
+import libraryRouter from "./backend/routes/library.js";
 import discoveryRouter from "./backend/routes/discovery.js";
 import requestsRouter from "./backend/routes/requests.js";
 import playlistsRouter from "./backend/routes/playlists.js";
 import healthRouter from "./backend/routes/health.js";
 
-dotenv.config();
+// Get __dirname for .env file path
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load .env file from the backend directory
+dotenv.config({ path: path.join(__dirname, 'backend', '.env') });
 
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error);
@@ -29,9 +33,6 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -53,7 +54,7 @@ app.use("/api/", limiter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/search", artistsRouter);
 app.use("/api/artists", artistsRouter);
-app.use("/api/lidarr", lidarrRouter);
+app.use("/api/library", libraryRouter);
 app.use("/api/discover", discoveryRouter);
 app.use("/api/requests", requestsRouter);
 app.use("/api/playlists", playlistsRouter);
@@ -85,8 +86,36 @@ setInterval(() => {
   });
 }, 24 * 60 * 60 * 1000);
 
-setTimeout(() => {
-  const lastUpdated = db.data.discovery?.lastUpdated;
+setTimeout(async () => {
+  const { getLastfmApiKey } = await import("./backend/services/apiClients.js");
+  const { libraryManager } = await import("./backend/services/libraryManager.js");
+  
+  const hasLastfm = !!getLastfmApiKey();
+  const libraryArtists = libraryManager.getAllArtists();
+  const hasArtists = libraryArtists.length > 0;
+  
+  // If nothing is configured, clear discovery cache
+  if (!hasLastfm && !hasArtists) {
+    console.log("Discovery not configured (no Last.fm key and no artists). Clearing cache.");
+    if (db.data?.discovery) {
+      db.data.discovery = {
+        recommendations: [],
+        globalTop: [],
+        basedOn: [],
+        topTags: [],
+        topGenres: [],
+        lastUpdated: null,
+      };
+      try {
+        await db.write();
+      } catch (error) {
+        console.error("Failed to clear discovery cache:", error.message);
+      }
+    }
+    return;
+  }
+  
+  const lastUpdated = db.data?.discovery?.lastUpdated;
   const discoveryCache = getDiscoveryCache();
   const hasRecommendations = discoveryCache.recommendations && discoveryCache.recommendations.length > 0;
   const hasGenres = discoveryCache.topGenres && discoveryCache.topGenres.length > 0;
@@ -112,21 +141,14 @@ setTimeout(() => {
 const server = app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   try {
-    const { getLidarrConfig, getLidarrBasepathDetected } = await import("./backend/services/apiClients.js");
-    const { url, apiKey } = getLidarrConfig();
-    console.log(`Lidarr URL (configured): ${url}`);
-    console.log(`Lidarr API Key configured: ${!!apiKey}`);
-
-    if (apiKey) {
-      try {
-        await probeLidarrUrl();
-        if (getLidarrBasepathDetected()) {
-          console.log(`Lidarr URL (resolved): ${url}/lidarr`);
-        }
-      } catch (error) {
-        console.warn("Lidarr probe failed (this is okay if Lidarr isn't running):", error.message);
-      }
-    }
+    const { libraryManager } = await import("./backend/services/libraryManager.js");
+    const { slskdClient } = await import("./backend/services/slskdClient.js");
+    const { downloadManager } = await import("./backend/services/downloadManager.js");
+    
+    const rootFolder = libraryManager.getRootFolder();
+    console.log(`Root folder: ${rootFolder || 'Not configured'}`);
+    console.log(`slskd configured: ${slskdClient.isConfigured()}`);
+    console.log(`Download manager initialized`);
   } catch (error) {
     console.error("Error during server startup:", error.message);
   }
