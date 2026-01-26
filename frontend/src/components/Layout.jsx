@@ -54,7 +54,11 @@ function Layout({
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search artists..."
               className="block w-full pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 transition-shadow shadow-sm"
-              style={{ focusRingColor: "#c1c1c3", backgroundColor: "#211f27", color: "#fff" }}
+              style={{
+                focusRingColor: "#c1c1c3",
+                backgroundColor: "#211f27",
+                color: "#fff",
+              }}
             />
           </form>
         </header>

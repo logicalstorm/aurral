@@ -30,6 +30,8 @@ export const createAuthMiddleware = () => {
 
   return (req, res, next) => {
     if (req.path === "/api/health") return next();
+    // Skip auth for streaming endpoints (they handle auth manually via token query param)
+    if (req.path.endsWith("/stream")) return next();
     return auth(req, res, next);
   };
 };
