@@ -25,8 +25,11 @@ const ProtectedRoute = ({ children }) => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="animate-spin h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div
+          className="animate-spin h-12 w-12"
+          style={{ borderBottom: "2px solid #707e61" }}
+        ></div>
       </div>
     );
   }
@@ -71,10 +74,10 @@ function AppContent() {
           slskdConfigured={slskdConfigured}
         >
           {isHealthy === false && (
-            <div className="mb-6 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-500/20 p-4">
+            <div className="mb-6 bg-red-500/20 border border-red-500/30 p-4">
               <div className="flex items-center">
                 <svg
-                  className="w-5 h-5 text-red-500 mr-3"
+                  className="w-5 h-5 text-red-400 mr-3"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -84,7 +87,7 @@ function AppContent() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <p className="text-red-800 dark:text-red-400 font-medium">
+                <p className="text-red-400 font-medium">
                   Unable to connect to the backend API. Please check your
                   configuration.
                 </p>
@@ -93,10 +96,10 @@ function AppContent() {
           )}
 
           {isHealthy && !rootFolderConfigured && (
-            <div className="mb-6 bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-500/20 p-4">
+            <div className="mb-6 bg-yellow-500/20 p-4">
               <div className="flex items-center">
                 <svg
-                  className="w-5 h-5 text-yellow-500 mr-3"
+                  className="w-5 h-5 text-yellow-400 mr-3"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -106,7 +109,7 @@ function AppContent() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <p className="text-yellow-800 dark:text-yellow-400 font-medium">
+                <p className="text-yellow-400 font-medium">
                   Root folder is not configured. Please configure your music
                   library root folder in settings.
                 </p>

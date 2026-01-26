@@ -116,18 +116,27 @@ function Sidebar({ isOpen, onClose }) {
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-52 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col border-r border-gray-200 dark:border-gray-800 transition-transform duration-300 ease-in-out pl-safe pt-safe pb-safe ${
+        className={`fixed inset-y-0 left-0 z-50 w-52 flex flex-col transition-transform duration-300 ease-in-out pl-safe pt-safe pb-safe ${
           isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
+        style={{ backgroundColor: "#18181c" }}
       >
-        <div className="h-16 flex items-center justify-center px-4 border-b border-gray-200 dark:border-b-gray-800">
+        <div className="h-16 flex items-center justify-center px-4">
           <Link to="/" className="flex items-center space-x-2 group">
             <img
               src="/arralogo.svg"
               alt="Aurral Logo"
               className="w-7 h-7 transition-transform group-hover:scale-110"
+              style={{
+                filter:
+                  "brightness(0) saturate(100%) invert(45%) sepia(8%) saturate(800%) hue-rotate(60deg) brightness(95%) contrast(85%)",
+              }}
             />
-            <span className="text-lg font-bold tracking-tight text-gray-900 dark:text-gray-100 group-hover:text-primary-500 transition-colors">
+            {/* Logo uses brand color filter - this is the secondary brand color instance */}
+            <span
+              className="text-lg font-bold tracking-tight transition-colors"
+              style={{ color: "#fff" }}
+            >
               Aurral
             </span>
           </Link>
@@ -136,18 +145,21 @@ function Sidebar({ isOpen, onClose }) {
         <div className="flex-1 px-3 py-6 overflow-y-auto flex items-start justify-center">
           <div
             ref={navRef}
-            className="relative bg-gray-100 dark:bg-gray-900 p-1.5"
+            className="relative p-1.5"
+            style={{ backgroundColor: "#0f0f12" }}
           >
             {/* Active bubble */}
             <div
               ref={activeBubbleRef}
-              className="absolute bg-gray-100 dark:bg-gray-400 transition-all duration-300 ease-out z-10 opacity-0"
+              className="absolute transition-all duration-300 ease-out z-10 opacity-0"
+              style={{ backgroundColor: "#707e61", opacity: "0.2" }}
             />
 
             {/* Hover bubble - covers entire nav by default, shrinks to hovered link */}
             <div
               ref={hoverBubbleRef}
-              className="absolute bg-gray-200 dark:bg-gray-800 transition-all duration-200 ease-out z-0"
+              className="absolute transition-all duration-200 ease-out z-0"
+              style={{ backgroundColor: "#1a1a1e" }}
             />
 
             <nav
@@ -166,18 +178,12 @@ function Sidebar({ isOpen, onClose }) {
                     }}
                     to={item.path}
                     onMouseEnter={() => setHoveredIndex(index)}
-                    className={`relative z-20 flex items-center space-x-2.5 px-4 py-2.5 font-medium transition-all duration-200 text-sm ${
-                      active
-                        ? "text-gray-800 dark:text-gray-800"
-                        : "text-gray-400 dark:text-gray-500 hover:text-gray-300 dark:hover:text-gray-400"
-                    }`}
+                    className="relative z-20 flex items-center space-x-2.5 px-4 py-2.5 font-medium transition-all duration-200 text-sm"
+                    style={{ color: "#fff" }}
                   >
                     <Icon
-                      className={`w-4 h-4 transition-transform group-hover:scale-110 flex-shrink-0 ${
-                        active
-                          ? "text-gray-800 dark:text-gray-800"
-                          : "text-gray-400 dark:text-gray-500"
-                      }`}
+                      className="w-4 h-4 transition-transform group-hover:scale-110 flex-shrink-0"
+                      style={{ color: "#fff" }}
                     />
                     <span className="truncate">{item.label}</span>
                   </Link>
@@ -188,10 +194,11 @@ function Sidebar({ isOpen, onClose }) {
         </div>
 
         {authRequired && (
-          <div className="p-3 border-t border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
+          <div className="p-3">
             <button
               onClick={logout}
-              className="flex items-center justify-center w-full px-3 py-2 space-x-2 text-xs font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
+              className="flex items-center justify-center w-full px-3 py-2 space-x-2 text-xs font-medium transition-colors shadow-sm"
+              style={{ backgroundColor: "#211f27", color: "#fff" }}
             >
               <LogOut className="w-4 h-4" />
               <span>Logout</span>
@@ -199,12 +206,13 @@ function Sidebar({ isOpen, onClose }) {
           </div>
         )}
 
-        <div className="p-3 border-t border-gray-200 dark:border-gray-800 flex items-center justify-center space-x-3">
+        <div className="p-3 flex items-center justify-center space-x-3">
           <a
             href="https://github.com/lklynet/aurral"
             target="_blank"
             rel="noopener noreferrer"
-            className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+            className="p-2 transition-colors"
+            style={{ color: "#c1c1c3" }}
             aria-label="GitHub Repository"
           >
             <Github className="w-4 h-4" />
@@ -213,7 +221,8 @@ function Sidebar({ isOpen, onClose }) {
             href="https://github.com/sponsors/lklynet/"
             target="_blank"
             rel="noopener noreferrer"
-            className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+            className="p-2 transition-colors"
+            style={{ color: "#c1c1c3" }}
             aria-label="GitHub Sponsors"
           >
             <Heart className="w-4 h-4" />

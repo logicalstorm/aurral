@@ -108,7 +108,7 @@ function FlowPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="animate-spin h-12 w-12 border-b-2 border-primary-600"></div>
+        <div className="animate-spin h-12 w-12 "></div>
       </div>
     );
   }
@@ -117,23 +117,26 @@ function FlowPage() {
     <div className="animate-fade-in space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
-            <Play className="w-8 h-8 text-primary-500 mr-3 fill-current" />
+          <h1
+            className="text-3xl font-bold flex items-center"
+            style={{ color: "#fff" }}
+          >
             Weekly Discovery
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
+          <p className="mt-1" style={{ color: "#c1c1c3" }}>
             Automated weekly rotation. "Ephemeral" items are deleted next week
             unless kept.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <span className="text-sm font-medium" style={{ color: "#fff" }}>
             {flow.enabled ? "Active" : "Disabled"}
           </span>
           <button
             onClick={handleToggle}
             disabled={toggling}
-            className={`text-4xl transition-colors ${flow.enabled ? "text-primary-600" : "text-gray-400"}`}
+            className="text-4xl transition-colors"
+            style={{ color: flow.enabled ? "#707e61" : "#c1c1c3" }}
           >
             {flow.enabled ? (
               <ToggleRight className="w-10 h-10 fill-current" />
@@ -145,7 +148,7 @@ function FlowPage() {
       </div>
 
       {flow.updatedAt && (
-        <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+        <div className="flex items-center text-sm" style={{ color: "#c1c1c3" }}>
           <Clock className="w-4 h-4 mr-1" />
           Last updated: {new Date(flow.updatedAt).toLocaleString()}
         </div>
@@ -153,11 +156,14 @@ function FlowPage() {
 
       {!flow.enabled && flow.items.length === 0 ? (
         <div className="card text-center py-12">
-          <Music className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-          <h3 className="text-xl font-medium text-gray-900 dark:text-gray-100 mb-2">
+          <Music
+            className="w-16 h-16 mx-auto mb-4"
+            style={{ color: "#c1c1c3" }}
+          />
+          <h3 className="text-xl font-medium mb-2" style={{ color: "#fff" }}>
             Weekly Discovery is Disabled
           </h3>
-          <p className="text-gray-500 dark:text-gray-400 mb-6">
+          <p className="mb-6" style={{ color: "#c1c1c3" }}>
             Enable it to start receiving a fresh playlist every Monday.
           </p>
           <button onClick={handleToggle} className="btn btn-primary">
@@ -166,11 +172,14 @@ function FlowPage() {
         </div>
       ) : flow.items.length === 0 ? (
         <div className="card text-center py-12">
-          <Music className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-          <h3 className="text-xl font-medium text-gray-900 dark:text-gray-100 mb-2">
+          <Music
+            className="w-16 h-16 mx-auto mb-4"
+            style={{ color: "#c1c1c3" }}
+          />
+          <h3 className="text-xl font-medium mb-2" style={{ color: "#fff" }}>
             No playlist yet
           </h3>
-          <p className="text-gray-500 dark:text-gray-400 mb-6">
+          <p className="mb-6" style={{ color: "#c1c1c3" }}>
             Generate your first weekly discovery playlist now, or wait for
             automatic generation on Monday.
           </p>
@@ -181,7 +190,7 @@ function FlowPage() {
           >
             {generating ? (
               <>
-                <div className="animate-spin h-4 w-4 border-b-2 border-white mr-2 inline-block"></div>
+                <div className="animate-spin h-4 w-4 "></div>
                 Generating...
               </>
             ) : (
@@ -198,10 +207,13 @@ function FlowPage() {
             <div
               key={item.mbid}
               className={`card group relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 ${
-                !item.isEphemeral ? "border-green-500/20 bg-green-50/10" : ""
+                !item.isEphemeral ? "" : ""
               }`}
             >
-              <div className="aspect-square relative overflow-hidden mb-4 bg-gray-100 dark:bg-gray-800">
+              <div
+                className="aspect-square relative overflow-hidden mb-4"
+                style={{ backgroundColor: "#211f27" }}
+              >
                 <ArtistImage
                   mbid={item.mbid}
                   name={item.artistName}
@@ -225,27 +237,28 @@ function FlowPage() {
               </div>
 
               <div>
-                <h3 className="font-bold text-gray-900 dark:text-gray-100 truncate">
+                <h3 className="font-bold truncate" style={{ color: "#fff" }}>
                   {item.trackName}
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                <p className="text-sm truncate" style={{ color: "#c1c1c3" }}>
                   {item.artistName}
                 </p>
                 <div className="flex items-center justify-between mt-3">
                   <div className="flex items-center gap-2">
                     {item.isEphemeral ? (
-                      <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 flex items-center">
+                      <span className="text-xs px-2 py-1 bg-yellow-500/20 text-yellow-400 flex items-center">
                         <Clock className="w-3 h-3 mr-1" /> Ephemeral
                       </span>
                     ) : (
-                      <span className="text-xs px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 flex items-center">
+                      <span className="text-xs px-2 py-1 bg-green-500/20 text-green-400 flex items-center">
                         <CheckCircle className="w-3 h-3 mr-1" /> Kept
                       </span>
                     )}
                   </div>
                   <button
                     onClick={() => handleRemove(item.mbid)}
-                    className="text-gray-400 hover:text-red-500 transition-colors p-1"
+                    className="hover:text-red-400 transition-colors p-1"
+                    style={{ color: "#c1c1c3" }}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
