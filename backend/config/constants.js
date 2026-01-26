@@ -56,6 +56,7 @@ export const defaultData = {
       lastfm: { username: "" },
       slskd: { url: "", apiKey: "" },
       musicbrainz: { email: "" },
+      spotify: { clientId: "", clientSecret: "" },
       general: { authUser: "", authPassword: "" },
     },
     queueCleaner: {

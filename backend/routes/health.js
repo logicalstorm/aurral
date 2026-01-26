@@ -1,5 +1,5 @@
 import express from "express";
-import { getLastfmApiKey } from "../services/apiClients.js";
+import { getLastfmApiKey, getSpotifyClientId, getSpotifyClientSecret } from "../services/apiClients.js";
 import { getAuthUser, getAuthPassword } from "../middleware/auth.js";
 import { getDiscoveryCache } from "../services/discoveryService.js";
 import { libraryManager } from "../services/libraryManager.js";
@@ -24,6 +24,7 @@ router.get("/", async (req, res) => {
       slskdConfigured,
       lastfmConfigured: !!getLastfmApiKey(),
       musicbrainzConfigured: !!(db.data?.settings?.integrations?.musicbrainz?.email || process.env.CONTACT_EMAIL),
+      spotifyConfigured: !!(getSpotifyClientId() && getSpotifyClientSecret()),
       library: {
         artistCount: libraryManager.getAllArtists().length,
         lastScan: db.data?.library?.lastScan || null,
