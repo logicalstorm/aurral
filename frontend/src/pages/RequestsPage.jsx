@@ -10,6 +10,7 @@ import {
   ExternalLink,
   ArrowLeft,
   RefreshCw,
+  History,
 } from "lucide-react";
 import { getRequests, deleteRequest, getAllDownloadStatus } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
@@ -95,7 +96,7 @@ function RequestsPage() {
 
     if (request.status === "available") {
       return (
-        <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+        <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase bg-green-500/20 text-green-400">
           <CheckCircle2 className="w-3.5 h-3.5" />
           Available
         </span>
@@ -104,7 +105,10 @@ function RequestsPage() {
 
     if (request.status === "processing" || hasActiveDownloads) {
       return (
-        <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+        <span
+          className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase"
+          style={{ backgroundColor: "#211f27", color: "#c1c1c3" }}
+        >
           <Loader className="w-3.5 h-3.5 animate-spin" />
           {hasActiveDownloads ? "Downloading..." : "Processing"}
         </span>
@@ -112,8 +116,7 @@ function RequestsPage() {
     }
 
     return (
-      <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
-        <Clock className="w-3.5 h-3.5" />
+      <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase bg-yellow-500/20 text-yellow-400">
         Requested
       </span>
     );
@@ -122,8 +125,11 @@ function RequestsPage() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-32">
-        <Loader className="w-12 h-12 text-primary-500 animate-spin mb-4" />
-        <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-300">
+        <Loader
+          className="w-12 h-12 animate-spin mb-4"
+          style={{ color: "#c1c1c3" }}
+        />
+        <h2 className="text-xl font-semibold" style={{ color: "#fff" }}>
           Loading your requests...
         </h2>
       </div>
@@ -136,15 +142,18 @@ function RequestsPage() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate(-1)}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="p-2 hover:bg-gray-900/50 transition-colors"
           >
             <ArrowLeft className="w-6 h-6" />
           </button>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+            <h1
+              className="text-3xl font-bold flex items-center"
+              style={{ color: "#fff" }}
+            >
               Requests
             </h1>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p style={{ color: "#c1c1c3" }}>
               Track your album requests and their availability
             </p>
           </div>
@@ -163,19 +172,22 @@ function RequestsPage() {
       </div>
 
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-500/20 p-4 flex items-center gap-3 mb-8">
-          <AlertCircle className="w-5 h-5 text-red-500" />
-          <p className="text-red-800 dark:text-red-400">{error}</p>
+        <div className="bg-red-500/20 ">
+          <AlertCircle className="w-5 h-5 text-red-400" />
+          <p className="text-red-400">{error}</p>
         </div>
       )}
 
       {requests.length === 0 ? (
         <div className="card text-center py-20">
-          <Music className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">
+          <Music
+            className="w-16 h-16 mx-auto mb-4"
+            style={{ color: "#c1c1c3" }}
+          />
+          <h3 className="text-xl font-semibold mb-2" style={{ color: "#fff" }}>
             No Requests Found
           </h3>
-          <p className="text-gray-500 dark:text-gray-400 mb-6">
+          <p className="mb-6" style={{ color: "#c1c1c3" }}>
             You haven't requested any albums yet.
           </p>
           <button onClick={() => navigate("/")} className="btn btn-primary">
@@ -196,10 +208,11 @@ function RequestsPage() {
             return (
               <div
                 key={request.id || request.mbid}
-                className="card group hover:shadow-md transition-all border border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row items-center gap-4 sm:gap-6 min-w-0"
+                className="card group hover:shadow-md transition-all "
               >
                 <div
-                  className="w-24 h-24 flex-shrink-0 bg-gray-200 dark:bg-gray-800 overflow-hidden cursor-pointer"
+                  className="w-24 h-24 flex-shrink-0 overflow-hidden cursor-pointer"
+                  style={{ backgroundColor: "#211f27" }}
                   onClick={() =>
                     navigate(
                       isAlbum
@@ -219,7 +232,8 @@ function RequestsPage() {
                 <div className="flex-1 text-center sm:text-left min-w-0">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-1 min-w-0">
                     <h3
-                      className="text-xl font-bold text-gray-900 dark:text-gray-100 hover:text-primary-500 cursor-pointer truncate"
+                      className="text-xl font-bold hover:underline cursor-pointer truncate"
+                      style={{ color: "#fff" }}
                       onClick={() =>
                         navigate(
                           isAlbum
@@ -235,7 +249,10 @@ function RequestsPage() {
                     </div>
                   </div>
 
-                  <div className="text-sm text-gray-500 dark:text-gray-400 flex flex-col sm:flex-row sm:items-center gap-x-4 gap-y-1 min-w-0">
+                  <div
+                    className="text-sm flex flex-col sm:flex-row sm:items-center gap-x-4 gap-y-1 min-w-0"
+                    style={{ color: "#c1c1c3" }}
+                  >
                     {isAlbum && artistName && (
                       <span className="flex items-center justify-center sm:justify-start gap-1 truncate">
                         <Music className="w-3.5 h-3.5" />
@@ -266,7 +283,8 @@ function RequestsPage() {
                           : `/artist/${request.mbid}`,
                       )
                     }
-                    className="p-2.5 text-gray-500 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-all"
+                    className="p-2.5 hover:bg-gray-900/50 transition-all"
+                    style={{ color: "#fff" }}
                     title={isAlbum ? "View Artist" : "View Artist"}
                   >
                     <ExternalLink className="w-5 h-5" />
@@ -285,7 +303,8 @@ function RequestsPage() {
                         handleDelete(request.mbid, displayName);
                       }
                     }}
-                    className="p-2.5 text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+                    className="p-2.5 hover:text-red-400 hover:bg-red-500/20 transition-all"
+                    style={{ color: "#fff" }}
                     title="Remove from history"
                   >
                     <Trash2 className="w-5 h-5" />
@@ -297,26 +316,29 @@ function RequestsPage() {
         </div>
       )}
 
-      <div className="mt-12 p-6 bg-primary-50 dark:bg-primary-900/10 border border-primary-100 dark:border-primary-500/10">
-        <h4 className="font-bold text-primary-900 dark:text-primary-400 mb-2">
+      <div className="mt-12 p-6" style={{ backgroundColor: "#211f27" }}>
+        <h4
+          className="font-bold mb-2 flex items-center"
+          style={{ color: "#fff" }}
+        >
           Request Status Guide
         </h4>
         <div className="grid sm:grid-cols-3 gap-4 text-sm">
-          <div className="flex gap-2 text-gray-600 dark:text-gray-400">
+          <div className="flex gap-2" style={{ color: "#c1c1c3" }}>
             <div className="w-2 h-2 bg-yellow-500 mt-1.5 shrink-0"></div>
             <p>
               <strong>Requested:</strong> Artist has been added to library and
               is awaiting monitoring/search.
             </p>
           </div>
-          <div className="flex gap-2 text-gray-600 dark:text-gray-400">
-            <div className="w-2 h-2 bg-blue-500 mt-1.5 shrink-0"></div>
+          <div className="flex gap-2" style={{ color: "#c1c1c3" }}>
+            <div className="w-2 h-2 bg-gray-600 mt-1.5 shrink-0"></div>
             <p>
               <strong>Processing:</strong> Artist is in library but content is
               still being downloaded.
             </p>
           </div>
-          <div className="flex gap-2 text-gray-600 dark:text-gray-400">
+          <div className="flex gap-2" style={{ color: "#c1c1c3" }}>
             <div className="w-2 h-2 bg-green-500 mt-1.5 shrink-0"></div>
             <p>
               <strong>Available:</strong> Content is available on disk and ready

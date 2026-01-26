@@ -234,32 +234,49 @@ function SettingsPage() {
       case "general":
         return (
           <div className="card animate-fade-in">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6 flex items-center">
-              <Database className="w-6 h-6 mr-2 text-primary-500" />
+            <h2
+              className="text-2xl font-bold mb-6 flex items-center"
+              style={{ color: "#fff" }}
+            >
               Default Artist Options
             </h2>
             <form onSubmit={handleSaveSettings} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label
+                  className="block text-sm font-medium mb-1"
+                  style={{ color: "#fff" }}
+                >
                   Music Library Path
                 </label>
-                <div className="input bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 cursor-not-allowed">
+                <div
+                  className="input cursor-not-allowed"
+                  style={{ backgroundColor: "#211f27", color: "#c1c1c3" }}
+                >
                   /data
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                <p className="text-xs mt-1" style={{ color: "#c1c1c3" }}>
                   Music library is stored at{" "}
-                  <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded">
+                  <code
+                    className="px-1 py-0.5 rounded"
+                    style={{ backgroundColor: "#211f27" }}
+                  >
                     /data
                   </code>
                   . In Docker, remap this path using volume mounts:{" "}
-                  <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded">
+                  <code
+                    className="px-1 py-0.5 rounded"
+                    style={{ backgroundColor: "#211f27" }}
+                  >
                     /your/path:/data
                   </code>
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label
+                  className="block text-sm font-medium mb-1"
+                  style={{ color: "#fff" }}
+                >
                   Quality Preset
                 </label>
                 <select
@@ -278,9 +295,10 @@ function SettingsPage() {
                   </option>
                   <option value="max">Max (FLAC only)</option>
                 </select>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Quality presets filter downloads by format: Standard allows MP3 320kbps and FLAC, Max allows FLAC only. 
-                  These settings are applied when searching and downloading from slskd.
+                <p className="text-xs mt-1" style={{ color: "#c1c1c3" }}>
+                  Quality presets filter downloads by format: Standard allows
+                  MP3 320kbps and FLAC, Max allows FLAC only. These settings are
+                  applied when searching and downloading from slskd.
                 </p>
               </div>
 
@@ -301,18 +319,26 @@ function SettingsPage() {
       case "integrations":
         return (
           <div className="card animate-fade-in">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6 flex items-center">
-              <Link className="w-6 h-6 mr-2 text-primary-500" />
+            <h2
+              className="text-2xl font-bold mb-6 flex items-center"
+              style={{ color: "#fff" }}
+            >
               Integrations & Security
             </h2>
             <form onSubmit={handleSaveSettings} className="space-y-6">
               <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center">
+                <h3
+                  className="text-lg font-medium flex items-center"
+                  style={{ color: "#fff" }}
+                >
                   <Server className="w-5 h-5 mr-2" /> slskd
                 </h3>
                 <div className="grid grid-cols-1 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <label
+                      className="block text-sm font-medium mb-1"
+                      style={{ color: "#fff" }}
+                    >
                       Server URL
                     </label>
                     <input
@@ -335,7 +361,10 @@ function SettingsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <label
+                      className="block text-sm font-medium mb-1"
+                      style={{ color: "#fff" }}
+                    >
                       API Key
                     </label>
                     <input
@@ -356,19 +385,25 @@ function SettingsPage() {
                         })
                       }
                     />
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
                       Found in Settings &rarr; General.
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-6 space-y-4">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center">
+              <div className="">
+                <h3
+                  className="text-lg font-medium flex items-center"
+                  style={{ color: "#fff" }}
+                >
                   <Music className="w-5 h-5 mr-2" /> Subsonic / Navidrome
                 </h3>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label
+                    className="block text-sm font-medium mb-1"
+                    style={{ color: "#fff" }}
+                  >
                     Server URL
                   </label>
                   <input
@@ -392,7 +427,10 @@ function SettingsPage() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <label
+                      className="block text-sm font-medium mb-1"
+                      style={{ color: "#fff" }}
+                    >
                       Username
                     </label>
                     <input
@@ -414,7 +452,10 @@ function SettingsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <label
+                      className="block text-sm font-medium mb-1"
+                      style={{ color: "#fff" }}
+                    >
                       Password
                     </label>
                     <input
@@ -438,12 +479,18 @@ function SettingsPage() {
                 </div>
               </div>
 
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center mb-4">
+              <div className="">
+                <h3
+                  className="text-lg font-medium flex items-center mb-4"
+                  style={{ color: "#fff" }}
+                >
                   <TrendingUp className="w-5 h-5 mr-2" /> MusicBrainz
                 </h3>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label
+                    className="block text-sm font-medium mb-1"
+                    style={{ color: "#fff" }}
+                  >
                     Contact Email (Required)
                   </label>
                   <input
@@ -464,18 +511,24 @@ function SettingsPage() {
                       })
                     }
                   />
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
                     Required by MusicBrainz API to identify the application.
                   </p>
                 </div>
               </div>
 
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center mb-4">
+              <div className="">
+                <h3
+                  className="text-lg font-medium flex items-center mb-4"
+                  style={{ color: "#fff" }}
+                >
                   <TrendingUp className="w-5 h-5 mr-2" /> Last.fm API
                 </h3>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label
+                    className="block text-sm font-medium mb-1"
+                    style={{ color: "#fff" }}
+                  >
                     API Key
                   </label>
                   <input
@@ -496,20 +549,26 @@ function SettingsPage() {
                       })
                     }
                   />
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
                     Required for high-quality images, better recommendations,
                     and weekly flow.
                   </p>
                 </div>
               </div>
 
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center mb-4">
+              <div className="">
+                <h3
+                  className="text-lg font-medium flex items-center mb-4"
+                  style={{ color: "#fff" }}
+                >
                   <Shield className="w-5 h-5 mr-2" /> Authentication
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <label
+                      className="block text-sm font-medium mb-1"
+                      style={{ color: "#fff" }}
+                    >
                       App Username
                     </label>
                     <input
@@ -532,7 +591,10 @@ function SettingsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <label
+                      className="block text-sm font-medium mb-1"
+                      style={{ color: "#fff" }}
+                    >
                       App Password
                     </label>
                     <input
@@ -575,32 +637,35 @@ function SettingsPage() {
         return (
           <div className="space-y-8 animate-fade-in">
             <div className="card">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4 flex items-center">
-                <Info className="w-6 h-6 mr-2" />
+              <h2
+                className="text-2xl font-bold mb-4 flex items-center"
+                style={{ color: "#fff" }}
+              >
                 System Status
               </h2>
               {loading ? (
-                <div className="text-gray-500 dark:text-gray-400">
-                  Loading...
-                </div>
+                <div style={{ color: "#c1c1c3" }}>Loading...</div>
               ) : health ? (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800">
-                    <span className="font-medium text-gray-700 dark:text-gray-300">
+                  <div
+                    className="flex items-center justify-between p-4"
+                    style={{ backgroundColor: "#211f27" }}
+                  >
+                    <span className="font-medium" style={{ color: "#fff" }}>
                       Backend API
                     </span>
                     <div className="flex items-center">
                       {health.status === "ok" ? (
                         <>
                           <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
-                          <span className="text-green-700 dark:text-green-400 font-medium">
+                          <span className="text-green-400 font-medium">
                             Connected
                           </span>
                         </>
                       ) : (
                         <>
-                          <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
-                          <span className="text-red-700 dark:text-red-400 font-medium">
+                          <AlertCircle className="w-5 h-5 text-red-400 mr-2" />
+                          <span className="text-red-400 font-medium">
                             Disconnected
                           </span>
                         </>
@@ -608,22 +673,28 @@ function SettingsPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800">
-                    <span className="font-medium text-gray-700 dark:text-gray-300">
+                  <div
+                    className="flex items-center justify-between p-4"
+                    style={{ backgroundColor: "#211f27" }}
+                  >
+                    <span className="font-medium" style={{ color: "#fff" }}>
                       slskd Connection
                     </span>
                     <div className="flex items-center">
                       {health?.slskdConfigured ? (
                         <>
                           <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
-                          <span className="text-green-700 dark:text-green-400 font-medium">
+                          <span className="text-green-400 font-medium">
                             Connected
                           </span>
                         </>
                       ) : (
                         <>
                           <AlertCircle className="w-5 h-5 text-yellow-500 mr-2" />
-                          <span className="text-yellow-700 dark:text-yellow-400 font-medium">
+                          <span
+                            className="font-medium"
+                            style={{ color: "#c1c1c3" }}
+                          >
                             Not Configured
                           </span>
                         </>
@@ -631,22 +702,25 @@ function SettingsPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800">
-                    <span className="font-medium text-gray-700 dark:text-gray-300">
+                  <div
+                    className="flex items-center justify-between p-4"
+                    style={{ backgroundColor: "#211f27" }}
+                  >
+                    <span className="font-medium" style={{ color: "#fff" }}>
                       MusicBrainz API
                     </span>
                     <div className="flex items-center">
                       {health.musicbrainzConfigured ? (
                         <>
                           <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
-                          <span className="text-green-700 dark:text-green-400 font-medium">
+                          <span className="text-green-400 font-medium">
                             Configured
                           </span>
                         </>
                       ) : (
                         <>
                           <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
-                          <span className="text-red-700 dark:text-red-400 font-medium">
+                          <span className="text-red-400 font-medium">
                             Missing Email
                           </span>
                         </>
@@ -654,22 +728,31 @@ function SettingsPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800">
-                    <span className="font-medium text-gray-700 dark:text-gray-300">
+                  <div
+                    className="flex items-center justify-between p-4"
+                    style={{ backgroundColor: "#211f27" }}
+                  >
+                    <span className="font-medium" style={{ color: "#fff" }}>
                       Last.fm API
                     </span>
                     <div className="flex items-center">
                       {health.lastfmConfigured ? (
                         <>
                           <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
-                          <span className="text-green-700 dark:text-green-400 font-medium">
+                          <span className="text-green-400 font-medium">
                             Configured
                           </span>
                         </>
                       ) : (
                         <>
-                          <AlertCircle className="w-5 h-5 text-gray-400 mr-2" />
-                          <span className="text-gray-500 dark:text-gray-400 font-medium">
+                          <AlertCircle
+                            className="w-5 h-5 mr-2"
+                            style={{ color: "#c1c1c3" }}
+                          />
+                          <span
+                            className="font-medium"
+                            style={{ color: "#c1c1c3" }}
+                          >
                             Optional
                           </span>
                         </>
@@ -678,34 +761,38 @@ function SettingsPage() {
                   </div>
 
                   {health.timestamp && (
-                    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800">
-                      <span className="font-medium text-gray-700 dark:text-gray-300">
+                    <div
+                      className="flex items-center justify-between p-4"
+                      style={{ backgroundColor: "#211f27" }}
+                    >
+                      <span className="font-medium" style={{ color: "#fff" }}>
                         Last Checked
                       </span>
-                      <span className="text-gray-600 dark:text-gray-400">
+                      <span style={{ color: "#c1c1c3" }}>
                         {new Date(health.timestamp).toLocaleString()}
                       </span>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="text-red-600 dark:text-red-400">
-                  Failed to load health status
-                </div>
+                <div className="text-red-400">Failed to load health status</div>
               )}
             </div>
 
             {health?.discovery && (
               <div className="card">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
+                  <h3
+                    className="text-sm font-semibold uppercase tracking-wider"
+                    style={{ color: "#c1c1c3" }}
+                  >
                     Discovery Engine
                   </h3>
                   <div className="flex gap-2">
                     <button
                       onClick={handleClearCache}
                       disabled={clearingCache || health.discovery.isUpdating}
-                      className="btn btn-secondary btn-sm text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
+                      className="btn btn-secondary btn-sm text-red-400 hover:text-red-300"
                     >
                       <Trash2 className="w-3.5 h-3.5 mr-2" />
                       Clear Cache
@@ -726,8 +813,11 @@ function SettingsPage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-                  <div className="p-3 bg-gray-50 dark:bg-gray-800">
-                    <div className="flex items-center text-gray-500 dark:text-gray-400 text-xs mb-1">
+                  <div className="p-3" style={{ backgroundColor: "#211f27" }}>
+                    <div
+                      className="flex items-center text-xs mb-1"
+                      style={{ color: "#c1c1c3" }}
+                    >
                       <Sparkles className="w-3 h-3 mr-1" /> Recommendations
                     </div>
                     <div className="text-xl font-bold">
@@ -735,8 +825,11 @@ function SettingsPage() {
                     </div>
                   </div>
 
-                  <div className="p-3 bg-gray-50 dark:bg-gray-800">
-                    <div className="flex items-center text-gray-500 dark:text-gray-400 text-xs mb-1">
+                  <div className="p-3" style={{ backgroundColor: "#211f27" }}>
+                    <div
+                      className="flex items-center text-xs mb-1"
+                      style={{ color: "#c1c1c3" }}
+                    >
                       <TrendingUp className="w-3 h-3 mr-1" /> Global Top
                     </div>
                     <div className="text-xl font-bold">
@@ -744,8 +837,11 @@ function SettingsPage() {
                     </div>
                   </div>
 
-                  <div className="p-3 bg-gray-50 dark:bg-gray-800">
-                    <div className="flex items-center text-gray-500 dark:text-gray-400 text-xs mb-1">
+                  <div className="p-3" style={{ backgroundColor: "#211f27" }}>
+                    <div
+                      className="flex items-center text-xs mb-1"
+                      style={{ color: "#c1c1c3" }}
+                    >
                       <Image className="w-3 h-3 mr-1" /> Cached Images
                     </div>
                     <div className="text-xl font-bold">
@@ -755,7 +851,10 @@ function SettingsPage() {
                 </div>
 
                 {health.discovery.lastUpdated && (
-                  <div className="text-xs text-gray-400 text-right">
+                  <div
+                    className="text-xs text-right"
+                    style={{ color: "#c1c1c3" }}
+                  >
                     Cache last built:{" "}
                     {new Date(health.discovery.lastUpdated).toLocaleString()}
                   </div>
@@ -771,22 +870,25 @@ function SettingsPage() {
                   className="w-12 h-12"
                 />
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  <h2 className="text-2xl font-bold" style={{ color: "#fff" }}>
                     About Aurral
                   </h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                  <p className="text-sm" style={{ color: "#c1c1c3" }}>
                     Version 1.0.0
                   </p>
                 </div>
               </div>
-              <div className="space-y-4 text-gray-700 dark:text-gray-300">
+              <div className="space-y-4" style={{ color: "#fff" }}>
                 <p>
                   Aurral is a streamlined artist request manager designed to
                   simplify expanding your music library.
                 </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6 pt-6 border-t border-gray-100 dark:border-gray-800">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6 pt-6 ">
                   <div>
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
+                    <h4
+                      className="text-xs font-semibold uppercase tracking-wider mb-2"
+                      style={{ color: "#c1c1c3" }}
+                    >
                       Data Sources
                     </h4>
                     <ul className="text-sm space-y-1">
@@ -797,7 +899,10 @@ function SettingsPage() {
                     </ul>
                   </div>
                   <div>
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
+                    <h4
+                      className="text-xs font-semibold uppercase tracking-wider mb-2"
+                      style={{ color: "#c1c1c3" }}
+                    >
                       Stack
                     </h4>
                     <p className="text-sm">
@@ -817,10 +922,10 @@ function SettingsPage() {
   return (
     <div className="animate-fade-in max-w-4xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+        <h1 className="text-3xl font-bold mb-2" style={{ color: "#fff" }}>
           Settings
         </h1>
-        <p className="text-gray-600 dark:text-gray-400">
+        <p style={{ color: "#c1c1c3" }}>
           Configure application preferences and integrations
         </p>
       </div>
@@ -828,21 +933,21 @@ function SettingsPage() {
       <div className="mb-8 flex justify-center">
         <div
           ref={tabsRef}
-          className="relative bg-gray-100 dark:bg-gray-900 p-1.5 inline-flex"
+          className="relative p-1.5 inline-flex"
+          style={{ backgroundColor: "#0f0f12" }}
         >
-          {/* Outer border gradient effect */}
-          <div className="absolute -inset-0.5 bg-gray-200 dark:bg-gray-700 -z-10" />
-
           {/* Active bubble */}
           <div
             ref={activeBubbleRef}
-            className="absolute bg-gray-100 dark:bg-gray-400 transition-all duration-300 ease-out z-10 opacity-0"
+            className="absolute transition-all duration-300 ease-out z-10 opacity-0"
+            style={{ backgroundColor: "#211f27" }}
           />
 
           {/* Hover bubble - covers entire nav by default, shrinks to hovered tab */}
           <div
             ref={hoverBubbleRef}
-            className="absolute bg-gray-200 dark:bg-gray-800 transition-all duration-200 ease-out z-0"
+            className="absolute transition-all duration-200 ease-out z-0"
+            style={{ backgroundColor: "#1a1a1e" }}
           />
 
           <div
@@ -860,18 +965,12 @@ function SettingsPage() {
                   }}
                   onClick={() => setActiveTab(tab.id)}
                   onMouseEnter={() => setHoveredTabIndex(index)}
-                  className={`relative z-20 flex items-center space-x-2 px-4 py-2.5 font-medium transition-all duration-200 text-sm ${
-                    isActive
-                      ? "text-gray-800 dark:text-gray-800"
-                      : "text-gray-400 dark:text-gray-500 hover:text-gray-300 dark:hover:text-gray-400"
-                  }`}
+                  className="relative z-20 flex items-center space-x-2 px-4 py-2.5 font-medium transition-all duration-200 text-sm"
+                  style={{ color: "#fff" }}
                 >
                   <Icon
-                    className={`w-4 h-4 transition-transform flex-shrink-0 ${
-                      isActive
-                        ? "text-gray-800 dark:text-gray-800"
-                        : "text-gray-400 dark:text-gray-500"
-                    }`}
+                    className="w-4 h-4 transition-transform flex-shrink-0"
+                    style={{ color: "#fff" }}
                   />
                   <span>{tab.label}</span>
                 </button>

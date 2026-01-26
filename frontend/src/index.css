@@ -4,11 +4,49 @@
 
 @layer base {
   body {
-    @apply bg-gray-50 text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background: linear-gradient(
+      to bottom,
+      #050505 0%,
+      #18181c 80%,
+      #18181c 100%
+    );
+    background-attachment: fixed;
+    background-size: 100% 100vh;
+    background-repeat: no-repeat;
+    color: #fff;
     /* Prevent elastic scrolling on iOS for the body */
     overscroll-behavior-y: none;
     /* Ensure taps are responsive */
     touch-action: manipulation;
+  }
+
+  .text-white {
+    color: #fff !important;
+  }
+
+  .text-main {
+    color: #fff !important;
+  }
+
+  .text-sub {
+    color: #c1c1c3 !important;
+  }
+
+  .bg-card {
+    background-color: #211f27 !important;
+  }
+
+  /* Remove all borders globally */
+  * {
+    border: none !important;
+    border-radius: 2px !important;
+  }
+
+  /* Override for specific cases that need visual separation */
+  .card-separator {
+    border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
   }
 
   html {
@@ -22,7 +60,6 @@
   }
 
   * {
-    @apply border-gray-200 dark:border-gray-800;
     /* Disable text selection highlight on mobile */
     -webkit-tap-highlight-color: transparent;
   }
@@ -42,11 +79,15 @@
   }
 
   .btn-primary {
-    @apply bg-primary-500 text-white hover:bg-primary-600 focus:ring-primary-500 shadow-sm hover:shadow active:scale-95 dark:focus:ring-offset-gray-900;
+    @apply text-white hover:opacity-90 focus:ring-2 shadow-sm hover:shadow active:scale-95;
+    background-color: #707e61;
+    --tw-ring-color: #c1c1c3;
   }
 
   .btn-secondary {
-    @apply bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 focus:ring-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-700 dark:focus:ring-gray-700 dark:focus:ring-offset-gray-900;
+    @apply focus:ring-gray-700;
+    background-color: #211f27;
+    color: #fff;
   }
 
   .btn-danger {
@@ -58,15 +99,20 @@
   }
 
   .btn-ghost {
-    @apply text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100;
+    @apply hover:bg-gray-900/50;
+    color: #c1c1c3;
   }
 
   .card {
-    @apply bg-white shadow-sm border border-gray-200 p-4 md:p-6 dark:bg-gray-900 dark:border-gray-800;
+    @apply shadow-sm p-4 md:p-6;
+    background-color: #211f27;
   }
 
   .input {
-    @apply w-full px-4 py-2 h-10 bg-white border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100 dark:focus:ring-primary-500 placeholder-gray-400 dark:placeholder-gray-500;
+    @apply w-full px-4 py-2 h-10 focus:outline-none focus:ring-2 transition-shadow placeholder-gray-500;
+    background-color: #211f27;
+    color: #fff;
+    --tw-ring-color: #c1c1c3;
   }
 
   .input-sm {
@@ -74,31 +120,34 @@
   }
 
   .label {
-    @apply block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300;
+    @apply block text-sm font-medium mb-1;
+    color: #fff;
   }
 
   .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 text-xs font-medium border;
+    @apply inline-flex items-center px-2.5 py-0.5 text-xs font-medium;
   }
 
   .badge-primary {
-    @apply bg-primary-50 text-primary-700 border-primary-100 dark:bg-primary-900/30 dark:text-primary-300 dark:border-primary-800/50;
+    background-color: #211f27;
+    color: #c1c1c3;
   }
 
   .badge-success {
-    @apply bg-green-50 text-green-700 border-green-100 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800/50;
+    @apply bg-green-500/20 text-green-400;
   }
 
   .badge-warning {
-    @apply bg-yellow-50 text-yellow-700 border-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800/50;
+    @apply bg-yellow-500/20 text-yellow-400;
   }
 
   .badge-danger {
-    @apply bg-red-50 text-red-700 border-red-100 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800/50;
+    @apply bg-red-500/20 text-red-400;
   }
 
   .badge-neutral {
-    @apply bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700;
+    @apply bg-gray-800/50;
+    color: #c1c1c3;
   }
 }
 
@@ -112,7 +161,13 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 hover:bg-gray-400 transition-colors dark:bg-gray-700 dark:hover:bg-gray-600;
+  @apply transition-colors;
+  background-color: #4a4a4a;
+}
+
+/* Hide scrollbar for similar artists carousel */
+.similar-artists-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 @keyframes spin {

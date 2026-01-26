@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Loader, Music, ExternalLink } from "lucide-react";
+import { Loader, Music } from "lucide-react";
 import {
   searchArtists,
   getArtistCover,
@@ -104,11 +104,11 @@ function SearchResultsPage() {
   return (
     <div className="animate-fade-in">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        <h1 className="text-2xl font-bold" style={{ color: "#fff" }}>
           {type === "tag" ? "Genre Results" : "Search Results"}
         </h1>
         {query && (
-          <p className="text-gray-600 dark:text-gray-400">
+          <p style={{ color: "#c1c1c3" }}>
             {type === "tag"
               ? `Top artists for tag "${query}"`
               : `Showing results for "${query}"`}
@@ -117,14 +117,14 @@ function SearchResultsPage() {
       </div>
 
       {error && (
-        <div className="mb-6 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-500/20 p-4">
-          <p className="text-red-800 dark:text-red-400">{error}</p>
+        <div className="mb-6 bg-red-500/20 ">
+          <p className="text-red-400">{error}</p>
         </div>
       )}
 
       {loading && (
         <div className="flex justify-center items-center py-20">
-          <Loader className="w-12 h-12 text-primary-600 animate-spin" />
+          <Loader className="w-12 h-12 animate-spin" style={{ color: "#c1c1c3" }} />
         </div>
       )}
 
@@ -132,11 +132,17 @@ function SearchResultsPage() {
         <div className="animate-slide-up">
           {results.length === 0 ? (
             <div className="card text-center py-12">
-              <Music className="w-16 h-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">
+              <Music
+                className="w-16 h-16 mx-auto mb-4"
+                style={{ color: "#c1c1c3" }}
+              />
+              <h3
+                className="text-xl font-semibold mb-2"
+                style={{ color: "#fff" }}
+              >
                 No Results Found
               </h3>
-              <p className="text-gray-500 dark:text-gray-400">
+              <p style={{ color: "#c1c1c3" }}>
                 {type === "tag"
                   ? `We couldn't find any top artists for tag "${query}"`
                   : `We couldn't find any artists matching "${query}"`}
@@ -145,7 +151,7 @@ function SearchResultsPage() {
           ) : (
             <>
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                <h2 className="text-xl font-semibold" style={{ color: "#fff" }}>
                   Found {results.length} result{results.length !== 1 ? "s" : ""}
                 </h2>
               </div>
@@ -158,7 +164,8 @@ function SearchResultsPage() {
                   >
                     <div
                       onClick={() => navigate(`/artist/${artist.id}`)}
-                      className="relative aspect-square mb-3 overflow-hidden bg-gray-200 dark:bg-gray-800 cursor-pointer shadow-sm group-hover:shadow-md transition-all"
+                      className="relative aspect-square mb-3 overflow-hidden cursor-pointer shadow-sm group-hover:shadow-md transition-all"
+                      style={{ backgroundColor: "#211f27" }}
                     >
                       {/* Artist Image */}
                       <ArtistImage
@@ -173,29 +180,21 @@ function SearchResultsPage() {
                         showLoading={false}
                       />
 
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/artist/${artist.id}`);
-                          }}
-                          className="p-2 bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 hover:scale-110 transition-all"
-                          title="View Details"
-                        >
-                          <ExternalLink className="w-5 h-5" />
-                        </button>
-                      </div>
                     </div>
 
                     <div className="flex flex-col min-w-0">
                       <h3
                         onClick={() => navigate(`/artist/${artist.id}`)}
-                        className="font-semibold text-gray-900 dark:text-gray-100 truncate hover:text-primary-500 cursor-pointer"
+                        className="font-semibold truncate hover:underline cursor-pointer"
+                        style={{ color: "#fff" }}
                       >
                         {artist.name}
                       </h3>
 
-                      <div className="flex flex-col min-w-0 text-sm text-gray-500 dark:text-gray-400">
+                      <div
+                        className="flex flex-col min-w-0 text-sm"
+                        style={{ color: "#c1c1c3" }}
+                      >
                         {artist.type && (
                           <p className="truncate">
                             {getArtistType(artist.type)}

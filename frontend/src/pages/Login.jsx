@@ -20,16 +20,22 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
-      <div className="max-w-md w-full space-y-8 bg-white dark:bg-gray-800 p-8 shadow-lg border border-gray-200 dark:border-gray-700">
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <div
+        className="max-w-md w-full space-y-8 backdrop-blur-sm p-8 shadow-lg"
+        style={{ backgroundColor: "#211f27" }}
+      >
         <div className="text-center">
-          <div className="mx-auto h-12 w-12 bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center mb-4">
-            <Lock className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+          <div className="mx-auto h-12 w-12 flex items-center justify-center mb-4" style={{ backgroundColor: "#211f27" }}>
+            <Lock className="h-6 w-6" style={{ color: "#707e61" }} />
           </div>
-          <h2 className="mt-2 text-3xl font-extrabold text-gray-900 dark:text-white">
+          <h2
+            className="mt-2 text-3xl font-extrabold"
+            style={{ color: "#fff" }}
+          >
             Login Required
           </h2>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+          <p className="mt-2 text-sm" style={{ color: "#c1c1c3" }}>
             Please enter your credentials to access Aurral
           </p>
         </div>
@@ -45,7 +51,9 @@ const Login = () => {
                 name="username"
                 type="text"
                 required
-                className="appearance-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 text-gray-900 dark:text-white dark:bg-gray-700 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                className="appearance-none relative block w-full px-3 py-2 placeholder-gray-500 focus:outline-none focus:ring-2 focus:z-10 sm:text-sm"
+              style={{ focusRingColor: "#c1c1c3" }}
+                style={{ backgroundColor: "#211f27", color: "#fff" }}
                 placeholder="Username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -60,7 +68,9 @@ const Login = () => {
                 name="password"
                 type="password"
                 required
-                className="appearance-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 text-gray-900 dark:text-white dark:bg-gray-700 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                className="appearance-none relative block w-full px-3 py-2 placeholder-gray-500 focus:outline-none focus:ring-2 focus:z-10 sm:text-sm"
+              style={{ focusRingColor: "#c1c1c3" }}
+                style={{ backgroundColor: "#211f27", color: "#fff" }}
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -69,13 +79,16 @@ const Login = () => {
           </div>
 
           {error && (
-            <div className="text-red-500 text-sm text-center">{error}</div>
+            <div className="text-sm text-center" style={{ color: "#ff6b6b" }}>
+              {error}
+            </div>
           )}
 
           <div>
             <button
               type="submit"
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
+              className="group relative w-full flex justify-center py-2 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors duration-200"
+              style={{ backgroundColor: "#707e61", color: "#fff" }}
             >
               Sign in
             </button>

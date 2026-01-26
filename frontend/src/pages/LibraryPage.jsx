@@ -151,13 +151,13 @@ function LibraryPage() {
 
   return (
     <div className="animate-fade-in">
-      <div className="card mb-4 p-4">
+      <div className="mb-4 p-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">
+            <h1 className="text-2xl font-bold mb-1" style={{ color: "#fff" }}>
               Your Library
             </h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm" style={{ color: "#c1c1c3" }}>
               {loading
                 ? "Loading..."
                 : `${artists.length} artist${artists.length !== 1 ? "s" : ""} in your collection`}
@@ -215,19 +215,19 @@ function LibraryPage() {
 
       {loading && (
         <div className="flex justify-center items-center py-20">
-          <Loader className="w-12 h-12 text-primary-600 animate-spin" />
+          <Loader className="w-12 h-12 animate-spin" style={{ color: "#c1c1c3" }} />
         </div>
       )}
 
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-500/20 p-6">
+        <div className="bg-red-500/20 ">
           <div className="flex items-center">
-            <AlertCircle className="w-6 h-6 text-red-500 mr-3" />
+            <AlertCircle className="w-6 h-6 text-red-400 mr-3" />
             <div>
-              <h3 className="text-red-900 dark:text-red-400 font-semibold">
+              <h3 className="text-red-400 font-semibold">
                 Error Loading Library
               </h3>
-              <p className="text-red-700 dark:text-red-300 mt-1">{error}</p>
+              <p className="text-red-300 mt-1">{error}</p>
             </div>
           </div>
           <button onClick={fetchArtists} className="btn btn-primary mt-4">
@@ -238,11 +238,14 @@ function LibraryPage() {
 
       {!loading && !error && artists.length === 0 && (
         <div className="card text-center py-12">
-          <Music className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">
+          <Music
+            className="w-16 h-16 mx-auto mb-4"
+            style={{ color: "#c1c1c3" }}
+          />
+          <h3 className="text-xl font-semibold mb-2" style={{ color: "#fff" }}>
             No Artists in Library
           </h3>
-          <p className="text-gray-500 dark:text-gray-400 mb-6">
+          <p className="mb-6" style={{ color: "#c1c1c3" }}>
             Your library is empty. Discover artists from your music folder or
             search and add them manually.
           </p>
@@ -270,7 +273,7 @@ function LibraryPage() {
       {!loading && !error && currentArtists.length > 0 && (
         <div className="animate-slide-up">
           {searchTerm && (
-            <div className="mb-3 text-sm text-gray-600 dark:text-gray-400">
+            <div className="mb-3 text-sm" style={{ color: "#c1c1c3" }}>
               Showing {filteredArtists.length} of {artists.length} artists
             </div>
           )}
@@ -289,7 +292,8 @@ function LibraryPage() {
               return (
                 <div key={artist.id} className="group relative">
                   <div
-                    className="relative aspect-square bg-gray-200 dark:bg-gray-800 overflow-hidden cursor-pointer mb-2 shadow-sm group-hover:shadow-md transition-all"
+                    className="relative aspect-square overflow-hidden cursor-pointer mb-2 shadow-sm group-hover:shadow-md transition-all"
+                    style={{ backgroundColor: "#211f27" }}
                     onClick={() =>
                       navigate(`/artist/${artist.foreignArtistId}`)
                     }
@@ -315,7 +319,8 @@ function LibraryPage() {
 
                   {/* Artist Name */}
                   <h3
-                    className="text-sm font-semibold text-gray-900 dark:text-gray-100 group-hover:text-primary-500 transition-colors cursor-pointer truncate text-center"
+                    className="text-sm font-semibold group-hover:underline transition-colors cursor-pointer truncate text-center"
+                    style={{ color: "#fff" }}
                     onClick={() =>
                       navigate(`/artist/${artist.foreignArtistId}`)
                     }
@@ -337,7 +342,10 @@ function LibraryPage() {
               >
                 Previous
               </button>
-              <span className="flex items-center px-4 text-sm text-gray-700 dark:text-gray-300">
+              <span
+                className="flex items-center px-4 text-sm"
+                style={{ color: "#fff" }}
+              >
                 Page {currentPage} of {totalPages}
               </span>
               <button
@@ -359,11 +367,17 @@ function LibraryPage() {
         artists.length > 0 &&
         filteredArtists.length === 0 && (
           <div className="card text-center py-12">
-            <Music className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">
+            <Music
+              className="w-16 h-16 mx-auto mb-4"
+              style={{ color: "#c1c1c3" }}
+            />
+            <h3
+              className="text-xl font-semibold mb-2"
+              style={{ color: "#fff" }}
+            >
               No Artists Found
             </h3>
-            <p className="text-gray-500 dark:text-gray-400 mb-4">
+            <p className="mb-4" style={{ color: "#c1c1c3" }}>
               No artists match your search "{searchTerm}"
             </p>
             <button

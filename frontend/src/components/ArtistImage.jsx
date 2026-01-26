@@ -51,13 +51,13 @@ const ArtistImage = ({
     try {
       setHasError(false);
 
-      const data = await scheduleFetch(() => 
+      const data = await scheduleFetch(() =>
         Promise.race([
           getArtistCover(mbidToFetch),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("Timeout")), 5000)
-          )
-        ])
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Timeout")), 5000),
+          ),
+        ]),
       );
       if (data?.images && data.images.length > 0) {
         const front = data.images.find((img) => img.front) || data.images[0];
@@ -85,7 +85,7 @@ const ArtistImage = ({
   useEffect(() => {
     // Reset state when src or mbid changes
     fetchingRef.current = false;
-    
+
     if (src) {
       setCurrentSrc(src);
       setHasError(false);
@@ -114,7 +114,8 @@ const ArtistImage = ({
   if (hasError) {
     return (
       <div
-        className={`flex items-center justify-center bg-gray-200 dark:bg-gray-800 text-gray-400 dark:text-gray-600 ${className}`}
+        className={`flex items-center justify-center ${className}`}
+        style={{ backgroundColor: "#211f27", color: "#c1c1c3" }}
       >
         <Music className="w-1/3 h-1/3" />
       </div>
@@ -124,11 +125,15 @@ const ArtistImage = ({
   if (!currentSrc && !isLoading && !hasError) {
     return (
       <div
-        className={`relative overflow-hidden bg-gray-200 dark:bg-gray-800 ${className}`}
+        className={`relative overflow-hidden ${className}`}
+        style={{ backgroundColor: "#211f27" }}
       >
         {showLoading && (
-          <div className="absolute inset-0 flex items-center justify-center z-10 bg-gray-200 dark:bg-gray-800">
-            <Loader className="w-6 h-6 text-primary-500 animate-spin" />
+          <div
+            className="absolute inset-0 flex items-center justify-center z-10"
+            style={{ backgroundColor: "#211f27" }}
+          >
+            <Loader className="w-6 h-6 animate-spin" style={{ color: "#c1c1c3" }} />
           </div>
         )}
       </div>
@@ -137,10 +142,14 @@ const ArtistImage = ({
 
   return (
     <div
-      className={`relative overflow-hidden bg-gray-200 dark:bg-gray-800 ${className}`}
+      className={`relative overflow-hidden ${className}`}
+      style={{ backgroundColor: "#211f27" }}
     >
       {isLoading && showLoading && (
-        <div className="absolute inset-0 flex items-center justify-center z-10 bg-gray-200 dark:bg-gray-800">
+        <div
+          className="absolute inset-0 flex items-center justify-center z-10"
+          style={{ backgroundColor: "#211f27" }}
+        >
           <Loader className="w-6 h-6 text-primary-500 animate-spin" />
         </div>
       )}
