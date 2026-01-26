@@ -1,5 +1,5 @@
 import { db } from "../config/db.js";
-import { musicbrainzRequest } from "./apiClients.js";
+import { musicbrainzRequest, spotifySearchArtist } from "./apiClients.js";
 import axios from "axios";
 
 const negativeImageCache = new Set();
@@ -41,43 +41,33 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
       const libraryArtist = libraryManager.getArtist(mbid);
       let artistName = libraryArtist?.artistName || null;
 
-      // Parallel fetch strategy: try MusicBrainz and Deezer simultaneously
-      const [artistData, deezerResult] = await Promise.allSettled([
-        // Only fetch from MusicBrainz if we don't have the name
-        !artistName ? Promise.race([
-          musicbrainzRequest(`/artist/${mbid}`, {}),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("MusicBrainz timeout")), 2000)
-          )
-        ]).catch(() => null) : Promise.resolve(null),
-        // Try Deezer search if we have a name (or will get one)
-        artistName ? axios.get(
-          `https://api.deezer.com/search/artist`,
-          {
-            params: { q: artistName, limit: 1 },
-            timeout: 2000
+      // Fetch artist name from MusicBrainz if we don't have it
+      let artistData = null;
+      if (!artistName) {
+        try {
+          artistData = await Promise.race([
+            musicbrainzRequest(`/artist/${mbid}`, {}),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error("MusicBrainz timeout")), 2000)
+            )
+          ]).catch(() => null);
+          
+          if (artistData?.name) {
+            artistName = artistData.name;
           }
-        ).catch(() => null) : Promise.resolve(null)
-      ]);
+        } catch (e) {
+          // Continue without artist name
+        }
+      }
 
-      // Extract artist name from MusicBrainz if we got it
-      if (!artistName && artistData.status === 'fulfilled' && artistData.value?.name) {
-        artistName = artistData.value.name;
-        
-        // Now try Deezer with the name we just got
-        if (artistName) {
-          try {
-            const searchResponse = await axios.get(
-              `https://api.deezer.com/search/artist`,
-              {
-                params: { q: artistName, limit: 1 },
-                timeout: 2000
-              }
-            ).catch(() => null);
-
-            if (searchResponse?.data?.data?.[0]?.picture_xl || searchResponse?.data?.data?.[0]?.picture_big) {
-              const artist = searchResponse.data.data[0];
-              const imageUrl = artist.picture_xl || artist.picture_big;
+      // Try Spotify first (fastest, best quality)
+      if (artistName) {
+        try {
+          const spotifyArtist = await spotifySearchArtist(artistName);
+          if (spotifyArtist?.images?.length > 0) {
+            // Get the largest available image (images are sorted by size, largest first)
+            const imageUrl = spotifyArtist.images[0].url;
+            if (imageUrl) {
               if (!db.data.images) db.data.images = {};
               if (!db.data.imageCacheAge) db.data.imageCacheAge = {};
               db.data.images[mbid] = imageUrl;
@@ -95,40 +85,16 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
                 }]
               };
             }
-          } catch (e) {
-            // Continue to fallback
           }
-        }
-      }
-
-      // Check if Deezer search succeeded
-      if (deezerResult.status === 'fulfilled' && deezerResult.value?.data?.data?.[0]) {
-        const artist = deezerResult.value.data.data[0];
-        if (artist.picture_xl || artist.picture_big) {
-          const imageUrl = artist.picture_xl || artist.picture_big;
-          if (!db.data.images) db.data.images = {};
-          if (!db.data.imageCacheAge) db.data.imageCacheAge = {};
-          db.data.images[mbid] = imageUrl;
-          db.data.imageCacheAge[mbid] = Date.now();
-          db.write().catch(e => {
-            console.error("Error saving image to database:", e.message);
-          });
-
-          return {
-            url: imageUrl,
-            images: [{
-              image: imageUrl,
-              front: true,
-              types: ["Front"],
-            }]
-          };
+        } catch (e) {
+          // Continue to fallback
         }
       }
 
       // Fallback: Try Cover Art Archive (only if we have artist name or can get release groups)
-      if (artistName || artistData.status === 'fulfilled') {
+      if (artistName || artistData) {
         try {
-          const artistDataForRG = artistData.status === 'fulfilled' ? artistData.value : 
+          const artistDataForRG = artistData?.["release-groups"] ? artistData : 
             await Promise.race([
               musicbrainzRequest(`/artist/${mbid}`, { inc: "release-groups" }),
               new Promise((_, reject) => 

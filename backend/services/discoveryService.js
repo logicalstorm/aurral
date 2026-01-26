@@ -1,6 +1,6 @@
 import { db } from "../config/db.js";
 import { GENRE_KEYWORDS } from "../config/constants.js";
-import { lastfmRequest, getLastfmApiKey, musicbrainzRequest } from "./apiClients.js";
+import { lastfmRequest, getLastfmApiKey, musicbrainzRequest, spotifySearchArtist } from "./apiClients.js";
 
 const getLastfmUsername = () => {
   return db.data?.settings?.integrations?.lastfm?.username || null;
@@ -431,31 +431,19 @@ export const updateDiscoveryCache = async () => {
         try {
           
           try {
-            const axios = (await import("axios")).default;
             const artistName = item.name || item.artistName;
             
-            // Search Deezer directly by artist name (no MusicBrainz relationship lookup needed)
+            // Try Spotify first (fastest, best quality)
             if (artistName) {
               try {
-                const searchResponse = await Promise.race([
-                  axios.get(
-                    `https://api.deezer.com/search/artist`,
-                    {
-                      params: { q: artistName, limit: 1 },
-                      timeout: 1500
-                    }
-                  ),
-                  new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error("Deezer timeout")), 1500)
-                  )
-                ]).catch(() => null);
-
-                if (searchResponse?.data?.data?.[0]?.picture_xl || searchResponse?.data?.data?.[0]?.picture_big) {
-                  const artist = searchResponse.data.data[0];
-                  item.image = artist.picture_xl || artist.picture_big;
+                const spotifyArtist = await spotifySearchArtist(artistName);
+                if (spotifyArtist?.images?.length > 0) {
+                  // Get the largest available image
+                  item.image = spotifyArtist.images[0].url;
                   return;
                 }
               } catch (e) {
+                // Continue to fallback
               }
             }
 

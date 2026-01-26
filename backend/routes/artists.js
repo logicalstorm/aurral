@@ -1,7 +1,7 @@
 import express from "express";
 import axios from "axios";
 import { UUID_REGEX } from "../config/constants.js";
-import { musicbrainzRequest, getLastfmApiKey, lastfmRequest } from "../services/apiClients.js";
+import { musicbrainzRequest, getLastfmApiKey, lastfmRequest, spotifySearchArtist } from "../services/apiClients.js";
 import { imagePrefetchService } from "../services/imagePrefetchService.js";
 import { getAuthUser, getAuthPassword } from "../middleware/auth.js";
 
@@ -364,20 +364,12 @@ router.get("/:mbid/stream", async (req, res) => {
             return;
           }
 
-          // Try Deezer if we have artist name
+          // Try Spotify if we have artist name
           if (artistName) {
             try {
-              const deezerResponse = await axios.get(
-                `https://api.deezer.com/search/artist`,
-                {
-                  params: { q: artistName, limit: 1 },
-                  timeout: 2000
-                }
-              ).catch(() => null);
-
-              if (deezerResponse?.data?.data?.[0]?.picture_xl || deezerResponse?.data?.data?.[0]?.picture_big) {
-                const artist = deezerResponse.data.data[0];
-                const imageUrl = artist.picture_xl || artist.picture_big;
+              const spotifyArtist = await spotifySearchArtist(artistName);
+              if (spotifyArtist?.images?.length > 0) {
+                const imageUrl = spotifyArtist.images[0].url;
                 if (!db.data.images) db.data.images = {};
                 if (!db.data.imageCacheAge) db.data.imageCacheAge = {};
                 db.data.images[mbid] = imageUrl;
@@ -692,58 +684,39 @@ const fetchCoverInBackground = async (mbid) => {
       const libraryArtist = libraryManager.getArtist(mbid);
       let artistName = libraryArtist?.artistName || null;
 
-      const [mbResult, deezerResult] = await Promise.allSettled([
-        !artistName ? Promise.race([
-          musicbrainzRequest(`/artist/${mbid}`, {}),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("MusicBrainz timeout")), 2000)
-          )
-        ]).catch(() => null) : Promise.resolve(null),
-        artistName ? axios.get(
-          `https://api.deezer.com/search/artist`,
-          {
-            params: { q: artistName, limit: 1 },
-            timeout: 2000
+      // Fetch artist name from MusicBrainz if we don't have it
+      if (!artistName) {
+        try {
+          const mbResult = await Promise.race([
+            musicbrainzRequest(`/artist/${mbid}`, {}),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error("MusicBrainz timeout")), 2000)
+            )
+          ]).catch(() => null);
+          
+          if (mbResult?.name) {
+            artistName = mbResult.name;
           }
-        ).catch(() => null) : Promise.resolve(null)
-      ]);
-
-      if (!artistName && mbResult.status === 'fulfilled' && mbResult.value?.name) {
-        artistName = mbResult.value.name;
-        if (artistName) {
-          try {
-            const searchResponse = await axios.get(
-              `https://api.deezer.com/search/artist`,
-              {
-                params: { q: artistName, limit: 1 },
-                timeout: 2000
-              }
-            ).catch(() => null);
-
-            if (searchResponse?.data?.data?.[0]?.picture_xl || searchResponse?.data?.data?.[0]?.picture_big) {
-              const artist = searchResponse.data.data[0];
-              const imageUrl = artist.picture_xl || artist.picture_big;
-              if (!db.data.images) db.data.images = {};
-              if (!db.data.imageCacheAge) db.data.imageCacheAge = {};
-              db.data.images[mbid] = imageUrl;
-              db.data.imageCacheAge[mbid] = Date.now();
-              db.write().catch(() => {});
-              return;
-            }
-          } catch (e) {}
+        } catch (e) {
+          // Continue without artist name
         }
       }
 
-      if (deezerResult.status === 'fulfilled' && deezerResult.value?.data?.data?.[0]) {
-        const artist = deezerResult.value.data.data[0];
-        if (artist.picture_xl || artist.picture_big) {
-          const imageUrl = artist.picture_xl || artist.picture_big;
-          if (!db.data.images) db.data.images = {};
-          if (!db.data.imageCacheAge) db.data.imageCacheAge = {};
-          db.data.images[mbid] = imageUrl;
-          db.data.imageCacheAge[mbid] = Date.now();
-          db.write().catch(() => {});
-          return;
+      // Try Spotify if we have artist name
+      if (artistName) {
+        try {
+          const spotifyArtist = await spotifySearchArtist(artistName);
+          if (spotifyArtist?.images?.length > 0) {
+            const imageUrl = spotifyArtist.images[0].url;
+            if (!db.data.images) db.data.images = {};
+            if (!db.data.imageCacheAge) db.data.imageCacheAge = {};
+            db.data.images[mbid] = imageUrl;
+            db.data.imageCacheAge[mbid] = Date.now();
+            db.write().catch(() => {});
+            return;
+          }
+        } catch (e) {
+          // Continue to fallback
         }
       }
     } catch (e) {
@@ -823,84 +796,53 @@ router.get("/:mbid/cover", async (req, res) => {
         // Try to get artist name from library first (fastest, no API call)
         let artistName = libraryArtist?.artistName || null;
 
-        // Parallel strategy: try MusicBrainz (if needed) and Deezer simultaneously
-        const [mbResult, deezerResult] = await Promise.allSettled([
-          // Only fetch from MusicBrainz if we don't have the name
-          !artistName ? Promise.race([
-            musicbrainzRequest(`/artist/${mbid}`, {}),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error("MusicBrainz timeout")), 2000)
-            )
-          ]).catch(() => null) : Promise.resolve(null),
-          // Try Deezer search if we have a name
-          artistName ? axios.get(
-            `https://api.deezer.com/search/artist`,
-            {
-              params: { q: artistName, limit: 1 },
-              timeout: 2000
+        // Fetch artist name from MusicBrainz if we don't have it
+        let mbResult = null;
+        if (!artistName) {
+          try {
+            mbResult = await Promise.race([
+              musicbrainzRequest(`/artist/${mbid}`, {}),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error("MusicBrainz timeout")), 2000)
+              )
+            ]).catch(() => null);
+            
+            if (mbResult?.name) {
+              artistName = mbResult.name;
             }
-          ).catch(() => null) : Promise.resolve(null)
-        ]);
-
-        // Extract artist name from MusicBrainz if we got it
-        if (!artistName && mbResult.status === 'fulfilled' && mbResult.value?.name) {
-          artistName = mbResult.value.name;
-          
-          // Now try Deezer with the name we just got
-          if (artistName) {
-            try {
-              const searchResponse = await axios.get(
-                `https://api.deezer.com/search/artist`,
-                {
-                  params: { q: artistName, limit: 1 },
-                  timeout: 2000
-                }
-              ).catch(() => null);
-
-              if (searchResponse?.data?.data?.[0]?.picture_xl || searchResponse?.data?.data?.[0]?.picture_big) {
-                const artist = searchResponse.data.data[0];
-                const imageUrl = artist.picture_xl || artist.picture_big;
-                if (!db.data.images) db.data.images = {};
-                db.data.images[mbid] = imageUrl;
-                db.write().catch(e => console.error("Error saving image to database:", e.message));
-                return {
-                  images: [{
-                    image: imageUrl,
-                    front: true,
-                    types: ["Front"],
-                  }]
-                };
-              }
-            } catch (e) {
-              // Continue to fallback
-            }
+          } catch (e) {
+            // Continue without artist name
           }
         }
 
-        // Check if Deezer search succeeded
-        if (deezerResult.status === 'fulfilled' && deezerResult.value?.data?.data?.[0]) {
-          const artist = deezerResult.value.data.data[0];
-          if (artist.picture_xl || artist.picture_big) {
-            const imageUrl = artist.picture_xl || artist.picture_big;
-            if (!db.data.images) db.data.images = {};
-            if (!db.data.imageCacheAge) db.data.imageCacheAge = {};
-            db.data.images[mbid] = imageUrl;
-            db.data.imageCacheAge[mbid] = Date.now();
-            db.write().catch(e => console.error("Error saving image to database:", e.message));
-            return {
-              images: [{
-                image: imageUrl,
-                front: true,
-                types: ["Front"],
-              }]
-            };
+        // Try Spotify if we have artist name
+        if (artistName) {
+          try {
+            const spotifyArtist = await spotifySearchArtist(artistName);
+            if (spotifyArtist?.images?.length > 0) {
+              const imageUrl = spotifyArtist.images[0].url;
+              if (!db.data.images) db.data.images = {};
+              if (!db.data.imageCacheAge) db.data.imageCacheAge = {};
+              db.data.images[mbid] = imageUrl;
+              db.data.imageCacheAge[mbid] = Date.now();
+              db.write().catch(e => console.error("Error saving image to database:", e.message));
+              return {
+                images: [{
+                  image: imageUrl,
+                  front: true,
+                  types: ["Front"],
+                }]
+              };
+            }
+          } catch (e) {
+            // Continue to fallback
           }
         }
 
         // Fallback: Try Cover Art Archive (parallel fetch for multiple release groups)
         try {
-          const artistDataForRG = mbResult.status === 'fulfilled' && mbResult.value?.["release-groups"] 
-            ? mbResult.value 
+          const artistDataForRG = mbResult?.["release-groups"] 
+            ? mbResult 
             : await Promise.race([
                 musicbrainzRequest(`/artist/${mbid}`, { inc: "release-groups" }),
                 new Promise((_, reject) => 

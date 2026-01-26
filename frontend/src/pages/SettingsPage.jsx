@@ -591,6 +591,82 @@ function SettingsPage() {
                   className="text-lg font-medium flex items-center mb-4"
                   style={{ color: "#fff" }}
                 >
+                  <TrendingUp className="w-5 h-5 mr-2" /> Spotify API
+                </h3>
+                <div className="space-y-4">
+                  <div>
+                    <label
+                      className="block text-sm font-medium mb-1"
+                      style={{ color: "#fff" }}
+                    >
+                      Client ID
+                    </label>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="Spotify Client ID"
+                      value={settings.integrations?.spotify?.clientId || ""}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          integrations: {
+                            ...settings.integrations,
+                            spotify: {
+                              ...(settings.integrations?.spotify || {}),
+                              clientId: e.target.value,
+                            },
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label
+                      className="block text-sm font-medium mb-1"
+                      style={{ color: "#fff" }}
+                    >
+                      Client Secret
+                    </label>
+                    <input
+                      type="password"
+                      className="input"
+                      placeholder="Spotify Client Secret"
+                      value={settings.integrations?.spotify?.clientSecret || ""}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          integrations: {
+                            ...settings.integrations,
+                            spotify: {
+                              ...(settings.integrations?.spotify || {}),
+                              clientSecret: e.target.value,
+                            },
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                  <p className="text-xs" style={{ color: "#c1c1c3" }}>
+                    Optional but recommended. Provides faster, higher-quality artist images. Get credentials from{" "}
+                    <a
+                      href="https://developer.spotify.com/dashboard"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline"
+                      style={{ color: "#60a5fa" }}
+                    >
+                      Spotify Developer Dashboard
+                    </a>
+                    . Create an app and use Client Credentials flow.
+                  </p>
+                </div>
+              </div>
+
+              <div className="">
+                <h3
+                  className="text-lg font-medium flex items-center mb-4"
+                  style={{ color: "#fff" }}
+                >
                   <Shield className="w-5 h-5 mr-2" /> Authentication
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -767,6 +843,38 @@ function SettingsPage() {
                     </span>
                     <div className="flex items-center">
                       {health.lastfmConfigured ? (
+                        <>
+                          <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
+                          <span className="text-green-400 font-medium">
+                            Configured
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle
+                            className="w-5 h-5 mr-2"
+                            style={{ color: "#c1c1c3" }}
+                          />
+                          <span
+                            className="font-medium"
+                            style={{ color: "#c1c1c3" }}
+                          >
+                            Optional
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div
+                    className="flex items-center justify-between p-4"
+                    style={{ backgroundColor: "#211f27" }}
+                  >
+                    <span className="font-medium" style={{ color: "#fff" }}>
+                      Spotify API
+                    </span>
+                    <div className="flex items-center">
+                      {health.spotifyConfigured ? (
                         <>
                           <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
                           <span className="text-green-400 font-medium">
