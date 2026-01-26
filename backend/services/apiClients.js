@@ -164,7 +164,10 @@ const getSpotifyAccessToken = async () => {
 
 export const spotifySearchArtist = spotifyLimiter.wrap(async (artistName) => {
   const token = await getSpotifyAccessToken();
-  if (!token) return null;
+  if (!token) {
+    // Don't log - credentials might not be configured (this is expected)
+    return null;
+  }
 
   try {
     const response = await axios.get('https://api.spotify.com/v1/search', {

@@ -673,6 +673,37 @@ router.get("/:mbid", async (req, res) => {
 
 const pendingCoverRequests = new Map();
 
+// Simple circuit breaker for MusicBrainz - skip if too many recent failures
+let musicbrainzFailureCount = 0;
+let musicbrainzLastFailure = 0;
+const MUSICBRAINZ_CIRCUIT_BREAKER_THRESHOLD = 5; // Skip after 5 failures
+const MUSICBRAINZ_CIRCUIT_BREAKER_RESET_MS = 60000; // Reset after 1 minute
+
+const shouldSkipMusicBrainz = () => {
+  const timeSinceLastFailure = Date.now() - musicbrainzLastFailure;
+  if (musicbrainzFailureCount >= MUSICBRAINZ_CIRCUIT_BREAKER_THRESHOLD && 
+      timeSinceLastFailure < MUSICBRAINZ_CIRCUIT_BREAKER_RESET_MS) {
+    return true;
+  }
+  // Reset counter if enough time has passed
+  if (timeSinceLastFailure >= MUSICBRAINZ_CIRCUIT_BREAKER_RESET_MS) {
+    musicbrainzFailureCount = 0;
+  }
+  return false;
+};
+
+const recordMusicBrainzFailure = () => {
+  musicbrainzFailureCount++;
+  musicbrainzLastFailure = Date.now();
+};
+
+const recordMusicBrainzSuccess = () => {
+  // Reset on success
+  if (musicbrainzFailureCount > 0) {
+    musicbrainzFailureCount = Math.max(0, musicbrainzFailureCount - 1);
+  }
+};
+
 // Background fetch function (doesn't block)
 const fetchCoverInBackground = async (mbid) => {
   if (pendingCoverRequests.has(mbid)) return;
@@ -684,28 +715,42 @@ const fetchCoverInBackground = async (mbid) => {
       const libraryArtist = libraryManager.getArtist(mbid);
       let artistName = libraryArtist?.artistName || null;
 
-      // Fetch artist name from MusicBrainz if we don't have it
-      if (!artistName) {
+      // Fetch artist name from MusicBrainz if we don't have it (with shorter timeout)
+      // Skip if circuit breaker is open
+      if (!artistName && !shouldSkipMusicBrainz()) {
         try {
           const mbResult = await Promise.race([
             musicbrainzRequest(`/artist/${mbid}`, {}),
             new Promise((_, reject) => 
-              setTimeout(() => reject(new Error("MusicBrainz timeout")), 2000)
+              setTimeout(() => reject(new Error("MusicBrainz timeout")), 1200)
             )
-          ]).catch(() => null);
+          ]).catch((e) => {
+            recordMusicBrainzFailure();
+            return null;
+          });
           
           if (mbResult?.name) {
             artistName = mbResult.name;
+            recordMusicBrainzSuccess();
+          } else if (mbResult === null) {
+            recordMusicBrainzFailure();
           }
         } catch (e) {
+          recordMusicBrainzFailure();
           // Continue without artist name
         }
       }
 
-      // Try Spotify if we have artist name
+      // Try Spotify if we have artist name (fastest, skip if not configured)
       if (artistName) {
         try {
-          const spotifyArtist = await spotifySearchArtist(artistName);
+          const spotifyArtist = await Promise.race([
+            spotifySearchArtist(artistName),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error("Spotify timeout")), 1500)
+            )
+          ]).catch(() => null);
+          
           if (spotifyArtist?.images?.length > 0) {
             const imageUrl = spotifyArtist.images[0].url;
             if (!db.data.images) db.data.images = {};
@@ -716,7 +761,7 @@ const fetchCoverInBackground = async (mbid) => {
             return;
           }
         } catch (e) {
-          // Continue to fallback
+          // Silently continue - Spotify might not be configured
         }
       }
     } catch (e) {
@@ -797,28 +842,42 @@ router.get("/:mbid/cover", async (req, res) => {
         let artistName = libraryArtist?.artistName || null;
 
         // Fetch artist name from MusicBrainz if we don't have it
+        // Skip if circuit breaker is open (MusicBrainz is having issues)
         let mbResult = null;
-        if (!artistName) {
+        if (!artistName && !shouldSkipMusicBrainz()) {
           try {
             mbResult = await Promise.race([
               musicbrainzRequest(`/artist/${mbid}`, {}),
               new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("MusicBrainz timeout")), 2000)
+                setTimeout(() => reject(new Error("MusicBrainz timeout")), 1200)
               )
-            ]).catch(() => null);
+            ]).catch((e) => {
+              recordMusicBrainzFailure();
+              return null;
+            });
             
             if (mbResult?.name) {
               artistName = mbResult.name;
+              recordMusicBrainzSuccess();
+            } else if (mbResult === null) {
+              recordMusicBrainzFailure();
             }
           } catch (e) {
-            // Continue without artist name
+            recordMusicBrainzFailure();
+            // Continue without artist name - MusicBrainz might be down
           }
         }
 
-        // Try Spotify if we have artist name
+        // Try Spotify if we have artist name (fastest option)
         if (artistName) {
           try {
-            const spotifyArtist = await spotifySearchArtist(artistName);
+            const spotifyArtist = await Promise.race([
+              spotifySearchArtist(artistName),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error("Spotify timeout")), 1500)
+              )
+            ]).catch(() => null);
+            
             if (spotifyArtist?.images?.length > 0) {
               const imageUrl = spotifyArtist.images[0].url;
               if (!db.data.images) db.data.images = {};
@@ -835,20 +894,19 @@ router.get("/:mbid/cover", async (req, res) => {
               };
             }
           } catch (e) {
-            // Continue to fallback
+            // Silently continue to fallback - Spotify might not be configured
           }
         }
 
-        // Fallback: Try Cover Art Archive (parallel fetch for multiple release groups)
+        // Fallback: Try Cover Art Archive (only if we have release groups already)
+        // Skip if we don't have artist name or release groups - avoid slow MusicBrainz calls
+        if (!artistName || !mbResult?.["release-groups"]) {
+          // Don't make another MusicBrainz call if we don't have the data
+          return { images: [] };
+        }
+        
         try {
-          const artistDataForRG = mbResult?.["release-groups"] 
-            ? mbResult 
-            : await Promise.race([
-                musicbrainzRequest(`/artist/${mbid}`, { inc: "release-groups" }),
-                new Promise((_, reject) => 
-                  setTimeout(() => reject(new Error("MusicBrainz timeout")), 2000)
-                )
-              ]).catch(() => null);
+          const artistDataForRG = mbResult;
 
           if (artistDataForRG?.["release-groups"]?.length > 0) {
             const releaseGroups = artistDataForRG["release-groups"]
