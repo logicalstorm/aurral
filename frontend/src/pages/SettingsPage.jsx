@@ -524,34 +524,64 @@ function SettingsPage() {
                 >
                   <TrendingUp className="w-5 h-5 mr-2" /> Last.fm API
                 </h3>
-                <div>
-                  <label
-                    className="block text-sm font-medium mb-1"
-                    style={{ color: "#fff" }}
-                  >
-                    API Key
-                  </label>
-                  <input
-                    type="password"
-                    className="input"
-                    placeholder="Last.fm API Key"
-                    value={settings.integrations?.lastfm?.apiKey || ""}
-                    onChange={(e) =>
-                      setSettings({
-                        ...settings,
-                        integrations: {
-                          ...settings.integrations,
-                          lastfm: {
-                            ...(settings.integrations?.lastfm || {}),
-                            apiKey: e.target.value,
+                <div className="space-y-4">
+                  <div>
+                    <label
+                      className="block text-sm font-medium mb-1"
+                      style={{ color: "#fff" }}
+                    >
+                      API Key
+                    </label>
+                    <input
+                      type="password"
+                      className="input"
+                      placeholder="Last.fm API Key"
+                      value={settings.integrations?.lastfm?.apiKey || ""}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          integrations: {
+                            ...settings.integrations,
+                            lastfm: {
+                              ...(settings.integrations?.lastfm || {}),
+                              apiKey: e.target.value,
+                            },
                           },
-                        },
-                      })
-                    }
-                  />
-                  <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
-                    Required for high-quality images, better recommendations,
-                    and weekly flow.
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label
+                      className="block text-sm font-medium mb-1"
+                      style={{ color: "#fff" }}
+                    >
+                      Username
+                    </label>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="Your Last.fm username"
+                      value={settings.integrations?.lastfm?.username || ""}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          integrations: {
+                            ...settings.integrations,
+                            lastfm: {
+                              ...(settings.integrations?.lastfm || {}),
+                              username: e.target.value,
+                            },
+                          },
+                        })
+                      }
+                    />
+                    <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
+                      Your Last.fm username for personalized recommendations based on your listening history.
+                    </p>
+                  </div>
+                  <p className="text-xs" style={{ color: "#c1c1c3" }}>
+                    API key is required for high-quality images, better recommendations, and weekly flow. Username enables personalized recommendations from your Last.fm listening history.
                   </p>
                 </div>
               </div>

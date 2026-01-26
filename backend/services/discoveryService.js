@@ -1,6 +1,10 @@
 import { db } from "../config/db.js";
 import { GENRE_KEYWORDS } from "../config/constants.js";
-import { lastfmRequest, getLastfmApiKey } from "./apiClients.js";
+import { lastfmRequest, getLastfmApiKey, musicbrainzRequest } from "./apiClients.js";
+
+const getLastfmUsername = () => {
+  return db.data?.settings?.integrations?.lastfm?.username || null;
+};
 
 // Initialize cache - but check if discovery is actually configured first
 let discoveryCache = {
@@ -69,7 +73,16 @@ export const updateDiscoveryCache = async () => {
       libraryArtists.map((a) => a.mbid),
     );
 
-    if (libraryArtists.length === 0 && !getLastfmApiKey()) {
+    const hasLastfmKey = !!getLastfmApiKey();
+    const lastfmUsername = getLastfmUsername();
+    const hasLastfmUser = hasLastfmKey && lastfmUsername;
+    
+    if (hasLastfmKey && !lastfmUsername) {
+      console.log("Last.fm API key configured but username not set. User-specific recommendations will not be available.");
+    }
+
+    // Check if we have any data source configured
+    if (libraryArtists.length === 0 && !hasLastfmKey) {
       console.log(
         "No artists in library and no Last.fm key. Skipping discovery and clearing cache.",
       );
@@ -101,13 +114,108 @@ export const updateDiscoveryCache = async () => {
       return;
     }
 
+    // Fetch Last.fm user's top artists if username is configured
+    let lastfmArtists = [];
+    if (hasLastfmUser) {
+      console.log(`Fetching Last.fm user top artists for ${lastfmUsername}...`);
+      try {
+        const userTopArtists = await lastfmRequest("user.getTopArtists", {
+          user: lastfmUsername,
+          limit: 50,
+          period: "overall", // overall, 7day, 1month, 3month, 6month, 12month
+        });
+        
+        if (!userTopArtists) {
+          console.warn("Last.fm user.getTopArtists returned null - check API key and username");
+        } else if (userTopArtists.error) {
+          console.error(`Last.fm API error: ${userTopArtists.message || userTopArtists.error}`);
+        } else if (userTopArtists?.topartists?.artist) {
+          const artists = Array.isArray(userTopArtists.topartists.artist)
+            ? userTopArtists.topartists.artist
+            : [userTopArtists.topartists.artist];
+          
+          // Convert Last.fm artists to a format similar to library artists
+          // Last.fm usually includes MBIDs in the response, but we'll handle cases where they're missing
+          const artistsWithMbids = [];
+          const artistsWithoutMbids = [];
+          
+          for (const artist of artists) {
+            if (artist.mbid) {
+              artistsWithMbids.push(artist);
+            } else if (artist.name) {
+              artistsWithoutMbids.push(artist);
+            }
+          }
+          
+          // Add artists that already have MBIDs
+          for (const artist of artistsWithMbids) {
+            lastfmArtists.push({
+              mbid: artist.mbid,
+              artistName: artist.name,
+              playcount: parseInt(artist.playcount || 0),
+            });
+          }
+          
+          // Try to get MBIDs for artists without them (limit to first 10 to avoid too many API calls)
+          if (artistsWithoutMbids.length > 0) {
+            console.log(`Attempting to get MBIDs for ${Math.min(artistsWithoutMbids.length, 10)} Last.fm artists without MBIDs...`);
+            const mbidsToFetch = artistsWithoutMbids.slice(0, 10);
+            await Promise.all(
+              mbidsToFetch.map(async (artist) => {
+                try {
+                  const mbSearch = await musicbrainzRequest("/artist", {
+                    query: `artist:"${artist.name}"`,
+                    limit: 1,
+                  });
+                  if (mbSearch?.artists?.[0]?.id) {
+                    lastfmArtists.push({
+                      mbid: mbSearch.artists[0].id,
+                      artistName: artist.name,
+                      playcount: parseInt(artist.playcount || 0),
+                    });
+                  }
+                } catch (e) {
+                  // Skip if we can't get MBID
+                  console.warn(`Could not get MBID for Last.fm artist ${artist.name}`);
+                }
+              })
+            );
+          }
+          console.log(`Found ${lastfmArtists.length} Last.fm artists with MBIDs.`);
+        } else {
+          console.warn(`Last.fm user.getTopArtists response missing expected data structure. Response:`, JSON.stringify(userTopArtists).substring(0, 200));
+        }
+      } catch (e) {
+        console.error(`Failed to fetch Last.fm user artists: ${e.message}`);
+        console.error(`Stack trace:`, e.stack);
+      }
+    } else if (hasLastfmKey) {
+      console.log("Last.fm API key is configured but username is missing. Set Last.fm username in Settings to enable user-specific recommendations.");
+    }
+
+    // Combine library and Last.fm artists for profile sampling
+    const allSourceArtists = [
+      ...libraryArtists.map(a => ({ mbid: a.mbid, artistName: a.artistName, source: 'library' })),
+      ...lastfmArtists.map(a => ({ mbid: a.mbid, artistName: a.artistName, source: 'lastfm' }))
+    ];
+    
+    // Remove duplicates (prefer library artists if both exist)
+    const uniqueArtists = [];
+    const seenMbids = new Set();
+    for (const artist of allSourceArtists) {
+      if (artist.mbid && !seenMbids.has(artist.mbid)) {
+        seenMbids.add(artist.mbid);
+        uniqueArtists.push(artist);
+      }
+    }
+
     const tagCounts = new Map();
     const genreCounts = new Map();
-    const profileSample = [...libraryArtists]
+    const profileSample = [...uniqueArtists]
       .sort(() => 0.5 - Math.random())
       .slice(0, 25);
 
-    console.log(`Sampling tags/genres from ${profileSample.length} artists...`);
+    console.log(`Sampling tags/genres from ${profileSample.length} artists (${libraryArtists.length} library, ${lastfmArtists.length} Last.fm)...`);
 
     let tagsFound = 0;
     await Promise.all(
@@ -194,14 +302,15 @@ export const updateDiscoveryCache = async () => {
       }
     }
 
-    const recSampleSize = Math.min(25, libraryArtists.length);
-    const recSample = [...libraryArtists]
+    // Use combined artists for recommendations
+    const recSampleSize = Math.min(25, uniqueArtists.length);
+    const recSample = [...uniqueArtists]
       .sort(() => 0.5 - Math.random())
       .slice(0, recSampleSize);
     const recommendations = new Map();
 
     console.log(
-      `Generating recommendations based on ${recSample.length} artists...`,
+      `Generating recommendations based on ${recSample.length} artists (${libraryArtists.length} library, ${lastfmArtists.length} Last.fm)...`,
     );
 
     if (getLastfmApiKey()) {
@@ -252,6 +361,7 @@ export const updateDiscoveryCache = async () => {
                     name: s.name,
                     type: "Artist",
                     sourceArtist: artist.artistName,
+                    sourceType: artist.source || 'library',
                     tags: sourceTags,
                     score: Math.round((s.match || 0) * 100),
                     image: img,
@@ -288,6 +398,7 @@ export const updateDiscoveryCache = async () => {
       basedOn: recSample.map((a) => ({
         name: a.artistName,
         id: a.mbid,
+        source: a.source || 'library',
       })),
       topTags: discoveryCache.topTags || [],
       topGenres: discoveryCache.topGenres || [],
