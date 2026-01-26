@@ -43,8 +43,7 @@ function ReloadPrompt() {
           </button>
           <button
             className="flex-1 px-3 py-1.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2"
-            style={{ "--tw-ring-color": "#c1c1c3" }}
-            style={{ backgroundColor: "#211f27", color: "#fff" }}
+            style={{ "--tw-ring-color": "#c1c1c3", backgroundColor: "#211f27", color: "#fff" }}
             onClick={close}
           >
             Close

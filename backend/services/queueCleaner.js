@@ -94,10 +94,40 @@ export class QueueCleaner {
       // Scan for audio files
       const files = await this.scanForAudioFiles(downloadDir);
       
-      // Check which files aren't matched to tracks
+      // Get active downloads and requests to filter relevant files
+      const activeDownloads = (db.data.downloads || []).filter(
+        d => d.status === 'downloading' || d.status === 'completed'
+      );
+      const activeRequests = (db.data.albumRequests || []).filter(
+        r => r.status === 'processing'
+      );
+      
+      // Only process files that are:
+      // 1. Not matched to tracks
+      // 2. Related to active downloads/requests OR recently modified (within 7 days)
+      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+      
       for (const file of files) {
         const isMatched = await this.isFileMatched(file.path);
-        if (!isMatched) {
+        if (isMatched) {
+          continue; // Skip matched files
+        }
+        
+        // Check if file is related to an active download
+        const isRelatedToDownload = activeDownloads.some(download => {
+          if (!download.destinationPath && !download.filename) {
+            return false;
+          }
+          const downloadPath = download.destinationPath || download.filename;
+          return file.path.includes(downloadPath) || 
+                 path.basename(file.path) === path.basename(downloadPath);
+        });
+        
+        // Check if file is recently modified (within 7 days)
+        const isRecent = file.mtime && file.mtime.getTime() > sevenDaysAgo;
+        
+        // Only process if related to active download/request or recently modified
+        if (isRelatedToDownload || isRecent) {
           unmatchedFiles.push(file);
         }
       }
@@ -134,6 +164,7 @@ export class QueueCleaner {
                 name: entry.name,
                 size: stats.size,
                 extension: ext,
+                mtime: stats.mtime, // Include modification time for filtering
               });
             } catch (error) {
               // Skip files we can't stat

@@ -50,12 +50,14 @@ router.post("/clear", async (req, res) => {
 
 router.get("/", async (req, res) => {
   // Check if discovery is configured
-  const hasLastfm = !!getLastfmApiKey();
+  const hasLastfmKey = !!getLastfmApiKey();
+  const lastfmUsername = db.data?.settings?.integrations?.lastfm?.username || null;
+  const hasLastfmUser = hasLastfmKey && lastfmUsername;
   const libraryArtists = libraryManager.getAllArtists();
   const hasArtists = libraryArtists.length > 0;
   
   // If nothing is configured, clear any existing data and return empty
-  if (!hasLastfm && !hasArtists) {
+  if (!hasLastfmKey && !hasArtists) {
     // Clear database if it has old data
     if (db.data?.discovery && (
       (db.data.discovery.recommendations?.length > 0) ||

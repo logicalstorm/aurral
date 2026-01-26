@@ -1,13 +1,12 @@
 import { useState, useEffect, useMemo, memo, useCallback, useRef } from "react";
+import PropTypes from "prop-types";
 import { useNavigate } from "react-router-dom";
 import {
   Loader,
   Music,
   Sparkles,
-  TrendingUp,
   CheckCircle,
   Tag,
-  PlayCircle,
   Clock,
   History,
 } from "lucide-react";
@@ -17,8 +16,33 @@ import {
   getRecentlyAdded,
   getAllDownloadStatus,
 } from "../utils/api";
-import { useToast } from "../contexts/ToastContext";
 import ArtistImage from "../components/ArtistImage";
+
+const TAG_COLORS = [
+  "#845336",
+  "#57553c",
+  "#a17e3e",
+  "#43454f",
+  "#604848",
+  "#5c6652",
+  "#a18b62",
+  "#8c4f4a",
+  "#898471",
+  "#c8b491",
+  "#65788f",
+  "#755e4a",
+  "#718062",
+  "#bc9d66",
+];
+
+const getTagColor = (name) => {
+  if (!name) return "#211f27";
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
+};
 
 function DiscoverPage() {
   const [data, setData] = useState(null);
@@ -26,10 +50,8 @@ function DiscoverPage() {
   const [recentlyAdded, setRecentlyAdded] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [downloadStatuses, setDownloadStatuses] = useState({});
   const downloadStatusesRef = useRef({});
   const navigate = useNavigate();
-  const { showSuccess } = useToast();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -42,6 +64,13 @@ function DiscoverPage() {
             getRecentlyAdded(),
           ]);
 
+        console.log("Discovery data received:", {
+          recommendations: discoveryData?.recommendations?.length || 0,
+          globalTop: discoveryData?.globalTop?.length || 0,
+          topGenres: discoveryData?.topGenres?.length || 0,
+          configured: discoveryData?.configured,
+          fullData: discoveryData,
+        });
         setData(discoveryData);
         setRequests(requestsData);
         setRecentlyAdded(recentlyAddedData);
@@ -57,18 +86,15 @@ function DiscoverPage() {
 
     fetchData();
 
-    // Poll download status every 5 seconds, but only update if changed
     const pollDownloadStatus = async () => {
       try {
         const statuses = await getAllDownloadStatus();
-        // Only update if the statuses actually changed (shallow comparison of keys and values)
         const prev = downloadStatusesRef.current;
         const prevKeys = Object.keys(prev).sort().join(",");
         const newKeys = Object.keys(statuses).sort().join(",");
 
         if (prevKeys !== newKeys) {
           downloadStatusesRef.current = statuses;
-          setDownloadStatuses(statuses);
           return;
         }
 
@@ -83,9 +109,7 @@ function DiscoverPage() {
 
         if (hasChanges) {
           downloadStatusesRef.current = statuses;
-          setDownloadStatuses(statuses);
         }
-        // If no changes, don't update state to prevent re-render
       } catch (error) {
         console.error("Failed to fetch download status:", error);
       }
@@ -105,9 +129,6 @@ function DiscoverPage() {
       const image = posterImage || artist.images[0];
 
       if (image && artist.id) {
-        const coverType = image.coverType || "poster";
-        const filename = `${coverType}.jpg`;
-        // Images are handled through the image service
         return null;
       }
       return image?.remoteUrl || image?.url || null;
@@ -153,17 +174,9 @@ function DiscoverPage() {
 
   const ArtistCard = memo(
     ({ artist, status }) => {
-      // For album requests, navigate to artist page; otherwise use artist.id
       const navigateTo = artist.navigateTo || artist.id;
       const handleClick = useCallback(
         () => navigate(`/artist/${navigateTo}`),
-        [navigateTo],
-      );
-      const handleButtonClick = useCallback(
-        (e) => {
-          e.stopPropagation();
-          navigate(`/artist/${navigateTo}`);
-        },
         [navigateTo],
       );
 
@@ -195,7 +208,6 @@ function DiscoverPage() {
                 {status}
               </div>
             )}
-
           </div>
 
           <div className="flex flex-col min-w-0">
@@ -222,7 +234,6 @@ function DiscoverPage() {
       );
     },
     (prevProps, nextProps) => {
-      // Custom comparison: only re-render if artist id, image, name, or status actually changed
       return (
         prevProps.artist.id === nextProps.artist.id &&
         prevProps.artist.image === nextProps.artist.image &&
@@ -232,6 +243,21 @@ function DiscoverPage() {
       );
     },
   );
+
+  ArtistCard.displayName = "ArtistCard";
+  ArtistCard.propTypes = {
+    artist: PropTypes.shape({
+      id: PropTypes.string,
+      name: PropTypes.string.isRequired,
+      image: PropTypes.string,
+      imageUrl: PropTypes.string,
+      type: PropTypes.string,
+      sourceArtist: PropTypes.string,
+      subtitle: PropTypes.string,
+      navigateTo: PropTypes.string,
+    }).isRequired,
+    status: PropTypes.string,
+  };
 
   if (loading) {
     return (
@@ -283,10 +309,23 @@ function DiscoverPage() {
     configured = true,
   } = data || {};
 
+  // Debug: Log the state
+  console.log("DiscoverPage render:", {
+    hasData: !!data,
+    configured,
+    recommendationsCount: recommendations.length,
+    globalTopCount: globalTop.length,
+    topGenresCount: topGenres.length,
+    topTagsCount: topTags.length,
+  });
+
   // Show configuration message if discovery isn't set up
+  // Only show "not configured" if explicitly set to false AND no data exists
   if (
-    !configured ||
-    (!recommendations.length && !globalTop.length && !topGenres.length)
+    configured === false &&
+    !recommendations.length &&
+    !globalTop.length &&
+    !topGenres.length
   ) {
     return (
       <div className="flex flex-col items-center justify-center py-32 text-center">
@@ -297,7 +336,7 @@ function DiscoverPage() {
           Discovery Not Configured
         </h2>
         <p className="max-w-md mx-auto mb-6" style={{ color: "#c1c1c3" }}>
-          To see music recommendations, you need to either:
+          To see music recommendations, you need at least one of:
         </p>
         <ul
           className="text-left max-w-md mx-auto mb-6 space-y-2"
@@ -313,7 +352,7 @@ function DiscoverPage() {
             <span style={{ color: "#c1c1c3" }} className="mt-1">
               •
             </span>
-            <span>Configure Last.fm integration in Settings</span>
+            <span>Configure Last.fm (API key and username) in Settings</span>
           </li>
         </ul>
         <button
@@ -601,7 +640,9 @@ function DiscoverPage() {
               className="text-xl font-bold flex items-center"
               style={{ color: "#fff" }}
             >
-              <span style={{ color: "#c1c1c3" }}>Because you like</span>
+              <span style={{ color: "#c1c1c3" }}>
+                Because you like{"\u00A0"}
+              </span>
               {section.genre}
             </h2>
             <button

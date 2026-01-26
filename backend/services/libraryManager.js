@@ -6,6 +6,8 @@ import { musicbrainzRequest } from './apiClients.js';
 export class LibraryManager {
   constructor() {
     this.initDb();
+    this._rootFolder = null;
+    this._rootFolderLogged = false;
   }
 
   initDb() {
@@ -24,13 +26,19 @@ export class LibraryManager {
   }
 
   getRootFolder() {
-    // Use environment variable if set (for local development)
-    // Otherwise use /data (for Docker - users can remap via volume mounts: /their/path:/data)
-    const rootFolder = process.env.MUSIC_ROOT || process.env.DATA_PATH || '/data';
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`[LibraryManager] Root folder: ${rootFolder} (MUSIC_ROOT=${process.env.MUSIC_ROOT || 'not set'}, DATA_PATH=${process.env.DATA_PATH || 'not set'})`);
+    // Cache the root folder value
+    if (this._rootFolder === null) {
+      // Use environment variable if set (for local development)
+      // Otherwise use /data (for Docker - users can remap via volume mounts: /their/path:/data)
+      this._rootFolder = process.env.MUSIC_ROOT || process.env.DATA_PATH || '/data';
+      
+      // Only log once on first call
+      if (process.env.NODE_ENV !== 'production' && !this._rootFolderLogged) {
+        console.log(`[LibraryManager] Root folder: ${this._rootFolder} (MUSIC_ROOT=${process.env.MUSIC_ROOT || 'not set'}, DATA_PATH=${process.env.DATA_PATH || 'not set'})`);
+        this._rootFolderLogged = true;
+      }
     }
-    return rootFolder;
+    return this._rootFolder;
   }
 
   setRootFolder(folderPath) {

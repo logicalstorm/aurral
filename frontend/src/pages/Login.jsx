@@ -52,8 +52,7 @@ const Login = () => {
                 type="text"
                 required
                 className="appearance-none relative block w-full px-3 py-2 placeholder-gray-500 focus:outline-none focus:ring-2 focus:z-10 sm:text-sm"
-              style={{ focusRingColor: "#c1c1c3" }}
-                style={{ backgroundColor: "#211f27", color: "#fff" }}
+                style={{ focusRingColor: "#c1c1c3", backgroundColor: "#211f27", color: "#fff" }}
                 placeholder="Username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -69,8 +68,7 @@ const Login = () => {
                 type="password"
                 required
                 className="appearance-none relative block w-full px-3 py-2 placeholder-gray-500 focus:outline-none focus:ring-2 focus:z-10 sm:text-sm"
-              style={{ focusRingColor: "#c1c1c3" }}
-                style={{ backgroundColor: "#211f27", color: "#fff" }}
+                style={{ focusRingColor: "#c1c1c3", backgroundColor: "#211f27", color: "#fff" }}
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
