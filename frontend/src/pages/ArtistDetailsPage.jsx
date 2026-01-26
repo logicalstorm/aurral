@@ -161,142 +161,283 @@ function ArtistDetailsPage() {
   const { showSuccess, showError } = useToast();
 
   useEffect(() => {
-    const fetchArtistData = async () => {
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
+    setLoadingCover(true);
+    setLoadingSimilar(true);
 
-      try {
-        // Fetch basic artist data first - show page immediately after this
-        const [artistData, settings] = await Promise.all([
-          getArtistDetails(mbid),
-          getAppSettings(),
-        ]);
+    // Fetch app settings (non-blocking)
+    getAppSettings().then(setAppSettings).catch(() => {});
 
-        // Filter settings are loaded from localStorage in useState initialization
-        // No need to reset them here
-        if (!artistData || !artistData.id) {
-          throw new Error("Invalid artist data received");
-        }
-        setArtist(artistData);
-        setAppSettings(settings);
-        setLoading(false); // Show page immediately with basic data
+    // Build EventSource URL with authentication
+    const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
+    const password = localStorage.getItem("auth_password");
+    const username = localStorage.getItem("auth_user") || "admin";
+    
+    let streamUrl = `${API_BASE_URL}/artists/${mbid}/stream`;
+    if (password) {
+      const token = btoa(`${username}:${password}`);
+      streamUrl += `?token=${encodeURIComponent(token)}`;
+    }
 
-        // Load cover image in background
-        setLoadingCover(true);
+    // Use EventSource for streaming data
+    const eventSource = new EventSource(streamUrl);
+    let artistReceived = false;
+    let streamComplete = false;
+    let coverReceived = false;
+    let similarReceived = false;
+    
+    // Fallback timeout - if cover/similar don't arrive within 10 seconds, fetch them directly
+    const fallbackTimeout = setTimeout(() => {
+      if (!coverReceived) {
+        console.log('[Stream] Fallback: Fetching cover directly');
         getArtistCover(mbid)
           .then((coverData) => {
             if (coverData.images && coverData.images.length > 0) {
               setCoverImages(coverData.images);
             }
           })
-          .catch((err) => {})
+          .catch(() => {})
           .finally(() => setLoadingCover(false));
-
-        // Load similar artists in background
-        setLoadingSimilar(true);
+      }
+      if (!similarReceived) {
+        console.log('[Stream] Fallback: Fetching similar artists directly');
         getSimilarArtistsForArtist(mbid)
           .then((similarData) => {
             setSimilarArtists(similarData.artists || []);
           })
-          .catch((err) => {
-            console.error("Failed to fetch similar artists:", err);
-          })
+          .catch(() => {})
           .finally(() => setLoadingSimilar(false));
+      }
+    }, 10000);
 
-        // Load album covers in background (non-blocking)
-        if (
-          artistData["release-groups"] &&
-          artistData["release-groups"].length > 0
-        ) {
-          const releaseGroupIds = artistData["release-groups"]
-            .filter(
-              (rg) =>
-                rg["primary-type"] === "Album" || rg["primary-type"] === "EP",
-            )
-            .slice(0, 30)
-            .map((rg) => rg.id);
-
-          const coverPromises = releaseGroupIds.map(async (rgId) => {
-            try {
-              const coverData = await getReleaseGroupCover(rgId);
-              if (coverData.images && coverData.images.length > 0) {
-                const front =
-                  coverData.images.find((img) => img.front) ||
-                  coverData.images[0];
-                return { id: rgId, url: front.image };
-              }
-            } catch (err) {}
-            return null;
-          });
-
-          Promise.all(coverPromises)
-            .then((results) => {
-              const covers = {};
-              results.forEach((result) => {
-                if (result) covers[result.id] = result.url;
-              });
-              setAlbumCovers((prev) => ({ ...prev, ...covers }));
-            })
-            .catch(() => {});
-        }
-
-        // Load library data in background
-        setLoadingLibrary(true);
-        lookupArtistInLibrary(mbid)
-          .then((lookup) => {
-            setExistsInLibrary(lookup.exists);
-            if (lookup.exists && lookup.artist) {
-              return Promise.all([
-                getLibraryArtist(
-                  lookup.artist.mbid || lookup.artist.foreignArtistId,
-                ).catch((err) => {
-                  console.error("Failed to fetch full artist details:", err);
-                  return lookup.artist;
-                }),
-              ]).then(([fullArtist]) => {
-                setLibraryArtist(fullArtist);
-                return fullArtist.id || lookup.artist.id;
-              });
-            }
-            return null;
-          })
-          .then((artistId) => {
-            if (artistId) {
-              // Fetch albums
-              setTimeout(() => {
-                getLibraryAlbums(artistId)
-                  .then((albums) => {
-                    setLibraryAlbums(albums);
-                  })
-                  .catch((err) => {
-                    setTimeout(() => {
-                      getLibraryAlbums(artistId)
-                        .then((albums) => setLibraryAlbums(albums))
-                        .catch((e) => {});
-                    }, 2000);
-                  });
-              }, 1000);
-            }
-          })
-          .catch((err) => {
-            console.error("Failed to lookup artist in library:", err);
-          })
-          .finally(() => setLoadingLibrary(false));
+    eventSource.addEventListener('connected', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('[Stream] Connected for artist:', data.mbid);
       } catch (err) {
-        console.error("Error fetching artist data:", err);
-        console.error("Error response:", err.response);
-        console.error("Error message:", err.message);
+        console.error('[Stream] Error parsing connected event:', err);
+      }
+    });
+
+    eventSource.addEventListener('artist', (event) => {
+      try {
+        const artistData = JSON.parse(event.data);
+        console.log('[Stream] Received artist data');
+        if (!artistData || !artistData.id) {
+          throw new Error("Invalid artist data received");
+        }
+        setArtist(artistData);
+        setLoading(false); // Show page immediately with basic data
+        artistReceived = true;
+      } catch (err) {
+        console.error("Error parsing artist data:", err);
+        setError("Failed to parse artist data");
+        setLoading(false);
+      }
+    });
+
+    eventSource.addEventListener('cover', (event) => {
+      try {
+        const coverData = JSON.parse(event.data);
+        console.log('[Stream] Received cover data:', coverData.images?.length || 0, 'images');
+        coverReceived = true;
+        if (coverData.images && coverData.images.length > 0) {
+          setCoverImages(coverData.images);
+        }
+        setLoadingCover(false);
+      } catch (err) {
+        console.error("Error parsing cover data:", err, event.data);
+        setLoadingCover(false);
+      }
+    });
+
+    eventSource.addEventListener('similar', (event) => {
+      try {
+        const similarData = JSON.parse(event.data);
+        console.log('[Stream] Received similar artists:', similarData.artists?.length || 0, 'artists');
+        similarReceived = true;
+        setSimilarArtists(similarData.artists || []);
+        setLoadingSimilar(false);
+      } catch (err) {
+        console.error("Error parsing similar artists data:", err, event.data);
+        setLoadingSimilar(false);
+      }
+    });
+
+    eventSource.addEventListener('releaseGroupCover', (event) => {
+      try {
+        const coverData = JSON.parse(event.data);
+        if (coverData.images && coverData.images.length > 0 && coverData.mbid) {
+          const front = coverData.images.find((img) => img.front) || coverData.images[0];
+          if (front && front.image) {
+            setAlbumCovers((prev) => ({
+              ...prev,
+              [coverData.mbid]: front.image,
+            }));
+          }
+        }
+      } catch (err) {
+        console.error("Error parsing release group cover data:", err, event.data);
+      }
+    });
+
+    eventSource.addEventListener('complete', () => {
+      console.log('[Stream] Stream complete');
+      streamComplete = true;
+      clearTimeout(fallbackTimeout);
+      eventSource.close();
+      
+      // Load library data after stream completes
+      setLoadingLibrary(true);
+      lookupArtistInLibrary(mbid)
+        .then((lookup) => {
+          setExistsInLibrary(lookup.exists);
+          if (lookup.exists && lookup.artist) {
+            return Promise.all([
+              getLibraryArtist(
+                lookup.artist.mbid || lookup.artist.foreignArtistId,
+              ).catch((err) => {
+                console.error("Failed to fetch full artist details:", err);
+                return lookup.artist;
+              }),
+            ]).then(([fullArtist]) => {
+              setLibraryArtist(fullArtist);
+              return fullArtist.id || lookup.artist.id;
+            });
+          }
+          return null;
+        })
+        .then((artistId) => {
+          if (artistId) {
+            // Fetch albums
+            setTimeout(() => {
+              getLibraryAlbums(artistId)
+                .then((albums) => {
+                  setLibraryAlbums(albums);
+                })
+                .catch((err) => {
+                  setTimeout(() => {
+                    getLibraryAlbums(artistId)
+                      .then((albums) => setLibraryAlbums(albums))
+                      .catch((e) => {});
+                  }, 2000);
+                });
+            }, 1000);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to lookup artist in library:", err);
+        })
+        .finally(() => setLoadingLibrary(false));
+    });
+
+    eventSource.addEventListener('error', (event) => {
+      try {
+        const errorData = JSON.parse(event.data);
         setError(
-          err.response?.data?.message ||
-            err.response?.data?.error ||
-            err.message ||
-            "Failed to fetch artist details",
+          errorData.message ||
+            errorData.error ||
+            "Failed to fetch artist details"
         );
         setLoading(false);
+        eventSource.close();
+      } catch (err) {
+        // If eventSource is in error state, fallback to regular API
+        if (eventSource.readyState === EventSource.CLOSED) {
+          console.warn("[Stream] Connection closed, falling back to regular API");
+          eventSource.close();
+          
+          // Fallback to regular API call
+          getArtistDetails(mbid)
+            .then((artistData) => {
+              if (!artistData || !artistData.id) {
+                throw new Error("Invalid artist data received");
+              }
+              setArtist(artistData);
+              setLoading(false);
+              
+              // Load other data in background
+              getArtistCover(mbid)
+                .then((coverData) => {
+                  if (coverData.images && coverData.images.length > 0) {
+                    setCoverImages(coverData.images);
+                  }
+                })
+                .catch(() => {})
+                .finally(() => setLoadingCover(false));
+              
+              getSimilarArtistsForArtist(mbid)
+                .then((similarData) => {
+                  setSimilarArtists(similarData.artists || []);
+                })
+                .catch(() => {})
+                .finally(() => setLoadingSimilar(false));
+            })
+            .catch((err) => {
+              console.error("Error fetching artist data:", err);
+              setError(
+                err.response?.data?.message ||
+                  err.response?.data?.error ||
+                  err.message ||
+                  "Failed to fetch artist details"
+              );
+              setLoading(false);
+            });
+        }
+      }
+    });
+
+    eventSource.onerror = (err) => {
+      console.error("[Stream] EventSource onerror:", err, "readyState:", eventSource.readyState);
+      // Only handle if we haven't received artist data yet
+      if (!artistReceived && !streamComplete) {
+        console.error("[Stream] EventSource error before artist data received");
+        eventSource.close();
+        
+        // Fallback to regular API
+        getArtistDetails(mbid)
+          .then((artistData) => {
+            if (!artistData || !artistData.id) {
+              throw new Error("Invalid artist data received");
+            }
+            setArtist(artistData);
+            setLoading(false);
+            
+            getArtistCover(mbid)
+              .then((coverData) => {
+                if (coverData.images && coverData.images.length > 0) {
+                  setCoverImages(coverData.images);
+                }
+              })
+              .catch(() => {})
+              .finally(() => setLoadingCover(false));
+            
+            getSimilarArtistsForArtist(mbid)
+              .then((similarData) => {
+                setSimilarArtists(similarData.artists || []);
+              })
+              .catch(() => {})
+              .finally(() => setLoadingSimilar(false));
+          })
+          .catch((err) => {
+            console.error("Error fetching artist data:", err);
+            setError(
+              err.response?.data?.message ||
+                err.response?.data?.error ||
+                err.message ||
+                "Failed to fetch artist details"
+            );
+            setLoading(false);
+          });
       }
     };
 
-    fetchArtistData();
+    // Cleanup on unmount or mbid change
+    return () => {
+      clearTimeout(fallbackTimeout);
+      eventSource.close();
+    };
   }, [mbid]);
 
   const handleRefreshArtist = async () => {
