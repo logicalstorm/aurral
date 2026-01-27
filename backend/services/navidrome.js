@@ -114,4 +114,43 @@ export class NavidromeClient {
   async deletePlaylist(id) {
     return this.request('deletePlaylist', { id });
   }
+  
+  async addToPlaylist(playlistId, songId) {
+    // Add a single song to an existing playlist
+    return this.request('updatePlaylist', {
+      playlistId,
+      songIdToAdd: songId
+    });
+  }
+  
+  async removeFromPlaylist(playlistId, songId) {
+    // Remove a single song from a playlist
+    // Navidrome/Subsonic API uses songIndexToRemove (position-based)
+    // We need to get the playlist first to find the song's index
+    try {
+      const playlistData = await this.request('getPlaylist', { id: playlistId });
+      const playlist = playlistData.playlist;
+      
+      if (!playlist || !playlist.entry) {
+        throw new Error('Playlist not found or empty');
+      }
+      
+      const entries = Array.isArray(playlist.entry) ? playlist.entry : [playlist.entry];
+      const songIndex = entries.findIndex(entry => entry.id === songId);
+      
+      if (songIndex === -1) {
+        throw new Error('Song not found in playlist');
+      }
+      
+      // Remove by index
+      await this.request('updatePlaylist', {
+        playlistId,
+        songIndexToRemove: songIndex
+      });
+      
+      return { success: true };
+    } catch (error) {
+      throw new Error(`Failed to remove song from playlist: ${error.message}`);
+    }
+  }
 }

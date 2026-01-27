@@ -1837,8 +1837,149 @@ export class SlskdClient {
         // Return array of all download results so downloadManager can track them all
         return downloadResults;
       } else {
-        // Single track download - just download the best match
-        const bestFile = sortedFiles[0];
+        // Single track download - filter and validate files
+        // Filter out remixes, live versions, acoustic versions, demos, etc.
+        const unwantedPatterns = [
+          /remix/i,
+          /live/i,
+          /acoustic/i,
+          /demo/i,
+          /version/i,
+          /edit/i,
+          /instrumental/i,
+          /karaoke/i,
+          /cover/i,
+          /tribute/i,
+          /bootleg/i,
+        ];
+        
+        // Filter files that don't contain unwanted patterns
+        let validFiles = sortedFiles.filter(file => {
+          const filename = (file.filename || file.name || "").toLowerCase();
+          const path = (file.path || "").toLowerCase();
+          const fullPath = `${path} ${filename}`;
+          
+          // Extract track name from filename for comparison
+          const pathParts = filename.split(/[\\/]/);
+          const justFilename = pathParts[pathParts.length - 1] || filename;
+          const extractedTrackName = justFilename
+            .replace(/\.(flac|mp3|m4a|ogg|wav)$/i, '')
+            .replace(/^\d{1,2}[\s\-\.]+/, '')
+            .replace(/^track\s*\d+[\s\-\.]+/i, '')
+            .trim();
+          
+          // Check if filename contains unwanted patterns
+          for (const pattern of unwantedPatterns) {
+            if (pattern.test(fullPath)) {
+              // Exception: if the track name itself contains the pattern (e.g., "Live Forever", "Acoustic Guitar")
+              // we should still allow it if the extracted track name matches the expected track name
+              const trackName = options.trackMetadata?.title?.toLowerCase() || "";
+              if (trackName && pattern.test(trackName)) {
+                // The expected track name contains this pattern, so it's legitimate
+                // Check if the extracted track name matches the expected track name
+                const normalizedExtracted = extractedTrackName.replace(/[^a-z0-9]/g, '');
+                const normalizedExpected = trackName.replace(/[^a-z0-9]/g, '');
+                if (normalizedExtracted === normalizedExpected || 
+                    normalizedExtracted.includes(normalizedExpected) ||
+                    normalizedExpected.includes(normalizedExtracted)) {
+                  // This is the actual track name, allow it
+                  continue;
+                }
+              }
+              // Pattern found and it's not part of the legitimate track name - filter out
+              return false;
+            }
+          }
+          return true;
+        });
+        
+        // If we filtered out all files, log a warning and use original list
+        if (validFiles.length === 0) {
+          console.warn(`All files were filtered out (remixes/live versions). Using original list.`);
+          validFiles = sortedFiles;
+        } else if (validFiles.length < sortedFiles.length) {
+          console.log(`Filtered out ${sortedFiles.length - validFiles.length} files (remixes/live versions). ${validFiles.length} valid files remaining.`);
+        }
+        
+        // If we have MusicBrainz metadata (duration), prioritize files that might match
+        // Note: slskd search results don't typically include file duration, so we can't match by duration directly
+        // But we can still filter out unwanted versions and prioritize exact title matches
+        let bestFile = validFiles[0];
+        
+        if (options.trackMetadata && options.trackMetadata.title) {
+          const expectedTitle = options.trackMetadata.title.toLowerCase().trim();
+          
+          // Prioritize files with exact title match (excluding track numbers and extensions)
+          let bestMatch = null;
+          let bestMatchScore = 0;
+          
+          for (const file of validFiles) {
+            const filename = (file.filename || file.name || "").toLowerCase();
+            const pathParts = filename.split(/[\\/]/);
+            const justFilename = pathParts[pathParts.length - 1] || filename;
+            
+            // Extract track name from filename
+            let extractedTrackName = justFilename
+              .replace(/\.(flac|mp3|m4a|ogg|wav)$/i, '') // Remove extension
+              .replace(/^\d{1,2}[\s\-\.]+/, '') // Remove leading track number
+              .replace(/^track\s*\d+[\s\-\.]+/i, '') // Remove "track 01 -"
+              .trim();
+            
+            // Normalize for comparison
+            const normalizedExtracted = extractedTrackName.replace(/[^a-z0-9]/g, '');
+            const normalizedExpected = expectedTitle.replace(/[^a-z0-9]/g, '');
+            
+            let matchScore = 0;
+            
+            // Exact match
+            if (normalizedExtracted === normalizedExpected) {
+              matchScore = 100;
+            }
+            // Contains match
+            else if (normalizedExtracted.includes(normalizedExpected) || normalizedExpected.includes(normalizedExtracted)) {
+              matchScore = 80;
+            }
+            // Partial match
+            else {
+              const minLength = Math.min(normalizedExtracted.length, normalizedExpected.length);
+              const maxLength = Math.max(normalizedExtracted.length, normalizedExpected.length);
+              if (minLength > 0 && maxLength > 0) {
+                let commonChars = 0;
+                const shorter = normalizedExtracted.length < normalizedExpected.length 
+                  ? normalizedExtracted 
+                  : normalizedExpected;
+                const longer = normalizedExtracted.length >= normalizedExpected.length 
+                  ? normalizedExtracted 
+                  : normalizedExpected;
+                
+                for (let i = 0; i < shorter.length; i++) {
+                  if (longer.includes(shorter[i])) {
+                    commonChars++;
+                  }
+                }
+                
+                matchScore = (commonChars / maxLength) * 100;
+              }
+            }
+            
+            if (matchScore > bestMatchScore) {
+              bestMatch = file;
+              bestMatchScore = matchScore;
+            }
+          }
+          
+          // If we found a good match, use it
+          if (bestMatch && bestMatchScore >= 60) {
+            bestFile = bestMatch;
+            console.log(
+              `Selected file with best title match: "${bestMatch.filename?.split(/[\\/]/).pop() || 'unknown'}" (match score: ${Math.round(bestMatchScore)})`
+            );
+          } else if (options.trackMetadata.length) {
+            console.log(
+              `No strong title match found. Expected duration: ${Math.round(options.trackMetadata.length / 1000)}s (not available in search results for validation).`
+            );
+          }
+        }
         
         if (bestFile._matchedTrack) {
           console.log(
