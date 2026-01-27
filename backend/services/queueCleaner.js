@@ -209,7 +209,19 @@ export class QueueCleaner {
       // Check if we should remove files
       if (this.config.remove && download.destinationPath) {
         try {
+          // Log deletion event
+          if (download.events) {
+            download.events.push({
+              timestamp: new Date().toISOString(),
+              event: 'deleted',
+              reason: 'queue_cleaner_failed_download',
+              destinationPath: download.destinationPath,
+            });
+          }
+          
           await fs.unlink(download.destinationPath);
+          download.status = 'deleted';
+          download.deletedAt = new Date().toISOString();
           console.log(`Removed failed download file: ${download.destinationPath}`);
         } catch (error) {
           console.warn(`Could not remove file ${download.destinationPath}:`, error.message);

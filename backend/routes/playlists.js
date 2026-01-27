@@ -40,6 +40,15 @@ router.post("/weekly/sync", async (req, res) => {
   }
 });
 
+router.post("/weekly/process-files", async (req, res) => {
+  try {
+    await playlistManager.processStuckWeeklyFlowFiles();
+    res.json({ success: true, message: "Processed stuck weekly flow files" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to process files", details: error.message });
+  }
+});
+
 router.post("/items/:mbid/keep", async (req, res) => {
   try {
     const success = await playlistManager.keepItem(req.params.mbid);

@@ -21,6 +21,107 @@ export class DownloadManager {
     this.initializeDownloadDirectory();
   }
 
+  /**
+   * Log an event to a download record's history
+   * This ensures we have a complete audit trail of all download operations
+   */
+  logDownloadEvent(downloadRecord, event, data = {}) {
+    if (!downloadRecord) return;
+    
+    // Initialize event history if it doesn't exist
+    if (!downloadRecord.events) {
+      downloadRecord.events = [];
+    }
+    
+    const eventEntry = {
+      timestamp: new Date().toISOString(),
+      event,
+      ...data,
+    };
+    
+    downloadRecord.events.push(eventEntry);
+    
+    // Keep only last 100 events to prevent bloat
+    if (downloadRecord.events.length > 100) {
+      downloadRecord.events = downloadRecord.events.slice(-100);
+    }
+    
+    // Update status-specific timestamps
+    const timestamp = eventEntry.timestamp;
+    switch (event) {
+      case 'requested':
+        downloadRecord.requestedAt = timestamp;
+        downloadRecord.status = 'requested';
+        break;
+      case 'queued':
+        downloadRecord.queuedAt = timestamp;
+        downloadRecord.status = 'queued';
+        break;
+      case 'started':
+        downloadRecord.startedAt = timestamp;
+        downloadRecord.status = 'downloading';
+        break;
+      case 'progress':
+        downloadRecord.lastProgressUpdate = timestamp;
+        if (data.progress !== undefined) {
+          downloadRecord.progress = data.progress;
+        }
+        break;
+      case 'stalled':
+        downloadRecord.stalledAt = downloadRecord.stalledAt || timestamp;
+        downloadRecord.status = 'stalled';
+        break;
+      case 'failed':
+        downloadRecord.failedAt = timestamp;
+        downloadRecord.status = 'failed';
+        if (data.error) {
+          downloadRecord.lastError = data.error;
+        }
+        break;
+      case 'timeout':
+        downloadRecord.timedOutAt = timestamp;
+        downloadRecord.status = 'timeout';
+        if (data.error) {
+          downloadRecord.lastError = data.error;
+        }
+        break;
+      case 'completed':
+        downloadRecord.completedAt = timestamp;
+        downloadRecord.status = 'completed';
+        break;
+      case 'moved':
+        downloadRecord.movedAt = timestamp;
+        if (data.destinationPath) {
+          downloadRecord.destinationPath = data.destinationPath;
+        }
+        break;
+      case 'added_to_library':
+        downloadRecord.addedToLibraryAt = timestamp;
+        downloadRecord.status = 'added';
+        break;
+      case 'deleted':
+        downloadRecord.deletedAt = timestamp;
+        downloadRecord.status = 'deleted';
+        break;
+      case 'requeued':
+        downloadRecord.requeuedAt = timestamp;
+        downloadRecord.requeueCount = (downloadRecord.requeueCount || 0) + 1;
+        downloadRecord.status = 'queued';
+        // Reset failure tracking for new attempt
+        downloadRecord.lastFailureAt = null;
+        break;
+      case 'cancelled':
+        downloadRecord.cancelledAt = timestamp;
+        downloadRecord.status = 'cancelled';
+        break;
+    }
+    
+    // Always update lastChecked
+    downloadRecord.lastChecked = timestamp;
+    
+    return eventEntry;
+  }
+
   // Remove empty directories up to the slskd download root
   async removeEmptyDirectories(filePath) {
     if (!this.slskdDownloadDir) {
@@ -75,18 +176,28 @@ export class DownloadManager {
       // Try to match without common suffixes like (1), (2), etc.
       const baseName = searchName.replace(/\s*\(\d+\)\s*$/, '').trim();
       
-      // Extract potential track pattern (e.g., "08 - Track Name" from "Artist - Album - 08 - Track Name")
-      const trackPattern = searchName.match(/(\d+\s*-\s*.+)$/);
-      const trackOnly = trackPattern ? trackPattern[1].trim() : null;
+      // Normalize separators (periods, dashes, spaces) for comparison
+      const normalizeSeparators = (str) => str.replace(/[.\-_\s]+/g, ' ').trim().toLowerCase();
+      const normalizedSearch = normalizeSeparators(searchName);
+      
+      // Extract potential track pattern (e.g., "08 - Track Name" or "01. Track Name")
+      const trackPattern = searchName.match(/(\d+[.\-\s]+\s*.+)$/);
+      const trackOnly = trackPattern ? normalizeSeparators(trackPattern[1]) : null;
       
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         
         if (entry.isFile()) {
           const entryName = entry.name.toLowerCase();
+          const normalizedEntry = normalizeSeparators(entryName);
           
           // Exact match
           if (entryName === searchName) {
+            return fullPath;
+          }
+          
+          // Normalized match (handles period vs dash differences)
+          if (normalizedEntry === normalizedSearch) {
             return fullPath;
           }
           
@@ -97,12 +208,13 @@ export class DownloadManager {
           
           // If we have a track-only pattern, try matching just that part
           // e.g., "Beddy Rays - 2022 Beddy Rays - 08 - Sobercoaster.flac" should match "08 - Sobercoaster.flac"
-          if (trackOnly && entryName === trackOnly) {
+          // or "01. She Loves Me So.flac" should match "01 - She Loves Me So.flac"
+          if (trackOnly && normalizedEntry === trackOnly) {
             return fullPath;
           }
           
-          // Partial match - check if the entry ends with the track pattern
-          if (trackOnly && entryName.endsWith(trackOnly)) {
+          // Partial match - check if the entry ends with the track pattern (normalized)
+          if (trackOnly && normalizedEntry.endsWith(trackOnly)) {
             return fullPath;
           }
           
@@ -110,10 +222,14 @@ export class DownloadManager {
           const entryBase = entryName.replace(/\s*\(\d+\)\s*\./, '.').replace(/\.[^.]+$/, '');
           const searchBase = baseName.replace(/\.[^.]+$/, '');
           
+          // Normalized base comparison
+          const normalizedEntryBase = normalizeSeparators(entryBase);
+          const normalizedSearchBase = normalizeSeparators(searchBase);
+          
           // If one contains the other (after removing common prefixes), it's likely a match
-          if (entryBase === searchBase || 
-              (entryBase.length > 10 && searchBase.length > 10 && 
-               (entryBase.includes(searchBase) || searchBase.includes(entryBase)))) {
+          if (normalizedEntryBase === normalizedSearchBase || 
+              (normalizedEntryBase.length > 10 && normalizedSearchBase.length > 10 && 
+               (normalizedEntryBase.includes(normalizedSearchBase) || normalizedSearchBase.includes(normalizedEntryBase)))) {
             return fullPath;
           }
         } else if (entry.isDirectory() && !entry.name.startsWith('.')) {
@@ -231,6 +347,69 @@ export class DownloadManager {
     setInterval(() => {
       this.checkCompletedDownloads();
     }, 10000);
+    
+    // Check for failed downloads that should be requeued every 5 minutes
+    setInterval(() => {
+      this.checkFailedDownloadsForRequeue();
+    }, 5 * 60 * 1000);
+  }
+
+  /**
+   * Check for failed downloads that should be automatically requeued
+   * This ensures we're always trying to complete downloads
+   */
+  async checkFailedDownloadsForRequeue() {
+    try {
+      if (!slskdClient.isConfigured()) {
+        return;
+      }
+
+      const failedDownloads = (db.data.downloads || []).filter(
+        d => d.status === 'failed' && 
+             !d.queueCleaned && 
+             (d.retryCount || 0) < 3 &&
+             (!d.lastRequeueAttempt || 
+              (new Date() - new Date(d.lastRequeueAttempt)) / (1000 * 60) > 60) // Wait at least 1 hour between requeue attempts
+      );
+
+      if (failedDownloads.length === 0) {
+        return;
+      }
+
+      console.log(`Checking ${failedDownloads.length} failed downloads for automatic requeue...`);
+
+      for (const download of failedDownloads) {
+        try {
+          // Check if enough time has passed since last failure
+          const lastFailure = download.failedAt || download.lastFailureAt;
+          if (!lastFailure) continue;
+
+          const minutesSinceFailure = (new Date() - new Date(lastFailure)) / (1000 * 60);
+          
+          // Only requeue if it's been at least 30 minutes since failure
+          if (minutesSinceFailure < 30) {
+            continue;
+          }
+
+          // Check if this download is still relevant (not deleted, not cleaned)
+          if (download.queueCleaned || download.status === 'deleted') {
+            continue;
+          }
+
+          console.log(`Auto-requeuing failed download ${download.id} (attempt ${(download.retryCount || 0) + 1}/3)...`);
+          
+          download.lastRequeueAttempt = new Date().toISOString();
+          await db.write();
+          
+          // Retry the download
+          await this.retryDownload(download);
+        } catch (error) {
+          console.error(`Error auto-requeuing download ${download.id}:`, error.message);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking failed downloads for requeue:', error.message);
+    }
   }
 
   // Helper function to normalize download state across different slskd API versions
@@ -323,7 +502,27 @@ export class DownloadManager {
               filename: download.filename || 'unknown',
               state: state,
             });
-            await this.handleCompletedDownload(download);
+            
+            // Try to find by slskdDownloadId even if status isn't completed
+            const existingRecord = (db.data.downloads || []).find(
+              d => {
+                const recordIdStr = d.slskdDownloadId?.toString();
+                return recordIdStr === downloadIdStr || d.slskdDownloadId === download.id;
+              }
+            );
+            
+            if (existingRecord) {
+              // Update existing record
+              this.logDownloadEvent(existingRecord, 'completed', {
+                slskdState: state,
+                filename: download.filename,
+              });
+              await db.write();
+              await this.handleCompletedDownload(download);
+            } else {
+              // New download we weren't tracking - handle it
+              await this.handleCompletedDownload(download);
+            }
             processedCount++;
           }
         }
@@ -350,14 +549,22 @@ export class DownloadManager {
             console.log(
               `Download ${trackedDownload.id} not found in slskd after ${Math.round(minutesElapsed)} minutes (retry ${trackedDownload.retryCount || 0}/3), marking for retry`,
             );
+            this.logDownloadEvent(trackedDownload, 'timeout', {
+              error: `Download not found in slskd after ${Math.round(minutesElapsed)} minutes`,
+              minutesElapsed: Math.round(minutesElapsed),
+            });
+            await db.write();
             await this.handleFailedDownload(trackedDownload);
           } else if (minutesElapsed > 10) {
             // Too many retries or too old - mark as failed
             console.log(
               `Download ${trackedDownload.id} not found after ${Math.round(minutesElapsed)} minutes and max retries reached, marking as failed`,
             );
-            trackedDownload.status = 'failed';
-            trackedDownload.failedAt = new Date().toISOString();
+            this.logDownloadEvent(trackedDownload, 'failed', {
+              error: `Download not found after ${Math.round(minutesElapsed)} minutes and max retries reached`,
+              minutesElapsed: Math.round(minutesElapsed),
+              retryCount: trackedDownload.retryCount || 0,
+            });
             await db.write();
           }
         } else {
@@ -368,9 +575,20 @@ export class DownloadManager {
           if (normalizedState === 'completed') {
             // Download is completed but we haven't processed it yet - handle it
             console.log(`Found completed download in tracked list: ${trackedDownload.id}, state: ${state}`);
+            this.logDownloadEvent(trackedDownload, 'completed', {
+              slskdState: state,
+              filename: slskdDownload.filename,
+            });
+            await db.write();
             await this.handleCompletedDownload(slskdDownload);
           } else if (normalizedState === 'failed' || normalizedState === 'cancelled') {
             console.log(`Download ${trackedDownload.id} failed with state: ${state}`);
+            const errorMsg = slskdDownload.error || slskdDownload.errorMessage || state;
+            this.logDownloadEvent(trackedDownload, normalizedState === 'cancelled' ? 'cancelled' : 'failed', {
+              error: errorMsg,
+              slskdState: state,
+            });
+            await db.write();
             await this.handleFailedDownload(trackedDownload, slskdDownload);
           } else if (normalizedState === 'downloading' || normalizedState === 'queued') {
             // Update progress if available
@@ -379,10 +597,23 @@ export class DownloadManager {
                            slskdDownload.percentComplete || 
                            0;
             
+            // Update status to queued if it was requested
+            if (trackedDownload.status === 'requested' && normalizedState === 'queued') {
+              this.logDownloadEvent(trackedDownload, 'queued', {
+                slskdState: state,
+              });
+            } else if (trackedDownload.status === 'queued' && normalizedState === 'downloading') {
+              this.logDownloadEvent(trackedDownload, 'started', {
+                slskdState: state,
+              });
+            }
+            
             // Update progress tracking
             if (trackedDownload.progress !== progress) {
-              trackedDownload.progress = progress;
-              trackedDownload.lastChecked = new Date().toISOString();
+              this.logDownloadEvent(trackedDownload, 'progress', {
+                progress,
+                slskdState: state,
+              });
               trackedDownload.lastState = state;
               await db.write();
             }
@@ -401,7 +632,13 @@ export class DownloadManager {
               console.log(
                 `Download ${trackedDownload.id} appears stalled (${progress}% complete, no update for ${Math.round(minutesSinceUpdate)} minutes, state: ${state})`,
               );
+              this.logDownloadEvent(trackedDownload, 'stalled', {
+                progress,
+                minutesSinceUpdate: Math.round(minutesSinceUpdate),
+                slskdState: state,
+              });
               trackedDownload.lastProgress = progress;
+              await db.write();
               await this.handleStalledDownload(trackedDownload, slskdDownload);
             } else if (progress !== lastProgress) {
               // Progress changed, update last progress
@@ -436,9 +673,50 @@ export class DownloadManager {
         username: download.username,
       });
       
-      // slskd download object structure may vary
-      // Try multiple possible path fields
-      let sourcePath = download.filePath || download.destinationPath || download.path || download.file;
+      // ALWAYS get the full download details from slskd API - it contains the actual file path
+      let fullDownload = download;
+      let sourcePath = null;
+      
+      if (download.id) {
+        try {
+          const detailedDownload = await slskdClient.getDownload(download.id);
+          if (detailedDownload) {
+            fullDownload = { ...download, ...detailedDownload };
+            
+            // slskd API returns the actual file path - try all possible field names
+            sourcePath = detailedDownload.filePath || 
+                        detailedDownload.destinationPath || 
+                        detailedDownload.path || 
+                        detailedDownload.file || 
+                        detailedDownload.localPath || 
+                        detailedDownload.completedPath ||
+                        detailedDownload.file?.path ||
+                        detailedDownload.destination?.path ||
+                        detailedDownload.destinationPath ||
+                        detailedDownload.completedFilePath;
+            
+            if (sourcePath) {
+              console.log(`✓ Got file path from slskd API for ${download.id}: ${sourcePath}`);
+            } else {
+              console.log(`⚠ No file path in detailed download. Available fields:`, Object.keys(detailedDownload).join(', '));
+              // Log the full object structure for debugging
+              console.log(`Full download object:`, JSON.stringify(detailedDownload, null, 2));
+            }
+          }
+        } catch (e) {
+          console.warn(`Could not get detailed download info for ${download.id}: ${e.message}`);
+        }
+      }
+      
+      // If we still don't have a path, try from the basic download object
+      if (!sourcePath) {
+        sourcePath = download.filePath || 
+                     download.destinationPath || 
+                     download.path || 
+                     download.file || 
+                     download.localPath || 
+                     download.completedPath;
+      }
       
       // If path not in download object, try to construct it from filename
       // slskd typically stores completed downloads in a "complete" or "downloads" folder
@@ -672,6 +950,15 @@ export class DownloadManager {
               foundFile = await this.findFileRecursively(slskdDownloadDir, trackOnlyFilename);
             }
             
+            // Also try with normalized separators (period vs dash)
+            if (!foundFile) {
+              const normalizedFilename = justFilename.replace(/\./g, ' - ').replace(/\s+/g, ' ').trim();
+              if (normalizedFilename !== justFilename) {
+                console.log(`Trying recursive search with normalized filename: ${normalizedFilename}`);
+                foundFile = await this.findFileRecursively(slskdDownloadDir, normalizedFilename);
+              }
+            }
+            
             if (foundFile) {
               sourcePath = foundFile;
               console.log(`✓ Found file via recursive search: ${foundFile}`);
@@ -870,8 +1157,10 @@ export class DownloadManager {
               if (album) {
                 // Store the file path but don't move yet - wait for all tracks
                 downloadRecord.tempFilePath = sourcePath;
-                downloadRecord.status = 'completed';
-                downloadRecord.completedAt = new Date().toISOString();
+                this.logDownloadEvent(downloadRecord, 'completed', {
+                  tempFilePath: sourcePath,
+                  trackTitle: downloadRecord.trackTitle,
+                });
                 await db.write();
                 
                 const trackInfo = downloadRecord.trackTitle 
@@ -997,26 +1286,57 @@ export class DownloadManager {
                 if (album) {
                   // Move to album folder with proper filename
                   destinationPath = await this.moveFileToTrack(sourcePath, artist, album, track);
+                  this.logDownloadEvent(downloadRecord, 'moved', {
+                    destinationPath,
+                    from: sourcePath,
+                  });
+                  this.logDownloadEvent(downloadRecord, 'added_to_library', {
+                    destinationPath,
+                    albumId: album.id,
+                    trackId: track.id,
+                  });
                   moved = true;
                 }
               }
             } else if (downloadRecord.type === 'weekly-flow') {
               // Move weekly flow tracks to Weekly Flow folder
-              destinationPath = await this.moveFileToWeeklyFlow(sourcePath, downloadRecord);
-              moved = true;
+              if (sourcePath) {
+                destinationPath = await this.moveFileToWeeklyFlow(sourcePath, downloadRecord);
+                this.logDownloadEvent(downloadRecord, 'moved', {
+                  destinationPath,
+                  from: sourcePath,
+                  location: 'weekly-flow',
+                });
+                moved = true;
+                console.log(`✓ Moved weekly flow track to: ${destinationPath}`);
+              } else {
+                console.warn(`No source path found for weekly-flow download ${downloadRecord.id}`);
+              }
             }
           }
         } catch (error) {
           console.error(`Error moving file for download ${download.id}:`, error.message);
         }
 
+        // Store the file path from slskd API in the download record for future reference
+        if (sourcePath && !downloadRecord.slskdFilePath) {
+          downloadRecord.slskdFilePath = sourcePath;
+        }
+        
         // Only update download record if it wasn't already updated (for album downloads that are waiting)
         // For album downloads, we set status and tempFilePath above, so skip this update
         const isAlbumWaiting = downloadRecord.type === 'album' && downloadRecord.albumId && downloadRecord.tempFilePath;
         if (!isAlbumWaiting) {
-          downloadRecord.status = 'completed';
-          downloadRecord.completedAt = new Date().toISOString();
-          downloadRecord.destinationPath = destinationPath;
+          // Log completion if not already logged
+          if (downloadRecord.status !== 'completed') {
+            this.logDownloadEvent(downloadRecord, 'completed', {
+              sourcePath,
+              destinationPath,
+            });
+          }
+          if (destinationPath && !downloadRecord.destinationPath) {
+            downloadRecord.destinationPath = destinationPath;
+          }
           await db.write();
           
           // For non-album downloads (single tracks), handle immediately
@@ -1429,17 +1749,23 @@ export class DownloadManager {
           type: 'album',
           artistId,
           albumId,
-          status: 'downloading',
-          startedAt: new Date().toISOString(),
+          status: 'requested',
           slskdDownloadId: downloadId,
-          username: downloadObj.username || download.username, // Store username for retry tracking
+          username: downloadObj.username || download.username,
           filename: downloadObj.filename || download.filename,
           retryCount: 0,
+          requeueCount: 0,
           progress: 0,
-          lastChecked: new Date().toISOString(),
-          trackTitle: download.track?.title, // Store which track this is
+          events: [],
+          trackTitle: download.track?.title,
           trackPosition: download.track?.position,
         };
+        
+        // Log initial requested event
+        this.logDownloadEvent(downloadRecord, 'requested', {
+          trackTitle: download.track?.title,
+          filename: downloadObj.filename || download.filename,
+        });
         
         downloadRecords.push(downloadRecord);
         db.data.downloads.push(downloadRecord);
@@ -1485,20 +1811,28 @@ export class DownloadManager {
       db.data.downloads = [];
     }
     
-    db.data.downloads.push({
+    const downloadRecord = {
       id: download.id || this.generateId(),
       type: 'track',
       artistId,
       trackId,
-      status: 'downloading',
-      startedAt: new Date().toISOString(),
+      status: 'requested',
       slskdDownloadId: download.id,
-      username: download.username, // Store username for retry tracking
+      username: download.username,
       filename: download.filename,
       retryCount: 0,
+      requeueCount: 0,
       progress: 0,
-      lastChecked: new Date().toISOString(),
+      events: [],
+    };
+    
+    // Log initial requested event
+    this.logDownloadEvent(downloadRecord, 'requested', {
+      filename: download.filename,
+      username: download.username,
     });
+    
+    db.data.downloads.push(downloadRecord);
     
     await db.write();
     
@@ -1524,23 +1858,33 @@ export class DownloadManager {
       db.data.downloads = [];
     }
     
-    db.data.downloads.push({
+    // Store the full download response from slskd for later reference
+    const downloadRecord = {
       id: download.id || this.generateId(),
       type: 'weekly-flow',
       artistId,
       artistMbid,
       artistName: artist.artistName,
       trackName,
-      status: 'downloading',
-      startedAt: new Date().toISOString(),
+      status: 'requested',
       slskdDownloadId: download.id,
-      username: download.username, // Store username for retry tracking
+      username: download.username,
       filename: download.filename,
+      slskdFilePath: download.filePath || download.destinationPath || download.path || download.file || download.localPath,
       retryCount: 0,
+      requeueCount: 0,
       progress: 0,
-      lastChecked: new Date().toISOString(),
+      events: [],
+    };
+    
+    // Log initial requested event
+    this.logDownloadEvent(downloadRecord, 'requested', {
+      trackName,
+      artistName: artist.artistName,
+      filename: download.filename,
     });
     
+    db.data.downloads.push(downloadRecord);
     await db.write();
     
     return download;
@@ -1556,15 +1900,16 @@ export class DownloadManager {
                           slskdDownload?.errorMessage || 
                           slskdDownload?.state || 
                           'Download not found in slskd';
-      downloadRecord.lastError = errorMessage;
-      downloadRecord.lastChecked = new Date().toISOString();
-      downloadRecord.lastFailureAt = new Date().toISOString();
       
       const maxRetries = 3;
       if (downloadRecord.retryCount >= maxRetries) {
         // Max retries reached, mark as failed
-        downloadRecord.status = 'failed';
-        downloadRecord.failedAt = new Date().toISOString();
+        this.logDownloadEvent(downloadRecord, 'failed', {
+          error: errorMessage,
+          retryCount: downloadRecord.retryCount,
+          maxRetries,
+          reason: 'max_retries_reached',
+        });
         downloadRecord.queueCleaned = false; // Let QueueCleaner handle it
         console.log(
           `Download ${downloadRecord.id} failed after ${maxRetries} retries. Last error: ${errorMessage}. Marking as failed for QueueCleaner.`,
@@ -1572,6 +1917,13 @@ export class DownloadManager {
         await db.write();
         return;
       }
+      
+      // Log failure but will retry
+      this.logDownloadEvent(downloadRecord, 'failed', {
+        error: errorMessage,
+        retryCount: downloadRecord.retryCount,
+        willRetry: true,
+      });
       
       // Calculate delay before retry (exponential backoff: 1min, 2min, 4min)
       const retryDelayMinutes = Math.pow(2, downloadRecord.retryCount - 1);
@@ -1607,13 +1959,20 @@ export class DownloadManager {
       }
       
       // Retry the download with alternative source
+      this.logDownloadEvent(downloadRecord, 'requeued', {
+        retryCount: downloadRecord.retryCount,
+        reason: 'failed_download_retry',
+      });
+      await db.write();
       await this.retryDownload(downloadRecord);
     } catch (error) {
       console.error(`Error handling failed download ${downloadRecord.id}:`, error.message);
       // Mark as failed if retry itself fails
-      downloadRecord.status = 'failed';
-      downloadRecord.failedAt = new Date().toISOString();
-      downloadRecord.lastError = `Retry failed: ${error.message}`;
+      this.logDownloadEvent(downloadRecord, 'failed', {
+        error: `Retry failed: ${error.message}`,
+        retryCount: downloadRecord.retryCount,
+        reason: 'retry_operation_failed',
+      });
       await db.write();
     }
   }
@@ -1622,19 +1981,29 @@ export class DownloadManager {
     try {
       // Similar to failed download, but for stalled ones
       downloadRecord.retryCount = (downloadRecord.retryCount || 0) + 1;
-      downloadRecord.lastError = `Download stalled - no progress for extended period (${downloadRecord.progress || 0}% complete)`;
-      downloadRecord.lastChecked = new Date().toISOString();
-      downloadRecord.lastFailureAt = new Date().toISOString();
+      const errorMessage = `Download stalled - no progress for extended period (${downloadRecord.progress || 0}% complete)`;
       
       const maxRetries = 3;
       if (downloadRecord.retryCount >= maxRetries) {
-        downloadRecord.status = 'failed';
-        downloadRecord.failedAt = new Date().toISOString();
+        this.logDownloadEvent(downloadRecord, 'failed', {
+          error: errorMessage,
+          retryCount: downloadRecord.retryCount,
+          maxRetries,
+          reason: 'stalled_max_retries',
+        });
         console.log(
           `Download ${downloadRecord.id} stalled after ${maxRetries} retries. Marking as failed.`,
         );
         await db.write();
         return;
+      }
+      
+      // Log stalled event (already logged in checkCompletedDownloads, but ensure it's here too)
+      if (!downloadRecord.stalledAt) {
+        this.logDownloadEvent(downloadRecord, 'stalled', {
+          progress: downloadRecord.progress || 0,
+          retryCount: downloadRecord.retryCount,
+        });
       }
       
       // Calculate delay before retry (exponential backoff)
@@ -1670,13 +2039,20 @@ export class DownloadManager {
       }
       
       // Retry with alternative source
+      this.logDownloadEvent(downloadRecord, 'requeued', {
+        retryCount: downloadRecord.retryCount,
+        reason: 'stalled_download_retry',
+      });
+      await db.write();
       await this.retryDownload(downloadRecord);
     } catch (error) {
       console.error(`Error handling stalled download ${downloadRecord.id}:`, error.message);
       // Mark as failed if retry itself fails
-      downloadRecord.status = 'failed';
-      downloadRecord.failedAt = new Date().toISOString();
-      downloadRecord.lastError = `Stalled retry failed: ${error.message}`;
+      this.logDownloadEvent(downloadRecord, 'failed', {
+        error: `Stalled retry failed: ${error.message}`,
+        retryCount: downloadRecord.retryCount,
+        reason: 'stalled_retry_operation_failed',
+      });
       await db.write();
     }
   }
@@ -1753,8 +2129,11 @@ export class DownloadManager {
           
           if (trackTitle) {
             // Retry just this specific track
-            downloadRecord.status = 'retrying';
-            downloadRecord.retryStartedAt = new Date().toISOString();
+            this.logDownloadEvent(downloadRecord, 'requeued', {
+              reason: 'retry_failed_track',
+              trackTitle,
+              retryCount: downloadRecord.retryCount,
+            });
             await db.write();
             
             // Search and download just this track
@@ -1776,8 +2155,10 @@ export class DownloadManager {
             if (downloadId) {
               // Update download record with new slskd download ID
               downloadRecord.slskdDownloadId = downloadId;
-              downloadRecord.status = 'downloading';
-              downloadRecord.startedAt = new Date().toISOString();
+              
+              const downloadObj = download.enqueued && download.enqueued.length > 0 
+                ? download.enqueued[0] 
+                : download;
               
               // Track which usernames we've tried
               if (!downloadRecord.triedUsernames) {
@@ -1786,18 +2167,32 @@ export class DownloadManager {
               if (downloadRecord.username) {
                 downloadRecord.triedUsernames.push(downloadRecord.username);
               }
-              const downloadObj = download.enqueued && download.enqueued.length > 0 
-                ? download.enqueued[0] 
-                : download;
               if (downloadObj?.username) {
                 downloadRecord.triedUsernames.push(downloadObj.username);
+                downloadRecord.username = downloadObj.username;
               }
+              
+              // Log requeue event
+              this.logDownloadEvent(downloadRecord, 'requeued', {
+                newSlskdDownloadId: downloadId,
+                newUsername: downloadObj?.username,
+                retryCount: downloadRecord.retryCount,
+                reason: 'retry_failed_track',
+              });
+              
+              // Log queued event
+              this.logDownloadEvent(downloadRecord, 'queued', {
+                slskdDownloadId: downloadId,
+              });
               
               await db.write();
               console.log(`Retry initiated for track "${trackTitle}" with new download ID: ${downloadId}`);
             } else {
               console.error(`Failed to get download ID from retry result for track "${trackTitle}"`);
-              downloadRecord.status = 'failed';
+              this.logDownloadEvent(downloadRecord, 'failed', {
+                error: 'Failed to get download ID from retry result',
+                retryCount: downloadRecord.retryCount,
+              });
               await db.write();
             }
           } else {
@@ -1811,7 +2206,10 @@ export class DownloadManager {
         const track = (db.data?.library?.tracks || []).find(t => t.id === downloadRecord.trackId);
         if (track) {
           // Retry track download
-          downloadRecord.status = 'retrying';
+          this.logDownloadEvent(downloadRecord, 'requeued', {
+            reason: 'retry_failed_track',
+            retryCount: downloadRecord.retryCount,
+          });
           downloadRecord.retryStartedAt = new Date().toISOString();
           await db.write();
           
@@ -1820,19 +2218,28 @@ export class DownloadManager {
           });
           
           downloadRecord.slskdDownloadId = download.id;
-          downloadRecord.status = 'downloading';
-          downloadRecord.startedAt = new Date().toISOString();
           downloadRecord.username = download.username;
           downloadRecord.filename = download.filename;
-          downloadRecord.progress = 0;
-          downloadRecord.lastChecked = new Date().toISOString();
+          
+          // Log queued and started events
+          this.logDownloadEvent(downloadRecord, 'queued', {
+            slskdDownloadId: download.id,
+          });
+          this.logDownloadEvent(downloadRecord, 'started', {
+            slskdDownloadId: download.id,
+            username: download.username,
+          });
+          
           await db.write();
         }
       }
     } catch (error) {
       console.error(`Error retrying download ${downloadRecord.id}:`, error.message);
-      downloadRecord.status = 'failed';
-      downloadRecord.failedAt = new Date().toISOString();
+      this.logDownloadEvent(downloadRecord, 'failed', {
+        error: `Retry operation failed: ${error.message}`,
+        retryCount: downloadRecord.retryCount,
+        reason: 'retry_operation_exception',
+      });
       await db.write();
     }
   }

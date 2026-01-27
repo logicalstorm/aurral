@@ -424,7 +424,7 @@ function DiscoverPage() {
                         `/search?q=${encodeURIComponent(genre)}&type=tag`,
                       )
                     }
-                    className="px-4 py-2 transition-colors text-sm font-medium shadow-sm"
+                    className="px-4 py-2 transition-colors transition-[border-radius] ease hover:!rounded-[50px] text-sm font-medium shadow-sm"
                     style={{
                       backgroundColor: getTagColor(genre),
                       color: "#fff",
@@ -684,7 +684,7 @@ function DiscoverPage() {
                 onClick={() =>
                   navigate(`/search?q=${encodeURIComponent(tag)}&type=tag`)
                 }
-                className="px-3 py-1.5 text-sm transition-colors"
+                className="px-3 py-1.5 text-sm transition-colors transition-[border-radius] ease hover:!rounded-[50px]"
                 style={{ backgroundColor: getTagColor(tag), color: "#fff" }}
               >
                 #{tag}
