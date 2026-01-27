@@ -185,9 +185,37 @@ export class PlaylistManager {
   async generateWeeklyFlow() {
     this.initDb();
     
-    await this.cleanupOldItems();
+    const existingItems = this.db.data.flows.weekly.items || [];
+    const isFirstRun = existingItems.length === 0;
+    
+    // First run: seed with 40 tracks
+    // Weekly: remove 10 oldest, add 10 new
+    const tracksToAdd = isFirstRun ? 40 : 10;
+    
+    if (!isFirstRun) {
+      // Remove 10 oldest items (sorted by addedAt)
+      const sortedItems = [...existingItems].sort((a, b) => {
+        const dateA = new Date(a.addedAt || 0);
+        const dateB = new Date(b.addedAt || 0);
+        return dateA - dateB;
+      });
+      
+      const itemsToRemove = sortedItems.slice(0, 10);
+      wfLog.log(`Removing ${itemsToRemove.length} oldest items from weekly flow...`);
+      
+      // Delete files and artists for removed items
+      for (const item of itemsToRemove) {
+        await this.deleteItemFiles(item);
+      }
+      
+      // Keep the remaining items
+      const remainingIds = new Set(itemsToRemove.map(i => `${i.mbid}-${i.trackName}`));
+      this.db.data.flows.weekly.items = existingItems.filter(
+        i => !remainingIds.has(`${i.mbid}-${i.trackName}`)
+      );
+    }
 
-    const recommendations = await this.fetchRecommendations(20);
+    const recommendations = await this.fetchRecommendations(tracksToAdd);
 
     const newItems = [];
     
@@ -195,26 +223,85 @@ export class PlaylistManager {
       try {
         const result = await this.addToLibrary(rec);
         if (result) {
-          newItems.push({
+          const newItem = {
             ...rec,
             ...result,
-            isEphemeral: true,
             addedAt: new Date().toISOString()
-          });
+          };
+          newItems.push(newItem);
+          
+          // Add to items immediately
+          this.db.data.flows.weekly.items.push(newItem);
+          await this.db.write();
+          
+          // Incrementally update Navidrome playlist as items are added
+          await this.addToNavidromePlaylist(newItem);
         }
       } catch (e) {
         wfLog.error(`Failed to process recommendation ${rec.artistName}:`, e.message);
       }
     }
 
-    this.db.data.flows.weekly.items = [
-      ...this.db.data.flows.weekly.items,
-      ...newItems
-    ];
     this.db.data.flows.weekly.updatedAt = new Date().toISOString();
     await this.db.write();
 
+    wfLog.log(`${isFirstRun ? 'Seeded' : 'Added'} ${newItems.length} tracks to weekly flow (total: ${this.db.data.flows.weekly.items.length})`);
     return newItems;
+  }
+  
+  async deleteItemFiles(item) {
+    try {
+      const downloadRecord = (this.db.data.downloads || []).find(
+        d => d.type === 'weekly-flow' && 
+             d.artistMbid === item.mbid && 
+             d.trackName === item.trackName
+      );
+      
+      if (downloadRecord && downloadRecord.destinationPath) {
+        try {
+          // Log deletion event
+          if (downloadRecord.events) {
+            downloadRecord.events.push({
+              timestamp: new Date().toISOString(),
+              event: 'deleted',
+              reason: 'weekly_flow_rotation',
+              destinationPath: downloadRecord.destinationPath,
+            });
+          }
+          
+          await fs.unlink(downloadRecord.destinationPath);
+          wfLog.log(`Deleted weekly flow track file: ${downloadRecord.destinationPath}`);
+        } catch (e) {
+          wfLog.log(`Could not delete weekly flow file (may already be gone): ${downloadRecord.destinationPath}`);
+        }
+        
+        // Mark as deleted
+        downloadRecord.status = 'deleted';
+        downloadRecord.deletedAt = new Date().toISOString();
+        await this.db.write();
+      }
+      
+      // Remove artist if only in weekly flow
+      if (item.artistId) {
+        try {
+          const artist = libraryManager.getArtistById(item.artistId);
+          if (artist) {
+            const isOnlyInFlow = !this.db.data.requests?.find(
+              r => r.mbid === artist.mbid && r.status === 'available'
+            );
+            
+            if (isOnlyInFlow) {
+              wfLog.log(`Removing artist: ${item.artistName}`);
+              await libraryManager.deleteArtist(artist.mbid, true);
+            }
+          }
+        } catch (e) {
+          wfLog.error(`Failed to remove ${item.artistName} from library: ${e.message}`);
+        }
+      }
+    } catch (e) {
+      wfLog.error(`Failed to delete item files: ${e.message}`);
+    }
   }
 
   async syncToNavidrome() {
@@ -244,87 +331,83 @@ export class PlaylistManager {
 
     return { success: false, error: 'No songs found in Navidrome yet' };
   }
-
-  async cleanupOldItems() {
-    this.initDb();
-    const items = this.db.data.flows.weekly.items;
-    const keepItems = [];
-    const deleteItems = [];
-
-    for (const item of items) {
-      if (!item.isEphemeral) {
-        keepItems.push(item);
-      } else {
-        deleteItems.push(item);
-      }
+  
+  /**
+   * Incrementally add a single track to the Navidrome playlist
+   * Called when a track is added to weekly flow or when a download completes
+   */
+  async addToNavidromePlaylist(item) {
+    const navidrome = this.getNavidromeClient();
+    if (!navidrome.isConfigured()) {
+      return { success: false, error: 'Navidrome not configured' };
     }
 
-    for (const item of deleteItems) {
-      // Delete weekly flow track files
-      try {
-        const downloadRecord = (this.db.data.downloads || []).find(
-          d => d.type === 'weekly-flow' && 
-               d.artistMbid === item.mbid && 
-               d.trackName === item.trackName
-        );
-        
-        if (downloadRecord && downloadRecord.destinationPath) {
-          try {
-            // Log deletion event before deleting
-            if (downloadRecord.events) {
-              downloadRecord.events.push({
-                timestamp: new Date().toISOString(),
-                event: 'deleted',
-                reason: 'weekly_flow_cleanup',
-                destinationPath: downloadRecord.destinationPath,
-              });
-            }
-            
-            await fs.unlink(downloadRecord.destinationPath);
-            wfLog.log(`Deleted weekly flow track file: ${downloadRecord.destinationPath}`);
-          } catch (e) {
-            // File might already be deleted or moved
-            wfLog.log(`Could not delete weekly flow file (may already be gone): ${downloadRecord.destinationPath}`);
-          }
-          
-          // Mark as deleted in record before removing
-          downloadRecord.status = 'deleted';
-          downloadRecord.deletedAt = new Date().toISOString();
-          await this.db.write();
-          
-          // Remove download record after a delay (keep for audit trail, but can be cleaned up later)
-          // For now, keep the record but mark it as deleted
-          // const downloadIndex = (this.db.data.downloads || []).findIndex(d => d.id === downloadRecord.id);
-          // if (downloadIndex > -1) {
-          //   this.db.data.downloads.splice(downloadIndex, 1);
-          // }
-        }
-      } catch (e) {
-        wfLog.error(`Failed to delete weekly flow track file: ${e.message}`);
+    try {
+      // Find the playlist
+      const playlists = await navidrome.getPlaylists();
+      let playlist = playlists.find(p => p.name === 'Aurral Weekly Discovery');
+      
+      // Create playlist if it doesn't exist
+      if (!playlist) {
+        playlist = await navidrome.createPlaylist('Aurral Weekly Discovery', [], false);
+        wfLog.log('Created Navidrome playlist: Aurral Weekly Discovery');
       }
       
-      if (item.artistId) {
-        try {
-          const artist = libraryManager.getArtistById(item.artistId);
-          if (artist) {
-            // Check if artist is still ephemeral (only in weekly flow)
-            const isOnlyInFlow = !this.db.data.requests?.find(r => r.mbid === artist.mbid && r.status === 'available');
-            
-            if (isOnlyInFlow) {
-              wfLog.log(`Removing ephemeral artist: ${item.artistName}`);
-              await libraryManager.deleteArtist(artist.mbid, true);
-            } else {
-              wfLog.log(`Skipping deletion of ${item.artistName}: Assumed kept by user.`);
-            }
-          }
-        } catch (e) {
-          wfLog.error(`Failed to remove ${item.artistName} from library: ${e.message}`);
-        }
+      // Find the song in Navidrome
+      const song = await navidrome.findSong(item.trackName, item.artistName);
+      if (song) {
+        // Add song to playlist (Navidrome will handle duplicates)
+        await navidrome.addToPlaylist(playlist.id, song.id);
+        wfLog.log(`Added to Navidrome playlist: ${item.artistName} - ${item.trackName}`);
+        return { success: true, songId: song.id };
+      } else {
+        wfLog.log(`Song not found in Navidrome yet: ${item.artistName} - ${item.trackName} (will retry on next sync)`);
+        return { success: false, error: 'Song not found in Navidrome yet' };
       }
+    } catch (e) {
+      wfLog.error(`Failed to add to Navidrome playlist: ${e.message}`);
+      return { success: false, error: e.message };
+    }
+  }
+  
+  /**
+   * Remove a track from the Navidrome playlist
+   * Called when a track is removed from weekly flow
+   */
+  async removeFromNavidromePlaylist(item) {
+    const navidrome = this.getNavidromeClient();
+    if (!navidrome.isConfigured()) {
+      return { success: false, error: 'Navidrome not configured' };
     }
 
-    this.db.data.flows.weekly.items = keepItems;
-    await this.db.write();
+    try {
+      const playlists = await navidrome.getPlaylists();
+      const playlist = playlists.find(p => p.name === 'Aurral Weekly Discovery');
+      
+      if (!playlist) {
+        return { success: false, error: 'Playlist not found' };
+      }
+      
+      const song = await navidrome.findSong(item.trackName, item.artistName);
+      if (song) {
+        await navidrome.removeFromPlaylist(playlist.id, song.id);
+        wfLog.log(`Removed from Navidrome playlist: ${item.artistName} - ${item.trackName}`);
+        return { success: true };
+      }
+      
+      return { success: false, error: 'Song not found in Navidrome' };
+    } catch (e) {
+      wfLog.error(`Failed to remove from Navidrome playlist: ${e.message}`);
+      return { success: false, error: e.message };
+    }
+  }
+
+  // cleanupOldItems is no longer needed - rotation is handled in generateWeeklyFlow
+  // Keeping this method for backwards compatibility but it's now a no-op
+  async cleanupOldItems() {
+    // Rotation is now handled in generateWeeklyFlow()
+    // This method is kept for backwards compatibility
+    return;
   }
 
   async fetchRecommendations(limit = 20) {
@@ -429,61 +512,10 @@ export class PlaylistManager {
     }
   }
 
+  // keepItem is no longer used - all tracks are ephemeral
+  // Users can manually add artists they like through the discovery/library pages
   async keepItem(mbid) {
-    this.initDb();
-    const items = this.db.data.flows.weekly.items;
-    const item = items.find(i => i.mbid === mbid);
-    if (item) {
-      item.isEphemeral = false;
-      await this.db.write();
-      
-      // Move track from weekly flow folder to artist folder if it exists
-      await this.moveTrackToLibrary(item);
-      
-      // Find and download the specific album containing this track
-      if (item.artistId && item.trackName) {
-        try {
-          const artist = libraryManager.getArtistById(item.artistId);
-          if (artist) {
-            // Find the album that contains this track via MusicBrainz
-            const albumMbid = await this.findAlbumByTrack(artist.mbid, item.trackName);
-            
-            if (albumMbid) {
-              // Check if album already exists in library
-              const albums = libraryManager.getAlbums(artist.id);
-              let album = albums.find(a => a.mbid === albumMbid);
-              
-              if (!album) {
-                // Fetch album name from MusicBrainz
-                try {
-                  const rgData = await this.musicbrainzRequest(`/release-group/${albumMbid}`);
-                  const albumName = rgData.title || 'Unknown Album';
-                  
-                  // Add album to library
-                  album = await libraryManager.addAlbum(artist.id, albumMbid, albumName, {});
-                  wfLog.log(`Added album "${albumName}" to library for kept track`);
-                } catch (e) {
-                  wfLog.error(`Failed to fetch album info: ${e.message}`);
-                }
-              }
-              
-              if (album) {
-                // Download just this specific album
-                const { downloadManager } = await import('./downloadManager.js');
-                await downloadManager.downloadAlbum(artist.id, album.id);
-                wfLog.log(`Queued download for album containing kept track: ${album.albumName}`);
-              }
-            } else {
-              wfLog.log(`Could not find album for track "${item.trackName}" by ${artist.artistName}`);
-            }
-          }
-        } catch (e) {
-          wfLog.error(`Failed to download album for kept item: ${e.message}`);
-        }
-      }
-      
-      return true;
-    }
+    wfLog.warn('keepItem is deprecated - all weekly flow tracks are ephemeral. Users can add artists manually.');
     return false;
   }
 
@@ -601,11 +633,22 @@ export class PlaylistManager {
       items.splice(itemIndex, 1);
       await this.db.write();
       
-      if (item.isEphemeral && item.artistId) {
+      // Delete files and remove from Navidrome playlist
+      await this.deleteItemFiles(item);
+      await this.removeFromNavidromePlaylist(item);
+      
+      if (item.artistId) {
         try {
           const artist = libraryManager.getArtistById(item.artistId);
           if (artist) {
-            await libraryManager.deleteArtist(artist.mbid, true);
+            // Only delete if artist is only in weekly flow
+            const isOnlyInFlow = !this.db.data.requests?.find(
+              r => r.mbid === artist.mbid && r.status === 'available'
+            );
+            
+            if (isOnlyInFlow) {
+              await libraryManager.deleteArtist(artist.mbid, true);
+            }
           }
         } catch(e) { 
           wfLog.error('Failed to delete from library:', e.message); 
@@ -795,10 +838,10 @@ export class PlaylistManager {
       
       // Generate immediately if enabled but no items exist (first time setup)
       if (!lastUpdate && !hasItems) {
-          console.log('Generating initial weekly flow...');
+          wfLog.log('Generating initial weekly flow (seeding with 40 tracks)...');
           await this.generateWeeklyFlow();
-          // Sync to Navidrome after generating
-          console.log('Syncing to Navidrome after generation...');
+          // Full sync to Navidrome after initial generation
+          wfLog.log('Syncing to Navidrome after initial generation...');
           await this.syncToNavidrome();
           return;
       }
@@ -806,10 +849,10 @@ export class PlaylistManager {
       // Otherwise, only generate on Mondays
       if (now.getDay() === 1) { 
           if (!lastUpdate) {
-               wfLog.log('Generating initial weekly flow...');
+               wfLog.log('Generating initial weekly flow (seeding with 40 tracks)...');
                await this.generateWeeklyFlow();
-               // Sync to Navidrome after generating
-               wfLog.log('Syncing to Navidrome after generation...');
+               // Full sync to Navidrome after initial generation
+               wfLog.log('Syncing to Navidrome after initial generation...');
                await this.syncToNavidrome();
           } else {
               const lastDate = new Date(lastUpdate);
@@ -818,21 +861,21 @@ export class PlaylistManager {
                                 lastDate.getFullYear() === now.getFullYear();
               
               if (!isSameDay) {
-                  wfLog.log('Rotating weekly flow...');
-                  // generateWeeklyFlow already calls cleanupOldItems first, then generates new items
-                  // So we sync after generation (which happens after cleanup)
+                  wfLog.log('Rotating weekly flow (removing 10 oldest, adding 10 new)...');
+                  // generateWeeklyFlow handles rotation (removes 10 oldest, adds 10 new)
+                  // Items are added incrementally to Navidrome as they're generated
                   await this.generateWeeklyFlow();
-                  // Sync to Navidrome after cleanup and generation
+                  // Full sync to ensure playlist is up to date
                   wfLog.log('Syncing to Navidrome after rotation...');
                   await this.syncToNavidrome();
               } else {
-                  // Same day, just sync (no cleanup needed)
+                  // Same day, just sync (no rotation needed)
                   wfLog.log('Running scheduled Navidrome sync...');
                   await this.syncToNavidrome();
               }
           }
       } else {
-          // Not Monday, just sync (no cleanup needed)
+          // Not Monday, just sync (no rotation needed)
           wfLog.log('Running scheduled Navidrome sync...');
           await this.syncToNavidrome();
       }

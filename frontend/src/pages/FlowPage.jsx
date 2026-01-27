@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-import { Play, Heart, Trash2, Clock, Music, CheckCircle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Play, Trash2, Music, Clock } from "lucide-react";
 import {
   getWeeklyFlow,
   toggleWeeklyFlow,
   generateWeeklyFlow,
-  keepFlowItem,
   removeFlowItem,
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
@@ -12,6 +12,7 @@ import ArtistImage from "../components/ArtistImage";
 import PowerSwitch from "../components/PowerSwitch";
 
 function FlowPage() {
+  const navigate = useNavigate();
   const [flow, setFlow] = useState({
     enabled: false,
     items: [],
@@ -58,22 +59,9 @@ function FlowPage() {
       });
   };
 
-  const handleKeep = async (mbid) => {
-    try {
-      await keepFlowItem(mbid);
-      setFlow((prev) => ({
-        ...prev,
-        items: prev.items.map((i) =>
-          i.mbid === mbid ? { ...i, isEphemeral: false } : i,
-        ),
-      }));
-      showSuccess("Artist kept permanently!");
-    } catch {
-      showError("Failed to keep item");
-    }
-  };
 
-  const handleRemove = async (mbid) => {
+  const handleRemove = async (e, mbid) => {
+    e.stopPropagation(); // Prevent navigation when clicking remove button
     if (!window.confirm("Remove this artist and delete files?")) return;
     try {
       await removeFlowItem(mbid);
@@ -85,6 +73,10 @@ function FlowPage() {
     } catch {
       showError("Failed to remove item");
     }
+  };
+
+  const handleCardClick = (mbid) => {
+    navigate(`/artist/${mbid}`);
   };
 
   const handleGenerate = async () => {
@@ -119,8 +111,7 @@ function FlowPage() {
             Weekly Discovery
           </h1>
           <p className="mt-1" style={{ color: "#c1c1c3" }}>
-            Automated weekly rotation. {'"'}Ephemeral{'"'} items are deleted next week
-            unless kept.
+            Revolving door playlist: 40 tracks initially, 10 rotate out weekly. All tracks are temporary.
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -190,9 +181,8 @@ function FlowPage() {
           {flow.items.map((item) => (
             <div
               key={item.mbid}
-              className={`card group relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 ${
-                !item.isEphemeral ? "" : ""
-              }`}
+              className="card group relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer"
+              onClick={() => handleCardClick(item.mbid)}
             >
               <div
                 className="aspect-square relative overflow-hidden mb-4"
@@ -203,21 +193,6 @@ function FlowPage() {
                   name={item.artistName}
                   className="w-full h-full object-cover"
                 />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                  <button
-                    onClick={() => handleKeep(item.mbid)}
-                    className={`p-3 backdrop-blur-sm transition-transform hover:scale-110 ${
-                      !item.isEphemeral
-                        ? "bg-green-500 text-white"
-                        : "bg-white/20 text-white hover:bg-green-500"
-                    }`}
-                    title={item.isEphemeral ? "Keep permanently" : "Kept"}
-                  >
-                    <Heart
-                      className={`w-6 h-6 ${!item.isEphemeral ? "fill-current" : ""}`}
-                    />
-                  </button>
-                </div>
               </div>
 
               <div>
@@ -227,22 +202,12 @@ function FlowPage() {
                 <p className="text-sm truncate" style={{ color: "#c1c1c3" }}>
                   {item.artistName}
                 </p>
-                <div className="flex items-center justify-between mt-3">
-                  <div className="flex items-center gap-2">
-                    {item.isEphemeral ? (
-                      <span className="text-xs px-2 py-1 bg-yellow-500/20 text-yellow-400 flex items-center">
-                        <Clock className="w-3 h-3 mr-1" /> Ephemeral
-                      </span>
-                    ) : (
-                      <span className="text-xs px-2 py-1 bg-green-500/20 text-green-400 flex items-center">
-                        <CheckCircle className="w-3 h-3 mr-1" /> Kept
-                      </span>
-                    )}
-                  </div>
+                <div className="flex items-center justify-end mt-3">
                   <button
-                    onClick={() => handleRemove(item.mbid)}
+                    onClick={(e) => handleRemove(e, item.mbid)}
                     className="hover:text-red-400 transition-colors p-1"
                     style={{ color: "#c1c1c3" }}
+                    title="Remove from weekly flow"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>

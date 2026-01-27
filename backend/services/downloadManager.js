@@ -542,11 +542,91 @@ export class DownloadManager {
             }
             processedCount++;
           }
-        } else if (weeklyFlowRecord && (normalizedState === 'downloading' || normalizedState === 'queued')) {
+        } else if (weeklyFlowRecord && (normalizedState === 'downloading' || normalizedState === 'queued' || state?.toLowerCase().includes('queued'))) {
+          // Update download ID if we didn't have it before
+          if (!weeklyFlowRecord.slskdDownloadId && download.id) {
+            weeklyFlowRecord.slskdDownloadId = download.id;
+            this.logDownloadEvent(weeklyFlowRecord, 'matched', {
+              slskdDownloadId: download.id,
+              matchedBy: 'slskd_check',
+              slskdState: state,
+            });
+            await db.write();
+            console.log(`[WEEKLY FLOW] ✓ Found download ID: ${weeklyFlowRecord.artistName} - ${weeklyFlowRecord.trackName} (ID: ${download.id}, state: ${state})`);
+          }
+          
           // Log progress for weekly-flow downloads
           const progress = download.percentComplete || download.progress || 0;
           if (progress > 0 && progress !== weeklyFlowRecord.progress) {
+            weeklyFlowRecord.progress = progress;
+            this.logDownloadEvent(weeklyFlowRecord, 'progress', {
+              progress,
+              slskdState: state,
+            });
             console.log(`[WEEKLY FLOW] Download progress: ${weeklyFlowRecord.artistName} - ${weeklyFlowRecord.trackName} (${progress}%)`);
+            await db.write();
+          } else if (state?.toLowerCase().includes('queued')) {
+            // Log when download is queued (especially "Queued, Remotely")
+            console.log(`[WEEKLY FLOW] Download queued: ${weeklyFlowRecord.artistName} - ${weeklyFlowRecord.trackName} (state: ${state})`);
+          }
+        }
+        
+        // Also try to match downloads without IDs by filename/artist-track
+        // This handles cases where download.id was undefined when queued
+        if (download.id) {
+          // Look for weekly-flow downloads without IDs that might match this slskd download
+          const unmatchedWeeklyFlow = trackedDownloads.filter(
+            d => d.type === 'weekly-flow' && (!d.slskdDownloadId || d.slskdDownloadId === undefined)
+          );
+          
+          for (const unmatched of unmatchedWeeklyFlow) {
+            const downloadFilename = download.filename || '';
+            const downloadFilenameLower = downloadFilename.toLowerCase();
+            const artistName = unmatched.artistName?.toLowerCase() || '';
+            const trackName = unmatched.trackName?.toLowerCase() || '';
+            
+            // Check if this slskd download matches our unmatched record
+            let matches = false;
+            let matchReason = '';
+            
+            // Match by exact filename if we stored it
+            if (unmatched.filename && downloadFilenameLower.includes(unmatched.filename.toLowerCase())) {
+              matches = true;
+              matchReason = 'exact_filename';
+            }
+            // Match by artist and track name in filename
+            else if (artistName && trackName && downloadFilenameLower.includes(artistName) && downloadFilenameLower.includes(trackName)) {
+              matches = true;
+              matchReason = 'artist_track_in_filename';
+            }
+            // Match by track name only (for cases like "15 - The Hanging Tree" containing "The Hanging Tree")
+            else if (trackName) {
+              const trackWords = trackName.split(/\s+/).filter(w => w.length > 2);
+              if (trackWords.length > 0 && trackWords.every(word => downloadFilenameLower.includes(word))) {
+                // Also verify artist is somewhere (in path or username)
+                const downloadPath = download.filePath || download.destinationPath || download.path || downloadFilename;
+                const downloadPathLower = downloadPath.toLowerCase();
+                if (downloadPathLower.includes(artistName) || download.username?.toLowerCase().includes(artistName)) {
+                  matches = true;
+                  matchReason = 'track_words_with_artist';
+                }
+              }
+            }
+            
+            if (matches) {
+              unmatched.slskdDownloadId = download.id;
+              unmatched.filename = unmatched.filename || download.filename;
+              unmatched.username = unmatched.username || download.username;
+              this.logDownloadEvent(unmatched, 'matched', {
+                slskdDownloadId: download.id,
+                matchedBy: matchReason,
+                filename: download.filename,
+                slskdState: state,
+              });
+              await db.write();
+              console.log(`[WEEKLY FLOW] ✓ Matched download: ${unmatched.artistName} - ${unmatched.trackName} (ID: ${download.id}, state: ${state}, matched by: ${matchReason})`);
+              break; // Only match one per slskd download
+            }
           }
         }
       }
@@ -555,9 +635,61 @@ export class DownloadManager {
       // Check for failed/stalled downloads and handle retries
       for (const trackedDownload of trackedDownloads) {
         // Find the corresponding slskd download
-        const slskdDownload = downloads.find(
+        let slskdDownload = downloads.find(
           d => d.id === trackedDownload.slskdDownloadId || d.id?.toString() === trackedDownload.slskdDownloadId
         );
+        
+        // If no match by ID and we don't have an ID, try matching by filename/artist-track
+        if (!slskdDownload && !trackedDownload.slskdDownloadId && trackedDownload.type === 'weekly-flow') {
+          const downloadFilename = trackedDownload.filename;
+          const artistName = trackedDownload.artistName;
+          const trackName = trackedDownload.trackName;
+          
+          // Try to match by filename or artist-track combination
+          slskdDownload = downloads.find(d => {
+            const dFilename = d.filename || '';
+            const dFilenameLower = dFilename.toLowerCase();
+            
+            // Match by exact filename
+            if (downloadFilename && dFilenameLower.includes(downloadFilename.toLowerCase())) {
+              return true;
+            }
+            
+            // Match by artist-track in filename
+            if (artistName && trackName) {
+              const artistLower = artistName.toLowerCase();
+              const trackLower = trackName.toLowerCase();
+              
+              // Check if filename contains both artist and track
+              if (dFilenameLower.includes(artistLower) && dFilenameLower.includes(trackLower)) {
+                return true;
+              }
+              
+              // Check for track name variations (e.g., "15 - The Hanging Tree" contains "The Hanging Tree")
+              const trackWords = trackLower.split(/\s+/).filter(w => w.length > 2);
+              if (trackWords.length > 0 && trackWords.every(word => dFilenameLower.includes(word))) {
+                // Also check if artist name is in the path/filename
+                if (dFilenameLower.includes(artistLower) || d.username?.toLowerCase().includes(artistLower)) {
+                  return true;
+                }
+              }
+            }
+            
+            return false;
+          });
+          
+          // If we found a match, update the download record with the ID
+          if (slskdDownload && slskdDownload.id) {
+            trackedDownload.slskdDownloadId = slskdDownload.id;
+            this.logDownloadEvent(trackedDownload, 'matched', {
+              slskdDownloadId: slskdDownload.id,
+              matchedBy: 'filename',
+              filename: slskdDownload.filename,
+            });
+            await db.write();
+            console.log(`[WEEKLY FLOW] Matched download by filename: ${artistName} - ${trackName} (ID: ${slskdDownload.id})`);
+          }
+        }
         
         if (!slskdDownload) {
           // Download not found in slskd - might have completed and been removed, or failed
@@ -1343,6 +1475,19 @@ export class DownloadManager {
                 });
                 moved = true;
                 console.log(`✓ Moved weekly flow track to: ${destinationPath}`);
+                
+                // Incrementally update Navidrome playlist when track is moved
+                try {
+                  const { playlistManager } = await import('./playlistManager.js');
+                  const item = {
+                    mbid: downloadRecord.artistMbid,
+                    artistName: downloadRecord.artistName,
+                    trackName: downloadRecord.trackName,
+                  };
+                  await playlistManager.addToNavidromePlaylist(item);
+                } catch (e) {
+                  console.warn(`Failed to update Navidrome playlist for completed download: ${e.message}`);
+                }
               } else {
                 console.warn(`No source path found for weekly-flow download ${downloadRecord.id}`);
               }
@@ -1878,8 +2023,31 @@ export class DownloadManager {
       throw new Error('slskd not configured');
     }
 
-    // Search and download
-    const download = await slskdClient.downloadTrack(artist.artistName, track.trackName);
+    // Fetch MusicBrainz recording metadata to validate downloads
+    let trackMetadata = null;
+    if (track.mbid) {
+      try {
+        const { musicbrainzRequest } = await import('./apiClients.js');
+        const recordingData = await musicbrainzRequest(`/recording/${track.mbid}`, {});
+        
+        if (recordingData) {
+          trackMetadata = {
+            mbid: recordingData.id,
+            title: recordingData.title,
+            length: recordingData.length || null, // Duration in milliseconds
+          };
+          console.log(`Found MusicBrainz metadata for "${track.trackName}": duration ${trackMetadata.length ? Math.round(trackMetadata.length / 1000) + 's' : 'unknown'}`);
+        }
+      } catch (error) {
+        // MusicBrainz unavailable - proceed without metadata
+        console.warn(`Could not fetch MusicBrainz metadata for "${track.trackName}": ${error.message}`);
+      }
+    }
+
+    // Search and download with metadata validation
+    const download = await slskdClient.downloadTrack(artist.artistName, track.trackName, {
+      trackMetadata: trackMetadata,
+    });
     
     // Store download reference
     if (!db.data.downloads) {
@@ -1965,13 +2133,47 @@ export class DownloadManager {
       throw new Error('slskd not configured');
     }
 
-    // Search and download - same as regular track download
+    // Fetch MusicBrainz recording metadata to validate downloads
+    let trackMetadata = null;
+    if (artistMbid) {
+      try {
+        const { musicbrainzRequest } = await import('./apiClients.js');
+        const searchResult = await musicbrainzRequest('/recording', {
+          query: `recording:"${trackName}" AND arid:${artistMbid}`,
+          limit: 1
+        });
+        
+        if (searchResult.recordings && searchResult.recordings.length > 0) {
+          const recording = searchResult.recordings[0];
+          trackMetadata = {
+            mbid: recording.id,
+            title: recording.title,
+            length: recording.length || null, // Duration in milliseconds
+          };
+          console.log(`[WEEKLY FLOW] Found MusicBrainz metadata for "${trackName}": duration ${trackMetadata.length ? Math.round(trackMetadata.length / 1000) + 's' : 'unknown'}`);
+        }
+      } catch (error) {
+        // MusicBrainz unavailable - proceed without metadata
+        console.warn(`[WEEKLY FLOW] Could not fetch MusicBrainz metadata for "${trackName}": ${error.message}`);
+      }
+    }
+
+    // Search and download with metadata validation
     let download;
     try {
-      download = await slskdClient.downloadTrack(artist.artistName, trackName);
+      download = await slskdClient.downloadTrack(artist.artistName, trackName, {
+        trackMetadata: trackMetadata,
+      });
       
-      if (!download || !download.id) {
-        throw new Error(`Download failed: slskd did not return a download ID for ${artist.artistName} - ${trackName}`);
+      // Note: download.id might be undefined initially (especially with API v0)
+      // We'll match it later by filename when checking slskd downloads
+      if (!download) {
+        throw new Error(`Download failed: slskd did not return a download response for ${artist.artistName} - ${trackName}`);
+      }
+      
+      // Log if we don't have an ID (we'll match it later)
+      if (!download.id) {
+        console.log(`[WEEKLY FLOW] Download queued but no ID yet (will match by filename): ${artist.artistName} - ${trackName}`);
       }
     } catch (error) {
       // Log the error with more context
@@ -1984,37 +2186,56 @@ export class DownloadManager {
       db.data.downloads = [];
     }
     
-    // Store the full download response from slskd for later reference
-    const downloadRecord = {
-      id: download.id || this.generateId(),
-      type: 'weekly-flow',
-      artistId,
-      artistMbid,
-      artistName: artist.artistName,
-      trackName,
-      status: 'downloading', // Start as downloading since it's queued in slskd
-      slskdDownloadId: download.id,
-      username: download.username,
-      filename: download.filename,
-      slskdFilePath: download.filePath || download.destinationPath || download.path || download.file || download.localPath,
-      retryCount: 0,
-      requeueCount: 0,
-      progress: 0,
-      events: [],
-    };
+    // Find existing download record (created by queueWeeklyFlowTrack)
+    let downloadRecord = (db.data.downloads || []).find(
+      d => d.type === 'weekly-flow' && 
+           d.artistId === artistId && 
+           d.trackName === trackName &&
+           (!d.slskdDownloadId || d.status === 'requested') // Match records without ID or still requested
+    );
     
-    // Log initial requested and queued events
-    this.logDownloadEvent(downloadRecord, 'requested', {
-      trackName,
-      artistName: artist.artistName,
-      filename: download.filename,
-    });
+    if (!downloadRecord) {
+      // Create new record if not found
+      downloadRecord = {
+        id: this.generateId(),
+        type: 'weekly-flow',
+        artistId,
+        artistMbid,
+        artistName: artist.artistName,
+        trackName,
+        status: 'downloading',
+        retryCount: 0,
+        requeueCount: 0,
+        progress: 0,
+        events: [],
+      };
+      db.data.downloads.push(downloadRecord);
+    }
+    
+    // Update with download info from slskd
+    if (download.id) {
+      downloadRecord.slskdDownloadId = download.id;
+    }
+    downloadRecord.username = download.username;
+    downloadRecord.filename = download.filename;
+    downloadRecord.slskdFilePath = download.filePath || download.destinationPath || download.path || download.file || download.localPath;
+    downloadRecord.status = 'downloading';
+    
+    // Log initial requested and queued events (only if not already logged)
+    if (!downloadRecord.events || downloadRecord.events.length === 0) {
+      this.logDownloadEvent(downloadRecord, 'requested', {
+        trackName,
+        artistName: artist.artistName,
+        filename: download.filename,
+      });
+    }
+    
     this.logDownloadEvent(downloadRecord, 'queued', {
-      slskdDownloadId: download.id,
+      slskdDownloadId: download.id || 'pending',
       username: download.username,
+      filename: download.filename,
     });
     
-    db.data.downloads.push(downloadRecord);
     await db.write();
     
     return download;
@@ -2343,8 +2564,28 @@ export class DownloadManager {
           downloadRecord.retryStartedAt = new Date().toISOString();
           await db.write();
           
+          // Fetch MusicBrainz metadata if available
+          let trackMetadata = null;
+          if (track.mbid) {
+            try {
+              const { musicbrainzRequest } = await import('./apiClients.js');
+              const recordingData = await musicbrainzRequest(`/recording/${track.mbid}`, {});
+              
+              if (recordingData) {
+                trackMetadata = {
+                  mbid: recordingData.id,
+                  title: recordingData.title,
+                  length: recordingData.length || null,
+                };
+              }
+            } catch (error) {
+              // MusicBrainz unavailable - proceed without metadata
+            }
+          }
+
           const download = await slskdClient.downloadTrack(artist.artistName, track.trackName, {
             excludeUsernames: downloadRecord.triedUsernames || [],
+            trackMetadata: trackMetadata,
           });
           
           downloadRecord.slskdDownloadId = download.id;
