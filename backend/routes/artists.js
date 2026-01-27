@@ -41,7 +41,7 @@ const handleSearch = async (req, res) => {
             ? lastfmData.results.artistmatches.artist
             : [lastfmData.results.artistmatches.artist];
 
-          const { db } = await import("../config/db.js");
+          // db import removed - using dbOps directly
           const formattedArtists = artists
             .filter((a) => a.mbid)
             .map((a) => {
@@ -69,9 +69,10 @@ const handleSearch = async (req, res) => {
                 listeners: a.listeners,
               };
               
-              if (db.data.images?.[a.mbid] && db.data.images[a.mbid] !== "NOT_FOUND") {
-                result.imageUrl = db.data.images[a.mbid];
-                result.image = db.data.images[a.mbid];
+              const cachedImage = dbOps.getImage(a.mbid);
+              if (cachedImage && cachedImage.imageUrl && cachedImage.imageUrl !== "NOT_FOUND") {
+                result.imageUrl = cachedImage.imageUrl;
+                result.image = cachedImage.imageUrl;
               }
               
               return result;
@@ -127,11 +128,11 @@ router.get("/release-group/:mbid/cover", async (req, res) => {
       return res.status(400).json({ error: "Invalid MBID format", images: [] });
     }
 
-    const { db } = await import("../config/db.js");
     const cacheKey = `rg:${mbid}`;
+    const cachedImage = dbOps.getImage(cacheKey);
     
-    if (db.data.images && db.data.images[cacheKey] && db.data.images[cacheKey] !== "NOT_FOUND") {
-      const cachedUrl = db.data.images[cacheKey];
+    if (cachedImage && cachedImage.imageUrl && cachedImage.imageUrl !== "NOT_FOUND") {
+      const cachedUrl = cachedImage.imageUrl;
       res.set("Cache-Control", "public, max-age=31536000, immutable");
       return res.json({
         images: [{
@@ -142,7 +143,7 @@ router.get("/release-group/:mbid/cover", async (req, res) => {
       });
     }
 
-    if (db.data.images && db.data.images[cacheKey] === "NOT_FOUND") {
+    if (cachedImage && cachedImage.imageUrl === "NOT_FOUND") {
       res.set("Cache-Control", "public, max-age=3600");
       return res.json({ images: [] });
     }
@@ -161,9 +162,7 @@ router.get("/release-group/:mbid/cover", async (req, res) => {
         if (frontImage) {
           const imageUrl = frontImage.thumbnails?.["500"] || frontImage.thumbnails?.["large"] || frontImage.image;
           if (imageUrl) {
-            if (!db.data.images) db.data.images = {};
-            db.data.images[cacheKey] = imageUrl;
-            db.write().catch(e => console.error("Error saving album cover to database:", e.message));
+            dbOps.setImage(cacheKey, imageUrl);
             
             res.set("Cache-Control", "public, max-age=31536000, immutable");
             return res.json({
@@ -179,9 +178,7 @@ router.get("/release-group/:mbid/cover", async (req, res) => {
     } catch (e) {
     }
 
-    if (!db.data.images) db.data.images = {};
-    db.data.images[cacheKey] = "NOT_FOUND";
-    db.write().catch(e => console.error("Error saving NOT_FOUND to database:", e.message));
+    dbOps.setImage(cacheKey, "NOT_FOUND");
     res.set("Cache-Control", "public, max-age=3600");
     res.json({ images: [] });
   } catch (error) {
@@ -347,16 +344,17 @@ router.get("/:mbid/stream", async (req, res) => {
       // Fetch cover image in background
       const coverTask = (async () => {
         try {
-          const { db } = await import("../config/db.js");
+          // db import removed - using dbOps directly
           const { libraryManager } = await import("../services/libraryManager.js");
           const libraryArtist = libraryManager.getArtist(mbid);
           let artistName = libraryArtist?.artistName || artistData?.name || null;
 
           // Try cached first
-          if (db.data.images && db.data.images[mbid] && db.data.images[mbid] !== "NOT_FOUND") {
+          const cachedImage = dbOps.getImage(mbid);
+          if (cachedImage && cachedImage.imageUrl && cachedImage.imageUrl !== "NOT_FOUND") {
             sendSSE(res, 'cover', {
               images: [{
-                image: db.data.images[mbid],
+                image: cachedImage.imageUrl,
                 front: true,
                 types: ["Front"],
               }]
@@ -370,11 +368,7 @@ router.get("/:mbid/stream", async (req, res) => {
               const spotifyArtist = await spotifySearchArtist(artistName);
               if (spotifyArtist?.images?.length > 0) {
                 const imageUrl = spotifyArtist.images[0].url;
-                if (!db.data.images) db.data.images = {};
-                if (!db.data.imageCacheAge) db.data.imageCacheAge = {};
-                db.data.images[mbid] = imageUrl;
-                db.data.imageCacheAge[mbid] = Date.now();
-                db.write().catch(() => {});
+                dbOps.setImage(mbid, imageUrl);
                 
                 sendSSE(res, 'cover', {
                   images: [{
@@ -414,11 +408,7 @@ router.get("/:mbid/stream", async (req, res) => {
                   if (frontImage) {
                     const imageUrl = frontImage.thumbnails?.["500"] || frontImage.thumbnails?.["large"] || frontImage.image;
                     if (imageUrl) {
-                      if (!db.data.images) db.data.images = {};
-                      if (!db.data.imageCacheAge) db.data.imageCacheAge = {};
-                      db.data.images[mbid] = imageUrl;
-                      db.data.imageCacheAge[mbid] = Date.now();
-                      db.write().catch(() => {});
+                      dbOps.setImage(mbid, imageUrl);
                       
                       sendSSE(res, 'cover', {
                         images: [{
@@ -436,9 +426,7 @@ router.get("/:mbid/stream", async (req, res) => {
           }
 
           // No cover found
-          if (!db.data.images) db.data.images = {};
-          db.data.images[mbid] = "NOT_FOUND";
-          db.write().catch(() => {});
+          dbOps.setImage(mbid, "NOT_FOUND");
           sendSSE(res, 'cover', { images: [] });
         } catch (e) {
           sendSSE(res, 'cover', { images: [] });
@@ -512,15 +500,16 @@ router.get("/:mbid/stream", async (req, res) => {
             
             const batchPromises = batch.map(async (rg) => {
               try {
-                const { db } = await import("../config/db.js");
+                // db import removed - using dbOps directly
                 const cacheKey = `rg:${rg.id}`;
                 
                 // Check cache first
-                if (db.data.images && db.data.images[cacheKey] && db.data.images[cacheKey] !== "NOT_FOUND") {
+                const cachedCover = dbOps.getImage(cacheKey);
+                if (cachedCover && cachedCover.imageUrl && cachedCover.imageUrl !== "NOT_FOUND") {
                   sendSSE(res, 'releaseGroupCover', {
                     mbid: rg.id,
                     images: [{
-                      image: db.data.images[cacheKey],
+                      image: cachedCover.imageUrl,
                       front: true,
                       types: ["Front"],
                     }]
@@ -528,7 +517,7 @@ router.get("/:mbid/stream", async (req, res) => {
                   return;
                 }
 
-                if (db.data.images && db.data.images[cacheKey] === "NOT_FOUND") {
+                if (cachedCover && cachedCover.imageUrl === "NOT_FOUND") {
                   sendSSE(res, 'releaseGroupCover', {
                     mbid: rg.id,
                     images: []
@@ -550,9 +539,7 @@ router.get("/:mbid/stream", async (req, res) => {
                   if (frontImage) {
                     const imageUrl = frontImage.thumbnails?.["500"] || frontImage.thumbnails?.["large"] || frontImage.image;
                     if (imageUrl) {
-                      if (!db.data.images) db.data.images = {};
-                      db.data.images[cacheKey] = imageUrl;
-                      db.write().catch(() => {});
+                      dbOps.setImage(cacheKey, imageUrl);
                       
                       sendSSE(res, 'releaseGroupCover', {
                         mbid: rg.id,
@@ -568,9 +555,7 @@ router.get("/:mbid/stream", async (req, res) => {
                 }
 
                 // No cover found
-                if (!db.data.images) db.data.images = {};
-                db.data.images[cacheKey] = "NOT_FOUND";
-                db.write().catch(() => {});
+                dbOps.setImage(cacheKey, "NOT_FOUND");
                 sendSSE(res, 'releaseGroupCover', {
                   mbid: rg.id,
                   images: []
@@ -710,7 +695,7 @@ const fetchCoverInBackground = async (mbid) => {
   
   const fetchPromise = (async () => {
     try {
-      const { db } = await import("../config/db.js");
+      // db import removed - using dbOps directly
       const { libraryManager } = await import("../services/libraryManager.js");
       const libraryArtist = libraryManager.getArtist(mbid);
       let artistName = libraryArtist?.artistName || null;
@@ -753,11 +738,7 @@ const fetchCoverInBackground = async (mbid) => {
           
           if (spotifyArtist?.images?.length > 0) {
             const imageUrl = spotifyArtist.images[0].url;
-            if (!db.data.images) db.data.images = {};
-            if (!db.data.imageCacheAge) db.data.imageCacheAge = {};
-            db.data.images[mbid] = imageUrl;
-            db.data.imageCacheAge[mbid] = Date.now();
-            db.write().catch(() => {});
+            dbOps.setImage(mbid, imageUrl);
             return;
           }
         } catch (e) {
@@ -792,16 +773,17 @@ router.get("/:mbid/cover", async (req, res) => {
       return res.json({ images: result.images || [] });
     }
 
-    const { db } = await import("../config/db.js");
+    // db import removed - using dbOps directly
     
     // Optimistic response: return cached data immediately if available
-    if (!refresh && db.data.images && db.data.images[mbid] && db.data.images[mbid] !== "NOT_FOUND") {
+    const cachedImage = dbOps.getImage(mbid);
+    if (!refresh && cachedImage && cachedImage.imageUrl && cachedImage.imageUrl !== "NOT_FOUND") {
       console.log(`[Cover Route] Cache hit for ${mbid}`);
-      const cachedUrl = db.data.images[mbid];
+      const cachedUrl = cachedImage.imageUrl;
       res.set("Cache-Control", "public, max-age=31536000, immutable");
       
       // Trigger background refresh if cache is old (older than 7 days)
-      const cacheAge = db.data.imageCacheAge?.[mbid];
+      const cacheAge = cachedImage.cacheAge;
       const shouldRefresh = !cacheAge || (Date.now() - cacheAge > 7 * 24 * 60 * 60 * 1000);
       
       if (shouldRefresh) {
@@ -818,7 +800,7 @@ router.get("/:mbid/cover", async (req, res) => {
       });
     }
 
-    if (!refresh && db.data.images && db.data.images[mbid] === "NOT_FOUND") {
+    if (!refresh && cachedImage && cachedImage.imageUrl === "NOT_FOUND") {
       console.log(`[Cover Route] NOT_FOUND cache for ${mbid}`);
       res.set("Cache-Control", "public, max-age=3600");
       
@@ -834,7 +816,7 @@ router.get("/:mbid/cover", async (req, res) => {
 
     const fetchPromise = (async () => {
       try {
-        const { db } = await import("../config/db.js");
+        // db import removed - using dbOps directly
         const { libraryManager } = await import("../services/libraryManager.js");
         const libraryArtist = libraryManager.getArtist(mbid);
 
@@ -880,11 +862,7 @@ router.get("/:mbid/cover", async (req, res) => {
             
             if (spotifyArtist?.images?.length > 0) {
               const imageUrl = spotifyArtist.images[0].url;
-              if (!db.data.images) db.data.images = {};
-              if (!db.data.imageCacheAge) db.data.imageCacheAge = {};
-              db.data.images[mbid] = imageUrl;
-              db.data.imageCacheAge[mbid] = Date.now();
-              db.write().catch(e => console.error("Error saving image to database:", e.message));
+              dbOps.setImage(mbid, imageUrl);
               return {
                 images: [{
                   image: imageUrl,
@@ -937,11 +915,7 @@ router.get("/:mbid/cover", async (req, res) => {
                 if (frontImage) {
                   const imageUrl = frontImage.thumbnails?.["500"] || frontImage.thumbnails?.["large"] || frontImage.image;
                   if (imageUrl) {
-                    if (!db.data.images) db.data.images = {};
-                    if (!db.data.imageCacheAge) db.data.imageCacheAge = {};
-                    db.data.images[mbid] = imageUrl;
-                    db.data.imageCacheAge[mbid] = Date.now();
-                    db.write().catch(e => console.error("Error saving image to database:", e.message));
+                    dbOps.setImage(mbid, imageUrl);
                     return {
                       images: [{
                         image: imageUrl,
@@ -973,10 +947,8 @@ router.get("/:mbid/cover", async (req, res) => {
       res.set("Cache-Control", "public, max-age=31536000, immutable");
     } else {
       console.log(`[Cover Route] No cover found for ${mbid}, caching NOT_FOUND`);
-      const { db } = await import("../config/db.js");
-      if (!db.data.images) db.data.images = {};
-      db.data.images[mbid] = "NOT_FOUND";
-      db.write().catch(e => console.error("Error saving NOT_FOUND to database:", e.message));
+      // db import removed - using dbOps directly
+      dbOps.setImage(mbid, "NOT_FOUND");
       res.set("Cache-Control", "public, max-age=3600");
     }
     

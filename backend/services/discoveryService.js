@@ -1,9 +1,10 @@
-import { db } from "../config/db.js";
+import { dbOps } from "../config/db-helpers.js";
 import { GENRE_KEYWORDS } from "../config/constants.js";
 import { lastfmRequest, getLastfmApiKey, musicbrainzRequest, spotifySearchArtist } from "./apiClients.js";
 
 const getLastfmUsername = () => {
-  return db.data?.settings?.integrations?.lastfm?.username || null;
+  const settings = dbOps.getSettings();
+  return settings.integrations?.lastfm?.username || null;
 };
 
 // Initialize cache - but check if discovery is actually configured first
@@ -17,41 +18,35 @@ let discoveryCache = {
   isUpdating: false,
 };
 
-// Only load from database if it exists and has data
-if (db.data?.discovery) {
-  const dbData = db.data.discovery;
-  // Only use database data if it has actual content
-  if (dbData.recommendations?.length > 0 || dbData.globalTop?.length > 0 || dbData.topGenres?.length > 0) {
-    discoveryCache = {
-      recommendations: dbData.recommendations || [],
-      globalTop: dbData.globalTop || [],
-      basedOn: dbData.basedOn || [],
-      topTags: dbData.topTags || [],
-      topGenres: dbData.topGenres || [],
-      lastUpdated: dbData.lastUpdated || null,
-      isUpdating: false,
-    };
-  }
+// Load from database if it exists and has data
+const dbData = dbOps.getDiscoveryCache();
+if (dbData.recommendations?.length > 0 || dbData.globalTop?.length > 0 || dbData.topGenres?.length > 0) {
+  discoveryCache = {
+    recommendations: dbData.recommendations || [],
+    globalTop: dbData.globalTop || [],
+    basedOn: dbData.basedOn || [],
+    topTags: dbData.topTags || [],
+    topGenres: dbData.topGenres || [],
+    lastUpdated: dbData.lastUpdated || null,
+    isUpdating: false,
+  };
 }
 
 export const getDiscoveryCache = () => {
-  // Don't check configuration here - let the route handle it
-  // Just sync cache with database if it exists
-  if (db.data?.discovery) {
-    const dbData = db.data.discovery;
-    // Only sync if database has more data than cache
-    if ((dbData.recommendations?.length > 0 && (!discoveryCache.recommendations || discoveryCache.recommendations.length === 0)) ||
-        (dbData.globalTop?.length > 0 && (!discoveryCache.globalTop || discoveryCache.globalTop.length === 0)) ||
-        (dbData.topGenres?.length > 0 && (!discoveryCache.topGenres || discoveryCache.topGenres.length === 0))) {
-      Object.assign(discoveryCache, {
-        recommendations: dbData.recommendations || discoveryCache.recommendations || [],
-        globalTop: dbData.globalTop || discoveryCache.globalTop || [],
-        basedOn: dbData.basedOn || discoveryCache.basedOn || [],
-        topTags: dbData.topTags || discoveryCache.topTags || [],
-        topGenres: dbData.topGenres || discoveryCache.topGenres || [],
-        lastUpdated: dbData.lastUpdated || discoveryCache.lastUpdated || null,
-      });
-    }
+  // Sync cache with database
+  const dbData = dbOps.getDiscoveryCache();
+  // Only sync if database has more data than cache
+  if ((dbData.recommendations?.length > 0 && (!discoveryCache.recommendations || discoveryCache.recommendations.length === 0)) ||
+      (dbData.globalTop?.length > 0 && (!discoveryCache.globalTop || discoveryCache.globalTop.length === 0)) ||
+      (dbData.topGenres?.length > 0 && (!discoveryCache.topGenres || discoveryCache.topGenres.length === 0))) {
+    Object.assign(discoveryCache, {
+      recommendations: dbData.recommendations || discoveryCache.recommendations || [],
+      globalTop: dbData.globalTop || discoveryCache.globalTop || [],
+      basedOn: dbData.basedOn || discoveryCache.basedOn || [],
+      topTags: dbData.topTags || discoveryCache.topTags || [],
+      topGenres: dbData.topGenres || discoveryCache.topGenres || [],
+      lastUpdated: dbData.lastUpdated || discoveryCache.lastUpdated || null,
+    });
   }
   return discoveryCache;
 };
@@ -96,21 +91,14 @@ export const updateDiscoveryCache = async () => {
       discoveryCache.isUpdating = false;
       
       // Also clear from database
-      if (db.data) {
-        db.data.discovery = {
-          recommendations: [],
-          globalTop: [],
-          basedOn: [],
-          topTags: [],
-          topGenres: [],
-          lastUpdated: null,
-        };
-        try {
-          await db.write();
-        } catch (error) {
-          console.error("Failed to clear discovery cache:", error.message);
-        }
-      }
+      dbOps.updateDiscoveryCache({
+        recommendations: [],
+        globalTop: [],
+        basedOn: [],
+        topTags: [],
+        topGenres: [],
+        lastUpdated: null,
+      });
       return;
     }
 
@@ -407,13 +395,8 @@ export const updateDiscoveryCache = async () => {
     };
 
     Object.assign(discoveryCache, discoveryData);
-    db.data.discovery = discoveryData;
-    try {
-      await db.write();
-      console.log(`Discovery data written to database: ${discoveryData.recommendations.length} recommendations, ${discoveryData.topGenres.length} genres, ${discoveryData.globalTop.length} trending`);
-    } catch (error) {
-      console.error("Failed to write discovery data to database:", error.message);
-    }
+    dbOps.updateDiscoveryCache(discoveryData);
+    console.log(`Discovery data written to database: ${discoveryData.recommendations.length} recommendations, ${discoveryData.topGenres.length} genres, ${discoveryData.globalTop.length} trending`);
 
     const allToHydrate = [
       ...(discoveryCache.globalTop || []),
@@ -509,7 +492,7 @@ export const updateDiscoveryCache = async () => {
       }
     }
 
-    await db.write();
+    // Discovery cache already updated above
 
     console.log("Discovery cache updated successfully.");
     console.log(`Summary: ${recommendationsArray.length} recommendations, ${discoveryCache.topGenres.length} genres, ${discoveryCache.globalTop.length} trending artists`);

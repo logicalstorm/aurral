@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { db } from '../config/db.js';
+import { dbOps } from '../config/db-helpers.js';
 import { libraryManager } from './libraryManager.js';
 import { fileScanner } from './fileScanner.js';
 
@@ -22,14 +22,8 @@ export class LibraryMonitor {
   }
 
   initLogging() {
-    // Initialize activity log in database
-    if (!db.data.activityLog) {
-      db.data.activityLog = [];
-    }
-    // Keep only last 1000 entries
-    if (db.data.activityLog.length > 1000) {
-      db.data.activityLog = db.data.activityLog.slice(-1000);
-    }
+    // Activity log is managed by SQLite with automatic cleanup
+    // No initialization needed
   }
 
   log(level, category, message, data = {}) {
@@ -41,8 +35,6 @@ export class LibraryMonitor {
       data,
     };
     
-    db.data.activityLog.push(entry);
-    
     // Also log to console with prefix
     const prefix = `[${level.toUpperCase()}] [${category}]`;
     const logMethod = level === 'error' ? console.error : 
@@ -53,9 +45,7 @@ export class LibraryMonitor {
     logMethod(`${prefix} ${message}`, Object.keys(data).length > 0 ? data : '');
     
     // Write to database (async, don't wait)
-    db.write().catch(err => {
-      console.error(`Failed to write activity log: ${err.message}`);
-    });
+    dbOps.insertActivityLog(entry);
   }
 
   async start() {
@@ -172,12 +162,8 @@ export class LibraryMonitor {
         filesTracked: currentFiles.size,
       });
 
-      // Update last scan time in database
-      if (!db.data.library) {
-        db.data.library = {};
-      }
-      db.data.library.lastScan = this.lastScan;
-      await db.write();
+      // Last scan time is tracked in memory, no need to store in database
+      // (can be added to settings if needed in the future)
 
     } catch (error) {
       this.log('error', 'scan', 'Library scan failed', { error: error.message, stack: error.stack });
@@ -349,11 +335,11 @@ export class LibraryMonitor {
               const isComplete = updatedAlbum?.statistics?.percentOfTracks === 100;
               
               // Update album request status
-              if (isComplete && db.data.albumRequests) {
-                const albumRequest = db.data.albumRequests.find(r => r.albumId === album.id);
+              if (isComplete) {
+                const albumRequests = dbOps.getAlbumRequests();
+                const albumRequest = albumRequests.find(r => r.albumId === album.id);
                 if (albumRequest && albumRequest.status !== 'available') {
-                  albumRequest.status = 'available';
-                  await db.write();
+                  dbOps.updateAlbumRequest(album.id, { status: 'available' });
                   this.log('info', 'request', 'Album request marked as available (file discovered)', {
                     albumId: album.id,
                     albumName: album.albumName,
@@ -506,20 +492,7 @@ export class LibraryMonitor {
 
   // Get activity log
   getActivityLog(limit = 100, category = null, level = null) {
-    let log = [...(db.data.activityLog || [])];
-    
-    if (category) {
-      log = log.filter(entry => entry.category === category);
-    }
-    
-    if (level) {
-      log = log.filter(entry => entry.level === level);
-    }
-    
-    // Sort by timestamp (newest first)
-    log.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    
-    return log.slice(0, limit);
+    return dbOps.getActivityLog(limit, category, level);
   }
 
   // Get library status summary
@@ -588,7 +561,7 @@ export class LibraryMonitor {
     }
 
     // Count downloading albums from download records
-    const downloads = db.data.downloads || [];
+    const downloads = dbOps.getDownloads();
     const downloadingAlbums = new Set();
     for (const download of downloads) {
       if (download.status === 'downloading' && download.albumId) {

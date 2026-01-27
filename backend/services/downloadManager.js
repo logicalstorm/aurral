@@ -1,7 +1,8 @@
 import { slskdClient } from './slskdClient.js';
 import { libraryManager } from './libraryManager.js';
 import { fileScanner } from './fileScanner.js';
-import { db } from '../config/db.js';
+import { dbOps } from '../config/db-helpers.js';
+import { dbHelpers } from '../config/db-sqlite.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -20,6 +21,107 @@ export class DownloadManager {
     this.remotePathMapping = null; // Cache remote path mapping if configured
     this.startDownloadMonitor();
     this.initializeDownloadDirectory();
+    this.recoveryCompleted = false; // Track if startup recovery has run
+  }
+
+  /**
+   * Classify error type for smart retry strategies
+   * Returns: 'rate_limit', 'network', 'server_error', 'not_found', 'permanent', 'unknown'
+   */
+  classifyError(error) {
+    if (!error) return 'unknown';
+
+    // Rate limit errors (429)
+    if (error.response?.status === 429 || 
+        error.message?.toLowerCase().includes('rate limit') ||
+        error.message?.toLowerCase().includes('too many requests') ||
+        error.response?.data?.error?.toLowerCase().includes('rate limit')) {
+      return 'rate_limit';
+    }
+
+    // Network errors (connection refused, timeout, etc.)
+    if (error.code === 'ECONNREFUSED' || 
+        error.code === 'ETIMEDOUT' ||
+        error.code === 'ENOTFOUND' ||
+        error.message?.toLowerCase().includes('connect') ||
+        error.message?.toLowerCase().includes('timeout') ||
+        error.message?.toLowerCase().includes('network')) {
+      return 'network';
+    }
+
+    // Not found errors (404) - usually permanent
+    if (error.response?.status === 404 ||
+        error.message?.toLowerCase().includes('not found') ||
+        error.message?.toLowerCase().includes('404')) {
+      return 'not_found';
+    }
+
+    // Server errors (500-503) - usually transient
+    if (error.response?.status >= 500 && error.response?.status < 504) {
+      return 'server_error';
+    }
+
+    // Permanent client errors (400, 401, 403) - don't retry
+    if (error.response?.status >= 400 && error.response?.status < 500) {
+      return 'permanent';
+    }
+
+    return 'unknown';
+  }
+
+  /**
+   * Get retry strategy based on error type
+   * Returns: { maxRetries, backoffMs, shouldRetry }
+   */
+  getRetryStrategy(errorType, retryCount = 0) {
+    const strategies = {
+      rate_limit: {
+        maxRetries: 5,
+        backoffMs: (attempt) => {
+          // Exponential backoff with jitter: 5min, 10min, 15min, 20min, 25min
+          const baseDelay = 5 * 60 * 1000; // 5 minutes
+          const jitter = Math.random() * 2 * 60 * 1000; // 0-2 minutes jitter
+          return baseDelay * attempt + jitter;
+        },
+        shouldRetry: true,
+      },
+      network: {
+        maxRetries: 10,
+        backoffMs: (attempt) => {
+          // Linear backoff: 30s, 1min, 2min, 3min, etc.
+          return Math.min(attempt * 30 * 1000, 5 * 60 * 1000); // Cap at 5 minutes
+        },
+        shouldRetry: true,
+      },
+      server_error: {
+        maxRetries: 3,
+        backoffMs: (attempt) => {
+          // Exponential backoff: 2min, 4min, 8min
+          return Math.pow(2, attempt) * 60 * 1000;
+        },
+        shouldRetry: true,
+      },
+      not_found: {
+        maxRetries: 0,
+        backoffMs: () => 0,
+        shouldRetry: false,
+      },
+      permanent: {
+        maxRetries: 0,
+        backoffMs: () => 0,
+        shouldRetry: false,
+      },
+      unknown: {
+        maxRetries: 3,
+        backoffMs: (attempt) => {
+          // Default exponential backoff: 1min, 2min, 4min
+          return Math.pow(2, attempt) * 60 * 1000;
+        },
+        shouldRetry: true,
+      },
+    };
+
+    return strategies[errorType] || strategies.unknown;
   }
 
   /**
@@ -356,6 +458,227 @@ export class DownloadManager {
   }
 
   /**
+   * Recover download state on startup
+   * Reconciles database state with slskd state to handle crashes and inconsistencies
+   */
+  async recoverDownloadState() {
+    if (this.recoveryCompleted) {
+      return; // Already recovered
+    }
+
+    if (!slskdClient.isConfigured()) {
+      console.log('[Download Recovery] slskd not configured, skipping recovery');
+      this.recoveryCompleted = true;
+      return;
+    }
+
+    console.log('[Download Recovery] Starting download state recovery...');
+    libraryMonitor.log('info', 'download', 'Starting download state recovery');
+
+    try {
+      // Get all downloads from database that are in progress
+      const dbDownloads = dbOps.getDownloads().filter(
+        d => d.status === 'downloading' || 
+             d.status === 'queued' || 
+             d.status === 'requested' ||
+             (d.status === 'failed' && (d.retryCount || 0) < 3)
+      );
+
+      console.log(`[Download Recovery] Found ${dbDownloads.length} in-progress downloads in database`);
+
+      // Get all downloads from slskd
+      let slskdDownloads = [];
+      try {
+        slskdDownloads = await slskdClient.getDownloads();
+        
+        // Flatten if nested structure
+        if (Array.isArray(slskdDownloads) && slskdDownloads.length > 0) {
+          const firstItem = slskdDownloads[0];
+          if (firstItem && typeof firstItem === 'object' && firstItem.directories && !firstItem.id) {
+            const flattened = [];
+            for (const userObj of slskdDownloads) {
+              if (userObj.directories && Array.isArray(userObj.directories)) {
+                for (const dir of userObj.directories) {
+                  if (dir.files && Array.isArray(dir.files)) {
+                    flattened.push(...dir.files);
+                  }
+                }
+              }
+            }
+            if (flattened.length > 0) {
+              slskdDownloads = flattened;
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('[Download Recovery] Could not fetch downloads from slskd:', error.message);
+      }
+
+      console.log(`[Download Recovery] Found ${slskdDownloads.length} downloads in slskd`);
+
+      let recovered = 0;
+      let orphaned = 0;
+      let completed = 0;
+      let failed = 0;
+
+      // Reconcile database downloads with slskd downloads
+      for (const dbDownload of dbDownloads) {
+        try {
+          // Find matching slskd download by ID
+          const slskdDownload = slskdDownloads.find(
+            d => {
+              const dbId = dbDownload.slskdDownloadId?.toString();
+              const slskdId = d.id?.toString();
+              return dbId && slskdId && dbId === slskdId;
+            }
+          );
+
+          if (slskdDownload) {
+            // Download exists in slskd - check its state
+            const state = slskdDownload.state || slskdDownload.status;
+            const normalizedState = this.normalizeState(state);
+
+            if (normalizedState === 'completed') {
+              // DB says downloading but slskd says completed - process completion
+              console.log(`[Download Recovery] Found completed download: ${dbDownload.id} (slskd ID: ${slskdDownload.id})`);
+              this.logDownloadEvent(dbDownload, 'recovered', {
+                action: 'process_completion',
+                slskdState: state,
+              });
+              await this.handleCompletedDownload(slskdDownload);
+              completed++;
+            } else if (normalizedState === 'failed' || normalizedState === 'cancelled') {
+              // DB says downloading but slskd says failed - handle failure
+              console.log(`[Download Recovery] Found failed download: ${dbDownload.id} (slskd ID: ${slskdDownload.id}, state: ${state})`);
+              const errorMsg = slskdDownload.error || slskdDownload.errorMessage || state;
+              const error = { message: errorMsg, response: { status: 500 } };
+              await this.handleFailedDownload(dbDownload, slskdDownload, error);
+              failed++;
+            } else {
+              // Still downloading/queued - update progress if available
+              const progress = slskdDownload.percentComplete || slskdDownload.progress || 0;
+              if (progress !== dbDownload.progress) {
+                this.logDownloadEvent(dbDownload, 'recovered', {
+                  action: 'update_progress',
+                  progress,
+                  slskdState: state,
+                });
+                dbDownload.progress = progress;
+                dbOps.updateDownload(dbDownload.id, dbDownload);
+              }
+              recovered++;
+            }
+          } else {
+            // Download not found in slskd - check if file exists (might have completed)
+            const startedAt = new Date(dbDownload.startedAt || dbDownload.requestedAt || new Date());
+            const minutesElapsed = (new Date() - startedAt) / (1000 * 60);
+
+            if (minutesElapsed > 5) {
+              // Been more than 5 minutes - likely completed or failed
+              // Check if file exists in download directory
+              if (dbDownload.destinationPath || dbDownload.filename) {
+                try {
+                  const filePath = dbDownload.destinationPath || 
+                                 (this.slskdDownloadDir && path.join(this.slskdDownloadDir, dbDownload.filename));
+                  
+                  if (filePath) {
+                    try {
+                      await fs.access(filePath);
+                      // File exists - download completed but wasn't processed
+                      console.log(`[Download Recovery] Found completed file for orphaned download: ${dbDownload.id}`);
+                      this.logDownloadEvent(dbDownload, 'recovered', {
+                        action: 'process_orphaned_file',
+                        filePath,
+                      });
+                      // Create a mock slskd download object for processing
+                      const mockDownload = {
+                        id: dbDownload.slskdDownloadId,
+                        filename: dbDownload.filename,
+                        state: 'completed',
+                        filePath: filePath,
+                      };
+                      await this.handleCompletedDownload(mockDownload);
+                      completed++;
+                      continue;
+                    } catch (fileError) {
+                      // File doesn't exist
+                    }
+                  }
+                } catch (error) {
+                  // Ignore errors checking file
+                }
+              }
+
+              // File doesn't exist and not in slskd - likely failed or timed out
+              if (minutesElapsed > 30) {
+                console.log(`[Download Recovery] Orphaned download (not in slskd, no file): ${dbDownload.id} (${Math.round(minutesElapsed)}m old)`);
+                const error = { message: 'Download not found in slskd and file does not exist', response: { status: 404 } };
+                await this.handleFailedDownload(dbDownload, null, error);
+                orphaned++;
+              } else {
+                // Too recent - might still be processing, keep as is
+                recovered++;
+              }
+            } else {
+              // Too recent - might still be queued
+              recovered++;
+            }
+          }
+        } catch (error) {
+          console.error(`[Download Recovery] Error processing download ${dbDownload.id}:`, error.message);
+        }
+      }
+
+      // Check for downloads in slskd that aren't in our database (orphaned in slskd)
+      for (const slskdDownload of slskdDownloads) {
+        const existsInDb = dbDownloads.some(
+          d => {
+            const dbId = d.slskdDownloadId?.toString();
+            const slskdId = slskdDownload.id?.toString();
+            return dbId && slskdId && dbId === slskdId;
+          }
+        );
+
+        if (!existsInDb) {
+          const state = slskdDownload.state || slskdDownload.status;
+          const normalizedState = this.normalizeState(state);
+          
+          if (normalizedState === 'completed') {
+            // Orphaned completed download - try to process it
+            console.log(`[Download Recovery] Found orphaned completed download in slskd: ${slskdDownload.id}`);
+            try {
+              await this.handleCompletedDownload(slskdDownload);
+            } catch (error) {
+              console.warn(`[Download Recovery] Could not process orphaned download ${slskdDownload.id}:`, error.message);
+            }
+          }
+        }
+      }
+
+      console.log(`[Download Recovery] Recovery complete:`);
+      console.log(`  - Recovered: ${recovered}`);
+      console.log(`  - Completed: ${completed}`);
+      console.log(`  - Failed: ${failed}`);
+      console.log(`  - Orphaned: ${orphaned}`);
+
+      libraryMonitor.log('info', 'download', 'Download state recovery complete', {
+        recovered,
+        completed,
+        failed,
+        orphaned,
+      });
+
+      this.recoveryCompleted = true;
+    } catch (error) {
+      console.error('[Download Recovery] Error during recovery:', error.message);
+      libraryMonitor.log('error', 'download', 'Download state recovery failed', {
+        error: error.message,
+      });
+      this.recoveryCompleted = true; // Mark as completed even on error to prevent retries
+    }
+  }
+
+  /**
    * Check for failed downloads that should be automatically requeued
    * This ensures we're always trying to complete downloads
    */
@@ -365,7 +688,8 @@ export class DownloadManager {
         return;
       }
 
-      const failedDownloads = (db.data.downloads || []).filter(
+      const allDownloads = dbOps.getDownloads();
+      const failedDownloads = allDownloads.filter(
         d => d.status === 'failed' && 
              !d.queueCleaned && 
              (d.retryCount || 0) < 3 &&
@@ -399,8 +723,9 @@ export class DownloadManager {
 
           console.log(`Auto-requeuing failed download ${download.id} (attempt ${(download.retryCount || 0) + 1}/3)...`);
           
-          download.lastRequeueAttempt = new Date().toISOString();
-          await db.write();
+          dbOps.updateDownload(download.id, {
+            lastRequeueAttempt: new Date().toISOString(),
+          });
           
           // Retry the download
           await this.retryDownload(download);
@@ -457,7 +782,8 @@ export class DownloadManager {
       }
       
       // Get our tracked downloads that are still in progress
-      const trackedDownloads = (db.data.downloads || []).filter(d => d.status === 'downloading' || d.status === 'requested');
+      const trackedDownloads = dbOps.getDownloads({ status: 'downloading' })
+        .concat(dbOps.getDownloads({ status: 'requested' }));
       
       // Separate weekly-flow downloads for better logging
       const weeklyFlowDownloads = trackedDownloads.filter(d => d.type === 'weekly-flow');
@@ -493,7 +819,7 @@ export class DownloadManager {
         
         // Check if this is a weekly-flow download
         const downloadIdStr = download.id?.toString();
-        const weeklyFlowRecord = (db.data.downloads || []).find(
+        const weeklyFlowRecord = dbOps.getDownloads().find(
           d => d.type === 'weekly-flow' && 
                (d.slskdDownloadId?.toString() === downloadIdStr || d.slskdDownloadId === download.id)
         );
@@ -501,7 +827,7 @@ export class DownloadManager {
         if (normalizedState === 'completed') {
           completedCount++;
           // Check if we've already processed this download
-          const downloadRecord = (db.data.downloads || []).find(
+          const downloadRecord = dbOps.getDownloads().find(
             d => {
               const recordIdStr = d.slskdDownloadId?.toString();
               return (recordIdStr === downloadIdStr || 
@@ -521,7 +847,7 @@ export class DownloadManager {
             });
             
             // Try to find by slskdDownloadId even if status isn't completed
-            const existingRecord = weeklyFlowRecord || (db.data.downloads || []).find(
+            const existingRecord = weeklyFlowRecord || dbOps.getDownloads().find(
               d => {
                 const recordIdStr = d.slskdDownloadId?.toString();
                 return recordIdStr === downloadIdStr || d.slskdDownloadId === download.id;
@@ -534,7 +860,7 @@ export class DownloadManager {
                 slskdState: state,
                 filename: download.filename,
               });
-              await db.write();
+              // Download record updated via dbOps.updateDownload
               await this.handleCompletedDownload(download);
             } else {
               // New download we weren't tracking - handle it
@@ -551,7 +877,7 @@ export class DownloadManager {
               matchedBy: 'slskd_check',
               slskdState: state,
             });
-            await db.write();
+            // Download record updated via dbOps.updateDownload
             console.log(`[WEEKLY FLOW] ✓ Found download ID: ${weeklyFlowRecord.artistName} - ${weeklyFlowRecord.trackName} (ID: ${download.id}, state: ${state})`);
           }
           
@@ -564,7 +890,7 @@ export class DownloadManager {
               slskdState: state,
             });
             console.log(`[WEEKLY FLOW] Download progress: ${weeklyFlowRecord.artistName} - ${weeklyFlowRecord.trackName} (${progress}%)`);
-            await db.write();
+            // Download record updated via dbOps.updateDownload
           } else if (state?.toLowerCase().includes('queued')) {
             // Log when download is queued (especially "Queued, Remotely")
             console.log(`[WEEKLY FLOW] Download queued: ${weeklyFlowRecord.artistName} - ${weeklyFlowRecord.trackName} (state: ${state})`);
@@ -623,7 +949,7 @@ export class DownloadManager {
                 filename: download.filename,
                 slskdState: state,
               });
-              await db.write();
+              // Download record updated via dbOps.updateDownload
               console.log(`[WEEKLY FLOW] ✓ Matched download: ${unmatched.artistName} - ${unmatched.trackName} (ID: ${download.id}, state: ${state}, matched by: ${matchReason})`);
               break; // Only match one per slskd download
             }
@@ -686,7 +1012,7 @@ export class DownloadManager {
               matchedBy: 'filename',
               filename: slskdDownload.filename,
             });
-            await db.write();
+            // Download record updated via dbOps.updateDownload
             console.log(`[WEEKLY FLOW] Matched download by filename: ${artistName} - ${trackName} (ID: ${slskdDownload.id})`);
           }
         }
@@ -716,7 +1042,7 @@ export class DownloadManager {
               error: `Download not found in slskd after ${Math.round(minutesElapsed)} minutes`,
               minutesElapsed: Math.round(minutesElapsed),
             });
-            await db.write();
+            // Download record updated via dbOps.updateDownload
             await this.handleFailedDownload(trackedDownload);
           } else if (minutesElapsed > 10) {
             // Too many retries or too old - mark as failed
@@ -731,7 +1057,7 @@ export class DownloadManager {
               minutesElapsed: Math.round(minutesElapsed),
               retryCount: trackedDownload.retryCount || 0,
             });
-            await db.write();
+            // Download record updated via dbOps.updateDownload
           }
         } else {
           // Check download state with normalized state handling
@@ -745,17 +1071,22 @@ export class DownloadManager {
               slskdState: state,
               filename: slskdDownload.filename,
             });
-            await db.write();
+            // Download record updated via dbOps.updateDownload
             await this.handleCompletedDownload(slskdDownload);
           } else if (normalizedState === 'failed' || normalizedState === 'cancelled') {
             console.log(`Download ${trackedDownload.id} failed with state: ${state}`);
             const errorMsg = slskdDownload.error || slskdDownload.errorMessage || state;
+            const error = { 
+              message: errorMsg, 
+              response: { status: 500 },
+              ...(slskdDownload.error ? { response: { status: 500, data: { error: slskdDownload.error } } } : {})
+            };
             this.logDownloadEvent(trackedDownload, normalizedState === 'cancelled' ? 'cancelled' : 'failed', {
               error: errorMsg,
               slskdState: state,
             });
-            await db.write();
-            await this.handleFailedDownload(trackedDownload, slskdDownload);
+            // Download record updated via dbOps.updateDownload
+            await this.handleFailedDownload(trackedDownload, slskdDownload, error);
           } else if (normalizedState === 'downloading' || normalizedState === 'queued') {
             // Update progress if available
             const progress = slskdDownload.percentComplete || 
@@ -781,7 +1112,7 @@ export class DownloadManager {
                 slskdState: state,
               });
               trackedDownload.lastState = state;
-              await db.write();
+              // Download record updated via dbOps.updateDownload
             }
             
             // Check if download is stalled (no progress for > 10 minutes)
@@ -804,19 +1135,19 @@ export class DownloadManager {
                 slskdState: state,
               });
               trackedDownload.lastProgress = progress;
-              await db.write();
+              // Download record updated via dbOps.updateDownload
               await this.handleStalledDownload(trackedDownload, slskdDownload);
             } else if (progress !== lastProgress) {
               // Progress changed, update last progress
               trackedDownload.lastProgress = progress;
-              await db.write();
+              // Download record updated via dbOps.updateDownload
             }
           } else {
             // Unknown state - log for debugging
             if (state !== trackedDownload.lastState) {
               console.log(`Download ${trackedDownload.id} state changed: ${state}`);
               trackedDownload.lastState = state;
-              await db.write();
+              // Download record updated via dbOps.updateDownload
             }
           }
         }
@@ -1206,7 +1537,7 @@ export class DownloadManager {
       const sourceFilename = sourcePath ? path.basename(sourcePath) : null;
       
       // Try multiple matching strategies
-      let downloadRecord = (db.data.downloads || []).find(
+      let downloadRecord = dbOps.getDownloads().find(
         d => {
           const recordIdStr = d.slskdDownloadId?.toString();
           const recordId = d.slskdDownloadId;
@@ -1224,7 +1555,7 @@ export class DownloadManager {
       // If no match by ID, try matching by filename (for orphaned downloads or weekly-flow)
       if (!downloadRecord && (downloadFilename || sourceFilename)) {
         const searchFilename = sourceFilename || downloadFilename;
-        downloadRecord = (db.data.downloads || []).find(
+        downloadRecord = dbOps.getDownloads().find(
           d => {
             if (!d.filename && !d.trackName) return false;
             
@@ -1284,8 +1615,10 @@ export class DownloadManager {
         console.warn(`No download record found for slskd download ID: ${download.id} (${typeof download.id})`);
         console.warn(`Filename: ${download.filename || 'unknown'}`);
         console.warn(`Source file: ${sourcePath || 'not found'}`);
-        console.warn(`Available download records (${(db.data.downloads || []).length} total, ${(db.data.downloads || []).filter(d => d.status === 'downloading').length} downloading):`, 
-          (db.data.downloads || []).slice(0, 10).map(d => ({
+        const allDownloads = dbOps.getDownloads();
+        const downloadingCount = allDownloads.filter(d => d.status === 'downloading').length;
+        console.warn(`Available download records (${allDownloads.length} total, ${downloadingCount} downloading):`, 
+          allDownloads.slice(0, 10).map(d => ({
             id: d.id,
             slskdDownloadId: d.slskdDownloadId,
             type: d.type || 'unknown',
@@ -1327,7 +1660,7 @@ export class DownloadManager {
                   tempFilePath: sourcePath,
                   trackTitle: downloadRecord.trackTitle,
                 });
-                await db.write();
+                // Download record updated via dbOps.updateDownload
                 
                 const trackInfo = downloadRecord.trackTitle 
                   ? ` (track: "${downloadRecord.trackTitle}")` 
@@ -1337,7 +1670,7 @@ export class DownloadManager {
                 );
                 
                 // Check if all tracks for this album are now complete
-                const albumDownloads = (db.data.downloads || []).filter(
+                const albumDownloads = dbOps.getDownloads().filter(
                   d => d.albumId === downloadRecord.albumId && d.type === 'album'
                 );
                 const completedCount = albumDownloads.filter(d => d.status === 'completed').length;
@@ -1385,7 +1718,7 @@ export class DownloadManager {
                     }
                   }
                   
-                  await db.write();
+                  // Download record updated via dbOps.updateDownload
                   
                   // Match all files to tracks
                   for (const trackDownload of albumDownloads) {
@@ -1419,11 +1752,11 @@ export class DownloadManager {
                   const tracksWithFiles = albumTracks.filter(t => t.hasFile && t.path);
                   const isComplete = albumTracks.length > 0 && tracksWithFiles.length === albumTracks.length;
                   
-                  if (isComplete && db.data.albumRequests) {
-                    const albumRequest = db.data.albumRequests.find(r => r.albumId === downloadRecord.albumId);
+                  if (isComplete) {
+                    const albumRequests = dbOps.getAlbumRequests();
+                    const albumRequest = albumRequests.find(r => r.albumId === downloadRecord.albumId);
                     if (albumRequest && albumRequest.status !== 'available') {
-                      albumRequest.status = 'available';
-                      await db.write();
+                      dbOps.updateAlbumRequest(downloadRecord.albumId, { status: 'available' });
                       libraryMonitor.log('info', 'request', 'Album request marked as available', {
                         albumId: downloadRecord.albumId,
                         albumName: album.albumName,
@@ -1446,7 +1779,9 @@ export class DownloadManager {
                 destinationPath = sourcePath; // Keep original path until all tracks are ready
               }
             } else if (downloadRecord.type === 'track' && downloadRecord.trackId) {
-              const track = (db.data?.library?.tracks || []).find(t => t.id === downloadRecord.trackId);
+              const track = libraryManager.getTracks(libraryManager.getAlbums(downloadRecord.artistId).find(a => 
+                libraryManager.getTracks(a.id).some(t => t.id === downloadRecord.trackId)
+              )?.id || '').find(t => t.id === downloadRecord.trackId);
               if (track) {
                 const album = libraryManager.getAlbumById(track.albumId);
                 if (album) {
@@ -1516,7 +1851,7 @@ export class DownloadManager {
           if (destinationPath && !downloadRecord.destinationPath) {
             downloadRecord.destinationPath = destinationPath;
           }
-          await db.write();
+                dbOps.updateDownload(downloadRecord.id, downloadRecord);
           
           // For non-album downloads (single tracks), handle immediately
           if (downloadRecord.type !== 'album' || !downloadRecord.albumId) {
@@ -1929,7 +2264,8 @@ export class DownloadManager {
       // Search and download with tracklist for matching
       // This will download multiple tracks (one per track in tracklist)
       // Use quality from artist settings or fall back to global settings
-      const quality = artist.quality || db.data?.settings?.quality || 'standard';
+      const settings = dbOps.getSettings();
+      const quality = artist.quality || settings.quality || 'standard';
       const downloadResults = await slskdClient.downloadAlbum(artist.artistName, album.albumName, {
         tracklist: tracklist,
         albumMbid: album.mbid,
@@ -1938,10 +2274,6 @@ export class DownloadManager {
       
       // Store download references for tracking
       // downloadAlbum returns an array of download results (one per track)
-      if (!db.data.downloads) {
-        db.data.downloads = [];
-      }
-      
       const downloadRecords = [];
       
       // Handle both single result (backward compatibility) and array of results
@@ -1969,7 +2301,12 @@ export class DownloadManager {
           type: 'album',
           artistId,
           albumId,
+          artistMbid: artist.mbid,
+          albumMbid: album.mbid,
+          artistName: artist.artistName,
+          albumName: album.albumName,
           status: 'requested',
+          requestedAt: new Date().toISOString(),
           slskdDownloadId: downloadId,
           username: downloadObj.username || download.username,
           filename: downloadObj.filename || download.filename,
@@ -1988,10 +2325,8 @@ export class DownloadManager {
         });
         
         downloadRecords.push(downloadRecord);
-        db.data.downloads.push(downloadRecord);
+        dbOps.insertDownload(downloadRecord);
       }
-      
-      await db.write();
       
       console.log(
         `Album download initiated: ${downloadRecords.length}/${tracklist.length} tracks started`,
@@ -2013,7 +2348,9 @@ export class DownloadManager {
 
   async downloadTrack(artistId, trackId) {
     const artist = libraryManager.getArtistById(artistId);
-    const track = (db.data?.library?.tracks || []).find(t => t.id === trackId);
+    const track = libraryManager.getTracks(libraryManager.getAlbums(artistId).find(a => 
+      libraryManager.getTracks(a.id).some(t => t.id === trackId)
+    )?.id || '').find(t => t.id === trackId);
     
     if (!artist || !track) {
       throw new Error('Artist or track not found');
@@ -2050,10 +2387,6 @@ export class DownloadManager {
     });
     
     // Store download reference
-    if (!db.data.downloads) {
-      db.data.downloads = [];
-    }
-    
     const downloadRecord = {
       id: download.id || this.generateId(),
       type: 'track',
@@ -2075,9 +2408,11 @@ export class DownloadManager {
       username: download.username,
     });
     
-    db.data.downloads.push(downloadRecord);
-    
-    await db.write();
+    downloadRecord.requestedAt = new Date().toISOString();
+    downloadRecord.artistMbid = artist.mbid;
+    downloadRecord.artistName = artist.artistName;
+    downloadRecord.trackName = track.trackName;
+    dbOps.insertDownload(downloadRecord);
     
     return download;
   }
@@ -2182,12 +2517,8 @@ export class DownloadManager {
     }
     
     // Store download reference - same structure as regular downloads
-    if (!db.data.downloads) {
-      db.data.downloads = [];
-    }
-    
     // Find existing download record (created by queueWeeklyFlowTrack)
-    let downloadRecord = (db.data.downloads || []).find(
+    let downloadRecord = dbOps.getDownloads().find(
       d => d.type === 'weekly-flow' && 
            d.artistId === artistId && 
            d.trackName === trackName &&
@@ -2204,12 +2535,14 @@ export class DownloadManager {
         artistName: artist.artistName,
         trackName,
         status: 'downloading',
+        requestedAt: new Date().toISOString(),
+        startedAt: new Date().toISOString(),
         retryCount: 0,
         requeueCount: 0,
         progress: 0,
         events: [],
       };
-      db.data.downloads.push(downloadRecord);
+      dbOps.insertDownload(downloadRecord);
     }
     
     // Update with download info from slskd
@@ -2236,66 +2569,78 @@ export class DownloadManager {
       filename: download.filename,
     });
     
-    await db.write();
+                dbOps.updateDownload(downloadRecord.id, downloadRecord);
     
     return download;
   }
 
-  async handleFailedDownload(downloadRecord, slskdDownload = null) {
+  async handleFailedDownload(downloadRecord, slskdDownload = null, error = null) {
     try {
       // Increment retry count
       downloadRecord.retryCount = (downloadRecord.retryCount || 0) + 1;
       
       // Extract error message from slskd download or use default
-      const errorMessage = slskdDownload?.error || 
+      const errorMessage = error?.message ||
+                          slskdDownload?.error || 
                           slskdDownload?.errorMessage || 
                           slskdDownload?.state || 
                           'Download not found in slskd';
       
-      const maxRetries = 3;
-      if (downloadRecord.retryCount >= maxRetries) {
-        // Max retries reached, mark as failed
+      // Classify error for smart retry strategy
+      const errorType = this.classifyError(error || { message: errorMessage });
+      const strategy = this.getRetryStrategy(errorType, downloadRecord.retryCount);
+      
+      // Check if we should retry
+      if (!strategy.shouldRetry || downloadRecord.retryCount > strategy.maxRetries) {
+        // Max retries reached or permanent error, mark as failed
         this.logDownloadEvent(downloadRecord, 'failed', {
           error: errorMessage,
+          errorType,
           retryCount: downloadRecord.retryCount,
-          maxRetries,
-          reason: 'max_retries_reached',
+          maxRetries: strategy.maxRetries,
+          reason: strategy.shouldRetry ? 'max_retries_reached' : 'permanent_error',
         });
         downloadRecord.queueCleaned = false; // Let QueueCleaner handle it
+        downloadRecord.errorType = errorType; // Store error type for analysis
         console.log(
-          `Download ${downloadRecord.id} failed after ${maxRetries} retries. Last error: ${errorMessage}. Marking as failed for QueueCleaner.`,
+          `Download ${downloadRecord.id} failed after ${downloadRecord.retryCount} retries (error type: ${errorType}). Last error: ${errorMessage}. Marking as failed for QueueCleaner.`,
         );
-        await db.write();
+        dbOps.updateDownload(downloadRecord.id, downloadRecord);
         return;
       }
       
       // Log failure but will retry
       this.logDownloadEvent(downloadRecord, 'failed', {
         error: errorMessage,
+        errorType,
         retryCount: downloadRecord.retryCount,
+        maxRetries: strategy.maxRetries,
         willRetry: true,
       });
       
-      // Calculate delay before retry (exponential backoff: 1min, 2min, 4min)
-      const retryDelayMinutes = Math.pow(2, downloadRecord.retryCount - 1);
+      // Calculate delay before retry using smart backoff
+      const backoffMs = strategy.backoffMs(downloadRecord.retryCount);
+      const retryDelayMinutes = backoffMs / (1000 * 60);
       const lastFailureTime = downloadRecord.lastFailureAt 
         ? new Date(downloadRecord.lastFailureAt) 
         : new Date();
-      const timeSinceFailure = (new Date() - lastFailureTime) / (1000 * 60); // minutes
+      const timeSinceFailure = (new Date() - lastFailureTime); // milliseconds
       
       // Only retry if enough time has passed
-      if (timeSinceFailure < retryDelayMinutes) {
-        const remainingMinutes = Math.ceil(retryDelayMinutes - timeSinceFailure);
+      if (timeSinceFailure < backoffMs) {
+        const remainingMs = backoffMs - timeSinceFailure;
+        const remainingMinutes = Math.ceil(remainingMs / (1000 * 60));
         console.log(
-          `Download ${downloadRecord.id} will retry in ${remainingMinutes} minutes (attempt ${downloadRecord.retryCount}/${maxRetries})...`,
+          `Download ${downloadRecord.id} will retry in ${remainingMinutes} minutes (error type: ${errorType}, attempt ${downloadRecord.retryCount}/${strategy.maxRetries})...`,
         );
-        await db.write();
+        downloadRecord.errorType = errorType;
+        dbOps.updateDownload(downloadRecord.id, downloadRecord);
         return;
       }
       
       // Try to find alternative source and retry
       console.log(
-        `Retrying download ${downloadRecord.id} (attempt ${downloadRecord.retryCount}/${maxRetries})...`,
+        `Retrying download ${downloadRecord.id} (error type: ${errorType}, attempt ${downloadRecord.retryCount}/${strategy.maxRetries})...`,
       );
       
       // Cancel the failed download in slskd if it exists
@@ -2303,28 +2648,33 @@ export class DownloadManager {
         try {
           await slskdClient.cancelDownload(slskdDownload.id);
           console.log(`Cancelled failed download ${slskdDownload.id} in slskd`);
-        } catch (error) {
+        } catch (cancelError) {
           // Ignore cancel errors (download might already be gone)
-          console.warn(`Could not cancel download ${slskdDownload.id}:`, error.message);
+          console.warn(`Could not cancel download ${slskdDownload.id}:`, cancelError.message);
         }
       }
       
       // Retry the download with alternative source
+      downloadRecord.errorType = errorType;
       this.logDownloadEvent(downloadRecord, 'requeued', {
         retryCount: downloadRecord.retryCount,
+        errorType,
         reason: 'failed_download_retry',
       });
-      await db.write();
+      dbOps.updateDownload(downloadRecord.id, downloadRecord);
       await this.retryDownload(downloadRecord);
-    } catch (error) {
-      console.error(`Error handling failed download ${downloadRecord.id}:`, error.message);
+    } catch (retryError) {
+      console.error(`Error handling failed download ${downloadRecord.id}:`, retryError.message);
       // Mark as failed if retry itself fails
+      const errorType = this.classifyError(retryError);
       this.logDownloadEvent(downloadRecord, 'failed', {
-        error: `Retry failed: ${error.message}`,
+        error: `Retry failed: ${retryError.message}`,
+        errorType,
         retryCount: downloadRecord.retryCount,
         reason: 'retry_operation_failed',
       });
-      await db.write();
+      downloadRecord.errorType = errorType;
+      dbOps.updateDownload(downloadRecord.id, downloadRecord);
     }
   }
 
@@ -2345,7 +2695,7 @@ export class DownloadManager {
         console.log(
           `Download ${downloadRecord.id} stalled after ${maxRetries} retries. Marking as failed.`,
         );
-        await db.write();
+                dbOps.updateDownload(downloadRecord.id, downloadRecord);
         return;
       }
       
@@ -2370,7 +2720,7 @@ export class DownloadManager {
         console.log(
           `Download ${downloadRecord.id} will retry in ${remainingMinutes} minutes (stalled, attempt ${downloadRecord.retryCount}/${maxRetries})...`,
         );
-        await db.write();
+                dbOps.updateDownload(downloadRecord.id, downloadRecord);
         return;
       }
       
@@ -2394,7 +2744,7 @@ export class DownloadManager {
         retryCount: downloadRecord.retryCount,
         reason: 'stalled_download_retry',
       });
-      await db.write();
+                dbOps.updateDownload(downloadRecord.id, downloadRecord);
       await this.retryDownload(downloadRecord);
     } catch (error) {
       console.error(`Error handling stalled download ${downloadRecord.id}:`, error.message);
@@ -2404,25 +2754,14 @@ export class DownloadManager {
         retryCount: downloadRecord.retryCount,
         reason: 'stalled_retry_operation_failed',
       });
-      await db.write();
+                dbOps.updateDownload(downloadRecord.id, downloadRecord);
     }
   }
 
   updateDownloadStatus(albumId, status, metadata = {}) {
-    if (!db.data.downloadStatus) {
-      db.data.downloadStatus = {};
-    }
-    
-    db.data.downloadStatus[albumId] = {
-      status,
-      updatedAt: new Date().toISOString(),
-      ...metadata,
-    };
-    
-    // Write to disk asynchronously (don't await)
-    db.write().catch(err => {
-      console.error('Failed to update download status:', err);
-    });
+    // Download status is now tracked in downloads table, no separate status object needed
+    // Status can be derived from download records for the album
+    // This method is kept for API compatibility but doesn't need to store separate status
   }
 
   // Public method to update status (for routes)
@@ -2431,17 +2770,24 @@ export class DownloadManager {
   }
 
   getDownloadStatus(albumId) {
-    if (!db.data.downloadStatus) {
+    // Get status from download records for this album
+    const albumDownloads = dbOps.getDownloads().filter(d => d.albumId === albumId);
+    if (albumDownloads.length === 0) {
       return null;
     }
     
-    const status = db.data.downloadStatus[albumId];
-    if (!status) {
-      return null;
-    }
+    // Determine overall status from download records
+    const hasDownloading = albumDownloads.some(d => d.status === 'downloading');
+    const hasCompleted = albumDownloads.some(d => d.status === 'completed');
+    const hasFailed = albumDownloads.some(d => d.status === 'failed');
+    
+    const status = {
+      status: hasDownloading ? 'downloading' : hasCompleted ? 'completed' : hasFailed ? 'failed' : 'requested',
+      updatedAt: new Date().toISOString(),
+    };
     
     // Check if there are active downloads for this album
-    const activeDownloads = (db.data.downloads || []).filter(
+    const activeDownloads = albumDownloads.filter(
       d => d.albumId === albumId && d.status === 'downloading'
     );
     
@@ -2466,7 +2812,7 @@ export class DownloadManager {
       
       if (!artist) {
         downloadRecord.status = 'failed';
-        await db.write();
+                dbOps.updateDownload(downloadRecord.id, downloadRecord);
         return;
       }
       
@@ -2485,7 +2831,7 @@ export class DownloadManager {
               trackTitle,
               retryCount: downloadRecord.retryCount,
             });
-            await db.write();
+            // Download record updated via dbOps.updateDownload
             
             // Search and download just this track
             const query = `${artist.artistName} ${album.albumName} ${trackTitle}`;
@@ -2536,7 +2882,7 @@ export class DownloadManager {
                 slskdDownloadId: downloadId,
               });
               
-              await db.write();
+              // Download record updated via dbOps.updateDownload
               console.log(`Retry initiated for track "${trackTitle}" with new download ID: ${downloadId}`);
             } else {
               console.error(`Failed to get download ID from retry result for track "${trackTitle}"`);
@@ -2544,17 +2890,19 @@ export class DownloadManager {
                 error: 'Failed to get download ID from retry result',
                 retryCount: downloadRecord.retryCount,
               });
-              await db.write();
+              // Download record updated via dbOps.updateDownload
             }
           } else {
             // No track info, can't retry individual track - would need to retry whole album
             console.warn(`Cannot retry download ${downloadRecord.id} - no track information available`);
             downloadRecord.status = 'failed';
-            await db.write();
+            // Download record updated via dbOps.updateDownload
           }
         }
       } else if (downloadRecord.type === 'track' && downloadRecord.trackId) {
-        const track = (db.data?.library?.tracks || []).find(t => t.id === downloadRecord.trackId);
+        const track = libraryManager.getTracks(libraryManager.getAlbums(downloadRecord.artistId).find(a => 
+          libraryManager.getTracks(a.id).some(t => t.id === downloadRecord.trackId)
+        )?.id || '').find(t => t.id === downloadRecord.trackId);
         if (track) {
           // Retry track download
           this.logDownloadEvent(downloadRecord, 'requeued', {
@@ -2562,7 +2910,7 @@ export class DownloadManager {
             retryCount: downloadRecord.retryCount,
           });
           downloadRecord.retryStartedAt = new Date().toISOString();
-          await db.write();
+                dbOps.updateDownload(downloadRecord.id, downloadRecord);
           
           // Fetch MusicBrainz metadata if available
           let trackMetadata = null;
@@ -2601,7 +2949,7 @@ export class DownloadManager {
             username: download.username,
           });
           
-          await db.write();
+                dbOps.updateDownload(downloadRecord.id, downloadRecord);
         }
       }
     } catch (error) {
@@ -2611,7 +2959,7 @@ export class DownloadManager {
         retryCount: downloadRecord.retryCount,
         reason: 'retry_operation_exception',
       });
-      await db.write();
+                dbOps.updateDownload(downloadRecord.id, downloadRecord);
     }
   }
 

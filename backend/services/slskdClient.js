@@ -1,5 +1,5 @@
 import axios from "axios";
-import { db } from "../config/db.js";
+import { dbOps } from "../config/db-helpers.js";
 
 export class SlskdClient {
   constructor() {
@@ -13,7 +13,8 @@ export class SlskdClient {
   }
 
   updateConfig() {
-    const dbConfig = db.data?.settings?.integrations?.slskd || {};
+    const settings = dbOps.getSettings();
+    const dbConfig = settings.integrations?.slskd || {};
     const newConfig = {
       url: (
         dbConfig.url ||

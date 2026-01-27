@@ -1,4 +1,4 @@
-import { db } from '../config/db.js';
+// QualityManager no longer needs database access
 
 // Quality presets based on optimization standards
 export const QUALITY_PRESETS = {

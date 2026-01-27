@@ -1,22 +1,26 @@
 import axios from "axios";
 import Bottleneck from "bottleneck";
-import { db } from "../config/db.js";
+import { dbOps } from "../config/db-helpers.js";
 import { MUSICBRAINZ_API, LASTFM_API, APP_NAME, APP_VERSION } from "../config/constants.js";
 
 export const getLastfmApiKey = () => {
-  return db.data.settings.integrations?.lastfm?.apiKey || process.env.LASTFM_API_KEY;
+  const settings = dbOps.getSettings();
+  return settings.integrations?.lastfm?.apiKey || process.env.LASTFM_API_KEY;
 };
 
 export const getMusicBrainzContact = () => {
-  return db.data.settings.integrations?.musicbrainz?.email || process.env.CONTACT_EMAIL || "user@example.com";
+  const settings = dbOps.getSettings();
+  return settings.integrations?.musicbrainz?.email || process.env.CONTACT_EMAIL || "user@example.com";
 };
 
 export const getSpotifyClientId = () => {
-  return db.data.settings.integrations?.spotify?.clientId || process.env.SPOTIFY_CLIENT_ID;
+  const settings = dbOps.getSettings();
+  return settings.integrations?.spotify?.clientId || process.env.SPOTIFY_CLIENT_ID;
 };
 
 export const getSpotifyClientSecret = () => {
-  return db.data.settings.integrations?.spotify?.clientSecret || process.env.SPOTIFY_CLIENT_SECRET;
+  const settings = dbOps.getSettings();
+  return settings.integrations?.spotify?.clientSecret || process.env.SPOTIFY_CLIENT_SECRET;
 };
 
 const mbLimiter = new Bottleneck({

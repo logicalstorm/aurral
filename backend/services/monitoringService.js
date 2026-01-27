@@ -2,7 +2,7 @@ import { libraryManager } from './libraryManager.js';
 import { downloadManager } from './downloadManager.js';
 import { libraryMonitor } from './libraryMonitor.js';
 import { musicbrainzRequest } from './apiClients.js';
-import { db } from '../config/db.js';
+import { dbOps } from '../config/db-helpers.js';
 
 /**
  * Monitoring Service - Automatically checks monitored artists and processes their monitoring options
@@ -199,16 +199,13 @@ export class MonitoringService {
           await libraryManager.updateAlbum(album.id, { ...album, monitored: true });
 
           // Create album request entry (so it appears in Requests page)
-          if (!db.data.albumRequests) {
-            db.data.albumRequests = [];
-          }
-          
-          const existingRequest = db.data.albumRequests.find(
+          const albumRequests = dbOps.getAlbumRequests();
+          const existingRequest = albumRequests.find(
             r => r.albumId === album.id || (r.albumMbid === album.mbid && r.artistMbid === artist.mbid)
           );
           
           if (!existingRequest) {
-            db.data.albumRequests.push({
+            dbOps.insertAlbumRequest({
               id: libraryManager.generateId(),
               artistId: artist.id,
               artistMbid: artist.mbid,
@@ -219,7 +216,6 @@ export class MonitoringService {
               status: 'processing',
               requestedAt: new Date().toISOString(),
             });
-            await db.write();
             libraryMonitor.log('info', 'request', 'Album request created (auto-monitored)', {
               albumId: album.id,
               albumName: album.albumName,

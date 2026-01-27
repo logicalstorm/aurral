@@ -1,4 +1,4 @@
-import { db } from "../config/db.js";
+import { dbOps } from "../config/db-helpers.js";
 import { getArtistImage } from "./imageService.js";
 
 /**
@@ -23,8 +23,8 @@ class ImagePrefetchService {
     const uniqueMbids = [...new Set(mbids)];
     const uncached = uniqueMbids.filter(mbid => {
       if (!mbid) return false;
-      const cached = db.data.images?.[mbid];
-      return !cached || cached === "NOT_FOUND";
+      const cached = dbOps.getImage(mbid);
+      return !cached || cached.imageUrl === "NOT_FOUND";
     });
 
     this.queue.push(...uncached);

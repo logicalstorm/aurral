@@ -1,12 +1,13 @@
 import express from "express";
-import { db } from "../config/db.js";
+import { dbOps } from "../config/db-helpers.js";
 import { defaultData } from "../config/constants.js";
 
 const router = express.Router();
 
 router.get("/", (req, res) => {
   try {
-    res.json(db.data?.settings || defaultData.settings);
+    const settings = dbOps.getSettings();
+    res.json(settings);
   } catch (error) {
     console.error("Settings GET error:", error);
     res.status(500).json({ error: "Failed to fetch settings", message: error.message });
@@ -15,13 +16,6 @@ router.get("/", (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
-    if (!db.data) {
-      db.data = defaultData;
-    }
-    if (!db.data.settings) {
-      db.data.settings = defaultData.settings;
-    }
-
     const {
       quality,
       releaseTypes,
@@ -29,13 +23,14 @@ router.post("/", async (req, res) => {
       queueCleaner,
     } = req.body;
 
-    db.data.settings = {
-      ...(db.data.settings || defaultData.settings),
-      // rootFolderPath is always /data - removed from settings
-      quality: quality || db.data.settings?.quality || 'standard',
-      releaseTypes: releaseTypes || db.data.settings?.releaseTypes || defaultData.settings.releaseTypes,
-      integrations: integrations || db.data.settings?.integrations || defaultData.settings.integrations,
-      queueCleaner: queueCleaner || db.data.settings?.queueCleaner || defaultData.settings.queueCleaner,
+    const currentSettings = dbOps.getSettings();
+    
+    const updatedSettings = {
+      ...currentSettings,
+      quality: quality || currentSettings.quality || 'standard',
+      releaseTypes: releaseTypes || currentSettings.releaseTypes || defaultData.settings.releaseTypes,
+      integrations: integrations || currentSettings.integrations || defaultData.settings.integrations,
+      queueCleaner: queueCleaner || currentSettings.queueCleaner || defaultData.settings.queueCleaner,
     };
     
     // Update QueueCleaner config if it exists
@@ -47,8 +42,9 @@ router.post("/", async (req, res) => {
         // QueueCleaner might not be available
       }
     }
-    await db.write();
-    res.json(db.data.settings);
+    
+    dbOps.updateSettings(updatedSettings);
+    res.json(updatedSettings);
   } catch (error) {
     console.error("Settings POST error:", error);
     res.status(500).json({ error: "Failed to save settings", message: error.message });

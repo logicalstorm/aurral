@@ -1,12 +1,14 @@
 import basicAuth from "express-basic-auth";
-import { db } from "../config/db.js";
+import { dbOps } from "../config/db-helpers.js";
 
 export const getAuthUser = () => {
-  return db.data.settings.integrations?.general?.authUser || process.env.AUTH_USER || "admin";
+  const settings = dbOps.getSettings();
+  return settings.integrations?.general?.authUser || process.env.AUTH_USER || "admin";
 };
 
 export const getAuthPassword = () => {
-  const dbPass = db.data.settings.integrations?.general?.authPassword;
+  const settings = dbOps.getSettings();
+  const dbPass = settings.integrations?.general?.authPassword;
   if (dbPass) return [dbPass];
   return process.env.AUTH_PASSWORD ? process.env.AUTH_PASSWORD.split(",").map(p => p.trim()) : [];
 };

@@ -1,4 +1,4 @@
-import { db } from "../config/db.js";
+import { dbOps } from "../config/db-helpers.js";
 import { musicbrainzRequest, spotifySearchArtist } from "./apiClients.js";
 import axios from "axios";
 
@@ -8,12 +8,13 @@ const pendingImageRequests = new Map();
 export const getArtistImage = async (mbid, forceRefresh = false) => {
   if (!mbid) return { url: null, images: [] };
 
-  if (!forceRefresh && db.data.images[mbid] && db.data.images[mbid] !== "NOT_FOUND") {
+  const cachedImage = dbOps.getImage(mbid);
+  if (!forceRefresh && cachedImage && cachedImage.imageUrl && cachedImage.imageUrl !== "NOT_FOUND") {
     return {
-      url: db.data.images[mbid],
+      url: cachedImage.imageUrl,
       images: [
         {
-          image: db.data.images[mbid],
+          image: cachedImage.imageUrl,
           front: true,
           types: ["Front"],
         },
@@ -21,8 +22,8 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
     };
   }
 
-  if (!forceRefresh && db.data.images[mbid] === "NOT_FOUND") {
-    delete db.data.images[mbid];
+  if (!forceRefresh && cachedImage && cachedImage.imageUrl === "NOT_FOUND") {
+    dbOps.deleteImage(mbid);
     negativeImageCache.delete(mbid);
   }
 
@@ -68,13 +69,7 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
             // Get the largest available image (images are sorted by size, largest first)
             const imageUrl = spotifyArtist.images[0].url;
             if (imageUrl) {
-              if (!db.data.images) db.data.images = {};
-              if (!db.data.imageCacheAge) db.data.imageCacheAge = {};
-              db.data.images[mbid] = imageUrl;
-              db.data.imageCacheAge[mbid] = Date.now();
-              db.write().catch(e => {
-                console.error("Error saving image to database:", e.message);
-              });
+              dbOps.setImage(mbid, imageUrl);
 
               return {
                 url: imageUrl,
@@ -131,13 +126,7 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
                 if (frontImage) {
                   const imageUrl = frontImage.thumbnails?.["500"] || frontImage.thumbnails?.["large"] || frontImage.image;
                   if (imageUrl) {
-                    if (!db.data.images) db.data.images = {};
-                    if (!db.data.imageCacheAge) db.data.imageCacheAge = {};
-                    db.data.images[mbid] = imageUrl;
-                    db.data.imageCacheAge[mbid] = Date.now();
-                    db.write().catch(e => {
-                      console.error("Error saving image to database:", e.message);
-                    });
+                    dbOps.setImage(mbid, imageUrl);
 
                     return {
                       url: imageUrl,
@@ -162,10 +151,7 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
 
     // Cache negative result
     negativeImageCache.add(mbid);
-    db.data.images[mbid] = "NOT_FOUND";
-    db.write().catch(e => {
-      console.error("Error saving image cache to database:", e.message);
-    });
+    dbOps.setImage(mbid, "NOT_FOUND");
 
     return { url: null, images: [] };
   })();

@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { db } from '../config/db.js';
+import { dbOps } from '../config/db-helpers.js';
 import { libraryManager } from './libraryManager.js';
 import { fileScanner } from './fileScanner.js';
 import { downloadManager } from './downloadManager.js';
@@ -28,7 +28,8 @@ export class QueueCleaner {
       maxRetries: 3,
     };
 
-    const dbConfig = db.data?.settings?.queueCleaner || {};
+    const settings = dbOps.getSettings();
+    const dbConfig = settings.queueCleaner || {};
     return { ...defaultConfig, ...dbConfig };
   }
 
@@ -53,7 +54,7 @@ export class QueueCleaner {
 
     try {
       // Find failed downloads that haven't been processed
-      const failedDownloads = (db.data.downloads || []).filter(
+      const failedDownloads = dbOps.getDownloads().filter(
         d => d.status === 'failed' && !d.queueCleaned
       );
 
@@ -95,10 +96,10 @@ export class QueueCleaner {
       const files = await this.scanForAudioFiles(downloadDir);
       
       // Get active downloads and requests to filter relevant files
-      const activeDownloads = (db.data.downloads || []).filter(
+      const activeDownloads = dbOps.getDownloads().filter(
         d => d.status === 'downloading' || d.status === 'completed'
       );
-      const activeRequests = (db.data.albumRequests || []).filter(
+      const activeRequests = dbOps.getAlbumRequests().filter(
         r => r.status === 'processing'
       );
       
@@ -229,9 +230,10 @@ export class QueueCleaner {
       }
 
       // Mark as cleaned
-      download.queueCleaned = true;
-      download.queueCleanedAt = new Date().toISOString();
-      await db.write();
+      dbOps.updateDownload(download.id, {
+        queueCleaned: true,
+        queueCleanedAt: new Date().toISOString(),
+      });
     } catch (error) {
       console.error(`Error processing failed download ${download.id}:`, error.message);
     }
@@ -454,12 +456,9 @@ export class QueueCleaner {
   }
 
   async blocklistRelease(albumId, download) {
-    if (!db.data.blocklist) {
-      db.data.blocklist = [];
-    }
-
     // Check if already blocklisted
-    const existing = db.data.blocklist.find(b => b.albumId === albumId);
+    const blocklist = dbOps.getBlocklist();
+    const existing = blocklist.find(b => b.albumId === albumId);
     if (existing) {
       return;
     }
@@ -469,7 +468,7 @@ export class QueueCleaner {
       return;
     }
 
-    db.data.blocklist.push({
+    dbOps.insertBlocklist({
       albumId: albumId,
       albumName: album.albumName,
       artistId: download.artistId,
@@ -478,20 +477,16 @@ export class QueueCleaner {
       downloadId: download.id,
     });
 
-    await db.write();
     console.log(`Blocklisted album: ${album.albumName}`);
   }
 
   async blocklistByMetadata(metadata) {
-    if (!db.data.blocklist) {
-      db.data.blocklist = [];
-    }
-
     // Create a unique key for this release
     const key = `${metadata.artist}:${metadata.album}`.toLowerCase();
 
     // Check if already blocklisted
-    const existing = db.data.blocklist.find(b => {
+    const blocklist = dbOps.getBlocklist();
+    const existing = blocklist.find(b => {
       const existingKey = `${b.artistName || ''}:${b.albumName || ''}`.toLowerCase();
       return existingKey === key;
     });
@@ -500,46 +495,27 @@ export class QueueCleaner {
       return;
     }
 
-    db.data.blocklist.push({
+    dbOps.insertBlocklist({
       artistName: metadata.artist,
       albumName: metadata.album,
       blocklistedAt: new Date().toISOString(),
       reason: 'Failed to match file to library',
     });
 
-    await db.write();
     console.log(`Blocklisted release: ${metadata.artist} - ${metadata.album}`);
   }
 
   isBlocklisted(artistName, albumName) {
-    if (!db.data.blocklist) {
-      return false;
-    }
-
-    const key = `${artistName}:${albumName}`.toLowerCase();
-    return db.data.blocklist.some(b => {
-      // Check both artistName/albumName and artistId/albumId combinations
-      const existingKey = `${b.artistName || ''}:${b.albumName || ''}`.toLowerCase();
-      return existingKey === key;
-    });
+    return dbOps.isBlocklisted(artistName, albumName);
   }
 
   getBlocklist() {
-    return db.data.blocklist || [];
+    return dbOps.getBlocklist();
   }
 
   async removeFromBlocklist(albumId) {
-    if (!db.data.blocklist) {
-      return false;
-    }
-
-    const index = db.data.blocklist.findIndex(b => b.albumId === albumId);
-    if (index !== -1) {
-      db.data.blocklist.splice(index, 1);
-      await db.write();
-      return true;
-    }
-    return false;
+    const result = dbOps.removeFromBlocklist(albumId);
+    return result.changes > 0;
   }
 
   // Manual trigger for testing
