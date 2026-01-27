@@ -6,6 +6,13 @@ import fs from 'fs/promises';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
+// Weekly Flow logging utility - prefix all logs for easy filtering
+const wfLog = {
+  log: (...args) => console.log('[WEEKLY FLOW]', ...args),
+  error: (...args) => console.error('[WEEKLY FLOW]', ...args),
+  warn: (...args) => console.warn('[WEEKLY FLOW]', ...args),
+};
+
 export class PlaylistManager {
   constructor(db, musicbrainzRequest, lastfmRequest) {
     this.db = db;
@@ -41,7 +48,7 @@ export class PlaylistManager {
       
       if (!enabled && this.db.data.flows.weekly.enabled) {
           // When disabling, completely wipe all weekly flow data
-          console.log('Disabling weekly flow - wiping all data and files...');
+          wfLog.log('Disabling weekly flow - wiping all data and files...');
           await this.wipeWeeklyFlowData();
       }
       
@@ -50,7 +57,7 @@ export class PlaylistManager {
       
       if (enabled) {
           // Always generate fresh when enabling (since we wiped everything if it was disabled)
-          console.log('Enabling weekly flow - generating fresh recommendations...');
+          wfLog.log('Enabling weekly flow - generating fresh recommendations...');
           await this.generateWeeklyFlow();
           // Sync to Navidrome after generating
           await this.syncToNavidrome();
@@ -64,7 +71,7 @@ export class PlaylistManager {
       const items = this.db.data.flows.weekly.items || [];
       const weeklyFlowFolder = this.getWeeklyFlowFolder();
       
-      console.log(`Wiping ${items.length} weekly flow items...`);
+      wfLog.log(`Wiping ${items.length} weekly flow items...`);
       
       // Delete all weekly flow files
       try {
@@ -78,10 +85,10 @@ export class PlaylistManager {
               if (downloadRecord.destinationPath) {
                   try {
                       await fs.unlink(downloadRecord.destinationPath);
-                      console.log(`Deleted weekly flow file: ${downloadRecord.destinationPath}`);
+                      wfLog.log(`Deleted weekly flow file: ${downloadRecord.destinationPath}`);
                   } catch (e) {
                       // File might already be deleted
-                      console.log(`File already gone: ${downloadRecord.destinationPath}`);
+                      wfLog.log(`File already gone: ${downloadRecord.destinationPath}`);
                   }
               }
           }
@@ -89,7 +96,7 @@ export class PlaylistManager {
           // Try to delete the entire Weekly Flow folder
           try {
               await fs.rm(weeklyFlowFolder, { recursive: true, force: true });
-              console.log(`Deleted Weekly Flow folder: ${weeklyFlowFolder}`);
+              wfLog.log(`Deleted Weekly Flow folder: ${weeklyFlowFolder}`);
           } catch (e) {
               // Folder might not exist or might have files, try to delete individual files
               try {
@@ -104,16 +111,16 @@ export class PlaylistManager {
                               await fs.rm(filePath, { recursive: true, force: true });
                           }
                       } catch (fileErr) {
-                          console.log(`Could not delete ${filePath}: ${fileErr.message}`);
+                          wfLog.log(`Could not delete ${filePath}: ${fileErr.message}`);
                       }
                   }
               } catch (readErr) {
                   // Folder might not exist, that's okay
-                  console.log(`Weekly Flow folder does not exist or is empty`);
+                  wfLog.log(`Weekly Flow folder does not exist or is empty`);
               }
           }
       } catch (e) {
-          console.error(`Error deleting weekly flow files: ${e.message}`);
+          wfLog.error(`Error deleting weekly flow files: ${e.message}`);
       }
       
       // Delete all artists that are only in weekly flow
@@ -128,12 +135,12 @@ export class PlaylistManager {
                       );
                       
                       if (isOnlyInFlow) {
-                          console.log(`Deleting weekly flow artist: ${artist.artistName}`);
+                          wfLog.log(`Deleting weekly flow artist: ${artist.artistName}`);
                           await libraryManager.deleteArtist(artist.mbid, true);
                       }
                   }
               } catch (e) {
-                  console.error(`Failed to delete artist ${item.artistName}: ${e.message}`);
+                  wfLog.error(`Failed to delete artist ${item.artistName}: ${e.message}`);
               }
           }
       }
@@ -145,7 +152,7 @@ export class PlaylistManager {
               d => d.type !== 'weekly-flow'
           );
           const removed = beforeCount - this.db.data.downloads.length;
-          console.log(`Removed ${removed} weekly-flow download records`);
+          wfLog.log(`Removed ${removed} weekly-flow download records`);
       }
       
       // Clear all weekly flow data
@@ -163,14 +170,14 @@ export class PlaylistManager {
               const existing = playlists.find(p => p.name === 'Aurral Weekly Discovery');
               if (existing) {
                   await navidrome.deletePlaylist(existing.id);
-                  console.log('Deleted Navidrome weekly flow playlist');
+                  wfLog.log('Deleted Navidrome weekly flow playlist');
               }
           }
       } catch (e) {
-          console.error(`Failed to delete Navidrome playlist: ${e.message}`);
+          wfLog.error(`Failed to delete Navidrome playlist: ${e.message}`);
       }
       
-      console.log('Weekly flow data completely wiped');
+      wfLog.log('Weekly flow data completely wiped');
   }
 
   // No longer need tags - we track ephemeral items in the flow data
@@ -196,7 +203,7 @@ export class PlaylistManager {
           });
         }
       } catch (e) {
-        console.error(`Failed to process recommendation ${rec.artistName}:`, e.message);
+        wfLog.error(`Failed to process recommendation ${rec.artistName}:`, e.message);
       }
     }
 
@@ -225,7 +232,7 @@ export class PlaylistManager {
           songIds.push(song.id);
         }
       } catch (e) {
-        console.warn(`Navidrome lookup failed for ${item.artistName} - ${item.trackName}`);
+        wfLog.warn(`Navidrome lookup failed for ${item.artistName} - ${item.trackName}`);
       }
     }
 
@@ -274,10 +281,10 @@ export class PlaylistManager {
             }
             
             await fs.unlink(downloadRecord.destinationPath);
-            console.log(`Deleted weekly flow track file: ${downloadRecord.destinationPath}`);
+            wfLog.log(`Deleted weekly flow track file: ${downloadRecord.destinationPath}`);
           } catch (e) {
             // File might already be deleted or moved
-            console.log(`Could not delete weekly flow file (may already be gone): ${downloadRecord.destinationPath}`);
+            wfLog.log(`Could not delete weekly flow file (may already be gone): ${downloadRecord.destinationPath}`);
           }
           
           // Mark as deleted in record before removing
@@ -293,7 +300,7 @@ export class PlaylistManager {
           // }
         }
       } catch (e) {
-        console.error(`Failed to delete weekly flow track file: ${e.message}`);
+        wfLog.error(`Failed to delete weekly flow track file: ${e.message}`);
       }
       
       if (item.artistId) {
@@ -304,14 +311,14 @@ export class PlaylistManager {
             const isOnlyInFlow = !this.db.data.requests?.find(r => r.mbid === artist.mbid && r.status === 'available');
             
             if (isOnlyInFlow) {
-              console.log(`Removing ephemeral artist: ${item.artistName}`);
+              wfLog.log(`Removing ephemeral artist: ${item.artistName}`);
               await libraryManager.deleteArtist(artist.mbid, true);
             } else {
-              console.log(`Skipping deletion of ${item.artistName}: Assumed kept by user.`);
+              wfLog.log(`Skipping deletion of ${item.artistName}: Assumed kept by user.`);
             }
           }
         } catch (e) {
-          console.error(`Failed to remove ${item.artistName} from library: ${e.message}`);
+          wfLog.error(`Failed to remove ${item.artistName} from library: ${e.message}`);
         }
       }
     }
@@ -324,7 +331,7 @@ export class PlaylistManager {
     const discovery = this.db.data.discovery;
     
     if (!discovery?.recommendations || discovery.recommendations.length === 0) {
-        console.warn("No discovery recommendations available. Waiting for cache refresh.");
+        wfLog.warn("No discovery recommendations available. Waiting for cache refresh.");
         return [];
     }
 
@@ -366,7 +373,7 @@ export class PlaylistManager {
         processedIds.add(rec.id);
 
       } catch (e) {
-        console.warn(`Failed to get top track for ${rec.name}`);
+        wfLog.warn(`Failed to get top track for ${rec.name}`);
       }
     }
 
@@ -389,7 +396,7 @@ export class PlaylistManager {
         artistId: artist.id,
       };
     } catch (error) {
-      console.error(`Failed to add artist ${item.artistName} to library:`, error.message);
+      wfLog.error(`Failed to add artist ${item.artistName} to library:`, error.message);
       throw error;
     }
   }
@@ -400,20 +407,26 @@ export class PlaylistManager {
   }
 
   async queueTrackDownload(artistId, trackName, mbid) {
-    setTimeout(async () => {
-      try {
-        const { downloadManager } = await import('./downloadManager.js');
-        const artist = libraryManager.getArtistById(artistId);
-        if (!artist) return;
-
-        // Use the same download mechanism as regular tracks
-        const download = await downloadManager.downloadWeeklyFlowTrack(artistId, trackName, mbid);
-        
-        console.log(`Queued weekly flow track download: ${artist.artistName} - ${trackName}`);
-      } catch (e) {
-        console.error(`Background track download failed: ${e.message}`);
+    try {
+      const { downloadManager } = await import('./downloadManager.js');
+      const artist = libraryManager.getArtistById(artistId);
+      if (!artist) {
+        wfLog.warn(`Artist not found for track download: ${trackName}`);
+        return;
       }
-    }, 5000);
+
+      wfLog.log(`Queueing weekly flow track: ${artist.artistName} - ${trackName}`);
+      
+      // Use the global queue system (automatically handles prioritization and rate limiting)
+      const downloadRecord = await downloadManager.queueWeeklyFlowTrack(artistId, trackName, mbid);
+      
+      wfLog.log(`✓ Added to download queue: ${artist.artistName} - ${trackName} (ID: ${downloadRecord.id})`);
+      
+      return downloadRecord;
+    } catch (e) {
+      wfLog.error(`Failed to queue track download: ${artist?.artistName || 'Unknown'} - ${trackName}: ${e.message}`);
+      throw e; // Re-throw so caller knows it failed
+    }
   }
 
   async keepItem(mbid) {
@@ -448,9 +461,9 @@ export class PlaylistManager {
                   
                   // Add album to library
                   album = await libraryManager.addAlbum(artist.id, albumMbid, albumName, {});
-                  console.log(`Added album "${albumName}" to library for kept track`);
+                  wfLog.log(`Added album "${albumName}" to library for kept track`);
                 } catch (e) {
-                  console.error(`Failed to fetch album info: ${e.message}`);
+                  wfLog.error(`Failed to fetch album info: ${e.message}`);
                 }
               }
               
@@ -458,14 +471,14 @@ export class PlaylistManager {
                 // Download just this specific album
                 const { downloadManager } = await import('./downloadManager.js');
                 await downloadManager.downloadAlbum(artist.id, album.id);
-                console.log(`Queued download for album containing kept track: ${album.albumName}`);
+                wfLog.log(`Queued download for album containing kept track: ${album.albumName}`);
               }
             } else {
-              console.log(`Could not find album for track "${item.trackName}" by ${artist.artistName}`);
+              wfLog.log(`Could not find album for track "${item.trackName}" by ${artist.artistName}`);
             }
           }
         } catch (e) {
-          console.error(`Failed to download album for kept item: ${e.message}`);
+          wfLog.error(`Failed to download album for kept item: ${e.message}`);
         }
       }
       
@@ -506,7 +519,7 @@ export class PlaylistManager {
         }
       }
     } catch (e) {
-      console.error(`Failed to find album for track "${trackName}": ${e.message}`);
+      wfLog.error(`Failed to find album for track "${trackName}": ${e.message}`);
     }
     
     return null;
@@ -528,7 +541,7 @@ export class PlaylistManager {
       );
 
       if (!downloadRecord || !downloadRecord.destinationPath) {
-        console.log(`No completed download found for track: ${item.trackName}`);
+        wfLog.log(`No completed download found for track: ${item.trackName}`);
         return;
       }
 
@@ -538,7 +551,7 @@ export class PlaylistManager {
       try {
         await fs.access(sourcePath);
       } catch {
-        console.log(`Source file no longer exists: ${sourcePath}`);
+        wfLog.log(`Source file no longer exists: ${sourcePath}`);
         return;
       }
 
@@ -553,7 +566,7 @@ export class PlaylistManager {
       // Move file
       try {
         await fs.rename(sourcePath, destinationPath);
-        console.log(`Moved kept track from weekly flow to library: ${destinationPath}`);
+        wfLog.log(`Moved kept track from weekly flow to library: ${destinationPath}`);
         
         // Update download record
         downloadRecord.destinationPath = destinationPath;
@@ -564,7 +577,7 @@ export class PlaylistManager {
           // Different filesystems - copy instead
           await fs.copyFile(sourcePath, destinationPath);
           await fs.unlink(sourcePath);
-          console.log(`Copied kept track from weekly flow to library: ${destinationPath}`);
+          wfLog.log(`Copied kept track from weekly flow to library: ${destinationPath}`);
           
           downloadRecord.destinationPath = destinationPath;
           downloadRecord.status = 'added';
@@ -574,7 +587,7 @@ export class PlaylistManager {
         }
       }
     } catch (e) {
-      console.error(`Failed to move track to library: ${e.message}`);
+      wfLog.error(`Failed to move track to library: ${e.message}`);
     }
   }
   
@@ -595,7 +608,7 @@ export class PlaylistManager {
             await libraryManager.deleteArtist(artist.mbid, true);
           }
         } catch(e) { 
-          console.error('Failed to delete from library:', e.message); 
+          wfLog.error('Failed to delete from library:', e.message); 
         }
       }
       return true;
@@ -620,7 +633,7 @@ export class PlaylistManager {
     const items = this.db.data.flows.weekly.items || [];
     const slskdDownloadDir = downloadManager.slskdDownloadDir || process.env.SLSKD_COMPLETE_DIR || '/Users/leekelly/Desktop/slskd/data/downloads';
     
-    console.log(`Checking ${items.length} weekly-flow items for stuck files in ${slskdDownloadDir}...`);
+    wfLog.log(`Checking ${items.length} weekly-flow items for stuck files in ${slskdDownloadDir}...`);
     
     for (const item of items) {
       // Check if this item already has a file in Weekly Flow folder
@@ -638,7 +651,7 @@ export class PlaylistManager {
           continue; // File exists, skip
         } catch {
           // File doesn't exist, need to find it again
-          console.log(`File missing for ${item.artistName} - ${item.trackName}, searching...`);
+          wfLog.log(`File missing for ${item.artistName} - ${item.trackName}, searching...`);
         }
       }
       
@@ -673,7 +686,7 @@ export class PlaylistManager {
                 try {
                   await fs.access(apiFilePath);
                   foundFile = apiFilePath;
-                  console.log(`✓ Got file path from slskd API: ${apiFilePath}`);
+                  wfLog.log(`✓ Got file path from slskd API: ${apiFilePath}`);
                   
                   // Update download record with the path from API
                   if (downloadRecord) {
@@ -681,12 +694,12 @@ export class PlaylistManager {
                     await db.write();
                   }
                 } catch {
-                  console.log(`File from slskd API doesn't exist at: ${apiFilePath}, will search...`);
+                  wfLog.log(`File from slskd API doesn't exist at: ${apiFilePath}, will search...`);
                 }
               }
             }
           } catch (e) {
-            console.log(`Could not get download details from slskd API: ${e.message}`);
+            wfLog.log(`Could not get download details from slskd API: ${e.message}`);
           }
         }
         
@@ -695,9 +708,9 @@ export class PlaylistManager {
           try {
             await fs.access(downloadRecord.slskdFilePath);
             foundFile = downloadRecord.slskdFilePath;
-            console.log(`✓ Using stored slskd file path: ${foundFile}`);
+            wfLog.log(`✓ Using stored slskd file path: ${foundFile}`);
           } catch {
-            console.log(`Stored path doesn't exist: ${downloadRecord.slskdFilePath}, will search...`);
+            wfLog.log(`Stored path doesn't exist: ${downloadRecord.slskdFilePath}, will search...`);
           }
         }
         
@@ -718,7 +731,7 @@ export class PlaylistManager {
             
             foundFile = await downloadManager.findFileRecursively(slskdDownloadDir, searchName);
             if (foundFile) {
-              console.log(`Found file via recursive search for ${item.artistName} - ${item.trackName}: ${foundFile}`);
+              wfLog.log(`Found file via recursive search for ${item.artistName} - ${item.trackName}: ${foundFile}`);
               break;
             }
           }
@@ -754,17 +767,17 @@ export class PlaylistManager {
           }
           
           // Move the file
-          console.log(`Moving ${item.artistName} - ${item.trackName} to Weekly Flow folder...`);
+          wfLog.log(`Moving ${item.artistName} - ${item.trackName} to Weekly Flow folder...`);
           const destinationPath = await downloadManager.moveFileToWeeklyFlow(foundFile, downloadRecord);
           downloadRecord.destinationPath = destinationPath;
           downloadRecord.status = 'completed';
           await db.write();
-          console.log(`✓ Moved to: ${destinationPath}`);
+          wfLog.log(`✓ Moved to: ${destinationPath}`);
         } else {
-          console.log(`Could not find file for ${item.artistName} - ${item.trackName} (may not have downloaded yet)`);
+          wfLog.log(`Could not find file for ${item.artistName} - ${item.trackName} (may not have downloaded yet)`);
         }
       } catch (e) {
-        console.error(`Failed to process file for ${item.artistName} - ${item.trackName}: ${e.message}`);
+        wfLog.error(`Failed to process file for ${item.artistName} - ${item.trackName}: ${e.message}`);
       }
     }
   }
@@ -793,10 +806,10 @@ export class PlaylistManager {
       // Otherwise, only generate on Mondays
       if (now.getDay() === 1) { 
           if (!lastUpdate) {
-               console.log('Generating initial weekly flow...');
+               wfLog.log('Generating initial weekly flow...');
                await this.generateWeeklyFlow();
                // Sync to Navidrome after generating
-               console.log('Syncing to Navidrome after generation...');
+               wfLog.log('Syncing to Navidrome after generation...');
                await this.syncToNavidrome();
           } else {
               const lastDate = new Date(lastUpdate);
@@ -805,22 +818,22 @@ export class PlaylistManager {
                                 lastDate.getFullYear() === now.getFullYear();
               
               if (!isSameDay) {
-                  console.log('Rotating weekly flow...');
+                  wfLog.log('Rotating weekly flow...');
                   // generateWeeklyFlow already calls cleanupOldItems first, then generates new items
                   // So we sync after generation (which happens after cleanup)
                   await this.generateWeeklyFlow();
                   // Sync to Navidrome after cleanup and generation
-                  console.log('Syncing to Navidrome after rotation...');
+                  wfLog.log('Syncing to Navidrome after rotation...');
                   await this.syncToNavidrome();
               } else {
                   // Same day, just sync (no cleanup needed)
-                  console.log('Running scheduled Navidrome sync...');
+                  wfLog.log('Running scheduled Navidrome sync...');
                   await this.syncToNavidrome();
               }
           }
       } else {
           // Not Monday, just sync (no cleanup needed)
-          console.log('Running scheduled Navidrome sync...');
+          wfLog.log('Running scheduled Navidrome sync...');
           await this.syncToNavidrome();
       }
   }

@@ -18,7 +18,6 @@ function FlowPage() {
     updatedAt: null,
   });
   const [loading, setLoading] = useState(true);
-  const [toggling, setToggling] = useState(false);
   const [generating, setGenerating] = useState(false);
   const { showSuccess, showError } = useToast();
 
@@ -38,23 +37,25 @@ function FlowPage() {
   }, []);
 
   const handleToggle = async (e) => {
-    setToggling(true);
     const newState = e.target.checked;
-    try {
-      await toggleWeeklyFlow(newState);
-      setFlow((prev) => ({ ...prev, enabled: newState }));
-      showSuccess(
-        newState
-          ? "Weekly Discovery enabled. It will run automatically."
-          : "Weekly Discovery disabled.",
-      );
-    } catch (err) {
-      showError("Failed to update settings");
-      // Revert on error
-      setFlow((prev) => ({ ...prev, enabled: !newState }));
-    } finally {
-      setToggling(false);
-    }
+    
+    // Optimistic update - update UI immediately for instant feedback
+    setFlow((prev) => ({ ...prev, enabled: newState }));
+    
+    // Make API call in background without blocking UI
+    toggleWeeklyFlow(newState)
+      .then(() => {
+        showSuccess(
+          newState
+            ? "Weekly Discovery enabled. It will run automatically."
+            : "Weekly Discovery disabled.",
+        );
+      })
+      .catch(() => {
+        // Revert on error
+        setFlow((prev) => ({ ...prev, enabled: !newState }));
+        showError("Failed to update settings");
+      });
   };
 
   const handleKeep = async (mbid) => {
@@ -67,7 +68,7 @@ function FlowPage() {
         ),
       }));
       showSuccess("Artist kept permanently!");
-    } catch (err) {
+    } catch {
       showError("Failed to keep item");
     }
   };
@@ -81,7 +82,7 @@ function FlowPage() {
         items: prev.items.filter((i) => i.mbid !== mbid),
       }));
       showSuccess("Item removed.");
-    } catch (err) {
+    } catch {
       showError("Failed to remove item");
     }
   };
@@ -118,7 +119,7 @@ function FlowPage() {
             Weekly Discovery
           </h1>
           <p className="mt-1" style={{ color: "#c1c1c3" }}>
-            Automated weekly rotation. "Ephemeral" items are deleted next week
+            Automated weekly rotation. {'"'}Ephemeral{'"'} items are deleted next week
             unless kept.
           </p>
         </div>
@@ -126,7 +127,6 @@ function FlowPage() {
           <PowerSwitch
             checked={flow.enabled}
             onChange={handleToggle}
-            disabled={toggling}
           />
         </div>
       </div>

@@ -371,22 +371,21 @@ router.post('/downloads/album', async (req, res) => {
       }
     }
 
-    // Start download asynchronously (don't wait for it to complete)
-    // This prevents timeouts on long-running downloads
-    downloadManager.downloadAlbum(artistId, albumId)
-      .then((download) => {
-        console.log(`Album download initiated successfully for album ${albumId}`);
-      })
-      .catch((error) => {
-        console.error(`Failed to download album ${albumId}:`, error.message);
-        // Update status to failed
-        downloadManager.updateStatus(albumId, 'failed', {
-          error: error.message,
-        });
+    // Queue download using global queue system
+    try {
+      const downloadRecord = await downloadManager.queueAlbumDownload(artistId, albumId);
+      res.json({ 
+        success: true, 
+        message: 'Download queued',
+        downloadId: downloadRecord.id,
       });
-    
-    // Return immediately
-    res.json({ success: true, message: 'Download started' });
+    } catch (error) {
+      console.error(`Failed to queue album download ${albumId}:`, error.message);
+      res.status(500).json({
+        error: 'Failed to queue download',
+        message: error.message,
+      });
+    }
   } catch (error) {
     console.error('Error initiating album download:', error);
     res.status(500).json({
@@ -405,11 +404,16 @@ router.post('/downloads/track', async (req, res) => {
       return res.status(400).json({ error: 'artistId and trackId are required' });
     }
 
-    const download = await downloadManager.downloadTrack(artistId, trackId);
-    res.json({ success: true, download });
+    // Queue download using global queue system
+    const downloadRecord = await downloadManager.queueTrackDownload(artistId, trackId);
+    res.json({ 
+      success: true, 
+      message: 'Download queued',
+      downloadId: downloadRecord.id,
+    });
   } catch (error) {
     res.status(500).json({
-      error: 'Failed to download track',
+      error: 'Failed to queue track download',
       message: error.message,
     });
   }
