@@ -1368,7 +1368,7 @@ function ArtistDetailsPage() {
                         `/search?q=${encodeURIComponent(genre.name)}&type=tag`,
                       )
                     }
-                    className="badge text-sm px-3 py-1 hover:opacity-80 cursor-pointer transition-opacity"
+                    className="badge text-sm px-3 py-1 hover:opacity-80 cursor-pointer transition-opacity transition-[border-radius] ease hover:!rounded-[50px]"
                     style={{
                       backgroundColor: getTagColor(genre.name),
                       color: "#fff",
@@ -1387,7 +1387,7 @@ function ArtistDetailsPage() {
                         `/search?q=${encodeURIComponent(tag.name)}&type=tag`,
                       )
                     }
-                    className="badge text-sm px-3 py-1 hover:opacity-80 cursor-pointer transition-opacity"
+                    className="badge text-sm px-3 py-1 hover:opacity-80 cursor-pointer transition-opacity transition-[border-radius] ease hover:!rounded-[50px]"
                     style={{
                       backgroundColor: getTagColor(tag.name),
                       color: "#fff",

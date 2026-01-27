@@ -263,6 +263,16 @@ export class PlaylistManager {
         
         if (downloadRecord && downloadRecord.destinationPath) {
           try {
+            // Log deletion event before deleting
+            if (downloadRecord.events) {
+              downloadRecord.events.push({
+                timestamp: new Date().toISOString(),
+                event: 'deleted',
+                reason: 'weekly_flow_cleanup',
+                destinationPath: downloadRecord.destinationPath,
+              });
+            }
+            
             await fs.unlink(downloadRecord.destinationPath);
             console.log(`Deleted weekly flow track file: ${downloadRecord.destinationPath}`);
           } catch (e) {
@@ -270,11 +280,17 @@ export class PlaylistManager {
             console.log(`Could not delete weekly flow file (may already be gone): ${downloadRecord.destinationPath}`);
           }
           
-          // Remove download record
-          const downloadIndex = (this.db.data.downloads || []).findIndex(d => d.id === downloadRecord.id);
-          if (downloadIndex > -1) {
-            this.db.data.downloads.splice(downloadIndex, 1);
-          }
+          // Mark as deleted in record before removing
+          downloadRecord.status = 'deleted';
+          downloadRecord.deletedAt = new Date().toISOString();
+          await this.db.write();
+          
+          // Remove download record after a delay (keep for audit trail, but can be cleaned up later)
+          // For now, keep the record but mark it as deleted
+          // const downloadIndex = (this.db.data.downloads || []).findIndex(d => d.id === downloadRecord.id);
+          // if (downloadIndex > -1) {
+          //   this.db.data.downloads.splice(downloadIndex, 1);
+          // }
         }
       } catch (e) {
         console.error(`Failed to delete weekly flow track file: ${e.message}`);
@@ -595,9 +611,170 @@ export class PlaylistManager {
       setTimeout(() => this.checkSchedule(), 60000);
   }
 
+  async processStuckWeeklyFlowFiles() {
+    // Check for weekly-flow items that don't have files moved yet
+    this.initDb();
+    const { downloadManager } = await import('./downloadManager.js');
+    const { db } = await import('../config/db.js');
+    
+    const items = this.db.data.flows.weekly.items || [];
+    const slskdDownloadDir = downloadManager.slskdDownloadDir || process.env.SLSKD_COMPLETE_DIR || '/Users/leekelly/Desktop/slskd/data/downloads';
+    
+    console.log(`Checking ${items.length} weekly-flow items for stuck files in ${slskdDownloadDir}...`);
+    
+    for (const item of items) {
+      // Check if this item already has a file in Weekly Flow folder
+      const existingDownload = (db.data.downloads || []).find(
+        d => d.type === 'weekly-flow' && 
+             d.artistMbid === item.mbid && 
+             d.trackName === item.trackName &&
+             d.destinationPath
+      );
+      
+      if (existingDownload && existingDownload.destinationPath) {
+        // File already moved, check if it still exists
+        try {
+          await fs.access(existingDownload.destinationPath);
+          continue; // File exists, skip
+        } catch {
+          // File doesn't exist, need to find it again
+          console.log(`File missing for ${item.artistName} - ${item.trackName}, searching...`);
+        }
+      }
+      
+      // Try to find the file - first check if we have the path from slskd API
+      try {
+        const downloadRecord = (db.data.downloads || []).find(
+          d => d.type === 'weekly-flow' && 
+               d.artistMbid === item.mbid && 
+               d.trackName === item.trackName
+        );
+        
+        let foundFile = null;
+        
+        // FIRST: Try to get the file path directly from slskd API if we have a download ID
+        if (downloadRecord && downloadRecord.slskdDownloadId) {
+          try {
+            const { slskdClient } = await import('./slskdClient.js');
+            const detailedDownload = await slskdClient.getDownload(downloadRecord.slskdDownloadId);
+            
+            if (detailedDownload) {
+              // Get file path from slskd API response
+              const apiFilePath = detailedDownload.filePath || 
+                                  detailedDownload.destinationPath || 
+                                  detailedDownload.path || 
+                                  detailedDownload.file || 
+                                  detailedDownload.localPath || 
+                                  detailedDownload.completedPath ||
+                                  detailedDownload.completedFilePath;
+              
+              if (apiFilePath) {
+                // Check if file exists at this path
+                try {
+                  await fs.access(apiFilePath);
+                  foundFile = apiFilePath;
+                  console.log(`✓ Got file path from slskd API: ${apiFilePath}`);
+                  
+                  // Update download record with the path from API
+                  if (downloadRecord) {
+                    downloadRecord.slskdFilePath = apiFilePath;
+                    await db.write();
+                  }
+                } catch {
+                  console.log(`File from slskd API doesn't exist at: ${apiFilePath}, will search...`);
+                }
+              }
+            }
+          } catch (e) {
+            console.log(`Could not get download details from slskd API: ${e.message}`);
+          }
+        }
+        
+        // SECOND: If we stored the path earlier, try that
+        if (!foundFile && downloadRecord && downloadRecord.slskdFilePath) {
+          try {
+            await fs.access(downloadRecord.slskdFilePath);
+            foundFile = downloadRecord.slskdFilePath;
+            console.log(`✓ Using stored slskd file path: ${foundFile}`);
+          } catch {
+            console.log(`Stored path doesn't exist: ${downloadRecord.slskdFilePath}, will search...`);
+          }
+        }
+        
+        // THIRD: Fall back to recursive search if API didn't give us a path
+        if (!foundFile) {
+          const searchNames = [
+            item.trackName, // Just track name
+            `${item.artistName} - ${item.trackName}`, // Artist - Track
+            path.basename(item.trackName), // In case trackName has path
+          ];
+          
+          if (downloadRecord && downloadRecord.filename) {
+            searchNames.push(path.basename(downloadRecord.filename));
+          }
+          
+          for (const searchName of searchNames) {
+            if (!searchName) continue;
+            
+            foundFile = await downloadManager.findFileRecursively(slskdDownloadDir, searchName);
+            if (foundFile) {
+              console.log(`Found file via recursive search for ${item.artistName} - ${item.trackName}: ${foundFile}`);
+              break;
+            }
+          }
+        }
+        
+        if (foundFile) {
+          // Create or update download record
+          let downloadRecord = (db.data.downloads || []).find(
+            d => d.type === 'weekly-flow' && 
+                 d.artistMbid === item.mbid && 
+                 d.trackName === item.trackName
+          );
+          
+          if (!downloadRecord) {
+            // Create a download record for this file
+            const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            downloadRecord = {
+              id: generateId(),
+              type: 'weekly-flow',
+              artistId: item.artistId,
+              artistMbid: item.mbid,
+              artistName: item.artistName,
+              trackName: item.trackName,
+              status: 'completed',
+              startedAt: item.addedAt || new Date().toISOString(),
+              completedAt: new Date().toISOString(),
+              filename: path.basename(foundFile),
+            };
+            if (!db.data.downloads) {
+              db.data.downloads = [];
+            }
+            db.data.downloads.push(downloadRecord);
+          }
+          
+          // Move the file
+          console.log(`Moving ${item.artistName} - ${item.trackName} to Weekly Flow folder...`);
+          const destinationPath = await downloadManager.moveFileToWeeklyFlow(foundFile, downloadRecord);
+          downloadRecord.destinationPath = destinationPath;
+          downloadRecord.status = 'completed';
+          await db.write();
+          console.log(`✓ Moved to: ${destinationPath}`);
+        } else {
+          console.log(`Could not find file for ${item.artistName} - ${item.trackName} (may not have downloaded yet)`);
+        }
+      } catch (e) {
+        console.error(`Failed to process file for ${item.artistName} - ${item.trackName}: ${e.message}`);
+      }
+    }
+  }
+
   async checkSchedule() {
       this.initDb();
       if (!this.db.data.flows.weekly.enabled) return;
+
+      // First, try to process any stuck weekly-flow files
+      await this.processStuckWeeklyFlowFiles();
 
       const now = new Date();
       const lastUpdate = this.db.data.flows.weekly.updatedAt;

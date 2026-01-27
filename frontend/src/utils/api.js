@@ -330,5 +330,10 @@ export const removeFlowItem = async (mbid) => {
   return response.data;
 };
 
+export const processWeeklyFlowFiles = async () => {
+  const response = await api.post("/playlists/weekly/process-files");
+  return response.data;
+};
+
 export default api;
 
