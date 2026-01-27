@@ -17,6 +17,7 @@ import discoveryRouter from "./routes/discovery.js";
 import requestsRouter from "./routes/requests.js";
 import playlistsRouter from "./routes/playlists.js";
 import healthRouter from "./routes/health.js";
+import downloadsRouter from "./routes/downloads.js";
 
 // Load .env file from the backend directory
 const __filename = fileURLToPath(import.meta.url);
@@ -45,6 +46,7 @@ app.use("/api/library", libraryRouter);
 app.use("/api/discover", discoveryRouter);
 app.use("/api/requests", requestsRouter);
 app.use("/api/playlists", playlistsRouter);
+app.use("/api/downloads", downloadsRouter);
 app.use("/api/health", healthRouter);
 
 setInterval(updateDiscoveryCache, 24 * 60 * 60 * 1000);
@@ -94,6 +96,16 @@ app.listen(PORT, async () => {
   } catch (error) {
     console.warn(`Queue Cleaner not available: ${error.message}`);
     console.warn(`  Install music-metadata: npm install music-metadata`);
+  }
+  
+  // Initialize Download Queue
+  try {
+    const { downloadQueue } = await import("./services/downloadQueue.js");
+    console.log(`✓ Download Queue initialized`);
+    const status = downloadQueue.getStatus();
+    console.log(`  Queue: ${status.total} items, ${status.processing} processing`);
+  } catch (error) {
+    console.error(`✗ Failed to initialize Download Queue: ${error.message}`);
   }
   
   const rootFolder = libraryManager.getRootFolder();

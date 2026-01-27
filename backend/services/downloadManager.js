@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { queueCleaner } from './queueCleaner.js';
 import { libraryMonitor } from './libraryMonitor.js';
+import { downloadQueue } from './downloadQueue.js';
 
 // Get __dirname for .env file path
 const __filename = fileURLToPath(import.meta.url);
@@ -456,10 +457,17 @@ export class DownloadManager {
       }
       
       // Get our tracked downloads that are still in progress
-      const trackedDownloads = (db.data.downloads || []).filter(d => d.status === 'downloading');
+      const trackedDownloads = (db.data.downloads || []).filter(d => d.status === 'downloading' || d.status === 'requested');
+      
+      // Separate weekly-flow downloads for better logging
+      const weeklyFlowDownloads = trackedDownloads.filter(d => d.type === 'weekly-flow');
+      const otherDownloads = trackedDownloads.filter(d => d.type !== 'weekly-flow');
       
       // Check for completed downloads that we haven't processed yet
       const trackedCount = trackedDownloads.length;
+      if (weeklyFlowDownloads.length > 0) {
+        console.log(`[WEEKLY FLOW] Checking ${downloads.length} downloads from slskd (${trackedCount} tracked, ${weeklyFlowDownloads.length} weekly-flow)`);
+      }
       libraryMonitor.log('debug', 'download', `Checking ${downloads.length} downloads from slskd (${trackedCount} tracked as downloading)`);
       let completedCount = 0;
       let processedCount = 0;
@@ -483,10 +491,16 @@ export class DownloadManager {
         const state = download.state || download.status || download.State || download.Status;
         const normalizedState = this.normalizeState(state);
         
+        // Check if this is a weekly-flow download
+        const downloadIdStr = download.id?.toString();
+        const weeklyFlowRecord = (db.data.downloads || []).find(
+          d => d.type === 'weekly-flow' && 
+               (d.slskdDownloadId?.toString() === downloadIdStr || d.slskdDownloadId === download.id)
+        );
+        
         if (normalizedState === 'completed') {
           completedCount++;
           // Check if we've already processed this download
-          const downloadIdStr = download.id?.toString();
           const downloadRecord = (db.data.downloads || []).find(
             d => {
               const recordIdStr = d.slskdDownloadId?.toString();
@@ -497,6 +511,9 @@ export class DownloadManager {
           );
           
           if (!downloadRecord) {
+            if (weeklyFlowRecord) {
+              console.log(`[WEEKLY FLOW] Found completed download: ${weeklyFlowRecord.artistName} - ${weeklyFlowRecord.trackName} (ID: ${download.id})`);
+            }
             libraryMonitor.log('info', 'download', `Found completed download`, {
               downloadId: download.id,
               filename: download.filename || 'unknown',
@@ -504,7 +521,7 @@ export class DownloadManager {
             });
             
             // Try to find by slskdDownloadId even if status isn't completed
-            const existingRecord = (db.data.downloads || []).find(
+            const existingRecord = weeklyFlowRecord || (db.data.downloads || []).find(
               d => {
                 const recordIdStr = d.slskdDownloadId?.toString();
                 return recordIdStr === downloadIdStr || d.slskdDownloadId === download.id;
@@ -525,6 +542,12 @@ export class DownloadManager {
             }
             processedCount++;
           }
+        } else if (weeklyFlowRecord && (normalizedState === 'downloading' || normalizedState === 'queued')) {
+          // Log progress for weekly-flow downloads
+          const progress = download.percentComplete || download.progress || 0;
+          if (progress > 0 && progress !== weeklyFlowRecord.progress) {
+            console.log(`[WEEKLY FLOW] Download progress: ${weeklyFlowRecord.artistName} - ${weeklyFlowRecord.trackName} (${progress}%)`);
+          }
         }
       }
       
@@ -539,13 +562,21 @@ export class DownloadManager {
         if (!slskdDownload) {
           // Download not found in slskd - might have completed and been removed, or failed
           // First check if it was recently completed (within last 2 minutes) - might just be processing
-          const startedAt = new Date(trackedDownload.startedAt);
+          const startedAt = new Date(trackedDownload.startedAt || trackedDownload.requestedAt || new Date());
           const now = new Date();
           const minutesElapsed = (now - startedAt) / (1000 * 60);
+          
+          // For weekly-flow downloads, log when they're missing
+          if (trackedDownload.type === 'weekly-flow') {
+            console.log(`[WEEKLY FLOW] Download not found in slskd: ${trackedDownload.artistName} - ${trackedDownload.trackName} (ID: ${trackedDownload.slskdDownloadId}, ${Math.round(minutesElapsed)}m ago)`);
+          }
           
           // Only retry if it's been more than 10 minutes (give it time to complete and be processed)
           // And only if we haven't already retried too many times
           if (minutesElapsed > 10 && (trackedDownload.retryCount || 0) < 3) {
+            if (trackedDownload.type === 'weekly-flow') {
+              console.log(`[WEEKLY FLOW] Retrying missing download: ${trackedDownload.artistName} - ${trackedDownload.trackName}`);
+            }
             console.log(
               `Download ${trackedDownload.id} not found in slskd after ${Math.round(minutesElapsed)} minutes (retry ${trackedDownload.retryCount || 0}/3), marking for retry`,
             );
@@ -557,6 +588,9 @@ export class DownloadManager {
             await this.handleFailedDownload(trackedDownload);
           } else if (minutesElapsed > 10) {
             // Too many retries or too old - mark as failed
+            if (trackedDownload.type === 'weekly-flow') {
+              console.log(`[WEEKLY FLOW] Marking as failed: ${trackedDownload.artistName} - ${trackedDownload.trackName} (max retries reached)`);
+            }
             console.log(
               `Download ${trackedDownload.id} not found after ${Math.round(minutesElapsed)} minutes and max retries reached, marking as failed`,
             );
@@ -1605,6 +1639,47 @@ export class DownloadManager {
     return finalDestination;
   }
 
+  /**
+   * Queue an album for download (uses global queue system)
+   */
+  async queueAlbumDownload(artistId, albumId) {
+    const artist = libraryManager.getArtistById(artistId);
+    const album = libraryManager.getAlbumById(albumId);
+    
+    if (!artist || !album) {
+      throw new Error('Artist or album not found');
+    }
+
+    // Create download record
+    const downloadRecord = {
+      id: this.generateId(),
+      type: 'album',
+      artistId,
+      albumId,
+      artistName: artist.artistName,
+      albumName: album.albumName,
+      status: 'requested',
+      retryCount: 0,
+      requeueCount: 0,
+      progress: 0,
+      events: [],
+    };
+
+    // Log requested event
+    this.logDownloadEvent(downloadRecord, 'requested', {
+      albumName: album.albumName,
+      artistName: artist.artistName,
+    });
+
+    // Add to global queue
+    await downloadQueue.enqueue(downloadRecord);
+
+    return downloadRecord;
+  }
+
+  /**
+   * Download album (internal method - called by queue system)
+   */
   async downloadAlbum(artistId, albumId) {
     const artist = libraryManager.getArtistById(artistId);
     const album = libraryManager.getAlbumById(albumId);
@@ -1839,6 +1914,46 @@ export class DownloadManager {
     return download;
   }
 
+  /**
+   * Queue a weekly flow track for download (uses global queue system)
+   */
+  async queueWeeklyFlowTrack(artistId, trackName, artistMbid) {
+    const artist = libraryManager.getArtistById(artistId);
+    
+    if (!artist) {
+      throw new Error('Artist not found');
+    }
+
+    // Create download record
+    const downloadRecord = {
+      id: this.generateId(),
+      type: 'weekly-flow',
+      artistId,
+      artistMbid,
+      artistName: artist.artistName,
+      trackName,
+      status: 'requested',
+      retryCount: 0,
+      requeueCount: 0,
+      progress: 0,
+      events: [],
+    };
+
+    // Log requested event
+    this.logDownloadEvent(downloadRecord, 'requested', {
+      trackName,
+      artistName: artist.artistName,
+    });
+
+    // Add to global queue (weekly flow gets lower priority automatically)
+    await downloadQueue.enqueue(downloadRecord);
+
+    return downloadRecord;
+  }
+
+  /**
+   * Download weekly flow track (internal method - called by queue system)
+   */
   async downloadWeeklyFlowTrack(artistId, trackName, artistMbid) {
     const artist = libraryManager.getArtistById(artistId);
     
@@ -1851,7 +1966,18 @@ export class DownloadManager {
     }
 
     // Search and download - same as regular track download
-    const download = await slskdClient.downloadTrack(artist.artistName, trackName);
+    let download;
+    try {
+      download = await slskdClient.downloadTrack(artist.artistName, trackName);
+      
+      if (!download || !download.id) {
+        throw new Error(`Download failed: slskd did not return a download ID for ${artist.artistName} - ${trackName}`);
+      }
+    } catch (error) {
+      // Log the error with more context
+      console.error(`[WEEKLY FLOW] Failed to initiate download for ${artist.artistName} - ${trackName}:`, error.message);
+      throw error;
+    }
     
     // Store download reference - same structure as regular downloads
     if (!db.data.downloads) {
@@ -1866,7 +1992,7 @@ export class DownloadManager {
       artistMbid,
       artistName: artist.artistName,
       trackName,
-      status: 'requested',
+      status: 'downloading', // Start as downloading since it's queued in slskd
       slskdDownloadId: download.id,
       username: download.username,
       filename: download.filename,
@@ -1877,11 +2003,15 @@ export class DownloadManager {
       events: [],
     };
     
-    // Log initial requested event
+    // Log initial requested and queued events
     this.logDownloadEvent(downloadRecord, 'requested', {
       trackName,
       artistName: artist.artistName,
       filename: download.filename,
+    });
+    this.logDownloadEvent(downloadRecord, 'queued', {
+      slskdDownloadId: download.id,
+      username: download.username,
     });
     
     db.data.downloads.push(downloadRecord);
