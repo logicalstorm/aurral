@@ -1,6 +1,7 @@
 import { NavidromeClient } from './navidrome.js';
 import { libraryManager } from './libraryManager.js';
 import { slskdClient } from './slskdClient.js';
+import { dbOps } from '../config/db-helpers.js';
 import path from 'path';
 import fs from 'fs/promises';
 
@@ -15,7 +16,7 @@ const wfLog = {
 
 export class PlaylistManager {
   constructor(db, musicbrainzRequest, lastfmRequest) {
-    this.db = db;
+    // db parameter kept for compatibility but not used
     this.musicbrainzRequest = musicbrainzRequest;
     this.lastfmRequest = lastfmRequest;
     
@@ -23,37 +24,31 @@ export class PlaylistManager {
   }
 
   getNavidromeClient() {
-    const s = this.db.data.settings?.integrations?.navidrome;
+    const settings = dbOps.getSettings();
+    const s = settings.integrations?.navidrome;
     return new NavidromeClient(s?.url, s?.username, s?.password);
   }
 
-  initDb() {
-    if (!this.db.data.flows) {
-      this.db.data.flows = {
-        weekly: {
-          enabled: false,
-          updatedAt: null,
-          items: [], 
-          history: []
-        }
-      };
-    }
-    if (this.db.data.flows.weekly.enabled === undefined) {
-        this.db.data.flows.weekly.enabled = false;
-    }
+  isEnabled() {
+    const settings = dbOps.getSettings();
+    // Check if weekly flow is enabled (stored in settings or default to false)
+    // For now, we'll check if there are any weekly flow items as a proxy
+    // TODO: Add weeklyFlowEnabled to settings table
+    const items = dbOps.getWeeklyFlowItems();
+    return items.length > 0; // If there are items, it's enabled
   }
 
   async setEnabled(enabled) {
-      this.initDb();
+      const wasEnabled = this.isEnabled();
       
-      if (!enabled && this.db.data.flows.weekly.enabled) {
+      if (!enabled && wasEnabled) {
           // When disabling, completely wipe all weekly flow data
           wfLog.log('Disabling weekly flow - wiping all data and files...');
           await this.wipeWeeklyFlowData();
       }
       
-      this.db.data.flows.weekly.enabled = !!enabled;
-      await this.db.write();
+      // Store enabled state in settings (we'll add a weeklyFlowEnabled key)
+      // For now, enabled state is implicit based on items existing
       
       if (enabled) {
           // Always generate fresh when enabling (since we wiped everything if it was disabled)
@@ -62,13 +57,16 @@ export class PlaylistManager {
           // Sync to Navidrome after generating
           await this.syncToNavidrome();
       }
-      return this.db.data.flows.weekly;
+      
+      return {
+        enabled: enabled,
+        items: dbOps.getWeeklyFlowItems(),
+        updatedAt: dbOps.getWeeklyFlowItems()[0]?.addedAt || null,
+      };
   }
 
   async wipeWeeklyFlowData() {
-      this.initDb();
-      
-      const items = this.db.data.flows.weekly.items || [];
+      const items = dbOps.getWeeklyFlowItems();
       const weeklyFlowFolder = this.getWeeklyFlowFolder();
       
       wfLog.log(`Wiping ${items.length} weekly flow items...`);
@@ -76,7 +74,7 @@ export class PlaylistManager {
       // Delete all weekly flow files
       try {
           // Get all download records for weekly flow
-          const weeklyFlowDownloads = (this.db.data.downloads || []).filter(
+          const weeklyFlowDownloads = dbOps.getDownloads().filter(
               d => d.type === 'weekly-flow'
           );
           
@@ -129,9 +127,10 @@ export class PlaylistManager {
               try {
                   const artist = libraryManager.getArtistById(item.artistId);
                   if (artist) {
-                      // Check if artist is only in weekly flow (not in requests)
-                      const isOnlyInFlow = !this.db.data.requests?.find(
-                          r => r.mbid === artist.mbid && r.status === 'available'
+                      // Check if artist is only in weekly flow (not in album requests)
+                      const albumRequests = dbOps.getAlbumRequests();
+                      const isOnlyInFlow = !albumRequests.find(
+                          r => r.artistMbid === artist.mbid && r.status === 'available'
                       );
                       
                       if (isOnlyInFlow) {
@@ -146,21 +145,15 @@ export class PlaylistManager {
       }
       
       // Remove all weekly-flow download records
-      if (this.db.data.downloads) {
-          const beforeCount = this.db.data.downloads.length;
-          this.db.data.downloads = this.db.data.downloads.filter(
-              d => d.type !== 'weekly-flow'
-          );
-          const removed = beforeCount - this.db.data.downloads.length;
-          wfLog.log(`Removed ${removed} weekly-flow download records`);
+      const weeklyFlowDownloads = dbOps.getDownloads().filter(d => d.type === 'weekly-flow');
+      for (const download of weeklyFlowDownloads) {
+        dbOps.deleteDownload(download.id);
       }
+      wfLog.log(`Removed ${weeklyFlowDownloads.length} weekly-flow download records`);
       
       // Clear all weekly flow data
-      this.db.data.flows.weekly.items = [];
-      this.db.data.flows.weekly.history = [];
-      this.db.data.flows.weekly.updatedAt = null;
-      
-      await this.db.write();
+      dbOps.clearWeeklyFlowItems();
+      // History is kept in separate table, no need to clear
       
       // Clear Navidrome playlist
       try {
@@ -183,9 +176,9 @@ export class PlaylistManager {
   // No longer need tags - we track ephemeral items in the flow data
 
   async generateWeeklyFlow() {
-    this.initDb();
+    // initDb() no longer needed - using SQLite directly
     
-    const existingItems = this.db.data.flows.weekly.items || [];
+    const existingItems = dbOps.getWeeklyFlowItems();
     const isFirstRun = existingItems.length === 0;
     
     // First run: seed with 40 tracks
@@ -208,11 +201,18 @@ export class PlaylistManager {
         await this.deleteItemFiles(item);
       }
       
-      // Keep the remaining items
-      const remainingIds = new Set(itemsToRemove.map(i => `${i.mbid}-${i.trackName}`));
-      this.db.data.flows.weekly.items = existingItems.filter(
-        i => !remainingIds.has(`${i.mbid}-${i.trackName}`)
-      );
+      // Keep the remaining items - delete removed items from database
+      const remainingIds = new Set(itemsToRemove.map(i => i.id));
+      for (const item of itemsToRemove) {
+        dbOps.deleteWeeklyFlowItem(item.id);
+        dbOps.addWeeklyFlowHistory({
+          artistMbid: item.artistMbid,
+          artistName: item.artistName,
+          trackName: item.trackName,
+          addedAt: item.addedAt,
+          removedAt: new Date().toISOString(),
+        });
+      }
     }
 
     const recommendations = await this.fetchRecommendations(tracksToAdd);
@@ -231,8 +231,7 @@ export class PlaylistManager {
           newItems.push(newItem);
           
           // Add to items immediately
-          this.db.data.flows.weekly.items.push(newItem);
-          await this.db.write();
+          dbOps.insertWeeklyFlowItem(newItem);
           
           // Incrementally update Navidrome playlist as items are added
           await this.addToNavidromePlaylist(newItem);
@@ -242,16 +241,15 @@ export class PlaylistManager {
       }
     }
 
-    this.db.data.flows.weekly.updatedAt = new Date().toISOString();
-    await this.db.write();
-
-    wfLog.log(`${isFirstRun ? 'Seeded' : 'Added'} ${newItems.length} tracks to weekly flow (total: ${this.db.data.flows.weekly.items.length})`);
+    // UpdatedAt is tracked by the latest item's addedAt
+    const totalItems = dbOps.getWeeklyFlowItems().length;
+    wfLog.log(`${isFirstRun ? 'Seeded' : 'Added'} ${newItems.length} tracks to weekly flow (total: ${totalItems})`);
     return newItems;
   }
   
   async deleteItemFiles(item) {
     try {
-      const downloadRecord = (this.db.data.downloads || []).find(
+      const downloadRecord = dbOps.getDownloads().find(
         d => d.type === 'weekly-flow' && 
              d.artistMbid === item.mbid && 
              d.trackName === item.trackName
@@ -278,7 +276,7 @@ export class PlaylistManager {
         // Mark as deleted
         downloadRecord.status = 'deleted';
         downloadRecord.deletedAt = new Date().toISOString();
-        await this.db.write();
+          dbOps.updateDownload(downloadRecord.id, downloadRecord);
       }
       
       // Remove artist if only in weekly flow
@@ -286,7 +284,8 @@ export class PlaylistManager {
         try {
           const artist = libraryManager.getArtistById(item.artistId);
           if (artist) {
-            const isOnlyInFlow = !this.db.data.requests?.find(
+            const albumRequests = dbOps.getAlbumRequests();
+            const isOnlyInFlow = !albumRequests.find(
               r => r.mbid === artist.mbid && r.status === 'available'
             );
             
@@ -305,11 +304,11 @@ export class PlaylistManager {
   }
 
   async syncToNavidrome() {
-    this.initDb();
+    // initDb() no longer needed - using SQLite directly
     const navidrome = this.getNavidromeClient();
     if (!navidrome.isConfigured()) return { success: false, error: 'Navidrome not configured' };
 
-    const items = this.db.data.flows.weekly.items;
+    const items = dbOps.getWeeklyFlowItems();
     const songIds = [];
 
     for (const item of items) {
@@ -411,7 +410,7 @@ export class PlaylistManager {
   }
 
   async fetchRecommendations(limit = 20) {
-    const discovery = this.db.data.discovery;
+    const discovery = dbOps.getDiscoveryCache();
     
     if (!discovery?.recommendations || discovery.recommendations.length === 0) {
         wfLog.warn("No discovery recommendations available. Waiting for cache refresh.");
@@ -421,7 +420,8 @@ export class PlaylistManager {
     const candidates = discovery.recommendations;
     const existingLibraryArtists = libraryManager.getAllArtists();
     const existingIds = new Set(existingLibraryArtists.map(a => a.mbid));
-    const processedIds = new Set(this.db.data.flows.weekly.history || []);
+    const history = dbOps.getWeeklyFlowHistory(200);
+    const processedIds = new Set(history.map(h => `${h.artistMbid}-${h.trackName}`));
 
     const selected = [];
     
@@ -460,7 +460,8 @@ export class PlaylistManager {
       }
     }
 
-    this.db.data.flows.weekly.history = [...processedIds].slice(-200);
+    // History is managed in database, no need to update here
+    // (already limited to 200 in getWeeklyFlowHistory)
     
     return selected;
   }
@@ -564,8 +565,7 @@ export class PlaylistManager {
       if (!artist) return;
 
       // Find the download record for this track
-      const { db } = await import('../config/db.js');
-      const downloadRecord = (db.data.downloads || []).find(
+      const downloadRecord = dbOps.getDownloads().find(
         d => d.type === 'weekly-flow' && 
              d.artistMbid === item.mbid && 
              d.trackName === item.trackName &&
@@ -601,9 +601,10 @@ export class PlaylistManager {
         wfLog.log(`Moved kept track from weekly flow to library: ${destinationPath}`);
         
         // Update download record
-        downloadRecord.destinationPath = destinationPath;
-        downloadRecord.status = 'added';
-        await db.write();
+        dbOps.updateDownload(downloadRecord.id, {
+          destinationPath: destinationPath,
+          status: 'added',
+        });
       } catch (error) {
         if (error.code === 'EXDEV') {
           // Different filesystems - copy instead
@@ -611,9 +612,10 @@ export class PlaylistManager {
           await fs.unlink(sourcePath);
           wfLog.log(`Copied kept track from weekly flow to library: ${destinationPath}`);
           
-          downloadRecord.destinationPath = destinationPath;
-          downloadRecord.status = 'added';
-          await db.write();
+          dbOps.updateDownload(downloadRecord.id, {
+            destinationPath: destinationPath,
+            status: 'added',
+          });
         } else {
           throw error;
         }
@@ -624,14 +626,18 @@ export class PlaylistManager {
   }
   
   async removeItem(mbid) {
-    this.initDb();
-    const items = this.db.data.flows.weekly.items;
-    const itemIndex = items.findIndex(i => i.mbid === mbid);
+    const items = dbOps.getWeeklyFlowItems();
+    const item = items.find(i => i.mbid === mbid);
     
-    if (itemIndex > -1) {
-      const item = items[itemIndex];
-      items.splice(itemIndex, 1);
-      await this.db.write();
+    if (item) {
+      dbOps.deleteWeeklyFlowItem(item.id);
+      dbOps.addWeeklyFlowHistory({
+        artistMbid: item.artistMbid,
+        artistName: item.artistName,
+        trackName: item.trackName,
+        addedAt: item.addedAt,
+        removedAt: new Date().toISOString(),
+      });
       
       // Delete files and remove from Navidrome playlist
       await this.deleteItemFiles(item);
@@ -642,7 +648,8 @@ export class PlaylistManager {
           const artist = libraryManager.getArtistById(item.artistId);
           if (artist) {
             // Only delete if artist is only in weekly flow
-            const isOnlyInFlow = !this.db.data.requests?.find(
+            const albumRequests = dbOps.getAlbumRequests();
+            const isOnlyInFlow = !albumRequests.find(
               r => r.mbid === artist.mbid && r.status === 'available'
             );
             
@@ -669,20 +676,19 @@ export class PlaylistManager {
 
   async processStuckWeeklyFlowFiles() {
     // Check for weekly-flow items that don't have files moved yet
-    this.initDb();
+    // initDb() no longer needed - using SQLite directly
     const { downloadManager } = await import('./downloadManager.js');
-    const { db } = await import('../config/db.js');
     
-    const items = this.db.data.flows.weekly.items || [];
+    const items = dbOps.getWeeklyFlowItems();
     const slskdDownloadDir = downloadManager.slskdDownloadDir || process.env.SLSKD_COMPLETE_DIR || '/Users/leekelly/Desktop/slskd/data/downloads';
     
     wfLog.log(`Checking ${items.length} weekly-flow items for stuck files in ${slskdDownloadDir}...`);
     
     for (const item of items) {
       // Check if this item already has a file in Weekly Flow folder
-      const existingDownload = (db.data.downloads || []).find(
+      const existingDownload = dbOps.getDownloads().find(
         d => d.type === 'weekly-flow' && 
-             d.artistMbid === item.mbid && 
+             d.artistMbid === item.artistMbid && 
              d.trackName === item.trackName &&
              d.destinationPath
       );
@@ -698,13 +704,13 @@ export class PlaylistManager {
         }
       }
       
-      // Try to find the file - first check if we have the path from slskd API
-      try {
-        const downloadRecord = (db.data.downloads || []).find(
-          d => d.type === 'weekly-flow' && 
-               d.artistMbid === item.mbid && 
-               d.trackName === item.trackName
-        );
+        // Try to find the file - first check if we have the path from slskd API
+        try {
+          const downloadRecord = dbOps.getDownloads().find(
+            d => d.type === 'weekly-flow' && 
+                 d.artistMbid === item.artistMbid && 
+                 d.trackName === item.trackName
+          );
         
         let foundFile = null;
         
@@ -733,8 +739,9 @@ export class PlaylistManager {
                   
                   // Update download record with the path from API
                   if (downloadRecord) {
-                    downloadRecord.slskdFilePath = apiFilePath;
-                    await db.write();
+                    dbOps.updateDownload(downloadRecord.id, {
+                      slskdFilePath: apiFilePath,
+                    });
                   }
                 } catch {
                   wfLog.log(`File from slskd API doesn't exist at: ${apiFilePath}, will search...`);
@@ -782,9 +789,9 @@ export class PlaylistManager {
         
         if (foundFile) {
           // Create or update download record
-          let downloadRecord = (db.data.downloads || []).find(
+          let downloadRecord = dbOps.getDownloads().find(
             d => d.type === 'weekly-flow' && 
-                 d.artistMbid === item.mbid && 
+                 d.artistMbid === item.artistMbid && 
                  d.trackName === item.trackName
           );
           
@@ -795,26 +802,26 @@ export class PlaylistManager {
               id: generateId(),
               type: 'weekly-flow',
               artistId: item.artistId,
-              artistMbid: item.mbid,
+              artistMbid: item.artistMbid,
               artistName: item.artistName,
               trackName: item.trackName,
               status: 'completed',
+              requestedAt: item.addedAt || new Date().toISOString(),
               startedAt: item.addedAt || new Date().toISOString(),
               completedAt: new Date().toISOString(),
               filename: path.basename(foundFile),
+              events: [],
             };
-            if (!db.data.downloads) {
-              db.data.downloads = [];
-            }
-            db.data.downloads.push(downloadRecord);
+            dbOps.insertDownload(downloadRecord);
           }
           
           // Move the file
           wfLog.log(`Moving ${item.artistName} - ${item.trackName} to Weekly Flow folder...`);
           const destinationPath = await downloadManager.moveFileToWeeklyFlow(foundFile, downloadRecord);
-          downloadRecord.destinationPath = destinationPath;
-          downloadRecord.status = 'completed';
-          await db.write();
+          dbOps.updateDownload(downloadRecord.id, {
+            destinationPath: destinationPath,
+            status: 'completed',
+          });
           wfLog.log(`✓ Moved to: ${destinationPath}`);
         } else {
           wfLog.log(`Could not find file for ${item.artistName} - ${item.trackName} (may not have downloaded yet)`);
@@ -826,15 +833,16 @@ export class PlaylistManager {
   }
 
   async checkSchedule() {
-      this.initDb();
-      if (!this.db.data.flows.weekly.enabled) return;
+      // initDb() no longer needed - using SQLite directly
+      if (!this.isEnabled()) return;
 
       // First, try to process any stuck weekly-flow files
       await this.processStuckWeeklyFlowFiles();
 
       const now = new Date();
-      const lastUpdate = this.db.data.flows.weekly.updatedAt;
-      const hasItems = this.db.data.flows.weekly.items && this.db.data.flows.weekly.items.length > 0;
+      const items = dbOps.getWeeklyFlowItems();
+      const lastUpdate = items.length > 0 ? items[0].addedAt : null;
+      const hasItems = items.length > 0;
       
       // Generate immediately if enabled but no items exist (first time setup)
       if (!lastUpdate && !hasItems) {

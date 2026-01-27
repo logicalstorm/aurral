@@ -2,8 +2,7 @@ import express from "express";
 import { getDiscoveryCache, updateDiscoveryCache } from "../services/discoveryService.js";
 import { lastfmRequest, getLastfmApiKey } from "../services/apiClients.js";
 import { libraryManager } from "../services/libraryManager.js";
-import { db } from "../config/db.js";
-import { defaultData } from "../config/constants.js";
+import { dbOps } from "../config/db-helpers.js";
 import { imagePrefetchService } from "../services/imagePrefetchService.js";
 
 const router = express.Router();
@@ -26,32 +25,36 @@ router.post("/refresh", (req, res) => {
 router.post("/clear", async (req, res) => {
   const { clearImages = true } = req.body;
   
-  db.data.discovery = {
+  dbOps.updateDiscoveryCache({
     recommendations: [],
     globalTop: [],
     basedOn: [],
     topTags: [],
     topGenres: [],
     lastUpdated: null,
-  };
+  });
   
-  if (clearImages) {
-    db.data.images = {};
-  }
+  // Note: Image cache would need a separate table - for now just clear discovery
+  // TODO: Add image cache table if needed
   
-  await db.write();
   const discoveryCache = getDiscoveryCache();
   Object.assign(discoveryCache, {
-    ...db.data.discovery,
+    recommendations: [],
+    globalTop: [],
+    basedOn: [],
+    topTags: [],
+    topGenres: [],
+    lastUpdated: null,
     isUpdating: false,
   });
-  res.json({ message: clearImages ? "Discovery cache and image cache cleared" : "Discovery cache cleared" });
+  res.json({ message: clearImages ? "Discovery cache cleared (image cache clearing not yet implemented)" : "Discovery cache cleared" });
 });
 
 router.get("/", async (req, res) => {
   // Check if discovery is configured
   const hasLastfmKey = !!getLastfmApiKey();
-  const lastfmUsername = db.data?.settings?.integrations?.lastfm?.username || null;
+  const settings = dbOps.getSettings();
+  const lastfmUsername = settings.integrations?.lastfm?.username || null;
   const hasLastfmUser = hasLastfmKey && lastfmUsername;
   const libraryArtists = libraryManager.getAllArtists();
   const hasArtists = libraryArtists.length > 0;
@@ -59,25 +62,17 @@ router.get("/", async (req, res) => {
   // If nothing is configured, clear any existing data and return empty
   if (!hasLastfmKey && !hasArtists) {
     // Clear database if it has old data
-    if (db.data?.discovery && (
-      (db.data.discovery.recommendations?.length > 0) ||
-      (db.data.discovery.globalTop?.length > 0) ||
-      (db.data.discovery.topGenres?.length > 0) ||
-      (db.data.discovery.basedOn?.length > 0)
-    )) {
-      db.data.discovery = {
+    const dbData = dbOps.getDiscoveryCache();
+    if (dbData.recommendations?.length > 0 || dbData.globalTop?.length > 0 || 
+        dbData.topGenres?.length > 0 || dbData.basedOn?.length > 0) {
+      dbOps.updateDiscoveryCache({
         recommendations: [],
         globalTop: [],
         basedOn: [],
         topTags: [],
         topGenres: [],
         lastUpdated: null,
-      };
-      try {
-        await db.write();
-      } catch (error) {
-        console.error("Failed to clear discovery data:", error.message);
-      }
+      });
     }
     
     // Clear cache
@@ -106,7 +101,7 @@ router.get("/", async (req, res) => {
   }
   
   // Always read directly from database as source of truth
-  const dbData = db.data?.discovery || {};
+  const dbData = dbOps.getDiscoveryCache();
   const discoveryCache = getDiscoveryCache();
   
   // Ensure we have arrays (not undefined)

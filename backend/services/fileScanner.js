@@ -469,10 +469,95 @@ export class FileScanner {
     return { artistsCreated, albumsCreated, tracksCreated };
   }
 
+  /**
+   * Read metadata from audio file
+   */
+  async readFileMetadata(filePath) {
+    try {
+      const { parseFile } = await import('music-metadata');
+      const metadata = await parseFile(filePath);
+      
+      return {
+        artist: metadata.common.artist || metadata.common.albumartist || null,
+        album: metadata.common.album || null,
+        title: metadata.common.title || null,
+        track: metadata.common.track?.no || null,
+        year: metadata.common.year || null,
+        genre: metadata.common.genre?.[0] || null,
+      };
+    } catch (error) {
+      if (error.code === 'MODULE_NOT_FOUND') {
+        return null; // music-metadata not available
+      }
+      // Silently fail - metadata reading is optional
+      return null;
+    }
+  }
+
+  /**
+   * Calculate Levenshtein distance for fuzzy matching
+   */
+  levenshteinDistance(str1, str2) {
+    const len1 = str1.length;
+    const len2 = str2.length;
+    const matrix = [];
+
+    for (let i = 0; i <= len1; i++) {
+      matrix[i] = [i];
+    }
+
+    for (let j = 0; j <= len2; j++) {
+      matrix[0][j] = j;
+    }
+
+    for (let i = 1; i <= len1; i++) {
+      for (let j = 1; j <= len2; j++) {
+        if (str1[i - 1] === str2[j - 1]) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j - 1] + 1
+          );
+        }
+      }
+    }
+
+    return matrix[len1][len2];
+  }
+
+  /**
+   * Calculate similarity score between two strings (0-100)
+   */
+  calculateSimilarity(str1, str2) {
+    if (!str1 || !str2) return 0;
+    
+    const normalized1 = str1.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normalized2 = str2.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    if (normalized1 === normalized2) return 100;
+    if (normalized1.includes(normalized2) || normalized2.includes(normalized1)) return 90;
+    
+    const distance = this.levenshteinDistance(normalized1, normalized2);
+    const maxLength = Math.max(normalized1.length, normalized2.length);
+    if (maxLength === 0) return 100;
+    
+    return Math.max(0, 100 - (distance / maxLength) * 100);
+  }
+
+  /**
+   * Match file to track using multiple strategies
+   * Returns: { matched: boolean, track: Track | null, confidence: number, method: string }
+   */
   async matchFileToTrack(file, artists) {
-    // Simple matching: try to find artist and album from path
     const pathParts = file.path.split(path.sep);
     const fileName = path.basename(file.path, file.extension);
+    
+    // Strategy 1: Filename-based matching (fast, existing logic)
+    let bestMatch = null;
+    let bestConfidence = 0;
+    let bestMethod = 'none';
     
     // Find matching artist by folder name
     for (const artist of artists) {
@@ -489,37 +574,128 @@ export class FileScanner {
           // Try to match track
           const tracks = libraryManager.getTracks(album.id);
           for (const track of tracks) {
-            // Simple name matching
+            // Filename matching
             const trackNameLower = track.trackName.toLowerCase().replace(/[^a-z0-9]/g, '');
             const fileNameLower = fileName.toLowerCase().replace(/[^a-z0-9]/g, '');
             
-            if (fileNameLower.includes(trackNameLower) || trackNameLower.includes(fileNameLower)) {
-              // Update track with file info
-              const wasMatched = track.hasFile;
-              await libraryManager.updateTrack(track.id, {
-                path: file.path,
-                hasFile: true,
-                size: file.size,
-              });
-              
-              if (!wasMatched) {
-                libraryMonitor.log('info', 'library', 'File matched to track', {
-                  file: file.name,
-                  trackId: track.id,
-                  trackName: track.trackName,
-                  albumId: album.id,
-                  albumName: album.albumName,
-                  artistId: artist.id,
-                  artistName: artist.artistName,
-                });
-              }
-              
-              return true; // File was matched
+            let confidence = 0;
+            let method = 'filename';
+            
+            if (trackNameLower === fileNameLower) {
+              confidence = 100;
+            } else if (fileNameLower.includes(trackNameLower) || trackNameLower.includes(fileNameLower)) {
+              confidence = 85;
+            } else {
+              // Fuzzy matching
+              confidence = this.calculateSimilarity(track.trackName, fileName);
+              method = 'fuzzy';
+            }
+            
+            if (confidence > bestConfidence && confidence >= 60) {
+              bestMatch = { track, album, artist };
+              bestConfidence = confidence;
+              bestMethod = method;
             }
           }
+        }
+      }
+    }
+    
+    // Strategy 2: Metadata-based matching (more accurate but slower)
+    let metadataMatch = null;
+    let metadataConfidence = 0;
+    try {
+      const metadata = await this.readFileMetadata(file.path);
+      
+      if (metadata && metadata.artist && metadata.title) {
+        // Find artist by metadata
+        for (const artist of artists) {
+          const artistSimilarity = this.calculateSimilarity(artist.artistName, metadata.artist);
           
-          // If no exact match, create a track entry for this file
-          // This handles cases where files exist but tracks weren't fetched yet
+          if (artistSimilarity >= 70) {
+            const albums = libraryManager.getAlbums(artist.id);
+            
+            // Find album by metadata
+            for (const album of albums) {
+              const albumSimilarity = metadata.album 
+                ? this.calculateSimilarity(album.albumName, metadata.album)
+                : 50; // If no album in metadata, give partial score
+              
+              if (albumSimilarity >= 50) {
+                const tracks = libraryManager.getTracks(album.id);
+                
+                // Find track by metadata title
+                for (const track of tracks) {
+                  const trackSimilarity = this.calculateSimilarity(track.trackName, metadata.title);
+                  
+                  // Combined confidence: artist + album + track
+                  const combinedConfidence = (artistSimilarity * 0.3) + (albumSimilarity * 0.2) + (trackSimilarity * 0.5);
+                  
+                  if (combinedConfidence > metadataConfidence && combinedConfidence >= 70) {
+                    metadataMatch = { track, album, artist };
+                    metadataConfidence = combinedConfidence;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      // Metadata reading failed - continue with filename matching
+    }
+    
+    // Choose best match (prefer metadata if confidence is high enough)
+    let finalMatch = null;
+    if (metadataMatch && metadataConfidence >= 80) {
+      finalMatch = metadataMatch;
+      bestConfidence = metadataConfidence;
+      bestMethod = 'metadata';
+    } else if (bestMatch && bestConfidence >= 60) {
+      finalMatch = bestMatch;
+    }
+    
+    if (finalMatch) {
+      const { track, album, artist } = finalMatch;
+      const wasMatched = track.hasFile;
+      
+      await libraryManager.updateTrack(track.id, {
+        path: file.path,
+        hasFile: true,
+        size: file.size,
+      });
+      
+      if (!wasMatched) {
+        libraryMonitor.log('info', 'library', 'File matched to track', {
+          file: file.name,
+          trackId: track.id,
+          trackName: track.trackName,
+          albumId: album.id,
+          albumName: album.albumName,
+          artistId: artist.id,
+          artistName: artist.artistName,
+          confidence: Math.round(bestConfidence),
+          method: bestMethod,
+        });
+      }
+      
+      return true; // File was matched
+    }
+    
+    // Strategy 3: If no match but file is in album folder, create track entry
+    for (const artist of artists) {
+      const artistFolderName = path.basename(artist.path);
+      const artistIndex = pathParts.indexOf(artistFolderName);
+      
+      if (artistIndex === -1) continue;
+
+      const albums = libraryManager.getAlbums(artist.id);
+      for (const album of albums) {
+        const albumFolderName = path.basename(album.path);
+        if (pathParts.includes(albumFolderName) || (pathParts.length > artistIndex + 1 && pathParts[artistIndex + 1] === albumFolderName)) {
+          const tracks = libraryManager.getTracks(album.id);
+          
+          // Only create if no tracks exist (file might be for a track we haven't fetched yet)
           if (tracks.length === 0) {
             const parsed = this.parseFileName(fileName);
             try {

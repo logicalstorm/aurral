@@ -1,14 +1,14 @@
 import express from "express";
 import { UUID_REGEX } from "../config/constants.js";
 import { libraryManager } from "../services/libraryManager.js";
-import { db } from "../config/db.js";
+import { dbOps } from "../config/db-helpers.js";
 
 const router = express.Router();
 
 router.get("/", async (req, res) => {
   try {
     // Get album-based requests (new system)
-    const albumRequests = db.data.albumRequests || [];
+    let albumRequests = dbOps.getAlbumRequests();
     const libraryArtists = libraryManager.getAllArtists();
 
     let changed = false;
@@ -41,16 +41,12 @@ router.get("/", async (req, res) => {
 
         if (newStatus !== req.status) {
           changed = true;
+          dbOps.updateAlbumRequest(req.albumId, { status: newStatus });
           return { ...req, status: newStatus };
         }
         return req;
       })
       .filter(Boolean); // Remove null entries (deleted albums/artists)
-
-    if (changed) {
-      db.data.albumRequests = updatedAlbumRequests;
-      await db.write();
-    }
 
     // Format for frontend - include album and artist info
     const formattedRequests = updatedAlbumRequests.map(req => {
@@ -94,10 +90,7 @@ router.delete("/album/:albumId", async (req, res) => {
     return res.status(400).json({ error: "albumId is required" });
   }
 
-  if (db.data.albumRequests) {
-    db.data.albumRequests = db.data.albumRequests.filter((r) => r.albumId !== albumId && r.id !== albumId);
-    await db.write();
-  }
+  dbOps.deleteAlbumRequest(albumId);
   res.json({ success: true });
 });
 
@@ -109,15 +102,13 @@ router.delete("/:mbid", async (req, res) => {
     return res.status(400).json({ error: "Invalid MBID format" });
   }
 
-  // Remove from legacy requests
-  db.data.requests = (db.data.requests || []).filter((r) => r.mbid !== mbid);
-  
-  // Also remove from album requests if it matches artist MBID
-  if (db.data.albumRequests) {
-    db.data.albumRequests = db.data.albumRequests.filter((r) => r.artistMbid !== mbid);
+  // Remove from album requests if it matches artist MBID
+  const albumRequests = dbOps.getAlbumRequests();
+  const toDelete = albumRequests.filter(r => r.artistMbid === mbid);
+  for (const req of toDelete) {
+    dbOps.deleteAlbumRequest(req.albumId);
   }
   
-  await db.write();
   res.json({ success: true });
 });
 

@@ -5,7 +5,7 @@ import { libraryManager } from '../services/libraryManager.js';
 import { downloadManager } from '../services/downloadManager.js';
 import { qualityManager } from '../services/qualityManager.js';
 import { musicbrainzRequest } from '../services/apiClients.js';
-import { db } from '../config/db.js';
+import { dbOps } from '../config/db-helpers.js';
 import { queueCleaner } from '../services/queueCleaner.js';
 import { libraryMonitor } from '../services/libraryMonitor.js';
 
@@ -79,30 +79,13 @@ router.post('/artists', async (req, res) => {
       return res.status(400).json({ error: 'Invalid MBID format' });
     }
 
+    const settings = dbOps.getSettings();
     const artist = await libraryManager.addArtist(mbid, artistName, {
-      quality: quality || db.data?.settings?.quality || 'standard',
+      quality: quality || settings.quality || 'standard',
     });
 
-    // Add to requests
-    const newRequest = {
-      mbid,
-      name: artistName,
-      image: req.body.image || null,
-      requestedAt: new Date().toISOString(),
-      status: 'requested',
-    };
-
-    db.data.requests = db.data.requests || [];
-    const existingIdx = db.data.requests.findIndex(r => r.mbid === mbid);
-    if (existingIdx > -1) {
-      db.data.requests[existingIdx] = {
-        ...db.data.requests[existingIdx],
-        ...newRequest,
-      };
-    } else {
-      db.data.requests.push(newRequest);
-    }
-    await db.write();
+    // Legacy requests are no longer stored separately - album requests are used instead
+    // This code is kept for backward compatibility but doesn't do anything
 
     res.status(201).json(artist);
   } catch (error) {
@@ -145,15 +128,8 @@ router.delete('/artists/:mbid', async (req, res) => {
     await libraryManager.deleteArtist(mbid, deleteFiles === 'true');
     
     // Also remove request for this artist
-    if (db.data.requests) {
-      const beforeCount = db.data.requests.length;
-      db.data.requests = db.data.requests.filter((r) => r.mbid !== mbid);
-      const afterCount = db.data.requests.length;
-      if (beforeCount !== afterCount) {
-        await db.write();
-        console.log(`Removed ${beforeCount - afterCount} request(s) for deleted artist ${mbid}`);
-      }
-    }
+    // Legacy requests are no longer stored - album requests are used instead
+    // This code is kept for backward compatibility but doesn't do anything
     
     res.json({ success: true, message: 'Artist deleted successfully' });
   } catch (error) {
@@ -317,7 +293,7 @@ router.post('/downloads/album', async (req, res) => {
     if (!artist && artistMbid && artistName) {
       try {
         artist = await libraryManager.addArtist(artistMbid, artistName, {
-          quality: db.data?.settings?.quality || 'standard',
+          quality: dbOps.getSettings().quality || 'standard',
         });
         libraryMonitor.log('info', 'library', 'Artist automatically added when downloading album', {
           artistMbid,
@@ -342,16 +318,13 @@ router.post('/downloads/album', async (req, res) => {
     
     if (album && artist) {
       // Create or update album request
-      if (!db.data.albumRequests) {
-        db.data.albumRequests = [];
-      }
-      
-      const existingRequest = db.data.albumRequests.find(
+      const albumRequests = dbOps.getAlbumRequests();
+      const existingRequest = albumRequests.find(
         r => r.albumId === albumId || (r.albumMbid === album.mbid && r.artistMbid === artist.mbid)
       );
       
       if (!existingRequest) {
-        db.data.albumRequests.push({
+        dbOps.insertAlbumRequest({
           id: libraryManager.generateId(),
           artistId,
           artistMbid: artist.mbid,
@@ -362,7 +335,6 @@ router.post('/downloads/album', async (req, res) => {
           status: 'processing',
           requestedAt: new Date().toISOString(),
         });
-        await db.write();
         libraryMonitor.log('info', 'request', 'Album request created', {
           albumId,
           albumName: album.albumName,
@@ -884,6 +856,38 @@ router.post('/queue-cleaner/clean', async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: 'Failed to run queue cleaner',
+      message: error.message,
+    });
+  }
+});
+
+// Get data integrity status
+router.get('/integrity/status', async (req, res) => {
+  try {
+    const { dataIntegrityService } = await import('../services/dataIntegrityService.js');
+    const status = await dataIntegrityService.getStatus();
+    res.json(status);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get integrity status',
+      message: error.message,
+    });
+  }
+});
+
+// Run data integrity check
+router.post('/integrity/check', async (req, res) => {
+  try {
+    const { dataIntegrityService } = await import('../services/dataIntegrityService.js');
+    const results = await dataIntegrityService.runIntegrityCheck();
+    res.json({
+      success: true,
+      message: 'Integrity check completed',
+      ...results,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to run integrity check',
       message: error.message,
     });
   }

@@ -1,5 +1,6 @@
 // Lazy imports to avoid circular dependencies
-let slskdClient, libraryManager, downloadManager, db, libraryMonitor;
+let slskdClient, libraryManager, downloadManager, libraryMonitor;
+import { dbOps } from '../config/db-helpers.js';
 
 async function getDependencies() {
   if (!slskdClient) {
@@ -14,15 +15,11 @@ async function getDependencies() {
     const mod = await import('./downloadManager.js');
     downloadManager = mod.downloadManager;
   }
-  if (!db) {
-    const mod = await import('../config/db.js');
-    db = mod.db;
-  }
   if (!libraryMonitor) {
     const mod = await import('./libraryMonitor.js');
     libraryMonitor = mod.libraryMonitor;
   }
-  return { slskdClient, libraryManager, downloadManager, db, libraryMonitor };
+  return { slskdClient, libraryManager, downloadManager, libraryMonitor };
 }
 
 /**
@@ -58,12 +55,10 @@ export class DownloadQueue {
    */
   async loadQueueFromDb() {
     await getDependencies();
-    if (!db.data.downloads) {
-      db.data.downloads = [];
-    }
     
     // Load pending downloads from database
-    const pendingDownloads = (db.data.downloads || []).filter(
+    const allDownloads = dbOps.getDownloads();
+    const pendingDownloads = allDownloads.filter(
       d => d.status === 'requested' || 
            d.status === 'queued' || 
            d.status === 'downloading' ||
@@ -143,19 +138,13 @@ export class DownloadQueue {
     this.queue.sort((a, b) => b.priority - a.priority);
 
     // Ensure download record is in database
-    if (!db.data.downloads) {
-      db.data.downloads = [];
-    }
-    
-    const existingRecord = db.data.downloads.find(d => d.id === downloadRecord.id);
+    const existingRecord = dbOps.getDownloadById(downloadRecord.id);
     if (!existingRecord) {
-      db.data.downloads.push(downloadRecord);
+      dbOps.insertDownload(downloadRecord);
     } else {
       // Update existing record
-      Object.assign(existingRecord, downloadRecord);
+      dbOps.updateDownload(downloadRecord.id, downloadRecord);
     }
-    
-    await db.write();
 
     console.log(`[Download Queue] Enqueued: ${downloadRecord.type} - ${downloadRecord.artistName || 'Unknown'} - ${downloadRecord.trackName || downloadRecord.albumName || 'Unknown'} (Priority: ${queueItem.priority})`);
     
@@ -176,18 +165,19 @@ export class DownloadQueue {
     const item = this.queue.splice(index, 1)[0];
     
     // Update database record
-    const downloadRecord = db.data.downloads?.find(d => d.id === downloadId);
+    const downloadRecord = dbOps.getDownloadById(downloadId);
     if (downloadRecord) {
-      downloadRecord.status = 'cancelled';
-      downloadRecord.cancelledAt = new Date().toISOString();
-      if (downloadRecord.events) {
-        downloadRecord.events.push({
-          timestamp: new Date().toISOString(),
-          event: 'cancelled',
-          reason: 'removed_from_queue',
-        });
-      }
-      await db.write();
+      const events = downloadRecord.events || [];
+      events.push({
+        timestamp: new Date().toISOString(),
+        event: 'cancelled',
+        reason: 'removed_from_queue',
+      });
+      dbOps.updateDownload(downloadId, {
+        status: 'cancelled',
+        cancelledAt: new Date().toISOString(),
+        events,
+      });
     }
 
     console.log(`[Download Queue] Dequeued: ${downloadId}`);
@@ -256,7 +246,7 @@ export class DownloadQueue {
    */
   async getStats() {
     await getDependencies();
-    const allDownloads = db.data.downloads || [];
+    const allDownloads = dbOps.getDownloads();
     
     const stats = {
       total: allDownloads.length,
@@ -416,7 +406,11 @@ export class DownloadQueue {
         downloadManager.logDownloadEvent(downloadRecord, 'started', {
           queued: true,
         });
-        await db.write();
+        dbOps.updateDownload(downloadRecord.id, {
+          status: 'downloading',
+          startedAt: downloadRecord.startedAt,
+          events: downloadRecord.events,
+        });
       }
 
       // Execute download based on type
@@ -461,20 +455,18 @@ export class DownloadQueue {
     } catch (error) {
       console.error(`[Download Queue] Failed to process ${item.id}:`, error.message);
       
-      // Handle failure
+      // Handle failure using downloadManager's smart error handling
       const { downloadRecord } = item;
-      downloadRecord.retryCount = (downloadRecord.retryCount || 0) + 1;
-      downloadRecord.lastError = error.message;
-      downloadRecord.lastFailureAt = new Date().toISOString();
       
-      downloadManager.logDownloadEvent(downloadRecord, 'failed', {
-        error: error.message,
-        retryCount: downloadRecord.retryCount,
-      });
-
-      // If max retries reached, remove from queue
-      if (downloadRecord.retryCount >= 3) {
-        downloadRecord.status = 'failed';
+      // Use downloadManager's error classification and retry strategy
+      await downloadManager.handleFailedDownload(downloadRecord, null, error);
+      
+      // Check if download should be removed from queue (permanent error or max retries)
+      const errorType = downloadManager.classifyError(error);
+      const strategy = downloadManager.getRetryStrategy(errorType, downloadRecord.retryCount);
+      
+      if (!strategy.shouldRetry || downloadRecord.retryCount >= strategy.maxRetries) {
+        // Remove from queue
         const index = this.queue.findIndex(q => q.id === item.id);
         if (index > -1) {
           this.queue.splice(index, 1);
@@ -482,10 +474,9 @@ export class DownloadQueue {
       } else {
         // Requeue with lower priority
         item.priority = Math.max(1, item.priority - 2);
+        item.downloadRecord.retryCount = downloadRecord.retryCount;
         this.queue.sort((a, b) => b.priority - a.priority);
       }
-
-      await db.write();
     } finally {
       this.currentDownloads.delete(item.id);
     }

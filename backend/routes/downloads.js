@@ -1,7 +1,7 @@
 import express from 'express';
 import { downloadQueue } from '../services/downloadQueue.js';
 import { downloadManager } from '../services/downloadManager.js';
-import { db } from '../config/db.js';
+import { dbOps } from '../config/db-helpers.js';
 
 const router = express.Router();
 
@@ -62,6 +62,7 @@ router.post('/queue', async (req, res) => {
       trackName,
       artistMbid,
       status: 'requested',
+      requestedAt: new Date().toISOString(),
       retryCount: 0,
       requeueCount: 0,
       progress: 0,
@@ -208,15 +209,11 @@ router.get('/queue/search', (req, res) => {
 router.get('/', (req, res) => {
   try {
     const { type, status } = req.query;
-    let downloads = db.data.downloads || [];
-
-    if (type) {
-      downloads = downloads.filter(d => d.type === type);
-    }
-
-    if (status) {
-      downloads = downloads.filter(d => d.status === status);
-    }
+    const filters = {};
+    if (type) filters.type = type;
+    if (status) filters.status = status;
+    
+    let downloads = dbOps.getDownloads(filters);
 
     // Sort by most recent first
     downloads.sort((a, b) => {
@@ -244,7 +241,7 @@ router.get('/', (req, res) => {
 router.get('/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const download = (db.data.downloads || []).find(d => d.id === id);
+    const download = dbOps.getDownloadById(id);
 
     if (!download) {
       return res.status(404).json({
@@ -273,13 +270,7 @@ router.delete('/:id', async (req, res) => {
     await downloadQueue.dequeue(id);
 
     // Remove from database
-    if (db.data.downloads) {
-      const index = db.data.downloads.findIndex(d => d.id === id);
-      if (index > -1) {
-        db.data.downloads.splice(index, 1);
-        await db.write();
-      }
-    }
+    dbOps.deleteDownload(id);
 
     res.json({
       success: true,

@@ -51,8 +51,10 @@ app.use("/api/health", healthRouter);
 
 setInterval(updateDiscoveryCache, 24 * 60 * 60 * 1000);
 
-setTimeout(() => {
-  const lastUpdated = db.data.discovery?.lastUpdated;
+setTimeout(async () => {
+  const { dbOps } = await import('./config/db-helpers.js');
+  const discovery = dbOps.getDiscoveryCache();
+  const lastUpdated = discovery?.lastUpdated;
   const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
   if (!lastUpdated || new Date(lastUpdated).getTime() < twentyFourHoursAgo) {
     updateDiscoveryCache();
@@ -106,6 +108,26 @@ app.listen(PORT, async () => {
     console.log(`  Queue: ${status.total} items, ${status.processing} processing`);
   } catch (error) {
     console.error(`✗ Failed to initialize Download Queue: ${error.message}`);
+  }
+  
+  // Recover download state on startup (critical for production)
+  try {
+    console.log(`[Startup] Recovering download state...`);
+    await downloadManager.recoverDownloadState();
+    console.log(`✓ Download state recovery complete`);
+  } catch (error) {
+    console.error(`✗ Download state recovery failed: ${error.message}`);
+    console.error(error.stack);
+  }
+  
+  // Initialize Data Integrity Service
+  try {
+    const { dataIntegrityService } = await import("./services/dataIntegrityService.js");
+    await dataIntegrityService.start();
+    console.log(`✓ Data Integrity Service initialized and started`);
+  } catch (error) {
+    console.error(`✗ Failed to start Data Integrity Service: ${error.message}`);
+    console.error(error.stack);
   }
   
   const rootFolder = libraryManager.getRootFolder();

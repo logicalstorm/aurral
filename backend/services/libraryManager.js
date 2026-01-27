@@ -1,28 +1,18 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { db } from '../config/db.js';
+import { dbOps } from '../config/db-helpers.js';
+import { dbHelpers } from '../config/db-sqlite.js';
 import { musicbrainzRequest } from './apiClients.js';
+
+// Get settings helper
+function getSettings() {
+  return dbOps.getSettings();
+}
 
 export class LibraryManager {
   constructor() {
-    this.initDb();
     this._rootFolder = null;
     this._rootFolderLogged = false;
-  }
-
-  initDb() {
-    if (!db.data) {
-      db.data = {};
-    }
-    if (!db.data.library) {
-      db.data.library = {
-        artists: [],
-        albums: [],
-        tracks: [],
-        rootFolder: null,
-        lastScan: null,
-      };
-    }
   }
 
   getRootFolder() {
@@ -48,9 +38,7 @@ export class LibraryManager {
   }
 
   async addArtist(mbid, artistName, options = {}) {
-    this.initDb();
-    
-    const existing = (db.data.library.artists || []).find(a => a.mbid === mbid);
+    const existing = dbOps.getArtist(mbid);
     if (existing) {
       return existing;
     }
@@ -58,9 +46,7 @@ export class LibraryManager {
     const rootFolder = this.getRootFolder(); // Always /data
     const artistPath = path.join(rootFolder, this.sanitizePath(artistName));
     
-    // Don't create folders - they will be created when albums are downloaded
-    // Just calculate the path for future use
-
+    const settings = getSettings();
     const artist = {
       id: this.generateId(),
       mbid,
@@ -69,7 +55,7 @@ export class LibraryManager {
       path: artistPath, // Path where folders will be created when downloading
       addedAt: new Date().toISOString(),
       // Use default quality from settings
-      quality: options.quality || db.data?.settings?.quality || 'standard',
+      quality: options.quality || settings.quality || 'standard',
       // Monitoring options - default to 'none' (artist only)
       monitored: false,
       monitorOption: 'none',
@@ -84,11 +70,7 @@ export class LibraryManager {
       },
     };
 
-    if (!db.data.library.artists) {
-      db.data.library.artists = [];
-    }
-    db.data.library.artists.push(artist);
-    await db.write();
+    dbOps.insertArtist(artist);
 
     // Don't automatically fetch albums - albums can be viewed without artist in library
     // Albums will be fetched when user explicitly requests them or when monitoring is enabled
@@ -187,67 +169,48 @@ export class LibraryManager {
   }
 
   getArtist(mbid) {
-    this.initDb();
-    const artist = (db.data?.library?.artists || []).find(a => a.mbid === mbid);
-    if (!artist) return null;
-    return {
-      ...artist,
-      foreignArtistId: artist.foreignArtistId || artist.mbid,
-    };
+    return dbOps.getArtist(mbid);
   }
 
   getArtistById(id) {
-    this.initDb();
-    return (db.data?.library?.artists || []).find(a => a.id === id) || null;
+    return dbOps.getArtistById(id);
   }
 
   getAllArtists() {
-    this.initDb();
-    // Ensure all artists have foreignArtistId for frontend compatibility
-    return ((db.data?.library?.artists) || []).map(artist => ({
-      ...artist,
-      foreignArtistId: artist.foreignArtistId || artist.mbid,
-    }));
+    return dbOps.getAllArtists();
   }
 
   async updateArtist(mbid, updates) {
-    this.initDb();
-    // Find the artist directly in the database array, not via getArtist which returns a copy
-    const artist = (db.data?.library?.artists || []).find(a => a.mbid === mbid);
+    const artist = dbOps.getArtist(mbid);
     if (!artist) {
       throw new Error('Artist not found');
     }
 
     // Handle nested objects properly (merge instead of replace)
+    let mergedUpdates = { ...updates };
     if (updates.addOptions) {
-      if (!artist.addOptions) {
-        artist.addOptions = {};
-      }
-      Object.assign(artist.addOptions, updates.addOptions);
-      // Don't delete from updates - Object.assign will overwrite, but we've already merged
-      // So we'll delete it to prevent overwriting our merged version
-      const { addOptions, ...restUpdates } = updates;
-      Object.assign(artist, restUpdates);
-    } else {
-      // Apply all updates directly
-      Object.assign(artist, updates);
+      mergedUpdates.addOptions = {
+        ...(artist.addOptions || {}),
+        ...updates.addOptions,
+      };
+    }
+    if (updates.statistics) {
+      mergedUpdates.statistics = {
+        ...(artist.statistics || {}),
+        ...updates.statistics,
+      };
     }
     
-    try {
-      await db.write();
-    } catch (error) {
-      console.error(`[LibraryManager] Error writing database:`, error);
-      throw error;
-    }
+    const updated = dbOps.updateArtist(mbid, mergedUpdates);
     
     // If monitoring option was changed and artist is now monitored, trigger monitoring immediately
     if (updates.monitored !== undefined || updates.monitorOption !== undefined) {
-      const isNowMonitored = artist.monitored && artist.monitorOption && artist.monitorOption !== 'none';
+      const isNowMonitored = updated.monitored && updated.monitorOption && updated.monitorOption !== 'none';
       if (isNowMonitored) {
         // Trigger monitoring check for this artist in background (don't wait)
-        import('../services/monitoringService.js').then(({ monitoringService }) => {
-          monitoringService.processArtistMonitoring(artist).catch(err => {
-            console.error(`[LibraryManager] Error triggering monitoring for ${artist.artistName}:`, err.message);
+        import('./monitoringService.js').then(({ monitoringService }) => {
+          monitoringService.processArtistMonitoring(updated).catch(err => {
+            console.error(`[LibraryManager] Error triggering monitoring for ${updated.artistName}:`, err.message);
           });
         }).catch(err => {
           console.error(`[LibraryManager] Failed to import monitoring service:`, err.message);
@@ -255,27 +218,19 @@ export class LibraryManager {
       }
     }
     
-    // Return formatted version for frontend compatibility
-    return {
-      ...artist,
-      foreignArtistId: artist.foreignArtistId || artist.mbid,
-    };
+    return updated;
   }
 
   async deleteArtist(mbid, deleteFiles = false) {
-    this.initDb();
-    
     console.log(`[LibraryManager] Deleting artist with MBID: ${mbid}`);
-    console.log(`[LibraryManager] Current artists in DB: ${(db.data.library?.artists || []).length}`);
     
     const artist = this.getArtist(mbid);
     if (!artist) {
       // Try to find by ID if mbid doesn't match (for generated UUIDs)
-      const allArtists = db.data.library?.artists || [];
+      const allArtists = this.getAllArtists();
       const foundById = allArtists.find(a => a.id === mbid || a.foreignArtistId === mbid);
       if (foundById) {
         console.log(`[LibraryManager] Found artist by ID instead of MBID: ${foundById.artistName}`);
-        // Use the actual mbid from the found artist
         const actualMbid = foundById.mbid;
         
         if (deleteFiles && foundById.path) {
@@ -287,14 +242,9 @@ export class LibraryManager {
           }
         }
         
-        // Remove by actual mbid
-        if (db.data.library) {
-          db.data.library.albums = (db.data.library.albums || []).filter(a => a.artistId !== foundById.id);
-          db.data.library.tracks = (db.data.library.tracks || []).filter(t => t.artistId !== foundById.id);
-          db.data.library.artists = (db.data.library.artists || []).filter(a => a.mbid !== actualMbid && a.id !== foundById.id);
-        }
-        await db.write();
-        console.log(`[LibraryManager] Artist deleted successfully. Remaining artists: ${(db.data.library?.artists || []).length}`);
+        // Delete by actual mbid (cascade will handle albums and tracks)
+        dbOps.deleteArtist(actualMbid);
+        console.log(`[LibraryManager] Artist deleted successfully.`);
         return { success: true };
       }
       
@@ -313,30 +263,22 @@ export class LibraryManager {
       }
     }
 
-    // Remove associated albums and tracks
-    const beforeCount = (db.data.library?.artists || []).length;
-    if (db.data.library) {
-      db.data.library.albums = (db.data.library.albums || []).filter(a => a.artistId !== artist.id);
-      db.data.library.tracks = (db.data.library.tracks || []).filter(t => t.artistId !== artist.id);
-      db.data.library.artists = (db.data.library.artists || []).filter(a => a.mbid !== mbid && a.id !== artist.id);
-    }
-    await db.write();
+    // Delete artist (cascade will handle albums and tracks via foreign keys)
+    dbOps.deleteArtist(mbid);
     
-    const afterCount = (db.data.library?.artists || []).length;
-    console.log(`[LibraryManager] Artist deleted. Before: ${beforeCount}, After: ${afterCount}`);
+    console.log(`[LibraryManager] Artist deleted successfully.`);
     
     return { success: true };
   }
 
   async addAlbum(artistId, releaseGroupMbid, albumName, options = {}) {
-    this.initDb();
     const artist = this.getArtistById(artistId);
     if (!artist) {
       throw new Error('Artist not found');
     }
 
-    const existing = (db.data.library.albums || []).find(
-      a => a.artistId === artistId && a.mbid === releaseGroupMbid
+    const existing = dbOps.getAlbums(artistId).find(
+      a => a.mbid === releaseGroupMbid
     );
     if (existing) {
       return existing;
@@ -362,11 +304,7 @@ export class LibraryManager {
       },
     };
 
-    if (!db.data.library.albums) {
-      db.data.library.albums = [];
-    }
-    db.data.library.albums.push(album);
-    await db.write();
+    dbOps.insertAlbum(album);
     
     // Fetch tracks for this album in background if we have a release group MBID
     if (releaseGroupMbid && options.fetchTracks !== false) {
@@ -379,33 +317,32 @@ export class LibraryManager {
   }
 
   getAlbums(artistId) {
-    this.initDb();
-    // Return albums with foreignAlbumId for frontend compatibility
-    return (db.data.library.albums.filter(a => a.artistId === artistId) || []).map(album => ({
-      ...album,
-      foreignAlbumId: album.foreignAlbumId || album.mbid,
-    }));
+    return dbOps.getAlbums(artistId);
   }
 
   getAlbumById(id) {
-    this.initDb();
-    return (db.data?.library?.albums || []).find(a => a.id === id) || null;
+    return dbOps.getAlbumById(id);
   }
 
   async updateAlbum(id, updates) {
-    this.initDb();
     const album = this.getAlbumById(id);
     if (!album) {
       throw new Error('Album not found');
     }
 
-    Object.assign(album, updates);
-    await db.write();
-    return album;
+    // Merge statistics if provided
+    let mergedUpdates = { ...updates };
+    if (updates.statistics) {
+      mergedUpdates.statistics = {
+        ...(album.statistics || {}),
+        ...updates.statistics,
+      };
+    }
+
+    return dbOps.updateAlbum(id, mergedUpdates);
   }
 
   async deleteAlbum(id, deleteFiles = false) {
-    this.initDb();
     const album = this.getAlbumById(id);
     if (!album) {
       throw new Error('Album not found');
@@ -419,23 +356,19 @@ export class LibraryManager {
       }
     }
 
-    if (db.data.library) {
-      db.data.library.tracks = (db.data.library.tracks || []).filter(t => t.albumId !== id);
-      db.data.library.albums = (db.data.library.albums || []).filter(a => a.id !== id);
-    }
-    await db.write();
+    // Delete album (cascade will handle tracks via foreign keys)
+    dbOps.deleteAlbum(id);
     return { success: true };
   }
 
   async addTrack(albumId, trackMbid, trackName, trackNumber, options = {}) {
-    this.initDb();
     const album = this.getAlbumById(albumId);
     if (!album) {
       throw new Error('Album not found');
     }
 
-    const existing = (db.data.library.tracks || []).find(
-      t => t.albumId === albumId && t.mbid === trackMbid
+    const existing = dbOps.getTracks(albumId).find(
+      t => t.mbid === trackMbid
     );
     if (existing) {
       return existing;
@@ -455,11 +388,7 @@ export class LibraryManager {
       hasFile: false,
     };
 
-    if (!db.data.library.tracks) {
-      db.data.library.tracks = [];
-    }
-    db.data.library.tracks.push(track);
-    await db.write();
+    dbOps.insertTrack(track);
     
     // Update album statistics after adding track
     this.updateAlbumStatistics(albumId).catch(err => {
@@ -470,20 +399,17 @@ export class LibraryManager {
   }
 
   getTracks(albumId) {
-    this.initDb();
-    return (db.data?.library?.tracks || []).filter(t => t.albumId === albumId) || [];
+    return dbOps.getTracks(albumId);
   }
 
   async updateTrack(id, updates) {
-    this.initDb();
-    const track = (db.data?.library?.tracks || []).find(t => t.id === id);
+    const track = dbOps.getTrackById(id);
     if (!track) {
       throw new Error('Track not found');
     }
 
     const albumId = track.albumId;
-    Object.assign(track, updates);
-    await db.write();
+    const updated = dbOps.updateTrack(id, updates);
     
     // Update album statistics if track file status changed
     if (updates.hasFile !== undefined || updates.path !== undefined || updates.size !== undefined) {
@@ -492,17 +418,15 @@ export class LibraryManager {
       });
     }
     
-    return track;
+    return updated;
   }
 
   async scanLibrary(discover = false) {
-    this.initDb();
     const { fileScanner } = await import('./fileScanner.js');
     return await fileScanner.scanLibrary(discover);
   }
 
   async updateAlbumStatistics(albumId) {
-    this.initDb();
     const album = this.getAlbumById(albumId);
     if (!album) return;
 
@@ -515,13 +439,12 @@ export class LibraryManager {
         try {
           const stats = await fs.stat(track.path);
           totalSize += stats.size;
-          track.size = stats.size;
+          // Update track size
+          dbOps.updateTrack(track.id, { size: stats.size });
           tracksWithFiles++;
         } catch (error) {
           // File doesn't exist
-          track.hasFile = false;
-          track.size = 0;
-          await this.updateTrack(track.id, { hasFile: false, size: 0 });
+          dbOps.updateTrack(track.id, { hasFile: false, size: 0 });
         }
       }
     }
@@ -530,14 +453,14 @@ export class LibraryManager {
       ? Math.round((tracksWithFiles / tracks.length) * 100) 
       : 0;
 
-    album.statistics = {
+    const statistics = {
       trackCount: tracks.length,
       sizeOnDisk: totalSize,
       percentOfTracks: percentOfTracks,
     };
 
-    await db.write();
-    return album;
+    dbOps.updateAlbum(albumId, { statistics });
+    return this.getAlbumById(albumId);
   }
 
   async updateArtistStatistics(artistId) {
@@ -554,16 +477,17 @@ export class LibraryManager {
       
       const tracks = this.getTracks(album.id);
       totalTracks += tracks.length;
-      totalSize += (album.statistics?.sizeOnDisk || 0);
+      const updatedAlbum = this.getAlbumById(album.id);
+      totalSize += (updatedAlbum.statistics?.sizeOnDisk || 0);
     }
 
-    artist.statistics = {
+    const statistics = {
       albumCount: albums.length,
       trackCount: totalTracks,
       sizeOnDisk: totalSize,
     };
 
-    await db.write();
+    dbOps.updateArtist(artist.mbid, { statistics });
   }
 
   sanitizePath(name) {
