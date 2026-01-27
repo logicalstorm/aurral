@@ -70,12 +70,52 @@ export class DownloadManager {
     try {
       const entries = await fs.readdir(dir, { withFileTypes: true });
       
+      // Normalize the search filename for better matching
+      const searchName = filename.toLowerCase();
+      // Try to match without common suffixes like (1), (2), etc.
+      const baseName = searchName.replace(/\s*\(\d+\)\s*$/, '').trim();
+      
+      // Extract potential track pattern (e.g., "08 - Track Name" from "Artist - Album - 08 - Track Name")
+      const trackPattern = searchName.match(/(\d+\s*-\s*.+)$/);
+      const trackOnly = trackPattern ? trackPattern[1].trim() : null;
+      
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         
-        // Check if filename matches (case-insensitive for better matching)
-        if (entry.isFile() && entry.name.toLowerCase() === filename.toLowerCase()) {
-          return fullPath;
+        if (entry.isFile()) {
+          const entryName = entry.name.toLowerCase();
+          
+          // Exact match
+          if (entryName === searchName) {
+            return fullPath;
+          }
+          
+          // Match without suffix (e.g., "file (1).mp3" matches "file.mp3")
+          if (entryName === baseName) {
+            return fullPath;
+          }
+          
+          // If we have a track-only pattern, try matching just that part
+          // e.g., "Beddy Rays - 2022 Beddy Rays - 08 - Sobercoaster.flac" should match "08 - Sobercoaster.flac"
+          if (trackOnly && entryName === trackOnly) {
+            return fullPath;
+          }
+          
+          // Partial match - check if the entry ends with the track pattern
+          if (trackOnly && entryName.endsWith(trackOnly)) {
+            return fullPath;
+          }
+          
+          // Check if entry name is contained in search name or vice versa (for partial matches)
+          const entryBase = entryName.replace(/\s*\(\d+\)\s*\./, '.').replace(/\.[^.]+$/, '');
+          const searchBase = baseName.replace(/\.[^.]+$/, '');
+          
+          // If one contains the other (after removing common prefixes), it's likely a match
+          if (entryBase === searchBase || 
+              (entryBase.length > 10 && searchBase.length > 10 && 
+               (entryBase.includes(searchBase) || searchBase.includes(entryBase)))) {
+            return fullPath;
+          }
         } else if (entry.isDirectory() && !entry.name.startsWith('.')) {
           // Skip common system directories
           if (entry.name === 'node_modules' || entry.name === '.git') {
@@ -428,11 +468,28 @@ export class DownloadManager {
         // Fallback to environment or common locations
         if (!slskdDownloadDir) {
           // Prefer COMPLETE_DIR, fallback to DOWNLOAD_DIR + /complete
-          let completeDir = process.env.SLSKD_COMPLETE_DIR;
-          
-          if (!completeDir && process.env.SLSKD_DOWNLOAD_DIR) {
-            completeDir = path.join(process.env.SLSKD_DOWNLOAD_DIR, 'complete');
-          }
+    let completeDir = process.env.SLSKD_COMPLETE_DIR;
+    
+    // If not in process.env, try loading .env file directly
+    if (!completeDir) {
+      try {
+        const dotenv = await import('dotenv');
+        const envPath = path.join(__dirname, '..', '.env');
+        const envConfig = dotenv.config({ path: envPath });
+        if (envConfig.parsed?.SLSKD_COMPLETE_DIR) {
+          completeDir = envConfig.parsed.SLSKD_COMPLETE_DIR;
+          // Also set it in process.env for future use
+          process.env.SLSKD_COMPLETE_DIR = completeDir;
+          console.log(`Loaded SLSKD_COMPLETE_DIR from .env: ${completeDir}`);
+        }
+      } catch (err) {
+        // Ignore
+      }
+    }
+    
+    if (!completeDir && process.env.SLSKD_DOWNLOAD_DIR) {
+      completeDir = path.join(process.env.SLSKD_DOWNLOAD_DIR, 'complete');
+    }
           
           // If still not found, try loading .env directly
           if (!completeDir) {
@@ -525,6 +582,21 @@ export class DownloadManager {
         const filename = download.filename.replace(/\\/g, '/'); // Normalize path separators
         const justFilename = path.basename(filename); // Get just the filename
         
+        // Also extract potential track-only filename (common pattern: "## - Track Name.ext")
+        // If filename contains " - " pattern, try to extract just the track part
+        let trackOnlyFilename = null;
+        const trackMatch = justFilename.match(/(\d+\s*-\s*.+)$/); // Match "## - Track Name.ext" at the end
+        if (trackMatch) {
+          trackOnlyFilename = trackMatch[1].trim();
+        } else {
+          // Try to extract last part after " - " if it exists
+          const parts = justFilename.split(' - ');
+          if (parts.length > 1) {
+            // Take the last part which is usually the track name
+            trackOnlyFilename = parts[parts.length - 1];
+          }
+        }
+        
         // slskd may preserve the directory structure from the remote path
         // Remove @@ prefix if present (slskd special marker)
         let cleanPath = filename.replace(/^@@[^\/\\]+[\/\\]/, ''); // Remove @@username/ prefix
@@ -539,8 +611,11 @@ export class DownloadManager {
           path.join(slskdDownloadDir, filename),
           // Most common: directly in complete folder
           path.join(slskdDownloadDir, justFilename),
+          // Track-only filename (e.g., "08 - Sobercoaster.flac" from "Beddy Rays - 2022 Beddy Rays - 08 - Sobercoaster.flac")
+          trackOnlyFilename ? path.join(slskdDownloadDir, trackOnlyFilename) : null,
           // With username: {username}/{filename} in complete dir
           download.username ? path.join(slskdDownloadDir, download.username, justFilename) : null,
+          download.username && trackOnlyFilename ? path.join(slskdDownloadDir, download.username, trackOnlyFilename) : null,
           // With username and full path in complete dir
           download.username ? path.join(slskdDownloadDir, download.username, cleanPath) : null,
           // If filename has path structure, try preserving just the filename
@@ -549,7 +624,9 @@ export class DownloadManager {
           incompleteDir ? path.join(incompleteDir, cleanPath) : null,
           incompleteDir ? path.join(incompleteDir, filename) : null,
           incompleteDir ? path.join(incompleteDir, justFilename) : null,
+          incompleteDir && trackOnlyFilename ? path.join(incompleteDir, trackOnlyFilename) : null,
           incompleteDir && download.username ? path.join(incompleteDir, download.username, justFilename) : null,
+          incompleteDir && download.username && trackOnlyFilename ? path.join(incompleteDir, download.username, trackOnlyFilename) : null,
           incompleteDir && download.username ? path.join(incompleteDir, download.username, cleanPath) : null,
         ].filter(Boolean);
         
@@ -585,9 +662,21 @@ export class DownloadManager {
         // If still not found, try recursive search in downloads directory
         if (!sourcePath) {
           try {
-            const foundFile = await this.findFileRecursively(slskdDownloadDir, justFilename);
+            // Try searching for the full filename first
+            console.log(`Attempting recursive search for: ${justFilename} in ${slskdDownloadDir}`);
+            let foundFile = await this.findFileRecursively(slskdDownloadDir, justFilename);
+            
+            // If not found and we have a track-only filename, try that too
+            if (!foundFile && trackOnlyFilename && trackOnlyFilename !== justFilename) {
+              console.log(`Trying recursive search for track-only filename: ${trackOnlyFilename}`);
+              foundFile = await this.findFileRecursively(slskdDownloadDir, trackOnlyFilename);
+            }
+            
             if (foundFile) {
               sourcePath = foundFile;
+              console.log(`✓ Found file via recursive search: ${foundFile}`);
+            } else {
+              console.log(`✗ Recursive search did not find: ${justFilename}${trackOnlyFilename ? ` or ${trackOnlyFilename}` : ''}`);
             }
           } catch (searchErr) {
             console.warn(`Recursive search failed:`, searchErr.message);
@@ -615,12 +704,21 @@ export class DownloadManager {
         // If still not found, log warning with helpful message
         if (!sourcePath) {
           console.warn(`Could not locate downloaded file: ${justFilename}`);
+          console.warn(`Original filename from slskd: ${download.filename}`);
           if (!this.slskdDownloadDir) {
             console.warn('SLSKD_COMPLETE_DIR not set. For Docker, map slskd downloads and set: -e SLSKD_COMPLETE_DIR=/downloads');
             console.warn('Example: docker run -v /your/slskd/downloads/complete:/downloads -e SLSKD_COMPLETE_DIR=/downloads ...');
           } else {
             console.warn(`Searched in: ${this.slskdDownloadDir}`);
+            console.warn(`Tried ${possiblePaths.length} possible paths`);
             console.warn('If file exists elsewhere, set SLSKD_COMPLETE_DIR to the correct path');
+            // Try to help debug - list what's actually in the directory
+            try {
+              const dirContents = await fs.readdir(slskdDownloadDir);
+              console.warn(`Directory contains ${dirContents.length} items (first 10):`, dirContents.slice(0, 10));
+            } catch (e) {
+              // Ignore
+            }
           }
         }
       }
@@ -650,45 +748,102 @@ export class DownloadManager {
       const downloadIdStr = download.id?.toString();
       const downloadId = download.id;
       
+      // Extract just the filename for matching
+      const downloadFilename = download.filename ? download.filename.split(/[\\/]/).pop() : null;
+      const sourceFilename = sourcePath ? path.basename(sourcePath) : null;
+      
       // Try multiple matching strategies
-      const downloadRecord = (db.data.downloads || []).find(
+      let downloadRecord = (db.data.downloads || []).find(
         d => {
           const recordIdStr = d.slskdDownloadId?.toString();
           const recordId = d.slskdDownloadId;
           
-          // Try exact matches
+          // Try exact ID matches first
           if (recordIdStr === downloadIdStr) return true;
           if (recordId === downloadId) return true;
           if (recordId === downloadIdStr) return true;
           if (recordIdStr === downloadId) return true;
           
-          // Try matching by filename if IDs don't match (for retries)
-          if (download.filename && d.filename) {
-            const downloadFilename = download.filename.split(/[\\/]/).pop();
-            const recordFilename = d.filename.split(/[\\/]/).pop();
-            if (downloadFilename === recordFilename && 
-                d.status === 'downloading' && 
-                d.albumId) {
-              return true;
-            }
-          }
-          
           return false;
         }
       );
       
+      // If no match by ID, try matching by filename (for orphaned downloads or weekly-flow)
+      if (!downloadRecord && (downloadFilename || sourceFilename)) {
+        const searchFilename = sourceFilename || downloadFilename;
+        downloadRecord = (db.data.downloads || []).find(
+          d => {
+            if (!d.filename && !d.trackName) return false;
+            
+            const recordFilename = d.filename ? d.filename.split(/[\\/]/).pop() : null;
+            const recordTrackName = d.trackName;
+            
+            // Match by filename
+            if (recordFilename && searchFilename && 
+                recordFilename.toLowerCase() === searchFilename.toLowerCase()) {
+              return true;
+            }
+            
+            // Match by track name (for weekly-flow downloads)
+            if (recordTrackName && searchFilename) {
+              const trackOnly = searchFilename.match(/(\d+\s*-\s*.+)$/);
+              if (trackOnly) {
+                const trackPart = trackOnly[1].toLowerCase();
+                if (recordTrackName.toLowerCase().includes(trackPart) || 
+                    trackPart.includes(recordTrackName.toLowerCase())) {
+                  return true;
+                }
+              }
+              // Direct track name match
+              if (searchFilename.toLowerCase().includes(recordTrackName.toLowerCase()) ||
+                  recordTrackName.toLowerCase().includes(searchFilename.toLowerCase())) {
+                return true;
+              }
+            }
+            
+            // For weekly-flow type, also match by artist and track
+            if (d.type === 'weekly-flow' && d.artistName && d.trackName && searchFilename) {
+              // Check if filename contains both artist and track name
+              const filenameLower = searchFilename.toLowerCase();
+              const artistLower = d.artistName.toLowerCase();
+              const trackLower = d.trackName.toLowerCase();
+              
+              // Try to extract track part from filename
+              const trackPattern = filenameLower.match(/(\d+\s*-\s*.+)$/);
+              if (trackPattern) {
+                const extractedTrack = trackPattern[1].toLowerCase();
+                if (extractedTrack.includes(trackLower) || trackLower.includes(extractedTrack.replace(/\.[^.]+$/, ''))) {
+                  return true;
+                }
+              }
+            }
+            
+            return false;
+          }
+        );
+        
+        if (downloadRecord) {
+          console.log(`Matched download record by filename instead of ID: ${downloadRecord.id} (type: ${downloadRecord.type})`);
+        }
+      }
+      
       if (!downloadRecord) {
         console.warn(`No download record found for slskd download ID: ${download.id} (${typeof download.id})`);
         console.warn(`Filename: ${download.filename || 'unknown'}`);
+        console.warn(`Source file: ${sourcePath || 'not found'}`);
         console.warn(`Available download records (${(db.data.downloads || []).length} total, ${(db.data.downloads || []).filter(d => d.status === 'downloading').length} downloading):`, 
           (db.data.downloads || []).slice(0, 10).map(d => ({
             id: d.id,
             slskdDownloadId: d.slskdDownloadId,
-            type: typeof d.slskdDownloadId,
+            type: d.type || 'unknown',
             filename: d.filename?.split(/[\\/]/).pop() || 'unknown',
+            trackName: d.trackName,
             status: d.status,
             trackTitle: d.trackTitle,
           })));
+        
+        // For weekly-flow downloads, we might want to create a record if file exists but no record
+        // But for now, just return - QueueCleaner might handle it
         return;
       }
       
@@ -845,6 +1000,10 @@ export class DownloadManager {
                   moved = true;
                 }
               }
+            } else if (downloadRecord.type === 'weekly-flow') {
+              // Move weekly flow tracks to Weekly Flow folder
+              destinationPath = await this.moveFileToWeeklyFlow(sourcePath, downloadRecord);
+              moved = true;
             }
           }
         } catch (error) {
@@ -979,6 +1138,83 @@ export class DownloadManager {
     }
 
     return destinationPath;
+  }
+
+  async moveFileToWeeklyFlow(sourcePath, downloadRecord) {
+    const rootFolder = libraryManager.getRootFolder(); // Always /data
+    const weeklyFlowFolder = path.join(rootFolder, 'Weekly Flow');
+    
+    // Create folder structure: Weekly Flow/Artist Name - Track Name.ext
+    const artistName = downloadRecord.artistName || 'Unknown Artist';
+    const trackName = downloadRecord.trackName || 'Unknown Track';
+    const sourceExt = path.extname(sourcePath);
+    
+    // Sanitize names for filesystem
+    const sanitizedArtist = artistName.replace(/[<>:"/\\|?*]/g, '_').trim();
+    const sanitizedTrack = trackName.replace(/[<>:"/\\|?*]/g, '_').trim();
+    const fileName = `${sanitizedArtist} - ${sanitizedTrack}${sourceExt}`;
+    const destinationPath = path.join(weeklyFlowFolder, fileName);
+
+    // Create weekly flow directory
+    try {
+      await fs.mkdir(weeklyFlowFolder, { recursive: true });
+    } catch (error) {
+      if (error.code !== 'EEXIST') {
+        throw new Error(`Failed to create weekly flow directory "${weeklyFlowFolder}": ${error.message}`);
+      }
+    }
+
+    // If destination already exists, add a number suffix
+    let finalDestination = destinationPath;
+    let counter = 1;
+    while (true) {
+      try {
+        await fs.access(finalDestination);
+        // File exists, try with counter
+        const nameWithoutExt = path.basename(fileName, sourceExt);
+        finalDestination = path.join(weeklyFlowFolder, `${nameWithoutExt} (${counter})${sourceExt}`);
+        counter++;
+      } catch (error) {
+        // File doesn't exist, we can use this path
+        break;
+      }
+    }
+
+    // Move file
+    try {
+      await fs.rename(sourcePath, finalDestination);
+      // Rename succeeded - file is moved, source is automatically gone
+      // Clean up empty directories after moving file
+      await this.removeEmptyDirectories(sourcePath);
+    } catch (error) {
+      // If rename fails (different filesystems), copy and delete
+      if (error.code === 'EXDEV') {
+        // Copy file to destination
+        await fs.copyFile(sourcePath, finalDestination);
+        
+        // Verify copy succeeded before deleting source
+        try {
+          const destStats = await fs.stat(finalDestination);
+          const sourceStats = await fs.stat(sourcePath);
+          if (destStats.size === sourceStats.size) {
+            // Copy verified - safe to delete source
+            await fs.unlink(sourcePath);
+            // Clean up empty directories after deleting file
+            await this.removeEmptyDirectories(sourcePath);
+          } else {
+            throw new Error(`Copy verification failed: destination size (${destStats.size}) doesn't match source (${sourceStats.size})`);
+          }
+        } catch (deleteError) {
+          console.error(`Failed to delete source file from slskd directory after copy: ${sourcePath}`, deleteError.message);
+          // Don't throw - file is copied successfully, we'll try to clean up later if needed
+        }
+      } else {
+        throw error;
+      }
+    }
+
+    console.log(`Moved weekly flow track to: ${finalDestination}`);
+    return finalDestination;
   }
 
   async moveFileToTrack(sourcePath, artist, album, track) {
@@ -1254,6 +1490,47 @@ export class DownloadManager {
       type: 'track',
       artistId,
       trackId,
+      status: 'downloading',
+      startedAt: new Date().toISOString(),
+      slskdDownloadId: download.id,
+      username: download.username, // Store username for retry tracking
+      filename: download.filename,
+      retryCount: 0,
+      progress: 0,
+      lastChecked: new Date().toISOString(),
+    });
+    
+    await db.write();
+    
+    return download;
+  }
+
+  async downloadWeeklyFlowTrack(artistId, trackName, artistMbid) {
+    const artist = libraryManager.getArtistById(artistId);
+    
+    if (!artist) {
+      throw new Error('Artist not found');
+    }
+
+    if (!slskdClient.isConfigured()) {
+      throw new Error('slskd not configured');
+    }
+
+    // Search and download - same as regular track download
+    const download = await slskdClient.downloadTrack(artist.artistName, trackName);
+    
+    // Store download reference - same structure as regular downloads
+    if (!db.data.downloads) {
+      db.data.downloads = [];
+    }
+    
+    db.data.downloads.push({
+      id: download.id || this.generateId(),
+      type: 'weekly-flow',
+      artistId,
+      artistMbid,
+      artistName: artist.artistName,
+      trackName,
       status: 'downloading',
       startedAt: new Date().toISOString(),
       slskdDownloadId: download.id,

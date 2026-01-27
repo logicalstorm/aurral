@@ -1,14 +1,5 @@
 import { useState, useEffect } from "react";
-import {
-  Play,
-  Heart,
-  Trash2,
-  Clock,
-  Music,
-  CheckCircle,
-  ToggleLeft,
-  ToggleRight,
-} from "lucide-react";
+import { Play, Heart, Trash2, Clock, Music, CheckCircle } from "lucide-react";
 import {
   getWeeklyFlow,
   toggleWeeklyFlow,
@@ -18,6 +9,7 @@ import {
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
 import ArtistImage from "../components/ArtistImage";
+import PowerSwitch from "../components/PowerSwitch";
 
 function FlowPage() {
   const [flow, setFlow] = useState({
@@ -45,9 +37,9 @@ function FlowPage() {
     fetchFlow();
   }, []);
 
-  const handleToggle = async () => {
+  const handleToggle = async (e) => {
     setToggling(true);
-    const newState = !flow.enabled;
+    const newState = e.target.checked;
     try {
       await toggleWeeklyFlow(newState);
       setFlow((prev) => ({ ...prev, enabled: newState }));
@@ -58,6 +50,8 @@ function FlowPage() {
       );
     } catch (err) {
       showError("Failed to update settings");
+      // Revert on error
+      setFlow((prev) => ({ ...prev, enabled: !newState }));
     } finally {
       setToggling(false);
     }
@@ -128,22 +122,12 @@ function FlowPage() {
             unless kept.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium" style={{ color: "#fff" }}>
-            {flow.enabled ? "Active" : "Disabled"}
-          </span>
-          <button
-            onClick={handleToggle}
+        <div className="flex items-center gap-4">
+          <PowerSwitch
+            checked={flow.enabled}
+            onChange={handleToggle}
             disabled={toggling}
-            className="text-4xl transition-colors"
-            style={{ color: flow.enabled ? "#707e61" : "#c1c1c3" }}
-          >
-            {flow.enabled ? (
-              <ToggleRight className="w-10 h-10 fill-current" />
-            ) : (
-              <ToggleLeft className="w-10 h-10" />
-            )}
-          </button>
+          />
         </div>
       </div>
 
