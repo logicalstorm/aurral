@@ -73,14 +73,34 @@ export class NavidromeClient {
     return data.playlists?.playlist || [];
   }
 
-  async createPlaylist(name, songIds) {
-    if (!songIds || songIds.length === 0) return null;
+  async createPlaylist(name, songIds, replace = false) {
+    if (!songIds || songIds.length === 0) {
+      // If no songs and replace is true, delete the playlist
+      if (replace) {
+        const playlists = await this.getPlaylists();
+        const existing = playlists.find(p => p.name === name);
+        if (existing) {
+          await this.deletePlaylist(existing.id);
+        }
+      }
+      return null;
+    }
 
     const playlists = await this.getPlaylists();
     const existing = playlists.find(p => p.name === name);
 
     if (existing) {
-      await this.deletePlaylist(existing.id);
+      if (replace) {
+        // Delete and recreate to ensure clean state
+        await this.deletePlaylist(existing.id);
+      } else {
+        // Update existing playlist
+        const data = await this.request('updatePlaylist', {
+          playlistId: existing.id,
+          songIdToAdd: songIds
+        });
+        return data.playlist || existing;
+      }
     }
 
     const data = await this.request('createPlaylist', {
