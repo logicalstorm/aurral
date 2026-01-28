@@ -12,8 +12,11 @@ router.get("/", async (req, res) => {
     const libraryArtists = libraryManager.getAllArtists();
 
     let changed = false;
-    const updatedAlbumRequests = albumRequests
-      .map((req) => {
+    const { downloadManager } = await import("../services/downloadManager.js");
+    const { fileScanner } = await import("../services/fileScanner.js");
+    
+    const updatedAlbumRequests = await Promise.all(
+      albumRequests.map(async (req) => {
         const album = libraryManager.getAlbumById(req.albumId);
         if (!album) {
           // Album not in library anymore - remove request
@@ -27,17 +30,118 @@ router.get("/", async (req, res) => {
         }
 
         // Check if album has files on disk
-        let hasFiles = false;
         const tracks = libraryManager.getTracks(album.id);
         const tracksWithFiles = tracks.filter(t => t.hasFile && t.path);
         
-        if (tracksWithFiles.length > 0) {
-          hasFiles = true;
+        // Check if files actually exist in album folder (even if tracks aren't matched)
+        let filesExistInFolder = false;
+        let audioFileCount = 0;
+        let audioFiles = [];
+        if (album.path) {
+          try {
+            const fs = await import('fs/promises');
+            const path = await import('path');
+            const files = await fs.readdir(album.path).catch(() => []);
+            audioFiles = files.filter(f => /\.(flac|mp3|m4a|ogg|wav)$/i.test(f));
+            audioFileCount = audioFiles.length;
+            filesExistInFolder = audioFiles.length > 0;
+            
+            // If files exist but tracks aren't matched, try direct matching
+            if (filesExistInFolder && tracksWithFiles.length < audioFiles.length) {
+              console.log(`[Requests] Found ${audioFiles.length} files in "${album.albumName}" but only ${tracksWithFiles.length} tracks matched - attempting direct match`);
+              
+              for (const fileName of audioFiles) {
+                const filePath = path.join(album.path, fileName);
+                try {
+                  const stats = await fs.stat(filePath);
+                  
+                  // Try direct matching by filename
+                  const fileNameBase = path.basename(fileName, path.extname(fileName)).toLowerCase();
+                  let matched = false;
+                  
+                  for (const track of tracks) {
+                    if (track.hasFile && track.path === filePath) {
+                      matched = true;
+                      break;
+                    }
+                    
+                    const trackNameBase = (track.trackName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                    const fileBase = fileNameBase.replace(/[^a-z0-9]/g, '');
+                    
+                    // Try to match by track number + name pattern (e.g., "01 - Track Name" or "01 Track Name")
+                    const trackNumMatch = fileNameBase.match(/^(\d+)\s*[-.]?\s*(.+)$/);
+                    if (trackNumMatch) {
+                      const fileTrackNum = parseInt(trackNumMatch[1]);
+                      const fileTrackName = trackNumMatch[2].replace(/[^a-z0-9]/g, '');
+                      if (track.trackNumber === fileTrackNum && 
+                          (fileTrackName.includes(trackNameBase) || trackNameBase.includes(fileTrackName))) {
+                        await libraryManager.updateTrack(track.id, {
+                          path: filePath,
+                          hasFile: true,
+                          size: stats.size,
+                        });
+                        matched = true;
+                        console.log(`✓ Directly matched "${fileName}" to track "${track.trackName}"`);
+                        break;
+                      }
+                    }
+                    
+                    // Fallback: match by name similarity
+                    const similarity = fileScanner.calculateSimilarity(track.trackName, fileNameBase);
+                    if (!matched && (fileBase.includes(trackNameBase) || trackNameBase.includes(fileBase) || similarity >= 70)) {
+                      await libraryManager.updateTrack(track.id, {
+                        path: filePath,
+                        hasFile: true,
+                        size: stats.size,
+                      });
+                      matched = true;
+                      console.log(`✓ Directly matched "${fileName}" to track "${track.trackName}" by name`);
+                      break;
+                    }
+                  }
+                  
+                  // If no direct match, try fileScanner
+                  if (!matched) {
+                    const artists = libraryManager.getAllArtists();
+                    await fileScanner.matchFileToTrack(
+                      {
+                        path: filePath,
+                        name: fileName,
+                        size: stats.size,
+                      },
+                      artists
+                    );
+                  }
+                } catch (error) {
+                  console.warn(`Failed to match file ${fileName}:`, error.message);
+                }
+              }
+              
+              // Force statistics update after matching
+              await libraryManager.updateAlbumStatistics(album.id);
+            }
+          } catch (error) {
+            // Folder doesn't exist or can't be read
+          }
         }
         
+        // Refresh tracks after potential updates to get latest state
+        const refreshedTracks = libraryManager.getTracks(album.id);
+        const refreshedTracksWithFiles = refreshedTracks.filter(t => t.hasFile && t.path);
+        
+        const hasFiles = refreshedTracksWithFiles.length > 0 || filesExistInFolder;
+        
         // Check if album is complete (all tracks have files)
-        const isComplete = tracks.length > 0 && tracksWithFiles.length === tracks.length;
+        const isComplete = refreshedTracks.length > 0 && refreshedTracksWithFiles.length === refreshedTracks.length;
         const newStatus = isComplete ? "available" : (hasFiles ? "processing" : "processing");
+
+        // If album is complete, also update download records to "added" status
+        if (isComplete) {
+          // Update all download records for this album to "added" since files are in library
+          downloadManager.updateDownloadStatus(req.albumId, 'added', {
+            reason: 'Album complete in library, syncing download status',
+          });
+        }
 
         if (newStatus !== req.status) {
           changed = true;
@@ -46,10 +150,12 @@ router.get("/", async (req, res) => {
         }
         return req;
       })
-      .filter(Boolean); // Remove null entries (deleted albums/artists)
+    );
+    
+    const filteredRequests = updatedAlbumRequests.filter(Boolean); // Remove null entries (deleted albums/artists)
 
     // Format for frontend - include album and artist info
-    const formattedRequests = updatedAlbumRequests.map(req => {
+    const formattedRequests = filteredRequests.map(req => {
       const album = libraryManager.getAlbumById(req.albumId);
       const artist = libraryManager.getArtistById(req.artistId);
       

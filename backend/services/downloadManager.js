@@ -1377,21 +1377,50 @@ export class DownloadManager {
         }
       }
       
-      // Match all files to tracks
+      // Match all files to tracks and update track records directly
+      const albumTracks = libraryManager.getTracks(album.id);
       for (const trackDownload of albumDownloads) {
         if (trackDownload.destinationPath) {
           try {
-            const wasMatched = await fileScanner.matchFileToTrack(
-              {
-                path: trackDownload.destinationPath,
-                name: path.basename(trackDownload.destinationPath),
-                size: 0, // Size not available at this point
-              },
-              libraryManager.getAllArtists()
-            );
+            // First, try to directly match by trackTitle
+            let matchingTrack = null;
+            if (trackDownload.trackTitle) {
+              matchingTrack = albumTracks.find(t => 
+                t.trackName && trackDownload.trackTitle &&
+                (t.trackName.toLowerCase() === trackDownload.trackTitle.toLowerCase() ||
+                 t.trackName.toLowerCase().includes(trackDownload.trackTitle.toLowerCase()) ||
+                 trackDownload.trackTitle.toLowerCase().includes(t.trackName.toLowerCase()))
+              );
+            }
             
-            if (!wasMatched) {
-              console.log(`File not matched: ${trackDownload.destinationPath}`);
+            // If no direct match, try by track position
+            if (!matchingTrack && trackDownload.trackPosition) {
+              matchingTrack = albumTracks.find(t => t.trackNumber === trackDownload.trackPosition);
+            }
+            
+            // If we found a matching track, update it directly
+            if (matchingTrack) {
+              const stats = await fs.stat(trackDownload.destinationPath);
+              await libraryManager.updateTrack(matchingTrack.id, {
+                path: trackDownload.destinationPath,
+                hasFile: true,
+                size: stats.size,
+              });
+              console.log(`✓ Directly updated track "${matchingTrack.trackName}" with file path`);
+            } else {
+              // Fall back to fileScanner matching
+              const wasMatched = await fileScanner.matchFileToTrack(
+                {
+                  path: trackDownload.destinationPath,
+                  name: path.basename(trackDownload.destinationPath),
+                  size: 0,
+                },
+                libraryManager.getAllArtists()
+              );
+              
+              if (!wasMatched) {
+                console.log(`File not matched: ${trackDownload.destinationPath}`);
+              }
             }
           } catch (error) {
             console.error(`Error matching file ${trackDownload.destinationPath}:`, error.message);
@@ -1399,15 +1428,15 @@ export class DownloadManager {
         }
       }
       
-      // Update album statistics
+      // Force update album statistics after all tracks are updated
       await libraryManager.updateAlbumStatistics(album.id).catch(err => {
         console.error(`Failed to update album statistics:`, err.message);
       });
       
-      // Update album request status
-      const albumTracks = libraryManager.getTracks(album.id);
-      const tracksWithFiles = albumTracks.filter(t => t.hasFile && t.path);
-      const isComplete = albumTracks.length > 0 && tracksWithFiles.length === albumTracks.length;
+      // Update album request status - refresh tracks after updates
+      const updatedAlbumTracks = libraryManager.getTracks(album.id);
+      const tracksWithFiles = updatedAlbumTracks.filter(t => t.hasFile && t.path);
+      const isComplete = updatedAlbumTracks.length > 0 && tracksWithFiles.length === updatedAlbumTracks.length;
       
       if (isComplete) {
         const albumRequests = dbOps.getAlbumRequests();
@@ -3693,15 +3722,39 @@ export class DownloadManager {
         d => d.albumId === albumId && d.type === 'album'
       );
       
-      // Mark all completed track downloads as 'added' since the album is now in library
-      for (const download of albumDownloads) {
-        if (download.status === 'completed' || download.tempFilePath) {
-          download.status = 'added';
-          download.addedAt = download.addedAt || new Date().toISOString();
-          dbOps.updateDownload(download.id, {
-            status: 'added',
-            addedAt: download.addedAt,
-          });
+      // Mark all track downloads as 'added' since the album is now in library
+      // Check if files actually exist before updating status
+      const album = libraryManager.getAlbumById(albumId);
+      if (album) {
+        const albumTracks = libraryManager.getTracks(albumId);
+        const tracksByTitle = new Map(albumTracks.map(t => [t.trackName?.toLowerCase(), t]));
+        
+        for (const download of albumDownloads) {
+          // Check if there's a matching track in the library with a file
+          const trackTitle = download.trackTitle?.toLowerCase() || download.trackName?.toLowerCase();
+          const matchingTrack = trackTitle ? tracksByTitle.get(trackTitle) : null;
+          
+          if (matchingTrack && matchingTrack.hasFile && matchingTrack.path) {
+            // Track exists in library, update download status to added
+            if (download.status !== 'added') {
+              download.status = 'added';
+              download.addedAt = download.addedAt || new Date().toISOString();
+              download.destinationPath = download.destinationPath || matchingTrack.path;
+              dbOps.updateDownload(download.id, {
+                status: 'added',
+                addedAt: download.addedAt,
+                destinationPath: download.destinationPath,
+              });
+            }
+          } else if (download.status === 'completed' || download.tempFilePath) {
+            // File was completed but might not be matched yet - still mark as added
+            download.status = 'added';
+            download.addedAt = download.addedAt || new Date().toISOString();
+            dbOps.updateDownload(download.id, {
+              status: 'added',
+              addedAt: download.addedAt,
+            });
+          }
         }
       }
     }
@@ -3721,11 +3774,27 @@ export class DownloadManager {
     
     // Determine overall status from download records
     const hasDownloading = albumDownloads.some(d => d.status === 'downloading');
+    const hasAdded = albumDownloads.some(d => d.status === 'added');
+    const allAdded = albumDownloads.length > 0 && albumDownloads.every(d => d.status === 'added');
     const hasCompleted = albumDownloads.some(d => d.status === 'completed');
     const hasFailed = albumDownloads.some(d => d.status === 'failed');
     
+    // Priority: downloading > all added > has added > completed > failed > requested
+    let overallStatus = 'requested';
+    if (hasDownloading) {
+      overallStatus = 'downloading';
+    } else if (allAdded) {
+      overallStatus = 'added';
+    } else if (hasAdded) {
+      overallStatus = 'added';
+    } else if (hasCompleted) {
+      overallStatus = 'completed';
+    } else if (hasFailed) {
+      overallStatus = 'failed';
+    }
+    
     const status = {
-      status: hasDownloading ? 'downloading' : hasCompleted ? 'completed' : hasFailed ? 'failed' : 'requested',
+      status: overallStatus,
       updatedAt: new Date().toISOString(),
     };
     
