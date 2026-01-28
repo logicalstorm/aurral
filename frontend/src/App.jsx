@@ -12,7 +12,6 @@ import LibraryPage from "./pages/LibraryPage";
 import SettingsPage from "./pages/SettingsPage";
 import ArtistDetailsPage from "./pages/ArtistDetailsPage";
 import RequestsPage from "./pages/RequestsPage";
-import FlowPage from "./pages/FlowPage";
 import Login from "./pages/Login";
 import { checkHealth } from "./utils/api";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -44,7 +43,6 @@ const ProtectedRoute = ({ children }) => {
 function AppContent() {
   const [isHealthy, setIsHealthy] = useState(null);
   const [rootFolderConfigured, setRootFolderConfigured] = useState(false);
-  const [slskdConfigured, setSlskdConfigured] = useState(false);
   const { isAuthenticated, authRequired } = useAuth();
 
   useEffect(() => {
@@ -53,7 +51,6 @@ function AppContent() {
         const health = await checkHealth();
         setIsHealthy(health.status === "ok");
         setRootFolderConfigured(health.rootFolderConfigured || false);
-        setSlskdConfigured(health.slskdConfigured || false);
       } catch (error) {
         console.error("Health check failed:", error);
         setIsHealthy(false);
@@ -71,7 +68,6 @@ function AppContent() {
         <Layout
           isHealthy={isHealthy}
           rootFolderConfigured={rootFolderConfigured}
-          slskdConfigured={slskdConfigured}
         >
           {isHealthy === false && (
             <div className="mb-6 bg-red-500/20 border border-red-500/30 p-4">
@@ -122,7 +118,6 @@ function AppContent() {
             <Route path="/search" element={<SearchResultsPage />} />
             <Route path="/discover" element={<Navigate to="/" replace />} />
             <Route path="/library" element={<LibraryPage />} />
-            <Route path="/flow" element={<FlowPage />} />
             <Route path="/requests" element={<RequestsPage />} />
             <Route path="/artist/:mbid" element={<ArtistDetailsPage />} />
             <Route path="/settings" element={<SettingsPage />} />

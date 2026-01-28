@@ -1,221 +1,187 @@
 import express from "express";
 import { UUID_REGEX } from "../config/constants.js";
-import { libraryManager } from "../services/libraryManager.js";
-import { dbOps } from "../config/db-helpers.js";
 
 const router = express.Router();
 
+const toIso = (value) => {
+  if (!value) return new Date().toISOString();
+  if (typeof value === "string") return value;
+  try {
+    return new Date(value).toISOString();
+  } catch {
+    return new Date().toISOString();
+  }
+};
+
 router.get("/", async (req, res) => {
   try {
-    // Get album-based requests (new system)
-    let albumRequests = dbOps.getAlbumRequests();
-    const libraryArtists = libraryManager.getAllArtists();
+    const { lidarrClient } = await import("../services/lidarrClient.js");
 
-    let changed = false;
-    const { downloadManager } = await import("../services/downloadManager.js");
-    const { fileScanner } = await import("../services/fileScanner.js");
-    
-    const updatedAlbumRequests = await Promise.all(
-      albumRequests.map(async (req) => {
-        const album = libraryManager.getAlbumById(req.albumId);
-        if (!album) {
-          // Album not in library anymore - remove request
-          return null;
-        }
+    if (!lidarrClient?.isConfigured()) {
+      return res.json([]);
+    }
 
-        const artist = libraryManager.getArtistById(req.artistId);
-        if (!artist) {
-          // Artist not in library anymore - remove request
-          return null;
-        }
+    const [queue, history, artists] = await Promise.all([
+      lidarrClient.getQueue().catch(() => []),
+      lidarrClient.getHistory(1, 200).catch(() => ({ records: [] })),
+      lidarrClient.request("/artist").catch(() => []),
+    ]);
 
-        // Check if album has files on disk
-        const tracks = libraryManager.getTracks(album.id);
-        const tracksWithFiles = tracks.filter(t => t.hasFile && t.path);
-        
-        // Check if files actually exist in album folder (even if tracks aren't matched)
-        let filesExistInFolder = false;
-        let audioFileCount = 0;
-        let audioFiles = [];
-        if (album.path) {
-          try {
-            const fs = await import('fs/promises');
-            const path = await import('path');
-            const files = await fs.readdir(album.path).catch(() => []);
-            audioFiles = files.filter(f => /\.(flac|mp3|m4a|ogg|wav)$/i.test(f));
-            audioFileCount = audioFiles.length;
-            filesExistInFolder = audioFiles.length > 0;
-            
-            // If files exist but tracks aren't matched, try direct matching
-            if (filesExistInFolder && tracksWithFiles.length < audioFiles.length) {
-              console.log(`[Requests] Found ${audioFiles.length} files in "${album.albumName}" but only ${tracksWithFiles.length} tracks matched - attempting direct match`);
-              
-              for (const fileName of audioFiles) {
-                const filePath = path.join(album.path, fileName);
-                try {
-                  const stats = await fs.stat(filePath);
-                  
-                  // Try direct matching by filename
-                  const fileNameBase = path.basename(fileName, path.extname(fileName)).toLowerCase();
-                  let matched = false;
-                  
-                  for (const track of tracks) {
-                    if (track.hasFile && track.path === filePath) {
-                      matched = true;
-                      break;
-                    }
-                    
-                    const trackNameBase = (track.trackName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                    const fileBase = fileNameBase.replace(/[^a-z0-9]/g, '');
-                    
-                    // Try to match by track number + name pattern (e.g., "01 - Track Name" or "01 Track Name")
-                    const trackNumMatch = fileNameBase.match(/^(\d+)\s*[-.]?\s*(.+)$/);
-                    if (trackNumMatch) {
-                      const fileTrackNum = parseInt(trackNumMatch[1]);
-                      const fileTrackName = trackNumMatch[2].replace(/[^a-z0-9]/g, '');
-                      if (track.trackNumber === fileTrackNum && 
-                          (fileTrackName.includes(trackNameBase) || trackNameBase.includes(fileTrackName))) {
-                        await libraryManager.updateTrack(track.id, {
-                          path: filePath,
-                          hasFile: true,
-                          size: stats.size,
-                        });
-                        matched = true;
-                        console.log(`✓ Directly matched "${fileName}" to track "${track.trackName}"`);
-                        break;
-                      }
-                    }
-                    
-                    // Fallback: match by name similarity
-                    const similarity = fileScanner.calculateSimilarity(track.trackName, fileNameBase);
-                    if (!matched && (fileBase.includes(trackNameBase) || trackNameBase.includes(fileBase) || similarity >= 70)) {
-                      await libraryManager.updateTrack(track.id, {
-                        path: filePath,
-                        hasFile: true,
-                        size: stats.size,
-                      });
-                      matched = true;
-                      console.log(`✓ Directly matched "${fileName}" to track "${track.trackName}" by name`);
-                      break;
-                    }
-                  }
-                  
-                  // If no direct match, try fileScanner
-                  if (!matched) {
-                    const artists = libraryManager.getAllArtists();
-                    await fileScanner.matchFileToTrack(
-                      {
-                        path: filePath,
-                        name: fileName,
-                        size: stats.size,
-                      },
-                      artists
-                    );
-                  }
-                } catch (error) {
-                  console.warn(`Failed to match file ${fileName}:`, error.message);
-                }
-              }
-              
-              // Force statistics update after matching
-              await libraryManager.updateAlbumStatistics(album.id);
-            }
-          } catch (error) {
-            // Folder doesn't exist or can't be read
-          }
-        }
-        
-        // Refresh tracks after potential updates to get latest state
-        const refreshedTracks = libraryManager.getTracks(album.id);
-        const refreshedTracksWithFiles = refreshedTracks.filter(t => t.hasFile && t.path);
-        
-        const hasFiles = refreshedTracksWithFiles.length > 0 || filesExistInFolder;
-        
-        // Check if album is complete (all tracks have files)
-        const isComplete = refreshedTracks.length > 0 && refreshedTracksWithFiles.length === refreshedTracks.length;
-        const newStatus = isComplete ? "available" : (hasFiles ? "processing" : "processing");
-
-        // If album is complete, also update download records to "added" status
-        if (isComplete) {
-          // Update all download records for this album to "added" since files are in library
-          downloadManager.updateDownloadStatus(req.albumId, 'added', {
-            reason: 'Album complete in library, syncing download status',
-          });
-        }
-
-        if (newStatus !== req.status) {
-          changed = true;
-          dbOps.updateAlbumRequest(req.albumId, { status: newStatus });
-          return { ...req, status: newStatus };
-        }
-        return req;
-      })
+    const artistById = new Map(
+      (Array.isArray(artists) ? artists : []).map((a) => [
+        a.id,
+        {
+          id: a.id,
+          artistName: a.artistName,
+          foreignArtistId: a.foreignArtistId,
+        },
+      ]),
     );
-    
-    const filteredRequests = updatedAlbumRequests.filter(Boolean); // Remove null entries (deleted albums/artists)
 
-    // Format for frontend - include album and artist info
-    const formattedRequests = filteredRequests.map(req => {
-      const album = libraryManager.getAlbumById(req.albumId);
-      const artist = libraryManager.getArtistById(req.artistId);
-      
-      return {
-        id: req.id,
-        type: 'album',
-        albumId: req.albumId,
-        albumMbid: req.albumMbid,
-        albumName: req.albumName || album?.albumName,
-        artistId: req.artistId,
-        artistMbid: req.artistMbid,
-        artistName: req.artistName || artist?.artistName,
-        status: req.status,
-        requestedAt: req.requestedAt,
-        // For backward compatibility with frontend
-        mbid: req.artistMbid, // Use artist MBID for image lookup
-        name: req.albumName || album?.albumName, // Show album name
-        image: null, // Will be fetched by frontend
-      };
-    });
+    const requestsByAlbumId = new Map();
 
-    const sortedRequests = [...formattedRequests].sort(
+    const queueItems = Array.isArray(queue) ? queue : queue?.records || [];
+    for (const item of queueItems) {
+      const albumId = item?.album?.id;
+      if (albumId == null) continue;
+
+      const artistId = item?.artist?.id ?? item?.album?.artistId;
+      const artistInfo = artistId != null ? artistById.get(artistId) : null;
+
+      const albumName = item?.album?.title || item?.title || "Album";
+      const artistName =
+        item?.artist?.artistName || artistInfo?.artistName || "Artist";
+      const artistMbid =
+        item?.artist?.foreignArtistId || artistInfo?.foreignArtistId || null;
+
+      requestsByAlbumId.set(String(albumId), {
+        id: `lidarr-queue-${item.id ?? albumId}`,
+        type: "album",
+        albumId: String(albumId),
+        albumMbid: item?.album?.foreignAlbumId || null,
+        albumName,
+        artistId: artistId != null ? String(artistId) : null,
+        artistMbid,
+        artistName,
+        status: "processing",
+        requestedAt: toIso(item?.added),
+        mbid: artistMbid,
+        name: albumName,
+        image: null,
+      });
+    }
+
+    const historyRecords = Array.isArray(history?.records)
+      ? history.records
+      : Array.isArray(history)
+        ? history
+        : [];
+
+    for (const record of historyRecords) {
+      const albumId = record?.albumId;
+      if (albumId == null) continue;
+
+      const existing = requestsByAlbumId.get(String(albumId));
+      if (existing) continue;
+
+      const artistId = record?.artistId;
+      const artistInfo = artistId != null ? artistById.get(artistId) : null;
+
+      const albumName = record?.album?.title || record?.sourceTitle || "Album";
+      const artistName =
+        record?.artist?.artistName || artistInfo?.artistName || "Artist";
+      const artistMbid =
+        record?.artist?.foreignArtistId || artistInfo?.foreignArtistId || null;
+
+      const eventType = String(record?.eventType || "").toLowerCase();
+      const status = eventType.includes("import") ? "available" : "processing";
+
+      requestsByAlbumId.set(String(albumId), {
+        id: `lidarr-history-${record.id ?? albumId}`,
+        type: "album",
+        albumId: String(albumId),
+        albumMbid: record?.album?.foreignAlbumId || null,
+        albumName,
+        artistId: artistId != null ? String(artistId) : null,
+        artistMbid,
+        artistName,
+        status,
+        requestedAt: toIso(record?.date),
+        mbid: artistMbid,
+        name: albumName,
+        image: null,
+      });
+    }
+
+    const sorted = [...requestsByAlbumId.values()].sort(
       (a, b) => new Date(b.requestedAt) - new Date(a.requestedAt),
     );
 
-    res.json(sortedRequests);
+    res.json(sorted);
   } catch (error) {
-    console.error("Error in /api/requests:", error);
     res.status(500).json({ error: "Failed to fetch requests" });
   }
 });
 
-// Delete request by album ID (new album-based system)
 router.delete("/album/:albumId", async (req, res) => {
   const { albumId } = req.params;
+  if (!albumId) return res.status(400).json({ error: "albumId is required" });
 
-  if (!albumId) {
-    return res.status(400).json({ error: "albumId is required" });
+  try {
+    const { lidarrClient } = await import("../services/lidarrClient.js");
+    if (lidarrClient?.isConfigured()) {
+      const queue = await lidarrClient.getQueue().catch(() => []);
+      const queueItems = Array.isArray(queue) ? queue : queue?.records || [];
+      const targetAlbumId = parseInt(albumId, 10);
+
+      for (const item of queueItems) {
+        if (item?.album?.id === targetAlbumId && item?.id != null) {
+          await lidarrClient
+            .request(`/queue/${item.id}`, "DELETE")
+            .catch(() => null);
+        }
+      }
+    }
+
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ error: "Failed to remove request" });
   }
-
-  dbOps.deleteAlbumRequest(albumId);
-  res.json({ success: true });
 });
 
-// Delete request by MBID (legacy artist-based system)
 router.delete("/:mbid", async (req, res) => {
   const { mbid } = req.params;
-
   if (!UUID_REGEX.test(mbid)) {
     return res.status(400).json({ error: "Invalid MBID format" });
   }
 
-  // Remove from album requests if it matches artist MBID
-  const albumRequests = dbOps.getAlbumRequests();
-  const toDelete = albumRequests.filter(r => r.artistMbid === mbid);
-  for (const req of toDelete) {
-    dbOps.deleteAlbumRequest(req.albumId);
+  try {
+    const { lidarrClient } = await import("../services/lidarrClient.js");
+    if (!lidarrClient?.isConfigured()) {
+      return res.json({ success: true });
+    }
+
+    const artist = await lidarrClient.getArtistByMbid(mbid).catch(() => null);
+    if (!artist?.id) {
+      return res.json({ success: true });
+    }
+
+    const queue = await lidarrClient.getQueue().catch(() => []);
+    const queueItems = Array.isArray(queue) ? queue : queue?.records || [];
+
+    for (const item of queueItems) {
+      const itemArtistId = item?.artist?.id ?? item?.album?.artistId;
+      if (itemArtistId === artist.id && item?.id != null) {
+        await lidarrClient
+          .request(`/queue/${item.id}`, "DELETE")
+          .catch(() => null);
+      }
+    }
+
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ error: "Failed to remove request" });
   }
-  
-  res.json({ success: true });
 });
 
 export default router;

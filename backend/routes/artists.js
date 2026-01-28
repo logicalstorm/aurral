@@ -1,13 +1,17 @@
 import express from "express";
 import axios from "axios";
 import { UUID_REGEX } from "../config/constants.js";
-import { musicbrainzRequest, getLastfmApiKey, lastfmRequest, spotifySearchArtist } from "../services/apiClients.js";
+import {
+  musicbrainzRequest,
+  getLastfmApiKey,
+  lastfmRequest,
+  spotifySearchArtist,
+} from "../services/apiClients.js";
 import { imagePrefetchService } from "../services/imagePrefetchService.js";
 import { getAuthUser, getAuthPassword } from "../middleware/auth.js";
 import { dbOps } from "../config/db-helpers.js";
 
 const router = express.Router();
-
 
 const parseLastFmDate = (dateStr) => {
   if (!dateStr) return "";
@@ -69,20 +73,26 @@ const handleSearch = async (req, res) => {
                 imageUrl: img,
                 listeners: a.listeners,
               };
-              
+
               const cachedImage = dbOps.getImage(a.mbid);
-              if (cachedImage && cachedImage.imageUrl && cachedImage.imageUrl !== "NOT_FOUND") {
+              if (
+                cachedImage &&
+                cachedImage.imageUrl &&
+                cachedImage.imageUrl !== "NOT_FOUND"
+              ) {
                 result.imageUrl = cachedImage.imageUrl;
                 result.image = cachedImage.imageUrl;
               }
-              
+
               return result;
             });
 
           if (formattedArtists.length > 0) {
             // Pre-fetch images for search results in background
-            imagePrefetchService.prefetchSearchResults(formattedArtists).catch(() => {});
-            
+            imagePrefetchService
+              .prefetchSearchResults(formattedArtists)
+              .catch(() => {});
+
             return res.json({
               artists: formattedArtists,
               count: parseInt(
@@ -93,10 +103,7 @@ const handleSearch = async (req, res) => {
           }
         }
       } catch (error) {
-        console.warn(
-          "Last.fm search failed",
-          error.message,
-        );
+        console.warn("Last.fm search failed", error.message);
       }
     }
 
@@ -115,9 +122,10 @@ router.get("/artists", handleSearch);
 
 // Root route - return 404 for /api/artists without MBID
 router.get("/", async (req, res) => {
-  res.status(404).json({ 
+  res.status(404).json({
     error: "Not found",
-    message: "Use /api/artists/:mbid to get artist details, or /api/search/artists to search"
+    message:
+      "Use /api/artists/:mbid to get artist details, or /api/search/artists to search",
   });
 });
 
@@ -131,16 +139,22 @@ router.get("/release-group/:mbid/cover", async (req, res) => {
 
     const cacheKey = `rg:${mbid}`;
     const cachedImage = dbOps.getImage(cacheKey);
-    
-    if (cachedImage && cachedImage.imageUrl && cachedImage.imageUrl !== "NOT_FOUND") {
+
+    if (
+      cachedImage &&
+      cachedImage.imageUrl &&
+      cachedImage.imageUrl !== "NOT_FOUND"
+    ) {
       const cachedUrl = cachedImage.imageUrl;
       res.set("Cache-Control", "public, max-age=31536000, immutable");
       return res.json({
-        images: [{
-          image: cachedUrl,
-          front: true,
-          types: ["Front"],
-        }]
+        images: [
+          {
+            image: cachedUrl,
+            front: true,
+            types: ["Front"],
+          },
+        ],
       });
     }
 
@@ -150,40 +164,48 @@ router.get("/release-group/:mbid/cover", async (req, res) => {
     }
 
     try {
-      const coverArtJson = await axios.get(
-        `https://coverartarchive.org/release-group/${mbid}`,
-        {
+      const coverArtJson = await axios
+        .get(`https://coverartarchive.org/release-group/${mbid}`, {
           headers: { Accept: "application/json" },
           timeout: 2000,
-        }
-      ).catch(() => null);
+        })
+        .catch(() => null);
 
       if (coverArtJson?.data?.images && coverArtJson.data.images.length > 0) {
-        const frontImage = coverArtJson.data.images.find(img => img.front) || coverArtJson.data.images[0];
+        const frontImage =
+          coverArtJson.data.images.find((img) => img.front) ||
+          coverArtJson.data.images[0];
         if (frontImage) {
-          const imageUrl = frontImage.thumbnails?.["500"] || frontImage.thumbnails?.["large"] || frontImage.image;
+          const imageUrl =
+            frontImage.thumbnails?.["500"] ||
+            frontImage.thumbnails?.["large"] ||
+            frontImage.image;
           if (imageUrl) {
             dbOps.setImage(cacheKey, imageUrl);
-            
+
             res.set("Cache-Control", "public, max-age=31536000, immutable");
             return res.json({
-              images: [{
-                image: imageUrl,
-                front: true,
-                types: frontImage.types || ["Front"],
-              }]
+              images: [
+                {
+                  image: imageUrl,
+                  front: true,
+                  types: frontImage.types || ["Front"],
+                },
+              ],
             });
           }
         }
       }
-    } catch (e) {
-    }
+    } catch (e) {}
 
     dbOps.setImage(cacheKey, "NOT_FOUND");
     res.set("Cache-Control", "public, max-age=3600");
     res.json({ images: [] });
   } catch (error) {
-    console.error(`Error in release-group cover route for ${req.params.mbid}:`, error.message);
+    console.error(
+      `Error in release-group cover route for ${req.params.mbid}:`,
+      error.message,
+    );
     res.set("Cache-Control", "public, max-age=60");
     res.json({ images: [] });
   }
@@ -199,19 +221,19 @@ router.get("/release-group/:mbid/tracks", async (req, res) => {
 
     // Get release group to find a release
     const rgData = await musicbrainzRequest(`/release-group/${mbid}`, {
-      inc: 'releases',
+      inc: "releases",
     });
-    
+
     if (!rgData.releases || rgData.releases.length === 0) {
       return res.json([]);
     }
-    
+
     // Get first release to get tracks
     const releaseId = rgData.releases[0].id;
     const releaseData = await musicbrainzRequest(`/release/${releaseId}`, {
-      inc: 'recordings',
+      inc: "recordings",
     });
-    
+
     const tracks = [];
     if (releaseData.media && releaseData.media.length > 0) {
       for (const medium of releaseData.media) {
@@ -233,7 +255,7 @@ router.get("/release-group/:mbid/tracks", async (req, res) => {
         }
       }
     }
-    
+
     res.json(tracks);
   } catch (error) {
     console.error("Error fetching release group tracks:", error);
@@ -250,7 +272,7 @@ const sendSSE = (res, event, data) => {
     res.write(`event: ${event}\n`);
     res.write(`data: ${JSON.stringify(data)}\n\n`);
     // Flush the response to ensure it's sent immediately
-    if (res.flush && typeof res.flush === 'function') {
+    if (res.flush && typeof res.flush === "function") {
       res.flush();
     }
   } catch (err) {
@@ -267,10 +289,10 @@ const verifyTokenAuth = (req) => {
 
   // Check Authorization header first (if present)
   const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Basic ')) {
+  if (authHeader && authHeader.startsWith("Basic ")) {
     const token = authHeader.substring(6);
     try {
-      const [username, password] = atob(token).split(':');
+      const [username, password] = atob(token).split(":");
       const userMatches = username === getAuthUser();
       const passwordMatches = passwords.some((p) => password === p);
       if (userMatches && passwordMatches) {
@@ -285,7 +307,7 @@ const verifyTokenAuth = (req) => {
   const token = req.query.token;
   if (token) {
     try {
-      const [username, password] = atob(decodeURIComponent(token)).split(':');
+      const [username, password] = atob(decodeURIComponent(token)).split(":");
       const userMatches = username === getAuthUser();
       const passwordMatches = passwords.some((p) => password === p);
       if (userMatches && passwordMatches) {
@@ -303,12 +325,12 @@ const verifyTokenAuth = (req) => {
 router.get("/:mbid/stream", async (req, res) => {
   try {
     const { mbid } = req.params;
-    
+
     // Validate MBID format early
     if (!UUID_REGEX.test(mbid)) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: "Invalid MBID format",
-        message: `"${mbid}" is not a valid MusicBrainz ID. MBIDs must be UUIDs.`
+        message: `"${mbid}" is not a valid MusicBrainz ID. MBIDs must be UUIDs.`,
       });
     }
 
@@ -316,67 +338,210 @@ router.get("/:mbid/stream", async (req, res) => {
     if (!verifyTokenAuth(req)) {
       return res.status(401).json({
         error: "Unauthorized",
-        message: "Authentication required"
+        message: "Authentication required",
       });
     }
-    
+
     // Set up SSE headers
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
-    
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
+
     // Send initial connection message
-    sendSSE(res, 'connected', { mbid });
-    
+    sendSSE(res, "connected", { mbid });
+
     try {
-      // Check circuit breaker before making request
-      if (shouldSkipMusicBrainz()) {
-        console.log(`[Artists Stream] MusicBrainz circuit breaker is open, skipping request for ${mbid}`);
-        sendSSE(res, 'error', {
-          error: "Service temporarily unavailable",
-          message: "MusicBrainz is currently experiencing issues. Please try again later.",
-        });
-        return;
-      }
-      
-      // Check if request is already in progress (deduplication)
-      let artistData;
-      if (pendingArtistRequests.has(mbid)) {
-        console.log(`[Artists Stream] Request for ${mbid} already in progress, waiting...`);
+      const { lidarrClient } = await import("../services/lidarrClient.js");
+      const { libraryManager } = await import("../services/libraryManager.js");
+
+      let artistData = null;
+
+      let lidarrArtist = null;
+      let lidarrAlbums = [];
+
+      if (lidarrClient.isConfigured()) {
         try {
-          artistData = await pendingArtistRequests.get(mbid);
+          lidarrArtist = await lidarrClient.getArtistByMbid(mbid);
+          if (lidarrArtist) {
+            console.log(
+              `[Artists Stream] Found artist in Lidarr: ${lidarrArtist.artistName}`,
+            );
+            const libraryArtist = await libraryManager.getArtist(mbid);
+            if (libraryArtist) {
+              lidarrAlbums = await libraryManager.getAlbums(libraryArtist.id);
+            }
+
+            artistData = {
+              id: lidarrArtist.foreignArtistId || mbid,
+              name: lidarrArtist.artistName,
+              "sort-name": lidarrArtist.artistName,
+              disambiguation: "",
+              "type-id": null,
+              type: null,
+              country: null,
+              "life-span": {
+                begin: null,
+                end: null,
+                ended: false,
+              },
+              aliases: [],
+              tags: [],
+              genres: [],
+              "release-groups": lidarrAlbums.map((album) => ({
+                id: album.mbid,
+                title: album.albumName,
+                "first-release-date": album.releaseDate || null,
+                "primary-type": "Album",
+                "secondary-types": [],
+              })),
+              relations: [],
+              rating: { value: null, "votes-count": 0 },
+              "release-group-count": lidarrAlbums.length,
+              "release-count": lidarrAlbums.length,
+              _lidarrData: {
+                id: lidarrArtist.id,
+                monitored: lidarrArtist.monitored,
+                statistics: lidarrArtist.statistics,
+                images: lidarrArtist.images || [],
+              },
+            };
+
+            if (!shouldSkipMusicBrainz()) {
+              try {
+                const mbData = await musicbrainzRequest(`/artist/${mbid}`, {
+                  inc: "aliases+tags+ratings+genres+release-groups",
+                });
+                recordMusicBrainzSuccess();
+
+                if (mbData["release-groups"]) {
+                  const lidarrAlbumMap = new Map(
+                    lidarrAlbums.map((a) => [a.mbid, a]),
+                  );
+                  artistData["release-groups"] = mbData["release-groups"].map(
+                    (rg) => {
+                      const lidarrAlbum = lidarrAlbumMap.get(rg.id);
+                      if (lidarrAlbum) {
+                        return {
+                          ...rg,
+                          _lidarrData: {
+                            id: lidarrAlbum.id,
+                            monitored: lidarrAlbum.monitored,
+                            statistics: lidarrAlbum.statistics,
+                          },
+                        };
+                      }
+                      return rg;
+                    },
+                  );
+                }
+
+                artistData.aliases = mbData.aliases || [];
+                artistData.tags = mbData.tags || [];
+                artistData.genres = mbData.genres || [];
+                artistData.rating = mbData.rating || {
+                  value: null,
+                  "votes-count": 0,
+                };
+                artistData.disambiguation = mbData.disambiguation || "";
+                artistData["life-span"] =
+                  mbData["life-span"] || artistData["life-span"];
+              } catch (error) {
+                recordMusicBrainzFailure();
+                console.warn(
+                  `[Artists Stream] Failed to enrich with MusicBrainz data: ${error.message}`,
+                );
+              }
+            }
+
+            sendSSE(res, "artist", artistData);
+          }
         } catch (error) {
-          sendSSE(res, 'error', {
-            error: "Failed to fetch artist details",
-            message: error.response?.data?.error || error.message,
+          console.warn(
+            `[Artists Stream] Failed to fetch from Lidarr: ${error.message}`,
+          );
+        }
+      }
+
+      if (!artistData) {
+        if (shouldSkipMusicBrainz()) {
+          console.log(
+            `[Artists Stream] MusicBrainz circuit breaker is open and artist not in Lidarr, skipping request for ${mbid}`,
+          );
+          sendSSE(res, "error", {
+            error: "Service temporarily unavailable",
+            message:
+              "MusicBrainz is currently experiencing issues. Please try again later.",
           });
           return;
         }
-      } else {
-        // Fetch basic artist data from MusicBrainz
-        console.log(`[Artists Stream] Fetching artist ${mbid}`);
-        const fetchPromise = (async () => {
+
+        if (pendingArtistRequests.has(mbid)) {
+          console.log(
+            `[Artists Stream] Request for ${mbid} already in progress, waiting...`,
+          );
           try {
-            const data = await musicbrainzRequest(`/artist/${mbid}`, {
-              inc: "aliases+tags+ratings+genres+release-groups",
-            });
-            recordMusicBrainzSuccess();
-            return data;
+            artistData = await pendingArtistRequests.get(mbid);
+            sendSSE(res, "artist", artistData);
           } catch (error) {
-            recordMusicBrainzFailure();
-            throw error;
-          } finally {
-            pendingArtistRequests.delete(mbid);
+            sendSSE(res, "error", {
+              error: "Failed to fetch artist details",
+              message: error.response?.data?.error || error.message,
+            });
+            return;
           }
-        })();
-        pendingArtistRequests.set(mbid, fetchPromise);
-        artistData = await fetchPromise;
+        } else {
+          const fetchPromise = (async () => {
+            try {
+              const data = await musicbrainzRequest(`/artist/${mbid}`, {
+                inc: "aliases+tags+ratings+genres+release-groups",
+              });
+              recordMusicBrainzSuccess();
+
+              if (lidarrArtist && data) {
+                const lidarrAlbumMap = new Map(
+                  lidarrAlbums.map((a) => [a.mbid, a]),
+                );
+
+                if (data["release-groups"]) {
+                  data["release-groups"] = data["release-groups"].map((rg) => {
+                    const lidarrAlbum = lidarrAlbumMap.get(rg.id);
+                    if (lidarrAlbum) {
+                      return {
+                        ...rg,
+                        _lidarrData: {
+                          id: lidarrAlbum.id,
+                          monitored: lidarrAlbum.monitored,
+                          statistics: lidarrAlbum.statistics,
+                        },
+                      };
+                    }
+                    return rg;
+                  });
+                }
+
+                data._lidarrData = {
+                  id: lidarrArtist.id,
+                  monitored: lidarrArtist.monitored,
+                  statistics: lidarrArtist.statistics,
+                  images: lidarrArtist.images || [],
+                };
+              }
+
+              return data;
+            } catch (error) {
+              recordMusicBrainzFailure();
+              throw error;
+            } finally {
+              pendingArtistRequests.delete(mbid);
+            }
+          })();
+          pendingArtistRequests.set(mbid, fetchPromise);
+          artistData = await fetchPromise;
+          sendSSE(res, "artist", artistData);
+        }
       }
 
-      // Send artist data immediately
-      sendSSE(res, 'artist', artistData);
-      
       // Track all background tasks
       const backgroundTasks = [];
 
@@ -384,19 +549,27 @@ router.get("/:mbid/stream", async (req, res) => {
       const coverTask = (async () => {
         try {
           // db import removed - using dbOps directly
-          const { libraryManager } = await import("../services/libraryManager.js");
+          const { libraryManager } =
+            await import("../services/libraryManager.js");
           const libraryArtist = libraryManager.getArtist(mbid);
-          let artistName = libraryArtist?.artistName || artistData?.name || null;
+          let artistName =
+            libraryArtist?.artistName || artistData?.name || null;
 
           // Try cached first
           const cachedImage = dbOps.getImage(mbid);
-          if (cachedImage && cachedImage.imageUrl && cachedImage.imageUrl !== "NOT_FOUND") {
-            sendSSE(res, 'cover', {
-              images: [{
-                image: cachedImage.imageUrl,
-                front: true,
-                types: ["Front"],
-              }]
+          if (
+            cachedImage &&
+            cachedImage.imageUrl &&
+            cachedImage.imageUrl !== "NOT_FOUND"
+          ) {
+            sendSSE(res, "cover", {
+              images: [
+                {
+                  image: cachedImage.imageUrl,
+                  front: true,
+                  types: ["Front"],
+                },
+              ],
             });
             return;
           }
@@ -408,13 +581,15 @@ router.get("/:mbid/stream", async (req, res) => {
               if (spotifyArtist?.images?.length > 0) {
                 const imageUrl = spotifyArtist.images[0].url;
                 dbOps.setImage(mbid, imageUrl);
-                
-                sendSSE(res, 'cover', {
-                  images: [{
-                    image: imageUrl,
-                    front: true,
-                    types: ["Front"],
-                  }]
+
+                sendSSE(res, "cover", {
+                  images: [
+                    {
+                      image: imageUrl,
+                      front: true,
+                      types: ["Front"],
+                    },
+                  ],
                 });
                 return;
               }
@@ -424,7 +599,10 @@ router.get("/:mbid/stream", async (req, res) => {
           // Try Cover Art Archive as fallback
           if (artistData?.["release-groups"]?.length > 0) {
             const releaseGroups = artistData["release-groups"]
-              .filter(rg => rg["primary-type"] === "Album" || rg["primary-type"] === "EP")
+              .filter(
+                (rg) =>
+                  rg["primary-type"] === "Album" || rg["primary-type"] === "EP",
+              )
               .sort((a, b) => {
                 const dateA = a["first-release-date"] || "";
                 const dateB = b["first-release-date"] || "";
@@ -434,27 +612,33 @@ router.get("/:mbid/stream", async (req, res) => {
 
             for (const rg of releaseGroups) {
               try {
-                const coverArtResponse = await axios.get(
-                  `https://coverartarchive.org/release-group/${rg.id}`,
-                  {
+                const coverArtResponse = await axios
+                  .get(`https://coverartarchive.org/release-group/${rg.id}`, {
                     headers: { Accept: "application/json" },
                     timeout: 2000,
-                  }
-                ).catch(() => null);
+                  })
+                  .catch(() => null);
 
                 if (coverArtResponse?.data?.images?.length > 0) {
-                  const frontImage = coverArtResponse.data.images.find(img => img.front) || coverArtResponse.data.images[0];
+                  const frontImage =
+                    coverArtResponse.data.images.find((img) => img.front) ||
+                    coverArtResponse.data.images[0];
                   if (frontImage) {
-                    const imageUrl = frontImage.thumbnails?.["500"] || frontImage.thumbnails?.["large"] || frontImage.image;
+                    const imageUrl =
+                      frontImage.thumbnails?.["500"] ||
+                      frontImage.thumbnails?.["large"] ||
+                      frontImage.image;
                     if (imageUrl) {
                       dbOps.setImage(mbid, imageUrl);
-                      
-                      sendSSE(res, 'cover', {
-                        images: [{
-                          image: imageUrl,
-                          front: true,
-                          types: frontImage.types || ["Front"],
-                        }]
+
+                      sendSSE(res, "cover", {
+                        images: [
+                          {
+                            image: imageUrl,
+                            front: true,
+                            types: frontImage.types || ["Front"],
+                          },
+                        ],
                       });
                       return;
                     }
@@ -466,9 +650,9 @@ router.get("/:mbid/stream", async (req, res) => {
 
           // No cover found
           dbOps.setImage(mbid, "NOT_FOUND");
-          sendSSE(res, 'cover', { images: [] });
+          sendSSE(res, "cover", { images: [] });
         } catch (e) {
-          sendSSE(res, 'cover', { images: [] });
+          sendSSE(res, "cover", { images: [] });
         }
       })();
       backgroundTasks.push(coverTask);
@@ -510,15 +694,15 @@ router.get("/:mbid/stream", async (req, res) => {
                 })
                 .filter((a) => a.id);
 
-              sendSSE(res, 'similar', { artists: formattedArtists });
+              sendSSE(res, "similar", { artists: formattedArtists });
             } else {
-              sendSSE(res, 'similar', { artists: [] });
+              sendSSE(res, "similar", { artists: [] });
             }
           } catch (e) {
-            sendSSE(res, 'similar', { artists: [] });
+            sendSSE(res, "similar", { artists: [] });
           }
         } else {
-          sendSSE(res, 'similar', { artists: [] });
+          sendSSE(res, "similar", { artists: [] });
         }
       })();
       backgroundTasks.push(similarTask);
@@ -527,66 +711,81 @@ router.get("/:mbid/stream", async (req, res) => {
       const releaseGroupCoversTask = (async () => {
         if (artistData?.["release-groups"]?.length > 0) {
           const releaseGroups = artistData["release-groups"]
-            .filter(rg => rg["primary-type"] === "Album" || rg["primary-type"] === "EP")
+            .filter(
+              (rg) =>
+                rg["primary-type"] === "Album" || rg["primary-type"] === "EP",
+            )
             .slice(0, 20); // Limit to first 20
 
           // Fetch covers in parallel batches
           const batchSize = 5;
           const allCoverPromises = [];
-          
+
           for (let i = 0; i < releaseGroups.length; i += batchSize) {
             const batch = releaseGroups.slice(i, i + batchSize);
-            
+
             const batchPromises = batch.map(async (rg) => {
               try {
                 // db import removed - using dbOps directly
                 const cacheKey = `rg:${rg.id}`;
-                
+
                 // Check cache first
                 const cachedCover = dbOps.getImage(cacheKey);
-                if (cachedCover && cachedCover.imageUrl && cachedCover.imageUrl !== "NOT_FOUND") {
-                  sendSSE(res, 'releaseGroupCover', {
+                if (
+                  cachedCover &&
+                  cachedCover.imageUrl &&
+                  cachedCover.imageUrl !== "NOT_FOUND"
+                ) {
+                  sendSSE(res, "releaseGroupCover", {
                     mbid: rg.id,
-                    images: [{
-                      image: cachedCover.imageUrl,
-                      front: true,
-                      types: ["Front"],
-                    }]
+                    images: [
+                      {
+                        image: cachedCover.imageUrl,
+                        front: true,
+                        types: ["Front"],
+                      },
+                    ],
                   });
                   return;
                 }
 
                 if (cachedCover && cachedCover.imageUrl === "NOT_FOUND") {
-                  sendSSE(res, 'releaseGroupCover', {
+                  sendSSE(res, "releaseGroupCover", {
                     mbid: rg.id,
-                    images: []
+                    images: [],
                   });
                   return;
                 }
 
                 // Fetch from Cover Art Archive
-                const coverArtResponse = await axios.get(
-                  `https://coverartarchive.org/release-group/${rg.id}`,
-                  {
+                const coverArtResponse = await axios
+                  .get(`https://coverartarchive.org/release-group/${rg.id}`, {
                     headers: { Accept: "application/json" },
                     timeout: 2000,
-                  }
-                ).catch(() => null);
+                  })
+                  .catch(() => null);
 
                 if (coverArtResponse?.data?.images?.length > 0) {
-                  const frontImage = coverArtResponse.data.images.find(img => img.front) || coverArtResponse.data.images[0];
+                  const frontImage =
+                    coverArtResponse.data.images.find((img) => img.front) ||
+                    coverArtResponse.data.images[0];
                   if (frontImage) {
-                    const imageUrl = frontImage.thumbnails?.["500"] || frontImage.thumbnails?.["large"] || frontImage.image;
+                    const imageUrl =
+                      frontImage.thumbnails?.["500"] ||
+                      frontImage.thumbnails?.["large"] ||
+                      frontImage.image;
                     if (imageUrl) {
                       dbOps.setImage(cacheKey, imageUrl);
-                      
-                      sendSSE(res, 'releaseGroupCover', {
+
+                      sendSSE(res, "releaseGroupCover", {
                         mbid: rg.id,
-                        images: [{
-                          image: imageUrl,
-                          front: true,
-                          types: frontImage.types || ["Front"],
-                        }]
+                        images: [
+                          {
+                            image: imageUrl,
+                            front: true,
+                            types: frontImage.types || ["Front"],
+                          },
+                        ],
                       });
                       return;
                     }
@@ -595,21 +794,21 @@ router.get("/:mbid/stream", async (req, res) => {
 
                 // No cover found
                 dbOps.setImage(cacheKey, "NOT_FOUND");
-                sendSSE(res, 'releaseGroupCover', {
+                sendSSE(res, "releaseGroupCover", {
                   mbid: rg.id,
-                  images: []
+                  images: [],
                 });
               } catch (e) {
-                sendSSE(res, 'releaseGroupCover', {
+                sendSSE(res, "releaseGroupCover", {
                   mbid: rg.id,
-                  images: []
+                  images: [],
                 });
               }
             });
-            
+
             allCoverPromises.push(...batchPromises);
           }
-          
+
           // Wait for all cover fetches to complete
           await Promise.allSettled(allCoverPromises);
         }
@@ -617,25 +816,29 @@ router.get("/:mbid/stream", async (req, res) => {
       backgroundTasks.push(releaseGroupCoversTask);
 
       // Wait for all background tasks to complete before closing
-      Promise.allSettled(backgroundTasks).then(() => {
-        // Send completion event
-        sendSSE(res, 'complete', {});
-        
-        // Close connection after a short delay to ensure all messages are sent
-        setTimeout(() => {
-          res.end();
-        }, 100);
-      }).catch(() => {
-        // Even if there's an error, try to send complete and close
-        sendSSE(res, 'complete', {});
-        setTimeout(() => {
-          res.end();
-        }, 100);
-      });
-      
+      Promise.allSettled(backgroundTasks)
+        .then(() => {
+          // Send completion event
+          sendSSE(res, "complete", {});
+
+          // Close connection after a short delay to ensure all messages are sent
+          setTimeout(() => {
+            res.end();
+          }, 100);
+        })
+        .catch(() => {
+          // Even if there's an error, try to send complete and close
+          sendSSE(res, "complete", {});
+          setTimeout(() => {
+            res.end();
+          }, 100);
+        });
     } catch (error) {
-      console.error(`[Artists Stream] Error for artist ${mbid}:`, error.message);
-      sendSSE(res, 'error', {
+      console.error(
+        `[Artists Stream] Error for artist ${mbid}:`,
+        error.message,
+      );
+      sendSSE(res, "error", {
         error: "Failed to fetch artist details",
         message: error.response?.data?.error || error.message,
       });
@@ -653,22 +856,24 @@ router.get("/:mbid/stream", async (req, res) => {
 router.get("/:mbid", async (req, res) => {
   try {
     const { mbid } = req.params;
-    
+
     // Validate MBID format early to catch invalid requests
     if (!UUID_REGEX.test(mbid)) {
       console.log(`[Artists Route] Invalid MBID format: ${mbid}`);
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: "Invalid MBID format",
-        message: `"${mbid}" is not a valid MusicBrainz ID. MBIDs must be UUIDs.`
+        message: `"${mbid}" is not a valid MusicBrainz ID. MBIDs must be UUIDs.`,
       });
     }
-    
+
     // Check if request is already in progress (deduplication)
     if (pendingArtistRequests.has(mbid)) {
-      console.log(`[Artists Route] Request for ${mbid} already in progress, waiting...`);
+      console.log(
+        `[Artists Route] Request for ${mbid} already in progress, waiting...`,
+      );
       try {
         const data = await pendingArtistRequests.get(mbid);
-        res.setHeader('Content-Type', 'application/json');
+        res.setHeader("Content-Type", "application/json");
         return res.json(data);
       } catch (error) {
         return res.status(error.response?.status || 500).json({
@@ -677,45 +882,198 @@ router.get("/:mbid", async (req, res) => {
         });
       }
     }
-    
-    // Check circuit breaker before making request
+
+    console.log(`[Artists Route] Fetching artist details for MBID: ${mbid}`);
+
+    const { lidarrClient } = await import("../services/lidarrClient.js");
+    const { libraryManager } = await import("../services/libraryManager.js");
+
+    let data = null;
+
+    let lidarrArtist = null;
+    let lidarrAlbums = [];
+
+    if (lidarrClient.isConfigured()) {
+      try {
+        lidarrArtist = await lidarrClient.getArtistByMbid(mbid);
+        if (lidarrArtist) {
+          console.log(
+            `[Artists Route] Found artist in Lidarr: ${lidarrArtist.artistName}`,
+          );
+          const libraryArtist = await libraryManager.getArtist(mbid);
+          if (libraryArtist) {
+            lidarrAlbums = await libraryManager.getAlbums(libraryArtist.id);
+          }
+        }
+      } catch (error) {
+        console.warn(
+          `[Artists Route] Failed to fetch from Lidarr: ${error.message}`,
+        );
+      }
+    }
+
+    if (lidarrArtist) {
+      const musicbrainzData = {
+        id: lidarrArtist.foreignArtistId || mbid,
+        name: lidarrArtist.artistName,
+        "sort-name": lidarrArtist.artistName,
+        disambiguation: "",
+        "type-id": null,
+        type: null,
+        country: null,
+        "life-span": {
+          begin: null,
+          end: null,
+          ended: false,
+        },
+        aliases: [],
+        tags: [],
+        genres: [],
+        "release-groups": lidarrAlbums.map((album) => ({
+          id: album.mbid,
+          title: album.albumName,
+          "first-release-date": album.releaseDate || null,
+          "primary-type": "Album",
+          "secondary-types": [],
+        })),
+        relations: [],
+        rating: { value: null, "votes-count": 0 },
+        "release-group-count": lidarrAlbums.length,
+        "release-count": lidarrAlbums.length,
+        _lidarrData: {
+          id: lidarrArtist.id,
+          monitored: lidarrArtist.monitored,
+          statistics: lidarrArtist.statistics,
+          images: lidarrArtist.images || [],
+        },
+      };
+
+      if (!shouldSkipMusicBrainz()) {
+        try {
+          const mbData = await musicbrainzRequest(`/artist/${mbid}`, {
+            inc: "aliases+tags+ratings+genres+release-groups",
+          });
+          recordMusicBrainzSuccess();
+
+          if (mbData["release-groups"]) {
+            const lidarrAlbumMap = new Map(
+              lidarrAlbums.map((a) => [a.mbid, a]),
+            );
+            musicbrainzData["release-groups"] = mbData["release-groups"].map(
+              (rg) => {
+                const lidarrAlbum = lidarrAlbumMap.get(rg.id);
+                if (lidarrAlbum) {
+                  return {
+                    ...rg,
+                    _lidarrData: {
+                      id: lidarrAlbum.id,
+                      monitored: lidarrAlbum.monitored,
+                      statistics: lidarrAlbum.statistics,
+                    },
+                  };
+                }
+                return rg;
+              },
+            );
+          }
+
+          musicbrainzData.aliases = mbData.aliases || [];
+          musicbrainzData.tags = mbData.tags || [];
+          musicbrainzData.genres = mbData.genres || [];
+          musicbrainzData.rating = mbData.rating || {
+            value: null,
+            "votes-count": 0,
+          };
+          musicbrainzData.disambiguation = mbData.disambiguation || "";
+          musicbrainzData["life-span"] =
+            mbData["life-span"] || musicbrainzData["life-span"];
+        } catch (error) {
+          recordMusicBrainzFailure();
+          console.warn(
+            `[Artists Route] Failed to enrich with MusicBrainz data: ${error.message}`,
+          );
+        }
+      }
+
+      res.setHeader("Content-Type", "application/json");
+      return res.json(musicbrainzData);
+    }
+
     if (shouldSkipMusicBrainz()) {
-      console.log(`[Artists Route] MusicBrainz circuit breaker is open, skipping request for ${mbid}`);
+      console.log(
+        `[Artists Route] MusicBrainz circuit breaker is open and artist not in Lidarr, skipping request for ${mbid}`,
+      );
       return res.status(503).json({
         error: "Service temporarily unavailable",
-        message: "MusicBrainz is currently experiencing issues. Please try again later.",
+        message:
+          "MusicBrainz is currently experiencing issues. Please try again later.",
       });
     }
-    
-    console.log(`[Artists Route] Fetching artist details for MBID: ${mbid}`);
 
     const fetchPromise = (async () => {
       try {
         console.log(`[Artists Route] Calling MusicBrainz for ${mbid}`);
-        const data = await musicbrainzRequest(`/artist/${mbid}`, {
+        const musicbrainzData = await musicbrainzRequest(`/artist/${mbid}`, {
           inc: "aliases+tags+ratings+genres+release-groups",
         });
 
         console.log(`[Artists Route] Successfully fetched artist ${mbid}`);
         recordMusicBrainzSuccess();
-        return data;
+
+        if (lidarrArtist && musicbrainzData) {
+          const lidarrAlbumMap = new Map(lidarrAlbums.map((a) => [a.mbid, a]));
+
+          if (musicbrainzData["release-groups"]) {
+            musicbrainzData["release-groups"] = musicbrainzData[
+              "release-groups"
+            ].map((rg) => {
+              const lidarrAlbum = lidarrAlbumMap.get(rg.id);
+              if (lidarrAlbum) {
+                return {
+                  ...rg,
+                  _lidarrData: {
+                    id: lidarrAlbum.id,
+                    monitored: lidarrAlbum.monitored,
+                    statistics: lidarrAlbum.statistics,
+                  },
+                };
+              }
+              return rg;
+            });
+          }
+
+          musicbrainzData._lidarrData = {
+            id: lidarrArtist.id,
+            monitored: lidarrArtist.monitored,
+            statistics: lidarrArtist.statistics,
+            images: lidarrArtist.images || [],
+          };
+        }
+
+        return musicbrainzData;
       } catch (error) {
         recordMusicBrainzFailure();
-        console.error(`[Artists Route] MusicBrainz error for artist ${mbid}:`, error.message);
+        console.error(
+          `[Artists Route] MusicBrainz error for artist ${mbid}:`,
+          error.message,
+        );
         throw error;
       } finally {
         pendingArtistRequests.delete(mbid);
       }
     })();
-    
+
     pendingArtistRequests.set(mbid, fetchPromise);
-    
+
     try {
-      const data = await fetchPromise;
+      data = await fetchPromise;
       console.log(`[Artists Route] Response data type:`, typeof data);
       console.log(`[Artists Route] Response has id:`, !!data?.id);
-      console.log(`[Artists Route] Response keys:`, data ? Object.keys(data).slice(0, 10) : 'null');
-      res.setHeader('Content-Type', 'application/json');
+      console.log(
+        `[Artists Route] Response keys:`,
+        data ? Object.keys(data).slice(0, 10) : "null",
+      );
+      res.setHeader("Content-Type", "application/json");
       res.json(data);
     } catch (error) {
       console.error(`[Artists Route] Error stack:`, error.stack);
@@ -725,7 +1083,10 @@ router.get("/:mbid", async (req, res) => {
       });
     }
   } catch (error) {
-    console.error(`[Artists Route] Unexpected error in artist details route:`, error.message);
+    console.error(
+      `[Artists Route] Unexpected error in artist details route:`,
+      error.message,
+    );
     console.error(`[Artists Route] Error stack:`, error.stack);
     res.status(500).json({
       error: "Failed to fetch artist details",
@@ -745,8 +1106,10 @@ const MUSICBRAINZ_CIRCUIT_BREAKER_RESET_MS = 60000; // Reset after 1 minute
 
 const shouldSkipMusicBrainz = () => {
   const timeSinceLastFailure = Date.now() - musicbrainzLastFailure;
-  if (musicbrainzFailureCount >= MUSICBRAINZ_CIRCUIT_BREAKER_THRESHOLD && 
-      timeSinceLastFailure < MUSICBRAINZ_CIRCUIT_BREAKER_RESET_MS) {
+  if (
+    musicbrainzFailureCount >= MUSICBRAINZ_CIRCUIT_BREAKER_THRESHOLD &&
+    timeSinceLastFailure < MUSICBRAINZ_CIRCUIT_BREAKER_RESET_MS
+  ) {
     return true;
   }
   // Reset counter if enough time has passed
@@ -771,7 +1134,7 @@ const recordMusicBrainzSuccess = () => {
 // Background fetch function (doesn't block)
 const fetchCoverInBackground = async (mbid) => {
   if (pendingCoverRequests.has(mbid)) return;
-  
+
   const fetchPromise = (async () => {
     try {
       // db import removed - using dbOps directly
@@ -785,14 +1148,14 @@ const fetchCoverInBackground = async (mbid) => {
         try {
           const mbResult = await Promise.race([
             musicbrainzRequest(`/artist/${mbid}`, {}),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error("MusicBrainz timeout")), 1200)
-            )
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("MusicBrainz timeout")), 1200),
+            ),
           ]).catch((e) => {
             recordMusicBrainzFailure();
             return null;
           });
-          
+
           if (mbResult?.name) {
             artistName = mbResult.name;
             recordMusicBrainzSuccess();
@@ -810,11 +1173,11 @@ const fetchCoverInBackground = async (mbid) => {
         try {
           const spotifyArtist = await Promise.race([
             spotifySearchArtist(artistName),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error("Spotify timeout")), 1500)
-            )
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("Spotify timeout")), 1500),
+            ),
           ]).catch(() => null);
-          
+
           if (spotifyArtist?.images?.length > 0) {
             const imageUrl = spotifyArtist.images[0].url;
             dbOps.setImage(mbid, imageUrl);
@@ -828,7 +1191,7 @@ const fetchCoverInBackground = async (mbid) => {
       // Silent fail for background updates
     }
   })();
-  
+
   pendingCoverRequests.set(mbid, fetchPromise);
   try {
     await fetchPromise;
@@ -840,7 +1203,7 @@ const fetchCoverInBackground = async (mbid) => {
 router.get("/:mbid/cover", async (req, res) => {
   const { mbid } = req.params;
   const { refresh = false } = req.query;
-  
+
   try {
     if (!UUID_REGEX.test(mbid)) {
       return res.status(400).json({ error: "Invalid MBID format", images: [] });
@@ -853,41 +1216,49 @@ router.get("/:mbid/cover", async (req, res) => {
     }
 
     // db import removed - using dbOps directly
-    
+
     // Optimistic response: return cached data immediately if available
     const cachedImage = dbOps.getImage(mbid);
-    if (!refresh && cachedImage && cachedImage.imageUrl && cachedImage.imageUrl !== "NOT_FOUND") {
+    if (
+      !refresh &&
+      cachedImage &&
+      cachedImage.imageUrl &&
+      cachedImage.imageUrl !== "NOT_FOUND"
+    ) {
       console.log(`[Cover Route] Cache hit for ${mbid}`);
       const cachedUrl = cachedImage.imageUrl;
       res.set("Cache-Control", "public, max-age=31536000, immutable");
-      
+
       // Trigger background refresh if cache is old (older than 7 days)
       const cacheAge = cachedImage.cacheAge;
-      const shouldRefresh = !cacheAge || (Date.now() - cacheAge > 7 * 24 * 60 * 60 * 1000);
-      
+      const shouldRefresh =
+        !cacheAge || Date.now() - cacheAge > 7 * 24 * 60 * 60 * 1000;
+
       if (shouldRefresh) {
         // Don't await - let it run in background
         fetchCoverInBackground(mbid).catch(() => {});
       }
-      
+
       return res.json({
-        images: [{
-          image: cachedUrl,
-          front: true,
-          types: ["Front"],
-        }]
+        images: [
+          {
+            image: cachedUrl,
+            front: true,
+            types: ["Front"],
+          },
+        ],
       });
     }
 
     if (!refresh && cachedImage && cachedImage.imageUrl === "NOT_FOUND") {
       console.log(`[Cover Route] NOT_FOUND cache for ${mbid}`);
       res.set("Cache-Control", "public, max-age=3600");
-      
+
       // Try again in background after some time (maybe new images available)
       setTimeout(() => {
         fetchCoverInBackground(mbid).catch(() => {});
       }, 60000); // Try again after 1 minute
-      
+
       return res.json({ images: [] });
     }
 
@@ -896,7 +1267,8 @@ router.get("/:mbid/cover", async (req, res) => {
     const fetchPromise = (async () => {
       try {
         // db import removed - using dbOps directly
-        const { libraryManager } = await import("../services/libraryManager.js");
+        const { libraryManager } =
+          await import("../services/libraryManager.js");
         const libraryArtist = libraryManager.getArtist(mbid);
 
         // Try to get artist name from library first (fastest, no API call)
@@ -909,14 +1281,17 @@ router.get("/:mbid/cover", async (req, res) => {
           try {
             mbResult = await Promise.race([
               musicbrainzRequest(`/artist/${mbid}`, {}),
-              new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("MusicBrainz timeout")), 1200)
-              )
+              new Promise((_, reject) =>
+                setTimeout(
+                  () => reject(new Error("MusicBrainz timeout")),
+                  1200,
+                ),
+              ),
             ]).catch((e) => {
               recordMusicBrainzFailure();
               return null;
             });
-            
+
             if (mbResult?.name) {
               artistName = mbResult.name;
               recordMusicBrainzSuccess();
@@ -934,20 +1309,22 @@ router.get("/:mbid/cover", async (req, res) => {
           try {
             const spotifyArtist = await Promise.race([
               spotifySearchArtist(artistName),
-              new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("Spotify timeout")), 1500)
-              )
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("Spotify timeout")), 1500),
+              ),
             ]).catch(() => null);
-            
+
             if (spotifyArtist?.images?.length > 0) {
               const imageUrl = spotifyArtist.images[0].url;
               dbOps.setImage(mbid, imageUrl);
               return {
-                images: [{
-                  image: imageUrl,
-                  front: true,
-                  types: ["Front"],
-                }]
+                images: [
+                  {
+                    image: imageUrl,
+                    front: true,
+                    types: ["Front"],
+                  },
+                ],
               };
             }
           } catch (e) {
@@ -961,13 +1338,16 @@ router.get("/:mbid/cover", async (req, res) => {
           // Don't make another MusicBrainz call if we don't have the data
           return { images: [] };
         }
-        
+
         try {
           const artistDataForRG = mbResult;
 
           if (artistDataForRG?.["release-groups"]?.length > 0) {
             const releaseGroups = artistDataForRG["release-groups"]
-              .filter(rg => rg["primary-type"] === "Album" || rg["primary-type"] === "EP")
+              .filter(
+                (rg) =>
+                  rg["primary-type"] === "Album" || rg["primary-type"] === "EP",
+              )
               .sort((a, b) => {
                 const dateA = a["first-release-date"] || "";
                 const dateB = b["first-release-date"] || "";
@@ -977,30 +1357,39 @@ router.get("/:mbid/cover", async (req, res) => {
 
             // Try cover art in parallel
             const coverArtResults = await Promise.allSettled(
-              releaseGroups.map(rg => 
-                axios.get(
-                  `https://coverartarchive.org/release-group/${rg.id}`,
-                  {
+              releaseGroups.map((rg) =>
+                axios
+                  .get(`https://coverartarchive.org/release-group/${rg.id}`, {
                     headers: { Accept: "application/json" },
                     timeout: 2000,
-                  }
-                ).catch(() => null)
-              )
+                  })
+                  .catch(() => null),
+              ),
             );
 
             for (const result of coverArtResults) {
-              if (result.status === 'fulfilled' && result.value?.data?.images?.length > 0) {
-                const frontImage = result.value.data.images.find(img => img.front) || result.value.data.images[0];
+              if (
+                result.status === "fulfilled" &&
+                result.value?.data?.images?.length > 0
+              ) {
+                const frontImage =
+                  result.value.data.images.find((img) => img.front) ||
+                  result.value.data.images[0];
                 if (frontImage) {
-                  const imageUrl = frontImage.thumbnails?.["500"] || frontImage.thumbnails?.["large"] || frontImage.image;
+                  const imageUrl =
+                    frontImage.thumbnails?.["500"] ||
+                    frontImage.thumbnails?.["large"] ||
+                    frontImage.image;
                   if (imageUrl) {
                     dbOps.setImage(mbid, imageUrl);
                     return {
-                      images: [{
-                        image: imageUrl,
-                        front: true,
-                        types: frontImage.types || ["Front"],
-                      }]
+                      images: [
+                        {
+                          image: imageUrl,
+                          front: true,
+                          types: frontImage.types || ["Front"],
+                        },
+                      ],
                     };
                   }
                 }
@@ -1020,17 +1409,19 @@ router.get("/:mbid/cover", async (req, res) => {
 
     pendingCoverRequests.set(mbid, fetchPromise);
     const result = await fetchPromise;
-    
+
     if (result.images && result.images.length > 0) {
       console.log(`[Cover Route] Successfully returning cover for ${mbid}`);
       res.set("Cache-Control", "public, max-age=31536000, immutable");
     } else {
-      console.log(`[Cover Route] No cover found for ${mbid}, caching NOT_FOUND`);
+      console.log(
+        `[Cover Route] No cover found for ${mbid}, caching NOT_FOUND`,
+      );
       // db import removed - using dbOps directly
       dbOps.setImage(mbid, "NOT_FOUND");
       res.set("Cache-Control", "public, max-age=3600");
     }
-    
+
     res.json({ images: result.images || [] });
   } catch (error) {
     console.error(`Error in cover route for ${mbid}:`, error.message);

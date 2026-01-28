@@ -7,16 +7,17 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 
-import { db } from "./backend/config/db.js";
 import { createAuthMiddleware } from "./backend/middleware/auth.js";
-import { updateDiscoveryCache, getDiscoveryCache } from "./backend/services/discoveryService.js";
+import {
+  updateDiscoveryCache,
+  getDiscoveryCache,
+} from "./backend/services/discoveryService.js";
 
 import settingsRouter from "./backend/routes/settings.js";
 import artistsRouter from "./backend/routes/artists.js";
 import libraryRouter from "./backend/routes/library.js";
 import discoveryRouter from "./backend/routes/discovery.js";
 import requestsRouter from "./backend/routes/requests.js";
-import playlistsRouter from "./backend/routes/playlists.js";
 import healthRouter from "./backend/routes/health.js";
 
 // Get __dirname for .env file path
@@ -24,23 +25,25 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Load .env file from the backend directory
-dotenv.config({ path: path.join(__dirname, 'backend', '.env') });
+dotenv.config({ path: path.join(__dirname, "backend", ".env") });
 
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception:", error);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
 });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(helmet({
-  contentSecurityPolicy: false,
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+  }),
+);
 app.use(express.json());
 
 app.use(createAuthMiddleware());
@@ -57,7 +60,6 @@ app.use("/api/artists", artistsRouter);
 app.use("/api/library", libraryRouter);
 app.use("/api/discover", discoveryRouter);
 app.use("/api/requests", requestsRouter);
-app.use("/api/playlists", playlistsRouter);
 app.use("/api/health", healthRouter);
 
 const frontendDist = path.join(__dirname, "frontend", "dist");
@@ -80,25 +82,31 @@ if (fs.existsSync(frontendDist)) {
   });
 }
 
-setInterval(() => {
-  updateDiscoveryCache().catch(err => {
-    console.error("Error in scheduled discovery update:", err.message);
-  });
-}, 24 * 60 * 60 * 1000);
+setInterval(
+  () => {
+    updateDiscoveryCache().catch((err) => {
+      console.error("Error in scheduled discovery update:", err.message);
+    });
+  },
+  24 * 60 * 60 * 1000,
+);
 
 setTimeout(async () => {
   const { getLastfmApiKey } = await import("./backend/services/apiClients.js");
-  const { libraryManager } = await import("./backend/services/libraryManager.js");
-  
+  const { libraryManager } =
+    await import("./backend/services/libraryManager.js");
+  const { dbOps } = await import("./backend/config/db-helpers.js");
+
   const hasLastfm = !!getLastfmApiKey();
-  const libraryArtists = libraryManager.getAllArtists();
+  const libraryArtists = await libraryManager.getAllArtists();
   const hasArtists = libraryArtists.length > 0;
-  
+
   // If nothing is configured, clear discovery cache
   if (!hasLastfm && !hasArtists) {
-    console.log("Discovery not configured (no Last.fm key and no artists). Clearing cache.");
+    console.log(
+      "Discovery not configured (no Last.fm key and no artists). Clearing cache.",
+    );
     try {
-      const { dbOps } = await import("./backend/config/db-helpers.js");
       dbOps.updateDiscoveryCache({
         recommendations: [],
         globalTop: [],
@@ -112,21 +120,24 @@ setTimeout(async () => {
     }
     return;
   }
-  
-  const lastUpdated = db.data?.discovery?.lastUpdated;
-  const discoveryCache = getDiscoveryCache();
-  const hasRecommendations = discoveryCache.recommendations && discoveryCache.recommendations.length > 0;
-  const hasGenres = discoveryCache.topGenres && discoveryCache.topGenres.length > 0;
-  
+
+  const discoveryCache = dbOps.getDiscoveryCache();
+  const lastUpdated = discoveryCache?.lastUpdated;
+  const hasRecommendations =
+    discoveryCache.recommendations && discoveryCache.recommendations.length > 0;
+  const hasGenres =
+    discoveryCache.topGenres && discoveryCache.topGenres.length > 0;
+
   const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
-  const needsUpdate = !lastUpdated || 
-                      new Date(lastUpdated).getTime() < twentyFourHoursAgo ||
-                      !hasRecommendations ||
-                      !hasGenres;
-  
+  const needsUpdate =
+    !lastUpdated ||
+    new Date(lastUpdated).getTime() < twentyFourHoursAgo ||
+    !hasRecommendations ||
+    !hasGenres;
+
   if (needsUpdate) {
     console.log("Discovery cache needs update. Starting...");
-    updateDiscoveryCache().catch(err => {
+    updateDiscoveryCache().catch((err) => {
       console.error("Error in initial discovery update:", err.message);
     });
   } else {
@@ -139,24 +150,23 @@ setTimeout(async () => {
 const server = app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   try {
-    const { libraryManager } = await import("./backend/services/libraryManager.js");
-    const { slskdClient } = await import("./backend/services/slskdClient.js");
-    const { downloadManager } = await import("./backend/services/downloadManager.js");
-    
+    const { libraryManager } =
+      await import("./backend/services/libraryManager.js");
+
     const rootFolder = libraryManager.getRootFolder();
-    console.log(`Root folder: ${rootFolder || 'Not configured'}`);
-    console.log(`slskd configured: ${slskdClient.isConfigured()}`);
-    console.log(`Download manager initialized`);
+    console.log(`Root folder: ${rootFolder || "Not configured"}`);
   } catch (error) {
     console.error("Error during server startup:", error.message);
   }
 });
 
-server.on('error', (error) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(`Port ${PORT} is already in use. Please stop the other process or use a different port.`);
+server.on("error", (error) => {
+  if (error.code === "EADDRINUSE") {
+    console.error(
+      `Port ${PORT} is already in use. Please stop the other process or use a different port.`,
+    );
     process.exit(1);
   } else {
-    console.error('Server error:', error);
+    console.error("Server error:", error);
   }
 });
