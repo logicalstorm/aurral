@@ -82,6 +82,20 @@ function ArtistDetailsPage() {
   const [coverImages, setCoverImages] = useState([]);
   const [libraryArtist, setLibraryArtist] = useState(null);
   const [libraryAlbums, setLibraryAlbums] = useState([]);
+
+  // Helper function to deduplicate albums by ID and MBID
+  const deduplicateAlbums = (albums) => {
+    const seen = new Map();
+    return albums.filter((album) => {
+      // Use ID as primary key, MBID+artistId as secondary
+      const key = album.id || `${album.mbid}-${album.artistId}`;
+      if (seen.has(key)) {
+        return false; // Duplicate
+      }
+      seen.set(key, true);
+      return true;
+    });
+  };
   const [similarArtists, setSimilarArtists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -454,7 +468,7 @@ function ArtistDetailsPage() {
           const refreshedArtist = await getLibraryArtist(mbid);
           setLibraryArtist(refreshedArtist);
           const albums = await getLibraryAlbums(refreshedArtist.id);
-          setLibraryAlbums(albums);
+          setLibraryAlbums(deduplicateAlbums(albums));
           showSuccess("Artist data refreshed successfully.");
         } catch (err) {
           console.error("Failed to refresh artist data:", err);
@@ -628,7 +642,7 @@ function ArtistDetailsPage() {
           fullArtist.mbid || fullArtist.foreignArtistId,
         );
         const albums = await getLibraryAlbums(fullArtist.id);
-        setLibraryAlbums(albums);
+        setLibraryAlbums(deduplicateAlbums(albums));
       }
 
       showSuccess(`${artist.name} added to library successfully!`);
@@ -671,7 +685,7 @@ function ArtistDetailsPage() {
             fullArtist.mbid || fullArtist.foreignArtistId,
           );
           const albums = await getLibraryAlbums(fullArtist.id);
-          setLibraryAlbums(albums);
+          setLibraryAlbums(deduplicateAlbums(albums));
         }
       }
 
@@ -704,15 +718,28 @@ function ArtistDetailsPage() {
             albumId,
             title,
           );
-          setLibraryAlbums((prev) => [...prev, libraryAlbum]);
+          
+          // Always refresh albums list from server after adding to prevent duplicates
+          // This ensures we have the latest state from the backend
+          const refreshedAlbums = await getLibraryAlbums(currentLibraryArtist.id);
+          const uniqueAlbums = deduplicateAlbums(refreshedAlbums);
+          setLibraryAlbums(uniqueAlbums);
+          
+          // Find the album in the refreshed list
+          libraryAlbum = uniqueAlbums.find(
+            (a) =>
+              (a.mbid === albumId || a.foreignAlbumId === albumId) &&
+              a.artistId === currentLibraryArtist.id,
+          );
         } catch (err) {
           // If that fails, try to refresh artist to get albums
           await refreshLibraryArtist(
             currentLibraryArtist.mbid || currentLibraryArtist.foreignArtistId,
           );
           const albums = await getLibraryAlbums(currentLibraryArtist.id);
-          setLibraryAlbums(albums);
-          libraryAlbum = albums.find(
+          const uniqueAlbums = deduplicateAlbums(albums);
+          setLibraryAlbums(uniqueAlbums);
+          libraryAlbum = uniqueAlbums.find(
             (a) =>
               (a.mbid === albumId || a.foreignAlbumId === albumId) &&
               a.artistId === currentLibraryArtist.id,

@@ -182,6 +182,68 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 
+  -- Dead Letter Queue table for permanently failed downloads
+  CREATE TABLE IF NOT EXISTS dead_letter_queue (
+    id TEXT PRIMARY KEY,
+    original_download_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    artist_id TEXT,
+    album_id TEXT,
+    track_id TEXT,
+    artist_name TEXT,
+    album_name TEXT,
+    track_name TEXT,
+    error_type TEXT,
+    last_error TEXT,
+    retry_count INTEGER DEFAULT 0,
+    requeue_count INTEGER DEFAULT 0,
+    failed_at TEXT NOT NULL,
+    moved_to_dlq_at TEXT NOT NULL,
+    events TEXT,
+    can_retry INTEGER DEFAULT 1,
+    retry_after TEXT
+  );
+
+  -- Blocked Sources table for tracking bad peers
+  CREATE TABLE IF NOT EXISTS blocked_sources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    blocked_at TEXT NOT NULL,
+    reason TEXT,
+    failure_count INTEGER DEFAULT 1,
+    last_failure_at TEXT NOT NULL,
+    unblock_after TEXT,
+    permanent INTEGER DEFAULT 0,
+    UNIQUE(username)
+  );
+
+  -- Download Attempts table for tracking each download attempt
+  CREATE TABLE IF NOT EXISTS download_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    download_id TEXT NOT NULL,
+    attempt_number INTEGER NOT NULL,
+    username TEXT,
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    duration_ms INTEGER,
+    status TEXT NOT NULL,
+    error_type TEXT,
+    error_message TEXT,
+    bytes_transferred INTEGER DEFAULT 0,
+    transfer_speed_bps INTEGER,
+    file_path TEXT,
+    FOREIGN KEY (download_id) REFERENCES downloads(id) ON DELETE CASCADE
+  );
+
+  -- Download Metrics table for success/failure rates
+  CREATE TABLE IF NOT EXISTS download_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recorded_at TEXT NOT NULL,
+    metric_type TEXT NOT NULL,
+    metric_value REAL NOT NULL,
+    metadata TEXT
+  );
+
   -- Create indexes for performance
   CREATE INDEX IF NOT EXISTS idx_albums_artist ON albums(artist_id);
   CREATE INDEX IF NOT EXISTS idx_tracks_album ON tracks(album_id);
@@ -192,7 +254,87 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_activity_log_category ON activity_log(category);
   CREATE INDEX IF NOT EXISTS idx_album_requests_album ON album_requests(album_id);
   CREATE INDEX IF NOT EXISTS idx_album_requests_artist ON album_requests(artist_id);
+  CREATE INDEX IF NOT EXISTS idx_dead_letter_queue_type ON dead_letter_queue(type);
+  CREATE INDEX IF NOT EXISTS idx_dead_letter_queue_failed_at ON dead_letter_queue(failed_at);
+  CREATE INDEX IF NOT EXISTS idx_blocked_sources_username ON blocked_sources(username);
+  CREATE INDEX IF NOT EXISTS idx_download_attempts_download ON download_attempts(download_id);
+  CREATE INDEX IF NOT EXISTS idx_download_metrics_type ON download_metrics(metric_type);
+  CREATE INDEX IF NOT EXISTS idx_download_metrics_recorded ON download_metrics(recorded_at);
 `);
+
+// Add missing columns to downloads table if they don't exist (migration)
+try {
+  // Get existing columns
+  const existingColumns = db.pragma('table_info(downloads)').map(col => col.name);
+  
+  // Add missing columns for session tracking and file paths
+  const missingColumns = [
+    { name: 'temp_file_path', type: 'TEXT' },
+    { name: 'track_title', type: 'TEXT' },
+    { name: 'track_position', type: 'INTEGER' },
+    { name: 'slskd_download_id', type: 'TEXT' },
+    { name: 'username', type: 'TEXT' },
+    { name: 'download_session_id', type: 'TEXT' },
+    { name: 'parent_download_id', type: 'TEXT' },
+    { name: 'is_parent', type: 'INTEGER DEFAULT 0' },
+    { name: 'stale', type: 'INTEGER DEFAULT 0' },
+    { name: 'tried_usernames', type: 'TEXT' }, // JSON array
+    { name: 'slskd_file_path', type: 'TEXT' },
+    { name: 'error_type', type: 'TEXT' },
+    { name: 'last_requeue_attempt', type: 'TEXT' },
+  ];
+  
+  for (const col of missingColumns) {
+    if (!existingColumns.includes(col.name)) {
+      try {
+        db.prepare(`ALTER TABLE downloads ADD COLUMN ${col.name} ${col.type}`).run();
+        console.log(`✓ Added column ${col.name} to downloads table`);
+      } catch (err) {
+        console.warn(`Could not add column ${col.name}:`, err.message);
+      }
+    }
+  }
+} catch (err) {
+  console.warn('Database migration warning:', err.message);
+}
+
+try {
+  const tableInfo = db.pragma('table_info(dead_letter_queue)');
+  if (tableInfo.length > 0) {
+    const fkList = db.pragma('foreign_key_list(dead_letter_queue)');
+    if (fkList.length > 0) {
+      console.log('Migrating dead_letter_queue to remove foreign key constraint...');
+      db.exec(`
+        ALTER TABLE dead_letter_queue RENAME TO dead_letter_queue_old;
+        CREATE TABLE dead_letter_queue (
+          id TEXT PRIMARY KEY,
+          original_download_id TEXT NOT NULL,
+          type TEXT NOT NULL,
+          artist_id TEXT,
+          album_id TEXT,
+          track_id TEXT,
+          artist_name TEXT,
+          album_name TEXT,
+          track_name TEXT,
+          error_type TEXT,
+          last_error TEXT,
+          retry_count INTEGER DEFAULT 0,
+          requeue_count INTEGER DEFAULT 0,
+          failed_at TEXT NOT NULL,
+          moved_to_dlq_at TEXT NOT NULL,
+          events TEXT,
+          can_retry INTEGER DEFAULT 1,
+          retry_after TEXT
+        );
+        INSERT INTO dead_letter_queue SELECT * FROM dead_letter_queue_old;
+        DROP TABLE dead_letter_queue_old;
+      `);
+      console.log('✓ Migrated dead_letter_queue table');
+    }
+  }
+} catch (err) {
+  console.warn('DLQ migration warning:', err.message);
+}
 
 // Helper functions for JSON handling
 export const dbHelpers = {

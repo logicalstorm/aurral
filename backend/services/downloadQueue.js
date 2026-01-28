@@ -1,6 +1,11 @@
-// Lazy imports to avoid circular dependencies
-let slskdClient, libraryManager, downloadManager, libraryMonitor;
 import { dbOps } from '../config/db-helpers.js';
+import { DOWNLOAD_STATES, STALLED_TIMEOUT_MS } from '../config/constants.js';
+import { downloadStateMachine } from './downloadStateMachine.js';
+import { sourceManager } from './sourceManager.js';
+import fs from 'fs';
+import path from 'path';
+
+let slskdClient, libraryManager, downloadManager, libraryMonitor;
 
 async function getDependencies() {
   if (!slskdClient) {
@@ -33,37 +38,184 @@ export class DownloadQueue {
     this.queue = [];
     this.processing = false;
     this.paused = false;
-    this.maxConcurrent = 3; // Max concurrent downloads
-    this.currentDownloads = new Set(); // Track active downloads
-    this.rateLimitDelay = 2000; // Base delay between downloads (ms)
+    this.maxConcurrent = 3;
+    this.currentDownloads = new Set();
+    this.rateLimitDelay = 2000;
     this.processInterval = null;
+    this.stalledCheckInterval = null;
     this.initialized = false;
     
-    // Initialize queue from database (async, but don't block)
+    this.schedule = {
+      enabled: false,
+      startHour: 0,
+      endHour: 24,
+      daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+      timezone: 'local',
+    };
+    
     this.initialize();
   }
 
   async initialize() {
     await this.loadQueueFromDb();
     this.initialized = true;
-    // Start processing queue
     this.start();
+    this.startStalledDetection();
+    downloadStateMachine.startMetricsCollection();
+    sourceManager.startSpeedMonitoring();
   }
 
-  /**
-   * Load queue from database on startup
-   */
+  startStalledDetection() {
+    if (this.stalledCheckInterval) {
+      clearInterval(this.stalledCheckInterval);
+    }
+
+    this.stalledCheckInterval = setInterval(async () => {
+      await this.checkAndHandleStalledDownloads();
+    }, 60000);
+
+    console.log('[Download Queue] Started stalled detection');
+  }
+
+  async checkAndHandleStalledDownloads() {
+    try {
+      const stalledDownloads = dbOps.getStalledDownloads(STALLED_TIMEOUT_MS);
+      
+      for (const download of stalledDownloads) {
+        console.log(`[Download Queue] Handling stalled download: ${download.id}`);
+        
+        this.currentDownloads.delete(download.id);
+        
+        const result = downloadStateMachine.handleDownloadFailure(
+          download, 
+          new Error('Download stalled - no progress for 30+ minutes'),
+          'timeout'
+        );
+
+        if (result.success && result.download.status === DOWNLOAD_STATES.QUEUED) {
+          await this.enqueue(result.download);
+        }
+      }
+
+      if (stalledDownloads.length > 0) {
+        console.log(`[Download Queue] Processed ${stalledDownloads.length} stalled downloads`);
+      }
+      
+      const slowTransfers = await sourceManager.checkSlowTransfers();
+      for (const slow of slowTransfers) {
+        const download = dbOps.getDownloadById(slow.downloadId);
+        if (download && download.status === DOWNLOAD_STATES.DOWNLOADING) {
+          console.log(`[Download Queue] Aborting slow transfer: ${slow.downloadId} (${Math.round(slow.averageSpeed)} B/s)`);
+          
+          await sourceManager.abortSlowTransfer(slow.downloadId, 'Slow transfer speed');
+          
+          const result = downloadStateMachine.handleDownloadFailure(
+            download,
+            new Error(`Transfer too slow: ${Math.round(slow.averageSpeed)} B/s`),
+            'slow_transfer'
+          );
+
+          if (result.success && result.download.status === DOWNLOAD_STATES.QUEUED) {
+            await this.enqueue(result.download);
+          }
+        }
+      }
+      
+      await sourceManager.cleanupExpiredBlocks();
+    } catch (error) {
+      console.error('[Download Queue] Error checking stalled downloads:', error.message);
+    }
+  }
+
   async loadQueueFromDb() {
     await getDependencies();
     
-    // Load pending downloads from database
     const allDownloads = dbOps.getDownloads();
-    const pendingDownloads = allDownloads.filter(
-      d => d.status === 'requested' || 
-           d.status === 'queued' || 
-           d.status === 'downloading' ||
-           (d.status === 'failed' && (d.retryCount || 0) < 3)
-    );
+    
+    const terminalStates = [
+      DOWNLOAD_STATES.ADDED, 
+      DOWNLOAD_STATES.COMPLETED, 
+      DOWNLOAD_STATES.DEAD_LETTER, 
+      DOWNLOAD_STATES.CANCELLED
+    ];
+    
+    const activeStates = [
+      DOWNLOAD_STATES.REQUESTED,
+      DOWNLOAD_STATES.QUEUED,
+      DOWNLOAD_STATES.SEARCHING,
+      DOWNLOAD_STATES.DOWNLOADING,
+      DOWNLOAD_STATES.PROCESSING,
+      DOWNLOAD_STATES.MOVING,
+    ];
+    
+    const pendingDownloads = allDownloads.filter(d => {
+      if (terminalStates.includes(d.status)) {
+        if (d.type === 'album' && d.albumId && d.status !== DOWNLOAD_STATES.DEAD_LETTER) {
+          const album = libraryManager.getAlbumById(d.albumId);
+          if (album && album.path) {
+            try {
+              if (fs.existsSync(album.path)) {
+                const files = fs.readdirSync(album.path);
+                const audioExtensions = ['.flac', '.mp3', '.m4a', '.aac', '.ogg', '.wav', '.opus'];
+                const audioFiles = files.filter(f => {
+                  const ext = path.extname(f).toLowerCase();
+                  return audioExtensions.includes(ext);
+                });
+                const albumTracks = libraryManager.getTracks(d.albumId);
+                const expectedTrackCount = albumTracks.length > 0 ? albumTracks.length : 12;
+                if (audioFiles.length >= Math.ceil(expectedTrackCount * 0.8)) {
+                  dbOps.updateDownload(d.id, { status: DOWNLOAD_STATES.ADDED, completedAt: d.completedAt || new Date().toISOString() });
+                  return false;
+                }
+              }
+            } catch {
+            }
+            
+            const albumTracks = libraryManager.getTracks(d.albumId);
+            if (albumTracks.length > 0) {
+              const tracksWithFiles = albumTracks.filter(t => t.hasFile && t.path);
+              if (tracksWithFiles.length === albumTracks.length) {
+                return false;
+              }
+            }
+          }
+        }
+        return false;
+      }
+      
+      if (d.type === 'album' && d.albumId && activeStates.includes(d.status)) {
+        const album = libraryManager.getAlbumById(d.albumId);
+        if (album && album.path) {
+          try {
+            if (fs.existsSync(album.path)) {
+              const files = fs.readdirSync(album.path);
+              const audioExtensions = ['.flac', '.mp3', '.m4a', '.aac', '.ogg', '.wav', '.opus'];
+              const audioFiles = files.filter(f => {
+                const ext = path.extname(f).toLowerCase();
+                return audioExtensions.includes(ext);
+              });
+              const albumTracks = libraryManager.getTracks(d.albumId);
+              const expectedTrackCount = albumTracks.length > 0 ? albumTracks.length : 12;
+              if (audioFiles.length >= Math.ceil(expectedTrackCount * 0.8)) {
+                dbOps.updateDownload(d.id, { status: DOWNLOAD_STATES.ADDED, completedAt: new Date().toISOString() });
+                return false;
+              }
+            }
+          } catch {
+          }
+        }
+      }
+      
+      if (activeStates.includes(d.status)) {
+        return true;
+      }
+      
+      if ((d.status === DOWNLOAD_STATES.FAILED || d.status === DOWNLOAD_STATES.STALLED) && (d.retryCount || 0) < 5) {
+        return true;
+      }
+      
+      return false;
+    });
     
     this.queue = pendingDownloads.map(d => ({
       id: d.id,
@@ -327,35 +479,79 @@ export class DownloadQueue {
     console.log('[Download Queue] Started');
   }
 
-  /**
-   * Stop processing queue
-   */
   stop() {
     if (this.processInterval) {
       clearInterval(this.processInterval);
       this.processInterval = null;
     }
+    if (this.stalledCheckInterval) {
+      clearInterval(this.stalledCheckInterval);
+      this.stalledCheckInterval = null;
+    }
+    downloadStateMachine.stopMetricsCollection();
+    sourceManager.stopSpeedMonitoring();
     console.log('[Download Queue] Stopped');
   }
 
   /**
    * Process queue - attempt to start downloads
    */
+  isWithinSchedule() {
+    if (!this.schedule.enabled) {
+      return true;
+    }
+
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentDay = now.getDay();
+
+    if (!this.schedule.daysOfWeek.includes(currentDay)) {
+      return false;
+    }
+
+    if (this.schedule.startHour <= this.schedule.endHour) {
+      return currentHour >= this.schedule.startHour && currentHour < this.schedule.endHour;
+    } else {
+      return currentHour >= this.schedule.startHour || currentHour < this.schedule.endHour;
+    }
+  }
+
+  setSchedule(scheduleConfig) {
+    this.schedule = {
+      ...this.schedule,
+      ...scheduleConfig,
+    };
+    console.log(`[Download Queue] Schedule updated:`, this.schedule);
+    return this.schedule;
+  }
+
+  getSchedule() {
+    return {
+      ...this.schedule,
+      isActive: this.isWithinSchedule(),
+      currentTime: new Date().toISOString(),
+    };
+  }
+
   async processQueue() {
     if (!this.initialized) {
-      return; // Not initialized yet
+      return;
     }
     
     if (this.paused || this.processing) {
       return;
     }
 
+    if (!this.isWithinSchedule()) {
+      return;
+    }
+
     if (this.currentDownloads.size >= this.maxConcurrent) {
-      return; // At max concurrent downloads
+      return;
     }
 
     if (this.queue.length === 0) {
-      return; // Nothing to process
+      return;
     }
 
     this.processing = true;
@@ -384,49 +580,78 @@ export class DownloadQueue {
     }
   }
 
-  /**
-   * Process a single queue item
-   */
   async processItem(item) {
     await getDependencies();
     
     if (this.currentDownloads.has(item.id)) {
-      return; // Already processing
+      return;
+    }
+
+    const freshDownloadRecord = dbOps.getDownloadById(item.id);
+    if (!freshDownloadRecord) {
+      console.log(`[Download Queue] Download ${item.id} not found in database, removing from queue`);
+      const index = this.queue.findIndex(q => q.id === item.id);
+      if (index > -1) {
+        this.queue.splice(index, 1);
+      }
+      return;
+    }
+
+    const finalStates = [DOWNLOAD_STATES.ADDED, DOWNLOAD_STATES.COMPLETED, DOWNLOAD_STATES.CANCELLED];
+    if (finalStates.includes(freshDownloadRecord.status)) {
+      console.log(`[Download Queue] Download ${item.id} already ${freshDownloadRecord.status}, removing from queue`);
+      const index = this.queue.findIndex(q => q.id === item.id);
+      if (index > -1) {
+        this.queue.splice(index, 1);
+      }
+      return;
     }
 
     this.currentDownloads.add(item.id);
+    
+    const attemptNumber = (freshDownloadRecord.retryCount || 0) + 1;
+    const attemptStartTime = Date.now();
+    let attemptRecord = null;
+    
+    const excludeUsernames = sourceManager.getExcludedUsernames(item.id);
+    
+    try {
+      attemptRecord = dbOps.insertDownloadAttempt({
+        downloadId: item.id,
+        attemptNumber,
+        username: null,
+        startedAt: new Date().toISOString(),
+        status: 'started',
+      });
+    } catch (err) {
+      console.warn('[Download Queue] Could not record attempt:', err.message);
+    }
+
+    const downloadRecord = freshDownloadRecord;
 
     try {
-      const { downloadRecord } = item;
 
-      // Update status to downloading
-      if (downloadRecord.status !== 'downloading') {
-        downloadRecord.status = 'downloading';
-        downloadRecord.startedAt = downloadRecord.startedAt || new Date().toISOString();
-        downloadManager.logDownloadEvent(downloadRecord, 'started', {
-          queued: true,
-        });
-        dbOps.updateDownload(downloadRecord.id, {
-          status: 'downloading',
-          startedAt: downloadRecord.startedAt,
-          events: downloadRecord.events,
-        });
-      }
+      downloadStateMachine.transition(downloadRecord, DOWNLOAD_STATES.SEARCHING, {
+        attemptNumber,
+        excludedSources: excludeUsernames.length,
+      });
 
-      // Execute download based on type
       let result;
       switch (downloadRecord.type) {
         case 'album':
           result = await downloadManager.downloadAlbum(
             downloadRecord.artistId,
-            downloadRecord.albumId
+            downloadRecord.albumId,
+            downloadRecord.id,
+            { excludeUsernames }
           );
           break;
         
         case 'track':
           result = await downloadManager.downloadTrack(
             downloadRecord.artistId,
-            downloadRecord.trackId
+            downloadRecord.trackId,
+            { excludeUsernames }
           );
           break;
         
@@ -434,7 +659,8 @@ export class DownloadQueue {
           result = await downloadManager.downloadWeeklyFlowTrack(
             downloadRecord.artistId,
             downloadRecord.trackName,
-            downloadRecord.artistMbid
+            downloadRecord.artistMbid,
+            { excludeUsernames }
           );
           break;
         
@@ -442,11 +668,61 @@ export class DownloadQueue {
           throw new Error(`Unknown download type: ${downloadRecord.type}`);
       }
 
-      // Download initiated successfully
-      // The downloadManager will handle completion tracking
+      if (result === null) {
+        downloadStateMachine.transition(downloadRecord, DOWNLOAD_STATES.ADDED, {
+          reason: 'Already exists',
+        });
+        
+        if (downloadRecord.type === 'album' && downloadRecord.albumId) {
+          const activeStates = [
+            DOWNLOAD_STATES.REQUESTED,
+            DOWNLOAD_STATES.QUEUED,
+            DOWNLOAD_STATES.SEARCHING,
+            DOWNLOAD_STATES.DOWNLOADING,
+          ];
+          
+          const allAlbumDownloads = dbOps.getDownloads().filter(
+            d => d.albumId === downloadRecord.albumId && 
+                 d.id !== downloadRecord.id &&
+                 activeStates.includes(d.status)
+          );
+          
+          for (const relatedDownload of allAlbumDownloads) {
+            downloadStateMachine.transition(relatedDownload, DOWNLOAD_STATES.ADDED, {
+              reason: 'Album already complete',
+            });
+          }
+          
+          this.queue = this.queue.filter(q => {
+            if (q.downloadRecord.albumId === downloadRecord.albumId && q.downloadRecord.type === 'album') {
+              return false;
+            }
+            return true;
+          });
+        }
+        
+        console.log(`[Download Queue] Skipped ${downloadRecord.type} - ${downloadRecord.artistName || 'Unknown'} - ${downloadRecord.trackName || downloadRecord.albumName || 'Unknown'} (already exists)`);
+        
+        const index = this.queue.findIndex(q => q.id === item.id);
+        if (index > -1) {
+          this.queue.splice(index, 1);
+        }
+        
+        if (attemptRecord) {
+          dbOps.updateDownloadAttempt(attemptRecord.id, {
+            endedAt: new Date().toISOString(),
+            durationMs: Date.now() - attemptStartTime,
+            status: 'skipped',
+          });
+        }
+        
+        return;
+      }
+
+      downloadStateMachine.transition(downloadRecord, DOWNLOAD_STATES.DOWNLOADING);
+      
       console.log(`[Download Queue] Started download: ${downloadRecord.type} - ${downloadRecord.artistName || 'Unknown'} - ${downloadRecord.trackName || downloadRecord.albumName || 'Unknown'}`);
 
-      // Remove from queue (it's now being tracked by downloadManager)
       const index = this.queue.findIndex(q => q.id === item.id);
       if (index > -1) {
         this.queue.splice(index, 1);
@@ -455,36 +731,50 @@ export class DownloadQueue {
     } catch (error) {
       console.error(`[Download Queue] Failed to process ${item.id}:`, error.message);
       
-      // Handle failure using downloadManager's smart error handling
-      const { downloadRecord } = item;
+      const errorType = downloadStateMachine.classifyError(error);
       
-      // Use downloadManager's error classification and retry strategy
-      await downloadManager.handleFailedDownload(downloadRecord, null, error);
+      const lastUsername = downloadRecord.username;
+      if (lastUsername) {
+        sourceManager.recordSourceFailure(lastUsername, error.message);
+      }
       
-      // Check if download should be removed from queue (permanent error or max retries)
-      const errorType = downloadManager.classifyError(error);
-      const strategy = downloadManager.getRetryStrategy(errorType, downloadRecord.retryCount);
+      if (attemptRecord) {
+        dbOps.updateDownloadAttempt(attemptRecord.id, {
+          endedAt: new Date().toISOString(),
+          durationMs: Date.now() - attemptStartTime,
+          status: 'failed',
+          errorType,
+          errorMessage: error.message,
+          username: lastUsername,
+        });
+      }
       
-      if (!strategy.shouldRetry || downloadRecord.retryCount >= strategy.maxRetries) {
-        // Remove from queue
+      const altSourceInfo = await sourceManager.findAlternativeSource(item.id, lastUsername);
+      
+      const result = downloadStateMachine.handleDownloadFailure(downloadRecord, error, errorType);
+      
+      if (result.download.status === DOWNLOAD_STATES.DEAD_LETTER) {
         const index = this.queue.findIndex(q => q.id === item.id);
         if (index > -1) {
           this.queue.splice(index, 1);
         }
-      } else {
-        // Requeue with lower priority
+        console.log(`[Download Queue] Moved ${item.id} to dead letter queue after ${downloadRecord.retryCount} retries`);
+      } else if (result.download.status === DOWNLOAD_STATES.QUEUED) {
         item.priority = Math.max(1, item.priority - 2);
-        item.downloadRecord.retryCount = downloadRecord.retryCount;
+        item.downloadRecord = result.download;
         this.queue.sort((a, b) => b.priority - a.priority);
+        console.log(`[Download Queue] Requeued ${item.id} with priority ${item.priority} (excluding ${altSourceInfo.excludeUsernames.length} sources)`);
+      } else {
+        const index = this.queue.findIndex(q => q.id === item.id);
+        if (index > -1) {
+          this.queue.splice(index, 1);
+        }
       }
     } finally {
       this.currentDownloads.delete(item.id);
     }
   }
 
-  /**
-   * Search queue
-   */
   search(query) {
     const lowerQuery = query.toLowerCase();
     
@@ -505,6 +795,235 @@ export class DownloadQueue {
       trackName: item.downloadRecord.trackName,
       albumName: item.downloadRecord.albumName,
     }));
+  }
+
+  getDeadLetterQueue(filters = {}) {
+    return dbOps.getDeadLetterQueue(filters);
+  }
+
+  async retryFromDeadLetter(dlqItemId) {
+    const result = downloadStateMachine.retryFromDeadLetter(dlqItemId);
+    
+    if (result.success && result.download) {
+      await this.enqueue(result.download);
+    }
+    
+    return result;
+  }
+
+  async retryAllFromDeadLetter(filters = {}) {
+    const dlqItems = dbOps.getDeadLetterQueue({ ...filters, canRetry: true });
+    const results = { success: 0, failed: 0 };
+    
+    for (const item of dlqItems) {
+      const result = await this.retryFromDeadLetter(item.id);
+      if (result.success) {
+        results.success++;
+      } else {
+        results.failed++;
+      }
+    }
+    
+    return results;
+  }
+
+  clearDeadLetterQueue() {
+    return dbOps.clearDeadLetterQueue();
+  }
+
+  getBlockedSources() {
+    return dbOps.getBlockedSources();
+  }
+
+  unblockSource(username) {
+    return dbOps.unblockSource(username);
+  }
+
+  clearBlockedSources() {
+    return dbOps.clearBlockedSources();
+  }
+
+  getHealthMetrics() {
+    const stateMachineMetrics = downloadStateMachine.getHealthMetrics();
+    const sourceStats = sourceManager.getSourceStats();
+    
+    return {
+      ...stateMachineMetrics,
+      sources: sourceStats,
+    };
+  }
+
+  getSourceStats() {
+    return sourceManager.getSourceStats();
+  }
+
+  updateTransferProgress(downloadId, bytesTransferred, totalBytes) {
+    return sourceManager.updateTransferProgress(downloadId, bytesTransferred, totalBytes);
+  }
+
+  trackTransferStart(downloadId, username, expectedBytes) {
+    return sourceManager.trackTransferStart(downloadId, username, expectedBytes);
+  }
+
+  trackTransferComplete(downloadId, success) {
+    return sourceManager.trackTransferComplete(downloadId, success);
+  }
+
+  exportQueueState() {
+    const queueItems = this.queue.map(item => ({
+      id: item.id,
+      type: item.type,
+      priority: item.priority,
+      createdAt: item.createdAt,
+      retryCount: item.retryCount,
+      downloadRecord: item.downloadRecord,
+    }));
+
+    const pendingDownloads = dbOps.getDownloads().filter(d => {
+      const activeStates = [
+        DOWNLOAD_STATES.REQUESTED,
+        DOWNLOAD_STATES.QUEUED,
+        DOWNLOAD_STATES.SEARCHING,
+        DOWNLOAD_STATES.DOWNLOADING,
+        DOWNLOAD_STATES.PROCESSING,
+        DOWNLOAD_STATES.MOVING,
+        DOWNLOAD_STATES.FAILED,
+        DOWNLOAD_STATES.STALLED,
+      ];
+      return activeStates.includes(d.status);
+    });
+
+    return {
+      exportedAt: new Date().toISOString(),
+      version: 1,
+      queue: {
+        items: queueItems,
+        count: queueItems.length,
+        paused: this.paused,
+        processing: this.currentDownloads.size,
+      },
+      database: {
+        pendingDownloads,
+        count: pendingDownloads.length,
+      },
+      deadLetterQueue: dbOps.getDeadLetterQueue(),
+      blockedSources: dbOps.getBlockedSources(),
+    };
+  }
+
+  async importQueueState(state) {
+    if (!state || !state.version || state.version !== 1) {
+      throw new Error('Invalid queue state format');
+    }
+
+    const results = { imported: 0, skipped: 0, errors: [] };
+
+    for (const item of state.database?.pendingDownloads || []) {
+      try {
+        const existing = dbOps.getDownloadById(item.id);
+        if (!existing) {
+          dbOps.insertDownload(item);
+          results.imported++;
+        } else {
+          results.skipped++;
+        }
+      } catch (error) {
+        results.errors.push({ id: item.id, error: error.message });
+      }
+    }
+
+    await this.loadQueueFromDb();
+
+    return results;
+  }
+
+  async verifyQueueIntegrity() {
+    await getDependencies();
+    
+    const issues = [];
+    const allDownloads = dbOps.getDownloads();
+
+    for (const download of allDownloads) {
+      if (download.status === DOWNLOAD_STATES.DOWNLOADING || download.status === DOWNLOAD_STATES.SEARCHING) {
+        const inQueue = this.queue.find(q => q.id === download.id);
+        const isProcessing = this.currentDownloads.has(download.id);
+        
+        if (!inQueue && !isProcessing) {
+          issues.push({
+            type: 'orphaned_active_download',
+            downloadId: download.id,
+            status: download.status,
+            message: 'Download marked as active but not in queue or processing',
+          });
+          
+          const result = downloadStateMachine.transition(download, DOWNLOAD_STATES.QUEUED, {
+            reason: 'Recovered from orphaned state during integrity check',
+          });
+          
+          if (result.success) {
+            await this.enqueue(result.download);
+          }
+        }
+      }
+
+      if (download.type === 'album' && download.albumId && 
+          [DOWNLOAD_STATES.DOWNLOADING, DOWNLOAD_STATES.SEARCHING, DOWNLOAD_STATES.QUEUED].includes(download.status)) {
+        const album = libraryManager.getAlbumById(download.albumId);
+        if (album && album.path) {
+          try {
+            if (fs.existsSync(album.path)) {
+              const files = fs.readdirSync(album.path);
+              const audioExtensions = ['.flac', '.mp3', '.m4a', '.aac', '.ogg', '.wav', '.opus'];
+              const audioFiles = files.filter(f => audioExtensions.includes(path.extname(f).toLowerCase()));
+              
+              if (audioFiles.length > 0) {
+                const tracks = libraryManager.getTracks(download.albumId);
+                const expectedCount = tracks.length > 0 ? tracks.length : 12;
+                
+                if (audioFiles.length >= Math.ceil(expectedCount * 0.8)) {
+                  issues.push({
+                    type: 'download_already_complete',
+                    downloadId: download.id,
+                    albumId: download.albumId,
+                    message: 'Album appears complete but download still active',
+                  });
+                  
+                  downloadStateMachine.transition(download, DOWNLOAD_STATES.ADDED, {
+                    reason: 'Album found complete during integrity check',
+                  });
+                  
+                  const idx = this.queue.findIndex(q => q.id === download.id);
+                  if (idx > -1) {
+                    this.queue.splice(idx, 1);
+                  }
+                }
+              }
+            }
+          } catch (err) {
+          }
+        }
+      }
+    }
+
+    for (const queueItem of this.queue) {
+      const dbRecord = dbOps.getDownloadById(queueItem.id);
+      if (!dbRecord) {
+        issues.push({
+          type: 'queue_item_missing_db_record',
+          downloadId: queueItem.id,
+          message: 'Queue item has no corresponding database record',
+        });
+        
+        dbOps.insertDownload(queueItem.downloadRecord);
+      }
+    }
+
+    return {
+      healthy: issues.length === 0,
+      issuesFound: issues.length,
+      issuesFixed: issues.length,
+      issues,
+    };
   }
 }
 

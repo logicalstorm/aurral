@@ -33,13 +33,11 @@ router.post("/", async (req, res) => {
       queueCleaner: queueCleaner || currentSettings.queueCleaner || defaultData.settings.queueCleaner,
     };
     
-    // Update QueueCleaner config if it exists
     if (queueCleaner) {
       try {
         const { queueCleaner: qc } = await import('../services/queueCleaner.js');
         qc.updateConfig();
       } catch (error) {
-        // QueueCleaner might not be available
       }
     }
     
@@ -48,6 +46,57 @@ router.post("/", async (req, res) => {
   } catch (error) {
     console.error("Settings POST error:", error);
     res.status(500).json({ error: "Failed to save settings", message: error.message });
+  }
+});
+
+router.get("/logs", async (req, res) => {
+  try {
+    const { logger } = await import('../services/logger.js');
+    const { limit = 100, category, level } = req.query;
+    
+    const logs = logger.getRecentLogs({
+      limit: parseInt(limit, 10),
+      category,
+      level,
+    });
+    
+    res.json({
+      logs,
+      count: logs.length,
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to get logs", message: error.message });
+  }
+});
+
+router.get("/logs/stats", async (req, res) => {
+  try {
+    const { logger } = await import('../services/logger.js');
+    const stats = logger.getLogStats();
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to get log stats", message: error.message });
+  }
+});
+
+router.post("/logs/level", async (req, res) => {
+  try {
+    const { logger } = await import('../services/logger.js');
+    const { level, category } = req.body;
+    
+    if (!level) {
+      return res.status(400).json({ error: "level is required" });
+    }
+    
+    if (category) {
+      logger.setCategoryLevel(category, level);
+      res.json({ message: `Log level for ${category} set to ${level}` });
+    } else {
+      logger.setLevel(level);
+      res.json({ message: `Global log level set to ${level}` });
+    }
+  } catch (error) {
+    res.status(500).json({ error: "Failed to set log level", message: error.message });
   }
 });
 

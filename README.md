@@ -5,34 +5,64 @@
 </p>
 
 <p align="center">
-  <strong>Streamlined Artist Request Manager for Lidarr</strong>
+  <strong>Self-hosted Music Discovery & Library Manager with SLSKD Integration</strong>
 </p>
 
 ---
 
 ## What is Aurral?
 
-Aurral is a simple web application that allows users to search for artists using the MusicBrainz database and seamlessly add them to their Lidarr music library. Think of it as an Overseerr or Jellyseerr, but specifically focused on music artists and Lidarr integration.
+Aurral is a comprehensive music discovery and library management application that integrates directly with [slskd](https://github.com/slskd/slskd) for downloading music from the Soulseek network. Think of it as a complete replacement for Lidarr, designed specifically for Soulseek users who want intelligent music discovery, library management, and automated downloading.
 
-Aurral makes expanding your music collection effortless.
+Aurral analyzes your existing music library and Last.fm listening history to provide personalized recommendations, manages your download queue with intelligent retry logic, and organizes your music collection seamlessly.
 
 ---
 
 ## Features
 
-### Search & Discovery
-- **Real-time Search:** Powered by the MusicBrainz API to find any artist in the world.
-- **Deep Metadata:** View artist types, countries, active years, genres, and aliases.
-- **Artist Details:** Explore full release groups (albums, EPs, singles) before adding them to your library.
-
-### Advanced Recommendation Engine
-- **Personalized Discover:** Analyzes your existing Lidarr library to suggest similar artists.
-- **Genre Analysis:** Identifies your top genres and tags to help you explore new musical territories.
+### Music Discovery
+- **Personalized Recommendations:** Analyzes your library and Last.fm scrobbles to suggest new artists
+- **Genre Analysis:** Identifies your top genres and tags to explore new musical territories
+- **Global Trending:** Discover what's popular on Last.fm
+- **Tag-Based Search:** Find artists by specific genres or tags
+- **Discovery Preferences:** Exclude genres or artists from recommendations
 
 ### Library Management
-- **One-Click Requests:** Add artists to Lidarr with a single click.
-- **Library Overview:** Browse your entire Lidarr collection in a grid view.
-- **Status Tracking:** Visual indicators show what's already in your library and what's currently being requested.
+- **Artist & Album Management:** Add artists to your library and select specific albums to download
+- **Automatic Monitoring:** Configure monitoring options (all releases, latest, first, missing, future)
+- **File Scanner:** Discover and import your existing music collection
+- **Library Integrity:** Verify file integrity, detect duplicates, and find missing tracks
+- **Statistics:** Track library size, completion percentage, and file counts
+
+### Download Management
+- **SLSKD Integration:** Direct integration with slskd for Soulseek downloads
+- **Smart Queue System:** Priority-based queue with configurable concurrent downloads
+- **State Machine:** Explicit state transitions (requested → searching → downloading → processing → completed)
+- **Robust Error Handling:** Intelligent retry logic with error classification
+- **Dead Letter Queue:** Failed downloads are tracked and can be retried later
+- **Source Tracking:** Avoids bad peers on retry, tracks download speeds
+- **Stalled Detection:** Automatically handles downloads stuck for 30+ minutes
+- **Slow Transfer Abort:** Detects and aborts slow transfers to try alternative sources
+- **Queue Scheduling:** Schedule downloads for specific times (e.g., night-time only)
+
+### Weekly Flow
+- **Discovery Playlist:** 40-track rotating playlist of new music
+- **Automatic Rotation:** 10 tracks rotate weekly
+- **Navidrome Sync:** Sync playlist to your Navidrome server
+
+### Integrations
+- **SLSKD:** Download music from Soulseek
+- **MusicBrainz:** Artist and album metadata
+- **Last.fm:** Scrobble history, recommendations, artist images
+- **Spotify:** High-quality artist images
+- **Navidrome/Subsonic:** Playlist sync
+
+### Technical Features
+- **WebSocket Support:** Real-time UI updates without polling
+- **Structured Logging:** Configurable log levels per category
+- **Metrics & Health:** Download success rates, queue health, system status
+- **Queue Export/Import:** Backup and restore queue state
+- **File Integrity Checks:** Hash verification, duplicate detection
 
 ---
 
@@ -67,7 +97,7 @@ cd aurral
 docker-compose up -d
 ```
 
-Access the UI at `http://localhost:3001`. Configuration is done through the web interface - no environment variables needed!
+Access the UI at `http://localhost:3001`. Configuration is done through the web interface.
 
 ### Manual Installation
 
@@ -85,34 +115,114 @@ Access at `http://localhost:3001`.
 
 ## Configuration
 
-All configuration is done through the web interface at `/settings`. No environment variables are required, but you can optionally set:
+All configuration is done through the web interface at `/settings`. 
+
+### Required Setup
+1. **SLSKD:** Configure your slskd URL and API key
+2. **MusicBrainz:** Set your contact email (required for API access)
+
+### Optional Integrations
+- **Last.fm:** API key and username for personalized recommendations
+- **Spotify:** Client ID and Secret for high-quality artist images
+- **Navidrome:** URL and credentials for playlist sync
+
+### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PORT` | Server port | `3001` |
+| `MUSIC_ROOT` | Music library root path | `/data` |
+| `SLSKD_COMPLETE_DIR` | slskd complete downloads directory | `/downloads` |
 
 ---
 
-## Discovery Engine
+## Architecture
 
-Aurral features a discovery system that helps you find new music based on what you already love.
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Frontend  │────▶│   Backend   │────▶│   SLSKD     │
+│  (React)    │     │  (Express)  │     │ (Soulseek)  │
+└─────────────┘     └──────┬──────┘     └─────────────┘
+                          │
+      ┌───────────────────┼───────────────────┐
+      │                   │                   │
+      ▼                   ▼                   ▼
+┌───────────┐     ┌───────────┐     ┌───────────┐
+│  SQLite   │     │ MusicBrainz│    │  Last.fm  │
+│    DB     │     │    API     │     │   API     │
+└───────────┘     └───────────┘     └───────────┘
+```
 
-### How it works:
-1. **Library Sampling:** The engine randomly samples artists from your current Lidarr collection.
-2. **Tag Analysis:** It queries MusicBrainz to find the specific sub-genres and tags associated with your artists (e.g., "Post-Punk", "Synthpop").
-3. **Similarity Search:** It looks for other bands matching those specific tag combinations.
+### Key Services
+
+- **Download Queue:** Manages all downloads with priority, retry logic, and scheduling
+- **Download Manager:** Orchestrates album/track downloads with SLSKD
+- **Library Manager:** Artist/album/track CRUD with file system integration
+- **Discovery Service:** Generates recommendations from library and Last.fm
+- **Source Manager:** Tracks peer quality and manages alternative sources
+- **File Integrity Service:** Verifies files, detects duplicates, finds missing tracks
+
+---
+
+## API Endpoints
+
+### Downloads
+- `GET /api/downloads` - List all downloads
+- `GET /api/downloads/queue` - Queue status
+- `GET /api/downloads/health/metrics` - Health metrics
+- `GET /api/downloads/dlq` - Dead letter queue
+- `POST /api/downloads/dlq/:id/retry` - Retry from DLQ
+- `GET /api/downloads/queue/schedule` - Get schedule
+- `POST /api/downloads/queue/schedule` - Set schedule
+
+### Library
+- `GET /api/library/artists` - List artists
+- `POST /api/library/downloads/album` - Queue album download
+- `GET /api/library/integrity/missing/:artistId` - Find missing tracks
+- `POST /api/library/integrity/albums/:albumId/requeue-missing` - Requeue missing
+
+### Discovery
+- `GET /api/discover` - Get recommendations
+- `GET /api/discover/filtered` - Get filtered recommendations
+- `GET /api/discover/preferences` - Get preferences
+- `POST /api/discover/preferences` - Set preferences
+
+### WebSocket
+- `ws://localhost:3001/ws` - Real-time updates
+  - Channels: `downloads`, `queue`, `library`, `discovery`, `notifications`
 
 ---
 
 ## Troubleshooting
 
-- **401 Unauthorized:** Configure your Lidarr API key in the Settings page.
-- **Connection Refused:** Ensure Lidarr is reachable from the server running Aurral.
-- **Slow Discovery:** The MusicBrainz API is rate-limited to 1 request per second. Aurral respects this limit, so discovery may take 10-20 seconds depending on library size.
-- **Missing Images:** Configure a Last.fm API key in Settings for better artist imagery coverage.
+- **SLSKD Connection Failed:** Verify slskd is running and API key is correct
+- **No Recommendations:** Configure Last.fm API key and username, or add artists to library
+- **Downloads Stuck:** Check slskd connectivity, view dead letter queue for failed items
+- **Missing Files:** Use integrity check to find and requeue missing tracks
+
+---
+
+## Development
+
+```bash
+# Start development servers
+docker-compose -f docker-compose.dev.yml up
+
+# Or run manually
+cd backend && npm run dev
+cd frontend && npm run dev
+```
 
 ---
 
 ## License
 
 Distributed under the MIT License. See `LICENSE` for more information.
+
+---
+
+## Credits
+
+- [MusicBrainz](https://musicbrainz.org/) for artist and album metadata
+- [Last.fm](https://www.last.fm/) for recommendations and scrobble data
+- [slskd](https://github.com/slskd/slskd) for Soulseek integration

@@ -875,7 +875,6 @@ router.get('/integrity/status', async (req, res) => {
   }
 });
 
-// Run data integrity check
 router.post('/integrity/check', async (req, res) => {
   try {
     const { dataIntegrityService } = await import('../services/dataIntegrityService.js');
@@ -888,6 +887,181 @@ router.post('/integrity/check', async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: 'Failed to run integrity check',
+      message: error.message,
+    });
+  }
+});
+
+router.post('/integrity/files/scan', async (req, res) => {
+  try {
+    const { fileIntegrityService } = await import('../services/fileIntegrityService.js');
+    const rootFolder = libraryManager.getRootFolder();
+    
+    if (!rootFolder) {
+      return res.status(400).json({ error: 'No root folder configured' });
+    }
+
+    const { maxFiles = 1000, includeHashes = false } = req.body;
+    const results = await fileIntegrityService.scanLibraryIntegrity(rootFolder, { maxFiles, includeHashes });
+    
+    res.json(results);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to scan library integrity',
+      message: error.message,
+    });
+  }
+});
+
+router.post('/integrity/files/verify', async (req, res) => {
+  try {
+    const { fileIntegrityService } = await import('../services/fileIntegrityService.js');
+    const { filePath, expectedHash } = req.body;
+    
+    if (!filePath) {
+      return res.status(400).json({ error: 'filePath is required' });
+    }
+
+    const result = await fileIntegrityService.verifyFile(filePath, expectedHash);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to verify file',
+      message: error.message,
+    });
+  }
+});
+
+router.get('/integrity/albums/:albumId/verify', async (req, res) => {
+  try {
+    const { fileIntegrityService } = await import('../services/fileIntegrityService.js');
+    const { albumId } = req.params;
+    
+    const album = libraryManager.getAlbumById(albumId);
+    if (!album) {
+      return res.status(404).json({ error: 'Album not found' });
+    }
+    
+    if (!album.path) {
+      return res.status(400).json({ error: 'Album has no path' });
+    }
+
+    const tracks = libraryManager.getTracks(albumId);
+    const results = await fileIntegrityService.verifyAlbumFiles(album.path, tracks);
+    
+    res.json({
+      albumId,
+      albumName: album.albumName,
+      ...results,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to verify album',
+      message: error.message,
+    });
+  }
+});
+
+router.get('/integrity/duplicates', async (req, res) => {
+  try {
+    const { fileIntegrityService } = await import('../services/fileIntegrityService.js');
+    const rootFolder = libraryManager.getRootFolder();
+    
+    if (!rootFolder) {
+      return res.status(400).json({ error: 'No root folder configured' });
+    }
+
+    const results = await fileIntegrityService.detectDuplicates(rootFolder);
+    res.json(results);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to detect duplicates',
+      message: error.message,
+    });
+  }
+});
+
+router.get('/integrity/missing/:artistId', async (req, res) => {
+  try {
+    const { fileIntegrityService } = await import('../services/fileIntegrityService.js');
+    const { artistId } = req.params;
+    
+    const results = await fileIntegrityService.getMissingTracksForArtist(artistId);
+    res.json(results);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get missing tracks',
+      message: error.message,
+    });
+  }
+});
+
+router.get('/integrity/albums/:albumId/missing', async (req, res) => {
+  try {
+    const { fileIntegrityService } = await import('../services/fileIntegrityService.js');
+    const { albumId } = req.params;
+    
+    const album = libraryManager.getAlbumById(albumId);
+    if (!album) {
+      return res.status(404).json({ error: 'Album not found' });
+    }
+    
+    const results = await fileIntegrityService.findMissingTracks(album.artistId, albumId);
+    res.json(results);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get missing tracks',
+      message: error.message,
+    });
+  }
+});
+
+router.post('/integrity/albums/:albumId/requeue-missing', async (req, res) => {
+  try {
+    const { fileIntegrityService } = await import('../services/fileIntegrityService.js');
+    const { downloadQueue } = await import('../services/downloadQueue.js');
+    const { albumId } = req.params;
+    
+    const album = libraryManager.getAlbumById(albumId);
+    if (!album) {
+      return res.status(404).json({ error: 'Album not found' });
+    }
+    
+    const missing = await fileIntegrityService.findMissingTracks(album.artistId, albumId);
+    
+    if (missing.error) {
+      return res.status(400).json({ error: missing.error });
+    }
+    
+    if (missing.missingTracks === 0) {
+      return res.json({ message: 'No missing tracks to requeue', requeued: 0 });
+    }
+
+    const downloadRecord = {
+      id: downloadManager.generateId(),
+      type: 'album',
+      artistId: album.artistId,
+      albumId: albumId,
+      artistName: libraryManager.getArtistById(album.artistId)?.artistName || 'Unknown',
+      albumName: album.albumName,
+      status: 'requested',
+      requestedAt: new Date().toISOString(),
+      retryCount: 0,
+      requeueCount: 0,
+      events: [{ timestamp: new Date().toISOString(), event: 'requeued_missing_tracks', missingCount: missing.missingTracks }],
+    };
+
+    await downloadQueue.enqueue(downloadRecord);
+
+    res.json({
+      message: `Requeued album download for ${missing.missingTracks} missing tracks`,
+      albumId,
+      albumName: album.albumName,
+      missingTracks: missing.missingTracks,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to requeue missing tracks',
       message: error.message,
     });
   }

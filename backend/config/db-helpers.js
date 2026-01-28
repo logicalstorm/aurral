@@ -333,47 +333,42 @@ export const dbOps = {
     if (!download) throw new Error('Download not found');
     
     const updated = { ...download, ...updates };
-    const stmt = db.prepare(`
-      UPDATE downloads SET
-        status = ?,
-        queued_at = ?,
-        started_at = ?,
-        completed_at = ?,
-        failed_at = ?,
-        cancelled_at = ?,
-        retry_count = ?,
-        requeue_count = ?,
-        last_error = ?,
-        last_failure_at = ?,
-        progress = ?,
-        last_progress_update = ?,
-        events = ?,
-        destination_path = ?,
-        filename = ?,
-        queue_cleaned = ?,
-        queue_cleaned_at = ?
-      WHERE id = ?
-    `);
-    stmt.run(
-      updated.status,
-      updated.queuedAt,
-      updated.startedAt,
-      updated.completedAt,
-      updated.failedAt,
-      updated.cancelledAt,
-      updated.retryCount || 0,
-      updated.requeueCount || 0,
-      updated.lastError,
-      updated.lastFailureAt,
-      updated.progress || 0,
-      updated.lastProgressUpdate,
-      dbHelpers.stringifyJSON(updated.events),
-      updated.destinationPath,
-      updated.filename,
-      updated.queueCleaned ? 1 : 0,
-      updated.queueCleanedAt,
-      id
-    );
+    
+    // Build dynamic UPDATE statement to handle optional columns
+    const columns = [
+      'status', 'queued_at', 'started_at', 'completed_at', 'failed_at', 'cancelled_at',
+      'retry_count', 'requeue_count', 'last_error', 'last_failure_at',
+      'progress', 'last_progress_update', 'events',
+      'destination_path', 'filename', 'queue_cleaned', 'queue_cleaned_at',
+      'temp_file_path', 'track_title', 'track_position',
+      'slskd_download_id', 'username', 'download_session_id', 'parent_download_id',
+      'is_parent', 'stale', 'tried_usernames', 'slskd_file_path', 'error_type',
+      'last_requeue_attempt'
+    ];
+    
+    const values = [];
+    const setClause = columns.map(col => {
+      const camelCol = col.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+      let value = updated[camelCol];
+      
+      // Convert undefined to null (SQLite doesn't accept undefined)
+      if (value === undefined) {
+        value = null;
+      }
+      
+      if (col === 'tried_usernames' || col === 'events') {
+        values.push(dbHelpers.stringifyJSON(value) || null);
+      } else if (col === 'is_parent' || col === 'stale' || col === 'queue_cleaned') {
+        values.push(value ? 1 : 0);
+      } else {
+        values.push(value);
+      }
+      
+      return `${col} = ?`;
+    }).join(', ');
+    
+    const stmt = db.prepare(`UPDATE downloads SET ${setClause} WHERE id = ?`);
+    stmt.run(...values, id);
     return this.getDownloadById(id);
   },
 
@@ -411,6 +406,20 @@ export const dbOps = {
       filename: row.filename,
       queueCleaned: row.queue_cleaned === 1,
       queueCleanedAt: row.queue_cleaned_at,
+      // New fields for session tracking and file paths
+      tempFilePath: row.temp_file_path,
+      trackTitle: row.track_title,
+      trackPosition: row.track_position,
+      slskdDownloadId: row.slskd_download_id,
+      username: row.username,
+      downloadSessionId: row.download_session_id,
+      parentDownloadId: row.parent_download_id,
+      isParent: row.is_parent === 1,
+      stale: row.stale === 1,
+      triedUsernames: dbHelpers.parseJSON(row.tried_usernames) || [],
+      slskdFilePath: row.slskd_file_path,
+      errorType: row.error_type,
+      lastRequeueAttempt: row.last_requeue_attempt,
     };
   },
 
@@ -449,7 +458,7 @@ export const dbOps = {
     if (settings.queueCleaner) {
       stmt.run('queueCleaner', dbHelpers.stringifyJSON(settings.queueCleaner));
     }
-    if (settings.rootFolderPath !== undefined) {
+    if (settings.rootFolderPath !== undefined && settings.rootFolderPath !== null) {
       stmt.run('rootFolderPath', settings.rootFolderPath);
     }
     if (settings.releaseTypes) {
@@ -734,5 +743,312 @@ export const dbOps = {
       addedAt: row.added_at,
       removedAt: row.removed_at,
     }));
+  },
+
+  getDeadLetterQueue(filters = {}) {
+    let query = 'SELECT * FROM dead_letter_queue WHERE 1=1';
+    const params = [];
+    
+    if (filters.type) {
+      query += ' AND type = ?';
+      params.push(filters.type);
+    }
+    if (filters.canRetry !== undefined) {
+      query += ' AND can_retry = ?';
+      params.push(filters.canRetry ? 1 : 0);
+    }
+    
+    query += ' ORDER BY moved_to_dlq_at DESC';
+    
+    if (filters.limit) {
+      query += ' LIMIT ?';
+      params.push(filters.limit);
+    }
+    
+    return db.prepare(query).all(...params).map(row => ({
+      id: row.id,
+      originalDownloadId: row.original_download_id,
+      type: row.type,
+      artistId: row.artist_id,
+      albumId: row.album_id,
+      trackId: row.track_id,
+      artistName: row.artist_name,
+      albumName: row.album_name,
+      trackName: row.track_name,
+      errorType: row.error_type,
+      lastError: row.last_error,
+      retryCount: row.retry_count,
+      requeueCount: row.requeue_count,
+      failedAt: row.failed_at,
+      movedToDlqAt: row.moved_to_dlq_at,
+      events: dbHelpers.parseJSON(row.events) || [],
+      canRetry: row.can_retry === 1,
+      retryAfter: row.retry_after,
+    }));
+  },
+
+  insertDeadLetterItem(item) {
+    const stmt = db.prepare(`
+      INSERT INTO dead_letter_queue 
+      (id, original_download_id, type, artist_id, album_id, track_id, artist_name, 
+       album_name, track_name, error_type, last_error, retry_count, requeue_count,
+       failed_at, moved_to_dlq_at, events, can_retry, retry_after)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      item.id,
+      item.originalDownloadId,
+      item.type,
+      item.artistId,
+      item.albumId,
+      item.trackId,
+      item.artistName,
+      item.albumName,
+      item.trackName,
+      item.errorType,
+      item.lastError,
+      item.retryCount || 0,
+      item.requeueCount || 0,
+      item.failedAt,
+      item.movedToDlqAt,
+      dbHelpers.stringifyJSON(item.events),
+      item.canRetry !== false ? 1 : 0,
+      item.retryAfter
+    );
+    return item;
+  },
+
+  deleteDeadLetterItem(id) {
+    return db.prepare('DELETE FROM dead_letter_queue WHERE id = ?').run(id);
+  },
+
+  clearDeadLetterQueue() {
+    return db.prepare('DELETE FROM dead_letter_queue').run();
+  },
+
+  getBlockedSources() {
+    return db.prepare('SELECT * FROM blocked_sources ORDER BY last_failure_at DESC').all().map(row => ({
+      id: row.id,
+      username: row.username,
+      blockedAt: row.blocked_at,
+      reason: row.reason,
+      failureCount: row.failure_count,
+      lastFailureAt: row.last_failure_at,
+      unblockAfter: row.unblock_after,
+      permanent: row.permanent === 1,
+    }));
+  },
+
+  getBlockedSource(username) {
+    const row = db.prepare('SELECT * FROM blocked_sources WHERE username = ?').get(username);
+    if (!row) return null;
+    return {
+      id: row.id,
+      username: row.username,
+      blockedAt: row.blocked_at,
+      reason: row.reason,
+      failureCount: row.failure_count,
+      lastFailureAt: row.last_failure_at,
+      unblockAfter: row.unblock_after,
+      permanent: row.permanent === 1,
+    };
+  },
+
+  isSourceBlocked(username) {
+    const source = this.getBlockedSource(username);
+    if (!source) return false;
+    if (source.permanent) return true;
+    if (source.unblockAfter && new Date(source.unblockAfter) <= new Date()) {
+      this.unblockSource(username);
+      return false;
+    }
+    return true;
+  },
+
+  blockSource(username, reason, options = {}) {
+    const existing = this.getBlockedSource(username);
+    const now = new Date().toISOString();
+    
+    if (existing) {
+      const stmt = db.prepare(`
+        UPDATE blocked_sources SET
+          failure_count = failure_count + 1,
+          last_failure_at = ?,
+          reason = COALESCE(?, reason),
+          unblock_after = COALESCE(?, unblock_after),
+          permanent = COALESCE(?, permanent)
+        WHERE username = ?
+      `);
+      stmt.run(
+        now,
+        reason,
+        options.unblockAfter,
+        options.permanent ? 1 : null,
+        username
+      );
+    } else {
+      const stmt = db.prepare(`
+        INSERT INTO blocked_sources (username, blocked_at, reason, failure_count, last_failure_at, unblock_after, permanent)
+        VALUES (?, ?, ?, 1, ?, ?, ?)
+      `);
+      stmt.run(
+        username,
+        now,
+        reason,
+        now,
+        options.unblockAfter,
+        options.permanent ? 1 : 0
+      );
+    }
+  },
+
+  unblockSource(username) {
+    return db.prepare('DELETE FROM blocked_sources WHERE username = ?').run(username);
+  },
+
+  clearBlockedSources() {
+    return db.prepare('DELETE FROM blocked_sources WHERE permanent = 0').run();
+  },
+
+  insertDownloadAttempt(attempt) {
+    const stmt = db.prepare(`
+      INSERT INTO download_attempts 
+      (download_id, attempt_number, username, started_at, ended_at, duration_ms,
+       status, error_type, error_message, bytes_transferred, transfer_speed_bps, file_path)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(
+      attempt.downloadId,
+      attempt.attemptNumber,
+      attempt.username,
+      attempt.startedAt,
+      attempt.endedAt,
+      attempt.durationMs,
+      attempt.status,
+      attempt.errorType,
+      attempt.errorMessage,
+      attempt.bytesTransferred || 0,
+      attempt.transferSpeedBps,
+      attempt.filePath
+    );
+    return { ...attempt, id: result.lastInsertRowid };
+  },
+
+  updateDownloadAttempt(id, updates) {
+    const stmt = db.prepare(`
+      UPDATE download_attempts SET
+        ended_at = COALESCE(?, ended_at),
+        duration_ms = COALESCE(?, duration_ms),
+        status = COALESCE(?, status),
+        error_type = COALESCE(?, error_type),
+        error_message = COALESCE(?, error_message),
+        bytes_transferred = COALESCE(?, bytes_transferred),
+        transfer_speed_bps = COALESCE(?, transfer_speed_bps)
+      WHERE id = ?
+    `);
+    stmt.run(
+      updates.endedAt,
+      updates.durationMs,
+      updates.status,
+      updates.errorType,
+      updates.errorMessage,
+      updates.bytesTransferred,
+      updates.transferSpeedBps,
+      id
+    );
+  },
+
+  getDownloadAttempts(downloadId) {
+    return db.prepare('SELECT * FROM download_attempts WHERE download_id = ? ORDER BY attempt_number ASC')
+      .all(downloadId)
+      .map(row => ({
+        id: row.id,
+        downloadId: row.download_id,
+        attemptNumber: row.attempt_number,
+        username: row.username,
+        startedAt: row.started_at,
+        endedAt: row.ended_at,
+        durationMs: row.duration_ms,
+        status: row.status,
+        errorType: row.error_type,
+        errorMessage: row.error_message,
+        bytesTransferred: row.bytes_transferred,
+        transferSpeedBps: row.transfer_speed_bps,
+        filePath: row.file_path,
+      }));
+  },
+
+  getFailedUsernamesForDownload(downloadId) {
+    return db.prepare(`
+      SELECT DISTINCT username FROM download_attempts 
+      WHERE download_id = ? AND status = 'failed' AND username IS NOT NULL
+    `).all(downloadId).map(row => row.username);
+  },
+
+  recordMetric(type, value, metadata = null) {
+    const stmt = db.prepare(`
+      INSERT INTO download_metrics (recorded_at, metric_type, metric_value, metadata)
+      VALUES (?, ?, ?, ?)
+    `);
+    stmt.run(
+      new Date().toISOString(),
+      type,
+      value,
+      dbHelpers.stringifyJSON(metadata)
+    );
+  },
+
+  getMetrics(type, since = null, limit = 100) {
+    let query = 'SELECT * FROM download_metrics WHERE metric_type = ?';
+    const params = [type];
+    
+    if (since) {
+      query += ' AND recorded_at >= ?';
+      params.push(since);
+    }
+    
+    query += ' ORDER BY recorded_at DESC LIMIT ?';
+    params.push(limit);
+    
+    return db.prepare(query).all(...params).map(row => ({
+      id: row.id,
+      recordedAt: row.recorded_at,
+      metricType: row.metric_type,
+      metricValue: row.metric_value,
+      metadata: dbHelpers.parseJSON(row.metadata),
+    }));
+  },
+
+  getDownloadSuccessRate(hours = 24) {
+    const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+    const stats = db.prepare(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN status IN ('completed', 'added') THEN 1 ELSE 0 END) as successful,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+        SUM(CASE WHEN status = 'dead_letter' THEN 1 ELSE 0 END) as dead_letter
+      FROM downloads
+      WHERE requested_at >= ?
+    `).get(since);
+    
+    return {
+      total: stats.total || 0,
+      successful: stats.successful || 0,
+      failed: stats.failed || 0,
+      deadLetter: stats.dead_letter || 0,
+      successRate: stats.total > 0 ? (stats.successful / stats.total) * 100 : 0,
+    };
+  },
+
+  getStalledDownloads(stalledTimeoutMs = 30 * 60 * 1000) {
+    const cutoff = new Date(Date.now() - stalledTimeoutMs).toISOString();
+    return db.prepare(`
+      SELECT * FROM downloads 
+      WHERE status IN ('downloading', 'searching', 'processing')
+      AND (
+        (last_progress_update IS NOT NULL AND last_progress_update < ?)
+        OR (last_progress_update IS NULL AND started_at < ?)
+      )
+    `).all(cutoff, cutoff).map(row => this.mapDownload(row));
   },
 };

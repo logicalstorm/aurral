@@ -4,6 +4,7 @@ import { UUID_REGEX } from "../config/constants.js";
 import { musicbrainzRequest, getLastfmApiKey, lastfmRequest, spotifySearchArtist } from "../services/apiClients.js";
 import { imagePrefetchService } from "../services/imagePrefetchService.js";
 import { getAuthUser, getAuthPassword } from "../middleware/auth.js";
+import { dbOps } from "../config/db-helpers.js";
 
 const router = express.Router();
 
@@ -329,11 +330,49 @@ router.get("/:mbid/stream", async (req, res) => {
     sendSSE(res, 'connected', { mbid });
     
     try {
-      // Fetch basic artist data from MusicBrainz
-      console.log(`[Artists Stream] Fetching artist ${mbid}`);
-      const artistData = await musicbrainzRequest(`/artist/${mbid}`, {
-        inc: "aliases+tags+ratings+genres+release-groups",
-      });
+      // Check circuit breaker before making request
+      if (shouldSkipMusicBrainz()) {
+        console.log(`[Artists Stream] MusicBrainz circuit breaker is open, skipping request for ${mbid}`);
+        sendSSE(res, 'error', {
+          error: "Service temporarily unavailable",
+          message: "MusicBrainz is currently experiencing issues. Please try again later.",
+        });
+        return;
+      }
+      
+      // Check if request is already in progress (deduplication)
+      let artistData;
+      if (pendingArtistRequests.has(mbid)) {
+        console.log(`[Artists Stream] Request for ${mbid} already in progress, waiting...`);
+        try {
+          artistData = await pendingArtistRequests.get(mbid);
+        } catch (error) {
+          sendSSE(res, 'error', {
+            error: "Failed to fetch artist details",
+            message: error.response?.data?.error || error.message,
+          });
+          return;
+        }
+      } else {
+        // Fetch basic artist data from MusicBrainz
+        console.log(`[Artists Stream] Fetching artist ${mbid}`);
+        const fetchPromise = (async () => {
+          try {
+            const data = await musicbrainzRequest(`/artist/${mbid}`, {
+              inc: "aliases+tags+ratings+genres+release-groups",
+            });
+            recordMusicBrainzSuccess();
+            return data;
+          } catch (error) {
+            recordMusicBrainzFailure();
+            throw error;
+          } finally {
+            pendingArtistRequests.delete(mbid);
+          }
+        })();
+        pendingArtistRequests.set(mbid, fetchPromise);
+        artistData = await fetchPromise;
+      }
 
       // Send artist data immediately
       sendSSE(res, 'artist', artistData);
@@ -624,22 +663,61 @@ router.get("/:mbid", async (req, res) => {
       });
     }
     
+    // Check if request is already in progress (deduplication)
+    if (pendingArtistRequests.has(mbid)) {
+      console.log(`[Artists Route] Request for ${mbid} already in progress, waiting...`);
+      try {
+        const data = await pendingArtistRequests.get(mbid);
+        res.setHeader('Content-Type', 'application/json');
+        return res.json(data);
+      } catch (error) {
+        return res.status(error.response?.status || 500).json({
+          error: "Failed to fetch artist details",
+          message: error.response?.data?.error || error.message,
+        });
+      }
+    }
+    
+    // Check circuit breaker before making request
+    if (shouldSkipMusicBrainz()) {
+      console.log(`[Artists Route] MusicBrainz circuit breaker is open, skipping request for ${mbid}`);
+      return res.status(503).json({
+        error: "Service temporarily unavailable",
+        message: "MusicBrainz is currently experiencing issues. Please try again later.",
+      });
+    }
+    
     console.log(`[Artists Route] Fetching artist details for MBID: ${mbid}`);
 
-    try {
-      console.log(`[Artists Route] Calling MusicBrainz for ${mbid}`);
-      const data = await musicbrainzRequest(`/artist/${mbid}`, {
-        inc: "aliases+tags+ratings+genres+release-groups",
-      });
+    const fetchPromise = (async () => {
+      try {
+        console.log(`[Artists Route] Calling MusicBrainz for ${mbid}`);
+        const data = await musicbrainzRequest(`/artist/${mbid}`, {
+          inc: "aliases+tags+ratings+genres+release-groups",
+        });
 
-      console.log(`[Artists Route] Successfully fetched artist ${mbid}`);
+        console.log(`[Artists Route] Successfully fetched artist ${mbid}`);
+        recordMusicBrainzSuccess();
+        return data;
+      } catch (error) {
+        recordMusicBrainzFailure();
+        console.error(`[Artists Route] MusicBrainz error for artist ${mbid}:`, error.message);
+        throw error;
+      } finally {
+        pendingArtistRequests.delete(mbid);
+      }
+    })();
+    
+    pendingArtistRequests.set(mbid, fetchPromise);
+    
+    try {
+      const data = await fetchPromise;
       console.log(`[Artists Route] Response data type:`, typeof data);
       console.log(`[Artists Route] Response has id:`, !!data?.id);
       console.log(`[Artists Route] Response keys:`, data ? Object.keys(data).slice(0, 10) : 'null');
       res.setHeader('Content-Type', 'application/json');
       res.json(data);
     } catch (error) {
-      console.error(`[Artists Route] MusicBrainz error for artist ${mbid}:`, error.message);
       console.error(`[Artists Route] Error stack:`, error.stack);
       res.status(error.response?.status || 500).json({
         error: "Failed to fetch artist details",
@@ -657,6 +735,7 @@ router.get("/:mbid", async (req, res) => {
 });
 
 const pendingCoverRequests = new Map();
+const pendingArtistRequests = new Map();
 
 // Simple circuit breaker for MusicBrainz - skip if too many recent failures
 let musicbrainzFailureCount = 0;

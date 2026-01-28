@@ -52,10 +52,15 @@ const musicbrainzRequestWithRetry = async (endpoint, params = {}, retryCount = 0
       "ECONNREFUSED",
       "ENOTFOUND",
       "EAI_AGAIN",
+      "ERR_BAD_RESPONSE",
+      "ERR_NETWORK",
+      "ERR_CONNECTION_REFUSED",
+      "ERR_CONNECTION_TIMED_OUT",
+      "ERR_INTERNET_DISCONNECTED",
     ];
     return (
       connectionErrors.some((err) => error.code === err || error.message.includes(err)) ||
-      (error.code && error.code.startsWith("E"))
+      (error.code && (error.code.startsWith("E") || error.code.startsWith("ERR_")))
     );
   };
 
@@ -71,19 +76,25 @@ const musicbrainzRequestWithRetry = async (endpoint, params = {}, retryCount = 0
     );
     return response.data;
   } catch (error) {
-    if (isConnectionError(error) && retryCount < MAX_RETRIES) {
+    const shouldRetry = 
+      (isConnectionError(error) || 
+       (error.response && [503, 429, 500, 502, 504].includes(error.response.status))) &&
+      retryCount < MAX_RETRIES;
+    
+    if (shouldRetry) {
       const delay = Math.min(1000 * Math.pow(2, retryCount), 5000);
+      const errorType = error.response 
+        ? `HTTP ${error.response.status}` 
+        : (error.code || error.message);
       console.warn(
-        `MusicBrainz connection error (${error.code || error.message}), retrying in ${delay}ms... (attempt ${retryCount + 1}/${MAX_RETRIES})`,
+        `MusicBrainz error (${errorType}), retrying in ${delay}ms... (attempt ${retryCount + 1}/${MAX_RETRIES})`,
       );
       await new Promise((resolve) => setTimeout(resolve, delay));
       return musicbrainzRequestWithRetry(endpoint, params, retryCount + 1);
     }
 
-    if (error.response && error.response.status === 503) {
-      console.warn(
-        "MusicBrainz 503 Service Unavailable (Rate Limit), retrying...",
-      );
+    if (error.response && error.response.status === 404) {
+      console.warn(`MusicBrainz 404 Not Found for ${endpoint}`);
       throw error;
     }
 

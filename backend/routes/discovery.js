@@ -4,8 +4,11 @@ import { lastfmRequest, getLastfmApiKey } from "../services/apiClients.js";
 import { libraryManager } from "../services/libraryManager.js";
 import { dbOps } from "../config/db-helpers.js";
 import { imagePrefetchService } from "../services/imagePrefetchService.js";
+import { defaultDiscoveryPreferences } from "../config/constants.js";
 
 const router = express.Router();
+
+let discoveryPreferences = { ...defaultDiscoveryPreferences };
 
 router.post("/refresh", (req, res) => {
   const discoveryCache = getDiscoveryCache();
@@ -100,18 +103,37 @@ router.get("/", async (req, res) => {
     });
   }
   
-  // Always read directly from database as source of truth
-  const dbData = dbOps.getDiscoveryCache();
   const discoveryCache = getDiscoveryCache();
-  
-  // Ensure we have arrays (not undefined)
-  const recommendations = Array.isArray(dbData.recommendations) ? dbData.recommendations : (Array.isArray(discoveryCache.recommendations) ? discoveryCache.recommendations : []);
-  const globalTop = Array.isArray(dbData.globalTop) ? dbData.globalTop : (Array.isArray(discoveryCache.globalTop) ? discoveryCache.globalTop : []);
-  const basedOn = Array.isArray(dbData.basedOn) ? dbData.basedOn : (Array.isArray(discoveryCache.basedOn) ? discoveryCache.basedOn : []);
-  const topTags = Array.isArray(dbData.topTags) ? dbData.topTags : (Array.isArray(discoveryCache.topTags) ? discoveryCache.topTags : []);
-  const topGenres = Array.isArray(dbData.topGenres) ? dbData.topGenres : (Array.isArray(discoveryCache.topGenres) ? discoveryCache.topGenres : []);
-  const lastUpdated = dbData.lastUpdated || discoveryCache.lastUpdated || null;
+  const dbData = dbOps.getDiscoveryCache();
   const isUpdating = discoveryCache.isUpdating || false;
+  
+  const dbHasData = (dbData.recommendations?.length > 0 || dbData.globalTop?.length > 0 || dbData.topGenres?.length > 0);
+  const cacheHasData = (discoveryCache.recommendations?.length > 0 || discoveryCache.globalTop?.length > 0 || discoveryCache.topGenres?.length > 0);
+  
+  let recommendations, globalTop, basedOn, topTags, topGenres, lastUpdated;
+  
+  if (dbHasData) {
+    recommendations = dbData.recommendations || [];
+    globalTop = dbData.globalTop || [];
+    basedOn = dbData.basedOn || [];
+    topTags = dbData.topTags || [];
+    topGenres = dbData.topGenres || [];
+    lastUpdated = dbData.lastUpdated || null;
+  } else if (cacheHasData) {
+    recommendations = discoveryCache.recommendations || [];
+    globalTop = discoveryCache.globalTop || [];
+    basedOn = discoveryCache.basedOn || [];
+    topTags = discoveryCache.topTags || [];
+    topGenres = discoveryCache.topGenres || [];
+    lastUpdated = discoveryCache.lastUpdated || null;
+  } else {
+    recommendations = [];
+    globalTop = [];
+    basedOn = [];
+    topTags = [];
+    topGenres = [];
+    lastUpdated = null;
+  }
   
   // Sync cache from database
   if (recommendations.length > 0 || globalTop.length > 0 || topGenres.length > 0) {
@@ -131,10 +153,17 @@ router.get("/", async (req, res) => {
     imagePrefetchService.prefetchDiscoveryImages({
       recommendations,
       globalTop
-    }).catch(() => {}); // Don't block response
+    }).catch(() => {});
   }
 
-  res.set("Cache-Control", "public, max-age=300");
+  if (recommendations.length > 0 || globalTop.length > 0) {
+    res.set("Cache-Control", "public, max-age=300");
+  } else if (isUpdating) {
+    res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+  } else {
+    res.set("Cache-Control", "public, max-age=30");
+  }
+  
   res.json({
     recommendations,
     globalTop,
@@ -238,6 +267,174 @@ router.get("/by-tag", async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: "Failed to search by tag",
+      message: error.message,
+    });
+  }
+});
+
+router.get("/preferences", (req, res) => {
+  res.json(discoveryPreferences);
+});
+
+router.post("/preferences", (req, res) => {
+  try {
+    const updates = req.body;
+    
+    discoveryPreferences = {
+      ...discoveryPreferences,
+      ...updates,
+    };
+    
+    res.json({
+      success: true,
+      preferences: discoveryPreferences,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to update preferences",
+      message: error.message,
+    });
+  }
+});
+
+router.post("/preferences/reset", (req, res) => {
+  discoveryPreferences = { ...defaultDiscoveryPreferences };
+  res.json({
+    success: true,
+    preferences: discoveryPreferences,
+  });
+});
+
+router.post("/preferences/exclude-genre", (req, res) => {
+  try {
+    const { genre } = req.body;
+    if (!genre) {
+      return res.status(400).json({ error: "genre is required" });
+    }
+    
+    if (!discoveryPreferences.excludedGenres.includes(genre.toLowerCase())) {
+      discoveryPreferences.excludedGenres.push(genre.toLowerCase());
+    }
+    
+    res.json({
+      success: true,
+      excludedGenres: discoveryPreferences.excludedGenres,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to exclude genre",
+      message: error.message,
+    });
+  }
+});
+
+router.delete("/preferences/exclude-genre/:genre", (req, res) => {
+  try {
+    const { genre } = req.params;
+    discoveryPreferences.excludedGenres = discoveryPreferences.excludedGenres.filter(
+      g => g !== genre.toLowerCase()
+    );
+    
+    res.json({
+      success: true,
+      excludedGenres: discoveryPreferences.excludedGenres,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to remove excluded genre",
+      message: error.message,
+    });
+  }
+});
+
+router.post("/preferences/exclude-artist", (req, res) => {
+  try {
+    const { artistId, artistName } = req.body;
+    if (!artistId) {
+      return res.status(400).json({ error: "artistId is required" });
+    }
+    
+    if (!discoveryPreferences.excludedArtists.find(a => a.artistId === artistId)) {
+      discoveryPreferences.excludedArtists.push({ artistId, artistName });
+    }
+    
+    res.json({
+      success: true,
+      excludedArtists: discoveryPreferences.excludedArtists,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to exclude artist",
+      message: error.message,
+    });
+  }
+});
+
+router.delete("/preferences/exclude-artist/:artistId", (req, res) => {
+  try {
+    const { artistId } = req.params;
+    discoveryPreferences.excludedArtists = discoveryPreferences.excludedArtists.filter(
+      a => a.artistId !== artistId
+    );
+    
+    res.json({
+      success: true,
+      excludedArtists: discoveryPreferences.excludedArtists,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to remove excluded artist",
+      message: error.message,
+    });
+  }
+});
+
+router.get("/filtered", async (req, res) => {
+  try {
+    const discoveryCache = getDiscoveryCache();
+    let recommendations = discoveryCache.recommendations || [];
+    let globalTop = discoveryCache.globalTop || [];
+    
+    if (discoveryPreferences.excludedGenres.length > 0) {
+      const excludedGenresLower = discoveryPreferences.excludedGenres.map(g => g.toLowerCase());
+      
+      recommendations = recommendations.filter(artist => {
+        const artistTags = (artist.tags || []).map(t => t.toLowerCase());
+        return !artistTags.some(tag => excludedGenresLower.includes(tag));
+      });
+      
+      globalTop = globalTop.filter(artist => {
+        const artistTags = (artist.tags || []).map(t => t.toLowerCase());
+        return !artistTags.some(tag => excludedGenresLower.includes(tag));
+      });
+    }
+    
+    if (discoveryPreferences.excludedArtists.length > 0) {
+      const excludedIds = new Set(discoveryPreferences.excludedArtists.map(a => a.artistId));
+      recommendations = recommendations.filter(artist => !excludedIds.has(artist.id));
+      globalTop = globalTop.filter(artist => !excludedIds.has(artist.id));
+    }
+    
+    if (discoveryPreferences.maxRecommendations > 0) {
+      recommendations = recommendations.slice(0, discoveryPreferences.maxRecommendations);
+    }
+    
+    res.json({
+      recommendations,
+      globalTop,
+      topTags: discoveryCache.topTags || [],
+      topGenres: discoveryCache.topGenres || [],
+      basedOn: discoveryCache.basedOn || [],
+      lastUpdated: discoveryCache.lastUpdated,
+      preferencesApplied: true,
+      excludedCount: {
+        genres: discoveryPreferences.excludedGenres.length,
+        artists: discoveryPreferences.excludedArtists.length,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to get filtered discovery",
       message: error.message,
     });
   }

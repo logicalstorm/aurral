@@ -97,20 +97,18 @@ setTimeout(async () => {
   // If nothing is configured, clear discovery cache
   if (!hasLastfm && !hasArtists) {
     console.log("Discovery not configured (no Last.fm key and no artists). Clearing cache.");
-    if (db.data?.discovery) {
-      db.data.discovery = {
+    try {
+      const { dbOps } = await import("./backend/config/db-helpers.js");
+      dbOps.updateDiscoveryCache({
         recommendations: [],
         globalTop: [],
         basedOn: [],
         topTags: [],
         topGenres: [],
         lastUpdated: null,
-      };
-      try {
-        await db.write();
-      } catch (error) {
-        console.error("Failed to clear discovery cache:", error.message);
-      }
+      });
+    } catch (error) {
+      console.error("Failed to clear discovery cache:", error.message);
     }
     return;
   }
