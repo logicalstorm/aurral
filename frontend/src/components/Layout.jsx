@@ -3,12 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Search, Menu } from "lucide-react";
 import Sidebar from "./Sidebar";
 
-function Layout({
-  children,
-  isHealthy,
-  rootFolderConfigured,
-  slskdConfigured,
-}) {
+function Layout({ children, isHealthy, rootFolderConfigured }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();

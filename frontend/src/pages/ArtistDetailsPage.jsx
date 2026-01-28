@@ -181,13 +181,15 @@ function ArtistDetailsPage() {
     setLoadingSimilar(true);
 
     // Fetch app settings (non-blocking)
-    getAppSettings().then(setAppSettings).catch(() => {});
+    getAppSettings()
+      .then(setAppSettings)
+      .catch(() => {});
 
     // Build EventSource URL with authentication
     const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
     const password = localStorage.getItem("auth_password");
     const username = localStorage.getItem("auth_user") || "admin";
-    
+
     let streamUrl = `${API_BASE_URL}/artists/${mbid}/stream`;
     if (password) {
       const token = btoa(`${username}:${password}`);
@@ -200,11 +202,11 @@ function ArtistDetailsPage() {
     let streamComplete = false;
     let coverReceived = false;
     let similarReceived = false;
-    
+
     // Fallback timeout - if cover/similar don't arrive within 10 seconds, fetch them directly
     const fallbackTimeout = setTimeout(() => {
       if (!coverReceived) {
-        console.log('[Stream] Fallback: Fetching cover directly');
+        console.log("[Stream] Fallback: Fetching cover directly");
         getArtistCover(mbid)
           .then((coverData) => {
             if (coverData.images && coverData.images.length > 0) {
@@ -215,7 +217,7 @@ function ArtistDetailsPage() {
           .finally(() => setLoadingCover(false));
       }
       if (!similarReceived) {
-        console.log('[Stream] Fallback: Fetching similar artists directly');
+        console.log("[Stream] Fallback: Fetching similar artists directly");
         getSimilarArtistsForArtist(mbid)
           .then((similarData) => {
             setSimilarArtists(similarData.artists || []);
@@ -225,19 +227,19 @@ function ArtistDetailsPage() {
       }
     }, 10000);
 
-    eventSource.addEventListener('connected', (event) => {
+    eventSource.addEventListener("connected", (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log('[Stream] Connected for artist:', data.mbid);
+        console.log("[Stream] Connected for artist:", data.mbid);
       } catch (err) {
-        console.error('[Stream] Error parsing connected event:', err);
+        console.error("[Stream] Error parsing connected event:", err);
       }
     });
 
-    eventSource.addEventListener('artist', (event) => {
+    eventSource.addEventListener("artist", (event) => {
       try {
         const artistData = JSON.parse(event.data);
-        console.log('[Stream] Received artist data');
+        console.log("[Stream] Received artist data");
         if (!artistData || !artistData.id) {
           throw new Error("Invalid artist data received");
         }
@@ -251,10 +253,14 @@ function ArtistDetailsPage() {
       }
     });
 
-    eventSource.addEventListener('cover', (event) => {
+    eventSource.addEventListener("cover", (event) => {
       try {
         const coverData = JSON.parse(event.data);
-        console.log('[Stream] Received cover data:', coverData.images?.length || 0, 'images');
+        console.log(
+          "[Stream] Received cover data:",
+          coverData.images?.length || 0,
+          "images",
+        );
         coverReceived = true;
         if (coverData.images && coverData.images.length > 0) {
           setCoverImages(coverData.images);
@@ -266,10 +272,14 @@ function ArtistDetailsPage() {
       }
     });
 
-    eventSource.addEventListener('similar', (event) => {
+    eventSource.addEventListener("similar", (event) => {
       try {
         const similarData = JSON.parse(event.data);
-        console.log('[Stream] Received similar artists:', similarData.artists?.length || 0, 'artists');
+        console.log(
+          "[Stream] Received similar artists:",
+          similarData.artists?.length || 0,
+          "artists",
+        );
         similarReceived = true;
         setSimilarArtists(similarData.artists || []);
         setLoadingSimilar(false);
@@ -279,11 +289,12 @@ function ArtistDetailsPage() {
       }
     });
 
-    eventSource.addEventListener('releaseGroupCover', (event) => {
+    eventSource.addEventListener("releaseGroupCover", (event) => {
       try {
         const coverData = JSON.parse(event.data);
         if (coverData.images && coverData.images.length > 0 && coverData.mbid) {
-          const front = coverData.images.find((img) => img.front) || coverData.images[0];
+          const front =
+            coverData.images.find((img) => img.front) || coverData.images[0];
           if (front && front.image) {
             setAlbumCovers((prev) => ({
               ...prev,
@@ -292,16 +303,20 @@ function ArtistDetailsPage() {
           }
         }
       } catch (err) {
-        console.error("Error parsing release group cover data:", err, event.data);
+        console.error(
+          "Error parsing release group cover data:",
+          err,
+          event.data,
+        );
       }
     });
 
-    eventSource.addEventListener('complete', () => {
-      console.log('[Stream] Stream complete');
+    eventSource.addEventListener("complete", () => {
+      console.log("[Stream] Stream complete");
       streamComplete = true;
       clearTimeout(fallbackTimeout);
       eventSource.close();
-      
+
       // Load library data after stream completes
       setLoadingLibrary(true);
       lookupArtistInLibrary(mbid)
@@ -346,22 +361,24 @@ function ArtistDetailsPage() {
         .finally(() => setLoadingLibrary(false));
     });
 
-    eventSource.addEventListener('error', (event) => {
+    eventSource.addEventListener("error", (event) => {
       try {
         const errorData = JSON.parse(event.data);
         setError(
           errorData.message ||
             errorData.error ||
-            "Failed to fetch artist details"
+            "Failed to fetch artist details",
         );
         setLoading(false);
         eventSource.close();
       } catch (err) {
         // If eventSource is in error state, fallback to regular API
         if (eventSource.readyState === EventSource.CLOSED) {
-          console.warn("[Stream] Connection closed, falling back to regular API");
+          console.warn(
+            "[Stream] Connection closed, falling back to regular API",
+          );
           eventSource.close();
-          
+
           // Fallback to regular API call
           getArtistDetails(mbid)
             .then((artistData) => {
@@ -370,7 +387,7 @@ function ArtistDetailsPage() {
               }
               setArtist(artistData);
               setLoading(false);
-              
+
               // Load other data in background
               getArtistCover(mbid)
                 .then((coverData) => {
@@ -380,7 +397,7 @@ function ArtistDetailsPage() {
                 })
                 .catch(() => {})
                 .finally(() => setLoadingCover(false));
-              
+
               getSimilarArtistsForArtist(mbid)
                 .then((similarData) => {
                   setSimilarArtists(similarData.artists || []);
@@ -394,7 +411,7 @@ function ArtistDetailsPage() {
                 err.response?.data?.message ||
                   err.response?.data?.error ||
                   err.message ||
-                  "Failed to fetch artist details"
+                  "Failed to fetch artist details",
               );
               setLoading(false);
             });
@@ -403,12 +420,17 @@ function ArtistDetailsPage() {
     });
 
     eventSource.onerror = (err) => {
-      console.error("[Stream] EventSource onerror:", err, "readyState:", eventSource.readyState);
+      console.error(
+        "[Stream] EventSource onerror:",
+        err,
+        "readyState:",
+        eventSource.readyState,
+      );
       // Only handle if we haven't received artist data yet
       if (!artistReceived && !streamComplete) {
         console.error("[Stream] EventSource error before artist data received");
         eventSource.close();
-        
+
         // Fallback to regular API
         getArtistDetails(mbid)
           .then((artistData) => {
@@ -417,7 +439,7 @@ function ArtistDetailsPage() {
             }
             setArtist(artistData);
             setLoading(false);
-            
+
             getArtistCover(mbid)
               .then((coverData) => {
                 if (coverData.images && coverData.images.length > 0) {
@@ -426,7 +448,7 @@ function ArtistDetailsPage() {
               })
               .catch(() => {})
               .finally(() => setLoadingCover(false));
-            
+
             getSimilarArtistsForArtist(mbid)
               .then((similarData) => {
                 setSimilarArtists(similarData.artists || []);
@@ -440,7 +462,7 @@ function ArtistDetailsPage() {
               err.response?.data?.message ||
                 err.response?.data?.error ||
                 err.message ||
-                "Failed to fetch artist details"
+                "Failed to fetch artist details",
             );
             setLoading(false);
           });
@@ -718,13 +740,15 @@ function ArtistDetailsPage() {
             albumId,
             title,
           );
-          
+
           // Always refresh albums list from server after adding to prevent duplicates
           // This ensures we have the latest state from the backend
-          const refreshedAlbums = await getLibraryAlbums(currentLibraryArtist.id);
+          const refreshedAlbums = await getLibraryAlbums(
+            currentLibraryArtist.id,
+          );
           const uniqueAlbums = deduplicateAlbums(refreshedAlbums);
           setLibraryAlbums(uniqueAlbums);
-          
+
           // Find the album in the refreshed list
           libraryAlbum = uniqueAlbums.find(
             (a) =>
@@ -788,17 +812,14 @@ function ArtistDetailsPage() {
 
     setExpandedAlbum(releaseGroupId);
 
-    // Fetch tracks - from library if available, otherwise from MusicBrainz
     const trackKey = libraryAlbumId || releaseGroupId;
     if (!albumTracks[trackKey]) {
       setLoadingTracks((prev) => ({ ...prev, [trackKey]: true }));
       try {
         if (libraryAlbumId) {
-          // Album is in library - fetch from library
-          const tracks = await getLibraryTracks(libraryAlbumId);
+          const tracks = await getLibraryTracks(libraryAlbumId, releaseGroupId);
           setAlbumTracks((prev) => ({ ...prev, [trackKey]: tracks }));
         } else {
-          // Album not in library - fetch from MusicBrainz
           const tracks = await getReleaseGroupTracks(releaseGroupId);
           setAlbumTracks((prev) => ({ ...prev, [trackKey]: tracks }));
         }
@@ -956,7 +977,7 @@ function ArtistDetailsPage() {
 
     // Poll immediately, then every 5 seconds
     pollDownloadStatus();
-    const interval = setInterval(pollDownloadStatus, 5000);
+    const interval = setInterval(pollDownloadStatus, 15000);
 
     return () => clearInterval(interval);
   }, [libraryAlbums]);
@@ -984,6 +1005,7 @@ function ArtistDetailsPage() {
         downloading: "Downloading...",
         moving: "Moving files...",
         added: "Added",
+        processing: "Processing...",
       };
 
       return {

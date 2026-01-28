@@ -1,29 +1,66 @@
 export const DOWNLOAD_STATES = {
-  REQUESTED: 'requested',
-  QUEUED: 'queued',
-  SEARCHING: 'searching',
-  DOWNLOADING: 'downloading',
-  PROCESSING: 'processing',
-  MOVING: 'moving',
-  COMPLETED: 'completed',
-  ADDED: 'added',
-  FAILED: 'failed',
-  STALLED: 'stalled',
-  DEAD_LETTER: 'dead_letter',
-  CANCELLED: 'cancelled',
+  REQUESTED: "requested",
+  QUEUED: "queued",
+  SEARCHING: "searching",
+  DOWNLOADING: "downloading",
+  PROCESSING: "processing",
+  MOVING: "moving",
+  COMPLETED: "completed",
+  ADDED: "added",
+  FAILED: "failed",
+  STALLED: "stalled",
+  DEAD_LETTER: "dead_letter",
+  CANCELLED: "cancelled",
 };
 
 export const DOWNLOAD_STATE_TRANSITIONS = {
-  [DOWNLOAD_STATES.REQUESTED]: [DOWNLOAD_STATES.QUEUED, DOWNLOAD_STATES.CANCELLED],
-  [DOWNLOAD_STATES.QUEUED]: [DOWNLOAD_STATES.SEARCHING, DOWNLOAD_STATES.CANCELLED, DOWNLOAD_STATES.FAILED, DOWNLOAD_STATES.DEAD_LETTER],
-  [DOWNLOAD_STATES.SEARCHING]: [DOWNLOAD_STATES.DOWNLOADING, DOWNLOAD_STATES.FAILED, DOWNLOAD_STATES.CANCELLED, DOWNLOAD_STATES.STALLED, DOWNLOAD_STATES.DEAD_LETTER],
-  [DOWNLOAD_STATES.DOWNLOADING]: [DOWNLOAD_STATES.PROCESSING, DOWNLOAD_STATES.FAILED, DOWNLOAD_STATES.CANCELLED, DOWNLOAD_STATES.STALLED, DOWNLOAD_STATES.DEAD_LETTER],
-  [DOWNLOAD_STATES.PROCESSING]: [DOWNLOAD_STATES.MOVING, DOWNLOAD_STATES.COMPLETED, DOWNLOAD_STATES.FAILED],
-  [DOWNLOAD_STATES.MOVING]: [DOWNLOAD_STATES.COMPLETED, DOWNLOAD_STATES.ADDED, DOWNLOAD_STATES.FAILED],
+  [DOWNLOAD_STATES.REQUESTED]: [
+    DOWNLOAD_STATES.QUEUED,
+    DOWNLOAD_STATES.CANCELLED,
+  ],
+  [DOWNLOAD_STATES.QUEUED]: [
+    DOWNLOAD_STATES.SEARCHING,
+    DOWNLOAD_STATES.CANCELLED,
+    DOWNLOAD_STATES.FAILED,
+    DOWNLOAD_STATES.DEAD_LETTER,
+  ],
+  [DOWNLOAD_STATES.SEARCHING]: [
+    DOWNLOAD_STATES.DOWNLOADING,
+    DOWNLOAD_STATES.FAILED,
+    DOWNLOAD_STATES.CANCELLED,
+    DOWNLOAD_STATES.STALLED,
+    DOWNLOAD_STATES.DEAD_LETTER,
+  ],
+  [DOWNLOAD_STATES.DOWNLOADING]: [
+    DOWNLOAD_STATES.PROCESSING,
+    DOWNLOAD_STATES.FAILED,
+    DOWNLOAD_STATES.CANCELLED,
+    DOWNLOAD_STATES.STALLED,
+    DOWNLOAD_STATES.DEAD_LETTER,
+  ],
+  [DOWNLOAD_STATES.PROCESSING]: [
+    DOWNLOAD_STATES.MOVING,
+    DOWNLOAD_STATES.COMPLETED,
+    DOWNLOAD_STATES.FAILED,
+  ],
+  [DOWNLOAD_STATES.MOVING]: [
+    DOWNLOAD_STATES.COMPLETED,
+    DOWNLOAD_STATES.ADDED,
+    DOWNLOAD_STATES.FAILED,
+  ],
   [DOWNLOAD_STATES.COMPLETED]: [DOWNLOAD_STATES.ADDED],
   [DOWNLOAD_STATES.ADDED]: [],
-  [DOWNLOAD_STATES.FAILED]: [DOWNLOAD_STATES.QUEUED, DOWNLOAD_STATES.SEARCHING, DOWNLOAD_STATES.ADDED, DOWNLOAD_STATES.DEAD_LETTER],
-  [DOWNLOAD_STATES.STALLED]: [DOWNLOAD_STATES.QUEUED, DOWNLOAD_STATES.FAILED, DOWNLOAD_STATES.DEAD_LETTER],
+  [DOWNLOAD_STATES.FAILED]: [
+    DOWNLOAD_STATES.QUEUED,
+    DOWNLOAD_STATES.SEARCHING,
+    DOWNLOAD_STATES.ADDED,
+    DOWNLOAD_STATES.DEAD_LETTER,
+  ],
+  [DOWNLOAD_STATES.STALLED]: [
+    DOWNLOAD_STATES.QUEUED,
+    DOWNLOAD_STATES.FAILED,
+    DOWNLOAD_STATES.DEAD_LETTER,
+  ],
   [DOWNLOAD_STATES.DEAD_LETTER]: [DOWNLOAD_STATES.QUEUED],
   [DOWNLOAD_STATES.CANCELLED]: [],
 };
@@ -35,16 +72,16 @@ export const SLOW_TRANSFER_TIMEOUT_MS = 10 * 60 * 1000;
 export const MIN_TRANSFER_SPEED_BPS = 10 * 1024;
 
 export const ERROR_TYPES = {
-  RATE_LIMIT: 'rate_limit',
-  NETWORK: 'network',
-  SERVER_ERROR: 'server_error',
-  NOT_FOUND: 'not_found',
-  PERMANENT: 'permanent',
-  TIMEOUT: 'timeout',
-  SLOW_TRANSFER: 'slow_transfer',
-  NO_SOURCES: 'no_sources',
-  BAD_SOURCE: 'bad_source',
-  UNKNOWN: 'unknown',
+  RATE_LIMIT: "rate_limit",
+  NETWORK: "network",
+  SERVER_ERROR: "server_error",
+  NOT_FOUND: "not_found",
+  PERMANENT: "permanent",
+  TIMEOUT: "timeout",
+  SLOW_TRANSFER: "slow_transfer",
+  NO_SOURCES: "no_sources",
+  BAD_SOURCE: "bad_source",
+  UNKNOWN: "unknown",
 };
 
 export const GENRE_KEYWORDS = [
@@ -68,7 +105,8 @@ export const GENRE_KEYWORDS = [
   "funk",
 ];
 
-export const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const MUSICBRAINZ_API = "https://musicbrainz.org/ws/2";
 export const LASTFM_API = "https://ws.audioscrobbler.com/2.0/";
@@ -111,11 +149,23 @@ export const defaultData = {
   settings: {
     rootFolderPath: null,
     quality: "standard", // "low", "standard", "max"
-    releaseTypes: ["Album", "EP", "Single", "Broadcast", "Soundtrack", "Spokenword", "Remix", "Live", "Compilation", "Demo"],
+    releaseTypes: [
+      "Album",
+      "EP",
+      "Single",
+      "Broadcast",
+      "Soundtrack",
+      "Spokenword",
+      "Remix",
+      "Live",
+      "Compilation",
+      "Demo",
+    ],
     integrations: {
       navidrome: { url: "", username: "", password: "" },
       lastfm: { username: "" },
       slskd: { url: "", apiKey: "" },
+      lidarr: { url: "", apiKey: "", qualityProfileId: null },
       musicbrainz: { email: "" },
       spotify: { clientId: "", clientSecret: "" },
       general: { authUser: "", authPassword: "" },

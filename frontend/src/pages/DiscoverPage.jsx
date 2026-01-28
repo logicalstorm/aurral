@@ -64,13 +64,6 @@ function DiscoverPage() {
             getRecentlyAdded(),
           ]);
 
-        console.log("Discovery data received:", {
-          recommendations: discoveryData?.recommendations?.length || 0,
-          globalTop: discoveryData?.globalTop?.length || 0,
-          topGenres: discoveryData?.topGenres?.length || 0,
-          configured: discoveryData?.configured,
-          fullData: discoveryData,
-        });
         setData(discoveryData);
         setRequests(requestsData);
         setRecentlyAdded(recentlyAddedData);
@@ -116,7 +109,7 @@ function DiscoverPage() {
     };
 
     pollDownloadStatus();
-    const interval = setInterval(pollDownloadStatus, 5000);
+    const interval = setInterval(pollDownloadStatus, 15000);
 
     return () => clearInterval(interval);
   }, []);
@@ -308,16 +301,6 @@ function DiscoverPage() {
     isUpdating,
     configured = true,
   } = data || {};
-
-  // Debug: Log the state
-  console.log("DiscoverPage render:", {
-    hasData: !!data,
-    configured,
-    recommendationsCount: recommendations.length,
-    globalTopCount: globalTop.length,
-    topGenresCount: topGenres.length,
-    topTagsCount: topTags.length,
-  });
 
   // Show configuration message if discovery isn't set up
   // Only show "not configured" if explicitly set to false AND no data exists
@@ -526,7 +509,6 @@ function DiscoverPage() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-            {/* Show completed album requests first */}
             {requests
               .filter((r) => r.status === "available")
               .slice(0, 6)
@@ -557,7 +539,6 @@ function DiscoverPage() {
                   />
                 );
               })}
-            {/* Then show recently added artists (if any slots remaining) */}
             {recentlyAdded
               .slice(
                 0,

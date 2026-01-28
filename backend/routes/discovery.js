@@ -1,5 +1,8 @@
 import express from "express";
-import { getDiscoveryCache, updateDiscoveryCache } from "../services/discoveryService.js";
+import {
+  getDiscoveryCache,
+  updateDiscoveryCache,
+} from "../services/discoveryService.js";
 import { lastfmRequest, getLastfmApiKey } from "../services/apiClients.js";
 import { libraryManager } from "../services/libraryManager.js";
 import { dbOps } from "../config/db-helpers.js";
@@ -27,7 +30,7 @@ router.post("/refresh", (req, res) => {
 
 router.post("/clear", async (req, res) => {
   const { clearImages = true } = req.body;
-  
+
   dbOps.updateDiscoveryCache({
     recommendations: [],
     globalTop: [],
@@ -36,10 +39,10 @@ router.post("/clear", async (req, res) => {
     topGenres: [],
     lastUpdated: null,
   });
-  
+
   // Note: Image cache would need a separate table - for now just clear discovery
   // TODO: Add image cache table if needed
-  
+
   const discoveryCache = getDiscoveryCache();
   Object.assign(discoveryCache, {
     recommendations: [],
@@ -50,7 +53,11 @@ router.post("/clear", async (req, res) => {
     lastUpdated: null,
     isUpdating: false,
   });
-  res.json({ message: clearImages ? "Discovery cache cleared (image cache clearing not yet implemented)" : "Discovery cache cleared" });
+  res.json({
+    message: clearImages
+      ? "Discovery cache cleared (image cache clearing not yet implemented)"
+      : "Discovery cache cleared",
+  });
 });
 
 router.get("/", async (req, res) => {
@@ -59,15 +66,19 @@ router.get("/", async (req, res) => {
   const settings = dbOps.getSettings();
   const lastfmUsername = settings.integrations?.lastfm?.username || null;
   const hasLastfmUser = hasLastfmKey && lastfmUsername;
-  const libraryArtists = libraryManager.getAllArtists();
+  const libraryArtists = await libraryManager.getAllArtists();
   const hasArtists = libraryArtists.length > 0;
-  
+
   // If nothing is configured, clear any existing data and return empty
   if (!hasLastfmKey && !hasArtists) {
     // Clear database if it has old data
     const dbData = dbOps.getDiscoveryCache();
-    if (dbData.recommendations?.length > 0 || dbData.globalTop?.length > 0 || 
-        dbData.topGenres?.length > 0 || dbData.basedOn?.length > 0) {
+    if (
+      dbData.recommendations?.length > 0 ||
+      dbData.globalTop?.length > 0 ||
+      dbData.topGenres?.length > 0 ||
+      dbData.basedOn?.length > 0
+    ) {
       dbOps.updateDiscoveryCache({
         recommendations: [],
         globalTop: [],
@@ -77,7 +88,7 @@ router.get("/", async (req, res) => {
         lastUpdated: null,
       });
     }
-    
+
     // Clear cache
     const discoveryCache = getDiscoveryCache();
     Object.assign(discoveryCache, {
@@ -89,7 +100,7 @@ router.get("/", async (req, res) => {
       lastUpdated: null,
       isUpdating: false,
     });
-    
+
     res.set("Cache-Control", "public, max-age=300");
     return res.json({
       recommendations: [],
@@ -102,16 +113,22 @@ router.get("/", async (req, res) => {
       configured: false,
     });
   }
-  
+
   const discoveryCache = getDiscoveryCache();
   const dbData = dbOps.getDiscoveryCache();
   const isUpdating = discoveryCache.isUpdating || false;
-  
-  const dbHasData = (dbData.recommendations?.length > 0 || dbData.globalTop?.length > 0 || dbData.topGenres?.length > 0);
-  const cacheHasData = (discoveryCache.recommendations?.length > 0 || discoveryCache.globalTop?.length > 0 || discoveryCache.topGenres?.length > 0);
-  
+
+  const dbHasData =
+    dbData.recommendations?.length > 0 ||
+    dbData.globalTop?.length > 0 ||
+    dbData.topGenres?.length > 0;
+  const cacheHasData =
+    discoveryCache.recommendations?.length > 0 ||
+    discoveryCache.globalTop?.length > 0 ||
+    discoveryCache.topGenres?.length > 0;
+
   let recommendations, globalTop, basedOn, topTags, topGenres, lastUpdated;
-  
+
   if (dbHasData) {
     recommendations = dbData.recommendations || [];
     globalTop = dbData.globalTop || [];
@@ -134,9 +151,23 @@ router.get("/", async (req, res) => {
     topGenres = [];
     lastUpdated = null;
   }
-  
-  // Sync cache from database
-  if (recommendations.length > 0 || globalTop.length > 0 || topGenres.length > 0) {
+
+  const existingArtistIds = new Set(libraryArtists.map((a) => a.mbid));
+
+  recommendations = recommendations.filter(
+    (artist) => !existingArtistIds.has(artist.id),
+  );
+  globalTop = globalTop.filter((artist) => !existingArtistIds.has(artist.id));
+
+  if (basedOn && Array.isArray(basedOn)) {
+    basedOn = basedOn.filter((artist) => !existingArtistIds.has(artist.id));
+  }
+
+  if (
+    recommendations.length > 0 ||
+    globalTop.length > 0 ||
+    topGenres.length > 0
+  ) {
     Object.assign(discoveryCache, {
       recommendations,
       globalTop,
@@ -147,13 +178,14 @@ router.get("/", async (req, res) => {
       isUpdating: false,
     });
   }
-  
-  // Trigger background pre-fetching of images for visible artists
+
   if (recommendations.length > 0 || globalTop.length > 0) {
-    imagePrefetchService.prefetchDiscoveryImages({
-      recommendations,
-      globalTop
-    }).catch(() => {});
+    imagePrefetchService
+      .prefetchDiscoveryImages({
+        recommendations,
+        globalTop,
+      })
+      .catch(() => {});
   }
 
   if (recommendations.length > 0 || globalTop.length > 0) {
@@ -163,7 +195,7 @@ router.get("/", async (req, res) => {
   } else {
     res.set("Cache-Control", "public, max-age=30");
   }
-  
+
   res.json({
     recommendations,
     globalTop,
@@ -250,10 +282,8 @@ router.get("/by-tag", async (req, res) => {
       }
     }
 
-    const libraryArtists = libraryManager.getAllArtists();
-    const existingArtistIds = new Set(
-      libraryArtists.map((a) => a.mbid),
-    );
+    const libraryArtists = await libraryManager.getAllArtists();
+    const existingArtistIds = new Set(libraryArtists.map((a) => a.mbid));
 
     const filtered = recommendations
       .filter((artist) => !existingArtistIds.has(artist.id))
@@ -279,12 +309,12 @@ router.get("/preferences", (req, res) => {
 router.post("/preferences", (req, res) => {
   try {
     const updates = req.body;
-    
+
     discoveryPreferences = {
       ...discoveryPreferences,
       ...updates,
     };
-    
+
     res.json({
       success: true,
       preferences: discoveryPreferences,
@@ -311,11 +341,11 @@ router.post("/preferences/exclude-genre", (req, res) => {
     if (!genre) {
       return res.status(400).json({ error: "genre is required" });
     }
-    
+
     if (!discoveryPreferences.excludedGenres.includes(genre.toLowerCase())) {
       discoveryPreferences.excludedGenres.push(genre.toLowerCase());
     }
-    
+
     res.json({
       success: true,
       excludedGenres: discoveryPreferences.excludedGenres,
@@ -331,10 +361,11 @@ router.post("/preferences/exclude-genre", (req, res) => {
 router.delete("/preferences/exclude-genre/:genre", (req, res) => {
   try {
     const { genre } = req.params;
-    discoveryPreferences.excludedGenres = discoveryPreferences.excludedGenres.filter(
-      g => g !== genre.toLowerCase()
-    );
-    
+    discoveryPreferences.excludedGenres =
+      discoveryPreferences.excludedGenres.filter(
+        (g) => g !== genre.toLowerCase(),
+      );
+
     res.json({
       success: true,
       excludedGenres: discoveryPreferences.excludedGenres,
@@ -353,11 +384,13 @@ router.post("/preferences/exclude-artist", (req, res) => {
     if (!artistId) {
       return res.status(400).json({ error: "artistId is required" });
     }
-    
-    if (!discoveryPreferences.excludedArtists.find(a => a.artistId === artistId)) {
+
+    if (
+      !discoveryPreferences.excludedArtists.find((a) => a.artistId === artistId)
+    ) {
       discoveryPreferences.excludedArtists.push({ artistId, artistName });
     }
-    
+
     res.json({
       success: true,
       excludedArtists: discoveryPreferences.excludedArtists,
@@ -373,10 +406,11 @@ router.post("/preferences/exclude-artist", (req, res) => {
 router.delete("/preferences/exclude-artist/:artistId", (req, res) => {
   try {
     const { artistId } = req.params;
-    discoveryPreferences.excludedArtists = discoveryPreferences.excludedArtists.filter(
-      a => a.artistId !== artistId
-    );
-    
+    discoveryPreferences.excludedArtists =
+      discoveryPreferences.excludedArtists.filter(
+        (a) => a.artistId !== artistId,
+      );
+
     res.json({
       success: true,
       excludedArtists: discoveryPreferences.excludedArtists,
@@ -394,31 +428,48 @@ router.get("/filtered", async (req, res) => {
     const discoveryCache = getDiscoveryCache();
     let recommendations = discoveryCache.recommendations || [];
     let globalTop = discoveryCache.globalTop || [];
-    
+
+    const libraryArtists = await libraryManager.getAllArtists();
+    const existingArtistIds = new Set(libraryArtists.map((a) => a.mbid));
+
+    recommendations = recommendations.filter(
+      (artist) => !existingArtistIds.has(artist.id),
+    );
+    globalTop = globalTop.filter((artist) => !existingArtistIds.has(artist.id));
+
     if (discoveryPreferences.excludedGenres.length > 0) {
-      const excludedGenresLower = discoveryPreferences.excludedGenres.map(g => g.toLowerCase());
-      
-      recommendations = recommendations.filter(artist => {
-        const artistTags = (artist.tags || []).map(t => t.toLowerCase());
-        return !artistTags.some(tag => excludedGenresLower.includes(tag));
+      const excludedGenresLower = discoveryPreferences.excludedGenres.map((g) =>
+        g.toLowerCase(),
+      );
+
+      recommendations = recommendations.filter((artist) => {
+        const artistTags = (artist.tags || []).map((t) => t.toLowerCase());
+        return !artistTags.some((tag) => excludedGenresLower.includes(tag));
       });
-      
-      globalTop = globalTop.filter(artist => {
-        const artistTags = (artist.tags || []).map(t => t.toLowerCase());
-        return !artistTags.some(tag => excludedGenresLower.includes(tag));
+
+      globalTop = globalTop.filter((artist) => {
+        const artistTags = (artist.tags || []).map((t) => t.toLowerCase());
+        return !artistTags.some((tag) => excludedGenresLower.includes(tag));
       });
     }
-    
+
     if (discoveryPreferences.excludedArtists.length > 0) {
-      const excludedIds = new Set(discoveryPreferences.excludedArtists.map(a => a.artistId));
-      recommendations = recommendations.filter(artist => !excludedIds.has(artist.id));
-      globalTop = globalTop.filter(artist => !excludedIds.has(artist.id));
+      const excludedIds = new Set(
+        discoveryPreferences.excludedArtists.map((a) => a.artistId),
+      );
+      recommendations = recommendations.filter(
+        (artist) => !excludedIds.has(artist.id),
+      );
+      globalTop = globalTop.filter((artist) => !excludedIds.has(artist.id));
     }
-    
+
     if (discoveryPreferences.maxRecommendations > 0) {
-      recommendations = recommendations.slice(0, discoveryPreferences.maxRecommendations);
+      recommendations = recommendations.slice(
+        0,
+        discoveryPreferences.maxRecommendations,
+      );
     }
-    
+
     res.json({
       recommendations,
       globalTop,

@@ -45,7 +45,6 @@ function RequestsPage() {
   useEffect(() => {
     fetchRequests();
 
-    // Poll download status every 5 seconds
     const pollDownloadStatus = async () => {
       try {
         const statuses = await getAllDownloadStatus();
@@ -56,7 +55,7 @@ function RequestsPage() {
     };
 
     pollDownloadStatus();
-    const interval = setInterval(pollDownloadStatus, 5000);
+    const interval = setInterval(pollDownloadStatus, 15000);
 
     return () => clearInterval(interval);
   }, []);

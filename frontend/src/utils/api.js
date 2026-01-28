@@ -145,19 +145,22 @@ export const getLibraryQualityProfiles = async () => {
   return response.data;
 };
 
-
 export const getLibraryAlbums = async (artistId) => {
   const response = await api.get("/library/albums", {
     params: { artistId },
   });
   // Ensure foreignAlbumId is set
-  return response.data.map(album => ({
+  return response.data.map((album) => ({
     ...album,
     foreignAlbumId: album.foreignAlbumId || album.mbid,
   }));
 };
 
-export const addLibraryAlbum = async (artistId, releaseGroupMbid, albumName) => {
+export const addLibraryAlbum = async (
+  artistId,
+  releaseGroupMbid,
+  albumName,
+) => {
   const response = await api.post("/library/albums", {
     artistId,
     releaseGroupMbid,
@@ -166,10 +169,12 @@ export const addLibraryAlbum = async (artistId, releaseGroupMbid, albumName) => 
   return response.data;
 };
 
-export const getLibraryTracks = async (albumId) => {
-  const response = await api.get("/library/tracks", {
-    params: { albumId },
-  });
+export const getLibraryTracks = async (albumId, releaseGroupMbid = null) => {
+  const params = { albumId };
+  if (releaseGroupMbid) {
+    params.releaseGroupMbid = releaseGroupMbid;
+  }
+  const response = await api.get("/library/tracks", { params });
   return response.data;
 };
 
@@ -184,8 +189,8 @@ export const updateLibraryArtist = async (mbid, data) => {
 };
 
 export const downloadAlbum = async (artistId, albumId, options = {}) => {
-  const response = await api.post("/library/downloads/album", { 
-    artistId, 
+  const response = await api.post("/library/downloads/album", {
+    artistId,
     albumId,
     artistMbid: options.artistMbid,
     artistName: options.artistName,
@@ -194,12 +199,15 @@ export const downloadAlbum = async (artistId, albumId, options = {}) => {
 };
 
 export const downloadTrack = async (artistId, trackId) => {
-  const response = await api.post("/library/downloads/track", { artistId, trackId });
+  const response = await api.post("/library/downloads/track", {
+    artistId,
+    trackId,
+  });
   return response.data;
 };
 
 export const getDownloadStatus = async (albumIds) => {
-  const ids = Array.isArray(albumIds) ? albumIds.join(',') : albumIds;
+  const ids = Array.isArray(albumIds) ? albumIds.join(",") : albumIds;
   const response = await api.get(`/library/downloads/status?albumIds=${ids}`);
   return response.data;
 };
@@ -209,16 +217,10 @@ export const getAllDownloadStatus = async () => {
   return response.data;
 };
 
-export const scanLibrary = async (discover = false) => {
-  const response = await api.post("/library/scan", { discover });
-  return response.data;
-};
-
 export const refreshLibraryArtist = async (mbid) => {
   const response = await api.post(`/library/artists/${mbid}/refresh`);
   return response.data;
 };
-
 
 export const getRequests = async () => {
   const response = await api.get("/requests");
@@ -228,8 +230,9 @@ export const getRequests = async () => {
 export const deleteRequest = async (id) => {
   // Check if it's a UUID (MBID format) or an album ID
   // UUID format: 8-4-4-4-12 hex characters
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  
+  const uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   if (uuidRegex.test(id)) {
     // It's a UUID/MBID - use the legacy endpoint
     const response = await api.delete(`/requests/${id}`);
@@ -299,41 +302,29 @@ export const updateAppSettings = async (settings) => {
   return response.data;
 };
 
-
-export const getWeeklyFlow = async () => {
-  const response = await api.get("/playlists/weekly");
+export const getLidarrProfiles = async (url, apiKey) => {
+  const params = new URLSearchParams();
+  if (url) params.append("url", url);
+  if (apiKey) params.append("apiKey", apiKey);
+  const queryString = params.toString();
+  const endpoint = `/settings/lidarr/profiles${queryString ? `?${queryString}` : ""}`;
+  const response = await api.get(endpoint);
   return response.data;
 };
 
-export const toggleWeeklyFlow = async (enabled) => {
-  const response = await api.post("/playlists/weekly/toggle", { enabled });
+export const testLidarrConnection = async (url, apiKey) => {
+  const params = new URLSearchParams();
+  if (url) params.append("url", url);
+  if (apiKey) params.append("apiKey", apiKey);
+  const queryString = params.toString();
+  const endpoint = `/settings/lidarr/test${queryString ? `?${queryString}` : ""}`;
+  const response = await api.get(endpoint);
   return response.data;
 };
 
-export const generateWeeklyFlow = async () => {
-  const response = await api.post("/playlists/weekly/generate");
-  return response.data;
-};
-
-export const syncWeeklyFlowToNavidrome = async () => {
-  const response = await api.post("/playlists/weekly/sync");
-  return response.data;
-};
-
-export const keepFlowItem = async (mbid) => {
-  const response = await api.post(`/playlists/items/${mbid}/keep`);
-  return response.data;
-};
-
-export const removeFlowItem = async (mbid) => {
-  const response = await api.delete(`/playlists/items/${mbid}`);
-  return response.data;
-};
-
-export const processWeeklyFlowFiles = async () => {
-  const response = await api.post("/playlists/weekly/process-files");
+export const applyLidarrCommunityGuide = async () => {
+  const response = await api.post("/settings/lidarr/apply-community-guide");
   return response.data;
 };
 
 export default api;
-

@@ -1,9 +1,13 @@
 import express from "express";
-import { getLastfmApiKey, getSpotifyClientId, getSpotifyClientSecret } from "../services/apiClients.js";
+import {
+  getLastfmApiKey,
+  getSpotifyClientId,
+  getSpotifyClientSecret,
+} from "../services/apiClients.js";
 import { getAuthUser, getAuthPassword } from "../middleware/auth.js";
 import { getDiscoveryCache } from "../services/discoveryService.js";
 import { libraryManager } from "../services/libraryManager.js";
-import { slskdClient } from "../services/slskdClient.js";
+import { lidarrClient } from "../services/lidarrClient.js";
 import { dbOps } from "../config/db-helpers.js";
 import { websocketService } from "../services/websocketService.js";
 
@@ -14,7 +18,7 @@ router.get("/", async (req, res) => {
     const authUser = getAuthUser();
     const authPassword = getAuthPassword();
     const rootFolder = libraryManager.getRootFolder();
-    const slskdConfigured = slskdClient.isConfigured();
+    const lidarrConfigured = lidarrClient.isConfigured();
 
     const discoveryCache = getDiscoveryCache();
     const wsStats = websocketService.getStats();
@@ -23,12 +27,15 @@ router.get("/", async (req, res) => {
       status: "ok",
       rootFolderConfigured: true,
       rootFolder: rootFolder,
-      slskdConfigured,
+      lidarrConfigured,
       lastfmConfigured: !!getLastfmApiKey(),
-      musicbrainzConfigured: !!(dbOps.getSettings().integrations?.musicbrainz?.email || process.env.CONTACT_EMAIL),
+      musicbrainzConfigured: !!(
+        dbOps.getSettings().integrations?.musicbrainz?.email ||
+        process.env.CONTACT_EMAIL
+      ),
       spotifyConfigured: !!(getSpotifyClientId() && getSpotifyClientSecret()),
       library: {
-        artistCount: libraryManager.getAllArtists().length,
+        artistCount: (await libraryManager.getAllArtists()).length,
         lastScan: null,
       },
       discovery: {
@@ -36,7 +43,9 @@ router.get("/", async (req, res) => {
         isUpdating: !!discoveryCache?.isUpdating,
         recommendationsCount: discoveryCache?.recommendations?.length || 0,
         globalTopCount: discoveryCache?.globalTop?.length || 0,
-        cachedImagesCount: dbOps.getAllImages() ? Object.keys(dbOps.getAllImages()).length : 0,
+        cachedImagesCount: dbOps.getAllImages()
+          ? Object.keys(dbOps.getAllImages()).length
+          : 0,
       },
       websocket: {
         clients: wsStats.totalClients,

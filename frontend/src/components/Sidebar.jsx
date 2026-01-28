@@ -9,7 +9,6 @@ import {
   X,
   History,
   LogOut,
-  Play,
   Github,
   Heart,
 } from "lucide-react";
@@ -31,7 +30,6 @@ function Sidebar({ isOpen, onClose }) {
 
   const navItems = [
     { path: "/discover", label: "Discover", icon: Sparkles },
-    { path: "/flow", label: "Weekly Flow", icon: Play },
     { path: "/library", label: "Library", icon: Library },
     { path: "/requests", label: "Requests", icon: History },
     { path: "/settings", label: "Settings", icon: Settings },
@@ -132,7 +130,6 @@ function Sidebar({ isOpen, onClose }) {
                   "brightness(0) saturate(100%) invert(45%) sepia(8%) saturate(800%) hue-rotate(60deg) brightness(95%) contrast(85%)",
               }}
             />
-            {/* Logo uses brand color filter - this is the secondary brand color instance */}
             <span
               className="text-lg font-bold tracking-tight transition-colors"
               style={{ color: "#fff" }}
