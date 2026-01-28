@@ -115,6 +115,20 @@ if (USE_SQLITE) {
           filename: row.filename,
           queueCleaned: row.queue_cleaned === 1,
           queueCleanedAt: row.queue_cleaned_at,
+          // New fields for session tracking and file paths
+          tempFilePath: row.temp_file_path,
+          trackTitle: row.track_title,
+          trackPosition: row.track_position,
+          slskdDownloadId: row.slskd_download_id,
+          username: row.username,
+          downloadSessionId: row.download_session_id,
+          parentDownloadId: row.parent_download_id,
+          isParent: row.is_parent === 1,
+          stale: row.stale === 1,
+          triedUsernames: dbHelpers.parseJSON(row.tried_usernames) || [],
+          slskdFilePath: row.slskd_file_path,
+          errorType: row.error_type,
+          lastRequeueAttempt: row.last_requeue_attempt,
         }));
       },
       get albumRequests() {

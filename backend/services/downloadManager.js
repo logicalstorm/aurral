@@ -19,6 +19,7 @@ export class DownloadManager {
     this.checkingDownloads = false;
     this.slskdDownloadDir = null; // Cache the download directory
     this.remotePathMapping = null; // Cache remote path mapping if configured
+    this.downloadCheckInterval = null; // Track interval so we can clear it
     this.startDownloadMonitor();
     this.initializeDownloadDirectory();
     this.recoveryCompleted = false; // Track if startup recovery has run
@@ -446,10 +447,14 @@ export class DownloadManager {
   }
 
   startDownloadMonitor() {
-    // Check downloads every 10 seconds for more responsive updates
-    setInterval(() => {
+    // Check downloads every 30 seconds - don't spam slskd API
+    // Downloads are also checked when files are found, so this is just a backup
+    if (this.downloadCheckInterval) {
+      clearInterval(this.downloadCheckInterval);
+    }
+    this.downloadCheckInterval = setInterval(() => {
       this.checkCompletedDownloads();
-    }, 10000);
+    }, 30000); // 30 seconds instead of 10
     
     // Check for failed downloads that should be requeued every 5 minutes
     setInterval(() => {
@@ -742,8 +747,10 @@ export class DownloadManager {
   normalizeState(state) {
     if (!state) return 'unknown';
     const stateStr = String(state).toLowerCase();
+    // Check for errored/failed states FIRST before checking completed
+    // This handles "Completed, Errored" correctly (treats as failed, not completed)
+    if (stateStr.includes('errored') || stateStr.includes('error') || stateStr.includes('failed')) return 'failed';
     if (stateStr.includes('completed') || stateStr === 'complete') return 'completed';
-    if (stateStr.includes('failed') || stateStr === 'error') return 'failed';
     if (stateStr.includes('cancelled') || stateStr === 'canceled') return 'cancelled';
     if (stateStr.includes('downloading') || stateStr === 'inprogress' || stateStr === 'in progress') return 'downloading';
     // Handle various queued states: "Queued", "Queued, Remotely", "Queued, Locally", etc.
@@ -821,7 +828,8 @@ export class DownloadManager {
         const downloadIdStr = download.id?.toString();
         const weeklyFlowRecord = dbOps.getDownloads().find(
           d => d.type === 'weekly-flow' && 
-               (d.slskdDownloadId?.toString() === downloadIdStr || d.slskdDownloadId === download.id)
+               (d.slskdDownloadId?.toString() === downloadIdStr || d.slskdDownloadId === download.id ||
+                d.id?.toString() === downloadIdStr || d.id === download.id)
         );
         
         if (normalizedState === 'completed') {
@@ -830,8 +838,11 @@ export class DownloadManager {
           const downloadRecord = dbOps.getDownloads().find(
             d => {
               const recordIdStr = d.slskdDownloadId?.toString();
+              const recordDbIdStr = d.id?.toString();
               return (recordIdStr === downloadIdStr || 
-                      d.slskdDownloadId === download.id) && 
+                      d.slskdDownloadId === download.id ||
+                      recordDbIdStr === downloadIdStr ||
+                      d.id === download.id) && 
                       d.status === 'completed';
             }
           );
@@ -850,7 +861,9 @@ export class DownloadManager {
             const existingRecord = weeklyFlowRecord || dbOps.getDownloads().find(
               d => {
                 const recordIdStr = d.slskdDownloadId?.toString();
-                return recordIdStr === downloadIdStr || d.slskdDownloadId === download.id;
+                const recordDbIdStr = d.id?.toString();
+                return recordIdStr === downloadIdStr || d.slskdDownloadId === download.id ||
+                       recordDbIdStr === downloadIdStr || d.id === download.id;
               }
             );
             
@@ -866,6 +879,61 @@ export class DownloadManager {
               // New download we weren't tracking - handle it
               await this.handleCompletedDownload(download);
             }
+            processedCount++;
+          }
+        } else if (normalizedState === 'failed') {
+          // Handle failed/errored downloads
+          const downloadRecord = dbOps.getDownloads().find(
+            d => {
+              const recordIdStr = d.slskdDownloadId?.toString();
+              const recordDbIdStr = d.id?.toString();
+              return (recordIdStr === downloadIdStr || 
+                      d.slskdDownloadId === download.id ||
+                      recordDbIdStr === downloadIdStr ||
+                      d.id === download.id) && 
+                      d.status !== 'failed';
+            }
+          );
+          
+          if (downloadRecord) {
+            const errorMsg = download.error || download.errorMessage || state || 'Download failed';
+            const error = { message: errorMsg, response: { status: 500 } };
+            console.log(`Found failed download: ${downloadRecord.id} (slskd ID: ${download.id}, state: ${state})`);
+            
+            // For album tracks, immediately retry the failed track (don't wait for backoff)
+            // This ensures we get the complete album as quickly as possible
+            // We do this BEFORE handleFailedDownload to bypass backoff timing
+            if (downloadRecord.type === 'album' && downloadRecord.albumId && 
+                (downloadRecord.retryCount || 0) < 3) {
+              console.log(`Immediately retrying failed album track "${downloadRecord.trackTitle || downloadRecord.id}" (bypassing backoff)...`);
+              try {
+                // Mark as failed first so handleFailedDownload doesn't try to retry again
+                downloadRecord.status = 'failed';
+                downloadRecord.failedAt = new Date().toISOString();
+                downloadRecord.retryCount = (downloadRecord.retryCount || 0) + 1;
+                this.logDownloadEvent(downloadRecord, 'failed', {
+                  error: errorMsg,
+                  errorType: 'transient',
+                  retryCount: downloadRecord.retryCount,
+                  willRetry: true,
+                  immediateRetry: true,
+                });
+                dbOps.updateDownload(downloadRecord.id, downloadRecord);
+                
+                // Now immediately retry just this specific track
+                downloadRecord.status = 'requested';
+                downloadRecord.slskdDownloadId = null; // Clear old ID
+                await this.retryDownload(downloadRecord);
+                processedCount++;
+                continue; // Skip handleFailedDownload since we already handled it
+              } catch (retryError) {
+                console.error(`Error immediately retrying failed track:`, retryError.message);
+                // Fall through to handleFailedDownload for proper error handling
+              }
+            }
+            
+            // For non-album downloads or if immediate retry failed, use normal flow
+            await this.handleFailedDownload(downloadRecord, download, error);
             processedCount++;
           }
         } else if (weeklyFlowRecord && (normalizedState === 'downloading' || normalizedState === 'queued' || state?.toLowerCase().includes('queued'))) {
@@ -1159,6 +1227,203 @@ export class DownloadManager {
       }
     } finally {
       this.checkingDownloads = false;
+      
+      // After processing all downloads, check for any albums that should be moved
+      // This catches cases where all tracks are complete but the per-track check missed it
+      await this.checkForCompletedAlbums();
+    }
+  }
+
+  /**
+   * Check for albums where all tracks are completed and move them to library
+   * This is called after processing downloads to catch any albums that should be moved
+   */
+  async checkForCompletedAlbums() {
+    try {
+      const allDownloads = dbOps.getDownloads();
+      
+      // Group downloads by albumId and sessionId (only current/active sessions)
+      // For records without session IDs, find the most recent active parent session
+      const albumGroups = {};
+      const albumSessions = {}; // Track active sessions per album
+      
+      // First, find all active parent sessions per album
+      for (const download of allDownloads) {
+        if (download.type === 'album' && download.albumId && download.isParent && !download.stale) {
+          if (!albumSessions[download.albumId]) {
+            albumSessions[download.albumId] = [];
+          }
+          albumSessions[download.albumId].push({
+            id: download.id,
+            requestedAt: download.requestedAt || download.startedAt || '0',
+            status: download.status
+          });
+        }
+      }
+      
+      // Sort sessions by date (most recent first) and get the active one
+      for (const albumId in albumSessions) {
+        albumSessions[albumId].sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt));
+      }
+      
+      // Group track downloads by session
+      for (const download of allDownloads) {
+        if (download.type === 'album' && download.albumId && !download.isParent && !download.stale && !download.destinationPath) {
+          let sessionId = download.downloadSessionId || download.parentDownloadId;
+          
+          // If no session ID, try to find the most recent active session for this album
+          if (!sessionId && albumSessions[download.albumId] && albumSessions[download.albumId].length > 0) {
+            const activeSession = albumSessions[download.albumId].find(s => 
+              s.status === 'requested' || s.status === 'downloading' || s.status === 'searching' || s.status === 'adding'
+            );
+            if (activeSession) {
+              sessionId = activeSession.id;
+            } else {
+              // No active session - use most recent one (backward compat)
+              sessionId = albumSessions[download.albumId][0].id;
+            }
+          }
+          
+          const key = `${download.albumId}:${sessionId || 'legacy'}`;
+          if (!albumGroups[key]) {
+            albumGroups[key] = {
+              albumId: download.albumId,
+              sessionId: sessionId,
+              downloads: []
+            };
+          }
+          albumGroups[key].downloads.push(download);
+        }
+      }
+      
+      // Check each album group (by session) - prioritize active sessions
+      const sortedGroups = Object.entries(albumGroups).sort(([keyA, groupA], [keyB, groupB]) => {
+        // Prioritize groups with session IDs over legacy ones
+        if (groupA.sessionId && !groupB.sessionId) return -1;
+        if (!groupA.sessionId && groupB.sessionId) return 1;
+        // If both have sessions, prefer the one with more recent downloads
+        const aLatest = Math.max(...groupA.downloads.map(d => new Date(d.requestedAt || 0).getTime()));
+        const bLatest = Math.max(...groupB.downloads.map(d => new Date(d.requestedAt || 0).getTime()));
+        return bLatest - aLatest;
+      });
+      
+      for (const [key, group] of sortedGroups) {
+        const { albumId, sessionId, downloads: albumDownloads } = group;
+        const completedCount = albumDownloads.filter(d => 
+          d.status === 'completed' || d.tempFilePath
+        ).length;
+        const failedCount = albumDownloads.filter(d => 
+          d.status === 'failed'
+        ).length;
+        const totalCount = albumDownloads.length;
+        
+        // If all tracks are complete and none failed, move them
+        if (completedCount === totalCount && totalCount > 0 && failedCount === 0) {
+          // Check if already moved (has destinationPath)
+          const alreadyMoved = albumDownloads.every(d => d.destinationPath);
+          if (!alreadyMoved) {
+            const album = libraryManager.getAlbumById(albumId);
+            if (album) {
+              const artist = libraryManager.getArtistById(album.artistId);
+              if (artist) {
+                console.log(`[Album Completion Check] Found completed album "${album.albumName}" (${completedCount}/${totalCount} tracks) - moving to library...`);
+                await this.moveCompletedAlbumTracks(album, artist, albumDownloads);
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[Album Completion Check] Error checking for completed albums:', error.message);
+    }
+  }
+
+  /**
+   * Move all completed tracks for an album to the library
+   */
+  async moveCompletedAlbumTracks(album, artist, albumDownloads) {
+    try {
+      console.log(`✓ Moving all ${albumDownloads.length} tracks for album "${album.albumName}" to library...`);
+      
+      for (const trackDownload of albumDownloads) {
+        // Track is complete if it has tempFilePath (file was found) OR status is completed
+        if (trackDownload.tempFilePath || trackDownload.status === 'completed') {
+          try {
+            const trackInfo = trackDownload.trackTitle 
+              ? ` (track: "${trackDownload.trackTitle}")` 
+              : '';
+            const username = trackDownload.username || 'unknown';
+            console.log(`Moving album track${trackInfo} from user "${username}" (${trackDownload.tempFilePath}) to: ${album.path}`);
+            libraryMonitor.log('info', 'download', `Moving completed download to library`, {
+              downloadId: trackDownload.slskdDownloadId || trackDownload.id,
+              trackTitle: trackDownload.trackTitle,
+              from: trackDownload.tempFilePath,
+              to: album.path,
+              albumId: album.id,
+              artistId: artist.id,
+              username: username,
+            });
+            const finalPath = await this.moveFileToAlbum(trackDownload.tempFilePath, artist, album);
+            trackDownload.destinationPath = finalPath;
+            delete trackDownload.tempFilePath;
+            trackDownload.status = 'added';
+            dbOps.updateDownload(trackDownload.id, trackDownload);
+          } catch (error) {
+            console.error(`Error moving track "${trackDownload.trackTitle}" from ${trackDownload.tempFilePath}:`, error.message);
+            // Keep tempFilePath so we can retry later
+          }
+        } else if (!trackDownload.tempFilePath) {
+          console.warn(`Track "${trackDownload.trackTitle}" is marked completed but has no tempFilePath - may need to be re-found`);
+        }
+      }
+      
+      // Match all files to tracks
+      for (const trackDownload of albumDownloads) {
+        if (trackDownload.destinationPath) {
+          try {
+            const wasMatched = await fileScanner.matchFileToTrack(
+              {
+                path: trackDownload.destinationPath,
+                name: path.basename(trackDownload.destinationPath),
+                size: 0, // Size not available at this point
+              },
+              libraryManager.getAllArtists()
+            );
+            
+            if (!wasMatched) {
+              console.log(`File not matched: ${trackDownload.destinationPath}`);
+            }
+          } catch (error) {
+            console.error(`Error matching file ${trackDownload.destinationPath}:`, error.message);
+          }
+        }
+      }
+      
+      // Update album statistics
+      await libraryManager.updateAlbumStatistics(album.id).catch(err => {
+        console.error(`Failed to update album statistics:`, err.message);
+      });
+      
+      // Update album request status
+      const albumTracks = libraryManager.getTracks(album.id);
+      const tracksWithFiles = albumTracks.filter(t => t.hasFile && t.path);
+      const isComplete = albumTracks.length > 0 && tracksWithFiles.length === albumTracks.length;
+      
+      if (isComplete) {
+        const albumRequests = dbOps.getAlbumRequests();
+        const albumRequest = albumRequests.find(r => r.albumId === album.id);
+        if (albumRequest && albumRequest.status !== 'available') {
+          dbOps.updateAlbumRequest(album.id, { status: 'available' });
+          libraryMonitor.log('info', 'request', 'Album request marked as available', {
+            albumId: album.id,
+            albumName: album.albumName,
+          });
+        }
+      }
+      
+      console.log(`✓ Successfully moved all tracks for album "${album.albumName}" to library`);
+    } catch (error) {
+      console.error(`Error moving completed album tracks for "${album.albumName}":`, error.message);
     }
   }
 
@@ -1541,12 +1806,20 @@ export class DownloadManager {
         d => {
           const recordIdStr = d.slskdDownloadId?.toString();
           const recordId = d.slskdDownloadId;
+          const recordDbIdStr = d.id?.toString();
+          const recordDbId = d.id;
           
-          // Try exact ID matches first
+          // Try exact ID matches first (check both slskdDownloadId and id fields)
           if (recordIdStr === downloadIdStr) return true;
           if (recordId === downloadId) return true;
           if (recordId === downloadIdStr) return true;
           if (recordIdStr === downloadId) return true;
+          
+          // Also check the record's id field (in case slskdDownloadId wasn't persisted)
+          if (recordDbIdStr === downloadIdStr) return true;
+          if (recordDbId === downloadId) return true;
+          if (recordDbId === downloadIdStr) return true;
+          if (recordDbIdStr === downloadId) return true;
           
           return false;
         }
@@ -1633,6 +1906,18 @@ export class DownloadManager {
         return;
       }
       
+      // Extract track title from filename if not already set
+      if (!downloadRecord.trackTitle && downloadFilename) {
+        // Try to extract track name from filename (e.g., "04 - Does He Really Care.flac" -> "Does He Really Care")
+        const trackMatch = downloadFilename.match(/(\d+\s*[-.]?\s*)(.+?)(\.\w+)?$/i);
+        if (trackMatch && trackMatch[2]) {
+          downloadRecord.trackTitle = trackMatch[2].trim();
+        } else {
+          // Fallback: use filename without extension
+          downloadRecord.trackTitle = downloadFilename.replace(/\.\w+$/, '').trim();
+        }
+      }
+      
       libraryMonitor.log('info', 'download', `Found download record for completed download`, {
         downloadId: download.id,
         trackTitle: downloadRecord.trackTitle || 'unknown',
@@ -1641,6 +1926,22 @@ export class DownloadManager {
         artistId: downloadRecord.artistId,
       });
       console.log(`✓ Found download record for ${download.id}: track "${downloadRecord.trackTitle || 'unknown'}", status: ${downloadRecord.status}`);
+
+      // Skip tracks that are already moved to library (both status AND destinationPath must exist)
+      // If status is "added" but no destinationPath, the move might have failed - process it again
+      if (downloadRecord.status === 'added' && downloadRecord.destinationPath) {
+        // Verify the file actually exists at destinationPath
+        try {
+          await fs.access(downloadRecord.destinationPath);
+          console.log(`Skipping track "${downloadRecord.trackTitle || downloadRecord.id}" - already moved to library at ${downloadRecord.destinationPath}`);
+          return; // Already moved and file exists, nothing to do
+        } catch (error) {
+          // File doesn't exist at destinationPath - move might have failed, process it again
+          console.log(`Track "${downloadRecord.trackTitle || downloadRecord.id}" marked as added but file not found at ${downloadRecord.destinationPath} - reprocessing...`);
+          downloadRecord.status = 'completed'; // Reset to completed so we can move it
+          downloadRecord.destinationPath = null; // Clear invalid destinationPath
+        }
+      }
 
       let moved = false;
       let destinationPath = sourcePath;
@@ -1654,13 +1955,38 @@ export class DownloadManager {
             if (downloadRecord.type === 'album' && downloadRecord.albumId) {
               const album = libraryManager.getAlbumById(downloadRecord.albumId);
               if (album) {
+                // Verify sourcePath exists before storing it
+                if (!sourcePath) {
+                  console.error(`[ERROR] Cannot store tempFilePath for track "${downloadRecord.trackTitle || downloadRecord.id}" - sourcePath is undefined!`);
+                  console.error(`Download ID: ${download.id}, Filename: ${download.filename}`);
+                  return; // Can't proceed without sourcePath
+                }
+                
                 // Store the file path but don't move yet - wait for all tracks
                 downloadRecord.tempFilePath = sourcePath;
+                downloadRecord.status = 'completed'; // Update status
+                downloadRecord.completedAt = new Date().toISOString();
+                
+                console.log(`[DEBUG] Storing tempFilePath for track "${downloadRecord.trackTitle}": ${sourcePath}`);
+                
+                // Update trackTitle if we extracted it from filename
+                if (downloadRecord.trackTitle && downloadRecord.trackTitle !== 'unknown') {
+                  // Track title was extracted, keep it
+                }
+                
                 this.logDownloadEvent(downloadRecord, 'completed', {
                   tempFilePath: sourcePath,
                   trackTitle: downloadRecord.trackTitle,
                 });
-                // Download record updated via dbOps.updateDownload
+                
+                // Persist status update to database (CRITICAL - was missing!)
+                dbOps.updateDownload(downloadRecord.id, {
+                  status: 'completed',
+                  completedAt: downloadRecord.completedAt,
+                  tempFilePath: sourcePath,
+                  trackTitle: downloadRecord.trackTitle,
+                  events: downloadRecord.events,
+                });
                 
                 const trackInfo = downloadRecord.trackTitle 
                   ? ` (track: "${downloadRecord.trackTitle}")` 
@@ -1670,27 +1996,197 @@ export class DownloadManager {
                 );
                 
                 // Check if all tracks for this album are now complete
-                const albumDownloads = dbOps.getDownloads().filter(
-                  d => d.albumId === downloadRecord.albumId && d.type === 'album'
+                // Only count tracks from the CURRENT download session (not stale ones)
+                const sessionId = downloadRecord.downloadSessionId || downloadRecord.parentDownloadId;
+                
+                // If no session ID, find the most recent active session for this album
+                let activeSessionId = sessionId;
+                if (!activeSessionId) {
+                  // Find the most recent parent download record (session) for this album
+                  const parentRecords = dbOps.getDownloads().filter(
+                    d => d.albumId === downloadRecord.albumId && 
+                         d.type === 'album' && 
+                         d.isParent &&
+                         (d.status === 'requested' || d.status === 'downloading' || d.status === 'searching' || d.status === 'adding')
+                  ).sort((a, b) => {
+                    const aTime = new Date(a.requestedAt || a.startedAt || 0);
+                    const bTime = new Date(b.requestedAt || b.startedAt || 0);
+                    return bTime - aTime; // Most recent first
+                  });
+                  
+                  if (parentRecords.length > 0) {
+                    activeSessionId = parentRecords[0].id;
+                    console.log(`[Album Completion Check] Found active session: ${activeSessionId} for album "${album.albumName}"`);
+                  } else {
+                    // No parent record found - try to find the most recent session (even if not active)
+                    // This handles cases where downloads completed but parent record status changed
+                    const allParentRecords = dbOps.getDownloads().filter(
+                      d => d.albumId === downloadRecord.albumId && 
+                           d.type === 'album' && 
+                           d.isParent &&
+                           !d.stale
+                    ).sort((a, b) => {
+                      const aTime = new Date(a.requestedAt || a.startedAt || 0);
+                      const bTime = new Date(b.requestedAt || b.startedAt || 0);
+                      return bTime - aTime; // Most recent first
+                    });
+                    
+                    if (allParentRecords.length > 0) {
+                      activeSessionId = allParentRecords[0].id;
+                      console.log(`[Album Completion Check] Found most recent session: ${activeSessionId} for album "${album.albumName}" (may not be active)`);
+                    } else {
+                      console.log(`[Album Completion Check] No session found - using backward compatibility mode for album "${album.albumName}"`);
+                    }
+                  }
+                }
+                
+                // Refresh from database to get latest status, but also include the just-updated record
+                // CRITICAL: Only count actual track records (not parent records, not stale)
+                // For backward compatibility, if no session ID, get ALL track records for this album
+                let allAlbumDownloads = dbOps.getDownloads().filter(
+                  d => d.albumId === downloadRecord.albumId && 
+                       d.type === 'album' && 
+                       !d.isParent && // Exclude parent records (they're not tracks!)
+                       !d.stale && // Exclude stale records
+                       d.trackTitle // Must have a track title (parent records don't have this)
                 );
-                const completedCount = albumDownloads.filter(d => d.status === 'completed').length;
+                
+                // If we have a session ID, filter by it. Otherwise, include all tracks (backward compat)
+                if (activeSessionId) {
+                  allAlbumDownloads = allAlbumDownloads.filter(d =>
+                    d.downloadSessionId === activeSessionId || d.parentDownloadId === activeSessionId
+                  );
+                }
+                
+                // Ensure the just-updated downloadRecord is included with latest data
+                const existingIndex = allAlbumDownloads.findIndex(d => d.id === downloadRecord.id);
+                if (existingIndex >= 0) {
+                  // Update the record in the array with the latest in-memory data
+                  allAlbumDownloads[existingIndex] = { ...allAlbumDownloads[existingIndex], ...downloadRecord };
+                } else if (downloadRecord.trackTitle && !downloadRecord.isParent) {
+                  // If somehow not found but it's a valid track record, add it
+                  allAlbumDownloads.push(downloadRecord);
+                }
+                
+                // Separate tracks that are actually moved (have destinationPath AND file exists there) 
+                // vs tracks still being downloaded or need to be moved
+                const actuallyMovedTracks = [];
+                const tracksToProcess = [];
+                
+                for (const d of allAlbumDownloads) {
+                  if (d.destinationPath) {
+                    // Check if file actually exists at destination
+                    try {
+                      await fs.access(d.destinationPath);
+                      actuallyMovedTracks.push(d); // File exists, truly moved
+                    } catch {
+                      // File doesn't exist - treat as not moved, needs processing
+                      tracksToProcess.push(d);
+                    }
+                  } else {
+                    // No destinationPath - needs to be moved
+                    tracksToProcess.push(d);
+                  }
+                }
+                
+                // Only count tracks that need processing (not actually moved)
+                let albumDownloads = tracksToProcess;
+                
+                console.log(`[Album Completion Check] Total tracks: ${allAlbumDownloads.length}, Already moved: ${actuallyMovedTracks.length}, To process: ${tracksToProcess.length}`);
+                
+                // Debug: Show all tracks found
+                if (allAlbumDownloads.length > 0) {
+                  console.log(`[Album Completion Check] All tracks found:`, allAlbumDownloads.map(d => ({
+                    id: d.id,
+                    trackTitle: d.trackTitle,
+                    status: d.status,
+                    hasTempPath: !!d.tempFilePath,
+                    hasDestPath: !!d.destinationPath,
+                    sessionId: d.downloadSessionId || d.parentDownloadId || 'none'
+                  })));
+                }
+                
+                // If no active tracks found but we have already-moved tracks, that means the album is complete
+                // But we still need to check if all tracks were moved
+                if (albumDownloads.length === 0 && actuallyMovedTracks.length > 0) {
+                  console.log(`[Album Completion Check] All tracks appear to be already moved (${alreadyMovedTracks.length} tracks with status 'added')`);
+                  // Check if all tracks in the album have files
+                  const albumTracks = libraryManager.getTracks(downloadRecord.albumId);
+                  const tracksWithFiles = albumTracks.filter(t => t.hasFile && t.path);
+                  if (tracksWithFiles.length === albumTracks.length && albumTracks.length > 0) {
+                    console.log(`[Album Completion Check] Album "${album.albumName}" is already complete in library (${tracksWithFiles.length}/${albumTracks.length} tracks have files)`);
+                    return; // Album is already complete, nothing to do
+                  }
+                }
+                
+                // Count completed: either status is 'completed' OR has tempFilePath (file found)
+                const completedCount = albumDownloads.filter(d => 
+                  d.status === 'completed' || d.tempFilePath
+                ).length;
+                // Count failed tracks - only count failures from CURRENT session (not stale ones)
+                // Stale failed records shouldn't block completion
+                const failedCount = albumDownloads.filter(d => 
+                  d.status === 'failed' && !d.stale && 
+                  (activeSessionId ? (d.downloadSessionId === activeSessionId || d.parentDownloadId === activeSessionId) : true)
+                ).length;
+                // Total count includes ALL tracks - we need the complete album
                 const totalCount = albumDownloads.length;
+                
+                // Debug: Log what we're counting
+                console.log(`[Album Completion Check] Album: "${album.albumName}", Session: ${activeSessionId || 'no-session'}, Track records: ${totalCount} (${completedCount} completed, ${failedCount} failed)`);
+                if (totalCount !== 12 && totalCount > 0) {
+                  console.log(`[Album Completion Check] WARNING: Expected 12 tracks but found ${totalCount}. Track IDs:`, albumDownloads.map(d => ({ id: d.id, trackTitle: d.trackTitle, isParent: d.isParent, stale: d.stale, status: d.status })));
+                }
                 
                 // Update status to show progress
                 this.updateDownloadStatus(downloadRecord.albumId, 'downloading', {
                   tracksCompleted: completedCount,
                   totalTracks: totalCount,
+                  failedTracks: failedCount,
                 });
                 
-                // If all tracks are complete, move them all at once
+                // Debug logging - show what's happening
+                if (completedCount !== totalCount || failedCount > 0) {
+                  const incompleteTracks = albumDownloads.filter(d => 
+                    d.status !== 'completed' && !d.tempFilePath && d.status !== 'failed'
+                  );
+                  const failedTracks = albumDownloads.filter(d => d.status === 'failed');
+                  if (incompleteTracks.length > 0) {
+                    console.log(`[Album Completion Check] Incomplete tracks: ${incompleteTracks.map(t => `"${t.trackTitle || t.id}" (status: ${t.status})`).join(', ')}`);
+                  }
+                  if (failedTracks.length > 0) {
+                    console.log(`[Album Completion Check] Failed tracks (will block completion): ${failedTracks.map(t => `"${t.trackTitle || t.id}" (stale: ${t.stale}, session: ${t.downloadSessionId || t.parentDownloadId || 'none'})`).join(', ')}`);
+                  }
+                }
+                
+                // If all tracks are complete (no failed tracks), move them all at once
                 // Note: Tracks may be in different folders (from different users), but we move each
                 // from its stored tempFilePath location to the final album folder
-                if (completedCount === totalCount && totalCount > 0) {
-                  console.log(`All ${totalCount} tracks completed for album "${album.albumName}" - moving all tracks to library...`);
+                // We require ALL tracks to be successful before importing - no partial albums
+                if (completedCount === totalCount && totalCount > 0 && failedCount === 0) {
+                  console.log(`✓ All ${totalCount} tracks completed for album "${album.albumName}" - moving all tracks to library...`);
+                  
+                  // Refresh from database one more time to get latest tempFilePath values
+                  // Use the same filtering logic as above to get all tracks that need processing
+                  const finalAlbumDownloads = dbOps.getDownloads().filter(
+                    d => d.albumId === downloadRecord.albumId && 
+                         d.type === 'album' && 
+                         !d.isParent && 
+                         !d.stale && 
+                         d.trackTitle &&
+                         !d.destinationPath // Only tracks that haven't been moved
+                  );
+                  
+                  // Log what we found
+                  console.log(`[Move Check] Found ${finalAlbumDownloads.length} tracks to move. tempFilePath status:`, 
+                    finalAlbumDownloads.map(d => ({ track: d.trackTitle, hasTempPath: !!d.tempFilePath, tempPath: d.tempFilePath, status: d.status }))
+                  );
                   
                   // Move all completed tracks (each may be from a different user/location)
-                  for (const trackDownload of albumDownloads) {
-                    if (trackDownload.tempFilePath && trackDownload.status === 'completed') {
+                  for (const trackDownload of finalAlbumDownloads) {
+                    // Track is complete if it has tempFilePath (file was found)
+                    // Don't try to move tracks that don't have tempFilePath
+                    if (trackDownload.tempFilePath) {
                       try {
                         const trackInfo = trackDownload.trackTitle 
                           ? ` (track: "${trackDownload.trackTitle}")` 
@@ -1910,7 +2406,23 @@ export class DownloadManager {
       }
     }
 
-    // Check if file already exists - if it does and is the same, skip moving
+    // Check if source file exists before attempting move
+    let sourceExists = false;
+    try {
+      await fs.access(sourcePath);
+      sourceExists = true;
+    } catch {
+      // Source file doesn't exist - check if it was already moved
+      try {
+        await fs.access(destinationPath);
+        console.log(`Source file not found but destination exists - file already moved: ${destinationPath}`);
+        return destinationPath;
+      } catch {
+        throw new Error(`Source file does not exist and destination not found: ${sourcePath}`);
+      }
+    }
+
+    // Check if file already exists at destination - if it does and is the same, skip moving
     try {
       const existingStats = await fs.stat(destinationPath);
       const sourceStats = await fs.stat(sourcePath);
@@ -1935,7 +2447,7 @@ export class DownloadManager {
         );
       }
     } catch {
-      // File doesn't exist, proceed with move
+      // Destination doesn't exist, proceed with move
     }
 
     // Move file (rename is atomic on same filesystem)
@@ -2067,6 +2579,32 @@ export class DownloadManager {
       }
     }
 
+    // Check if source file exists before attempting move
+    try {
+      await fs.access(sourcePath);
+    } catch {
+      // Source file doesn't exist - check if it was already moved to any destination
+      // Try to find it at the expected destination or with number suffixes
+      let checkPath = destinationPath;
+      let counter = 0;
+      while (counter <= 10) {
+        try {
+          await fs.access(checkPath);
+          console.log(`Source file not found but destination exists - file already moved: ${checkPath}`);
+          return checkPath;
+        } catch {
+          if (counter === 0) {
+            checkPath = destinationPath;
+          } else {
+            const nameWithoutExt = path.basename(trackFileName, sourceExt);
+            checkPath = path.join(album.path, `${nameWithoutExt} (${counter})${sourceExt}`);
+          }
+          counter++;
+        }
+      }
+      throw new Error(`Source file does not exist: ${sourcePath}`);
+    }
+
     // If destination already exists, add a number suffix
     let finalDestination = destinationPath;
     let counter = 1;
@@ -2130,9 +2668,105 @@ export class DownloadManager {
       throw new Error('Artist or album not found');
     }
 
-    // Create download record
+    // Check if album is already complete (all tracks have files)
+    const albumTracks = libraryManager.getTracks(albumId);
+    if (albumTracks.length > 0) {
+      const tracksWithFiles = albumTracks.filter(t => t.hasFile && t.path);
+      if (tracksWithFiles.length === albumTracks.length) {
+        console.log(`[DownloadManager] Album "${album.albumName}" is already complete (${tracksWithFiles.length}/${albumTracks.length} tracks have files). Skipping queue.`);
+        // Update album request status if needed
+        const albumRequests = dbOps.getAlbumRequests();
+        const albumRequest = albumRequests.find(r => r.albumId === albumId);
+        if (albumRequest && albumRequest.status !== 'available') {
+          dbOps.updateAlbumRequest(albumId, { status: 'available' });
+        }
+        // Return a mock record indicating it's already complete
+        return {
+          id: this.generateId(),
+          type: 'album',
+          artistId,
+          albumId,
+          status: 'added',
+          message: 'Album already complete',
+        };
+      }
+    }
+
+    // Check if there are already active downloads for this album
+    // But verify they actually have track downloads associated with them
+    const existingDownloads = dbOps.getDownloads().filter(
+      d => d.albumId === albumId && 
+           d.type === 'album' && 
+           (d.status === 'downloading' || d.status === 'requested' || d.status === 'searching' || d.status === 'adding' || d.status === 'queued')
+    );
+    
+    if (existingDownloads.length > 0) {
+      // Check if any of these downloads actually have track downloads (slskdDownloadId)
+      // A valid album download should have created individual track download records
+      const allAlbumDownloads = dbOps.getDownloads().filter(
+        d => d.albumId === albumId && d.type === 'album'
+      );
+      
+      // Check if there are any track downloads with slskdDownloadId (actual downloads in slskd)
+      const hasActiveTrackDownloads = allAlbumDownloads.some(
+        d => d.slskdDownloadId && (d.status === 'downloading' || d.status === 'requested' || d.status === 'completed')
+      );
+      
+      if (hasActiveTrackDownloads) {
+        const activeCount = existingDownloads.length;
+        console.log(`[DownloadManager] Album "${album.albumName}" already has ${activeCount} active download(s) with track downloads queued or in progress. Skipping duplicate queue.`);
+        console.log(`[DownloadManager] Active download statuses:`, existingDownloads.map(d => ({ id: d.id, status: d.status, trackTitle: d.trackTitle, slskdDownloadId: d.slskdDownloadId })));
+        // Return the first existing download instead of creating a new one
+        return existingDownloads[0];
+      } else {
+        // Existing download record exists but has no actual track downloads - it's stale
+        console.warn(`[DownloadManager] Album "${album.albumName}" has stale download record(s) with no active track downloads. Clearing and queueing fresh download.`);
+        console.warn(`[DownloadManager] Stale download IDs:`, existingDownloads.map(d => d.id));
+        
+        // Mark stale downloads as failed so they don't block new downloads
+        for (const staleDownload of existingDownloads) {
+          staleDownload.status = 'failed';
+          staleDownload.lastError = 'Stale download - no track downloads found';
+          dbOps.updateDownload(staleDownload.id, {
+            status: 'failed',
+            lastError: 'Stale download - no track downloads found',
+          });
+        }
+        
+        // Continue with new download queue
+        console.log(`[DownloadManager] Proceeding with fresh download queue for "${album.albumName}"`);
+      }
+    }
+
+    // Mark old download sessions as stale before creating new one
+    // This ensures we only track the current/latest download attempt
+    const oldDownloads = dbOps.getDownloads().filter(
+      d => d.albumId === albumId && 
+           d.type === 'album' && 
+           d.status !== 'failed' && 
+           d.status !== 'added' && 
+           d.status !== 'completed'
+    );
+    
+    if (oldDownloads.length > 0) {
+      console.log(`[DownloadManager] Marking ${oldDownloads.length} old download record(s) as stale for album "${album.albumName}"`);
+      for (const oldDownload of oldDownloads) {
+        // Mark as stale but keep for history
+        oldDownload.status = 'failed';
+        oldDownload.lastError = 'Stale - superseded by new download request';
+        oldDownload.stale = true;
+        dbOps.updateDownload(oldDownload.id, {
+          status: 'failed',
+          lastError: 'Stale - superseded by new download request',
+          stale: true,
+        });
+      }
+    }
+
+    // Create download record (parent/session record)
+    const downloadSessionId = this.generateId();
     const downloadRecord = {
-      id: this.generateId(),
+      id: downloadSessionId,
       type: 'album',
       artistId,
       albumId,
@@ -2143,6 +2777,8 @@ export class DownloadManager {
       requeueCount: 0,
       progress: 0,
       events: [],
+      isParent: true, // Mark as parent record
+      downloadSessionId: downloadSessionId, // Self-reference for consistency
     };
 
     // Log requested event
@@ -2159,8 +2795,11 @@ export class DownloadManager {
 
   /**
    * Download album (internal method - called by queue system)
+   * @param {string} artistId - Artist ID
+   * @param {string} albumId - Album ID
+   * @param {string} parentDownloadId - Optional parent download record ID (download session ID)
    */
-  async downloadAlbum(artistId, albumId) {
+  async downloadAlbum(artistId, albumId, parentDownloadId = null) {
     const artist = libraryManager.getArtistById(artistId);
     const album = libraryManager.getAlbumById(albumId);
 
@@ -2181,6 +2820,233 @@ export class DownloadManager {
         albumArtistName: actualArtistName,
       });
       throw new Error(`Album "${album.albumName}" does not belong to artist "${artist.artistName}". Album belongs to "${actualArtistName}". This indicates a data inconsistency.`);
+    }
+    
+    // FIRST: Check if album already exists in library root folder
+    if (album.path) {
+      const fs = await import('fs/promises');
+      try {
+        const albumDirExists = await fs.access(album.path).then(() => true).catch(() => false);
+        
+        if (albumDirExists) {
+          const files = await fs.readdir(album.path);
+          const audioExtensions = ['.flac', '.mp3', '.m4a', '.aac', '.ogg', '.wav', '.opus'];
+          const audioFiles = files.filter(f => {
+            const ext = path.extname(f).toLowerCase();
+            return audioExtensions.includes(ext);
+          });
+          
+          // Get expected track count
+          const albumTracks = libraryManager.getTracks(albumId);
+          const expectedTrackCount = albumTracks.length > 0 ? albumTracks.length : 12; // Default to 12 if no tracks in DB yet
+          
+          // If we have enough audio files (at least 80% of expected tracks), album is complete
+          if (audioFiles.length >= Math.ceil(expectedTrackCount * 0.8)) {
+            console.log(`[DownloadManager] Album "${album.albumName}" already exists in library (${audioFiles.length} audio files found in ${album.path}). Skipping download.`);
+            const albumRequests = dbOps.getAlbumRequests();
+            const albumRequest = albumRequests.find(r => r.albumId === albumId);
+            if (albumRequest && albumRequest.status !== 'available') {
+              dbOps.updateAlbumRequest(albumId, { status: 'available' });
+            }
+            return null; // Album already exists in library
+          }
+        }
+      } catch (error) {
+        // Album directory doesn't exist or can't be accessed, continue with download check
+      }
+    }
+    
+    // Second, check if download records show files were already moved
+    const trackDownloadsWithPath = dbOps.getDownloads().filter(
+      d => d.albumId === albumId && d.type !== 'album' && d.destinationPath
+    );
+    
+    if (trackDownloadsWithPath.length > 0) {
+      const fs = await import('fs/promises');
+      let existingFiles = 0;
+      for (const download of trackDownloadsWithPath) {
+        try {
+          await fs.access(download.destinationPath);
+          existingFiles++;
+        } catch {
+          // File doesn't exist at destinationPath
+        }
+      }
+      
+      // If we have destination paths for most/all tracks and files exist, album is complete
+      const albumTracks = libraryManager.getTracks(albumId);
+      const expectedTrackCount = albumTracks.length > 0 ? albumTracks.length : trackDownloadsWithPath.length;
+      
+      if (existingFiles >= Math.max(expectedTrackCount * 0.9, trackDownloadsWithPath.length * 0.9)) {
+        console.log(`[DownloadManager] Album "${album.albumName}" is already complete (${existingFiles} files found at destination paths). Skipping download.`);
+        const albumRequests = dbOps.getAlbumRequests();
+        const albumRequest = albumRequests.find(r => r.albumId === albumId);
+        if (albumRequest && albumRequest.status !== 'available') {
+          dbOps.updateAlbumRequest(albumId, { status: 'available' });
+        }
+        return null; // Album already complete
+      }
+    }
+    
+    // Also check if files exist in the album directory even if download records aren't updated
+    const albumTracksForCheck = libraryManager.getTracks(albumId);
+    if (albumTracksForCheck.length > 0 && album.path) {
+      const fs = await import('fs/promises');
+      try {
+        const files = await fs.readdir(album.path);
+        const audioFiles = files.filter(f => {
+          const ext = path.extname(f).toLowerCase();
+          return ['.flac', '.mp3', '.m4a', '.ogg', '.wav'].includes(ext);
+        });
+        
+        // If we have audio files matching or exceeding track count, album is likely complete
+        if (audioFiles.length >= albumTracksForCheck.length) {
+          console.log(`[DownloadManager] Album "${album.albumName}" appears complete (${audioFiles.length} audio files found in album directory). Skipping download.`);
+          const albumRequests = dbOps.getAlbumRequests();
+          const albumRequest = albumRequests.find(r => r.albumId === albumId);
+          if (albumRequest && albumRequest.status !== 'available') {
+            dbOps.updateAlbumRequest(albumId, { status: 'available' });
+          }
+          return null; // Album already complete
+        }
+      } catch {
+        // Album directory doesn't exist or can't be read, continue with download check
+      }
+    }
+    
+    // Check if album is already complete (all tracks have files)
+    const albumTracks = libraryManager.getTracks(albumId);
+    if (albumTracks.length > 0) {
+      const tracksWithFiles = albumTracks.filter(t => t.hasFile && t.path);
+      
+      // If library scanner hasn't updated hasFile yet, verify files exist directly
+      if (tracksWithFiles.length < albumTracks.length) {
+        const fs = await import('fs/promises');
+        let verifiedCount = tracksWithFiles.length;
+        for (const track of albumTracks) {
+          if (!track.hasFile && track.path) {
+            try {
+              await fs.access(track.path);
+              verifiedCount++;
+            } catch {
+              // File doesn't exist
+            }
+          }
+        }
+        
+        if (verifiedCount === albumTracks.length) {
+          console.log(`[DownloadManager] Album "${album.albumName}" is already complete (${verifiedCount}/${albumTracks.length} tracks verified). Skipping download.`);
+          const albumRequests = dbOps.getAlbumRequests();
+          const albumRequest = albumRequests.find(r => r.albumId === albumId);
+          if (albumRequest && albumRequest.status !== 'available') {
+            dbOps.updateAlbumRequest(albumId, { status: 'available' });
+          }
+          return null; // Album already complete
+        }
+      } else if (tracksWithFiles.length === albumTracks.length) {
+        console.log(`[DownloadManager] Album "${album.albumName}" is already complete (${tracksWithFiles.length}/${albumTracks.length} tracks have files). Skipping download.`);
+        // Update album request status if needed
+        const albumRequests = dbOps.getAlbumRequests();
+        const albumRequest = albumRequests.find(r => r.albumId === albumId);
+        if (albumRequest && albumRequest.status !== 'available') {
+          dbOps.updateAlbumRequest(albumId, { status: 'available' });
+        }
+        return null; // Album already complete
+      }
+    }
+    
+    // Check if there are already active downloads for this album
+    // But verify they actually have track downloads associated with them
+    const existingDownloads = dbOps.getDownloads().filter(
+      d => d.albumId === albumId && 
+           d.type === 'album' && 
+           (d.status === 'downloading' || d.status === 'requested' || d.status === 'searching' || d.status === 'adding')
+    );
+    
+    if (existingDownloads.length > 0) {
+      // Check if any of these downloads actually have track downloads (slskdDownloadId)
+      // A valid album download should have created individual track download records
+      const allAlbumDownloads = dbOps.getDownloads().filter(
+        d => d.albumId === albumId && d.type === 'album'
+      );
+      
+      // Check if there are any track downloads with slskdDownloadId (actual downloads in slskd)
+      const hasActiveTrackDownloads = allAlbumDownloads.some(
+        d => d.slskdDownloadId && (d.status === 'downloading' || d.status === 'requested' || d.status === 'completed')
+      );
+      
+      // Also check if files were already moved (have destinationPath) - these are complete, not stale
+      const trackDownloads = dbOps.getDownloads().filter(
+        d => d.albumId === albumId && d.type !== 'album' && d.destinationPath
+      );
+      
+      // Verify that moved files actually exist
+      let hasMovedFiles = false;
+      if (trackDownloads.length > 0) {
+        const fs = await import('fs/promises');
+        let existingCount = 0;
+        for (const trackDownload of trackDownloads) {
+          try {
+            await fs.access(trackDownload.destinationPath);
+            existingCount++;
+          } catch {
+            // File doesn't exist, ignore
+          }
+        }
+        // If most files exist, consider the album as having moved files
+        if (existingCount >= Math.min(trackDownloads.length, albumTracks.length * 0.8)) {
+          hasMovedFiles = true;
+        }
+      }
+      
+      if (hasActiveTrackDownloads) {
+        const activeCount = existingDownloads.length;
+        console.log(`[DownloadManager] Album "${album.albumName}" already has ${activeCount} active download(s) with track downloads in progress. Skipping duplicate download.`);
+        console.log(`[DownloadManager] Active download statuses:`, existingDownloads.map(d => ({ id: d.id, status: d.status, trackTitle: d.trackTitle, slskdDownloadId: d.slskdDownloadId })));
+        return existingDownloads[0]; // Return existing download - it has active track downloads
+      } else if (hasMovedFiles) {
+        // Files were moved but library scanner might not have updated hasFile yet
+        // Re-check album completion by verifying files exist
+        const fs = await import('fs/promises');
+        let verifiedTracks = 0;
+        for (const track of albumTracks) {
+          if (track.path) {
+            try {
+              await fs.access(track.path);
+              verifiedTracks++;
+            } catch {
+              // File doesn't exist
+            }
+          }
+        }
+        
+        if (verifiedTracks === albumTracks.length && albumTracks.length > 0) {
+          console.log(`[DownloadManager] Album "${album.albumName}" is complete (${verifiedTracks}/${albumTracks.length} tracks verified). Skipping download.`);
+          const albumRequests = dbOps.getAlbumRequests();
+          const albumRequest = albumRequests.find(r => r.albumId === albumId);
+          if (albumRequest && albumRequest.status !== 'available') {
+            dbOps.updateAlbumRequest(albumId, { status: 'available' });
+          }
+          return null;
+        }
+      } else {
+        // Existing download record exists but has no actual track downloads - it's stale
+        console.warn(`[DownloadManager] Album "${album.albumName}" has stale download record(s) with no active track downloads. Clearing and starting fresh.`);
+        console.warn(`[DownloadManager] Stale download IDs:`, existingDownloads.map(d => d.id));
+        
+        // Mark stale downloads as failed so they don't block new downloads
+        for (const staleDownload of existingDownloads) {
+          staleDownload.status = 'failed';
+          staleDownload.lastError = 'Stale download - no track downloads found';
+          dbOps.updateDownload(staleDownload.id, {
+            status: 'failed',
+            lastError: 'Stale download - no track downloads found',
+          });
+        }
+        
+        // Continue with new download
+        console.log(`[DownloadManager] Proceeding with fresh download for "${album.albumName}"`);
+      }
     }
     
     console.log(`[DownloadManager] Downloading album "${album.albumName}" by "${artist.artistName}" (albumId: ${albumId}, artistId: ${artistId})`);
@@ -2279,6 +3145,46 @@ export class DownloadManager {
       // Handle both single result (backward compatibility) and array of results
       const results = Array.isArray(downloadResults) ? downloadResults : [downloadResults];
       
+      // Check if we got any results
+      if (!results || results.length === 0 || (results.length === 1 && !results[0])) {
+        console.error(`[DownloadManager] No download results returned for album "${album.albumName}" by "${artist.artistName}"`);
+        console.error(`[DownloadManager] This usually means no files were found in the search or the search failed`);
+        throw new Error(`No files found for album "${album.albumName}" by "${artist.artistName}". The search may have returned no results or all files were filtered out.`);
+      }
+      
+      // Find the parent download record (session) if not provided
+      if (!parentDownloadId) {
+        const parentRecord = dbOps.getDownloads().find(
+          d => d.albumId === albumId && 
+               d.type === 'album' && 
+               d.isParent && 
+               (d.status === 'requested' || d.status === 'downloading' || d.status === 'searching' || d.status === 'adding')
+        );
+        if (parentRecord) {
+          parentDownloadId = parentRecord.id;
+          console.log(`[DownloadManager] Found parent download session: ${parentDownloadId} for album "${album.albumName}"`);
+        } else {
+          // Create a parent record if one doesn't exist (backward compatibility)
+          console.warn(`[DownloadManager] No parent download record found for album "${album.albumName}", creating one...`);
+          parentDownloadId = this.generateId();
+          const parentRecord = {
+            id: parentDownloadId,
+            type: 'album',
+            artistId,
+            albumId,
+            artistName: artist.artistName,
+            albumName: album.albumName,
+            status: 'downloading',
+            isParent: true,
+            downloadSessionId: parentDownloadId,
+            requestedAt: new Date().toISOString(),
+            startedAt: new Date().toISOString(),
+            events: [],
+          };
+          dbOps.insertDownload(parentRecord);
+        }
+      }
+
       for (const download of results) {
         // Extract download ID - it might be at the top level or in enqueued[0]
         let downloadId = download?.id;
@@ -2295,6 +3201,14 @@ export class DownloadManager {
         const downloadObj = download.enqueued && download.enqueued.length > 0 
           ? download.enqueued[0] 
           : download;
+        
+        // Extract track information from download result
+        // For album downloads, track info is in download.track
+        const trackTitle = download.track?.title || 
+                          (downloadObj.filename ? this.extractTrackTitleFromFilename(downloadObj.filename) : null) ||
+                          null;
+        const trackPosition = download.track?.position || 
+                             (downloadObj.filename ? this.extractTrackNumberFromFilename(downloadObj.filename) : null);
         
         const downloadRecord = {
           id: downloadId || this.generateId(),
@@ -2314,8 +3228,10 @@ export class DownloadManager {
           requeueCount: 0,
           progress: 0,
           events: [],
-          trackTitle: download.track?.title,
-          trackPosition: download.track?.position,
+          trackTitle: trackTitle,
+          trackPosition: trackPosition,
+          parentDownloadId: parentDownloadId, // Link to parent download session
+          downloadSessionId: parentDownloadId, // Same as parent for easy filtering
         };
         
         // Log initial requested event
@@ -2328,14 +3244,21 @@ export class DownloadManager {
         dbOps.insertDownload(downloadRecord);
       }
       
+      // Check if we actually created any download records
+      if (downloadRecords.length === 0) {
+        console.error(`[DownloadManager] Failed to create any download records for album "${album.albumName}"`);
+        console.error(`[DownloadManager] Results received: ${results.length}, but no valid download records created`);
+        throw new Error(`Failed to initiate downloads for album "${album.albumName}". No valid download results were returned.`);
+      }
+      
       console.log(
-        `Album download initiated: ${downloadRecords.length}/${tracklist.length} tracks started`,
+        `Album download initiated: ${downloadRecords.length}/${tracklist.length || 'unknown'} tracks started`,
       );
       
       // Update status to "downloading" now that downloads are initiated
       this.updateDownloadStatus(albumId, 'downloading', {
         tracksStarted: downloadRecords.length,
-        totalTracks: tracklist.length,
+        totalTracks: tracklist.length || downloadRecords.length,
       });
       
       // Return the first download for backward compatibility
@@ -2762,6 +3685,26 @@ export class DownloadManager {
     // Download status is now tracked in downloads table, no separate status object needed
     // Status can be derived from download records for the album
     // This method is kept for API compatibility but doesn't need to store separate status
+    
+    // However, we can update all download records for this album to reflect the overall status
+    // This is useful when marking an album as 'added' after all tracks are moved
+    if (status === 'added') {
+      const albumDownloads = dbOps.getDownloads().filter(
+        d => d.albumId === albumId && d.type === 'album'
+      );
+      
+      // Mark all completed track downloads as 'added' since the album is now in library
+      for (const download of albumDownloads) {
+        if (download.status === 'completed' || download.tempFilePath) {
+          download.status = 'added';
+          download.addedAt = download.addedAt || new Date().toISOString();
+          dbOps.updateDownload(download.id, {
+            status: 'added',
+            addedAt: download.addedAt,
+          });
+        }
+      }
+    }
   }
 
   // Public method to update status (for routes)
@@ -2965,6 +3908,64 @@ export class DownloadManager {
 
   generateId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
+  }
+
+  /**
+   * Extract track title from filename
+   * Examples: "04 - Does He Really Care.flac" -> "Does He Really Care"
+   *           "01. Alive.flac" -> "Alive"
+   */
+  extractTrackTitleFromFilename(filename) {
+    if (!filename) return null;
+    
+    // Remove path, get just the filename
+    const justFilename = filename.split(/[\\/]/).pop() || filename;
+    
+    // Remove extension
+    const withoutExt = justFilename.replace(/\.\w+$/, '');
+    
+    // Try patterns: "04 - Track Name", "01. Track Name", "Track Name"
+    const patterns = [
+      /^\d+\s*[-.]?\s*(.+)$/,  // "04 - Track" or "01. Track"
+      /^track\s*\d+\s*[-.]?\s*(.+)$/i,  // "Track 04 - Name"
+      /^(.+)$/,  // Just the name
+    ];
+    
+    for (const pattern of patterns) {
+      const match = withoutExt.match(pattern);
+      if (match && match[1]) {
+        return match[1].trim();
+      }
+    }
+    
+    return withoutExt.trim();
+  }
+
+  /**
+   * Extract track number from filename
+   * Examples: "04 - Does He Really Care.flac" -> 4
+   *           "01. Alive.flac" -> 1
+   */
+  extractTrackNumberFromFilename(filename) {
+    if (!filename) return null;
+    
+    // Remove path, get just the filename
+    const justFilename = filename.split(/[\\/]/).pop() || filename;
+    
+    // Try to match track number at start: "04 -", "01.", "Track 04"
+    const patterns = [
+      /^(\d+)\s*[-.]/,  // "04 -" or "01."
+      /^track\s*(\d+)/i,  // "Track 04"
+    ];
+    
+    for (const pattern of patterns) {
+      const match = justFilename.match(pattern);
+      if (match && match[1]) {
+        return parseInt(match[1], 10);
+      }
+    }
+    
+    return null;
   }
 }
 

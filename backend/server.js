@@ -5,10 +5,12 @@ import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { createServer } from "http";
 
 import { db } from "./config/db.js";
 import { createAuthMiddleware } from "./middleware/auth.js";
 import { updateDiscoveryCache, getDiscoveryCache } from "./services/discoveryService.js";
+import { websocketService } from "./services/websocketService.js";
 
 import settingsRouter from "./routes/settings.js";
 import artistsRouter from "./routes/artists.js";
@@ -65,8 +67,13 @@ setTimeout(async () => {
   }
 }, 5000);
 
-app.listen(PORT, async () => {
+const httpServer = createServer(app);
+
+websocketService.initialize(httpServer);
+
+httpServer.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`WebSocket available at ws://localhost:${PORT}/ws`);
   const { libraryManager } = await import("./services/libraryManager.js");
   const { slskdClient } = await import("./services/slskdClient.js");
   const { downloadManager } = await import("./services/downloadManager.js");
@@ -100,12 +107,18 @@ app.listen(PORT, async () => {
     console.warn(`  Install music-metadata: npm install music-metadata`);
   }
   
-  // Initialize Download Queue
   try {
     const { downloadQueue } = await import("./services/downloadQueue.js");
     console.log(`✓ Download Queue initialized`);
     const status = downloadQueue.getStatus();
     console.log(`  Queue: ${status.total} items, ${status.processing} processing`);
+    
+    const integrity = await downloadQueue.verifyQueueIntegrity();
+    if (integrity.issuesFound > 0) {
+      console.log(`  Queue integrity: ${integrity.issuesFound} issues found and fixed`);
+    } else {
+      console.log(`  Queue integrity: healthy`);
+    }
   } catch (error) {
     console.error(`✗ Failed to initialize Download Queue: ${error.message}`);
   }

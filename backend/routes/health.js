@@ -5,6 +5,7 @@ import { getDiscoveryCache } from "../services/discoveryService.js";
 import { libraryManager } from "../services/libraryManager.js";
 import { slskdClient } from "../services/slskdClient.js";
 import { dbOps } from "../config/db-helpers.js";
+import { websocketService } from "../services/websocketService.js";
 
 const router = express.Router();
 
@@ -12,22 +13,23 @@ router.get("/", async (req, res) => {
   try {
     const authUser = getAuthUser();
     const authPassword = getAuthPassword();
-    const rootFolder = libraryManager.getRootFolder(); // Always returns /data
+    const rootFolder = libraryManager.getRootFolder();
     const slskdConfigured = slskdClient.isConfigured();
 
     const discoveryCache = getDiscoveryCache();
+    const wsStats = websocketService.getStats();
 
     res.json({
       status: "ok",
-      rootFolderConfigured: true, // Always configured as /data
-      rootFolder: rootFolder, // Always /data
+      rootFolderConfigured: true,
+      rootFolder: rootFolder,
       slskdConfigured,
       lastfmConfigured: !!getLastfmApiKey(),
       musicbrainzConfigured: !!(dbOps.getSettings().integrations?.musicbrainz?.email || process.env.CONTACT_EMAIL),
       spotifyConfigured: !!(getSpotifyClientId() && getSpotifyClientSecret()),
       library: {
         artistCount: libraryManager.getAllArtists().length,
-        lastScan: null, // Last scan time can be added to settings if needed
+        lastScan: null,
       },
       discovery: {
         lastUpdated: discoveryCache?.lastUpdated || null,
@@ -35,6 +37,10 @@ router.get("/", async (req, res) => {
         recommendationsCount: discoveryCache?.recommendations?.length || 0,
         globalTopCount: discoveryCache?.globalTop?.length || 0,
         cachedImagesCount: dbOps.getAllImages() ? Object.keys(dbOps.getAllImages()).length : 0,
+      },
+      websocket: {
+        clients: wsStats.totalClients,
+        channels: wsStats.channels,
       },
       authRequired: authPassword.length > 0,
       authUser: authUser,
@@ -46,6 +52,18 @@ router.get("/", async (req, res) => {
       status: "error",
       error: error.message,
       timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+router.get("/ws", (req, res) => {
+  try {
+    const stats = websocketService.getStats();
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to get WebSocket stats",
+      message: error.message,
     });
   }
 });
