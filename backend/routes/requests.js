@@ -1,7 +1,9 @@
 import express from "express";
 import { UUID_REGEX } from "../config/constants.js";
+import { noCache } from "../middleware/cache.js";
 
 const router = express.Router();
+const dismissedAlbumIds = new Set();
 
 const toIso = (value) => {
   if (!value) return new Date().toISOString();
@@ -13,7 +15,7 @@ const toIso = (value) => {
   }
 };
 
-router.get("/", async (req, res) => {
+router.get("/", noCache, async (req, res) => {
   try {
     const { lidarrClient } = await import("../services/lidarrClient.js");
 
@@ -33,26 +35,88 @@ router.get("/", async (req, res) => {
         {
           id: a.id,
           artistName: a.artistName,
-          foreignArtistId: a.foreignArtistId,
+          foreignArtistId: a.foreignArtistId || a.mbid || null,
         },
       ]),
     );
+    
+    console.log(`[Requests] Loaded ${artistById.size} artists into map. Sample:`, Array.from(artistById.entries()).slice(0, 3).map(([id, info]) => ({ id, name: info.artistName, mbid: info.foreignArtistId })));
 
     const requestsByAlbumId = new Map();
 
     const queueItems = Array.isArray(queue) ? queue : queue?.records || [];
+    console.log(`[Requests] Found ${queueItems.length} items in queue`);
     for (const item of queueItems) {
-      const albumId = item?.album?.id;
-      if (albumId == null) continue;
+      const albumId = item?.albumId ?? item?.album?.id;
+      if (albumId == null) {
+        console.log(`[Requests] Queue item has no albumId, skipping:`, JSON.stringify(item, null, 2));
+        continue;
+      }
 
-      const artistId = item?.artist?.id ?? item?.album?.artistId;
+      const artistId = item?.artistId ?? item?.artist?.id ?? item?.album?.artistId;
       const artistInfo = artistId != null ? artistById.get(artistId) : null;
 
       const albumName = item?.album?.title || item?.title || "Album";
       const artistName =
         item?.artist?.artistName || artistInfo?.artistName || "Artist";
-      const artistMbid =
-        item?.artist?.foreignArtistId || artistInfo?.foreignArtistId || null;
+      
+      let artistMbid = null;
+      
+      if (artistId && artistById.has(artistId)) {
+        artistMbid = artistById.get(artistId).foreignArtistId || null;
+      }
+      
+      if (!artistMbid) {
+        artistMbid = item?.artist?.foreignArtistId || null;
+      }
+      
+      if (!artistMbid && artistInfo) {
+        artistMbid = artistInfo.foreignArtistId || null;
+      }
+      
+      if (!artistMbid && artistId) {
+        try {
+          const { libraryManager } = await import("../services/libraryManager.js");
+          const libraryArtist = await libraryManager.getArtistById(artistId);
+          if (libraryArtist) {
+            artistMbid = libraryArtist.foreignArtistId || libraryArtist.mbid || null;
+          }
+        } catch (e) {
+          console.warn(`[Requests] Failed to fetch artist MBID for artistId ${artistId}:`, e.message);
+        }
+      }
+      
+      if (!artistMbid) {
+        console.warn(`[Requests] No artist MBID found for queue item album ${albumId}, artistId: ${artistId}, artistName: ${artistName}, artistInfo:`, artistInfo, `artistById.has(${artistId}):`, artistById.has(artistId));
+      }
+
+      const queueStatus = String(item.status || "").toLowerCase();
+      const title = String(item.title || "").toLowerCase();
+      const trackedDownloadState = String(item.trackedDownloadState || "").toLowerCase();
+      const trackedDownloadStatus = String(item.trackedDownloadStatus || "").toLowerCase();
+      const errorMessage = String(item.errorMessage || "").toLowerCase();
+      const statusMessages = Array.isArray(item.statusMessages) 
+        ? item.statusMessages.map(m => String(m || "").toLowerCase()).join(" ")
+        : "";
+      
+      const isFailed = 
+        trackedDownloadState === "importfailed" ||
+        trackedDownloadState === "importFailed" ||
+        queueStatus.includes("fail") || 
+        queueStatus.includes("import fail") ||
+        title.includes("import fail") ||
+        title.includes("downloaded - import fail") ||
+        trackedDownloadState.includes("fail") ||
+        trackedDownloadStatus.includes("fail") ||
+        trackedDownloadStatus === "warning" ||
+        errorMessage.includes("fail") ||
+        errorMessage.includes("retrying") ||
+        statusMessages.includes("fail") ||
+        statusMessages.includes("unmatched");
+      
+      const status = isFailed ? "processing" : "processing";
+      
+      console.log(`[Requests] Queue item for album ${albumId}: status="${item.status}", title="${item.title}", trackedDownloadState="${item.trackedDownloadState}", trackedDownloadStatus="${item.trackedDownloadStatus}", errorMessage="${item.errorMessage}", statusMessages="${JSON.stringify(item.statusMessages)}", isFailed=${isFailed}, finalStatus=${status}`);
 
       requestsByAlbumId.set(String(albumId), {
         id: `lidarr-queue-${item.id ?? albumId}`,
@@ -63,7 +127,7 @@ router.get("/", async (req, res) => {
         artistId: artistId != null ? String(artistId) : null,
         artistMbid,
         artistName,
-        status: "processing",
+        status,
         requestedAt: toIso(item?.added),
         mbid: artistMbid,
         name: albumName,
@@ -82,7 +146,10 @@ router.get("/", async (req, res) => {
       if (albumId == null) continue;
 
       const existing = requestsByAlbumId.get(String(albumId));
-      if (existing) continue;
+      if (existing) {
+        console.log(`[Requests] Skipping history for album ${albumId} - already in queue with status: ${existing.status}`);
+        continue;
+      }
 
       const artistId = record?.artistId;
       const artistInfo = artistId != null ? artistById.get(artistId) : null;
@@ -90,11 +157,62 @@ router.get("/", async (req, res) => {
       const albumName = record?.album?.title || record?.sourceTitle || "Album";
       const artistName =
         record?.artist?.artistName || artistInfo?.artistName || "Artist";
-      const artistMbid =
-        record?.artist?.foreignArtistId || artistInfo?.foreignArtistId || null;
+      
+      let artistMbid = null;
+      
+      if (artistId && artistById.has(artistId)) {
+        artistMbid = artistById.get(artistId).foreignArtistId || null;
+      }
+      
+      if (!artistMbid) {
+        artistMbid = record?.artist?.foreignArtistId || null;
+      }
+      
+      if (!artistMbid && artistInfo) {
+        artistMbid = artistInfo.foreignArtistId || null;
+      }
+      
+      if (!artistMbid && artistId) {
+        try {
+          const { libraryManager } = await import("../services/libraryManager.js");
+          const libraryArtist = await libraryManager.getArtistById(artistId);
+          if (libraryArtist) {
+            artistMbid = libraryArtist.foreignArtistId || libraryArtist.mbid || null;
+          }
+        } catch (e) {
+          console.warn(`[Requests] Failed to fetch artist MBID for history artistId ${artistId}:`, e.message);
+        }
+      }
+      
+      if (!artistMbid) {
+        console.warn(`[Requests] No artist MBID found for history album ${albumId}, artistId: ${artistId}, artistName: ${artistName}, artistInfo:`, artistInfo, `artistById.has(${artistId}):`, artistById.has(artistId));
+      }
 
       const eventType = String(record?.eventType || "").toLowerCase();
-      const status = eventType.includes("import") ? "available" : "processing";
+      const data = record?.data || {};
+      const statusMessages = Array.isArray(data?.statusMessages) 
+        ? data.statusMessages.map(m => String(m || "").toLowerCase()).join(" ")
+        : String(data?.statusMessages?.[0] || "").toLowerCase();
+      const errorMessage = String(data?.errorMessage || "").toLowerCase();
+      const sourceTitle = String(record?.sourceTitle || "").toLowerCase();
+      const dataString = JSON.stringify(data).toLowerCase();
+      
+      const isFailedImport = 
+        eventType === "albumimportincomplete" ||
+        eventType.includes("incomplete") ||
+        statusMessages.includes("fail") || 
+        statusMessages.includes("error") ||
+        statusMessages.includes("import fail") ||
+        statusMessages.includes("incomplete") ||
+        errorMessage.includes("fail") ||
+        errorMessage.includes("error") ||
+        sourceTitle.includes("import fail") ||
+        dataString.includes("import fail");
+      
+      const isSuccessfulImport = eventType.includes("import") && !isFailedImport && eventType !== "albumimportincomplete";
+      const status = isSuccessfulImport ? "available" : "processing";
+      
+      console.log(`[Requests] History item for album ${albumId}: eventType="${record.eventType}", sourceTitle="${record.sourceTitle}", statusMessages="${statusMessages}", errorMessage="${errorMessage}", isFailedImport=${isFailedImport}, isSuccessfulImport=${isSuccessfulImport}, finalStatus=${status}`);
 
       requestsByAlbumId.set(String(albumId), {
         id: `lidarr-history-${record.id ?? albumId}`,
@@ -113,8 +231,11 @@ router.get("/", async (req, res) => {
       });
     }
 
-    const sorted = [...requestsByAlbumId.values()].sort(
+    let sorted = [...requestsByAlbumId.values()].sort(
       (a, b) => new Date(b.requestedAt) - new Date(a.requestedAt),
+    );
+    sorted = sorted.filter(
+      (r) => !r.albumId || !dismissedAlbumIds.has(String(r.albumId)),
     );
 
     res.json(sorted);
@@ -127,6 +248,8 @@ router.delete("/album/:albumId", async (req, res) => {
   const { albumId } = req.params;
   if (!albumId) return res.status(400).json({ error: "albumId is required" });
 
+  dismissedAlbumIds.add(String(albumId));
+
   try {
     const { lidarrClient } = await import("../services/lidarrClient.js");
     if (lidarrClient?.isConfigured()) {
@@ -135,7 +258,10 @@ router.delete("/album/:albumId", async (req, res) => {
       const targetAlbumId = parseInt(albumId, 10);
 
       for (const item of queueItems) {
-        if (item?.album?.id === targetAlbumId && item?.id != null) {
+        const match =
+          (item?.albumId != null && item.albumId === targetAlbumId) ||
+          (item?.album?.id != null && item.album.id === targetAlbumId);
+        if (match && item?.id != null) {
           await lidarrClient
             .request(`/queue/${item.id}`, "DELETE")
             .catch(() => null);

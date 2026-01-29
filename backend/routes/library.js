@@ -5,10 +5,11 @@ import { libraryManager } from "../services/libraryManager.js";
 import { qualityManager } from "../services/qualityManager.js";
 import { musicbrainzRequest } from "../services/apiClients.js";
 import { dbOps } from "../config/db-helpers.js";
+import { cacheMiddleware, noCache } from "../middleware/cache.js";
 
 const router = express.Router();
 
-router.get("/artists", async (req, res) => {
+router.get("/artists", cacheMiddleware(120), async (req, res) => {
   try {
     const artists = await libraryManager.getAllArtists();
     const formatted = artists.map((artist) => ({
@@ -16,7 +17,6 @@ router.get("/artists", async (req, res) => {
       foreignArtistId: artist.foreignArtistId || artist.mbid,
       added: artist.addedAt,
     }));
-    res.set("Cache-Control", "no-cache, no-store, must-revalidate");
     res.json(formatted);
   } catch (error) {
     res.status(500).json({
@@ -26,7 +26,7 @@ router.get("/artists", async (req, res) => {
   }
 });
 
-router.get("/artists/:mbid", async (req, res) => {
+router.get("/artists/:mbid", cacheMiddleware(120), async (req, res) => {
   try {
     const { mbid } = req.params;
     if (!UUID_REGEX.test(mbid)) {
@@ -128,7 +128,7 @@ router.delete("/artists/:mbid", async (req, res) => {
   }
 });
 
-router.get("/albums", async (req, res) => {
+router.get("/albums", cacheMiddleware(120), async (req, res) => {
   try {
     const { artistId } = req.query;
     if (!artistId) {
@@ -167,13 +167,15 @@ router.post("/albums", async (req, res) => {
       });
     }
 
+    const settings = dbOps.getSettings();
+    const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
+
     const album = await libraryManager.addAlbum(
       artistId,
       releaseGroupMbid,
       albumName,
       {
-        fetchTracks: true,
-        triggerSearch: true,
+        triggerSearch: searchOnAdd,
       },
     );
 
@@ -194,7 +196,7 @@ router.post("/albums", async (req, res) => {
   }
 });
 
-router.get("/albums/:id", async (req, res) => {
+router.get("/albums/:id", cacheMiddleware(120), async (req, res) => {
   try {
     const { id } = req.params;
     const album = await libraryManager.getAlbumById(id);
@@ -239,7 +241,7 @@ router.delete("/albums/:id", async (req, res) => {
   }
 });
 
-router.get("/tracks", async (req, res) => {
+router.get("/tracks", cacheMiddleware(30), async (req, res) => {
   try {
     const { albumId, releaseGroupMbid } = req.query;
 
@@ -336,6 +338,7 @@ router.post("/downloads/album", async (req, res) => {
     if (!artist && artistMbid && artistName) {
       try {
         artist = await libraryManager.addArtist(artistMbid, artistName, {
+          monitorOption: "none",
           quality: dbOps.getSettings().quality || "standard",
         });
       } catch (error) {
@@ -358,14 +361,19 @@ router.post("/downloads/album", async (req, res) => {
         await libraryManager.updateAlbum(albumId, { monitored: true });
       }
 
-      await lidarrClient.request("/command", "POST", {
-        name: "AlbumSearch",
-        albumIds: [parseInt(albumId, 10)],
-      });
+      const settings = dbOps.getSettings();
+      const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
+
+      if (searchOnAdd) {
+        await lidarrClient.request("/command", "POST", {
+          name: "AlbumSearch",
+          albumIds: [parseInt(albumId, 10)],
+        });
+      }
 
       res.json({
         success: true,
-        message: "Album search triggered",
+        message: searchOnAdd ? "Album search triggered" : "Album added to library",
       });
     } catch (error) {
       console.error(
@@ -424,7 +432,7 @@ router.get("/downloads", async (req, res) => {
   }
 });
 
-router.get("/downloads/status", async (req, res) => {
+router.get("/downloads/status", noCache, async (req, res) => {
   try {
     const { albumIds } = req.query;
 
@@ -458,18 +466,48 @@ router.get("/downloads/status", async (req, res) => {
 
           const queueItem = queueItems.find((q) => {
             const qAlbumId = q?.albumId ?? q?.album?.id;
-            return qAlbumId === lidarrAlbumId;
+            return qAlbumId != null && qAlbumId === lidarrAlbumId;
           });
 
           if (queueItem) {
-            const progress = queueItem.size
-              ? Math.round((1 - queueItem.sizeleft / queueItem.size) * 100)
-              : 0;
-            statuses[albumId] = {
-              status: "downloading",
-              progress: progress,
-              updatedAt: new Date().toISOString(),
-            };
+            const queueStatus = String(queueItem.status || "").toLowerCase();
+            const title = String(queueItem.title || "").toLowerCase();
+            const trackedDownloadState = String(queueItem.trackedDownloadState || "").toLowerCase();
+            const trackedDownloadStatus = String(queueItem.trackedDownloadStatus || "").toLowerCase();
+            const errorMessage = String(queueItem.errorMessage || "").toLowerCase();
+            const statusMessages = Array.isArray(queueItem.statusMessages) 
+              ? queueItem.statusMessages.map(m => String(m || "").toLowerCase()).join(" ")
+              : "";
+            
+            const isFailed = 
+              trackedDownloadState === "importfailed" ||
+              trackedDownloadState === "importFailed" ||
+              queueStatus.includes("fail") || 
+              queueStatus.includes("import fail") ||
+              title.includes("import fail") ||
+              trackedDownloadState.includes("fail") ||
+              trackedDownloadStatus.includes("fail") ||
+              trackedDownloadStatus === "warning" ||
+              errorMessage.includes("fail") ||
+              errorMessage.includes("retrying") ||
+              statusMessages.includes("fail") ||
+              statusMessages.includes("unmatched");
+            
+            if (isFailed) {
+              statuses[albumId] = {
+                status: "processing",
+                updatedAt: new Date().toISOString(),
+              };
+            } else {
+              const progress = queueItem.size
+                ? Math.round((1 - queueItem.sizeleft / queueItem.size) * 100)
+                : 0;
+              statuses[albumId] = {
+                status: "downloading",
+                progress: progress,
+                updatedAt: new Date().toISOString(),
+              };
+            }
             continue;
           }
 
@@ -481,7 +519,20 @@ router.get("/downloads/status", async (req, res) => {
             const eventType = String(
               recentHistory.eventType || "",
             ).toLowerCase();
-            const isComplete = eventType.includes("import");
+            const data = recentHistory?.data || {};
+            const statusMessages = Array.isArray(data?.statusMessages) 
+              ? data.statusMessages.map(m => String(m || "").toLowerCase()).join(" ")
+              : String(data?.statusMessages?.[0] || "").toLowerCase();
+            const errorMessage = String(data?.errorMessage || "").toLowerCase();
+            const isFailedImport = 
+              eventType === "albumimportincomplete" ||
+              eventType.includes("incomplete") ||
+              statusMessages.includes("fail") || 
+              statusMessages.includes("error") ||
+              statusMessages.includes("incomplete") ||
+              errorMessage.includes("fail") ||
+              errorMessage.includes("error");
+            const isComplete = eventType.includes("import") && !isFailedImport && eventType !== "albumimportincomplete";
             statuses[albumId] = {
               status: isComplete ? "added" : "processing",
               updatedAt: new Date().toISOString(),
@@ -504,7 +555,7 @@ router.get("/downloads/status", async (req, res) => {
 });
 
 // Get download status for all albums (for polling)
-router.get("/downloads/status/all", async (req, res) => {
+router.get("/downloads/status/all", noCache, async (req, res) => {
   try {
     const { lidarrClient } = await import("../services/lidarrClient.js");
     const allStatuses = {};
@@ -544,14 +595,44 @@ router.get("/downloads/status/all", async (req, res) => {
           const queueItem = queueByAlbumId.get(lidarrAlbumId);
 
           if (queueItem) {
-            const progress = queueItem.size
-              ? Math.round((1 - queueItem.sizeleft / queueItem.size) * 100)
-              : 0;
-            allStatuses[String(lidarrAlbumId)] = {
-              status: "downloading",
-              progress: progress,
-              updatedAt: new Date().toISOString(),
-            };
+            const queueStatus = String(queueItem.status || "").toLowerCase();
+            const title = String(queueItem.title || "").toLowerCase();
+            const trackedDownloadState = String(queueItem.trackedDownloadState || "").toLowerCase();
+            const trackedDownloadStatus = String(queueItem.trackedDownloadStatus || "").toLowerCase();
+            const errorMessage = String(queueItem.errorMessage || "").toLowerCase();
+            const statusMessages = Array.isArray(queueItem.statusMessages) 
+              ? queueItem.statusMessages.map(m => String(m || "").toLowerCase()).join(" ")
+              : "";
+            
+            const isFailed = 
+              trackedDownloadState === "importfailed" ||
+              trackedDownloadState === "importFailed" ||
+              queueStatus.includes("fail") || 
+              queueStatus.includes("import fail") ||
+              title.includes("import fail") ||
+              trackedDownloadState.includes("fail") ||
+              trackedDownloadStatus.includes("fail") ||
+              trackedDownloadStatus === "warning" ||
+              errorMessage.includes("fail") ||
+              errorMessage.includes("retrying") ||
+              statusMessages.includes("fail") ||
+              statusMessages.includes("unmatched");
+            
+            if (isFailed) {
+              allStatuses[String(lidarrAlbumId)] = {
+                status: "processing",
+                updatedAt: new Date().toISOString(),
+              };
+            } else {
+              const progress = queueItem.size
+                ? Math.round((1 - queueItem.sizeleft / queueItem.size) * 100)
+                : 0;
+              allStatuses[String(lidarrAlbumId)] = {
+                status: "downloading",
+                progress: progress,
+                updatedAt: new Date().toISOString(),
+              };
+            }
             continue;
           }
 
@@ -561,19 +642,30 @@ router.get("/downloads/status/all", async (req, res) => {
             const eventType = String(
               recentHistory.eventType || "",
             ).toLowerCase();
-            const isComplete = eventType.includes("import");
-            allStatuses[String(lidarrAlbumId)] = {
-              status: isComplete ? "added" : "processing",
-              updatedAt: new Date().toISOString(),
-            };
-            continue;
-          }
-
-          if (album.monitored) {
-            allStatuses[String(lidarrAlbumId)] = {
-              status: "searching",
-              updatedAt: new Date().toISOString(),
-            };
+            const data = recentHistory?.data || {};
+            const statusMessages = Array.isArray(data?.statusMessages) 
+              ? data.statusMessages.map(m => String(m || "").toLowerCase()).join(" ")
+              : String(data?.statusMessages?.[0] || "").toLowerCase();
+            const errorMessage = String(data?.errorMessage || "").toLowerCase();
+            const isFailedImport = 
+              eventType === "albumimportincomplete" ||
+              eventType.includes("incomplete") ||
+              statusMessages.includes("fail") || 
+              statusMessages.includes("error") ||
+              statusMessages.includes("incomplete") ||
+              errorMessage.includes("fail") ||
+              errorMessage.includes("error");
+            const isComplete = eventType.includes("import") && !isFailedImport && eventType !== "albumimportincomplete";
+            const historyDate = new Date(recentHistory.date || recentHistory.eventDate || 0);
+            const oneHourAgo = Date.now() - 60 * 60 * 1000;
+            
+            if (historyDate.getTime() > oneHourAgo) {
+              allStatuses[String(lidarrAlbumId)] = {
+                status: isComplete ? "added" : "processing",
+                updatedAt: new Date().toISOString(),
+              };
+              continue;
+            }
           }
         }
       } catch (error) {

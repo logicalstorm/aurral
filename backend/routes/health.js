@@ -10,10 +10,11 @@ import { libraryManager } from "../services/libraryManager.js";
 import { lidarrClient } from "../services/lidarrClient.js";
 import { dbOps } from "../config/db-helpers.js";
 import { websocketService } from "../services/websocketService.js";
+import { noCache } from "../middleware/cache.js";
 
 const router = express.Router();
 
-router.get("/", async (req, res) => {
+router.get("/", noCache, async (req, res) => {
   try {
     const authUser = getAuthUser();
     const authPassword = getAuthPassword();
@@ -65,7 +66,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.get("/ws", (req, res) => {
+router.get("/ws", noCache, (req, res) => {
   try {
     const stats = websocketService.getStats();
     res.json(stats);

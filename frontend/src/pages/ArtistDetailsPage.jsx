@@ -790,11 +790,10 @@ function ArtistDetailsPage() {
         artistName: currentLibraryArtist.artistName,
       });
 
-      setLibraryAlbums((prev) =>
-        prev.map((a) =>
-          a.id === libraryAlbum.id ? { ...a, monitored: true } : a,
-        ),
-      );
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const refreshedAlbums = await getLibraryAlbums(currentLibraryArtist.id);
+      setLibraryAlbums(deduplicateAlbums(refreshedAlbums));
 
       showSuccess(`Downloading album: ${title}`);
     } catch (err) {
@@ -961,26 +960,70 @@ function ArtistDetailsPage() {
 
   useEffect(() => {
     // Poll download status every 5 seconds if we have albums
-    if (!libraryAlbums.length) return;
+    if (!libraryAlbums.length || !libraryArtist) return;
 
     const pollDownloadStatus = async () => {
       try {
         const albumIds = libraryAlbums.map((a) => a.id).filter(Boolean);
         if (albumIds.length > 0) {
           const statuses = await getDownloadStatus(albumIds);
-          setDownloadStatuses(statuses);
+          setDownloadStatuses((prevStatuses) => {
+            const hasNewlyAdded = Object.keys(statuses).some(
+              (albumId) => {
+                const currentStatus = statuses[albumId]?.status;
+                const previousStatus = prevStatuses[albumId]?.status;
+                return currentStatus === "added" && previousStatus !== "added";
+              }
+            );
+            
+            const hasActiveDownloads = Object.values(statuses).some(
+              (s) => s && (s.status === "downloading" || s.status === "processing" || s.status === "adding")
+            );
+            
+            if (hasNewlyAdded || hasActiveDownloads) {
+              setTimeout(async () => {
+                try {
+                  const refreshedAlbums = await getLibraryAlbums(libraryArtist.id);
+                  setLibraryAlbums(deduplicateAlbums(refreshedAlbums));
+                } catch (err) {
+                  console.error("Failed to refresh albums:", err);
+                }
+              }, hasNewlyAdded ? 2000 : 5000);
+            }
+            
+            return statuses;
+          });
         }
       } catch (error) {
         console.error("Failed to fetch download status:", error);
       }
     };
 
-    // Poll immediately, then every 5 seconds
+    // Poll immediately, then every 15 seconds
     pollDownloadStatus();
     const interval = setInterval(pollDownloadStatus, 15000);
 
     return () => clearInterval(interval);
-  }, [libraryAlbums]);
+  }, [libraryAlbums, libraryArtist]);
+
+  useEffect(() => {
+    // Refresh albums periodically to catch imports
+    if (!libraryArtist) return;
+
+    const refreshAlbums = async () => {
+      try {
+        const refreshedAlbums = await getLibraryAlbums(libraryArtist.id);
+        setLibraryAlbums(deduplicateAlbums(refreshedAlbums));
+      } catch (err) {
+        console.error("Failed to refresh albums:", err);
+      }
+    };
+
+    // Refresh every 30 seconds
+    const interval = setInterval(refreshAlbums, 30000);
+
+    return () => clearInterval(interval);
+  }, [libraryArtist]);
 
   const getAlbumStatus = (releaseGroupId) => {
     // If artist is not in library, album is not in library
@@ -996,9 +1039,10 @@ function ArtistDetailsPage() {
       return null;
     }
 
-    // Check download status first
+    const isComplete = album.statistics?.percentOfTracks >= 100 || album.statistics?.sizeOnDisk > 0;
+    
     const downloadStatus = downloadStatuses[album.id];
-    if (downloadStatus) {
+    if (downloadStatus && !isComplete) {
       const statusLabels = {
         adding: "Adding...",
         searching: "Searching...",
@@ -1017,9 +1061,8 @@ function ArtistDetailsPage() {
       };
     }
 
-    const isComplete = album.statistics?.percentOfTracks === 100;
-    const isAvailable = isComplete; // Available if 100% downloaded, regardless of monitored status
-    const isProcessing = album.monitored && !isComplete;
+    const isAvailable = isComplete;
+    const isProcessing = false;
 
     return {
       status: isAvailable
@@ -1028,7 +1071,7 @@ function ArtistDetailsPage() {
           ? "processing"
           : "unmonitored",
       label: isAvailable
-        ? "Available"
+        ? "Complete"
         : isProcessing
           ? "Processing"
           : "Not Monitored",
@@ -1604,7 +1647,12 @@ function ArtistDetailsPage() {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            {downloadStatus ? (
+                            {isComplete ? (
+                              <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase bg-green-500/20 text-green-400 cursor-default">
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                Complete
+                              </span>
+                            ) : downloadStatus ? (
                               downloadStatus.status === "added" ||
                               downloadStatus.status === "available" ? (
                                 <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase bg-green-500/20 text-green-400 cursor-default">
@@ -1631,11 +1679,6 @@ function ArtistDetailsPage() {
                                           : downloadStatus.status}
                                 </span>
                               )
-                            ) : isComplete ? (
-                              <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase bg-green-500/20 text-green-400 cursor-default">
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                Complete
-                              </span>
                             ) : (
                               <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase bg-yellow-500/20 text-yellow-400 cursor-default">
                                 Incomplete
@@ -1857,7 +1900,7 @@ function ArtistDetailsPage() {
                                               .padStart(2, "0")}
                                           </span>
                                         )}
-                                        {track.hasFile ? (
+                                        {(track.hasFile || (libraryAlbum?.statistics?.percentOfTracks >= 100) || (libraryAlbum?.statistics?.sizeOnDisk > 0)) ? (
                                           <CheckCircle className="w-4 h-4 text-green-500" />
                                         ) : libraryAlbum.id ? (
                                           <span
@@ -2459,7 +2502,7 @@ function ArtistDetailsPage() {
                                           .padStart(2, "0")}
                                       </span>
                                     )}
-                                    {track.hasFile ? (
+                                    {(track.hasFile || (status?.albumInfo?.statistics?.percentOfTracks >= 100) || (status?.albumInfo?.statistics?.sizeOnDisk > 0)) ? (
                                       <CheckCircle className="w-4 h-4 text-green-500" />
                                     ) : status?.libraryId ? (
                                       <span

@@ -116,6 +116,15 @@ router.get("/", async (req, res) => {
 
   const discoveryCache = getDiscoveryCache();
   const dbData = dbOps.getDiscoveryCache();
+  
+  const hasData = 
+    (dbData.recommendations?.length > 0 ||
+     dbData.globalTop?.length > 0 ||
+     dbData.topGenres?.length > 0) ||
+    (discoveryCache.recommendations?.length > 0 ||
+     discoveryCache.globalTop?.length > 0 ||
+     discoveryCache.topGenres?.length > 0);
+  
   const isUpdating = discoveryCache.isUpdating || false;
 
   const dbHasData =
