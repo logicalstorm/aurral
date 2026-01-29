@@ -515,13 +515,15 @@ function ArtistDetailsPage() {
     if (!audio || !track.preview_url) return;
     if (playingPreviewId === track.id) {
       if (audio.paused) {
-        if (snapBackTimeoutRef.current) clearTimeout(snapBackTimeoutRef.current);
+        if (snapBackTimeoutRef.current)
+          clearTimeout(snapBackTimeoutRef.current);
         snapBackTimeoutRef.current = null;
         setPreviewSnappingBack(false);
         audio.play();
       } else {
         audio.pause();
-        if (previewTickRef.current) cancelAnimationFrame(previewTickRef.current);
+        if (previewTickRef.current)
+          cancelAnimationFrame(previewTickRef.current);
         previewTickRef.current = null;
         setPreviewSnappingBack(true);
         setPreviewProgress(0);
@@ -538,7 +540,8 @@ function ArtistDetailsPage() {
     const PREVIEW_DURATION = 30;
     const tick = () => {
       if (audio.ended) {
-        if (previewTickRef.current) cancelAnimationFrame(previewTickRef.current);
+        if (previewTickRef.current)
+          cancelAnimationFrame(previewTickRef.current);
         previewTickRef.current = null;
         setPreviewSnappingBack(true);
         setPreviewProgress(0);
@@ -685,10 +688,7 @@ function ArtistDetailsPage() {
       delete updatedArtist.images;
       delete updatedArtist.links;
 
-      await updateLibraryArtist(
-        libraryArtist.mbid,
-        updatedArtist,
-      );
+      await updateLibraryArtist(libraryArtist.mbid, updatedArtist);
 
       // Refetch the artist from library to get the actual updated data
       const refreshedArtist = await getLibraryArtist(libraryArtist.mbid);
@@ -1636,10 +1636,7 @@ function ArtistDetailsPage() {
                 })}
               {(!artist.genres || artist.genres.length === 0) &&
                 (!artist.tags || artist.tags.length === 0) && (
-                  <span
-                    className="text-sm"
-                    style={{ color: "#c1c1c3" }}
-                  >
+                  <span className="text-sm" style={{ color: "#c1c1c3" }}>
                     No genres or tags
                   </span>
                 )}
@@ -2428,36 +2425,36 @@ function ArtistDetailsPage() {
                       }
                     }}
                   >
-<div
-                    className="flex items-center justify-between py-2.5 px-3 cursor-pointer"
-                    onClick={() =>
-                      handleAlbumClick(releaseGroup.id, status?.libraryId)
-                    }
-                  >
-                    <div className="flex-1 flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAlbumClick(
-                            releaseGroup.id,
-                            status?.libraryId,
-                          );
-                        }}
-                        className="hover:text-gray-300 transition-colors"
-                        style={{ color: "#c1c1c3" }}
-                      >
-                        {isExpanded ? (
-                          <ChevronUp className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        )}
-                      </button>
-                      {albumCovers[releaseGroup.id] ? (
-                        <img
-                          src={albumCovers[releaseGroup.id]}
-                          alt={releaseGroup.title}
-                          className="w-10 h-10 flex-shrink-0 object-cover"
+                    <div
+                      className="flex items-center justify-between py-2.5 px-3 cursor-pointer"
+                      onClick={() =>
+                        handleAlbumClick(releaseGroup.id, status?.libraryId)
+                      }
+                    >
+                      <div className="flex-1 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAlbumClick(
+                              releaseGroup.id,
+                              status?.libraryId,
+                            );
+                          }}
+                          className="hover:text-gray-300 transition-colors"
+                          style={{ color: "#c1c1c3" }}
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          )}
+                        </button>
+                        {albumCovers[releaseGroup.id] ? (
+                          <img
+                            src={albumCovers[releaseGroup.id]}
+                            alt={releaseGroup.title}
+                            className="w-10 h-10 flex-shrink-0 object-cover"
                             loading="lazy"
                             decoding="async"
                           />
@@ -2940,8 +2937,9 @@ function ArtistDetailsPage() {
                     Delete artist folder and files
                   </span>
                   <p className="text-sm  mt-1" style={{ color: "#c1c1c3" }}>
-                    This will permanently delete the artist&apos;s folder and all
-                    music files from your disk. This action cannot be undone.
+                    This will permanently delete the artist&apos;s folder and
+                    all music files from your disk. This action cannot be
+                    undone.
                   </p>
                 </div>
               </label>

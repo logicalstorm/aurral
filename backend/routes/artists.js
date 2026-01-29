@@ -594,7 +594,9 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
               if (deezer?.imageUrl) {
                 dbOps.setImage(mbid, deezer.imageUrl);
                 sendSSE(res, "cover", {
-                  images: [{ image: deezer.imageUrl, front: true, types: ["Front"] }],
+                  images: [
+                    { image: deezer.imageUrl, front: true, types: ["Front"] },
+                  ],
                 });
                 return;
               }
@@ -881,10 +883,13 @@ router.get("/:mbid/preview", cacheMiddleware(60), async (req, res) => {
       } catch (e) {}
     }
     if (!artistName) {
-      console.warn(`[Preview] No artist name for mbid=${mbid} (pass ?artistName= in query or ensure MusicBrainz is up)`);
+      console.warn(
+        `[Preview] No artist name for mbid=${mbid} (pass ?artistName= in query or ensure MusicBrainz is up)`,
+      );
       return res.json({ tracks: [] });
     }
-    const normalized = artistName.replace(/\s*\([^)]*\)\s*$/, "").trim() || artistName;
+    const normalized =
+      artistName.replace(/\s*\([^)]*\)\s*$/, "").trim() || artistName;
     const tracks = await deezerGetArtistTopTracks(normalized);
     res.json({ tracks });
   } catch (error) {
@@ -1369,7 +1374,7 @@ router.get("/:mbid/cover", async (req, res) => {
           }
         }
 
-      if (artistName) {
+        if (artistName) {
           try {
             console.log(`[Cover Route] Trying Deezer for cover: ${artistName}`);
             const deezer = await deezerSearchArtist(artistName);
@@ -1382,9 +1387,14 @@ router.get("/:mbid/cover", async (req, res) => {
                 ],
               };
             }
-            console.log(`[Cover Route] Deezer returned no image for: ${artistName}`);
+            console.log(
+              `[Cover Route] Deezer returned no image for: ${artistName}`,
+            );
           } catch (e) {
-            console.log(`[Cover Route] Deezer error for ${artistName}:`, e.message);
+            console.log(
+              `[Cover Route] Deezer error for ${artistName}:`,
+              e.message,
+            );
           }
         }
 
