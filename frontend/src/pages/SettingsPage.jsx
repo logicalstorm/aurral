@@ -3,12 +3,14 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   CheckCircle,
   RefreshCw,
+  Trash2,
   TrendingUp,
   Save,
   Music,
   Shield,
   Server,
   AlertTriangle,
+  Sparkles,
 } from "lucide-react";
 import api, {
   checkHealth,
@@ -366,9 +368,16 @@ function SettingsPage() {
 
   const tabs = [
     { id: "integrations", label: "Integrations", icon: Server },
+    { id: "discovery", label: "Discovery", icon: Sparkles },
     { id: "metadata", label: "Metadata", icon: TrendingUp },
     { id: "auth", label: "Authentication", icon: Shield },
   ];
+
+  useEffect(() => {
+    if (activeTab === "discovery") {
+      checkHealth().then(setHealth).catch(() => {});
+    }
+  }, [activeTab]);
 
   // Update active bubble position
   useEffect(() => {
@@ -437,6 +446,94 @@ function SettingsPage() {
 
   const renderTabContent = () => {
     switch (activeTab) {
+      case "discovery":
+        return (
+          <div className="card animate-fade-in">
+            <h2
+              className="text-2xl font-bold flex items-center mb-2"
+              style={{ color: "#fff" }}
+            >
+              <Sparkles className="w-6 h-6 mr-2" />
+              Discovery
+            </h2>
+            <p className="mb-6" style={{ color: "#c1c1c3" }}>
+              Refresh recommendations or clear the discovery and image cache.
+            </p>
+            <div
+              className="p-6 rounded-lg mb-6 space-y-3"
+              style={{
+                backgroundColor: "#1a1a1e",
+                border: "1px solid #2a2a2e",
+              }}
+            >
+              <h3
+                className="text-lg font-medium flex items-center"
+                style={{ color: "#fff" }}
+              >
+                Cache status
+              </h3>
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div>
+                  <dt style={{ color: "#c1c1c3" }}>Last updated</dt>
+                  <dd style={{ color: "#fff" }}>
+                    {health?.discovery?.lastUpdated
+                      ? new Date(health.discovery.lastUpdated).toLocaleString()
+                      : "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt style={{ color: "#c1c1c3" }}>Recommendations</dt>
+                  <dd style={{ color: "#fff" }}>
+                    {health?.discovery?.recommendationsCount ?? "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt style={{ color: "#c1c1c3" }}>Global trending</dt>
+                  <dd style={{ color: "#fff" }}>
+                    {health?.discovery?.globalTopCount ?? "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt style={{ color: "#c1c1c3" }}>Cached images</dt>
+                  <dd style={{ color: "#fff" }}>
+                    {health?.discovery?.cachedImagesCount ?? "—"}
+                  </dd>
+                </div>
+              </dl>
+              {health?.discovery?.isUpdating && (
+                <p className="text-sm flex items-center gap-2" style={{ color: "#c1c1c3" }}>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Updating…
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={handleRefreshDiscovery}
+                disabled={refreshingDiscovery}
+                className="btn btn-secondary flex items-center"
+              >
+                <RefreshCw
+                  className={`w-4 h-4 mr-2 ${refreshingDiscovery ? "animate-spin" : ""}`}
+                />
+                {refreshingDiscovery ? "Refreshing..." : "Refresh Discovery"}
+              </button>
+              <button
+                type="button"
+                onClick={handleClearCache}
+                disabled={clearingCache}
+                className="btn btn-secondary flex items-center"
+              >
+                <Trash2
+                  className={`w-4 h-4 mr-2 ${clearingCache ? "animate-spin" : ""}`}
+                />
+                {clearingCache ? "Clearing..." : "Clear Cache"}
+              </button>
+            </div>
+          </div>
+        );
+
       case "integrations":
         return (
           <div className="card animate-fade-in">
@@ -1292,7 +1389,7 @@ function SettingsPage() {
       )}
 
       <div className="animate-fade-in max-w-4xl mx-auto">
-        <div className="mb-8">
+        <div className="mb-6">
           <h1 className="text-3xl font-bold mb-2" style={{ color: "#fff" }}>
             Settings
           </h1>
