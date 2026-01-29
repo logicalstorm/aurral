@@ -16,9 +16,7 @@
     background-size: 100% 100vh;
     background-repeat: no-repeat;
     color: #fff;
-    /* Prevent elastic scrolling on iOS for the body */
     overscroll-behavior-y: none;
-    /* Ensure taps are responsive */
     touch-action: manipulation;
   }
 
@@ -38,13 +36,11 @@
     background-color: #211f27 !important;
   }
 
-  /* Remove all borders globally */
   * {
     border: none !important;
     border-radius: 2px !important;
   }
 
-  /* Override for specific cases that need visual separation */
   .card-separator {
     border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
   }
@@ -54,13 +50,11 @@
     height: 100%;
   }
 
-  /* Allow scrolling within the root element */
   #root {
     min-height: 100%;
   }
 
   * {
-    /* Disable text selection highlight on mobile */
     -webkit-tap-highlight-color: transparent;
   }
 }
@@ -193,7 +187,6 @@
   background-color: #4a4a4a;
 }
 
-/* Hide scrollbar for similar artists carousel */
 .similar-artists-scroll::-webkit-scrollbar {
   display: none;
 }

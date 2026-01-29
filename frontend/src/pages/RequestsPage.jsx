@@ -8,7 +8,6 @@ import {
   Trash2,
   Music,
   ArrowLeft,
-  History,
 } from "lucide-react";
 import { getRequests, deleteRequest, getAllDownloadStatus } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
@@ -29,9 +28,8 @@ function RequestsPage() {
       const data = await getRequests();
       setRequests(data);
       setError(null);
-    } catch (err) {
+    } catch {
       setError("Failed to load requests history.");
-      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -44,9 +42,7 @@ function RequestsPage() {
       try {
         const statuses = await getAllDownloadStatus();
         setDownloadStatuses(statuses);
-      } catch (error) {
-        console.error("Failed to fetch download status:", error);
-      }
+      } catch {}
     };
 
     pollDownloadStatus();
@@ -65,7 +61,7 @@ function RequestsPage() {
     try {
       await deleteRequest(mbid);
       setRequests((prev) => prev.filter((r) => r.mbid !== mbid));
-    } catch (err) {
+    } catch {
       showError("Failed to delete request");
     }
   };
@@ -81,11 +77,8 @@ function RequestsPage() {
   };
 
   const getStatusBadge = (request) => {
-    // Check if there are any active downloads for this artist's albums
     const artistDownloadStatuses = Object.values(downloadStatuses).filter(
       (status) => {
-        // We'd need to match by artistId, but downloadStatuses are keyed by albumId
-        // For now, just show request status
         return (
           status &&
           (status.status === "adding" ||
@@ -212,7 +205,7 @@ function RequestsPage() {
             No Requests Found
           </h3>
           <p className="mb-6" style={{ color: "#c1c1c3" }}>
-            You haven't requested any albums yet.
+            You haven&apos;t requested any albums yet.
           </p>
           <button onClick={() => navigate("/")} className="btn btn-primary">
             Start Discovering
@@ -224,9 +217,6 @@ function RequestsPage() {
             const isAlbum = request.type === "album";
             const displayName = isAlbum ? request.albumName : request.name;
             const artistName = isAlbum ? request.artistName : null;
-            const mbid = isAlbum
-              ? request.albumMbid || request.mbid
-              : request.mbid;
             const artistMbid = isAlbum ? request.artistMbid : request.mbid;
             const hasValidMbid =
               artistMbid && artistMbid !== "null" && artistMbid !== "undefined";
@@ -272,7 +262,11 @@ function RequestsPage() {
                           isAlbum
                             ? `/artist/${artistMbid}`
                             : `/artist/${request.mbid}`,
-                          { state: { artistName: isAlbum ? artistName : displayName } },
+                          {
+                            state: {
+                              artistName: isAlbum ? artistName : displayName,
+                            },
+                          },
                         );
                       }
                     }}
@@ -297,7 +291,13 @@ function RequestsPage() {
                               isAlbum
                                 ? `/artist/${artistMbid}`
                                 : `/artist/${request.mbid}`,
-                              { state: { artistName: isAlbum ? artistName : displayName } },
+                              {
+                                state: {
+                                  artistName: isAlbum
+                                    ? artistName
+                                    : displayName,
+                                },
+                              },
                             );
                           }
                         }}
@@ -348,19 +348,22 @@ function RequestsPage() {
           <div className="flex gap-2" style={{ color: "#c1c1c3" }}>
             <div className="w-2 h-2 bg-yellow-500 mt-1.5 shrink-0"></div>
             <p>
-              <strong>Requested:</strong> Album is in queue or has been requested but not yet imported.
+              <strong>Requested:</strong> Album is in queue or has been
+              requested but not yet imported.
             </p>
           </div>
           <div className="flex gap-2" style={{ color: "#c1c1c3" }}>
             <div className="w-2 h-2 bg-gray-600 mt-1.5 shrink-0"></div>
             <p>
-              <strong>Processing:</strong> Album is downloading, importing, or import failed. Check Lidarr for details.
+              <strong>Processing:</strong> Album is downloading, importing, or
+              import failed. Check Lidarr for details.
             </p>
           </div>
           <div className="flex gap-2" style={{ color: "#c1c1c3" }}>
             <div className="w-2 h-2 bg-green-500 mt-1.5 shrink-0"></div>
             <p>
-              <strong>Available:</strong> Album has been successfully imported and is available on disk.
+              <strong>Available:</strong> Album has been successfully imported
+              and is available on disk.
             </p>
           </div>
         </div>

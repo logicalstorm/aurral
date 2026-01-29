@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { Lock } from "lucide-react";
 
@@ -26,7 +26,10 @@ const Login = () => {
         style={{ backgroundColor: "#211f27" }}
       >
         <div className="text-center">
-          <div className="mx-auto h-12 w-12 flex items-center justify-center mb-4" style={{ backgroundColor: "#211f27" }}>
+          <div
+            className="mx-auto h-12 w-12 flex items-center justify-center mb-4"
+            style={{ backgroundColor: "#211f27" }}
+          >
             <Lock className="h-6 w-6" style={{ color: "#707e61" }} />
           </div>
           <h2
@@ -52,7 +55,11 @@ const Login = () => {
                 type="text"
                 required
                 className="appearance-none relative block w-full px-3 py-2 placeholder-gray-500 focus:outline-none focus:ring-2 focus:z-10 sm:text-sm"
-                style={{ focusRingColor: "#c1c1c3", backgroundColor: "#211f27", color: "#fff" }}
+                style={{
+                  focusRingColor: "#c1c1c3",
+                  backgroundColor: "#211f27",
+                  color: "#fff",
+                }}
                 placeholder="Username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -68,7 +75,11 @@ const Login = () => {
                 type="password"
                 required
                 className="appearance-none relative block w-full px-3 py-2 placeholder-gray-500 focus:outline-none focus:ring-2 focus:z-10 sm:text-sm"
-                style={{ focusRingColor: "#c1c1c3", backgroundColor: "#211f27", color: "#fff" }}
+                style={{
+                  focusRingColor: "#c1c1c3",
+                  backgroundColor: "#211f27",
+                  color: "#fff",
+                }}
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

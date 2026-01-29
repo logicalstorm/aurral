@@ -30,9 +30,6 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    const message =
-      error.response?.data?.message || error.message || "An error occurred";
-    console.error("API Error:", message);
     return Promise.reject(error);
   },
 );
@@ -109,7 +106,6 @@ export const getStreamUrl = (songId) => {
   return url;
 };
 
-// Library API functions
 export const getLibraryArtists = async () => {
   const response = await api.get("/library/artists");
   return response.data;
@@ -125,7 +121,6 @@ export const clearLibrary = async (deleteFiles = false) => {
 export const getLibraryArtist = async (mbid) => {
   const response = await api.get(`/library/artists/${mbid}`);
   const artist = response.data;
-  // Ensure foreignArtistId is set for compatibility
   if (artist && !artist.foreignArtistId) {
     artist.foreignArtistId = artist.mbid;
   }
@@ -175,7 +170,6 @@ export const getLibraryAlbums = async (artistId) => {
   const response = await api.get("/library/albums", {
     params: { artistId },
   });
-  // Ensure foreignAlbumId is set
   return response.data.map((album) => ({
     ...album,
     foreignAlbumId: album.foreignAlbumId || album.mbid,
@@ -254,17 +248,13 @@ export const getRequests = async () => {
 };
 
 export const deleteRequest = async (id) => {
-  // Check if it's a UUID (MBID format) or an album ID
-  // UUID format: 8-4-4-4-12 hex characters
   const uuidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   if (uuidRegex.test(id)) {
-    // It's a UUID/MBID - use the legacy endpoint
     const response = await api.delete(`/requests/${id}`);
     return response.data;
   } else {
-    // It's an album ID - use the album endpoint
     const response = await api.delete(`/requests/album/${id}`);
     return response.data;
   }

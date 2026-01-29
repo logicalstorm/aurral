@@ -57,7 +57,6 @@ function AppContent() {
         setIsHealthy(health.status === "ok");
         setRootFolderConfigured(health.rootFolderConfigured || false);
       } catch (error) {
-        console.error("Health check failed:", error);
         setIsHealthy(false);
       }
     };

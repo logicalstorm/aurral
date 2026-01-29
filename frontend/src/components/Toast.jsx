@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import PropTypes from "prop-types";
 import { CheckCircle, AlertCircle, X, Info } from "lucide-react";
 
 export function Toast({ toast, onDismiss }) {
@@ -48,6 +49,16 @@ export function Toast({ toast, onDismiss }) {
   );
 }
 
+Toast.propTypes = {
+  toast: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    type: PropTypes.oneOf(["success", "error", "info"]).isRequired,
+    message: PropTypes.string.isRequired,
+    duration: PropTypes.number,
+  }).isRequired,
+  onDismiss: PropTypes.func.isRequired,
+};
+
 export function ToastContainer({ toasts, onDismiss }) {
   return (
     <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end space-y-2 pointer-events-none">
@@ -59,3 +70,15 @@ export function ToastContainer({ toasts, onDismiss }) {
     </div>
   );
 }
+
+ToastContainer.propTypes = {
+  toasts: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.string.isRequired,
+      type: PropTypes.oneOf(["success", "error", "info"]).isRequired,
+      message: PropTypes.string.isRequired,
+      duration: PropTypes.number,
+    }),
+  ).isRequired,
+  onDismiss: PropTypes.func.isRequired,
+};

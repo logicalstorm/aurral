@@ -1,12 +1,10 @@
 import { Link, useLocation } from "react-router-dom";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import PropTypes from "prop-types";
 import {
   Library,
   Settings,
   Sparkles,
-  Music,
-  Menu,
-  X,
   History,
   LogOut,
   Github,
@@ -23,33 +21,36 @@ function Sidebar({ isOpen, onClose }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const linkRefs = useRef({});
 
-  const isActive = (path) => {
-    if (path === "/discover" && location.pathname === "/") return true;
-    return location.pathname === path;
-  };
+  const isActive = useCallback(
+    (path) => {
+      if (path === "/discover" && location.pathname === "/") return true;
+      return location.pathname === path;
+    },
+    [location.pathname],
+  );
 
-  const navItems = [
-    { path: "/discover", label: "Discover", icon: Sparkles },
-    { path: "/library", label: "Library", icon: Library },
-    { path: "/requests", label: "Requests", icon: History },
-    { path: "/settings", label: "Settings", icon: Settings },
-  ];
+  const navItems = useMemo(
+    () => [
+      { path: "/discover", label: "Discover", icon: Sparkles },
+      { path: "/library", label: "Library", icon: Library },
+      { path: "/requests", label: "Requests", icon: History },
+      { path: "/settings", label: "Settings", icon: Settings },
+    ],
+    [],
+  );
 
-  // Update bubble position for active link
   useEffect(() => {
     const updateBubblePosition = () => {
       if (!navRef.current || !activeBubbleRef.current) return;
 
       const activeIndex = navItems.findIndex((item) => isActive(item.path));
       if (activeIndex === -1) {
-        // Hide bubble if no active item
         activeBubbleRef.current.style.opacity = "0";
         return;
       }
 
       const activeLink = linkRefs.current[activeIndex];
       if (!activeLink) {
-        // Wait a bit for DOM to update
         setTimeout(updateBubblePosition, 50);
         return;
       }
@@ -64,22 +65,19 @@ function Sidebar({ isOpen, onClose }) {
       activeBubbleRef.current.style.opacity = "1";
     };
 
-    // Initial update with slight delay to ensure DOM is ready
     const timeoutId = setTimeout(updateBubblePosition, 10);
     window.addEventListener("resize", updateBubblePosition);
     return () => {
       clearTimeout(timeoutId);
       window.removeEventListener("resize", updateBubblePosition);
     };
-  }, [location.pathname, navItems, isOpen]);
+  }, [location.pathname, navItems, isOpen, isActive]);
 
-  // Update hover bubble position
   useEffect(() => {
     const updateHoverBubble = () => {
       if (!navRef.current || !hoverBubbleRef.current) return;
 
       if (hoveredIndex === null) {
-        // Cover entire nav container when not hovering - more subtle/washed out
         hoverBubbleRef.current.style.left = "0px";
         hoverBubbleRef.current.style.top = "0px";
         hoverBubbleRef.current.style.width = "100%";
@@ -145,14 +143,12 @@ function Sidebar({ isOpen, onClose }) {
             className="relative p-3"
             style={{ backgroundColor: "#0f0f12" }}
           >
-            {/* Active bubble */}
             <div
               ref={activeBubbleRef}
               className="absolute transition-all duration-300 ease-out z-10 opacity-0"
               style={{ backgroundColor: "#707e61", opacity: "0.2" }}
             />
 
-            {/* Hover bubble - covers entire nav by default, shrinks to hovered link */}
             <div
               ref={hoverBubbleRef}
               className="absolute transition-all duration-200 ease-out z-0"
@@ -231,5 +227,10 @@ function Sidebar({ isOpen, onClose }) {
     </>
   );
 }
+
+Sidebar.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+};
 
 export default Sidebar;

@@ -1,3 +1,4 @@
+import PropTypes from "prop-types";
 import "./PowerSwitch.css";
 
 function PowerSwitch({ checked, onChange, disabled }) {
@@ -22,5 +23,11 @@ function PowerSwitch({ checked, onChange, disabled }) {
     </div>
   );
 }
+
+PowerSwitch.propTypes = {
+  checked: PropTypes.bool.isRequired,
+  onChange: PropTypes.func.isRequired,
+  disabled: PropTypes.bool,
+};
 
 export default PowerSwitch;

@@ -1,4 +1,3 @@
-// Color constants for the application
 export const colors = {
   card: "#211f27",
   text: "#fff",

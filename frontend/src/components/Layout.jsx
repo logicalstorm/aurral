@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
+import PropTypes from "prop-types";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Search, Menu } from "lucide-react";
 import Sidebar from "./Sidebar";
 
-function Layout({ children, isHealthy, rootFolderConfigured }) {
+function Layout({ children }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
@@ -65,5 +66,9 @@ function Layout({ children, isHealthy, rootFolderConfigured }) {
     </div>
   );
 }
+
+Layout.propTypes = {
+  children: PropTypes.node.isRequired,
+};
 
 export default Layout;

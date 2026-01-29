@@ -89,7 +89,6 @@ router.get("/artists/:mbid", cacheMiddleware(120), async (req, res) => {
   }
 });
 
-// Add artist
 router.post("/artists", async (req, res) => {
   try {
     const { foreignArtistId: mbid, artistName, quality } = req.body;
@@ -109,9 +108,6 @@ router.post("/artists", async (req, res) => {
       quality: quality || settings.quality || "standard",
     });
 
-    // Legacy requests are no longer stored separately - album requests are used instead
-    // This code is kept for backward compatibility but doesn't do anything
-
     res.status(201).json(artist);
   } catch (error) {
     res.status(500).json({
@@ -121,7 +117,6 @@ router.post("/artists", async (req, res) => {
   }
 });
 
-// Update artist
 router.put("/artists/:mbid", async (req, res) => {
   try {
     const { mbid } = req.params;
@@ -139,8 +134,6 @@ router.put("/artists/:mbid", async (req, res) => {
   }
 });
 
-// Delete artist
-// Clean up requests when artist is deleted
 router.delete("/artists/:mbid", async (req, res) => {
   try {
     const { mbid } = req.params;
@@ -151,10 +144,6 @@ router.delete("/artists/:mbid", async (req, res) => {
     }
 
     await libraryManager.deleteArtist(mbid, deleteFiles === "true");
-
-    // Also remove request for this artist
-    // Legacy requests are no longer stored - album requests are used instead
-    // This code is kept for backward compatibility but doesn't do anything
 
     res.json({ success: true, message: "Artist deleted successfully" });
   } catch (error) {
@@ -193,7 +182,6 @@ router.get("/albums", cacheMiddleware(120), async (req, res) => {
   }
 });
 
-// Add album
 router.post("/albums", async (req, res) => {
   try {
     const { artistId, releaseGroupMbid, albumName } = req.body;
@@ -216,7 +204,6 @@ router.post("/albums", async (req, res) => {
       },
     );
 
-    // Format for frontend
     const formatted = {
       ...album,
       foreignAlbumId: album.mbid,
@@ -249,7 +236,6 @@ router.get("/albums/:id", cacheMiddleware(120), async (req, res) => {
   }
 });
 
-// Update album
 router.put("/albums/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -263,7 +249,6 @@ router.put("/albums/:id", async (req, res) => {
   }
 });
 
-// Delete album
 router.delete("/albums/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -351,7 +336,6 @@ router.get("/tracks", cacheMiddleware(30), async (req, res) => {
   }
 });
 
-// Download album
 router.post("/downloads/album", async (req, res) => {
   try {
     const { artistId, albumId, artistMbid, artistName } = req.body;
@@ -410,7 +394,9 @@ router.post("/downloads/album", async (req, res) => {
 
       res.json({
         success: true,
-        message: searchOnAdd ? "Album search triggered" : "Album added to library",
+        message: searchOnAdd
+          ? "Album search triggered"
+          : "Album added to library",
       });
     } catch (error) {
       console.error(
@@ -431,14 +417,12 @@ router.post("/downloads/album", async (req, res) => {
   }
 });
 
-// Download track
 router.post("/downloads/track", async (req, res) => {
   res
     .status(400)
     .json({ error: "Track downloads are not supported by Lidarr" });
 });
 
-// Get downloads (Lidarr queue for albums/tracks, slskd for weekly-flow)
 router.get("/downloads", async (req, res) => {
   try {
     const { lidarrClient } = await import("../services/lidarrClient.js");
@@ -509,17 +493,25 @@ router.get("/downloads/status", noCache, async (req, res) => {
           if (queueItem) {
             const queueStatus = String(queueItem.status || "").toLowerCase();
             const title = String(queueItem.title || "").toLowerCase();
-            const trackedDownloadState = String(queueItem.trackedDownloadState || "").toLowerCase();
-            const trackedDownloadStatus = String(queueItem.trackedDownloadStatus || "").toLowerCase();
-            const errorMessage = String(queueItem.errorMessage || "").toLowerCase();
-            const statusMessages = Array.isArray(queueItem.statusMessages) 
-              ? queueItem.statusMessages.map(m => String(m || "").toLowerCase()).join(" ")
+            const trackedDownloadState = String(
+              queueItem.trackedDownloadState || "",
+            ).toLowerCase();
+            const trackedDownloadStatus = String(
+              queueItem.trackedDownloadStatus || "",
+            ).toLowerCase();
+            const errorMessage = String(
+              queueItem.errorMessage || "",
+            ).toLowerCase();
+            const statusMessages = Array.isArray(queueItem.statusMessages)
+              ? queueItem.statusMessages
+                  .map((m) => String(m || "").toLowerCase())
+                  .join(" ")
               : "";
-            
-            const isFailed = 
+
+            const isFailed =
               trackedDownloadState === "importfailed" ||
               trackedDownloadState === "importFailed" ||
-              queueStatus.includes("fail") || 
+              queueStatus.includes("fail") ||
               queueStatus.includes("import fail") ||
               title.includes("import fail") ||
               trackedDownloadState.includes("fail") ||
@@ -529,7 +521,7 @@ router.get("/downloads/status", noCache, async (req, res) => {
               errorMessage.includes("retrying") ||
               statusMessages.includes("fail") ||
               statusMessages.includes("unmatched");
-            
+
             if (isFailed) {
               statuses[albumId] = {
                 status: "processing",
@@ -557,19 +549,24 @@ router.get("/downloads/status", noCache, async (req, res) => {
               recentHistory.eventType || "",
             ).toLowerCase();
             const data = recentHistory?.data || {};
-            const statusMessages = Array.isArray(data?.statusMessages) 
-              ? data.statusMessages.map(m => String(m || "").toLowerCase()).join(" ")
+            const statusMessages = Array.isArray(data?.statusMessages)
+              ? data.statusMessages
+                  .map((m) => String(m || "").toLowerCase())
+                  .join(" ")
               : String(data?.statusMessages?.[0] || "").toLowerCase();
             const errorMessage = String(data?.errorMessage || "").toLowerCase();
-            const isFailedImport = 
+            const isFailedImport =
               eventType === "albumimportincomplete" ||
               eventType.includes("incomplete") ||
-              statusMessages.includes("fail") || 
+              statusMessages.includes("fail") ||
               statusMessages.includes("error") ||
               statusMessages.includes("incomplete") ||
               errorMessage.includes("fail") ||
               errorMessage.includes("error");
-            const isComplete = eventType.includes("import") && !isFailedImport && eventType !== "albumimportincomplete";
+            const isComplete =
+              eventType.includes("import") &&
+              !isFailedImport &&
+              eventType !== "albumimportincomplete";
             statuses[albumId] = {
               status: isComplete ? "added" : "processing",
               updatedAt: new Date().toISOString(),
@@ -591,7 +588,6 @@ router.get("/downloads/status", noCache, async (req, res) => {
   }
 });
 
-// Get download status for all albums (for polling)
 router.get("/downloads/status/all", noCache, async (req, res) => {
   try {
     const { lidarrClient } = await import("../services/lidarrClient.js");
@@ -634,17 +630,25 @@ router.get("/downloads/status/all", noCache, async (req, res) => {
           if (queueItem) {
             const queueStatus = String(queueItem.status || "").toLowerCase();
             const title = String(queueItem.title || "").toLowerCase();
-            const trackedDownloadState = String(queueItem.trackedDownloadState || "").toLowerCase();
-            const trackedDownloadStatus = String(queueItem.trackedDownloadStatus || "").toLowerCase();
-            const errorMessage = String(queueItem.errorMessage || "").toLowerCase();
-            const statusMessages = Array.isArray(queueItem.statusMessages) 
-              ? queueItem.statusMessages.map(m => String(m || "").toLowerCase()).join(" ")
+            const trackedDownloadState = String(
+              queueItem.trackedDownloadState || "",
+            ).toLowerCase();
+            const trackedDownloadStatus = String(
+              queueItem.trackedDownloadStatus || "",
+            ).toLowerCase();
+            const errorMessage = String(
+              queueItem.errorMessage || "",
+            ).toLowerCase();
+            const statusMessages = Array.isArray(queueItem.statusMessages)
+              ? queueItem.statusMessages
+                  .map((m) => String(m || "").toLowerCase())
+                  .join(" ")
               : "";
-            
-            const isFailed = 
+
+            const isFailed =
               trackedDownloadState === "importfailed" ||
               trackedDownloadState === "importFailed" ||
-              queueStatus.includes("fail") || 
+              queueStatus.includes("fail") ||
               queueStatus.includes("import fail") ||
               title.includes("import fail") ||
               trackedDownloadState.includes("fail") ||
@@ -654,7 +658,7 @@ router.get("/downloads/status/all", noCache, async (req, res) => {
               errorMessage.includes("retrying") ||
               statusMessages.includes("fail") ||
               statusMessages.includes("unmatched");
-            
+
             if (isFailed) {
               allStatuses[String(lidarrAlbumId)] = {
                 status: "processing",
@@ -680,22 +684,29 @@ router.get("/downloads/status/all", noCache, async (req, res) => {
               recentHistory.eventType || "",
             ).toLowerCase();
             const data = recentHistory?.data || {};
-            const statusMessages = Array.isArray(data?.statusMessages) 
-              ? data.statusMessages.map(m => String(m || "").toLowerCase()).join(" ")
+            const statusMessages = Array.isArray(data?.statusMessages)
+              ? data.statusMessages
+                  .map((m) => String(m || "").toLowerCase())
+                  .join(" ")
               : String(data?.statusMessages?.[0] || "").toLowerCase();
             const errorMessage = String(data?.errorMessage || "").toLowerCase();
-            const isFailedImport = 
+            const isFailedImport =
               eventType === "albumimportincomplete" ||
               eventType.includes("incomplete") ||
-              statusMessages.includes("fail") || 
+              statusMessages.includes("fail") ||
               statusMessages.includes("error") ||
               statusMessages.includes("incomplete") ||
               errorMessage.includes("fail") ||
               errorMessage.includes("error");
-            const isComplete = eventType.includes("import") && !isFailedImport && eventType !== "albumimportincomplete";
-            const historyDate = new Date(recentHistory.date || recentHistory.eventDate || 0);
+            const isComplete =
+              eventType.includes("import") &&
+              !isFailedImport &&
+              eventType !== "albumimportincomplete";
+            const historyDate = new Date(
+              recentHistory.date || recentHistory.eventDate || 0,
+            );
             const oneHourAgo = Date.now() - 60 * 60 * 1000;
-            
+
             if (historyDate.getTime() > oneHourAgo) {
               allStatuses[String(lidarrAlbumId)] = {
                 status: isComplete ? "added" : "processing",
@@ -719,15 +730,13 @@ router.get("/downloads/status/all", noCache, async (req, res) => {
   }
 });
 
-// Scan library
 router.post("/scan", async (req, res) => {
   res.status(400).json({ error: "Scanning is handled by Lidarr" });
 });
 
-// Get root folder (always returns /data)
 router.get("/rootfolder", async (req, res) => {
   try {
-    const rootFolder = libraryManager.getRootFolder(); // Always /data
+    const rootFolder = libraryManager.getRootFolder();
     res.json([{ path: rootFolder }]);
   } catch (error) {
     res.status(500).json({
@@ -737,7 +746,6 @@ router.get("/rootfolder", async (req, res) => {
   }
 });
 
-// Quality profiles
 router.get("/qualityprofile", async (req, res) => {
   try {
     const profiles = qualityManager.getQualityProfiles();
@@ -852,7 +860,6 @@ router.post("/artists/:mbid/refresh", async (req, res) => {
 
     const albums = await libraryManager.getAlbums(artist.id);
 
-    // Update statistics for all albums (to ensure track counts and completion are correct)
     for (const album of albums) {
       await libraryManager.updateAlbumStatistics(album.id).catch((err) => {
         console.error(
@@ -862,7 +869,6 @@ router.post("/artists/:mbid/refresh", async (req, res) => {
       });
     }
 
-    // Update artist statistics
     await libraryManager.updateArtistStatistics(artist.id);
 
     if (
