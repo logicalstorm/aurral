@@ -23,6 +23,7 @@ function SearchResultsPage() {
   const [error, setError] = useState(null);
   const [artistImages, setArtistImages] = useState({});
   const [hasMore, setHasMore] = useState(false);
+  const [searchTotalCount, setSearchTotalCount] = useState(0);
   const navigate = useNavigate();
   const { showSuccess } = useToast();
 
@@ -94,6 +95,9 @@ function SearchResultsPage() {
         const uniqueArtists = dedupe(artists);
         setResults(uniqueArtists);
         setFullList(null);
+        if (type !== "tag") {
+          setSearchTotalCount(totalCount);
+        }
         setHasMore(
           (type === "tag" && uniqueArtists.length >= PAGE_SIZE) ||
             (type !== "tag" && totalCount > uniqueArtists.length),
@@ -151,20 +155,26 @@ function SearchResultsPage() {
     }
     setLoadingMore(true);
     try {
-      const data = await searchArtists(query.trim(), PAGE_SIZE, results.length);
+      const offset = results.length;
+      const data = await searchArtists(query.trim(), PAGE_SIZE, offset);
       const newArtists = data.artists || [];
-      const combined = dedupe([...results, ...newArtists]);
-      setResults(combined);
-      setHasMore((data.count ?? 0) > combined.length);
-      newArtists.forEach((artist) => {
-        if (artist.image && artist.id) {
-          setArtistImages((prev) => ({ ...prev, [artist.id]: artist.image }));
-        }
-      });
+      const total = data.count ?? 0;
+      if (newArtists.length === 0) {
+        setHasMore(false);
+      } else {
+        setResults((prev) => dedupe([...prev, ...newArtists]));
+        setSearchTotalCount(total);
+        setHasMore(total > offset + newArtists.length);
+        newArtists.forEach((artist) => {
+          if (artist.image && artist.id) {
+            setArtistImages((prev) => ({ ...prev, [artist.id]: artist.image }));
+          }
+        });
+      }
     } finally {
       setLoadingMore(false);
     }
-  }, [type, fullList, visibleCount, query, results, dedupe]);
+  }, [type, fullList, visibleCount, query, results.length, dedupe]);
 
   const getArtistType = (artistType) => {
     const types = {
@@ -198,7 +208,15 @@ function SearchResultsPage() {
 
   const showContent = !loading && (query || type === "recommended" || type === "trending");
   const isEmpty = displayedArtists.length === 0;
-  const showBackButton = type === "recommended" || type === "trending" || type === "tag";
+  const showBackButton =
+    type === "recommended" || type === "trending" || type === "tag" || !!query.trim();
+  const showLoadMore =
+    hasMore &&
+    (type === "recommended" || type === "trending"
+      ? results.length > PAGE_SIZE
+      : type === "tag"
+        ? results.length >= PAGE_SIZE
+        : results.length >= PAGE_SIZE && searchTotalCount > PAGE_SIZE);
 
   return (
     <div className="animate-fade-in">
@@ -219,20 +237,22 @@ function SearchResultsPage() {
               ? "Global Trending"
               : type === "tag"
                 ? "Genre Results"
-                : "Search Results"}
+                : query.trim()
+                  ? (loading
+                      ? `Showing results for "${query}"`
+                      : `Showing ${results.length} results for "${query}"`)
+                  : "Search Results"}
         </h1>
         {type === "recommended" && (
-          <p style={{ color: "#c1c1c3" }}>Artists we think you&apos;ll like</p>
+          <p style={{ color: "#c1c1c3" }}>
+            {results.length} artist{results.length !== 1 ? "s" : ""} we think you&apos;ll like
+          </p>
         )}
         {type === "trending" && (
           <p style={{ color: "#c1c1c3" }}>Trending artists right now</p>
         )}
-        {query && type !== "recommended" && type !== "trending" && (
-          <p style={{ color: "#c1c1c3" }}>
-            {type === "tag"
-              ? `Top artists for tag "${query}"`
-              : `Showing results for "${query}"`}
-          </p>
+        {type === "tag" && query && (
+          <p style={{ color: "#c1c1c3" }}>{`Top artists for tag "${query}"`}</p>
         )}
       </div>
 
@@ -272,14 +292,6 @@ function SearchResultsPage() {
             </div>
           ) : (
             <>
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-semibold" style={{ color: "#fff" }}>
-                  {type === "recommended" || type === "trending"
-                    ? `${results.length} artist${results.length !== 1 ? "s" : ""}`
-                    : `Found ${results.length} result${results.length !== 1 ? "s" : ""}`}
-                </h2>
-              </div>
-
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
                 {displayedArtists.map((artist, index) => (
                   <div
@@ -337,7 +349,7 @@ function SearchResultsPage() {
                 ))}
               </div>
 
-              {hasMore && (
+              {showLoadMore && (
                 <div className="mt-8 flex justify-center">
                   <button
                     onClick={loadMore}
