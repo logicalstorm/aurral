@@ -182,6 +182,7 @@ export class WeeklyFlowPlaylistSource {
           error.message,
         );
       }
+      await new Promise((r) => setTimeout(r, 150));
     }
 
     return tracks;
