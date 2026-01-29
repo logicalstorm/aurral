@@ -204,13 +204,11 @@ All configuration is done through the web interface at `/settings`.
 ## Development
 
 ```bash
-# Start development servers
-docker-compose -f docker-compose.dev.yml up
-
-# Or run manually
-cd backend && npm run dev
-cd frontend && npm run dev
+npm run install:all
+npm run dev
 ```
+
+Backend runs on port 3001; frontend Vite dev server runs on port 3000 with API proxy. Or use `docker-compose -f docker-compose.dev.yml up` for containerized dev.
 
 ---
 

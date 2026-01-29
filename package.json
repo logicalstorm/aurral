@@ -5,14 +5,14 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "build": "cd frontend && npm install && npm run build && cd ..",
+    "build": "cd frontend && npm run build",
     "start": "node server.js",
-    "dev": "npm run install:frontend && concurrently --kill-others-on-fail \"npm run dev:backend\" \"npm run wait-and-dev:frontend\"",
-    "wait-and-dev:frontend": "sleep 3 && cd frontend && npm run dev",
+    "dev": "concurrently --kill-others-on-fail \"npm run dev:backend\" \"npm run wait-and-dev:frontend\"",
+    "wait-and-dev:frontend": "wait-on -t 15000 http://localhost:3001/api/health && cd frontend && npm run dev",
     "dev:backend": "nodemon server.js",
     "dev:frontend": "cd frontend && npm run dev",
-    "install:all": "npm install && cd frontend && npm install && cd ..",
-    "install:frontend": "cd frontend && npm install && cd ..",
+    "install:all": "npm install && cd frontend && npm install",
+    "install:frontend": "cd frontend && npm install",
     "docker:build": "docker build -t aurral .",
     "docker:run": "docker run -p 3001:3001 -v $(pwd)/backend/data:/app/data aurral"
   },
@@ -26,6 +26,7 @@
   "license": "MIT",
   "dependencies": {
     "axios": "^1.7.9",
+    "better-sqlite3": "^12.6.2",
     "bottleneck": "^2.19.5",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
@@ -33,11 +34,12 @@
     "express-basic-auth": "^1.2.1",
     "express-rate-limit": "^7.5.1",
     "helmet": "^8.1.0",
-    "lowdb": "^7.0.1"
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
-    "nodemon": "^3.1.9"
+    "nodemon": "^3.1.9",
+    "wait-on": "^8.0.1"
   },
   "nodemonConfig": {
     "watch": ["backend", "server.js"],
