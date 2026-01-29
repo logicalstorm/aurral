@@ -16,3 +16,4 @@ backend/data/*
 package-lock.json
 frontend/package-lock.json
 backend/package-lock.json
+weekly-flow/

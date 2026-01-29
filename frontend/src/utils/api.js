@@ -343,4 +343,40 @@ export const applyLidarrCommunityGuide = async () => {
   return response.data;
 };
 
+export const getFlowStatus = async () => {
+  const response = await api.get("/weekly-flow/status");
+  return response.data;
+};
+
+export const getFlowJobs = async (playlistType) => {
+  const response = await api.get(`/weekly-flow/jobs/${playlistType}`);
+  return response.data;
+};
+
+export const startFlowPlaylist = async (playlistType, limit = 30) => {
+  const response = await api.post(`/weekly-flow/start/${playlistType}`, {
+    limit,
+  });
+  return response.data;
+};
+
+export const resetFlowPlaylists = async (
+  playlistTypes = ["discover", "recommended", "mix", "trending"],
+) => {
+  const response = await api.post("/weekly-flow/reset", {
+    playlistTypes,
+  });
+  return response.data;
+};
+
+export const startFlowWorker = async () => {
+  const response = await api.post("/weekly-flow/worker/start");
+  return response.data;
+};
+
+export const stopFlowWorker = async () => {
+  const response = await api.post("/weekly-flow/worker/stop");
+  return response.data;
+};
+
 export default api;
