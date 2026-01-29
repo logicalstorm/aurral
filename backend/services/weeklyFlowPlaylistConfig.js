@@ -1,6 +1,6 @@
 import { dbOps } from "../config/db-helpers.js";
 
-const TYPES = ["recommended", "mix", "trending"];
+const TYPES = ["discover", "mix", "trending"];
 const DEFAULT = { enabled: false, nextRunAt: null };
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 

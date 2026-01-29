@@ -14,7 +14,6 @@ router.get("/", noCache, async (req, res) => {
   try {
     const authUser = getAuthUser();
     const authPassword = getAuthPassword();
-    const rootFolder = libraryManager.getRootFolder();
     const lidarrConfigured = lidarrClient.isConfigured();
 
     const discoveryCache = getDiscoveryCache();
@@ -22,8 +21,7 @@ router.get("/", noCache, async (req, res) => {
 
     res.json({
       status: "ok",
-      rootFolderConfigured: true,
-      rootFolder: rootFolder,
+      rootFolderConfigured: lidarrConfigured,
       lidarrConfigured,
       lastfmConfigured: !!getLastfmApiKey(),
       musicbrainzConfigured: !!(

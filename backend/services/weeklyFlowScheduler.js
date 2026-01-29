@@ -6,6 +6,7 @@ import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { soulseekClient } from "./simpleSoulseekClient.js";
 
 const DEFAULT_LIMIT = 30;
+const QUEUE_LIMIT = 35;
 
 export async function runScheduledRefresh() {
   if (!soulseekClient.isConfigured()) return;
@@ -22,7 +23,7 @@ export async function runScheduledRefresh() {
 
       const tracks = await playlistSource.getTracksForPlaylist(
         playlistType,
-        DEFAULT_LIMIT,
+        QUEUE_LIMIT,
       );
       if (tracks.length === 0) {
         flowPlaylistConfig.scheduleNextRun(playlistType);

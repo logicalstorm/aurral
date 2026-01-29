@@ -5,6 +5,9 @@ import { soulseekClient } from "./simpleSoulseekClient.js";
 import { playlistManager } from "./weeklyFlowPlaylistManager.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 
+const CONCURRENCY = 1;
+const FALLBACK_MP3_REGEX = /^[^/\\]+-[a-f0-9]{8}\.mp3$/i;
+
 export class WeeklyFlowWorker {
   constructor(weeklyFlowRoot = "./weekly-flow") {
     this.weeklyFlowRoot = path.isAbsolute(weeklyFlowRoot)
@@ -12,7 +15,31 @@ export class WeeklyFlowWorker {
       : path.resolve(process.cwd(), weeklyFlowRoot);
     this.running = false;
     this.intervalId = null;
-    this.processing = false;
+    this.activeCount = 0;
+  }
+
+  async moveFallbackMp3sToDir() {
+    const cwd = process.cwd();
+    if (path.resolve(cwd) === path.resolve(this.weeklyFlowRoot)) return;
+    const fallbackDir = path.join(this.weeklyFlowRoot, "_fallback");
+    try {
+      const entries = await fs.readdir(cwd, { withFileTypes: true });
+      const toMove = entries.filter(
+        (e) =>
+          e.isFile() &&
+          e.name.endsWith(".mp3") &&
+          FALLBACK_MP3_REGEX.test(e.name),
+      );
+      if (toMove.length === 0) return;
+      await fs.mkdir(fallbackDir, { recursive: true });
+      for (const e of toMove) {
+        const src = path.join(cwd, e.name);
+        const dest = path.join(fallbackDir, e.name);
+        try {
+          await fs.rename(src, dest);
+        } catch {}
+      }
+    } catch {}
   }
 
   async start(intervalMs = 5000) {
@@ -22,28 +49,29 @@ export class WeeklyFlowWorker {
 
     this.running = true;
     console.log("[WeeklyFlowWorker] Starting worker...");
+    await this.moveFallbackMp3sToDir();
 
-    const processLoop = async () => {
-      if (this.processing) {
-        return;
-      }
+    const processLoop = () => {
+      while (this.activeCount < CONCURRENCY) {
+        const job = downloadTracker.getNextPending();
+        if (!job) break;
 
-      const job = downloadTracker.getNextPending();
-      if (!job) {
-        return;
-      }
-
-      this.processing = true;
-      try {
-        await this.processJob(job);
-      } catch (error) {
-        console.error(
-          `[WeeklyFlowWorker] Error processing job ${job.id}:`,
-          error.message,
-        );
-        downloadTracker.setFailed(job.id, error.message);
-      } finally {
-        this.processing = false;
+        this.activeCount++;
+        this.processJob(job)
+          .catch((error) => {
+            console.error(
+              `[WeeklyFlowWorker] Error processing job ${job.id}:`,
+              error.message,
+            );
+            downloadTracker.setFailed(job.id, error.message);
+          })
+          .finally(async () => {
+            this.activeCount--;
+            try {
+              await this.moveFallbackMp3sToDir();
+            } catch {}
+            if (this.running) processLoop();
+          });
       }
     };
 
@@ -61,6 +89,7 @@ export class WeeklyFlowWorker {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
+    downloadTracker.resetDownloadingToPending();
     console.log("[WeeklyFlowWorker] Worker stopped");
   }
 
@@ -100,7 +129,34 @@ export class WeeklyFlowWorker {
       await fs.mkdir(stagingDir, { recursive: true });
       const stagingFile = `${job.artistName} - ${job.trackName}${ext}`;
       const stagingFilePath = path.join(stagingDir, stagingFile);
-      await soulseekClient.download(bestMatch, stagingFilePath);
+
+      let lastError = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        let match = bestMatch;
+        if (attempt === 1) {
+          const retryResults = await soulseekClient.search(
+            job.artistName,
+            job.trackName,
+          );
+          if (retryResults?.length) {
+            const retryMatch = soulseekClient.pickBestMatch(
+              retryResults,
+              job.trackName,
+            );
+            if (retryMatch) match = retryMatch;
+          }
+        }
+        try {
+          await soulseekClient.download(match, stagingFilePath);
+          lastError = null;
+          break;
+        } catch (err) {
+          lastError = err;
+          const isTimeout = err?.message === "Download timeout";
+          if (!isTimeout || attempt === 1) throw err;
+        }
+      }
+      if (lastError) throw lastError;
 
       const downloadedFiles = await fs.readdir(stagingDir);
       if (downloadedFiles.length === 0) {
@@ -174,6 +230,12 @@ export class WeeklyFlowWorker {
       console.log(
         `[WeeklyFlowWorker] All jobs complete for ${playlistType}, creating playlist...`,
       );
+      try {
+        await fs.rm(path.join(this.weeklyFlowRoot, "_fallback"), {
+          recursive: true,
+          force: true,
+        });
+      } catch {}
       playlistManager.updateConfig();
       const playlistName = playlistManager.getPlaylistName(playlistType);
 
@@ -195,7 +257,8 @@ export class WeeklyFlowWorker {
   getStatus() {
     return {
       running: this.running,
-      processing: this.processing,
+      processing: this.activeCount > 0,
+      activeCount: this.activeCount,
       stats: downloadTracker.getStats(),
     };
   }

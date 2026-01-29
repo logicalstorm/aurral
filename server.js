@@ -168,15 +168,6 @@ websocketService.initialize(httpServer);
 
 httpServer.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
-  try {
-    const { libraryManager } =
-      await import("./backend/services/libraryManager.js");
-
-    const rootFolder = libraryManager.getRootFolder();
-    console.log(`Root folder: ${rootFolder || "Not configured"}`);
-  } catch (error) {
-    console.error("Error during server startup:", error.message);
-  }
 });
 
 httpServer.on("error", (error) => {

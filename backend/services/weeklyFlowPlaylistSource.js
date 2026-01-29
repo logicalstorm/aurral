@@ -5,8 +5,6 @@ export class WeeklyFlowPlaylistSource {
   async getTracksForPlaylist(playlistType, limit = 30) {
     switch (playlistType) {
       case "discover":
-        return await this.getDiscoverTracks(limit);
-      case "recommended":
         return await this.getRecommendedTracks(limit);
       case "mix":
         return await this.getMixTracks(limit);
@@ -24,7 +22,7 @@ export class WeeklyFlowPlaylistSource {
 
     try {
       const trackData = await lastfmRequest("chart.getTopTracks", {
-        limit: Math.min(limit * 2, 100),
+        limit: 100,
       });
 
       if (!trackData?.tracks?.track) {
@@ -36,18 +34,23 @@ export class WeeklyFlowPlaylistSource {
         : [trackData.tracks.track];
 
       const result = [];
+      const seenArtists = new Set();
       for (const track of tracks) {
         if (result.length >= limit) break;
 
-        const artistName = track.artist?.name || track.artist?.["#text"];
-        const trackName = track.name;
+        const artistName = (
+          track.artist?.name ||
+          track.artist?.["#text"] ||
+          ""
+        ).trim();
+        const trackName = track?.name?.trim();
+        if (!artistName || !trackName) continue;
 
-        if (artistName && trackName) {
-          result.push({
-            artistName: artistName.trim(),
-            trackName: trackName.trim(),
-          });
-        }
+        const key = artistName.toLowerCase();
+        if (seenArtists.has(key)) continue;
+        seenArtists.add(key);
+
+        result.push({ artistName, trackName });
       }
 
       return result;
@@ -71,49 +74,33 @@ export class WeeklyFlowPlaylistSource {
       );
     }
 
-    const artists = [...recommendations, ...globalTop].slice(
-      0,
-      Math.min(limit, 20),
-    );
+    const artists = [...recommendations, ...globalTop].slice(0, limit);
 
     if (!getLastfmApiKey()) {
       throw new Error("Last.fm API key required for recommended tracks");
     }
 
     const tracks = [];
-    const seen = new Set();
-
     for (const artist of artists) {
       if (tracks.length >= limit) break;
 
-      const artistName = artist.name || artist.artistName;
+      const artistName = (artist.name || artist.artistName || "").trim();
       if (!artistName) continue;
 
       try {
         const topTracks = await lastfmRequest("artist.getTopTracks", {
           artist: artistName,
-          limit: 3,
+          limit: 1,
         });
 
         if (topTracks?.toptracks?.track) {
           const trackList = Array.isArray(topTracks.toptracks.track)
             ? topTracks.toptracks.track
             : [topTracks.toptracks.track];
-
-          for (const track of trackList) {
-            if (tracks.length >= limit) break;
-
-            const trackName = track.name;
-            if (!trackName) continue;
-
-            const key = `${artistName.toLowerCase()}-${trackName.toLowerCase()}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-
-            tracks.push({
-              artistName: artistName.trim(),
-              trackName: trackName.trim(),
-            });
+          const track = trackList[0];
+          const trackName = track?.name?.trim();
+          if (trackName) {
+            tracks.push({ artistName, trackName });
           }
         }
       } catch (error) {
@@ -125,6 +112,19 @@ export class WeeklyFlowPlaylistSource {
     }
 
     return tracks;
+  }
+
+  async getLibraryTrackTitles(libraryManager, artistId) {
+    const albums = await libraryManager.getAlbums(artistId);
+    const titles = new Set();
+    for (const album of albums) {
+      const tracks = await libraryManager.getTracks(album.id);
+      for (const t of tracks) {
+        const name = (t.trackName || t.title || "").trim().toLowerCase();
+        if (name) titles.add(name);
+      }
+    }
+    return titles;
   }
 
   async getMixTracks(limit) {
@@ -139,42 +139,42 @@ export class WeeklyFlowPlaylistSource {
     }
 
     const shuffled = [...artists].sort(() => 0.5 - Math.random());
-    const sample = shuffled.slice(0, Math.min(20, artists.length));
     const tracks = [];
-    const seen = new Set();
+    const maxArtistsToTry = Math.max(limit * 3, 60);
 
-    for (const artist of sample) {
-      if (tracks.length >= limit) break;
-
-      const artistName = artist.artistName || artist.name;
+    for (
+      let i = 0;
+      i < shuffled.length && tracks.length < limit && i < maxArtistsToTry;
+      i++
+    ) {
+      const artist = shuffled[i];
+      const artistName = (artist.artistName || artist.name || "").trim();
       if (!artistName) continue;
 
       try {
+        const ownedTitles = await this.getLibraryTrackTitles(
+          libraryManager,
+          artist.id,
+        );
         const topTracks = await lastfmRequest("artist.getTopTracks", {
           artist: artistName,
-          limit: 5,
+          limit: 25,
         });
 
-        if (topTracks?.toptracks?.track) {
-          const trackList = Array.isArray(topTracks.toptracks.track)
-            ? topTracks.toptracks.track
-            : [topTracks.toptracks.track];
+        if (!topTracks?.toptracks?.track) continue;
 
-          for (const track of trackList) {
-            if (tracks.length >= limit) break;
+        const trackList = Array.isArray(topTracks.toptracks.track)
+          ? topTracks.toptracks.track
+          : [topTracks.toptracks.track];
 
-            const trackName = track.name;
-            if (!trackName) continue;
+        const notOwned = trackList.find((t) => {
+          const name = (t?.name || "").trim().toLowerCase();
+          return name && !ownedTitles.has(name);
+        });
 
-            const key = `${artistName.toLowerCase()}-${trackName.toLowerCase()}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-
-            tracks.push({
-              artistName: artistName.trim(),
-              trackName: trackName.trim(),
-            });
-          }
+        if (notOwned) {
+          const trackName = (notOwned.name || "").trim();
+          if (trackName) tracks.push({ artistName, trackName });
         }
       } catch (error) {
         console.warn(

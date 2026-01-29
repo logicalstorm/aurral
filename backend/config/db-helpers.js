@@ -27,10 +27,21 @@ export const dbOps = {
     );
 
     const defaultFlowPlaylists = {
-      recommended: { enabled: false, nextRunAt: null },
+      discover: { enabled: false, nextRunAt: null },
       mix: { enabled: false, nextRunAt: null },
       trending: { enabled: false, nextRunAt: null },
     };
+    const merged = weeklyFlowPlaylists
+      ? { ...defaultFlowPlaylists, ...weeklyFlowPlaylists }
+      : defaultFlowPlaylists;
+    if (merged.recommended) {
+      merged.discover = {
+        ...defaultFlowPlaylists.discover,
+        ...merged.discover,
+        ...merged.recommended,
+      };
+    }
+    delete merged.recommended;
 
     return {
       integrations: integrations || {},
@@ -38,9 +49,7 @@ export const dbOps = {
       queueCleaner: queueCleaner || {},
       rootFolderPath: rootFolderPath || null,
       releaseTypes: releaseTypes || [],
-      weeklyFlowPlaylists: weeklyFlowPlaylists
-        ? { ...defaultFlowPlaylists, ...weeklyFlowPlaylists }
-        : defaultFlowPlaylists,
+      weeklyFlowPlaylists: merged,
     };
   },
 

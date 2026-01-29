@@ -736,8 +736,15 @@ router.post("/scan", async (req, res) => {
 
 router.get("/rootfolder", async (req, res) => {
   try {
-    const rootFolder = libraryManager.getRootFolder();
-    res.json([{ path: rootFolder }]);
+    const { lidarrClient } = await import("../services/lidarrClient.js");
+    if (!lidarrClient.isConfigured()) {
+      return res.json([]);
+    }
+    const rootFolders = await lidarrClient.getRootFolders();
+    const list = Array.isArray(rootFolders)
+      ? rootFolders.map((r) => ({ path: r.path }))
+      : [];
+    res.json(list);
   } catch (error) {
     res.status(500).json({
       error: "Failed to fetch root folder",

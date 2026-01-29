@@ -14,12 +14,12 @@ import PowerSwitch from "../components/PowerSwitch";
 
 const PLAYLIST_CONFIG = [
   {
-    id: "recommended",
+    id: "discover",
     title: "Discover",
     description:
       "Recommendations from your library and scrobbles. Excludes artists already in your library.",
     icon: Sparkles,
-    backendType: "recommended",
+    backendType: "discover",
   },
   {
     id: "mix",
@@ -108,9 +108,7 @@ function FlowPage() {
     try {
       await setFlowPlaylistEnabled(backendType, enabled);
       showSuccess(
-        enabled
-          ? `${backendType} playlist on (30 tracks)`
-          : `${backendType} playlist off`,
+        enabled ? `${backendType} playlist on` : `${backendType} playlist off`,
       );
       await fetchStatus();
     } catch (err) {
@@ -142,8 +140,8 @@ function FlowPage() {
         <div>
           <h1 className="text-2xl font-semibold text-white">Flow</h1>
           <p className="text-sm text-[#c1c1c3]">
-            Weekly playlists (30 tracks). Turn on to run in the background;
-            resets every week.
+            Weekly playlists. Turn on to run in the background; resets every
+            week.
           </p>
         </div>
       </div>
