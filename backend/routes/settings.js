@@ -1,10 +1,11 @@
 import express from "express";
 import { dbOps } from "../config/db-helpers.js";
 import { defaultData } from "../config/constants.js";
+import { noCache } from "../middleware/cache.js";
 
 const router = express.Router();
 
-router.get("/", (req, res) => {
+router.get("/", noCache, (req, res) => {
   try {
     const settings = dbOps.getSettings();
     res.json(settings);

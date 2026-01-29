@@ -5,6 +5,7 @@ import {
   Navigate,
 } from "react-router-dom";
 import { useState, useEffect } from "react";
+import PropTypes from "prop-types";
 import Layout from "./components/Layout";
 import SearchResultsPage from "./pages/SearchResultsPage";
 import DiscoverPage from "./pages/DiscoverPage";
@@ -40,10 +41,14 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
+ProtectedRoute.propTypes = {
+  children: PropTypes.node.isRequired,
+};
+
 function AppContent() {
   const [isHealthy, setIsHealthy] = useState(null);
   const [rootFolderConfigured, setRootFolderConfigured] = useState(false);
-  const { isAuthenticated, authRequired } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
     const checkApiHealth = async () => {

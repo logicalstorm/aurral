@@ -298,11 +298,12 @@ export class LidarrClient {
       rootFolderPath: rootFolder.path,
       qualityProfileId: qualityProfileId,
       metadataProfileId: metadataProfileId,
-      monitored: monitorOption !== "none",
-      monitor: monitorOption,
+      monitored: false,
+      monitor: "none",
+      monitorNewItems: "none",
       albumsToMonitor: [],
       addOptions: {
-        monitor: monitorOption,
+        monitor: "none",
         searchForMissingAlbums: false,
       },
     };
@@ -358,14 +359,14 @@ export class LidarrClient {
       foreignAlbumId: albumMbid,
       artistId: artistId,
       artist: artist,
-      monitored: true,
+      monitored: options.monitored !== false,
       anyReleaseOk: true,
       images: [],
     };
 
     const result = await this.request("/album", "POST", lidarrAlbum);
 
-    if (options.triggerSearch !== false) {
+    if (options.triggerSearch === true) {
       await this.triggerAlbumSearch(result.id);
     }
 

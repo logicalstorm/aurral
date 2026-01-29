@@ -89,14 +89,6 @@ function LibraryPage() {
         (img) => img.coverType === "poster" || img.coverType === "fanart",
       );
       const image = posterImage || artist.images[0];
-
-      if (image && artist.id) {
-        const coverType = image.coverType || "poster";
-        const filename = `${coverType}.jpg`;
-        // Images are handled through the image service
-        return null;
-      }
-
       return image?.remoteUrl || image?.url || null;
     }
     return null;
@@ -224,8 +216,7 @@ function LibraryPage() {
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
             {filteredArtists.map((artist) => {
-              const image = getArtistImage(artist);
-              // Check if artist is monitored (monitored = true and monitorOption !== 'none')
+              const lidarrImage = getArtistImage(artist);
               const monitorOption =
                 artist.addOptions?.monitor ||
                 artist.monitorNewItems ||
@@ -243,7 +234,7 @@ function LibraryPage() {
                     }
                   >
                     <ArtistImage
-                      src={image || artist.imageUrl}
+                      src={lidarrImage || undefined}
                       mbid={artist.foreignArtistId}
                       alt={artist.artistName}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform"
@@ -251,14 +242,14 @@ function LibraryPage() {
                     />
 
                     {/* Monitoring dot indicator */}
-                    <div className="absolute top-2 right-2">
-                      <div
-                        className={`w-3 h-3 ${
-                          isMonitored ? "bg-green-500" : "bg-gray-400"
-                        } shadow-md`}
-                        title={isMonitored ? "Monitored" : "Unmonitored"}
-                      />
-                    </div>
+                    {isMonitored && (
+                      <div className="absolute top-2 right-2">
+                        <div
+                          className="w-3 h-3 bg-green-500 shadow-md"
+                          title="Monitored"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Artist Name */}

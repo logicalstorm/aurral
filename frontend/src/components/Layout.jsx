@@ -61,28 +61,6 @@ function Layout({ children, isHealthy, rootFolderConfigured }) {
         <main className="flex-1 w-full max-w-[1600px] mx-auto p-4 md:p-8 lg:p-10">
           <div className="animate-fade-in">{children}</div>
         </main>
-
-        <footer
-          className="backdrop-blur-sm pt-6 pb-8 pb-safe-extra"
-          style={{ backgroundColor: "rgba(24, 24, 28, 0.5)" }}
-        >
-          <div
-            className="max-w-[1600px] mx-auto px-6 md:px-8 lg:px-10 flex flex-col md:flex-row justify-between items-center text-sm"
-            style={{ color: "#c1c1c3" }}
-          >
-            <p>&copy; {new Date().getFullYear()} Aurral.</p>
-            <div className="flex items-center space-x-6 mt-4 md:mt-0">
-              <a
-                href="https://musicbrainz.org"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:underline transition-colors"
-              >
-                MusicBrainz
-              </a>
-            </div>
-          </div>
-        </footer>
       </div>
     </div>
   );

@@ -50,7 +50,7 @@ function SettingsPage() {
       navidrome: { url: "", username: "", password: "" },
       lastfm: { username: "" },
       slskd: { url: "", apiKey: "" },
-      lidarr: { url: "", apiKey: "", qualityProfileId: null },
+      lidarr: { url: "", apiKey: "", qualityProfileId: null, searchOnAdd: false },
       musicbrainz: { email: "" },
       general: { authUser: "", authPassword: "" },
     },
@@ -91,6 +91,7 @@ function SettingsPage() {
             url: "",
             apiKey: "",
             qualityProfileId: null,
+            searchOnAdd: false,
             ...(savedSettings.integrations?.lidarr || {}),
           },
           navidrome: {
@@ -695,6 +696,33 @@ function SettingsPage() {
                     <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
                       Quality profile used when adding artists and albums to
                       Lidarr.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="checkbox"
+                        checked={settings.integrations?.lidarr?.searchOnAdd || false}
+                        onChange={(e) =>
+                          updateSettings({
+                            ...settings,
+                            integrations: {
+                              ...settings.integrations,
+                              lidarr: {
+                                ...(settings.integrations?.lidarr || {}),
+                                searchOnAdd: e.target.checked,
+                              },
+                            },
+                          })
+                        }
+                      />
+                      <span className="text-sm font-medium" style={{ color: "#fff" }}>
+                        Search on Add
+                      </span>
+                    </label>
+                    <p className="mt-1 text-xs ml-6" style={{ color: "#c1c1c3" }}>
+                      Automatically search for albums when adding them to library
                     </p>
                   </div>
 

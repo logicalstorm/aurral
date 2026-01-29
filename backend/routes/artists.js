@@ -10,6 +10,7 @@ import {
 import { imagePrefetchService } from "../services/imagePrefetchService.js";
 import { getAuthUser, getAuthPassword } from "../middleware/auth.js";
 import { dbOps } from "../config/db-helpers.js";
+import { cacheMiddleware, noCache } from "../middleware/cache.js";
 
 const router = express.Router();
 
@@ -117,8 +118,8 @@ const handleSearch = async (req, res) => {
 };
 
 // Register search handler for both /search and /artists
-router.get("/search", handleSearch);
-router.get("/artists", handleSearch);
+router.get("/search", cacheMiddleware(300), handleSearch);
+router.get("/artists", cacheMiddleware(300), handleSearch);
 
 // Root route - return 404 for /api/artists without MBID
 router.get("/", async (req, res) => {
@@ -322,7 +323,7 @@ const verifyTokenAuth = (req) => {
 };
 
 // Streaming endpoint for artist details
-router.get("/:mbid/stream", async (req, res) => {
+router.get("/:mbid/stream", noCache, async (req, res) => {
   try {
     const { mbid } = req.params;
 
@@ -351,11 +352,11 @@ router.get("/:mbid/stream", async (req, res) => {
     // Send initial connection message
     sendSSE(res, "connected", { mbid });
 
+    let artistData = null;
+
     try {
       const { lidarrClient } = await import("../services/lidarrClient.js");
       const { libraryManager } = await import("../services/libraryManager.js");
-
-      let artistData = null;
 
       let lidarrArtist = null;
       let lidarrAlbums = [];
@@ -385,7 +386,6 @@ router.get("/:mbid/stream", async (req, res) => {
                 end: null,
                 ended: false,
               },
-              aliases: [],
               tags: [],
               genres: [],
               "release-groups": lidarrAlbums.map((album) => ({
@@ -396,7 +396,6 @@ router.get("/:mbid/stream", async (req, res) => {
                 "secondary-types": [],
               })),
               relations: [],
-              rating: { value: null, "votes-count": 0 },
               "release-group-count": lidarrAlbums.length,
               "release-count": lidarrAlbums.length,
               _lidarrData: {
@@ -407,54 +406,60 @@ router.get("/:mbid/stream", async (req, res) => {
               },
             };
 
-            if (!shouldSkipMusicBrainz()) {
-              try {
-                const mbData = await musicbrainzRequest(`/artist/${mbid}`, {
-                  inc: "aliases+tags+ratings+genres+release-groups",
-                });
-                recordMusicBrainzSuccess();
-
-                if (mbData["release-groups"]) {
-                  const lidarrAlbumMap = new Map(
-                    lidarrAlbums.map((a) => [a.mbid, a]),
-                  );
-                  artistData["release-groups"] = mbData["release-groups"].map(
-                    (rg) => {
-                      const lidarrAlbum = lidarrAlbumMap.get(rg.id);
-                      if (lidarrAlbum) {
-                        return {
-                          ...rg,
-                          _lidarrData: {
-                            id: lidarrAlbum.id,
-                            monitored: lidarrAlbum.monitored,
-                            statistics: lidarrAlbum.statistics,
-                          },
-                        };
-                      }
-                      return rg;
-                    },
-                  );
-                }
-
-                artistData.aliases = mbData.aliases || [];
-                artistData.tags = mbData.tags || [];
-                artistData.genres = mbData.genres || [];
-                artistData.rating = mbData.rating || {
-                  value: null,
-                  "votes-count": 0,
-                };
-                artistData.disambiguation = mbData.disambiguation || "";
-                artistData["life-span"] =
-                  mbData["life-span"] || artistData["life-span"];
-              } catch (error) {
-                recordMusicBrainzFailure();
-                console.warn(
-                  `[Artists Stream] Failed to enrich with MusicBrainz data: ${error.message}`,
-                );
-              }
-            }
-
             sendSSE(res, "artist", artistData);
+
+            if (!shouldSkipMusicBrainz()) {
+              (async () => {
+                try {
+                  const mbData = await Promise.race([
+                    musicbrainzRequest(`/artist/${mbid}`, {
+                      inc: "tags+genres+release-groups",
+                    }),
+                    new Promise((_, reject) =>
+                      setTimeout(() => reject(new Error("MusicBrainz timeout")), 2000)
+                    ),
+                  ]).catch(() => null);
+
+                  if (mbData) {
+                    recordMusicBrainzSuccess();
+
+                    const enrichedData = { ...artistData };
+
+                    if (mbData["release-groups"]) {
+                      const lidarrAlbumMap = new Map(
+                        lidarrAlbums.map((a) => [a.mbid, a]),
+                      );
+                      enrichedData["release-groups"] = mbData["release-groups"].map(
+                        (rg) => {
+                          const lidarrAlbum = lidarrAlbumMap.get(rg.id);
+                          if (lidarrAlbum) {
+                            return {
+                              ...rg,
+                              _lidarrData: {
+                                id: lidarrAlbum.id,
+                                monitored: lidarrAlbum.monitored,
+                                statistics: lidarrAlbum.statistics,
+                              },
+                            };
+                          }
+                          return rg;
+                        },
+                      );
+                    }
+
+                    enrichedData.tags = mbData.tags || [];
+                    enrichedData.genres = mbData.genres || [];
+                    enrichedData.disambiguation = mbData.disambiguation || "";
+                    enrichedData["life-span"] =
+                      mbData["life-span"] || enrichedData["life-span"];
+
+                    sendSSE(res, "artist", enrichedData);
+                  }
+                } catch (error) {
+                  recordMusicBrainzFailure();
+                }
+              })();
+            }
           }
         } catch (error) {
           console.warn(
@@ -466,13 +471,31 @@ router.get("/:mbid/stream", async (req, res) => {
       if (!artistData) {
         if (shouldSkipMusicBrainz()) {
           console.log(
-            `[Artists Stream] MusicBrainz circuit breaker is open and artist not in Lidarr, skipping request for ${mbid}`,
+            `[Artists Stream] MusicBrainz circuit breaker is open and artist not in Lidarr, sending basic data for ${mbid}`,
           );
-          sendSSE(res, "error", {
-            error: "Service temporarily unavailable",
-            message:
-              "MusicBrainz is currently experiencing issues. Please try again later.",
-          });
+          const basicData = {
+            id: mbid,
+            name: "Unknown Artist",
+            "sort-name": "Unknown Artist",
+            disambiguation: "",
+            "type-id": null,
+            type: null,
+            country: null,
+            "life-span": {
+              begin: null,
+              end: null,
+              ended: false,
+            },
+            tags: [],
+            genres: [],
+            "release-groups": [],
+            relations: [],
+            "release-group-count": 0,
+            "release-count": 0,
+          };
+          sendSSE(res, "artist", basicData);
+          sendSSE(res, "complete", {});
+          setTimeout(() => res.end(), 100);
           return;
         }
 
@@ -494,7 +517,7 @@ router.get("/:mbid/stream", async (req, res) => {
           const fetchPromise = (async () => {
             try {
               const data = await musicbrainzRequest(`/artist/${mbid}`, {
-                inc: "aliases+tags+ratings+genres+release-groups",
+                inc: "tags+genres+release-groups",
               });
               recordMusicBrainzSuccess();
 
@@ -838,10 +861,16 @@ router.get("/:mbid/stream", async (req, res) => {
         `[Artists Stream] Error for artist ${mbid}:`,
         error.message,
       );
-      sendSSE(res, "error", {
-        error: "Failed to fetch artist details",
-        message: error.response?.data?.error || error.message,
-      });
+      // Only send error if we haven't already sent artist data
+      if (!artistData) {
+        sendSSE(res, "error", {
+          error: "Failed to fetch artist details",
+          message: error.response?.data?.error || error.message,
+        });
+      } else {
+        // If we already sent artist data, just send complete and close
+        sendSSE(res, "complete", {});
+      }
       res.end();
     }
   } catch (error) {
@@ -853,7 +882,7 @@ router.get("/:mbid/stream", async (req, res) => {
   }
 });
 
-router.get("/:mbid", async (req, res) => {
+router.get("/:mbid", cacheMiddleware(300), async (req, res) => {
   try {
     const { mbid } = req.params;
 
@@ -926,7 +955,6 @@ router.get("/:mbid", async (req, res) => {
           end: null,
           ended: false,
         },
-        aliases: [],
         tags: [],
         genres: [],
         "release-groups": lidarrAlbums.map((album) => ({
@@ -937,7 +965,6 @@ router.get("/:mbid", async (req, res) => {
           "secondary-types": [],
         })),
         relations: [],
-        rating: { value: null, "votes-count": 0 },
         "release-group-count": lidarrAlbums.length,
         "release-count": lidarrAlbums.length,
         _lidarrData: {
@@ -948,73 +975,68 @@ router.get("/:mbid", async (req, res) => {
         },
       };
 
+      res.setHeader("Content-Type", "application/json");
+      res.json(musicbrainzData);
+
       if (!shouldSkipMusicBrainz()) {
-        try {
-          const mbData = await musicbrainzRequest(`/artist/${mbid}`, {
-            inc: "aliases+tags+ratings+genres+release-groups",
-          });
-          recordMusicBrainzSuccess();
+        (async () => {
+          try {
+            const mbData = await Promise.race([
+              musicbrainzRequest(`/artist/${mbid}`, {
+                inc: "tags+genres+release-groups",
+              }),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("MusicBrainz timeout")), 3000)
+              ),
+            ]).catch(() => null);
 
-          if (mbData["release-groups"]) {
-            const lidarrAlbumMap = new Map(
-              lidarrAlbums.map((a) => [a.mbid, a]),
-            );
-            musicbrainzData["release-groups"] = mbData["release-groups"].map(
-              (rg) => {
-                const lidarrAlbum = lidarrAlbumMap.get(rg.id);
-                if (lidarrAlbum) {
-                  return {
-                    ...rg,
-                    _lidarrData: {
-                      id: lidarrAlbum.id,
-                      monitored: lidarrAlbum.monitored,
-                      statistics: lidarrAlbum.statistics,
-                    },
-                  };
-                }
-                return rg;
-              },
-            );
+            if (mbData) {
+              recordMusicBrainzSuccess();
+            }
+          } catch (error) {
+            recordMusicBrainzFailure();
           }
-
-          musicbrainzData.aliases = mbData.aliases || [];
-          musicbrainzData.tags = mbData.tags || [];
-          musicbrainzData.genres = mbData.genres || [];
-          musicbrainzData.rating = mbData.rating || {
-            value: null,
-            "votes-count": 0,
-          };
-          musicbrainzData.disambiguation = mbData.disambiguation || "";
-          musicbrainzData["life-span"] =
-            mbData["life-span"] || musicbrainzData["life-span"];
-        } catch (error) {
-          recordMusicBrainzFailure();
-          console.warn(
-            `[Artists Route] Failed to enrich with MusicBrainz data: ${error.message}`,
-          );
-        }
+        })();
       }
 
-      res.setHeader("Content-Type", "application/json");
-      return res.json(musicbrainzData);
+      return;
     }
 
     if (shouldSkipMusicBrainz()) {
       console.log(
-        `[Artists Route] MusicBrainz circuit breaker is open and artist not in Lidarr, skipping request for ${mbid}`,
+        `[Artists Route] MusicBrainz circuit breaker is open, but artist not in Lidarr. Returning basic artist data.`,
       );
-      return res.status(503).json({
-        error: "Service temporarily unavailable",
-        message:
-          "MusicBrainz is currently experiencing issues. Please try again later.",
-      });
+      
+      const basicData = {
+        id: mbid,
+        name: "Unknown Artist",
+        "sort-name": "Unknown Artist",
+        disambiguation: "",
+        "type-id": null,
+        type: null,
+        country: null,
+        "life-span": {
+          begin: null,
+          end: null,
+          ended: false,
+        },
+        tags: [],
+        genres: [],
+        "release-groups": [],
+        relations: [],
+        "release-group-count": 0,
+        "release-count": 0,
+      };
+      
+      res.setHeader("Content-Type", "application/json");
+      return res.json(basicData);
     }
 
     const fetchPromise = (async () => {
       try {
         console.log(`[Artists Route] Calling MusicBrainz for ${mbid}`);
-        const musicbrainzData = await musicbrainzRequest(`/artist/${mbid}`, {
-          inc: "aliases+tags+ratings+genres+release-groups",
+                const musicbrainzData = await musicbrainzRequest(`/artist/${mbid}`, {
+          inc: "tags+genres+release-groups",
         });
 
         console.log(`[Artists Route] Successfully fetched artist ${mbid}`);

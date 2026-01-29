@@ -65,7 +65,7 @@ export class LibraryManager {
 
       const lidarrSettings = getSettings();
       const lidarrArtist = await lidarr.addArtist(mbid, artistName, {
-        monitorOption: options.monitorOption || options.monitor || "none",
+        monitorOption: "none",
         qualityProfileId: lidarrSettings.integrations?.lidarr?.qualityProfileId,
       });
 
@@ -230,6 +230,7 @@ export class LibraryManager {
       monitored: lidarrArtist.monitored || false,
       monitorOption:
         lidarrArtist.monitor || lidarrArtist.addOptions?.monitor || "none",
+      monitorNewItems: lidarrArtist.monitorNewItems || "none",
       addOptions: {
         monitor:
           lidarrArtist.monitor || lidarrArtist.addOptions?.monitor || "none",
@@ -329,12 +330,16 @@ export class LibraryManager {
       return this.mapLidarrAlbum(existing, lidarrArtist);
     }
 
+    const settings = getSettings();
+    const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
+
     const lidarrAlbum = await lidarr.addAlbum(
       artistId,
       releaseGroupMbid,
       albumName,
       {
-        triggerSearch: options.triggerSearch !== false,
+        monitored: true,
+        triggerSearch: options.triggerSearch === true || (options.triggerSearch === undefined && searchOnAdd),
       },
     );
 
@@ -398,6 +403,20 @@ export class LibraryManager {
       artistPath,
       this.sanitizePath(lidarrAlbum.title),
     );
+    
+    const rawStats = lidarrAlbum.statistics || {};
+    let percentOfTracks = rawStats.percentOfTracks;
+    
+    if (percentOfTracks !== undefined) {
+      if (percentOfTracks > 1 && percentOfTracks <= 100) {
+        percentOfTracks = percentOfTracks;
+      } else if (percentOfTracks <= 1 && percentOfTracks >= 0) {
+        percentOfTracks = Math.round(percentOfTracks * 100);
+      } else if (percentOfTracks > 100) {
+        percentOfTracks = Math.min(100, Math.round(percentOfTracks / 10));
+      }
+    }
+    
     return {
       id: lidarrAlbum.id?.toString() || lidarrAlbum.foreignAlbumId,
       artistId: lidarrAlbum.artistId?.toString() || lidarrArtist.id?.toString(),
@@ -408,10 +427,10 @@ export class LibraryManager {
       addedAt: lidarrAlbum.added || new Date().toISOString(),
       releaseDate: lidarrAlbum.releaseDate || null,
       monitored: lidarrAlbum.monitored || false,
-      statistics: lidarrAlbum.statistics || {
-        trackCount: 0,
-        sizeOnDisk: 0,
-        percentOfTracks: 0,
+      statistics: {
+        trackCount: rawStats.trackCount || 0,
+        sizeOnDisk: rawStats.sizeOnDisk || 0,
+        percentOfTracks: percentOfTracks || 0,
       },
     };
   }
@@ -492,6 +511,24 @@ export class LibraryManager {
         return [];
       }
 
+      const rawPercent = lidarrAlbum.statistics?.percentOfTracks || 0;
+      const albumSizeOnDisk = lidarrAlbum.statistics?.sizeOnDisk || 0;
+      let normalizedPercent = rawPercent;
+      
+      if (rawPercent > 1 && rawPercent <= 100) {
+        normalizedPercent = rawPercent;
+      } else if (rawPercent <= 1 && rawPercent >= 0) {
+        normalizedPercent = Math.round(rawPercent * 100);
+      } else if (rawPercent > 100) {
+        normalizedPercent = Math.min(100, Math.round(rawPercent / 10));
+      }
+      
+      const isAlbumComplete = normalizedPercent >= 100 || albumSizeOnDisk > 0;
+      
+      console.log(
+        `[LibraryManager] Album ${albumId} - Raw percent: ${rawPercent}, Normalized: ${normalizedPercent}%, Complete: ${isAlbumComplete}`,
+      );
+
       if (
         lidarrAlbum.tracks &&
         Array.isArray(lidarrAlbum.tracks) &&
@@ -500,9 +537,13 @@ export class LibraryManager {
         console.log(
           `[LibraryManager] Found ${lidarrAlbum.tracks.length} tracks in lidarrAlbum.tracks for album ${albumId}`,
         );
-        return lidarrAlbum.tracks.map((t, index) =>
-          this.mapLidarrTrack(t, lidarrAlbum, index + 1),
+        const mappedTracks = lidarrAlbum.tracks.map((t, index) =>
+          this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete),
         );
+        console.log(
+          `[LibraryManager] Mapped tracks - hasFile counts: ${mappedTracks.filter(t => t.hasFile).length}/${mappedTracks.length}`,
+        );
+        return mappedTracks;
       }
 
       if (lidarrAlbum.albumReleases && lidarrAlbum.albumReleases.length > 0) {
@@ -515,9 +556,13 @@ export class LibraryManager {
             console.log(
               `[LibraryManager] Found ${release.tracks.length} tracks in albumReleases for album ${albumId}`,
             );
-            return release.tracks.map((t, index) =>
-              this.mapLidarrTrack(t, lidarrAlbum, index + 1),
+            const mappedTracks = release.tracks.map((t, index) =>
+              this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete),
             );
+            console.log(
+              `[LibraryManager] Mapped tracks - hasFile counts: ${mappedTracks.filter(t => t.hasFile).length}/${mappedTracks.length}`,
+            );
+            return mappedTracks;
           }
         }
       }
@@ -537,9 +582,13 @@ export class LibraryManager {
           console.log(
             `[LibraryManager] Found ${allTracks.length} tracks in media for album ${albumId}`,
           );
-          return allTracks.map((t, index) =>
-            this.mapLidarrTrack(t, lidarrAlbum, index + 1),
+          const mappedTracks = allTracks.map((t, index) =>
+            this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete),
           );
+          console.log(
+            `[LibraryManager] Mapped tracks - hasFile counts: ${mappedTracks.filter(t => t.hasFile).length}/${mappedTracks.length}`,
+          );
+          return mappedTracks;
         }
       }
 
@@ -559,7 +608,29 @@ export class LibraryManager {
     }
   }
 
-  mapLidarrTrack(lidarrTrack, lidarrAlbum, trackNumber = 0) {
+  mapLidarrTrack(lidarrTrack, lidarrAlbum, trackNumber = 0, albumIsComplete = false) {
+    const path = lidarrTrack.path || null;
+    const size = lidarrTrack.sizeOnDisk || lidarrTrack.size || 0;
+    const hasFileExplicit = lidarrTrack.hasFile;
+    const hasFileFromPathOrSize = !!(path || size > 0);
+    const albumSizeOnDisk = lidarrAlbum.statistics?.sizeOnDisk || 0;
+    
+    let hasFile = false;
+    
+    if (albumIsComplete || albumSizeOnDisk > 0) {
+      hasFile = true;
+    } else if (hasFileExplicit === true) {
+      hasFile = true;
+    } else if (hasFileFromPathOrSize) {
+      hasFile = true;
+    } else if (hasFileExplicit === false) {
+      hasFile = false;
+    }
+    
+    console.log(
+      `[LibraryManager] Track "${lidarrTrack.title || lidarrTrack.trackTitle}" - hasFile: ${hasFile}, albumIsComplete: ${albumIsComplete}, albumSizeOnDisk: ${albumSizeOnDisk}, hasFileExplicit: ${hasFileExplicit}, path: ${!!path}, size: ${size}`,
+    );
+
     return {
       id:
         lidarrTrack.id?.toString() ||
@@ -571,9 +642,9 @@ export class LibraryManager {
       mbid: lidarrTrack.foreignRecordingId || lidarrTrack.foreignTrackId,
       trackName: lidarrTrack.title || lidarrTrack.trackTitle,
       trackNumber: trackNumber || lidarrTrack.trackNumber || 0,
-      path: lidarrTrack.path || null,
-      hasFile: lidarrTrack.hasFile || false,
-      size: lidarrTrack.sizeOnDisk || lidarrTrack.size || 0,
+      path: path,
+      hasFile: hasFile,
+      size: size,
       quality:
         lidarrTrack.mediaInfo?.audioFormat ||
         lidarrTrack.quality?.quality?.name ||

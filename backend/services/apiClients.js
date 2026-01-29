@@ -71,7 +71,7 @@ const musicbrainzRequestWithRetry = async (endpoint, params = {}, retryCount = 0
         headers: {
           "User-Agent": `${APP_NAME}/${APP_VERSION} ( ${getMusicBrainzContact()} )`,
         },
-        timeout: 20000,
+        timeout: 5000,
       },
     );
     return response.data;
@@ -82,7 +82,7 @@ const musicbrainzRequestWithRetry = async (endpoint, params = {}, retryCount = 0
       retryCount < MAX_RETRIES;
     
     if (shouldRetry) {
-      const delay = Math.min(1000 * Math.pow(2, retryCount), 5000);
+      const delay = Math.min(300 * Math.pow(2, retryCount), 1000);
       const errorType = error.response 
         ? `HTTP ${error.response.status}` 
         : (error.code || error.message);

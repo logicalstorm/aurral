@@ -64,11 +64,22 @@ function DiscoverPage() {
             getRecentlyAdded(),
           ]);
 
+        const hasData = discoveryData && (
+          (discoveryData.recommendations && discoveryData.recommendations.length > 0) ||
+          (discoveryData.globalTop && discoveryData.globalTop.length > 0) ||
+          (discoveryData.topGenres && discoveryData.topGenres.length > 0)
+        );
+
         setData(discoveryData);
         setRequests(requestsData);
         setRecentlyAdded(recentlyAddedData);
         downloadStatusesRef.current = {};
-        setLoading(false);
+        
+        if (hasData) {
+          setLoading(false);
+        } else {
+          setTimeout(() => setLoading(false), 500);
+        }
       } catch (err) {
         setError(
           err.response?.data?.message || "Failed to load discovery data",
@@ -168,16 +179,21 @@ function DiscoverPage() {
   const ArtistCard = memo(
     ({ artist, status }) => {
       const navigateTo = artist.navigateTo || artist.id;
+      const hasValidMbid = navigateTo && navigateTo !== "null" && navigateTo !== "undefined";
       const handleClick = useCallback(
-        () => navigate(`/artist/${navigateTo}`),
-        [navigateTo],
+        () => {
+          if (hasValidMbid) {
+            navigate(`/artist/${navigateTo}`);
+          }
+        },
+        [navigateTo, hasValidMbid],
       );
 
       return (
         <div className="group relative flex flex-col w-full min-w-0">
           <div
             onClick={handleClick}
-            className="relative aspect-square mb-3 overflow-hidden cursor-pointer shadow-sm group-hover:shadow-md transition-all"
+            className={`relative aspect-square mb-3 overflow-hidden shadow-sm group-hover:shadow-md transition-all ${hasValidMbid ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
             style={{ backgroundColor: "#211f27" }}
           >
             <ArtistImage
@@ -206,7 +222,7 @@ function DiscoverPage() {
           <div className="flex flex-col min-w-0">
             <h3
               onClick={handleClick}
-              className="font-semibold truncate hover:underline cursor-pointer"
+              className={`font-semibold truncate ${hasValidMbid ? "hover:underline cursor-pointer" : "cursor-not-allowed opacity-75"}`}
               style={{ color: "#fff" }}
             >
               {artist.name}
@@ -252,7 +268,28 @@ function DiscoverPage() {
     status: PropTypes.string,
   };
 
-  if (loading) {
+  const hasData = data && (
+    (data.recommendations && data.recommendations.length > 0) ||
+    (data.globalTop && data.globalTop.length > 0) ||
+    (data.topGenres && data.topGenres.length > 0)
+  );
+  const isActuallyUpdating = data?.isUpdating && !hasData;
+
+  if (loading && !hasData && !isActuallyUpdating) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32">
+        <Loader
+          className="w-12 h-12 animate-spin mb-4"
+          style={{ color: "#c1c1c3" }}
+        />
+        <h2 className="text-xl font-semibold" style={{ color: "#fff" }}>
+          Loading recommendations...
+        </h2>
+      </div>
+    );
+  }
+
+  if (isActuallyUpdating) {
     return (
       <div className="flex flex-col items-center justify-center py-32">
         <Loader
@@ -460,6 +497,8 @@ function DiscoverPage() {
               .slice(0, 6)
               .map((request) => {
                 const artistMbid = request.artistMbid || request.mbid;
+                const navigateTo = request.type === "album" ? artistMbid : (request.albumMbid || request.mbid);
+                const hasValidMbid = navigateTo && navigateTo !== "null" && navigateTo !== "undefined";
 
                 return (
                   <ArtistCard
@@ -477,10 +516,7 @@ function DiscoverPage() {
                           ? `${request.artistName} • ${new Date(request.requestedAt).toLocaleDateString()}`
                           : `Requested ${new Date(request.requestedAt).toLocaleDateString()}`,
                       // For album requests, navigate to artist page
-                      navigateTo:
-                        request.type === "album"
-                          ? artistMbid
-                          : request.albumMbid || request.mbid,
+                      navigateTo: hasValidMbid ? navigateTo : null,
                     }}
                   />
                 );
