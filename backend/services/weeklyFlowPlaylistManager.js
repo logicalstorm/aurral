@@ -35,6 +35,10 @@ export class WeeklyFlowPlaylistManager {
     }
   }
 
+  _sanitize(str) {
+    return String(str || "").replace(/[<>:"/\\|?*]/g, "_").trim();
+  }
+
   async createSymlink(sourcePath, playlistType) {
     if (!this.navidromeMusicFolder) {
       return null;
@@ -73,6 +77,31 @@ export class WeeklyFlowPlaylistManager {
         error.message,
       );
       return null;
+    }
+  }
+
+  async removeDiscoverSymlinksForAlbum(artistName, albumName) {
+    if (!this.navidromeMusicFolder) return;
+    const sanitizedArtist = this._sanitize(artistName);
+    const sanitizedAlbum = this._sanitize(albumName);
+    const jobs = downloadTracker.getByPlaylistType("discover");
+    for (const job of jobs) {
+      if (job.status !== "done" || !job.finalPath) continue;
+      const relativePath = path.relative(this.weeklyFlowRoot, job.finalPath);
+      const parts = relativePath.split(path.sep).filter(Boolean);
+      if (parts.length < 4 || parts[0] !== "discover") continue;
+      const artistDir = parts[1];
+      const albumDir = parts[2];
+      if (artistDir !== sanitizedArtist || albumDir !== sanitizedAlbum) continue;
+      const symlinkPath = path.join(
+        this.navidromeMusicFolder,
+        ".aurral-weekly-flow",
+        "discover",
+        relativePath,
+      );
+      try {
+        await fs.unlink(symlinkPath);
+      } catch {}
     }
   }
 
