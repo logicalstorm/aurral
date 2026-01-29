@@ -19,6 +19,17 @@ router.get("/", noCache, async (req, res) => {
     const discoveryCache = getDiscoveryCache();
     const wsStats = websocketService.getStats();
 
+    const artistCountPromise = libraryManager
+      .getAllArtists()
+      .then((a) => a.length);
+    const timeoutMs = 5000;
+    const artistCount = await Promise.race([
+      artistCountPromise,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Lidarr timeout")), timeoutMs),
+      ),
+    ]).catch(() => 0);
+
     res.json({
       status: "ok",
       rootFolderConfigured: lidarrConfigured,
@@ -29,7 +40,7 @@ router.get("/", noCache, async (req, res) => {
         process.env.CONTACT_EMAIL
       ),
       library: {
-        artistCount: (await libraryManager.getAllArtists()).length,
+        artistCount: typeof artistCount === "number" ? artistCount : 0,
         lastScan: null,
       },
       discovery: {
