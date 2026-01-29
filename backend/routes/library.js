@@ -3,6 +3,7 @@ import axios from "axios";
 import fs from "fs/promises";
 import { UUID_REGEX } from "../config/constants.js";
 import { libraryManager } from "../services/libraryManager.js";
+import { playlistManager } from "../services/weeklyFlowPlaylistManager.js";
 import { qualityManager } from "../services/qualityManager.js";
 import { musicbrainzRequest } from "../services/apiClients.js";
 import { dbOps } from "../config/db-helpers.js";
@@ -203,6 +204,13 @@ router.post("/albums", async (req, res) => {
         triggerSearch: searchOnAdd,
       },
     );
+
+    if (album.artistName && album.albumName) {
+      playlistManager.removeDiscoverSymlinksForAlbum(
+        album.artistName,
+        album.albumName,
+      ).catch(() => {});
+    }
 
     const formatted = {
       ...album,

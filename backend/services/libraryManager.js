@@ -378,6 +378,7 @@ export class LibraryManager {
     return {
       id: lidarrAlbum.id?.toString() || lidarrAlbum.foreignAlbumId,
       artistId: lidarrAlbum.artistId?.toString() || lidarrArtist.id?.toString(),
+      artistName: lidarrArtist.name ?? null,
       mbid: lidarrAlbum.foreignAlbumId,
       foreignAlbumId: lidarrAlbum.foreignAlbumId,
       albumName: lidarrAlbum.title,
