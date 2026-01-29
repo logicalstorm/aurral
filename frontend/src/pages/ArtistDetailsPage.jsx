@@ -103,7 +103,6 @@ function ArtistDetailsPage() {
   const [error, setError] = useState(null);
   const [existsInLibrary, setExistsInLibrary] = useState(false);
   const [requestingAlbum, setRequestingAlbum] = useState(null);
-  const [pendingRequestAlbums, setPendingRequestAlbums] = useState({});
   const [removingAlbum, setRemovingAlbum] = useState(null);
   const [albumDropdownOpen, setAlbumDropdownOpen] = useState(null);
   const [showDeleteAlbumModal, setShowDeleteAlbumModal] = useState(null);
@@ -802,23 +801,14 @@ function ArtistDetailsPage() {
 
   const handleRequestAlbum = async (albumId, title) => {
     setRequestingAlbum(albumId);
-    setPendingRequestAlbums((prev) => ({
-      ...prev,
-      [albumId]: { title, status: "searching" },
-    }));
+    let addedOptimistic = false;
     try {
       if (!existsInLibrary || !libraryArtist?.id) {
         if (!artist) {
           showError("Artist information not available");
-          setPendingRequestAlbums((prev) => {
-            const next = { ...prev };
-            delete next[albumId];
-            return next;
-          });
           return;
         }
 
-        // Add artist to library first (this just saves them, doesn't create folders)
         await addArtistToLibrary({
           foreignArtistId: artist.id,
           artistName: artist.name,
@@ -826,7 +816,6 @@ function ArtistDetailsPage() {
           rootFolderPath: appSettings?.rootFolderPath,
         });
 
-        // Refresh library data
         const lookup = await lookupArtistInLibrary(artist.id);
         if (lookup.exists && lookup.artist) {
           const fullArtist = await getLibraryArtist(
@@ -835,7 +824,6 @@ function ArtistDetailsPage() {
           setLibraryArtist(fullArtist);
           setExistsInLibrary(true);
 
-          // Fetch albums for this artist
           await refreshLibraryArtist(
             fullArtist.mbid || fullArtist.foreignArtistId,
           );
@@ -844,7 +832,6 @@ function ArtistDetailsPage() {
         }
       }
 
-      // Now get the library artist (should exist now)
       const currentLibraryArtist =
         libraryArtist ||
         (await lookupArtistInLibrary(artist.id).then((l) =>
@@ -856,16 +843,31 @@ function ArtistDetailsPage() {
         throw new Error("Failed to get library artist");
       }
 
-      // Find album by MBID, but ensure it belongs to the current artist
       let libraryAlbum = libraryAlbums.find(
         (a) =>
           (a.mbid === albumId || a.foreignAlbumId === albumId) &&
           a.artistId === currentLibraryArtist.id,
       );
 
-      // If album doesn't exist, create it
       if (!libraryAlbum) {
-        // Add album to library first
+        const pendingId = `pending-${albumId}`;
+        const optimisticAlbum = {
+          id: pendingId,
+          mbid: albumId,
+          foreignAlbumId: albumId,
+          albumName: title,
+          artistId: currentLibraryArtist.id,
+          releaseDate: null,
+          albumType: null,
+          statistics: null,
+        };
+        setLibraryAlbums((prev) => [...prev, optimisticAlbum]);
+        setDownloadStatuses((prev) => ({
+          ...prev,
+          [pendingId]: { status: "processing" },
+        }));
+        addedOptimistic = true;
+
         const { addLibraryAlbum } = await import("../utils/api");
         try {
           libraryAlbum = await addLibraryAlbum(
@@ -874,15 +876,12 @@ function ArtistDetailsPage() {
             title,
           );
 
-          // Always refresh albums list from server after adding to prevent duplicates
-          // This ensures we have the latest state from the backend
           const refreshedAlbums = await getLibraryAlbums(
             currentLibraryArtist.id,
           );
           const uniqueAlbums = deduplicateAlbums(refreshedAlbums);
           setLibraryAlbums(uniqueAlbums);
 
-          // Find the album in the refreshed list
           libraryAlbum = uniqueAlbums.find(
             (a) =>
               (a.mbid === albumId || a.foreignAlbumId === albumId) &&
@@ -914,12 +913,6 @@ function ArtistDetailsPage() {
         monitored: true,
       });
 
-      setPendingRequestAlbums((prev) =>
-        prev[albumId]
-          ? { ...prev, [albumId]: { ...prev[albumId], status: "downloading" } }
-          : prev,
-      );
-
       await downloadAlbum(currentLibraryArtist.id, libraryAlbum.id, {
         artistMbid:
           currentLibraryArtist.mbid || currentLibraryArtist.foreignArtistId,
@@ -932,20 +925,18 @@ function ArtistDetailsPage() {
       setLibraryAlbums(deduplicateAlbums(refreshedAlbums));
 
       showSuccess(`Downloading album: ${title}`);
-      setTimeout(() => {
-        setPendingRequestAlbums((prev) => {
+    } catch (err) {
+      if (addedOptimistic) {
+        setLibraryAlbums((prev) =>
+          prev.filter((a) => a.id !== `pending-${albumId}`),
+        );
+        setDownloadStatuses((prev) => {
           const next = { ...prev };
-          delete next[albumId];
+          delete next[`pending-${albumId}`];
           return next;
         });
-      }, 2000);
-    } catch (err) {
+      }
       showError(`Failed to add album: ${err.message}`);
-      setPendingRequestAlbums((prev) => {
-        const next = { ...prev };
-        delete next[albumId];
-        return next;
-      });
     } finally {
       setRequestingAlbum(null);
     }
@@ -1766,26 +1757,21 @@ function ArtistDetailsPage() {
       )}
 
       {/* Albums in Library Section */}
-      {((existsInLibrary && (libraryAlbums?.length > 0 || Object.keys(pendingRequestAlbums).length > 0)) ||
-        (!existsInLibrary && Object.keys(pendingRequestAlbums).length > 0)) &&
+      {existsInLibrary &&
+        libraryAlbums &&
+        libraryAlbums.length > 0 &&
         (() => {
-          const downloadedAlbums = (libraryAlbums || []).filter((album) => {
-            const mbid = album.mbid || album.foreignAlbumId;
+          // Filter to only show albums that have been downloaded (have files)
+          const downloadedAlbums = libraryAlbums.filter((album) => {
+            // Show if album has any tracks with files (percentOfTracks > 0) or has size on disk
             return (
               album.statistics?.percentOfTracks > 0 ||
               album.statistics?.sizeOnDisk > 0 ||
-              downloadStatuses[album.id] ||
-              pendingRequestAlbums[mbid]
+              downloadStatuses[album.id] // Also show if currently downloading
             );
           });
-          const pendingOnly = Object.entries(pendingRequestAlbums).filter(
-            ([mbid]) =>
-              !(libraryAlbums || []).some(
-                (a) => (a.mbid === mbid || a.foreignAlbumId === mbid),
-              ),
-          );
-          const totalCount = pendingOnly.length + downloadedAlbums.length;
-          if (totalCount === 0) return null;
+
+          if (downloadedAlbums.length === 0) return null;
 
           return (
             <div className="card mb-4 p-4">
@@ -1793,58 +1779,9 @@ function ArtistDetailsPage() {
                 className="text-lg font-semibold mb-2 flex items-center"
                 style={{ color: "#fff" }}
               >
-                Albums in Your Library ({totalCount})
+                Albums in Your Library ({downloadedAlbums.length})
               </h2>
               <div className="space-y-1">
-                {pendingOnly.map(([mbid, pending]) => (
-                  <div
-                    key={`pending-${mbid}`}
-                    className="flex items-center justify-between py-2.5 px-3"
-                    style={{ backgroundColor: "#211f27" }}
-                  >
-                    <div className="flex-1 flex items-center gap-2">
-                      {albumCovers[mbid] ? (
-                        <img
-                          src={albumCovers[mbid]}
-                          alt={pending.title}
-                          className="w-10 h-10 flex-shrink-0 object-cover"
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      ) : (
-                        <div
-                          className="w-10 h-10 flex-shrink-0 flex items-center justify-center"
-                          style={{ backgroundColor: "#211f27" }}
-                        >
-                          <Music
-                            className="w-5 h-5"
-                            style={{ color: "#c1c1c3" }}
-                          />
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <h3
-                          className="font-semibold text-sm truncate"
-                          style={{ color: "#fff" }}
-                        >
-                          {pending.title}
-                        </h3>
-                      </div>
-                    </div>
-                    <span
-                      className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase cursor-default"
-                      style={{
-                        backgroundColor: "#211f27",
-                        color: "#c1c1c3",
-                      }}
-                    >
-                      <Loader className="w-3.5 h-3.5 animate-spin" />
-                      {pending.status === "searching"
-                        ? "Searching..."
-                        : "Downloading..."}
-                    </span>
-                  </div>
-                ))}
                 {downloadedAlbums
                   .sort((a, b) => {
                     const dateA = a.releaseDate || "";
@@ -1859,9 +1796,6 @@ function ArtistDetailsPage() {
                     const tracks = albumTracks[trackKey] || null;
                     const isLoadingTracks = loadingTracks[trackKey] || false;
                     const downloadStatus = downloadStatuses[libraryAlbum.id];
-                    const pendingStatus = pendingRequestAlbums[
-                      libraryAlbum.mbid || libraryAlbum.foreignAlbumId
-                    ];
                     const isComplete =
                       libraryAlbum.statistics?.percentOfTracks === 100;
 
@@ -1986,19 +1920,6 @@ function ArtistDetailsPage() {
                                 <CheckCircle className="w-3.5 h-3.5" />
                                 Complete
                               </span>
-                            ) : pendingStatus ? (
-                              <span
-                                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase cursor-default"
-                                style={{
-                                  backgroundColor: "#211f27",
-                                  color: "#c1c1c3",
-                                }}
-                              >
-                                <Loader className="w-3.5 h-3.5 animate-spin" />
-                                {pendingStatus.status === "searching"
-                                  ? "Searching..."
-                                  : "Downloading..."}
-                              </span>
                             ) : downloadStatus ? (
                               downloadStatus.status === "added" ||
                               downloadStatus.status === "available" ? (
@@ -2023,7 +1944,10 @@ function ArtistDetailsPage() {
                                         ? "Downloading..."
                                         : downloadStatus.status === "moving"
                                           ? "Moving..."
-                                          : downloadStatus.status}
+                                          : downloadStatus.status ===
+                                              "processing"
+                                            ? "Processing..."
+                                            : downloadStatus.status}
                                 </span>
                               )
                             ) : (
