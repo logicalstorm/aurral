@@ -4,7 +4,7 @@ import {
   lastfmRequest,
   getLastfmApiKey,
   musicbrainzRequest,
-  spotifySearchArtist,
+  deezerSearchArtist,
 } from "./apiClients.js";
 
 const getLastfmUsername = () => {
@@ -462,18 +462,14 @@ export const updateDiscoveryCache = async () => {
             try {
               const artistName = item.name || item.artistName;
 
-              // Try Spotify first (fastest, best quality)
               if (artistName) {
                 try {
-                  const spotifyArtist = await spotifySearchArtist(artistName);
-                  if (spotifyArtist?.images?.length > 0) {
-                    // Get the largest available image
-                    item.image = spotifyArtist.images[0].url;
+                  const deezer = await deezerSearchArtist(artistName);
+                  if (deezer?.imageUrl) {
+                    item.image = deezer.imageUrl;
                     return;
                   }
-                } catch (e) {
-                  // Continue to fallback
-                }
+                } catch (e) {}
               }
 
               const artistDataWithRGs = await Promise.race([

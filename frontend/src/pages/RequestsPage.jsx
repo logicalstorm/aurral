@@ -272,6 +272,7 @@ function RequestsPage() {
                           isAlbum
                             ? `/artist/${artistMbid}`
                             : `/artist/${request.mbid}`,
+                          { state: { artistName: isAlbum ? artistName : displayName } },
                         );
                       }
                     }}
@@ -279,6 +280,7 @@ function RequestsPage() {
                     <ArtistImage
                       src={request.image}
                       mbid={artistMbid}
+                      artistName={isAlbum ? artistName : displayName}
                       alt={displayName}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                     />
@@ -295,6 +297,7 @@ function RequestsPage() {
                               isAlbum
                                 ? `/artist/${artistMbid}`
                                 : `/artist/${request.mbid}`,
+                              { state: { artistName: isAlbum ? artistName : displayName } },
                             );
                           }
                         }}

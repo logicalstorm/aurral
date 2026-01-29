@@ -32,8 +32,28 @@ export const createAuthMiddleware = () => {
 
   return (req, res, next) => {
     if (req.path === "/api/health") return next();
-    // Skip auth for streaming endpoints (they handle auth manually via token query param)
-    if (req.path.endsWith("/stream")) return next();
+    if (req.path.endsWith("/stream") || req.path.includes("/stream/")) return next();
     return auth(req, res, next);
   };
+};
+
+export const verifyTokenAuth = (req) => {
+  const passwords = getAuthPassword();
+  if (passwords.length === 0) return true;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Basic ")) {
+    const token = authHeader.substring(6);
+    try {
+      const [username, password] = atob(token).split(":");
+      if (username === getAuthUser() && passwords.some((p) => basicAuth.safeCompare(password, p))) return true;
+    } catch (e) {}
+  }
+  const token = req.query.token;
+  if (token) {
+    try {
+      const [username, password] = atob(decodeURIComponent(token)).split(":");
+      if (username === getAuthUser() && passwords.some((p) => basicAuth.safeCompare(password, p))) return true;
+    } catch (e) {}
+  }
+  return false;
 };

@@ -54,7 +54,7 @@ Aurral analyzes your existing music library and Last.fm listening history to pro
 - **SLSKD:** Download music from Soulseek
 - **MusicBrainz:** Artist and album metadata
 - **Last.fm:** Scrobble history, recommendations, artist images
-- **Spotify:** High-quality artist images
+- **Deezer:** Artist images and 30s previews (no API key required)
 - **Navidrome/Subsonic:** Playlist sync
 
 ### Technical Features
@@ -123,7 +123,6 @@ All configuration is done through the web interface at `/settings`.
 
 ### Optional Integrations
 - **Last.fm:** API key and username for personalized recommendations
-- **Spotify:** Client ID and Secret for high-quality artist images
 - **Navidrome:** URL and credentials for playlist sync
 
 ### Environment Variables

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   Loader,
   Music,
@@ -10,7 +10,6 @@ import {
   Calendar,
   MapPin,
   Tag,
-  Sparkles,
   RefreshCw,
   ChevronDown,
   ChevronUp,
@@ -22,11 +21,12 @@ import {
   MoreVertical,
   Disc,
   Disc3,
+  Play,
+  Pause,
 } from "lucide-react";
 import {
   getArtistDetails,
   getArtistCover,
-  getReleaseGroupCover,
   lookupArtistInLibrary,
   getLibraryAlbums,
   getLibraryTracks,
@@ -39,10 +39,10 @@ import {
   updateLibraryArtist,
   getLibraryArtist,
   downloadAlbum,
-  downloadTrack,
   refreshLibraryArtist,
   getDownloadStatus,
   addArtistToLibrary,
+  getArtistPreview,
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
 import ArtistImage from "../components/ArtistImage";
@@ -77,7 +77,9 @@ const getTagColor = (name) => {
 
 function ArtistDetailsPage() {
   const { mbid } = useParams();
+  const { state: locationState } = useLocation();
   const navigate = useNavigate();
+  const artistNameFromNav = locationState?.artistName;
   const [artist, setArtist] = useState(null);
   const [coverImages, setCoverImages] = useState([]);
   const [libraryArtist, setLibraryArtist] = useState(null);
@@ -159,8 +161,6 @@ function ArtistDetailsPage() {
       console.warn("Failed to save filter settings to localStorage:", e);
     }
   }, [selectedReleaseTypes]);
-  const [showMonitorDropdown, setShowMonitorDropdown] = useState(false);
-  const [monitorOption, setMonitorOption] = useState("none");
   const [showRemoveDropdown, setShowRemoveDropdown] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteFiles, setDeleteFiles] = useState(false);
@@ -172,6 +172,14 @@ function ArtistDetailsPage() {
   const [loadingCover, setLoadingCover] = useState(true);
   const [loadingSimilar, setLoadingSimilar] = useState(true);
   const [loadingLibrary, setLoadingLibrary] = useState(true);
+  const [previewTracks, setPreviewTracks] = useState([]);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [playingPreviewId, setPlayingPreviewId] = useState(null);
+  const [previewProgress, setPreviewProgress] = useState(0);
+  const [previewSnappingBack, setPreviewSnappingBack] = useState(false);
+  const previewAudioRef = useRef(null);
+  const previewTickRef = useRef(null);
+  const snapBackTimeoutRef = useRef(null);
   const { showSuccess, showError } = useToast();
 
   useEffect(() => {
@@ -191,10 +199,15 @@ function ArtistDetailsPage() {
     const username = localStorage.getItem("auth_user") || "admin";
 
     let streamUrl = `${API_BASE_URL}/artists/${mbid}/stream`;
+    const streamParams = [];
     if (password) {
       const token = btoa(`${username}:${password}`);
-      streamUrl += `?token=${encodeURIComponent(token)}`;
+      streamParams.push(`token=${encodeURIComponent(token)}`);
     }
+    if (artistNameFromNav) {
+      streamParams.push(`artistName=${encodeURIComponent(artistNameFromNav)}`);
+    }
+    if (streamParams.length) streamUrl += `?${streamParams.join("&")}`;
 
     // Use EventSource for streaming data
     const eventSource = new EventSource(streamUrl);
@@ -207,7 +220,8 @@ function ArtistDetailsPage() {
     const fallbackTimeout = setTimeout(() => {
       if (!coverReceived) {
         console.log("[Stream] Fallback: Fetching cover directly");
-        getArtistCover(mbid)
+        const nameForCover = artistNameFromNav || artist?.name;
+        getArtistCover(mbid, nameForCover)
           .then((coverData) => {
             if (coverData.images && coverData.images.length > 0) {
               setCoverImages(coverData.images);
@@ -345,18 +359,18 @@ function ArtistDetailsPage() {
                 .then((albums) => {
                   setLibraryAlbums(albums);
                 })
-                .catch((err) => {
+                .catch(() => {
                   setTimeout(() => {
                     getLibraryAlbums(artistId)
                       .then((albums) => setLibraryAlbums(albums))
-                      .catch((e) => {});
+                      .catch(() => {});
                   }, 2000);
                 });
             }, 1000);
           }
         })
-        .catch((err) => {
-          console.error("Failed to lookup artist in library:", err);
+        .catch((e) => {
+          console.error("Failed to lookup artist in library:", e);
         })
         .finally(() => setLoadingLibrary(false));
     });
@@ -371,8 +385,7 @@ function ArtistDetailsPage() {
         );
         setLoading(false);
         eventSource.close();
-      } catch (err) {
-        // If eventSource is in error state, fallback to regular API
+      } catch {
         if (eventSource.readyState === EventSource.CLOSED) {
           console.warn(
             "[Stream] Connection closed, falling back to regular API",
@@ -380,7 +393,7 @@ function ArtistDetailsPage() {
           eventSource.close();
 
           // Fallback to regular API call
-          getArtistDetails(mbid)
+          getArtistDetails(mbid, artistNameFromNav)
             .then((artistData) => {
               if (!artistData || !artistData.id) {
                 throw new Error("Invalid artist data received");
@@ -388,8 +401,8 @@ function ArtistDetailsPage() {
               setArtist(artistData);
               setLoading(false);
 
-              // Load other data in background
-              getArtistCover(mbid)
+              const nameForCover = artistNameFromNav || artistData?.name;
+              getArtistCover(mbid, nameForCover)
                 .then((coverData) => {
                   if (coverData.images && coverData.images.length > 0) {
                     setCoverImages(coverData.images);
@@ -432,7 +445,7 @@ function ArtistDetailsPage() {
         eventSource.close();
 
         // Fallback to regular API
-        getArtistDetails(mbid)
+        getArtistDetails(mbid, artistNameFromNav)
           .then((artistData) => {
             if (!artistData || !artistData.id) {
               throw new Error("Invalid artist data received");
@@ -440,7 +453,8 @@ function ArtistDetailsPage() {
             setArtist(artistData);
             setLoading(false);
 
-            getArtistCover(mbid)
+            const nameForCover = artistNameFromNav || artistData?.name;
+            getArtistCover(mbid, nameForCover)
               .then((coverData) => {
                 if (coverData.images && coverData.images.length > 0) {
                   setCoverImages(coverData.images);
@@ -469,12 +483,122 @@ function ArtistDetailsPage() {
       }
     };
 
-    // Cleanup on unmount or mbid change
     return () => {
       clearTimeout(fallbackTimeout);
       eventSource.close();
     };
-  }, [mbid]);
+  }, [mbid, artistNameFromNav, artist?.name]);
+
+  useEffect(() => {
+    const name = artistNameFromNav || artist?.name;
+    if (!mbid || !name) {
+      if (!artistNameFromNav && !artist) setPreviewTracks([]);
+      return;
+    }
+    setLoadingPreview(true);
+    getArtistPreview(mbid, name)
+      .then((data) => setPreviewTracks(data.tracks || []))
+      .catch(() => setPreviewTracks([]))
+      .finally(() => setLoadingPreview(false));
+  }, [mbid, artistNameFromNav, artist]);
+
+  const SNAP_BACK_MS = 320;
+  const finishSnapBack = () => {
+    if (snapBackTimeoutRef.current) clearTimeout(snapBackTimeoutRef.current);
+    snapBackTimeoutRef.current = null;
+    setPlayingPreviewId(null);
+    setPreviewProgress(0);
+    setPreviewSnappingBack(false);
+  };
+  const handlePreviewPlay = (track) => {
+    const audio = previewAudioRef.current;
+    if (!audio || !track.preview_url) return;
+    if (playingPreviewId === track.id) {
+      if (audio.paused) {
+        if (snapBackTimeoutRef.current) clearTimeout(snapBackTimeoutRef.current);
+        snapBackTimeoutRef.current = null;
+        setPreviewSnappingBack(false);
+        audio.play();
+      } else {
+        audio.pause();
+        if (previewTickRef.current) cancelAnimationFrame(previewTickRef.current);
+        previewTickRef.current = null;
+        setPreviewSnappingBack(true);
+        setPreviewProgress(0);
+        snapBackTimeoutRef.current = setTimeout(finishSnapBack, SNAP_BACK_MS);
+      }
+      return;
+    }
+    if (snapBackTimeoutRef.current) clearTimeout(snapBackTimeoutRef.current);
+    snapBackTimeoutRef.current = null;
+    setPreviewSnappingBack(false);
+    setPlayingPreviewId(track.id);
+    setPreviewProgress(0);
+    if (previewTickRef.current) cancelAnimationFrame(previewTickRef.current);
+    const PREVIEW_DURATION = 30;
+    const tick = () => {
+      if (audio.ended) {
+        if (previewTickRef.current) cancelAnimationFrame(previewTickRef.current);
+        previewTickRef.current = null;
+        setPreviewSnappingBack(true);
+        setPreviewProgress(0);
+        snapBackTimeoutRef.current = setTimeout(finishSnapBack, SNAP_BACK_MS);
+        return;
+      }
+      const t = audio.currentTime;
+      const d = audio.duration;
+      const duration = Number.isFinite(d) && d > 0 ? d : PREVIEW_DURATION;
+      setPreviewProgress(Math.min(1, t / duration));
+      previewTickRef.current = requestAnimationFrame(tick);
+    };
+    previewTickRef.current = requestAnimationFrame(tick);
+    audio.src = track.preview_url;
+    audio.play();
+  };
+
+  useEffect(() => {
+    const audio = previewAudioRef.current;
+    if (!audio) return;
+    const PREVIEW_DURATION = 30;
+    const updateProgress = () => {
+      const t = audio.currentTime;
+      const d = audio.duration;
+      const duration = Number.isFinite(d) && d > 0 ? d : PREVIEW_DURATION;
+      setPreviewProgress(Math.min(1, t / duration));
+    };
+    const onLoadedMetadata = updateProgress;
+    const clearProgressTick = () => {
+      if (previewTickRef.current != null) {
+        cancelAnimationFrame(previewTickRef.current);
+        previewTickRef.current = null;
+      }
+    };
+    const onEnded = () => {
+      clearProgressTick();
+      setPreviewSnappingBack(true);
+      setPreviewProgress(0);
+      if (snapBackTimeoutRef.current) clearTimeout(snapBackTimeoutRef.current);
+      snapBackTimeoutRef.current = setTimeout(finishSnapBack, SNAP_BACK_MS);
+    };
+    const onPause = () => {
+      clearProgressTick();
+      setPreviewSnappingBack(true);
+      setPreviewProgress(0);
+      if (snapBackTimeoutRef.current) clearTimeout(snapBackTimeoutRef.current);
+      snapBackTimeoutRef.current = setTimeout(finishSnapBack, SNAP_BACK_MS);
+    };
+    audio.addEventListener("timeupdate", updateProgress);
+    audio.addEventListener("loadedmetadata", onLoadedMetadata);
+    audio.addEventListener("ended", onEnded);
+    audio.addEventListener("pause", onPause);
+    return () => {
+      clearProgressTick();
+      audio.removeEventListener("timeupdate", updateProgress);
+      audio.removeEventListener("loadedmetadata", onLoadedMetadata);
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("pause", onPause);
+    };
+  }, [previewTracks.length]);
 
   const handleRefreshArtist = async () => {
     if (!libraryArtist?.mbid && !libraryArtist?.foreignArtistId) return;
@@ -561,7 +685,7 @@ function ArtistDetailsPage() {
       delete updatedArtist.images;
       delete updatedArtist.links;
 
-      const result = await updateLibraryArtist(
+      await updateLibraryArtist(
         libraryArtist.mbid,
         updatedArtist,
       );
@@ -755,8 +879,7 @@ function ArtistDetailsPage() {
               (a.mbid === albumId || a.foreignAlbumId === albumId) &&
               a.artistId === currentLibraryArtist.id,
           );
-        } catch (err) {
-          // If that fails, try to refresh artist to get albums
+        } catch {
           await refreshLibraryArtist(
             currentLibraryArtist.mbid || currentLibraryArtist.foreignArtistId,
           );
@@ -790,8 +913,8 @@ function ArtistDetailsPage() {
         artistName: currentLibraryArtist.artistName,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
       const refreshedAlbums = await getLibraryAlbums(currentLibraryArtist.id);
       setLibraryAlbums(deduplicateAlbums(refreshedAlbums));
 
@@ -968,29 +1091,36 @@ function ArtistDetailsPage() {
         if (albumIds.length > 0) {
           const statuses = await getDownloadStatus(albumIds);
           setDownloadStatuses((prevStatuses) => {
-            const hasNewlyAdded = Object.keys(statuses).some(
-              (albumId) => {
-                const currentStatus = statuses[albumId]?.status;
-                const previousStatus = prevStatuses[albumId]?.status;
-                return currentStatus === "added" && previousStatus !== "added";
-              }
-            );
-            
+            const hasNewlyAdded = Object.keys(statuses).some((albumId) => {
+              const currentStatus = statuses[albumId]?.status;
+              const previousStatus = prevStatuses[albumId]?.status;
+              return currentStatus === "added" && previousStatus !== "added";
+            });
+
             const hasActiveDownloads = Object.values(statuses).some(
-              (s) => s && (s.status === "downloading" || s.status === "processing" || s.status === "adding")
+              (s) =>
+                s &&
+                (s.status === "downloading" ||
+                  s.status === "processing" ||
+                  s.status === "adding"),
             );
-            
+
             if (hasNewlyAdded || hasActiveDownloads) {
-              setTimeout(async () => {
-                try {
-                  const refreshedAlbums = await getLibraryAlbums(libraryArtist.id);
-                  setLibraryAlbums(deduplicateAlbums(refreshedAlbums));
-                } catch (err) {
-                  console.error("Failed to refresh albums:", err);
-                }
-              }, hasNewlyAdded ? 2000 : 5000);
+              setTimeout(
+                async () => {
+                  try {
+                    const refreshedAlbums = await getLibraryAlbums(
+                      libraryArtist.id,
+                    );
+                    setLibraryAlbums(deduplicateAlbums(refreshedAlbums));
+                  } catch (err) {
+                    console.error("Failed to refresh albums:", err);
+                  }
+                },
+                hasNewlyAdded ? 2000 : 5000,
+              );
             }
-            
+
             return statuses;
           });
         }
@@ -1039,8 +1169,10 @@ function ArtistDetailsPage() {
       return null;
     }
 
-    const isComplete = album.statistics?.percentOfTracks >= 100 || album.statistics?.sizeOnDisk > 0;
-    
+    const isComplete =
+      album.statistics?.percentOfTracks >= 100 ||
+      album.statistics?.sizeOnDisk > 0;
+
     const downloadStatus = downloadStatuses[album.id];
     if (downloadStatus && !isComplete) {
       const statusLabels = {
@@ -1447,52 +1579,170 @@ function ArtistDetailsPage() {
           </div>
         </div>
 
-        {((artist.tags && artist.tags.length > 0) ||
-          (artist.genres && artist.genres.length > 0)) && (
+        {artist && (
           <div className="mt-3 pt-3">
+            <h3
+              className="text-xs font-semibold uppercase tracking-wider mb-2"
+              style={{ color: "#c1c1c3" }}
+            >
+              Genres & tags
+            </h3>
             <div className="flex flex-wrap gap-2">
               {artist.genres &&
-                artist.genres.map((genre, idx) => (
-                  <button
-                    key={`genre-${idx}`}
-                    onClick={() =>
-                      navigate(
-                        `/search?q=${encodeURIComponent(genre.name)}&type=tag`,
-                      )
-                    }
-                    className="badge text-sm px-3 py-1 hover:opacity-80 cursor-pointer transition-opacity transition-[border-radius] ease hover:!rounded-[50px]"
-                    style={{
-                      backgroundColor: getTagColor(genre.name),
-                      color: "#fff",
-                    }}
-                    title={`View artists with genre: ${genre.name}`}
-                  >
-                    {genre.name}
-                  </button>
-                ))}
+                artist.genres.map((genre, idx) => {
+                  const name = typeof genre === "string" ? genre : genre?.name;
+                  if (!name) return null;
+                  return (
+                    <button
+                      key={`genre-${idx}`}
+                      onClick={() =>
+                        navigate(
+                          `/search?q=${encodeURIComponent(name)}&type=tag`,
+                        )
+                      }
+                      className="badge genre-tag-pill text-sm px-3 py-1 cursor-pointer"
+                      style={{
+                        backgroundColor: getTagColor(name),
+                        color: "#fff",
+                      }}
+                      title={`View artists with genre: ${name}`}
+                    >
+                      {name}
+                    </button>
+                  );
+                })}
               {artist.tags &&
-                artist.tags.map((tag, idx) => (
-                  <button
-                    key={`tag-${idx}`}
-                    onClick={() =>
-                      navigate(
-                        `/search?q=${encodeURIComponent(tag.name)}&type=tag`,
-                      )
-                    }
-                    className="badge text-sm px-3 py-1 hover:opacity-80 cursor-pointer transition-opacity transition-[border-radius] ease hover:!rounded-[50px]"
-                    style={{
-                      backgroundColor: getTagColor(tag.name),
-                      color: "#fff",
-                    }}
-                    title={`View artists with tag: ${tag.name}`}
+                artist.tags.map((tag, idx) => {
+                  const name = typeof tag === "string" ? tag : tag?.name;
+                  if (!name) return null;
+                  return (
+                    <button
+                      key={`tag-${idx}`}
+                      onClick={() =>
+                        navigate(
+                          `/search?q=${encodeURIComponent(name)}&type=tag`,
+                        )
+                      }
+                      className="badge genre-tag-pill text-sm px-3 py-1 cursor-pointer"
+                      style={{
+                        backgroundColor: getTagColor(name),
+                        color: "#fff",
+                      }}
+                      title={`View artists with tag: ${name}`}
+                    >
+                      {name}
+                    </button>
+                  );
+                })}
+              {(!artist.genres || artist.genres.length === 0) &&
+                (!artist.tags || artist.tags.length === 0) && (
+                  <span
+                    className="text-sm"
+                    style={{ color: "#c1c1c3" }}
                   >
-                    {tag.name}
-                  </button>
-                ))}
+                    No genres or tags
+                  </span>
+                )}
             </div>
           </div>
         )}
       </div>
+
+      {(artist || artistNameFromNav) && (
+        <div className="card mb-4 p-4">
+          <h2
+            className="text-lg font-semibold mb-2 flex items-center"
+            style={{ color: "#fff" }}
+          >
+            <Radio className="w-4 h-4 mr-2" style={{ color: "#c1c1c3" }} />
+            Preview
+            {loadingPreview && (
+              <Loader
+                className="w-4 h-4 ml-2 animate-spin"
+                style={{ color: "#c1c1c3" }}
+              />
+            )}
+          </h2>
+          {!loadingPreview && previewTracks.length > 0 && (
+            <>
+              <audio ref={previewAudioRef} />
+              <ul className="space-y-0.5">
+                {previewTracks.map((track) => (
+                  <li
+                    key={track.id}
+                    className="relative flex items-center gap-2 py-2 px-2 rounded hover:bg-black/30 transition-colors cursor-pointer overflow-hidden"
+                    style={{
+                      backgroundColor:
+                        playingPreviewId === track.id
+                          ? "rgba(0,0,0,0.12)"
+                          : undefined,
+                    }}
+                    onClick={() => handlePreviewPlay(track)}
+                  >
+                    {playingPreviewId === track.id && (
+                      <div
+                        className="absolute inset-0 rounded pointer-events-none"
+                        style={{
+                          width: `${previewProgress * 100}%`,
+                          backgroundColor: "rgba(112, 126, 97, 0.55)",
+                          transition: previewSnappingBack
+                            ? "width 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)"
+                            : "width 0.1s linear",
+                          zIndex: 15,
+                        }}
+                      />
+                    )}
+                    <button
+                      type="button"
+                      className="relative z-10 flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
+                      style={{ backgroundColor: "#211f27", color: "#fff" }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePreviewPlay(track);
+                      }}
+                    >
+                      {playingPreviewId === track.id && !previewSnappingBack ? (
+                        <Pause className="w-4 h-4" />
+                      ) : (
+                        <Play className="w-4 h-4 ml-0.5" />
+                      )}
+                    </button>
+                    <div className="relative z-10 flex-1 min-w-0">
+                      <div
+                        className="text-sm font-medium truncate"
+                        style={{ color: "#fff" }}
+                      >
+                        {track.title}
+                      </div>
+                      {track.album && (
+                        <div
+                          className="text-xs truncate"
+                          style={{ color: "#c1c1c3" }}
+                        >
+                          {track.album}
+                        </div>
+                      )}
+                    </div>
+                    {track.duration_ms > 0 && (
+                      <span
+                        className="relative z-10 text-xs flex-shrink-0"
+                        style={{ color: "#c1c1c3" }}
+                      >
+                        0:30
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {!loadingPreview && previewTracks.length === 0 && (
+            <p className="text-xs italic" style={{ color: "#c1c1c3" }}>
+              No preview available
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Albums in Library Section */}
       {existsInLibrary &&
@@ -1512,20 +1762,18 @@ function ArtistDetailsPage() {
           if (downloadedAlbums.length === 0) return null;
 
           return (
-            <div className="card mb-8">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-                <h2
-                  className="text-2xl font-bold  flex items-center"
-                  style={{ color: "#fff" }}
-                >
-                  <FileMusic
-                    className="w-6 h-6 mr-2"
-                    style={{ color: "#c1c1c3" }}
-                  />
-                  Albums in Your Library ({downloadedAlbums.length})
-                </h2>
-              </div>
-              <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+            <div className="card mb-4 p-4">
+              <h2
+                className="text-lg font-semibold mb-2 flex items-center"
+                style={{ color: "#fff" }}
+              >
+                <FileMusic
+                  className="w-4 h-4 mr-2"
+                  style={{ color: "#c1c1c3" }}
+                />
+                Albums in Your Library ({downloadedAlbums.length})
+              </h2>
+              <div className="space-y-1">
                 {downloadedAlbums
                   .sort((a, b) => {
                     const dateA = a.releaseDate || "";
@@ -1546,11 +1794,23 @@ function ArtistDetailsPage() {
                     return (
                       <div
                         key={libraryAlbum.id}
-                        className="hover:bg-gray-900/50 transition-colors"
-                        style={{ backgroundColor: "#211f27" }}
+                        className="transition-colors"
+                        style={{
+                          backgroundColor: isExpanded ? "#2a2830" : "#211f27",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isExpanded) {
+                            e.currentTarget.style.backgroundColor = "#25232b";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isExpanded) {
+                            e.currentTarget.style.backgroundColor = "#211f27";
+                          }
+                        }}
                       >
                         <div
-                          className={`flex items-center justify-between p-4 cursor-pointer`}
+                          className="flex items-center justify-between py-2.5 px-3 cursor-pointer"
                           onClick={() =>
                             handleAlbumClick(
                               libraryAlbum.mbid || libraryAlbum.foreignAlbumId,
@@ -1558,7 +1818,7 @@ function ArtistDetailsPage() {
                             )
                           }
                         >
-                          <div className="flex-1 flex items-center gap-3">
+                          <div className="flex-1 flex items-center gap-2">
                             <button
                               type="button"
                               onClick={(e) => {
@@ -1569,7 +1829,7 @@ function ArtistDetailsPage() {
                                   libraryAlbum.id,
                                 );
                               }}
-                              className=" hover:text-gray-300 transition-colors"
+                              className="hover:text-gray-300 transition-colors"
                               style={{ color: "#c1c1c3" }}
                             >
                               {isExpanded ? (
@@ -1589,30 +1849,30 @@ function ArtistDetailsPage() {
                                   ]
                                 }
                                 alt={libraryAlbum.albumName}
-                                className="w-12 h-12 flex-shrink-0 object-cover"
+                                className="w-10 h-10 flex-shrink-0 object-cover"
                                 loading="lazy"
                                 decoding="async"
                               />
                             ) : (
                               <div
-                                className="w-12 h-12 flex-shrink-0  flex items-center justify-center"
+                                className="w-10 h-10 flex-shrink-0 flex items-center justify-center"
                                 style={{ backgroundColor: "#211f27" }}
                               >
                                 <Music
-                                  className="w-6 h-6 "
+                                  className="w-5 h-5"
                                   style={{ color: "#c1c1c3" }}
                                 />
                               </div>
                             )}
-                            <div className="flex-1">
+                            <div className="flex-1 min-w-0">
                               <h3
-                                className="font-semibold "
+                                className="font-semibold text-sm truncate"
                                 style={{ color: "#fff" }}
                               >
                                 {libraryAlbum.albumName}
                               </h3>
                               <div
-                                className="flex items-center gap-3 mt-1 text-sm "
+                                className="flex items-center gap-2 mt-0.5 text-xs"
                                 style={{ color: "#c1c1c3" }}
                               >
                                 {libraryAlbum.releaseDate && (
@@ -1754,12 +2014,11 @@ function ArtistDetailsPage() {
 
                         {isExpanded && (
                           <div
-                            className=" px-4 py-4 /50 overflow-hidden"
+                            className="px-3 py-2 overflow-hidden"
                             style={{ backgroundColor: "#211f27" }}
                           >
-                            {/* Show library album info */}
-                            <div className="mb-4 pb-4 ">
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                            <div className="mb-2 pb-2">
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                                 {libraryAlbum.statistics && (
                                   <>
                                     <div>
@@ -1846,12 +2105,11 @@ function ArtistDetailsPage() {
                               </div>
                             </div>
 
-                            {/* Show tracks */}
                             <div>
                               {isLoadingTracks ? (
-                                <div className="flex items-center justify-center py-8">
+                                <div className="flex items-center justify-center py-4">
                                   <Loader
-                                    className="w-6 h-6 animate-spin"
+                                    className="w-5 h-5 animate-spin"
                                     style={{ color: "#c1c1c3" }}
                                   />
                                 </div>
@@ -1860,7 +2118,7 @@ function ArtistDetailsPage() {
                                   {tracks.map((track, idx) => (
                                     <div
                                       key={track.id || track.mbid || idx}
-                                      className="flex items-center justify-between p-2 transition-colors"
+                                      className="flex items-center justify-between py-1.5 px-2 transition-colors text-sm"
                                       style={{
                                         backgroundColor:
                                           idx % 2 === 0
@@ -1900,7 +2158,11 @@ function ArtistDetailsPage() {
                                               .padStart(2, "0")}
                                           </span>
                                         )}
-                                        {(track.hasFile || (libraryAlbum?.statistics?.percentOfTracks >= 100) || (libraryAlbum?.statistics?.sizeOnDisk > 0)) ? (
+                                        {track.hasFile ||
+                                        libraryAlbum?.statistics
+                                          ?.percentOfTracks >= 100 ||
+                                        libraryAlbum?.statistics?.sizeOnDisk >
+                                          0 ? (
                                           <CheckCircle className="w-4 h-4 text-green-500" />
                                         ) : libraryAlbum.id ? (
                                           <span
@@ -1934,17 +2196,17 @@ function ArtistDetailsPage() {
         })()}
 
       {artist["release-groups"] && artist["release-groups"].length > 0 && (
-        <div className="card">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+        <div className="card p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
             <h2
-              className="text-2xl font-bold flex items-center"
+              className="text-lg font-semibold flex items-center"
               style={{ color: "#fff" }}
             >
               Albums & Releases (
               {artist["release-groups"].filter(matchesReleaseTypeFilter).length}
               )
             </h2>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
               {/* Primary Type Buttons */}
               <div className="flex items-center gap-2">
                 {primaryReleaseTypes.map((type) => {
@@ -1971,7 +2233,7 @@ function ArtistDetailsPage() {
                           ]);
                         }
                       }}
-                      className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-all"
+                      className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium transition-all"
                       style={{
                         backgroundColor: isSelected ? "#4a4a4a" : "#211f27",
                         color: "#fff",
@@ -2133,7 +2395,7 @@ function ArtistDetailsPage() {
               )}
             </div>
           </div>
-          <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+          <div className="space-y-1">
             {artist["release-groups"]
               .filter(matchesReleaseTypeFilter)
               .sort((a, b) => {
@@ -2148,8 +2410,6 @@ function ArtistDetailsPage() {
                 const trackKey = libraryAlbumId || releaseGroup.id;
                 const tracks = albumTracks[trackKey] || null;
                 const isLoadingTracks = loadingTracks[trackKey] || false;
-                const albumInfo = status?.albumInfo;
-
                 return (
                   <div
                     key={releaseGroup.id}
@@ -2168,59 +2428,59 @@ function ArtistDetailsPage() {
                       }
                     }}
                   >
-                    <div
-                      className={`flex items-center justify-between p-4 cursor-pointer`}
-                      onClick={() =>
-                        handleAlbumClick(releaseGroup.id, status?.libraryId)
-                      }
-                    >
-                      <div className="flex-1 flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAlbumClick(
-                              releaseGroup.id,
-                              status?.libraryId,
-                            );
-                          }}
-                          className=" hover:text-gray-300 transition-colors"
-                          style={{ color: "#c1c1c3" }}
-                        >
-                          {isExpanded ? (
-                            <ChevronUp className="w-4 h-4" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4" />
-                          )}
-                        </button>
-                        {albumCovers[releaseGroup.id] ? (
-                          <img
-                            src={albumCovers[releaseGroup.id]}
-                            alt={releaseGroup.title}
-                            className="w-12 h-12 flex-shrink-0 object-cover"
+<div
+                    className="flex items-center justify-between py-2.5 px-3 cursor-pointer"
+                    onClick={() =>
+                      handleAlbumClick(releaseGroup.id, status?.libraryId)
+                    }
+                  >
+                    <div className="flex-1 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAlbumClick(
+                            releaseGroup.id,
+                            status?.libraryId,
+                          );
+                        }}
+                        className="hover:text-gray-300 transition-colors"
+                        style={{ color: "#c1c1c3" }}
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        )}
+                      </button>
+                      {albumCovers[releaseGroup.id] ? (
+                        <img
+                          src={albumCovers[releaseGroup.id]}
+                          alt={releaseGroup.title}
+                          className="w-10 h-10 flex-shrink-0 object-cover"
                             loading="lazy"
                             decoding="async"
                           />
                         ) : (
                           <div
-                            className="w-12 h-12 flex-shrink-0  flex items-center justify-center"
+                            className="w-10 h-10 flex-shrink-0 flex items-center justify-center"
                             style={{ backgroundColor: "#211f27" }}
                           >
                             <Music
-                              className="w-6 h-6 "
+                              className="w-5 h-5"
                               style={{ color: "#c1c1c3" }}
                             />
                           </div>
                         )}
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <h3
-                            className="font-semibold "
+                            className="font-semibold text-sm truncate"
                             style={{ color: "#fff" }}
                           >
                             {releaseGroup.title}
                           </h3>
                           <div
-                            className="flex items-center gap-3 mt-1 text-sm "
+                            className="flex items-center gap-2 mt-0.5 text-xs"
                             style={{ color: "#c1c1c3" }}
                           >
                             {releaseGroup["first-release-date"] && (
@@ -2445,15 +2705,14 @@ function ArtistDetailsPage() {
 
                     {isExpanded && (
                       <div
-                        className=" px-4 py-4 /50 overflow-hidden"
+                        className="px-3 py-2 overflow-hidden"
                         style={{ backgroundColor: "#211f27" }}
                       >
-                        {/* Show tracks (from library or MusicBrainz) */}
                         <div>
                           {isLoadingTracks ? (
-                            <div className="flex items-center justify-center py-8">
+                            <div className="flex items-center justify-center py-4">
                               <Loader
-                                className="w-6 h-6 animate-spin"
+                                className="w-5 h-5 animate-spin"
                                 style={{ color: "#c1c1c3" }}
                               />
                             </div>
@@ -2462,7 +2721,7 @@ function ArtistDetailsPage() {
                               {tracks.map((track, idx) => (
                                 <div
                                   key={track.id || track.mbid || idx}
-                                  className="flex items-center justify-between p-2 transition-colors"
+                                  className="flex items-center justify-between py-1.5 px-2 transition-colors text-sm"
                                   style={{
                                     backgroundColor:
                                       idx % 2 === 0
@@ -2502,7 +2761,11 @@ function ArtistDetailsPage() {
                                           .padStart(2, "0")}
                                       </span>
                                     )}
-                                    {(track.hasFile || (status?.albumInfo?.statistics?.percentOfTracks >= 100) || (status?.albumInfo?.statistics?.sizeOnDisk > 0)) ? (
+                                    {track.hasFile ||
+                                    status?.albumInfo?.statistics
+                                      ?.percentOfTracks >= 100 ||
+                                    status?.albumInfo?.statistics?.sizeOnDisk >
+                                      0 ? (
                                       <CheckCircle className="w-4 h-4 text-green-500" />
                                     ) : status?.libraryId ? (
                                       <span
@@ -2587,7 +2850,11 @@ function ArtistDetailsPage() {
                   <div
                     key={similar.id}
                     className="flex-shrink-0 w-40 group cursor-pointer"
-                    onClick={() => navigate(`/artist/${similar.id}`)}
+                    onClick={() =>
+                      navigate(`/artist/${similar.id}`, {
+                        state: { artistName: similar.name },
+                      })
+                    }
                   >
                     <div
                       className="relative aspect-square overflow-hidden  mb-2 shadow-sm group-hover:shadow-md transition-all"
@@ -2596,6 +2863,7 @@ function ArtistDetailsPage() {
                       <ArtistImage
                         src={similar.image}
                         mbid={similar.id}
+                        artistName={similar.name}
                         alt={similar.name}
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                       />
@@ -2672,7 +2940,7 @@ function ArtistDetailsPage() {
                     Delete artist folder and files
                   </span>
                   <p className="text-sm  mt-1" style={{ color: "#c1c1c3" }}>
-                    This will permanently delete the artist's folder and all
+                    This will permanently delete the artist&apos;s folder and all
                     music files from your disk. This action cannot be undone.
                   </p>
                 </div>
@@ -2737,7 +3005,7 @@ function ArtistDetailsPage() {
                     Delete album folder and files
                   </span>
                   <p className="text-sm  mt-1" style={{ color: "#c1c1c3" }}>
-                    This will permanently delete the album's folder and all
+                    This will permanently delete the album&apos;s folder and all
                     music files from your disk. This action cannot be undone.
                   </p>
                 </div>

@@ -61,12 +61,6 @@ router.post("/", async (req, res) => {
               ...integrations.musicbrainz,
             }
           : mergedIntegrations.musicbrainz,
-        spotify: integrations.spotify
-          ? {
-              ...(mergedIntegrations.spotify || {}),
-              ...integrations.spotify,
-            }
-          : mergedIntegrations.spotify,
         general: integrations.general
           ? {
               ...(mergedIntegrations.general || {}),

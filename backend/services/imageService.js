@@ -1,5 +1,5 @@
 import { dbOps } from "../config/db-helpers.js";
-import { musicbrainzRequest, spotifySearchArtist } from "./apiClients.js";
+import { musicbrainzRequest, deezerSearchArtist } from "./apiClients.js";
 import axios from "axios";
 
 const negativeImageCache = new Set();
@@ -61,29 +61,17 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
         }
       }
 
-      // Try Spotify first (fastest, best quality)
       if (artistName) {
         try {
-          const spotifyArtist = await spotifySearchArtist(artistName);
-          if (spotifyArtist?.images?.length > 0) {
-            // Get the largest available image (images are sorted by size, largest first)
-            const imageUrl = spotifyArtist.images[0].url;
-            if (imageUrl) {
-              dbOps.setImage(mbid, imageUrl);
-
-              return {
-                url: imageUrl,
-                images: [{
-                  image: imageUrl,
-                  front: true,
-                  types: ["Front"],
-                }]
-              };
-            }
+          const deezer = await deezerSearchArtist(artistName);
+          if (deezer?.imageUrl) {
+            dbOps.setImage(mbid, deezer.imageUrl);
+            return {
+              url: deezer.imageUrl,
+              images: [{ image: deezer.imageUrl, front: true, types: ["Front"] }],
+            };
           }
-        } catch (e) {
-          // Continue to fallback
-        }
+        } catch (e) {}
       }
 
       // Fallback: Try Cover Art Archive (only if we have artist name or can get release groups)

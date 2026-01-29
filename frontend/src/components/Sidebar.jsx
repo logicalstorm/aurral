@@ -166,6 +166,8 @@ function Sidebar({ isOpen, onClose }) {
               {navItems.map((item, index) => {
                 const Icon = item.icon;
                 const active = isActive(item.path);
+                const highlighted = active || hoveredIndex === index;
+                const linkColor = highlighted ? "#fff" : "#c1c1c3";
 
                 return (
                   <Link
@@ -176,11 +178,11 @@ function Sidebar({ isOpen, onClose }) {
                     to={item.path}
                     onMouseEnter={() => setHoveredIndex(index)}
                     className="relative z-20 flex items-center space-x-2.5 px-4 py-2.5 font-medium transition-all duration-200 text-sm"
-                    style={{ color: "#fff" }}
+                    style={{ color: linkColor }}
                   >
                     <Icon
                       className="w-4 h-4 transition-transform group-hover:scale-110 flex-shrink-0"
-                      style={{ color: "#fff" }}
+                      style={{ color: linkColor }}
                     />
                     <span className="truncate">{item.label}</span>
                   </Link>

@@ -230,12 +230,13 @@ function LibraryPage() {
                     className="relative aspect-square overflow-hidden cursor-pointer mb-2 shadow-sm group-hover:shadow-md transition-all"
                     style={{ backgroundColor: "#211f27" }}
                     onClick={() =>
-                      navigate(`/artist/${artist.foreignArtistId}`)
+                      navigate(`/artist/${artist.foreignArtistId}`, { state: { artistName: artist.artistName } })
                     }
                   >
                     <ArtistImage
                       src={lidarrImage || undefined}
                       mbid={artist.foreignArtistId}
+                      artistName={artist.artistName}
                       alt={artist.artistName}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                       showLoading={false}
@@ -257,7 +258,7 @@ function LibraryPage() {
                     className="text-sm font-semibold group-hover:underline transition-colors cursor-pointer truncate text-center"
                     style={{ color: "#fff" }}
                     onClick={() =>
-                      navigate(`/artist/${artist.foreignArtistId}`)
+                      navigate(`/artist/${artist.foreignArtistId}`, { state: { artistName: artist.artistName } })
                     }
                     title={artist.artistName}
                   >

@@ -67,6 +67,33 @@ export class NavidromeClient {
 
     return match || null;
   }
+
+  async searchSongsByArtist(artistName, limit = 5) {
+    const data = await this.request('search3', {
+      query: artistName,
+      songCount: limit,
+      artistCount: 0,
+      albumCount: 0
+    });
+    const songs = data.searchResult3?.song || [];
+    const list = Array.isArray(songs) ? songs : [songs];
+    return list
+      .filter((s) => s.artist && s.artist.toLowerCase() === artistName.toLowerCase())
+      .slice(0, limit)
+      .map((s) => ({
+        id: s.id,
+        title: s.title,
+        album: s.album,
+        duration: s.duration ?? 0
+      }));
+  }
+
+  getStreamUrl(songId) {
+    if (!this.isConfigured()) throw new Error("Navidrome not configured");
+    const params = new URLSearchParams(this.getAuthParams());
+    params.delete('f');
+    return `${this.url}/rest/stream?id=${encodeURIComponent(songId)}&${params.toString()}`;
+  }
   
   async getPlaylists() {
     const data = await this.request('getPlaylists');

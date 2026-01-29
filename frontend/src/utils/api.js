@@ -54,8 +54,10 @@ export const searchArtists = async (query, limit = 20, offset = 0) => {
   return response.data;
 };
 
-export const getArtistDetails = async (mbid) => {
-  const response = await api.get(`/artists/${mbid}`);
+export const getArtistDetails = async (mbid, artistName) => {
+  const response = await api.get(`/artists/${mbid}`, {
+    params: artistName ? { artistName } : {},
+  });
   return response.data;
 };
 
@@ -64,9 +66,14 @@ export const getReleaseGroupTracks = async (mbid) => {
   return response.data;
 };
 
-export const getArtistCover = async (mbid) => {
+export const getArtistCover = async (mbid, artistName) => {
+  const params = {};
+  if (artistName && typeof artistName === "string" && artistName.trim()) {
+    params.artistName = artistName.trim();
+  }
   const response = await api.get(`/artists/${mbid}/cover`, {
-    timeout: 4000, // Reduced timeout for faster failure
+    params,
+    timeout: 4000,
   });
   return response.data;
 };
@@ -81,6 +88,25 @@ export const getSimilarArtistsForArtist = async (mbid, limit = 20) => {
     params: { limit },
   });
   return response.data;
+};
+
+export const getArtistPreview = async (mbid, artistName) => {
+  const response = await api.get(`/artists/${mbid}/preview`, {
+    params: artistName ? { artistName } : {},
+  });
+  return response.data;
+};
+
+export const getStreamUrl = (songId) => {
+  const base = import.meta.env.VITE_API_URL || "/api";
+  const password = localStorage.getItem("auth_password");
+  const username = localStorage.getItem("auth_user") || "admin";
+  let url = `${base}/library/stream/${encodeURIComponent(songId)}`;
+  if (password) {
+    const token = btoa(`${username}:${password}`);
+    url += `?token=${encodeURIComponent(token)}`;
+  }
+  return url;
 };
 
 // Library API functions
