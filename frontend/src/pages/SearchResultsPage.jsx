@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Loader, Music, ArrowLeft } from "lucide-react";
 import { searchArtists, searchArtistsByTag, getDiscovery } from "../utils/api";
@@ -20,6 +20,12 @@ function SearchResultsPage() {
   const [hasMore, setHasMore] = useState(false);
   const [searchTotalCount, setSearchTotalCount] = useState(0);
   const navigate = useNavigate();
+
+  const trimmedQuery = useMemo(() => query.trim(), [query]);
+  const isTagSearch = useMemo(
+    () => type === "tag" || trimmedQuery.startsWith("#"),
+    [type, trimmedQuery],
+  );
 
   const dedupe = useCallback((artists) => {
     const seen = new Set();
@@ -80,23 +86,26 @@ function SearchResultsPage() {
       try {
         let artists = [];
         let totalCount = 0;
-        if (type === "tag") {
-          const data = await searchArtistsByTag(query.trim(), PAGE_SIZE, 0);
+        if (isTagSearch) {
+          const tag = trimmedQuery.startsWith("#")
+            ? trimmedQuery.substring(1)
+            : trimmedQuery;
+          const data = await searchArtistsByTag(tag, PAGE_SIZE, 0);
           artists = data.recommendations || [];
         } else {
-          const data = await searchArtists(query.trim(), PAGE_SIZE, 0);
+          const data = await searchArtists(trimmedQuery, PAGE_SIZE, 0);
           artists = data.artists || [];
           totalCount = data?.count ?? 0;
         }
         const uniqueArtists = dedupe(artists);
         setResults(uniqueArtists);
         setFullList(null);
-        if (type !== "tag") {
+        if (!isTagSearch) {
           setSearchTotalCount(totalCount);
         }
         setHasMore(
-          (type === "tag" && uniqueArtists.length >= PAGE_SIZE) ||
-            (type !== "tag" && totalCount > uniqueArtists.length),
+          (isTagSearch && uniqueArtists.length >= PAGE_SIZE) ||
+            (!isTagSearch && totalCount > uniqueArtists.length),
         );
         if (uniqueArtists.length > 0) {
           const imagesMap = {};
@@ -118,7 +127,7 @@ function SearchResultsPage() {
     };
 
     performSearch();
-  }, [query, type, dedupe]);
+  }, [query, type, dedupe, trimmedQuery, isTagSearch]);
 
   const loadMore = useCallback(async () => {
     if (type === "recommended" || type === "trending") {
@@ -129,14 +138,13 @@ function SearchResultsPage() {
       setHasMore((fullList?.length ?? 0) > next);
       return;
     }
-    if (type === "tag") {
+    if (isTagSearch) {
       setLoadingMore(true);
       try {
-        const data = await searchArtistsByTag(
-          query.trim(),
-          PAGE_SIZE,
-          results.length,
-        );
+        const tag = trimmedQuery.startsWith("#")
+          ? trimmedQuery.substring(1)
+          : trimmedQuery;
+        const data = await searchArtistsByTag(tag, PAGE_SIZE, results.length);
         const newArtists = data.recommendations || [];
         const combined = dedupe([...results, ...newArtists]);
         setResults(combined);
@@ -172,7 +180,16 @@ function SearchResultsPage() {
     } finally {
       setLoadingMore(false);
     }
-  }, [type, fullList, visibleCount, query, results, dedupe]);
+  }, [
+    type,
+    fullList,
+    visibleCount,
+    query,
+    results,
+    dedupe,
+    trimmedQuery,
+    isTagSearch,
+  ]);
 
   const getArtistType = (artistType) => {
     const types = {
@@ -197,13 +214,13 @@ function SearchResultsPage() {
   const showBackButton =
     type === "recommended" ||
     type === "trending" ||
-    type === "tag" ||
-    !!query.trim();
+    isTagSearch ||
+    !!trimmedQuery;
   const showLoadMore =
     hasMore &&
     (type === "recommended" || type === "trending"
       ? results.length > PAGE_SIZE
-      : type === "tag"
+      : isTagSearch
         ? results.length >= PAGE_SIZE
         : results.length >= PAGE_SIZE && searchTotalCount > PAGE_SIZE);
 
@@ -224,12 +241,12 @@ function SearchResultsPage() {
             ? "Recommended for You"
             : type === "trending"
               ? "Global Trending"
-              : type === "tag"
+              : isTagSearch
                 ? "Genre Results"
-                : query.trim()
+                : trimmedQuery
                   ? loading
-                    ? `Showing results for "${query}"`
-                    : `Showing ${results.length} results for "${query}"`
+                    ? `Showing results for "${trimmedQuery}"`
+                    : `Showing ${results.length} results for "${trimmedQuery}"`
                   : "Search Results"}
         </h1>
         {type === "recommended" && (
@@ -241,8 +258,10 @@ function SearchResultsPage() {
         {type === "trending" && (
           <p style={{ color: "#c1c1c3" }}>Trending artists right now</p>
         )}
-        {type === "tag" && query && (
-          <p style={{ color: "#c1c1c3" }}>{`Top artists for tag "${query}"`}</p>
+        {isTagSearch && trimmedQuery && (
+          <p
+            style={{ color: "#c1c1c3" }}
+          >{`Top artists for tag "${trimmedQuery.startsWith("#") ? trimmedQuery.substring(1) : trimmedQuery}"`}</p>
         )}
       </div>
 
@@ -278,9 +297,9 @@ function SearchResultsPage() {
               <p style={{ color: "#c1c1c3" }}>
                 {type === "recommended" || type === "trending"
                   ? "Nothing to show here yet."
-                  : type === "tag"
-                    ? `We couldn't find any top artists for tag "${query}"`
-                    : `We couldn't find any artists matching "${query}"`}
+                  : isTagSearch
+                    ? `We couldn't find any top artists for tag "${trimmedQuery.startsWith("#") ? trimmedQuery.substring(1) : trimmedQuery}"`
+                    : `We couldn't find any artists matching "${trimmedQuery}"`}
               </p>
             </div>
           ) : (

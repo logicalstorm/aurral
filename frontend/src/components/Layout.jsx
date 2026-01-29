@@ -17,7 +17,13 @@ function Layout({ children }) {
   const handleSearch = (e) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+      const trimmedQuery = searchQuery.trim();
+      if (trimmedQuery.startsWith("#")) {
+        const tag = trimmedQuery.substring(1);
+        navigate(`/search?q=${encodeURIComponent(tag)}&type=tag`);
+      } else {
+        navigate(`/search?q=${encodeURIComponent(trimmedQuery)}`);
+      }
       setSearchQuery("");
     }
   };
@@ -48,7 +54,7 @@ function Layout({ children }) {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search artists..."
+              placeholder="Search artists or #tags"
               className="block w-full pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 transition-shadow shadow-sm"
               style={{
                 focusRingColor: "#c1c1c3",
