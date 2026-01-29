@@ -9,6 +9,7 @@ import {
   LogOut,
   Github,
   Heart,
+  AudioWaveform,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -33,6 +34,7 @@ function Sidebar({ isOpen, onClose }) {
     () => [
       { path: "/discover", label: "Discover", icon: Sparkles },
       { path: "/library", label: "Library", icon: Library },
+      { path: "/flow", label: "Flow", icon: AudioWaveform },
       { path: "/requests", label: "Requests", icon: History },
       { path: "/settings", label: "Settings", icon: Settings },
     ],

@@ -21,6 +21,7 @@ import libraryRouter from "./backend/routes/library.js";
 import discoveryRouter from "./backend/routes/discovery.js";
 import requestsRouter from "./backend/routes/requests.js";
 import healthRouter from "./backend/routes/health.js";
+import weeklyFlowRouter from "./backend/routes/weeklyFlow.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -61,6 +62,7 @@ app.use("/api/library", libraryRouter);
 app.use("/api/discover", discoveryRouter);
 app.use("/api/requests", requestsRouter);
 app.use("/api/health", healthRouter);
+app.use("/api/weekly-flow", weeklyFlowRouter);
 
 const frontendDist = path.join(__dirname, "frontend", "dist");
 

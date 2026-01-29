@@ -147,4 +147,108 @@ router.post("/playlist/:playlistType/create", async (req, res) => {
   }
 });
 
+router.get("/test/soulseek", async (req, res) => {
+  try {
+    if (!soulseekClient.isConfigured()) {
+      return res.status(400).json({
+        error: "Soulseek not configured",
+        configured: false,
+      });
+    }
+
+    const connected = soulseekClient.isConnected();
+    if (!connected) {
+      try {
+        await soulseekClient.connect();
+      } catch (error) {
+        return res.status(500).json({
+          error: "Failed to connect to Soulseek",
+          message: error.message,
+          configured: true,
+          connected: false,
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      configured: true,
+      connected: true,
+      message: "Soulseek client is ready",
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Soulseek test failed",
+      message: error.message,
+    });
+  }
+});
+
+router.post("/test/download", async (req, res) => {
+  try {
+    const { artistName, trackName } = req.body;
+
+    if (!artistName || !trackName) {
+      return res.status(400).json({
+        error: "artistName and trackName are required",
+      });
+    }
+
+    if (!soulseekClient.isConfigured()) {
+      return res.status(400).json({
+        error: "Soulseek not configured",
+      });
+    }
+
+    if (!soulseekClient.isConnected()) {
+      await soulseekClient.connect();
+    }
+
+    const searchWithTimeout = (ms) =>
+      Promise.race([
+        soulseekClient.search(artistName, trackName),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Search timed out")), ms),
+        ),
+      ]);
+
+    const results = await searchWithTimeout(15000);
+    if (!results || results.length === 0) {
+      return res.status(404).json({
+        error: "No search results found",
+        artistName,
+        trackName,
+      });
+    }
+
+    const bestMatch = soulseekClient.pickBestMatch(results, trackName);
+    if (!bestMatch) {
+      return res.status(404).json({
+        error: "No suitable match found",
+        resultsCount: results.length,
+      });
+    }
+
+    res.json({
+      success: true,
+      artistName,
+      trackName,
+      resultsCount: results.length,
+      bestMatch: {
+        file: bestMatch.file,
+        size: bestMatch.size,
+        user: bestMatch.user,
+        slots: bestMatch.slots,
+      },
+      message: "Search successful - ready to download",
+    });
+  } catch (error) {
+    console.error("[weekly-flow] test/download error:", error);
+    res.status(500).json({
+      error: "Test download failed",
+      message: error?.message || String(error),
+    });
+  }
+});
+
 export default router;

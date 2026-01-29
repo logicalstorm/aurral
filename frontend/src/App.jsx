@@ -13,6 +13,7 @@ import LibraryPage from "./pages/LibraryPage";
 import SettingsPage from "./pages/SettingsPage";
 import ArtistDetailsPage from "./pages/ArtistDetailsPage";
 import RequestsPage from "./pages/RequestsPage";
+import FlowPage from "./pages/FlowPage";
 import Login from "./pages/Login";
 import { checkHealth } from "./utils/api";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -122,6 +123,7 @@ function AppContent() {
             <Route path="/search" element={<SearchResultsPage />} />
             <Route path="/discover" element={<Navigate to="/" replace />} />
             <Route path="/library" element={<LibraryPage />} />
+            <Route path="/flow" element={<FlowPage />} />
             <Route path="/requests" element={<RequestsPage />} />
             <Route path="/artist/:mbid" element={<ArtistDetailsPage />} />
             <Route path="/settings" element={<SettingsPage />} />

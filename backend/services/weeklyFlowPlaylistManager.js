@@ -167,6 +167,8 @@ export class WeeklyFlowPlaylistManager {
       const playlistNames = {
         discover: "Aurral Discover",
         recommended: "Aurral Recommended",
+        mix: "Aurral Mix",
+        trending: "Aurral Trending",
       };
 
       for (const playlistType of playlistTypes) {
@@ -235,6 +237,8 @@ export class WeeklyFlowPlaylistManager {
     const names = {
       discover: "Aurral Discover",
       recommended: "Aurral Recommended",
+      mix: "Aurral Mix",
+      trending: "Aurral Trending",
     };
     return names[playlistType] || `Aurral ${playlistType}`;
   }

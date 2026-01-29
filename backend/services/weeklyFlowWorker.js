@@ -88,8 +88,16 @@ export class WeeklyFlowWorker {
         throw new Error("No suitable match found");
       }
 
+      const extFromSoulseek = path.extname(bestMatch.file || "");
+      const ext =
+        extFromSoulseek && /^\.(flac|mp3|m4a|ogg|wav)$/i.test(extFromSoulseek)
+          ? extFromSoulseek
+          : ".mp3";
+
       await fs.mkdir(stagingDir, { recursive: true });
-      await soulseekClient.download(bestMatch, stagingPath);
+      const stagingFile = `${job.artistName} - ${job.trackName}${ext}`;
+      const stagingFilePath = path.join(stagingDir, stagingFile);
+      await soulseekClient.download(bestMatch, stagingFilePath);
 
       const downloadedFiles = await fs.readdir(stagingDir);
       if (downloadedFiles.length === 0) {
@@ -98,21 +106,34 @@ export class WeeklyFlowWorker {
 
       const downloadedFile = downloadedFiles[0];
       const sourcePath = path.join(stagingDir, downloadedFile);
-      const ext = path.extname(downloadedFile) || ".mp3";
+      const finalExt = path.extname(downloadedFile) || ext;
 
       const sanitize = (str) => {
         return str.replace(/[<>:"/\\|?*]/g, "_").trim();
       };
 
+      const parseAlbumFromPath = (filePath) => {
+        if (!filePath || typeof filePath !== "string") return null;
+        const normalized = filePath.replace(/\\/g, "/").trim();
+        const parts = normalized.split("/").filter(Boolean);
+        if (parts.length >= 2) {
+          return parts[parts.length - 2];
+        }
+        return null;
+      };
+
       const artistDir = sanitize(job.artistName);
-      const albumDir = "Unknown Album";
+      const albumFromPath = parseAlbumFromPath(bestMatch.file);
+      const albumDir = albumFromPath
+        ? sanitize(albumFromPath)
+        : "Unknown Album";
       const finalDir = path.join(
         this.weeklyFlowRoot,
         job.playlistType,
         artistDir,
         albumDir,
       );
-      const finalFileName = `${sanitize(job.trackName)}${ext}`;
+      const finalFileName = `${sanitize(job.trackName)}${finalExt}`;
       const finalPath = path.join(finalDir, finalFileName);
 
       await fs.mkdir(finalDir, { recursive: true });
