@@ -113,6 +113,23 @@
     background-color: #211f27;
     color: #fff;
     --tw-ring-color: #c1c1c3;
+    --tw-ring-offset-color: #211f27;
+    border-radius: 2px;
+    box-sizing: border-box;
+  }
+
+  .input:-webkit-autofill,
+  .input:-webkit-autofill:hover,
+  .input:-webkit-autofill:focus,
+  .input:-webkit-autofill:active {
+    -webkit-text-fill-color: #fff !important;
+    -webkit-box-shadow: 0 0 0 1000px #211f27 inset !important;
+    box-shadow: 0 0 0 1000px #211f27 inset !important;
+    background-color: #211f27 !important;
+    caret-color: #fff !important;
+    border-radius: 2px;
+    outline: none;
+    transition: background-color 5000s ease-in-out 0s;
   }
 
   .input-sm {

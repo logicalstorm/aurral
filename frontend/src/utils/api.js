@@ -47,7 +47,7 @@ export const getAuthConfig = async () => {
   return response.data;
 };
 
-export const searchArtists = async (query, limit = 20, offset = 0) => {
+export const searchArtists = async (query, limit = 24, offset = 0) => {
   const response = await api.get("/search/artists", {
     params: { query, limit, offset },
   });
@@ -294,9 +294,9 @@ export const getSimilarArtists = async (limit = 20) => {
   return response.data;
 };
 
-export const searchArtistsByTag = async (tag, limit = 20) => {
+export const searchArtistsByTag = async (tag, limit = 24, offset = 0) => {
   const response = await api.get("/discover/by-tag", {
-    params: { tag, limit },
+    params: { tag, limit, offset },
   });
   return response.data;
 };

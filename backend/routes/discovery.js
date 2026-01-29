@@ -238,11 +238,15 @@ router.get("/similar", (req, res) => {
 
 router.get("/by-tag", async (req, res) => {
   try {
-    const { tag, limit = 20 } = req.query;
+    const { tag, limit = 24, offset = 0 } = req.query;
 
     if (!tag) {
       return res.status(400).json({ error: "Tag parameter is required" });
     }
+
+    const limitInt = Math.min(parseInt(limit) || 24, 50);
+    const offsetInt = parseInt(offset) || 0;
+    const page = Math.floor(offsetInt / limitInt) + 1;
 
     let recommendations = [];
 
@@ -250,7 +254,8 @@ router.get("/by-tag", async (req, res) => {
       try {
         const data = await lastfmRequest("tag.getTopArtists", {
           tag,
-          limit: Math.min(parseInt(limit) * 2, 50),
+          limit: limitInt,
+          page,
         });
 
         if (data?.topartists?.artist) {
@@ -295,13 +300,13 @@ router.get("/by-tag", async (req, res) => {
     const existingArtistIds = new Set(libraryArtists.map((a) => a.mbid));
 
     const filtered = recommendations
-      .filter((artist) => !existingArtistIds.has(artist.id))
-      .slice(0, parseInt(limit));
+      .filter((artist) => !existingArtistIds.has(artist.id));
 
     res.json({
       recommendations: filtered,
       tag,
       total: filtered.length,
+      offset: offsetInt,
     });
   } catch (error) {
     res.status(500).json({

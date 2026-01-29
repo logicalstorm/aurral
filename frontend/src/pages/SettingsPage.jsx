@@ -68,6 +68,7 @@ function SettingsPage() {
   const navigateBase = useNavigate();
   const previousLocationRef = useRef("/settings");
   const hasUnsavedChangesRef = useRef(false);
+  const comparisonEnabledRef = useRef(false);
 
   useEffect(() => {
     hasUnsavedChangesRef.current = hasUnsavedChanges;
@@ -75,6 +76,7 @@ function SettingsPage() {
 
   const fetchSettings = async () => {
     setLoading(true);
+    comparisonEnabledRef.current = false;
     try {
       const [healthData, savedSettings] = await Promise.all([
         checkHealth(),
@@ -82,6 +84,7 @@ function SettingsPage() {
       ]);
       setHealth(healthData);
 
+      const lidarr = savedSettings.integrations?.lidarr || {};
       const updatedSettings = {
         ...savedSettings,
         releaseTypes: savedSettings.releaseTypes || allReleaseTypes,
@@ -92,7 +95,11 @@ function SettingsPage() {
             apiKey: "",
             qualityProfileId: null,
             searchOnAdd: false,
-            ...(savedSettings.integrations?.lidarr || {}),
+            ...lidarr,
+            qualityProfileId:
+              lidarr.qualityProfileId != null
+                ? parseInt(lidarr.qualityProfileId, 10)
+                : null,
           },
           navidrome: {
             url: "",
@@ -123,6 +130,9 @@ function SettingsPage() {
       setSettings(updatedSettings);
       setOriginalSettings(JSON.parse(JSON.stringify(updatedSettings)));
       setHasUnsavedChanges(false);
+      setTimeout(() => {
+        comparisonEnabledRef.current = true;
+      }, 600);
 
       if (
         updatedSettings.integrations?.lidarr?.url &&
@@ -177,7 +187,9 @@ function SettingsPage() {
 
   const updateSettings = (newSettings) => {
     setSettings(newSettings);
-    setHasUnsavedChanges(checkForChanges(newSettings));
+    if (comparisonEnabledRef.current) {
+      setHasUnsavedChanges(checkForChanges(newSettings));
+    }
   };
 
   useEffect(() => {
@@ -449,7 +461,7 @@ function SettingsPage() {
                 {saving ? "Saving..." : "Save"}
               </button>
             </div>
-            <form onSubmit={handleSaveSettings} className="space-y-6">
+            <form onSubmit={handleSaveSettings} className="space-y-6" autoComplete="off">
               <div
                 className="p-6 rounded-lg space-y-4"
                 style={{
@@ -483,6 +495,7 @@ function SettingsPage() {
                       type="url"
                       className="input"
                       placeholder="http://lidarr:8686"
+                      autoComplete="off"
                       value={settings.integrations?.lidarr?.url || ""}
                       onChange={(e) =>
                         updateSettings({
@@ -510,6 +523,7 @@ function SettingsPage() {
                         type="password"
                         className="input flex-1"
                         placeholder="Enter Lidarr API Key"
+                        autoComplete="off"
                         value={settings.integrations?.lidarr?.apiKey || ""}
                         onChange={(e) =>
                           updateSettings({
@@ -798,6 +812,7 @@ function SettingsPage() {
                     type="url"
                     className="input"
                     placeholder="https://music.example.com"
+                    autoComplete="off"
                     value={settings.integrations?.navidrome?.url || ""}
                     onChange={(e) =>
                       updateSettings({
@@ -824,6 +839,7 @@ function SettingsPage() {
                     <input
                       type="text"
                       className="input"
+                      autoComplete="off"
                       value={settings.integrations?.navidrome?.username || ""}
                       onChange={(e) =>
                         updateSettings({
@@ -849,6 +865,7 @@ function SettingsPage() {
                     <input
                       type="password"
                       className="input"
+                      autoComplete="off"
                       value={settings.integrations?.navidrome?.password || ""}
                       onChange={(e) =>
                         updateSettings({
@@ -894,7 +911,7 @@ function SettingsPage() {
                 {saving ? "Saving..." : "Save"}
               </button>
             </div>
-            <form onSubmit={handleSaveSettings} className="space-y-6">
+            <form onSubmit={handleSaveSettings} className="space-y-6" autoComplete="off">
               <div
                 className="p-6 rounded-lg space-y-4"
                 style={{
@@ -927,6 +944,7 @@ function SettingsPage() {
                     type="email"
                     className="input"
                     placeholder="contact@example.com"
+                    autoComplete="off"
                     value={settings.integrations?.musicbrainz?.email || ""}
                     onChange={(e) =>
                       updateSettings({
@@ -980,6 +998,7 @@ function SettingsPage() {
                       type="password"
                       className="input"
                       placeholder="Last.fm API Key"
+                      autoComplete="off"
                       value={settings.integrations?.lastfm?.apiKey || ""}
                       onChange={(e) =>
                         updateSettings({
@@ -1006,6 +1025,7 @@ function SettingsPage() {
                       type="text"
                       className="input"
                       placeholder="Your Last.fm username"
+                      autoComplete="off"
                       value={settings.integrations?.lastfm?.username || ""}
                       onChange={(e) =>
                         updateSettings({
@@ -1061,7 +1081,7 @@ function SettingsPage() {
                 {saving ? "Saving..." : "Save"}
               </button>
             </div>
-            <form onSubmit={handleSaveSettings} className="space-y-6">
+            <form onSubmit={handleSaveSettings} className="space-y-6" autoComplete="off">
               <div
                 className="p-6 rounded-lg space-y-4"
                 style={{
@@ -1095,6 +1115,7 @@ function SettingsPage() {
                       type="text"
                       className="input"
                       placeholder="admin"
+                      autoComplete="off"
                       value={settings.integrations?.general?.authUser || ""}
                       onChange={(e) =>
                         updateSettings({
@@ -1121,6 +1142,7 @@ function SettingsPage() {
                       type="password"
                       className="input"
                       placeholder="Leave empty to disable auth"
+                      autoComplete="off"
                       value={settings.integrations?.general?.authPassword || ""}
                       onChange={(e) =>
                         updateSettings({
