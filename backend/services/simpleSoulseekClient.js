@@ -159,12 +159,7 @@ export class SimpleSoulseekClient {
     const dir = path.dirname(absPath);
     await fs.mkdir(dir, { recursive: true });
 
-    const normalizedResult = {
-      ...result,
-      file: (result.file || "").replace(/\\/g, "/"),
-    };
-
-    const DOWNLOAD_TIMEOUT_MS = 120000;
+    const DOWNLOAD_TIMEOUT_MS = 300000;
 
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -188,32 +183,29 @@ export class SimpleSoulseekClient {
         }
       }, DOWNLOAD_TIMEOUT_MS);
 
-      this.client.downloadStream(
-        { file: normalizedResult },
-        (err, readStream) => {
-          if (err) {
-            clearTimeout(timeoutId);
-            reject(err);
-            return;
-          }
-          const writeStream = createWriteStream(absPath);
-          readStream.pipe(writeStream);
-          writeStream.on("finish", () => {
-            clearTimeout(timeoutId);
-            settle(resolve)(absPath);
-          });
-          writeStream.on("error", (e) => {
-            clearTimeout(timeoutId);
-            readStream.destroy();
-            settle(reject)(e);
-          });
-          readStream.on("error", (e) => {
-            clearTimeout(timeoutId);
-            writeStream.destroy();
-            settle(reject)(e);
-          });
-        },
-      );
+      this.client.downloadStream({ file: result }, (err, readStream) => {
+        if (err) {
+          clearTimeout(timeoutId);
+          reject(err);
+          return;
+        }
+        const writeStream = createWriteStream(absPath);
+        readStream.pipe(writeStream);
+        writeStream.on("finish", () => {
+          clearTimeout(timeoutId);
+          settle(resolve)(absPath);
+        });
+        writeStream.on("error", (e) => {
+          clearTimeout(timeoutId);
+          readStream.destroy();
+          settle(reject)(e);
+        });
+        readStream.on("error", (e) => {
+          clearTimeout(timeoutId);
+          writeStream.destroy();
+          settle(reject)(e);
+        });
+      });
     });
   }
 }

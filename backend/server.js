@@ -74,8 +74,4 @@ websocketService.initialize(httpServer);
 httpServer.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`WebSocket available at ws://localhost:${PORT}/ws`);
-  const { libraryManager } = await import("./services/libraryManager.js");
-
-  const rootFolder = libraryManager.getRootFolder();
-  console.log(`Root folder: ${rootFolder || "Not configured"}`);
 });

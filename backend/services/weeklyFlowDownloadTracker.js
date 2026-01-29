@@ -40,6 +40,22 @@ export class WeeklyFlowDownloadTracker {
     const rows = selectAllStmt.all();
     for (const row of rows) {
       const job = rowToJob(row);
+      if (job.playlistType === "recommended") {
+        job.playlistType = "discover";
+        updateStmt.run(
+          job.status,
+          job.stagingPath,
+          job.finalPath,
+          job.error,
+          job.startedAt,
+          job.completedAt,
+          job.id,
+        );
+        const updateTypeStmt = db.prepare(
+          "UPDATE weekly_flow_jobs SET playlist_type = ? WHERE id = ?",
+        );
+        updateTypeStmt.run("discover", job.id);
+      }
       if (job.status === "downloading") {
         job.status = "pending";
         job.startedAt = null;
@@ -191,6 +207,20 @@ export class WeeklyFlowDownloadTracker {
       }
     }
     return jobs;
+  }
+
+  resetDownloadingToPending() {
+    let count = 0;
+    for (const job of this.jobs.values()) {
+      if (job.status === "downloading") {
+        job.status = "pending";
+        job.startedAt = null;
+        job.stagingPath = null;
+        this._update(job);
+        count++;
+      }
+    }
+    return count;
   }
 
   getAll() {

@@ -37,9 +37,12 @@ export class WeeklyFlowPlaylistManager {
 
   async createSymlink(sourcePath, playlistType) {
     if (!this.navidromeMusicFolder) {
-      console.warn(
-        "[WeeklyFlowPlaylistManager] Navidrome music folder not configured, skipping symlink",
-      );
+      return null;
+    }
+
+    try {
+      await fs.access(path.dirname(this.navidromeMusicFolder));
+    } catch {
       return null;
     }
 
@@ -158,7 +161,7 @@ export class WeeklyFlowPlaylistManager {
     }
   }
 
-  async weeklyReset(playlistTypes = ["discover", "recommended"]) {
+  async weeklyReset(playlistTypes = ["discover", "mix", "trending"]) {
     if (!this.navidromeClient || !this.navidromeClient.isConfigured()) {
       console.warn(
         "[WeeklyFlowPlaylistManager] Navidrome not configured, skipping playlist deletion",
@@ -166,7 +169,6 @@ export class WeeklyFlowPlaylistManager {
     } else {
       const playlistNames = {
         discover: "Aurral Discover",
-        recommended: "Aurral Recommended",
         mix: "Aurral Mix",
         trending: "Aurral Trending",
       };
@@ -213,7 +215,19 @@ export class WeeklyFlowPlaylistManager {
       }
     }
 
+    const fallbackDir = path.join(this.weeklyFlowRoot, "_fallback");
+    try {
+      await fs.rm(fallbackDir, { recursive: true, force: true });
+    } catch {}
+
     for (const playlistType of playlistTypes) {
+      const jobs = downloadTracker.getByPlaylistType(playlistType);
+      for (const job of jobs) {
+        const stagingDir = path.join(this.weeklyFlowRoot, "_staging", job.id);
+        try {
+          await fs.rm(stagingDir, { recursive: true, force: true });
+        } catch {}
+      }
       const playlistDir = path.join(this.weeklyFlowRoot, playlistType);
       try {
         await fs.rm(playlistDir, { recursive: true, force: true });
@@ -226,9 +240,16 @@ export class WeeklyFlowPlaylistManager {
           error.message,
         );
       }
+      if (playlistType === "discover") {
+        try {
+          await fs.rm(path.join(this.weeklyFlowRoot, "recommended"), {
+            recursive: true,
+            force: true,
+          });
+        } catch {}
+      }
+      downloadTracker.clearByPlaylistType(playlistType);
     }
-
-    downloadTracker.clearAll();
 
     await this.triggerNavidromeScan();
   }
@@ -236,7 +257,6 @@ export class WeeklyFlowPlaylistManager {
   getPlaylistName(playlistType) {
     const names = {
       discover: "Aurral Discover",
-      recommended: "Aurral Recommended",
       mix: "Aurral Mix",
       trending: "Aurral Trending",
     };

@@ -369,7 +369,7 @@ export const startFlowPlaylist = async (playlistType, limit = 30) => {
 };
 
 export const resetFlowPlaylists = async (
-  playlistTypes = ["discover", "recommended", "mix", "trending"],
+  playlistTypes = ["discover", "mix", "trending"],
 ) => {
   const response = await api.post("/weekly-flow/reset", {
     playlistTypes,

@@ -20,30 +20,6 @@ function getSettings() {
 }
 
 export class LibraryManager {
-  constructor() {
-    this._rootFolder = null;
-    this._rootFolderLogged = false;
-  }
-
-  getRootFolder() {
-    if (this._rootFolder === null) {
-      this._rootFolder =
-        process.env.MUSIC_ROOT || process.env.DATA_PATH || "/data";
-
-      if (process.env.NODE_ENV !== "production" && !this._rootFolderLogged) {
-        console.log(
-          `[LibraryManager] Root folder: ${this._rootFolder} (MUSIC_ROOT=${process.env.MUSIC_ROOT || "not set"}, DATA_PATH=${process.env.DATA_PATH || "not set"})`,
-        );
-        this._rootFolderLogged = true;
-      }
-    }
-    return this._rootFolder;
-  }
-
-  setRootFolder(folderPath) {
-    return Promise.resolve();
-  }
-
   async addArtist(mbid, artistName, options = {}) {
     const lidarr = await getLidarrClient();
     if (!lidarr || !lidarr.isConfigured()) {
@@ -203,11 +179,7 @@ export class LibraryManager {
   }
 
   mapLidarrArtist(lidarrArtist) {
-    const rootFolder = this.getRootFolder();
-    const artistPath = path.join(
-      rootFolder,
-      this.sanitizePath(lidarrArtist.artistName),
-    );
+    const artistPath = lidarrArtist.path ?? null;
     return {
       id: lidarrArtist.id?.toString() || lidarrArtist.foreignArtistId,
       mbid: lidarrArtist.foreignArtistId,
@@ -384,15 +356,11 @@ export class LibraryManager {
   }
 
   mapLidarrAlbum(lidarrAlbum, lidarrArtist) {
-    const rootFolder = this.getRootFolder();
-    const artistPath = path.join(
-      rootFolder,
-      this.sanitizePath(lidarrArtist.artistName),
-    );
-    const albumPath = path.join(
-      artistPath,
-      this.sanitizePath(lidarrAlbum.title),
-    );
+    const albumPath =
+      lidarrAlbum.path ??
+      (lidarrArtist.path
+        ? path.join(lidarrArtist.path, this.sanitizePath(lidarrAlbum.title))
+        : null);
 
     const rawStats = lidarrAlbum.statistics || {};
     let percentOfTracks = rawStats.percentOfTracks;

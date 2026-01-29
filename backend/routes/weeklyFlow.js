@@ -8,6 +8,7 @@ import { flowPlaylistConfig } from "../services/weeklyFlowPlaylistConfig.js";
 
 const router = express.Router();
 const DEFAULT_LIMIT = 30;
+const QUEUE_LIMIT = 35;
 
 router.post("/start/:playlistType", async (req, res) => {
   try {
@@ -73,7 +74,7 @@ router.put("/playlist/:playlistType/enabled", async (req, res) => {
       return res.status(400).json({ error: "enabled must be a boolean" });
     }
 
-    const validTypes = ["recommended", "mix", "trending"];
+    const validTypes = ["discover", "mix", "trending"];
     if (!validTypes.includes(playlistType)) {
       return res.status(400).json({ error: "Invalid playlist type" });
     }
@@ -92,7 +93,7 @@ router.put("/playlist/:playlistType/enabled", async (req, res) => {
 
       const tracks = await playlistSource.getTracksForPlaylist(
         playlistType,
-        DEFAULT_LIMIT,
+        QUEUE_LIMIT,
       );
       if (tracks.length === 0) {
         flowPlaylistConfig.setEnabled(playlistType, true);
@@ -191,7 +192,7 @@ router.delete("/jobs/all", (req, res) => {
 router.post("/reset", async (req, res) => {
   try {
     const { playlistTypes } = req.body;
-    const types = playlistTypes || ["discover", "recommended"];
+    const types = playlistTypes || ["discover", "mix", "trending"];
 
     weeklyFlowWorker.stop();
     playlistManager.updateConfig();
