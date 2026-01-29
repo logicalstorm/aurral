@@ -162,9 +162,10 @@ export const defaultData = {
       "Demo",
     ],
     integrations: {
-      navidrome: { url: "", username: "", password: "" },
+      navidrome: { url: "", username: "", password: "", musicFolder: "" },
       lastfm: { username: "", discoveryPeriod: "1month" },
       slskd: { url: "", apiKey: "" },
+      soulseek: { username: "", password: "" },
       lidarr: {
         url: "",
         apiKey: "",

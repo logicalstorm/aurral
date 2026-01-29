@@ -20,6 +20,7 @@ import libraryRouter from "./routes/library.js";
 import discoveryRouter from "./routes/discovery.js";
 import requestsRouter from "./routes/requests.js";
 import healthRouter from "./routes/health.js";
+import weeklyFlowRouter from "./routes/weeklyFlow.js";
 
 // Load .env file from the backend directory
 const __filename = fileURLToPath(import.meta.url);
@@ -48,6 +49,7 @@ app.use("/api/library", libraryRouter);
 app.use("/api/discover", discoveryRouter);
 app.use("/api/requests", requestsRouter);
 app.use("/api/health", healthRouter);
+app.use("/api/weekly-flow", weeklyFlowRouter);
 
 setInterval(updateDiscoveryCache, 24 * 60 * 60 * 1000);
 
