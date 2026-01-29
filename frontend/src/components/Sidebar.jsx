@@ -142,7 +142,7 @@ function Sidebar({ isOpen, onClose }) {
         <div className="flex-1 px-3 py-6 overflow-y-auto flex items-start justify-center">
           <div
             ref={navRef}
-            className="relative p-1.5"
+            className="relative p-3"
             style={{ backgroundColor: "#0f0f12" }}
           >
             {/* Active bubble */}
@@ -160,7 +160,7 @@ function Sidebar({ isOpen, onClose }) {
             />
 
             <nav
-              className="relative flex flex-col space-y-1"
+              className="relative flex flex-col space-y-2"
               onMouseLeave={() => setHoveredIndex(null)}
             >
               {navItems.map((item, index) => {
@@ -177,11 +177,11 @@ function Sidebar({ isOpen, onClose }) {
                     }}
                     to={item.path}
                     onMouseEnter={() => setHoveredIndex(index)}
-                    className="relative z-20 flex items-center space-x-2.5 px-4 py-2.5 font-medium transition-all duration-200 text-sm"
+                    className="relative z-20 flex items-center space-x-3 px-4 py-3.5 font-medium transition-all duration-200 text-base"
                     style={{ color: linkColor }}
                   >
                     <Icon
-                      className="w-4 h-4 transition-transform group-hover:scale-110 flex-shrink-0"
+                      className="w-5 h-5 transition-transform group-hover:scale-110 flex-shrink-0"
                       style={{ color: linkColor }}
                     />
                     <span className="truncate">{item.label}</span>
