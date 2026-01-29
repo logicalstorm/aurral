@@ -22,11 +22,9 @@ import discoveryRouter from "./backend/routes/discovery.js";
 import requestsRouter from "./backend/routes/requests.js";
 import healthRouter from "./backend/routes/health.js";
 
-// Get __dirname for .env file path
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load .env file from the backend directory
 dotenv.config({ path: path.join(__dirname, "backend", ".env") });
 
 process.on("uncaughtException", (error) => {
@@ -103,7 +101,6 @@ setTimeout(async () => {
   const libraryArtists = await libraryManager.getAllArtists();
   const hasArtists = libraryArtists.length > 0;
 
-  // If nothing is configured, clear discovery cache
   if (!hasLastfm && !hasArtists) {
     console.log(
       "Discovery not configured (no Last.fm key and no artists). Clearing cache.",

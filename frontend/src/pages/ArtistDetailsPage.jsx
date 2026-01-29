@@ -47,7 +47,6 @@ import {
 import { useToast } from "../contexts/ToastContext";
 import ArtistImage from "../components/ArtistImage";
 
-// Color palette for tags and genres
 const TAG_COLORS = [
   "#845336",
   "#57553c",
@@ -65,7 +64,6 @@ const TAG_COLORS = [
   "#bc9d66",
 ];
 
-// Get a deterministic color for a tag/genre based on its name
 const getTagColor = (name) => {
   if (!name) return "#211f27";
   let hash = 0;
@@ -85,14 +83,12 @@ function ArtistDetailsPage() {
   const [libraryArtist, setLibraryArtist] = useState(null);
   const [libraryAlbums, setLibraryAlbums] = useState([]);
 
-  // Helper function to deduplicate albums by ID and MBID
   const deduplicateAlbums = (albums) => {
     const seen = new Map();
     return albums.filter((album) => {
-      // Use ID as primary key, MBID+artistId as secondary
       const key = album.id || `${album.mbid}-${album.artistId}`;
       if (seen.has(key)) {
-        return false; // Duplicate
+        return false;
       }
       seen.set(key, true);
       return true;
@@ -126,40 +122,32 @@ function ArtistDetailsPage() {
   ];
   const allReleaseTypes = [...primaryReleaseTypes, ...secondaryReleaseTypes];
 
-  // Load filter settings from localStorage on mount
   const loadFilterSettings = () => {
     try {
       const saved = localStorage.getItem("artistDetailsFilterSettings");
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Validate that all saved types are valid release types
         const validTypes = parsed.filter((type) =>
           allReleaseTypes.includes(type),
         );
-        // If we have valid types and they're not empty, use them; otherwise use all
         if (validTypes.length > 0) {
           return validTypes;
         }
       }
-    } catch (e) {
-      console.warn("Failed to load filter settings from localStorage:", e);
-    }
+    } catch {}
     return allReleaseTypes;
   };
 
   const [selectedReleaseTypes, setSelectedReleaseTypes] =
     useState(loadFilterSettings);
 
-  // Save filter settings to localStorage whenever they change
   useEffect(() => {
     try {
       localStorage.setItem(
         "artistDetailsFilterSettings",
         JSON.stringify(selectedReleaseTypes),
       );
-    } catch (e) {
-      console.warn("Failed to save filter settings to localStorage:", e);
-    }
+    } catch {}
   }, [selectedReleaseTypes]);
   const [showRemoveDropdown, setShowRemoveDropdown] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -188,12 +176,10 @@ function ArtistDetailsPage() {
     setLoadingCover(true);
     setLoadingSimilar(true);
 
-    // Fetch app settings (non-blocking)
     getAppSettings()
       .then(setAppSettings)
       .catch(() => {});
 
-    // Build EventSource URL with authentication
     const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
     const password = localStorage.getItem("auth_password");
     const username = localStorage.getItem("auth_user") || "admin";
@@ -209,17 +195,14 @@ function ArtistDetailsPage() {
     }
     if (streamParams.length) streamUrl += `?${streamParams.join("&")}`;
 
-    // Use EventSource for streaming data
     const eventSource = new EventSource(streamUrl);
     let artistReceived = false;
     let streamComplete = false;
     let coverReceived = false;
     let similarReceived = false;
 
-    // Fallback timeout - if cover/similar don't arrive within 10 seconds, fetch them directly
     const fallbackTimeout = setTimeout(() => {
       if (!coverReceived) {
-        console.log("[Stream] Fallback: Fetching cover directly");
         const nameForCover = artistNameFromNav || artist?.name;
         getArtistCover(mbid, nameForCover)
           .then((coverData) => {
@@ -231,7 +214,6 @@ function ArtistDetailsPage() {
           .finally(() => setLoadingCover(false));
       }
       if (!similarReceived) {
-        console.log("[Stream] Fallback: Fetching similar artists directly");
         getSimilarArtistsForArtist(mbid)
           .then((similarData) => {
             setSimilarArtists(similarData.artists || []);
@@ -241,24 +223,16 @@ function ArtistDetailsPage() {
       }
     }, 10000);
 
-    eventSource.addEventListener("connected", (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        console.log("[Stream] Connected for artist:", data.mbid);
-      } catch (err) {
-        console.error("[Stream] Error parsing connected event:", err);
-      }
-    });
+    eventSource.addEventListener("connected", () => {});
 
     eventSource.addEventListener("artist", (event) => {
       try {
         const artistData = JSON.parse(event.data);
-        console.log("[Stream] Received artist data");
         if (!artistData || !artistData.id) {
           throw new Error("Invalid artist data received");
         }
         setArtist(artistData);
-        setLoading(false); // Show page immediately with basic data
+        setLoading(false);
         artistReceived = true;
       } catch (err) {
         console.error("Error parsing artist data:", err);
@@ -270,11 +244,6 @@ function ArtistDetailsPage() {
     eventSource.addEventListener("cover", (event) => {
       try {
         const coverData = JSON.parse(event.data);
-        console.log(
-          "[Stream] Received cover data:",
-          coverData.images?.length || 0,
-          "images",
-        );
         coverReceived = true;
         if (coverData.images && coverData.images.length > 0) {
           setCoverImages(coverData.images);
@@ -289,11 +258,6 @@ function ArtistDetailsPage() {
     eventSource.addEventListener("similar", (event) => {
       try {
         const similarData = JSON.parse(event.data);
-        console.log(
-          "[Stream] Received similar artists:",
-          similarData.artists?.length || 0,
-          "artists",
-        );
         similarReceived = true;
         setSimilarArtists(similarData.artists || []);
         setLoadingSimilar(false);
@@ -326,12 +290,10 @@ function ArtistDetailsPage() {
     });
 
     eventSource.addEventListener("complete", () => {
-      console.log("[Stream] Stream complete");
       streamComplete = true;
       clearTimeout(fallbackTimeout);
       eventSource.close();
 
-      // Load library data after stream completes
       setLoadingLibrary(true);
       lookupArtistInLibrary(mbid)
         .then((lookup) => {
@@ -353,7 +315,6 @@ function ArtistDetailsPage() {
         })
         .then((artistId) => {
           if (artistId) {
-            // Fetch albums
             setTimeout(() => {
               getLibraryAlbums(artistId)
                 .then((albums) => {
@@ -369,9 +330,7 @@ function ArtistDetailsPage() {
             }, 1000);
           }
         })
-        .catch((e) => {
-          console.error("Failed to lookup artist in library:", e);
-        })
+        .catch(() => {})
         .finally(() => setLoadingLibrary(false));
     });
 
@@ -387,12 +346,8 @@ function ArtistDetailsPage() {
         eventSource.close();
       } catch {
         if (eventSource.readyState === EventSource.CLOSED) {
-          console.warn(
-            "[Stream] Connection closed, falling back to regular API",
-          );
           eventSource.close();
 
-          // Fallback to regular API call
           getArtistDetails(mbid, artistNameFromNav)
             .then((artistData) => {
               if (!artistData || !artistData.id) {
@@ -432,19 +387,10 @@ function ArtistDetailsPage() {
       }
     });
 
-    eventSource.onerror = (err) => {
-      console.error(
-        "[Stream] EventSource onerror:",
-        err,
-        "readyState:",
-        eventSource.readyState,
-      );
-      // Only handle if we haven't received artist data yet
+    eventSource.onerror = () => {
       if (!artistReceived && !streamComplete) {
-        console.error("[Stream] EventSource error before artist data received");
         eventSource.close();
 
-        // Fallback to regular API
         getArtistDetails(mbid, artistNameFromNav)
           .then((artistData) => {
             if (!artistData || !artistData.id) {
@@ -471,7 +417,6 @@ function ArtistDetailsPage() {
               .finally(() => setLoadingSimilar(false));
           })
           .catch((err) => {
-            console.error("Error fetching artist data:", err);
             setError(
               err.response?.data?.message ||
                 err.response?.data?.error ||
@@ -611,7 +556,6 @@ function ArtistDetailsPage() {
       const mbid = libraryArtist.mbid || libraryArtist.foreignArtistId;
       await refreshLibraryArtist(mbid);
 
-      // Refetch the artist data
       setTimeout(async () => {
         try {
           const refreshedArtist = await getLibraryArtist(mbid);
@@ -672,7 +616,6 @@ function ArtistDetailsPage() {
 
     setUpdatingMonitor(true);
     try {
-      // Update monitoring option
       const updatedArtist = {
         ...libraryArtist,
         monitored: newMonitorOption !== "none",
@@ -683,14 +626,12 @@ function ArtistDetailsPage() {
         },
       };
 
-      // Remove any fields that shouldn't be sent in updates
       delete updatedArtist.statistics;
       delete updatedArtist.images;
       delete updatedArtist.links;
 
       await updateLibraryArtist(libraryArtist.mbid, updatedArtist);
 
-      // Refetch the artist from library to get the actual updated data
       const refreshedArtist = await getLibraryArtist(libraryArtist.mbid);
       setLibraryArtist(refreshedArtist);
 
@@ -721,19 +662,15 @@ function ArtistDetailsPage() {
   const getCurrentMonitorOption = () => {
     if (!libraryArtist) return "none";
 
-    // Check monitored status first
     if (libraryArtist.monitored === false) {
       return "none";
     }
 
-    // Get the actual monitor option from the artist data
-    // Check multiple possible locations for the monitor option
     const monitorOption =
       libraryArtist.monitorOption ||
       libraryArtist.addOptions?.monitor ||
       libraryArtist.monitorNewItems;
 
-    // If we have a valid monitor option, return it
     if (
       monitorOption &&
       ["none", "all", "future", "missing", "latest", "first"].includes(
@@ -743,7 +680,6 @@ function ArtistDetailsPage() {
       return monitorOption;
     }
 
-    // Default to "all" if monitored but no specific option set
     return libraryArtist.monitored ? "all" : "none";
   };
 
@@ -766,7 +702,6 @@ function ArtistDetailsPage() {
     }
 
     try {
-      // Add artist to library
       await addArtistToLibrary({
         foreignArtistId: artist.id,
         artistName: artist.name,
@@ -774,7 +709,6 @@ function ArtistDetailsPage() {
         rootFolderPath: appSettings?.rootFolderPath,
       });
 
-      // Refresh library data
       const lookup = await lookupArtistInLibrary(artist.id);
       if (lookup.exists && lookup.artist) {
         const fullArtist = await getLibraryArtist(
@@ -783,7 +717,6 @@ function ArtistDetailsPage() {
         setLibraryArtist(fullArtist);
         setExistsInLibrary(true);
 
-        // Fetch albums for this artist
         await refreshLibraryArtist(
           fullArtist.mbid || fullArtist.foreignArtistId,
         );
@@ -1014,39 +947,29 @@ function ArtistDetailsPage() {
     }
   };
 
-  // Check if a release group matches the selected release type filters
   const matchesReleaseTypeFilter = (releaseGroup) => {
-    // If no filters selected, show all
     if (!selectedReleaseTypes || selectedReleaseTypes.length === 0) return true;
 
     const primaryType = releaseGroup["primary-type"];
     const secondaryTypes = releaseGroup["secondary-types"] || [];
 
-    // Primary type must be in selected types
     if (!selectedReleaseTypes.includes(primaryType)) {
       return false;
     }
 
-    // If there are secondary types, ALL of them must be in selected types
-    // This means if you only select "Album", you won't see "Album, Live" or "Album, Remix"
-    // You need to also select "Live" or "Remix" to see those combinations
     if (secondaryTypes.length > 0) {
       return secondaryTypes.every((secondaryType) =>
         selectedReleaseTypes.includes(secondaryType),
       );
     }
 
-    // Primary type matches and no secondary types - show it
     return true;
   };
 
-  // Check if any filters are active
   const hasActiveFilters = () => {
-    // If selected types don't match all types, filters are active
     if (selectedReleaseTypes.length !== allReleaseTypes.length) {
       return true;
     }
-    // Check if all types are included (order doesn't matter)
     return !allReleaseTypes.every((type) =>
       selectedReleaseTypes.includes(type),
     );
@@ -1073,7 +996,6 @@ function ArtistDetailsPage() {
     setProcessingBulk(true);
     try {
       const ids = unmonitored.map((a) => a.id);
-      // Monitor albums and trigger downloads
       for (const id of ids) {
         const album = libraryAlbums.find((a) => a.id === id);
         if (album) {
@@ -1098,7 +1020,6 @@ function ArtistDetailsPage() {
   const [downloadStatuses, setDownloadStatuses] = useState({});
 
   useEffect(() => {
-    // Poll download status every 5 seconds if we have albums
     if (!libraryAlbums.length || !libraryArtist) return;
 
     const pollDownloadStatus = async () => {
@@ -1145,7 +1066,6 @@ function ArtistDetailsPage() {
       }
     };
 
-    // Poll immediately, then every 15 seconds
     pollDownloadStatus();
     const interval = setInterval(pollDownloadStatus, 15000);
 
@@ -1153,7 +1073,6 @@ function ArtistDetailsPage() {
   }, [libraryAlbums, libraryArtist]);
 
   useEffect(() => {
-    // Refresh albums periodically to catch imports
     if (!libraryArtist) return;
 
     const refreshAlbums = async () => {
@@ -1165,14 +1084,12 @@ function ArtistDetailsPage() {
       }
     };
 
-    // Refresh every 30 seconds
     const interval = setInterval(refreshAlbums, 30000);
 
     return () => clearInterval(interval);
   }, [libraryArtist]);
 
   const getAlbumStatus = (releaseGroupId) => {
-    // If artist is not in library, album is not in library
     if (!existsInLibrary || !libraryArtist || libraryAlbums.length === 0) {
       return null;
     }
@@ -1756,18 +1673,15 @@ function ArtistDetailsPage() {
         </div>
       )}
 
-      {/* Albums in Library Section */}
       {existsInLibrary &&
         libraryAlbums &&
         libraryAlbums.length > 0 &&
         (() => {
-          // Filter to only show albums that have been downloaded (have files)
           const downloadedAlbums = libraryAlbums.filter((album) => {
-            // Show if album has any tracks with files (percentOfTracks > 0) or has size on disk
             return (
               album.statistics?.percentOfTracks > 0 ||
               album.statistics?.sizeOnDisk > 0 ||
-              downloadStatuses[album.id] // Also show if currently downloading
+              downloadStatuses[album.id]
             );
           });
 
@@ -2214,12 +2128,10 @@ function ArtistDetailsPage() {
               style={{ color: "#fff" }}
             >
               Albums & Releases (
-              {artist["release-groups"].filter(matchesReleaseTypeFilter).length}/
-              {artist["release-groups"].length}
-              )
+              {artist["release-groups"].filter(matchesReleaseTypeFilter).length}
+              /{artist["release-groups"].length})
             </h2>
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Primary Type Buttons */}
               <div className="flex items-center gap-2">
                 {primaryReleaseTypes.map((type) => {
                   const isSelected = selectedReleaseTypes.includes(type);
@@ -2259,7 +2171,6 @@ function ArtistDetailsPage() {
                 })}
               </div>
 
-              {/* Filter Dropdown Button */}
               <div className="relative">
                 <button
                   onClick={() => setShowFilterDropdown(!showFilterDropdown)}
@@ -2283,7 +2194,6 @@ function ArtistDetailsPage() {
                   />
                 </button>
 
-                {/* Filter Dropdown Panel */}
                 {showFilterDropdown && (
                   <>
                     <div
@@ -2295,7 +2205,6 @@ function ArtistDetailsPage() {
                       style={{ backgroundColor: "#211f27" }}
                     >
                       <div className="space-y-4">
-                        {/* Secondary Types */}
                         <div>
                           <h3
                             className="text-sm font-semibold  mb-2"
@@ -2340,7 +2249,6 @@ function ArtistDetailsPage() {
                           </div>
                         </div>
 
-                        {/* Quick Actions */}
                         <div className=" pt-3">
                           <div className="flex gap-2">
                             <button
@@ -2383,7 +2291,6 @@ function ArtistDetailsPage() {
                 )}
               </div>
 
-              {/* Add All Button */}
               {existsInLibrary && (
                 <button
                   onClick={handleMonitorAll}
@@ -2844,7 +2751,7 @@ function ArtistDetailsPage() {
                 className="flex-shrink-0 p-2 hover:bg-black/50 transition-colors"
                 style={{
                   color: "#fff",
-                  marginTop: "70px", // Center with 160px image (half height)
+                  marginTop: "70px",
                 }}
                 aria-label="Scroll left"
               >
@@ -2909,7 +2816,7 @@ function ArtistDetailsPage() {
                 className="flex-shrink-0 p-2 hover:bg-black/50 transition-colors"
                 style={{
                   color: "#fff",
-                  marginTop: "70px", // Center with 160px image (half height)
+                  marginTop: "70px",
                 }}
                 aria-label="Scroll right"
               >
@@ -2920,7 +2827,6 @@ function ArtistDetailsPage() {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
       {showDeleteModal && libraryArtist && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div

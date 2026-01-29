@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { checkHealth, verifyCredentials } from '../utils/api';
+import { createContext, useContext, useState, useEffect } from "react";
+import { checkHealth, verifyCredentials } from "../utils/api";
 
 const AuthContext = createContext(null);
 
@@ -12,11 +12,11 @@ export const AuthProvider = ({ children }) => {
     try {
       const healthData = await checkHealth();
       const isRequired = healthData.authRequired;
-      const authUser = healthData.authUser || 'admin';
+      const authUser = healthData.authUser || "admin";
       setAuthRequired(isRequired);
-      
+
       if (isRequired) {
-         localStorage.setItem('auth_user', authUser);
+        localStorage.setItem("auth_user", authUser);
       }
 
       if (!isRequired) {
@@ -25,24 +25,21 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      const storedPassword = localStorage.getItem('auth_password');
-      const storedUser = localStorage.getItem('auth_user') || 'admin';
+      const storedPassword = localStorage.getItem("auth_password");
+      const storedUser = localStorage.getItem("auth_user") || "admin";
 
       if (storedPassword) {
         try {
-           const isValid = await verifyCredentials(storedPassword, storedUser);
-           setIsAuthenticated(isValid);
-           if (!isValid) {
-             localStorage.removeItem('auth_password');
-           }
-        } catch (e) {
-           console.error("Credential verification failed", e);
-        }
+          const isValid = await verifyCredentials(storedPassword, storedUser);
+          setIsAuthenticated(isValid);
+          if (!isValid) {
+            localStorage.removeItem("auth_password");
+          }
+        } catch (e) {}
       } else {
         setIsAuthenticated(false);
       }
     } catch (error) {
-      console.error("Auth check failed:", error);
     } finally {
       setIsLoading(false);
     }
@@ -52,33 +49,34 @@ export const AuthProvider = ({ children }) => {
     checkAuthStatus();
   }, []);
 
-  const login = async (password, username = 'admin') => {
+  const login = async (password, username = "admin") => {
     if (!password) return false;
-    
+
     try {
       const isValid = await verifyCredentials(password, username);
       if (isValid) {
-        localStorage.setItem('auth_password', password);
-        localStorage.setItem('auth_user', username);
+        localStorage.setItem("auth_password", password);
+        localStorage.setItem("auth_user", username);
         setIsAuthenticated(true);
-        window.location.reload(); 
+        window.location.reload();
         return true;
       }
       return false;
     } catch (e) {
-      console.error("Login failed:", e);
       return false;
     }
   };
 
   const logout = () => {
-    localStorage.removeItem('auth_password');
-    localStorage.removeItem('auth_user');
+    localStorage.removeItem("auth_password");
+    localStorage.removeItem("auth_user");
     setIsAuthenticated(false);
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, isLoading, login, logout, authRequired }}>
+    <AuthContext.Provider
+      value={{ isAuthenticated, isLoading, login, logout, authRequired }}
+    >
       {children}
     </AuthContext.Provider>
   );

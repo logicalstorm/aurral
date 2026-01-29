@@ -23,14 +23,12 @@ router.post("/", async (req, res) => {
 
     const currentSettings = dbOps.getSettings();
 
-    // Deep merge integrations to preserve existing values
     let mergedIntegrations =
       currentSettings.integrations || defaultData.settings.integrations || {};
     if (integrations) {
       mergedIntegrations = {
         ...mergedIntegrations,
         ...integrations,
-        // Deep merge nested objects
         lidarr: integrations.lidarr
           ? {
               ...(mergedIntegrations.lidarr || {}),
@@ -129,17 +127,14 @@ router.get("/lidarr/profiles", async (req, res) => {
   try {
     const { lidarrClient } = await import("../services/lidarrClient.js");
 
-    // Allow fetching with provided URL/API key (from query params) or use saved settings
     const testUrl = req.query.url;
     const testApiKey = req.query.apiKey;
 
     let url, apiKey;
     if (testUrl && testApiKey) {
-      // Use provided values
       url = testUrl.trim();
       apiKey = testApiKey.trim();
     } else {
-      // Use saved settings
       lidarrClient.updateConfig();
       const config = lidarrClient.getConfig();
       url = config.url;
@@ -153,7 +148,6 @@ router.get("/lidarr/profiles", async (req, res) => {
       });
     }
 
-    // Temporarily override config for this request
     const originalConfig = { ...lidarrClient.config };
     const originalApiPath = lidarrClient.apiPath;
 
@@ -164,11 +158,9 @@ router.get("/lidarr/profiles", async (req, res) => {
     lidarrClient.apiPath = "/api/v1";
 
     try {
-      // Pass skipConfigUpdate=true so it doesn't overwrite our test config
       const profiles = await lidarrClient.getQualityProfiles(true);
       res.json(profiles);
     } finally {
-      // Restore original config
       lidarrClient.config = originalConfig;
       lidarrClient.apiPath = originalApiPath;
       lidarrClient.updateConfig();
@@ -187,17 +179,14 @@ router.get("/lidarr/test", async (req, res) => {
   try {
     const { lidarrClient } = await import("../services/lidarrClient.js");
 
-    // Allow testing with provided URL/API key (from query params) or use saved settings
     const testUrl = req.query.url;
     const testApiKey = req.query.apiKey;
 
     let url, apiKey;
     if (testUrl && testApiKey) {
-      // Use provided values for testing
       url = testUrl.trim();
       apiKey = testApiKey.trim();
     } else {
-      // Use saved settings
       lidarrClient.updateConfig();
       const config = lidarrClient.getConfig();
       url = config.url;
@@ -217,7 +206,6 @@ router.get("/lidarr/test", async (req, res) => {
         .json({ error: "Lidarr URL and API key are required" });
     }
 
-    // Temporarily override config for this test
     const originalConfig = { ...lidarrClient.config };
     const originalApiPath = lidarrClient.apiPath;
 
@@ -228,7 +216,6 @@ router.get("/lidarr/test", async (req, res) => {
     lidarrClient.apiPath = "/api/v1";
 
     try {
-      // Pass skipConfigUpdate=true so it doesn't overwrite our test config
       const result = await lidarrClient.testConnection(true);
       console.log("[Settings] Lidarr test result:", result);
 
@@ -252,7 +239,6 @@ router.get("/lidarr/test", async (req, res) => {
         });
       }
     } finally {
-      // Restore original config
       lidarrClient.config = originalConfig;
       lidarrClient.apiPath = originalApiPath;
       lidarrClient.updateConfig();

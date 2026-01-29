@@ -26,7 +26,6 @@ const parseLastFmDate = (dateStr) => {
   return d.toISOString().split("T")[0];
 };
 
-// Handle both /search and /artists endpoints for search
 const handleSearch = async (req, res) => {
   try {
     const { query, limit = 24, offset = 0 } = req.query;
@@ -52,7 +51,6 @@ const handleSearch = async (req, res) => {
             ? lastfmData.results.artistmatches.artist
             : [lastfmData.results.artistmatches.artist];
 
-          // db import removed - using dbOps directly
           const formattedArtists = artists
             .filter((a) => a.mbid)
             .map((a) => {
@@ -94,7 +92,6 @@ const handleSearch = async (req, res) => {
             });
 
           if (formattedArtists.length > 0) {
-            // Pre-fetch images for search results in background
             imagePrefetchService
               .prefetchSearchResults(formattedArtists)
               .catch(() => {});
@@ -122,11 +119,9 @@ const handleSearch = async (req, res) => {
   }
 };
 
-// Register search handler for both /search and /artists
 router.get("/search", cacheMiddleware(300), handleSearch);
 router.get("/artists", cacheMiddleware(300), handleSearch);
 
-// Root route - return 404 for /api/artists without MBID
 router.get("/", async (req, res) => {
   res.status(404).json({
     error: "Not found",
@@ -217,7 +212,6 @@ router.get("/release-group/:mbid/cover", async (req, res) => {
   }
 });
 
-// Get release group tracks from MusicBrainz
 router.get("/release-group/:mbid/tracks", async (req, res) => {
   try {
     const { mbid } = req.params;
@@ -225,7 +219,6 @@ router.get("/release-group/:mbid/tracks", async (req, res) => {
       return res.status(400).json({ error: "Invalid MBID format" });
     }
 
-    // Get release group to find a release
     const rgData = await musicbrainzRequest(`/release-group/${mbid}`, {
       inc: "releases",
     });
@@ -234,7 +227,6 @@ router.get("/release-group/:mbid/tracks", async (req, res) => {
       return res.json([]);
     }
 
-    // Get first release to get tracks
     const releaseId = rgData.releases[0].id;
     const releaseData = await musicbrainzRequest(`/release/${releaseId}`, {
       inc: "recordings",
@@ -272,12 +264,10 @@ router.get("/release-group/:mbid/tracks", async (req, res) => {
   }
 });
 
-// Helper function to send SSE message
 const sendSSE = (res, event, data) => {
   try {
     res.write(`event: ${event}\n`);
     res.write(`data: ${JSON.stringify(data)}\n\n`);
-    // Flush the response to ensure it's sent immediately
     if (res.flush && typeof res.flush === "function") {
       res.flush();
     }
@@ -286,7 +276,6 @@ const sendSSE = (res, event, data) => {
   }
 };
 
-// Streaming endpoint for artist details
 router.get("/:mbid/stream", noCache, async (req, res) => {
   try {
     const { mbid } = req.params;
@@ -299,7 +288,6 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
       });
     }
 
-    // Verify authentication
     if (!verifyTokenAuth(req)) {
       return res.status(401).json({
         error: "Unauthorized",
@@ -307,13 +295,11 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
       });
     }
 
-    // Set up SSE headers
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
+    res.setHeader("X-Accel-Buffering", "no");
 
-    // Send initial connection message
     sendSSE(res, "connected", { mbid });
 
     let artistData = null;
@@ -554,10 +540,8 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
         }
       }
 
-      // Track all background tasks
       const backgroundTasks = [];
 
-      // Fetch cover image in background
       const coverTask = (async () => {
         try {
           const { libraryManager } =
@@ -569,7 +553,6 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
             streamArtistName ||
             null;
 
-          // Try cached first
           const cachedImage = dbOps.getImage(mbid);
           if (
             cachedImage &&
@@ -603,7 +586,6 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
             } catch (e) {}
           }
 
-          // Try Cover Art Archive as fallback
           if (artistData?.["release-groups"]?.length > 0) {
             const releaseGroups = artistData["release-groups"]
               .filter(
@@ -655,7 +637,6 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
             }
           }
 
-          // No cover found
           dbOps.setImage(mbid, "NOT_FOUND");
           sendSSE(res, "cover", { images: [] });
         } catch (e) {
@@ -664,7 +645,6 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
       })();
       backgroundTasks.push(coverTask);
 
-      // Fetch similar artists in background
       const similarTask = (async () => {
         if (getLastfmApiKey()) {
           try {
@@ -722,9 +702,8 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
               (rg) =>
                 rg["primary-type"] === "Album" || rg["primary-type"] === "EP",
             )
-            .slice(0, 20); // Limit to first 20
+            .slice(0, 20);
 
-          // Fetch covers in parallel batches
           const batchSize = 5;
           const allCoverPromises = [];
 
@@ -733,10 +712,8 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
 
             const batchPromises = batch.map(async (rg) => {
               try {
-                // db import removed - using dbOps directly
                 const cacheKey = `rg:${rg.id}`;
 
-                // Check cache first
                 const cachedCover = dbOps.getImage(cacheKey);
                 if (
                   cachedCover &&
@@ -764,7 +741,6 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
                   return;
                 }
 
-                // Fetch from Cover Art Archive
                 const coverArtResponse = await axios
                   .get(`https://coverartarchive.org/release-group/${rg.id}`, {
                     headers: { Accept: "application/json" },
@@ -799,7 +775,6 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
                   }
                 }
 
-                // No cover found
                 dbOps.setImage(cacheKey, "NOT_FOUND");
                 sendSSE(res, "releaseGroupCover", {
                   mbid: rg.id,
@@ -816,25 +791,20 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
             allCoverPromises.push(...batchPromises);
           }
 
-          // Wait for all cover fetches to complete
           await Promise.allSettled(allCoverPromises);
         }
       })();
       backgroundTasks.push(releaseGroupCoversTask);
 
-      // Wait for all background tasks to complete before closing
       Promise.allSettled(backgroundTasks)
         .then(() => {
-          // Send completion event
           sendSSE(res, "complete", {});
 
-          // Close connection after a short delay to ensure all messages are sent
           setTimeout(() => {
             res.end();
           }, 100);
         })
         .catch(() => {
-          // Even if there's an error, try to send complete and close
           sendSSE(res, "complete", {});
           setTimeout(() => {
             res.end();
@@ -845,14 +815,12 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
         `[Artists Stream] Error for artist ${mbid}:`,
         error.message,
       );
-      // Only send error if we haven't already sent artist data
       if (!artistData) {
         sendSSE(res, "error", {
           error: "Failed to fetch artist details",
           message: error.response?.data?.error || error.message,
         });
       } else {
-        // If we already sent artist data, just send complete and close
         sendSSE(res, "complete", {});
       }
       res.end();
@@ -909,7 +877,6 @@ router.get("/:mbid", cacheMiddleware(300), async (req, res) => {
       });
     }
 
-    // Check if request is already in progress (deduplication)
     if (pendingArtistRequests.has(mbid)) {
       console.log(
         `[Artists Route] Request for ${mbid} already in progress, waiting...`,
@@ -1145,7 +1112,6 @@ router.get("/:mbid", cacheMiddleware(300), async (req, res) => {
 const pendingCoverRequests = new Map();
 const pendingArtistRequests = new Map();
 
-// Simple circuit breaker for MusicBrainz - skip if too many recent failures
 let musicbrainzFailureCount = 0;
 let musicbrainzLastFailure = 0;
 const MUSICBRAINZ_CIRCUIT_BREAKER_THRESHOLD = 2;
@@ -1159,7 +1125,6 @@ const shouldSkipMusicBrainz = () => {
   ) {
     return true;
   }
-  // Reset counter if enough time has passed
   if (timeSinceLastFailure >= MUSICBRAINZ_CIRCUIT_BREAKER_RESET_MS) {
     musicbrainzFailureCount = 0;
   }
@@ -1172,13 +1137,11 @@ const recordMusicBrainzFailure = () => {
 };
 
 const recordMusicBrainzSuccess = () => {
-  // Reset on success
   if (musicbrainzFailureCount > 0) {
     musicbrainzFailureCount = Math.max(0, musicbrainzFailureCount - 1);
   }
 };
 
-// Background fetch function (doesn't block)
 const fetchCoverInBackground = async (mbid) => {
   if (pendingCoverRequests.has(mbid)) return;
 
@@ -1288,9 +1251,6 @@ router.get("/:mbid/cover", async (req, res) => {
       return res.json({ images: result.images || [] });
     }
 
-    // db import removed - using dbOps directly
-
-    // Optimistic response: return cached data immediately if available
     const cachedImage = dbOps.getImage(mbid);
     if (
       !refresh &&
@@ -1302,13 +1262,11 @@ router.get("/:mbid/cover", async (req, res) => {
       const cachedUrl = cachedImage.imageUrl;
       res.set("Cache-Control", "public, max-age=31536000, immutable");
 
-      // Trigger background refresh if cache is old (older than 7 days)
       const cacheAge = cachedImage.cacheAge;
       const shouldRefresh =
         !cacheAge || Date.now() - cacheAge > 7 * 24 * 60 * 60 * 1000;
 
       if (shouldRefresh) {
-        // Don't await - let it run in background
         fetchCoverInBackground(mbid).catch(() => {});
       }
 
@@ -1327,10 +1285,9 @@ router.get("/:mbid/cover", async (req, res) => {
       console.log(`[Cover Route] NOT_FOUND cache for ${mbid}`);
       res.set("Cache-Control", "public, max-age=3600");
 
-      // Try again in background after some time (maybe new images available)
       setTimeout(() => {
         fetchCoverInBackground(mbid).catch(() => {});
-      }, 60000); // Try again after 1 minute
+      }, 60000);
 
       return res.json({ images: [] });
     }
@@ -1339,7 +1296,6 @@ router.get("/:mbid/cover", async (req, res) => {
 
     const fetchPromise = (async () => {
       try {
-        // db import removed - using dbOps directly
         const { libraryManager } =
           await import("../services/libraryManager.js");
         const libraryArtist = libraryManager.getArtist(mbid);

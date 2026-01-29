@@ -12,14 +12,20 @@ const getLastfmUsername = () => {
   return settings.integrations?.lastfm?.username || null;
 };
 
-const LASTFM_PERIODS = ["7day", "1month", "3month", "6month", "12month", "overall"];
+const LASTFM_PERIODS = [
+  "7day",
+  "1month",
+  "3month",
+  "6month",
+  "12month",
+  "overall",
+];
 const getLastfmDiscoveryPeriod = () => {
   const settings = dbOps.getSettings();
   const p = settings.integrations?.lastfm?.discoveryPeriod;
   return p && LASTFM_PERIODS.includes(p) ? p : "1month";
 };
 
-// Initialize cache - but check if discovery is actually configured first
 let discoveryCache = {
   recommendations: [],
   globalTop: [],
@@ -30,7 +36,6 @@ let discoveryCache = {
   isUpdating: false,
 };
 
-// Load from database if it exists and has data
 const dbData = dbOps.getDiscoveryCache();
 if (
   dbData.recommendations?.length > 0 ||
@@ -49,9 +54,7 @@ if (
 }
 
 export const getDiscoveryCache = () => {
-  // Sync cache with database
   const dbData = dbOps.getDiscoveryCache();
-  // Only sync if database has more data than cache
   if (
     (dbData.recommendations?.length > 0 &&
       (!discoveryCache.recommendations ||
@@ -99,12 +102,10 @@ export const updateDiscoveryCache = async () => {
       );
     }
 
-    // Check if we have any data source configured
     if (libraryArtists.length === 0 && !hasLastfmKey) {
       console.log(
         "No artists in library and no Last.fm key. Skipping discovery and clearing cache.",
       );
-      // Clear discovery cache if nothing is configured
       discoveryCache.recommendations = [];
       discoveryCache.globalTop = [];
       discoveryCache.basedOn = [];
@@ -113,7 +114,6 @@ export const updateDiscoveryCache = async () => {
       discoveryCache.lastUpdated = null;
       discoveryCache.isUpdating = false;
 
-      // Also clear from database
       dbOps.updateDiscoveryCache({
         recommendations: [],
         globalTop: [],
@@ -125,11 +125,12 @@ export const updateDiscoveryCache = async () => {
       return;
     }
 
-    // Fetch Last.fm user's top artists if username is configured
     let lastfmArtists = [];
     if (hasLastfmUser) {
       const discoveryPeriod = getLastfmDiscoveryPeriod();
-      console.log(`Fetching Last.fm user top artists for ${lastfmUsername} (period: ${discoveryPeriod})...`);
+      console.log(
+        `Fetching Last.fm user top artists for ${lastfmUsername} (period: ${discoveryPeriod})...`,
+      );
       try {
         const userTopArtists = await lastfmRequest("user.getTopArtists", {
           user: lastfmUsername,
@@ -150,8 +151,6 @@ export const updateDiscoveryCache = async () => {
             ? userTopArtists.topartists.artist
             : [userTopArtists.topartists.artist];
 
-          // Convert Last.fm artists to a format similar to library artists
-          // Last.fm usually includes MBIDs in the response, but we'll handle cases where they're missing
           const artistsWithMbids = [];
           const artistsWithoutMbids = [];
 
@@ -163,7 +162,6 @@ export const updateDiscoveryCache = async () => {
             }
           }
 
-          // Add artists that already have MBIDs
           for (const artist of artistsWithMbids) {
             lastfmArtists.push({
               mbid: artist.mbid,
@@ -172,7 +170,6 @@ export const updateDiscoveryCache = async () => {
             });
           }
 
-          // Try to get MBIDs for artists without them (limit to first 10 to avoid too many API calls)
           if (artistsWithoutMbids.length > 0) {
             console.log(
               `Attempting to get MBIDs for ${Math.min(artistsWithoutMbids.length, 10)} Last.fm artists without MBIDs...`,
@@ -193,7 +190,6 @@ export const updateDiscoveryCache = async () => {
                     });
                   }
                 } catch (e) {
-                  // Skip if we can't get MBID
                   console.warn(
                     `Could not get MBID for Last.fm artist ${artist.name}`,
                   );
@@ -220,7 +216,6 @@ export const updateDiscoveryCache = async () => {
       );
     }
 
-    // Combine library and Last.fm artists for profile sampling
     const allSourceArtists = [
       ...libraryArtists.map((a) => ({
         mbid: a.mbid,
@@ -234,7 +229,6 @@ export const updateDiscoveryCache = async () => {
       })),
     ];
 
-    // Remove duplicates (prefer library artists if both exist)
     const uniqueArtists = [];
     const seenMbids = new Set();
     for (const artist of allSourceArtists) {
@@ -323,7 +317,10 @@ export const updateDiscoveryCache = async () => {
             const mbid = (artist.mbid && artist.mbid.trim()) || null;
             const name = artist.name || artist["#text"];
             if (!name) continue;
-            if ((mbid && seenMbids.has(mbid)) || (!mbid && seenNames.has(name.toLowerCase())))
+            if (
+              (mbid && seenMbids.has(mbid)) ||
+              (!mbid && seenNames.has(name.toLowerCase()))
+            )
               continue;
             if (mbid) seenMbids.add(mbid);
             seenNames.add(name.toLowerCase());
@@ -332,7 +329,11 @@ export const updateDiscoveryCache = async () => {
               const i =
                 t.image.find((im) => im.size === "extralarge") ||
                 t.image.find((im) => im.size === "large");
-              if (i && i["#text"] && !i["#text"].includes("2a96cbd8b46e442fc41c2b86b821562f"))
+              if (
+                i &&
+                i["#text"] &&
+                !i["#text"].includes("2a96cbd8b46e442fc41c2b86b821562f")
+              )
                 img = i["#text"];
             }
             artistsFromTracks.push({
@@ -361,13 +362,19 @@ export const updateDiscoveryCache = async () => {
                   const i =
                     a.image.find((im) => im.size === "extralarge") ||
                     a.image.find((im) => im.size === "large");
-                  if (i && i["#text"] && !i["#text"].includes("2a96cbd8b46e442fc41c2b86b821562f"))
+                  if (
+                    i &&
+                    i["#text"] &&
+                    !i["#text"].includes("2a96cbd8b46e442fc41c2b86b821562f")
+                  )
                     img = i["#text"];
                 }
                 return { id: a.mbid, name: a.name, image: img, type: "Artist" };
               })
               .filter((a) => a.id && !existingArtistIds.has(a.id));
-            const fillMbids = new Set(globalTop.map((a) => a.id).filter(Boolean));
+            const fillMbids = new Set(
+              globalTop.map((a) => a.id).filter(Boolean),
+            );
             for (const a of fromArtists) {
               if (globalTop.length >= 32) break;
               if (a.id && !fillMbids.has(a.id)) {
@@ -386,7 +393,6 @@ export const updateDiscoveryCache = async () => {
       }
     }
 
-    // Use combined artists for recommendations
     const recSampleSize = Math.min(25, uniqueArtists.length);
     const recSample = [...uniqueArtists]
       .sort(() => 0.5 - Math.random())
@@ -504,8 +510,6 @@ export const updateDiscoveryCache = async () => {
     ].filter((a) => !a.image);
     console.log(`Hydrating images for ${allToHydrate.length} artists...`);
 
-    // Images are now handled through the image service, no need for library lookup here
-    // Process in batches to avoid overwhelming APIs
     const batchSize = 10;
     for (let i = 0; i < allToHydrate.length; i += batchSize) {
       const batch = allToHydrate.slice(i, i + batchSize);
@@ -553,7 +557,6 @@ export const updateDiscoveryCache = async () => {
                     return dateB.localeCompare(dateA);
                   });
 
-                // Try top 2 release groups in parallel
                 const coverArtPromises = releaseGroups.slice(0, 2).map((rg) =>
                   Promise.race([
                     axios.get(
@@ -597,13 +600,10 @@ export const updateDiscoveryCache = async () => {
         }),
       );
 
-      // Small delay between batches
       if (i + batchSize < allToHydrate.length) {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
     }
-
-    // Discovery cache already updated above
 
     console.log("Discovery cache updated successfully.");
     console.log(

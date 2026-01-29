@@ -95,7 +95,6 @@ function DiscoverPage() {
           return;
         }
 
-        // Check if any values changed
         let hasChanges = false;
         for (const key in statuses) {
           if (prev[key] !== statuses[key]) {
@@ -107,9 +106,7 @@ function DiscoverPage() {
         if (hasChanges) {
           downloadStatusesRef.current = statuses;
         }
-      } catch (error) {
-        console.error("Failed to fetch download status:", error);
-      }
+      } catch {}
     };
 
     pollDownloadStatus();
@@ -139,7 +136,6 @@ function DiscoverPage() {
     const sections = [];
     const usedArtistIds = new Set();
 
-    // Use a stable sort based on genre name instead of random to prevent re-renders
     const sortedGenres = [...data.topGenres].sort((a, b) => a.localeCompare(b));
 
     for (const genre of sortedGenres) {
@@ -347,8 +343,6 @@ function DiscoverPage() {
     );
   }
 
-  // Show configuration message if discovery isn't set up
-  // Only show "not configured" if explicitly set to false AND no data exists
   if (
     configured === false &&
     !recommendations.length &&
@@ -528,17 +522,16 @@ function DiscoverPage() {
                     key={request.id || request.mbid}
                     status={request.status}
                     artist={{
-                      id: request.albumMbid || request.mbid, // Use album MBID for image lookup
+                      id: request.albumMbid || request.mbid,
                       name:
                         request.type === "album"
                           ? request.albumName
-                          : request.name, // Show album name if album request
+                          : request.name,
                       image: request.image,
                       subtitle:
                         request.type === "album"
                           ? `${request.artistName} • ${new Date(request.requestedAt).toLocaleDateString()}`
                           : `Requested ${new Date(request.requestedAt).toLocaleDateString()}`,
-                      // For album requests, navigate to artist page
                       navigateTo: hasValidMbid ? navigateTo : null,
                     }}
                   />
@@ -575,7 +568,7 @@ function DiscoverPage() {
                     key={`request-${request.id || request.mbid}`}
                     status="available"
                     artist={{
-                      id: request.albumMbid || request.mbid, // Use album MBID for image lookup
+                      id: request.albumMbid || request.mbid,
                       name:
                         request.type === "album"
                           ? request.albumName
@@ -585,7 +578,6 @@ function DiscoverPage() {
                         request.type === "album"
                           ? `${request.artistName} • ${new Date(request.requestedAt).toLocaleDateString()}`
                           : `Added ${new Date(request.requestedAt).toLocaleDateString()}`,
-                      // For album requests, navigate to artist page
                       navigateTo:
                         request.type === "album"
                           ? artistMbid

@@ -13,7 +13,6 @@ export class LidarrClient {
     const dbConfig = settings.integrations?.lidarr || {};
     let url = dbConfig.url || process.env.LIDARR_URL || "http://localhost:8686";
 
-    // Remove trailing slashes
     url = url.replace(/\/+$/, "");
 
     const newConfig = {
@@ -112,7 +111,6 @@ export class LidarrClient {
           });
         }
 
-        // Handle different response data types
         let errorMsg = statusText || "Unknown error";
         let errorDetails = "";
 
@@ -120,7 +118,6 @@ export class LidarrClient {
           errorMsg = responseData;
           errorDetails = responseData;
         } else if (responseData) {
-          // Try to extract meaningful error message
           errorMsg =
             responseData.message ||
             responseData.error ||
@@ -178,14 +175,12 @@ export class LidarrClient {
       return { connected: false, error: "Lidarr not configured" };
     }
 
-    // Try /api/v1 first, then fallback to /api if that fails
     const apiPaths = ["/api/v1", "/api"];
 
     for (const apiPath of apiPaths) {
       this.apiPath = apiPath;
 
       try {
-        // Try /rootFolder first (most reliable endpoint, exists in all versions)
         try {
           const rootFolders = await this.request(
             "/rootFolder",
@@ -203,7 +198,6 @@ export class LidarrClient {
             apiPath: apiPath,
           };
         } catch (rootFolderError) {
-          // If /rootFolder fails with 400/404, try /system/status as fallback
           if (
             rootFolderError.message.includes("404") ||
             rootFolderError.message.includes("400")
@@ -222,22 +216,18 @@ export class LidarrClient {
                 apiPath: apiPath,
               };
             } catch (statusError) {
-              // If both fail and we have another API path to try, continue
               if (apiPath === "/api/v1" && apiPaths.length > 1) {
                 continue;
               }
-              // Otherwise throw the original error
               throw rootFolderError;
             }
           }
-          // If error is not 400/404, or we're on last API path, throw
           if (apiPath === "/api/v1" && apiPaths.length > 1) {
             continue;
           }
           throw rootFolderError;
         }
       } catch (error) {
-        // If this is the last API path to try, return error
         if (apiPath === apiPaths[apiPaths.length - 1]) {
           const errorMessage = error.message || "Unknown error";
           const errorDetails = error.response?.data
@@ -259,12 +249,10 @@ export class LidarrClient {
             responseHeaders: error.response?.headers,
           };
         }
-        // Otherwise continue to next API path
         continue;
       }
     }
 
-    // Should never reach here, but just in case
     return {
       connected: false,
       error: "Failed to connect with any API path",

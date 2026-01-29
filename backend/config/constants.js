@@ -135,8 +135,8 @@ export const defaultData = {
     lastUpdated: null,
   },
   images: {},
-  requests: [], // Legacy artist-based requests (kept for backward compatibility)
-  albumRequests: [], // New album-based requests
+  requests: [],
+  albumRequests: [],
   library: {
     artists: [],
     albums: [],
@@ -148,7 +148,7 @@ export const defaultData = {
   customFormats: [],
   settings: {
     rootFolderPath: null,
-    quality: "standard", // "low", "standard", "max"
+    quality: "standard",
     releaseTypes: [
       "Album",
       "EP",
@@ -179,12 +179,12 @@ export const defaultData = {
       blocklist: true,
       remove: false,
       rename: true,
-      cleanImports: "missing", // "missing", "incomplete", "always"
+      cleanImports: "missing",
       retryFindingRelease: true,
       retryDelayMinutes: 5,
       maxRetries: 3,
     },
   },
   blocklist: [],
-  activityLog: [], // Activity log for tracking all operations
+  activityLog: [],
 };

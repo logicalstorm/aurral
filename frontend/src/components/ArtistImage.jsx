@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import PropTypes from "prop-types";
 import { Music, Loader } from "lucide-react";
 import { getArtistCover } from "../utils/api";
 
@@ -66,7 +67,6 @@ const ArtistImage = ({
         if (url) {
           setCurrentSrc(url);
           setHasError(false);
-          // Don't set isLoading to false here - let onLoad handle it
         } else {
           setHasError(true);
           setIsLoading(false);
@@ -75,7 +75,7 @@ const ArtistImage = ({
         setHasError(true);
         setIsLoading(false);
       }
-    } catch (err) {
+    } catch {
       setHasError(true);
       setIsLoading(false);
     } finally {
@@ -84,7 +84,6 @@ const ArtistImage = ({
   }, []);
 
   useEffect(() => {
-    // Reset state when src or mbid changes
     fetchingRef.current = false;
 
     if (src) {
@@ -134,7 +133,10 @@ const ArtistImage = ({
             className="absolute inset-0 flex items-center justify-center z-10"
             style={{ backgroundColor: "#211f27" }}
           >
-            <Loader className="w-6 h-6 animate-spin" style={{ color: "#c1c1c3" }} />
+            <Loader
+              className="w-6 h-6 animate-spin"
+              style={{ color: "#c1c1c3" }}
+            />
           </div>
         )}
       </div>
@@ -165,12 +167,21 @@ const ArtistImage = ({
           onError={handleError}
           loading="lazy"
           decoding="async"
-          fetchpriority={showLoading ? "high" : "auto"}
+          fetchPriority={showLoading ? "high" : "auto"}
           style={{ contentVisibility: "auto" }}
         />
       )}
     </div>
   );
+};
+
+ArtistImage.propTypes = {
+  mbid: PropTypes.string,
+  src: PropTypes.string,
+  alt: PropTypes.string,
+  artistName: PropTypes.string,
+  className: PropTypes.string,
+  showLoading: PropTypes.bool,
 };
 
 export default ArtistImage;

@@ -40,9 +40,6 @@ router.post("/clear", async (req, res) => {
     lastUpdated: null,
   });
 
-  // Note: Image cache would need a separate table - for now just clear discovery
-  // TODO: Add image cache table if needed
-
   const discoveryCache = getDiscoveryCache();
   Object.assign(discoveryCache, {
     recommendations: [],
@@ -61,7 +58,6 @@ router.post("/clear", async (req, res) => {
 });
 
 router.get("/", async (req, res) => {
-  // Check if discovery is configured
   const hasLastfmKey = !!getLastfmApiKey();
   const settings = dbOps.getSettings();
   const lastfmUsername = settings.integrations?.lastfm?.username || null;
@@ -69,9 +65,7 @@ router.get("/", async (req, res) => {
   const libraryArtists = await libraryManager.getAllArtists();
   const hasArtists = libraryArtists.length > 0;
 
-  // If nothing is configured, clear any existing data and return empty
   if (!hasLastfmKey && !hasArtists) {
-    // Clear database if it has old data
     const dbData = dbOps.getDiscoveryCache();
     if (
       dbData.recommendations?.length > 0 ||
@@ -89,7 +83,6 @@ router.get("/", async (req, res) => {
       });
     }
 
-    // Clear cache
     const discoveryCache = getDiscoveryCache();
     Object.assign(discoveryCache, {
       recommendations: [],
@@ -116,15 +109,15 @@ router.get("/", async (req, res) => {
 
   const discoveryCache = getDiscoveryCache();
   const dbData = dbOps.getDiscoveryCache();
-  
-  const hasData = 
-    (dbData.recommendations?.length > 0 ||
-     dbData.globalTop?.length > 0 ||
-     dbData.topGenres?.length > 0) ||
-    (discoveryCache.recommendations?.length > 0 ||
-     discoveryCache.globalTop?.length > 0 ||
-     discoveryCache.topGenres?.length > 0);
-  
+
+  const hasData =
+    dbData.recommendations?.length > 0 ||
+    dbData.globalTop?.length > 0 ||
+    dbData.topGenres?.length > 0 ||
+    discoveryCache.recommendations?.length > 0 ||
+    discoveryCache.globalTop?.length > 0 ||
+    discoveryCache.topGenres?.length > 0;
+
   const isUpdating = discoveryCache.isUpdating || false;
 
   const dbHasData =
@@ -295,8 +288,9 @@ router.get("/by-tag", async (req, res) => {
     const libraryArtists = await libraryManager.getAllArtists();
     const existingArtistIds = new Set(libraryArtists.map((a) => a.mbid));
 
-    const filtered = recommendations
-      .filter((artist) => !existingArtistIds.has(artist.id));
+    const filtered = recommendations.filter(
+      (artist) => !existingArtistIds.has(artist.id),
+    );
 
     res.json({
       recommendations: filtered,

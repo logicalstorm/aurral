@@ -9,7 +9,12 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
   if (!mbid) return { url: null, images: [] };
 
   const cachedImage = dbOps.getImage(mbid);
-  if (!forceRefresh && cachedImage && cachedImage.imageUrl && cachedImage.imageUrl !== "NOT_FOUND") {
+  if (
+    !forceRefresh &&
+    cachedImage &&
+    cachedImage.imageUrl &&
+    cachedImage.imageUrl !== "NOT_FOUND"
+  ) {
     return {
       url: cachedImage.imageUrl,
       images: [
@@ -37,28 +42,24 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
 
   const fetchPromise = (async () => {
     try {
-      // Try to get artist name from library first (fastest, no API call)
       const { libraryManager } = await import("./libraryManager.js");
       const libraryArtist = libraryManager.getArtist(mbid);
       let artistName = libraryArtist?.artistName || null;
 
-      // Fetch artist name from MusicBrainz if we don't have it
       let artistData = null;
       if (!artistName) {
         try {
           artistData = await Promise.race([
             musicbrainzRequest(`/artist/${mbid}`, {}),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error("MusicBrainz timeout")), 2000)
-            )
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("MusicBrainz timeout")), 2000),
+            ),
           ]).catch(() => null);
-          
+
           if (artistData?.name) {
             artistName = artistData.name;
           }
-        } catch (e) {
-          // Continue without artist name
-        }
+        } catch (e) {}
       }
 
       if (artistName) {
@@ -68,76 +69,91 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
             dbOps.setImage(mbid, deezer.imageUrl);
             return {
               url: deezer.imageUrl,
-              images: [{ image: deezer.imageUrl, front: true, types: ["Front"] }],
+              images: [
+                { image: deezer.imageUrl, front: true, types: ["Front"] },
+              ],
             };
           }
         } catch (e) {}
       }
 
-      // Fallback: Try Cover Art Archive (only if we have artist name or can get release groups)
       if (artistName || artistData) {
         try {
-          const artistDataForRG = artistData?.["release-groups"] ? artistData : 
-            await Promise.race([
-              musicbrainzRequest(`/artist/${mbid}`, { inc: "release-groups" }),
-              new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("MusicBrainz timeout")), 2000)
-              )
-            ]).catch(() => null);
+          const artistDataForRG = artistData?.["release-groups"]
+            ? artistData
+            : await Promise.race([
+                musicbrainzRequest(`/artist/${mbid}`, {
+                  inc: "release-groups",
+                }),
+                new Promise((_, reject) =>
+                  setTimeout(
+                    () => reject(new Error("MusicBrainz timeout")),
+                    2000,
+                  ),
+                ),
+              ]).catch(() => null);
 
           if (artistDataForRG?.["release-groups"]?.length > 0) {
             const releaseGroups = artistDataForRG["release-groups"]
-              .filter(rg => rg["primary-type"] === "Album" || rg["primary-type"] === "EP")
+              .filter(
+                (rg) =>
+                  rg["primary-type"] === "Album" || rg["primary-type"] === "EP",
+              )
               .sort((a, b) => {
                 const dateA = a["first-release-date"] || "";
                 const dateB = b["first-release-date"] || "";
                 return dateB.localeCompare(dateA);
               })
-              .slice(0, 2); // Only check top 2
+              .slice(0, 2);
 
-            // Try cover art in parallel
             const coverArtResults = await Promise.allSettled(
-              releaseGroups.map(rg => 
-                axios.get(
-                  `https://coverartarchive.org/release-group/${rg.id}`,
-                  {
+              releaseGroups.map((rg) =>
+                axios
+                  .get(`https://coverartarchive.org/release-group/${rg.id}`, {
                     headers: { Accept: "application/json" },
                     timeout: 2000,
-                  }
-                ).catch(() => null)
-              )
+                  })
+                  .catch(() => null),
+              ),
             );
 
             for (const result of coverArtResults) {
-              if (result.status === 'fulfilled' && result.value?.data?.images?.length > 0) {
-                const frontImage = result.value.data.images.find(img => img.front) || result.value.data.images[0];
+              if (
+                result.status === "fulfilled" &&
+                result.value?.data?.images?.length > 0
+              ) {
+                const frontImage =
+                  result.value.data.images.find((img) => img.front) ||
+                  result.value.data.images[0];
                 if (frontImage) {
-                  const imageUrl = frontImage.thumbnails?.["500"] || frontImage.thumbnails?.["large"] || frontImage.image;
+                  const imageUrl =
+                    frontImage.thumbnails?.["500"] ||
+                    frontImage.thumbnails?.["large"] ||
+                    frontImage.image;
                   if (imageUrl) {
                     dbOps.setImage(mbid, imageUrl);
 
                     return {
                       url: imageUrl,
-                      images: [{
-                        image: imageUrl,
-                        front: true,
-                        types: frontImage.types || ["Front"],
-                      }]
+                      images: [
+                        {
+                          image: imageUrl,
+                          front: true,
+                          types: frontImage.types || ["Front"],
+                        },
+                      ],
                     };
                   }
                 }
               }
             }
           }
-        } catch (e) {
-          // Continue to negative cache
-        }
+        } catch (e) {}
       }
     } catch (e) {
       console.warn(`Failed to fetch image for ${mbid}:`, e.message);
     }
 
-    // Cache negative result
     negativeImageCache.add(mbid);
     dbOps.setImage(mbid, "NOT_FOUND");
 

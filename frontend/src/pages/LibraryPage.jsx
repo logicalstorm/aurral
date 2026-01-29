@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader, Music, AlertCircle, RefreshCw } from "lucide-react";
-import { getLibraryArtists, getAllDownloadStatus } from "../utils/api";
+import { getLibraryArtists } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
-import { useToast } from "../contexts/ToastContext";
 
 function LibraryPage() {
   const [artists, setArtists] = useState([]);
@@ -11,9 +10,7 @@ function LibraryPage() {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("name");
-  const [downloadStatuses, setDownloadStatuses] = useState({});
   const navigate = useNavigate();
-  const { showError } = useToast();
 
   const fetchArtists = async () => {
     setLoading(true);
@@ -32,22 +29,6 @@ function LibraryPage() {
 
   useEffect(() => {
     fetchArtists();
-
-    const pollDownloadStatus = async () => {
-      try {
-        const statuses = await getAllDownloadStatus();
-        setDownloadStatuses(statuses);
-      } catch (error) {
-        console.error("Failed to fetch download status:", error);
-      }
-    };
-
-    pollDownloadStatus();
-    const interval = setInterval(pollDownloadStatus, 15000);
-
-    return () => {
-      clearInterval(interval);
-    };
   }, []);
 
   const getFilteredAndSortedArtists = () => {
@@ -187,16 +168,6 @@ function LibraryPage() {
           </p>
           <div className="flex gap-3 justify-center">
             <button
-              onClick={handleDiscoverAndScan}
-              disabled={scanning}
-              className="btn btn-primary"
-            >
-              <Search
-                className={`w-4 h-4 mr-2 ${scanning ? "animate-spin" : ""}`}
-              />
-              {scanning ? "Discovering..." : "Discover from Files"}
-            </button>
-            <button
               onClick={() => navigate("/search")}
               className="btn btn-secondary"
             >
@@ -230,7 +201,9 @@ function LibraryPage() {
                     className="relative aspect-square overflow-hidden cursor-pointer mb-2 shadow-sm group-hover:shadow-md transition-all"
                     style={{ backgroundColor: "#211f27" }}
                     onClick={() =>
-                      navigate(`/artist/${artist.foreignArtistId}`, { state: { artistName: artist.artistName } })
+                      navigate(`/artist/${artist.foreignArtistId}`, {
+                        state: { artistName: artist.artistName },
+                      })
                     }
                   >
                     <ArtistImage
@@ -242,7 +215,6 @@ function LibraryPage() {
                       showLoading={false}
                     />
 
-                    {/* Monitoring dot indicator */}
                     {isMonitored && (
                       <div className="absolute top-2 right-2">
                         <div
@@ -253,12 +225,13 @@ function LibraryPage() {
                     )}
                   </div>
 
-                  {/* Artist Name */}
                   <h3
                     className="text-sm font-semibold group-hover:underline transition-colors cursor-pointer truncate text-center"
                     style={{ color: "#fff" }}
                     onClick={() =>
-                      navigate(`/artist/${artist.foreignArtistId}`, { state: { artistName: artist.artistName } })
+                      navigate(`/artist/${artist.foreignArtistId}`, {
+                        state: { artistName: artist.artistName },
+                      })
                     }
                     title={artist.artistName}
                   >
@@ -287,7 +260,7 @@ function LibraryPage() {
               No Artists Found
             </h3>
             <p className="mb-4" style={{ color: "#c1c1c3" }}>
-              No artists match your search "{searchTerm}"
+              No artists match your search &quot;{searchTerm}&quot;
             </p>
             <button
               onClick={() => setSearchTerm("")}

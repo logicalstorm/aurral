@@ -15,7 +15,6 @@ async function getLidarrClient() {
   return lidarrClient;
 }
 
-// Get settings helper
 function getSettings() {
   return dbOps.getSettings();
 }
@@ -27,14 +26,10 @@ export class LibraryManager {
   }
 
   getRootFolder() {
-    // Cache the root folder value
     if (this._rootFolder === null) {
-      // Use environment variable if set (for local development)
-      // Otherwise use /data (for Docker - users can remap via volume mounts: /their/path:/data)
       this._rootFolder =
         process.env.MUSIC_ROOT || process.env.DATA_PATH || "/data";
 
-      // Only log once on first call
       if (process.env.NODE_ENV !== "production" && !this._rootFolderLogged) {
         console.log(
           `[LibraryManager] Root folder: ${this._rootFolder} (MUSIC_ROOT=${process.env.MUSIC_ROOT || "not set"}, DATA_PATH=${process.env.DATA_PATH || "not set"})`,
@@ -46,8 +41,6 @@ export class LibraryManager {
   }
 
   setRootFolder(folderPath) {
-    // No-op: root folder is always /data
-    // This method is kept for API compatibility but doesn't do anything
     return Promise.resolve();
   }
 
@@ -109,7 +102,6 @@ export class LibraryManager {
 
   async fetchAlbumTracks(albumId, releaseGroupMbid) {
     try {
-      // Fetch release group details to get releases
       const rgData = await musicbrainzRequest(
         `/release-group/${releaseGroupMbid}`,
         {
@@ -118,10 +110,8 @@ export class LibraryManager {
       );
 
       if (rgData.releases && rgData.releases.length > 0) {
-        // Get the first release
         const releaseId = rgData.releases[0].id;
 
-        // Fetch release details with recordings
         const releaseData = await musicbrainzRequest(`/release/${releaseId}`, {
           inc: "recordings",
         });
@@ -142,7 +132,6 @@ export class LibraryManager {
                     );
                     tracksAdded++;
                   } catch (err) {
-                    // Track might already exist, that's okay
                     if (!err.message.includes("already exists")) {
                       console.error(
                         `Failed to add track ${recording.title}:`,
@@ -156,7 +145,6 @@ export class LibraryManager {
           }
         }
 
-        // Update album statistics after tracks are added
         if (tracksAdded > 0) {
           await this.updateAlbumStatistics(albumId);
         }
@@ -339,7 +327,9 @@ export class LibraryManager {
       albumName,
       {
         monitored: true,
-        triggerSearch: options.triggerSearch === true || (options.triggerSearch === undefined && searchOnAdd),
+        triggerSearch:
+          options.triggerSearch === true ||
+          (options.triggerSearch === undefined && searchOnAdd),
       },
     );
 
@@ -403,10 +393,10 @@ export class LibraryManager {
       artistPath,
       this.sanitizePath(lidarrAlbum.title),
     );
-    
+
     const rawStats = lidarrAlbum.statistics || {};
     let percentOfTracks = rawStats.percentOfTracks;
-    
+
     if (percentOfTracks !== undefined) {
       if (percentOfTracks > 1 && percentOfTracks <= 100) {
         percentOfTracks = percentOfTracks;
@@ -416,7 +406,7 @@ export class LibraryManager {
         percentOfTracks = Math.min(100, Math.round(percentOfTracks / 10));
       }
     }
-    
+
     return {
       id: lidarrAlbum.id?.toString() || lidarrAlbum.foreignAlbumId,
       artistId: lidarrAlbum.artistId?.toString() || lidarrArtist.id?.toString(),
@@ -514,7 +504,7 @@ export class LibraryManager {
       const rawPercent = lidarrAlbum.statistics?.percentOfTracks || 0;
       const albumSizeOnDisk = lidarrAlbum.statistics?.sizeOnDisk || 0;
       let normalizedPercent = rawPercent;
-      
+
       if (rawPercent > 1 && rawPercent <= 100) {
         normalizedPercent = rawPercent;
       } else if (rawPercent <= 1 && rawPercent >= 0) {
@@ -522,9 +512,9 @@ export class LibraryManager {
       } else if (rawPercent > 100) {
         normalizedPercent = Math.min(100, Math.round(rawPercent / 10));
       }
-      
+
       const isAlbumComplete = normalizedPercent >= 100 || albumSizeOnDisk > 0;
-      
+
       console.log(
         `[LibraryManager] Album ${albumId} - Raw percent: ${rawPercent}, Normalized: ${normalizedPercent}%, Complete: ${isAlbumComplete}`,
       );
@@ -541,7 +531,7 @@ export class LibraryManager {
           this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete),
         );
         console.log(
-          `[LibraryManager] Mapped tracks - hasFile counts: ${mappedTracks.filter(t => t.hasFile).length}/${mappedTracks.length}`,
+          `[LibraryManager] Mapped tracks - hasFile counts: ${mappedTracks.filter((t) => t.hasFile).length}/${mappedTracks.length}`,
         );
         return mappedTracks;
       }
@@ -560,7 +550,7 @@ export class LibraryManager {
               this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete),
             );
             console.log(
-              `[LibraryManager] Mapped tracks - hasFile counts: ${mappedTracks.filter(t => t.hasFile).length}/${mappedTracks.length}`,
+              `[LibraryManager] Mapped tracks - hasFile counts: ${mappedTracks.filter((t) => t.hasFile).length}/${mappedTracks.length}`,
             );
             return mappedTracks;
           }
@@ -586,7 +576,7 @@ export class LibraryManager {
             this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete),
           );
           console.log(
-            `[LibraryManager] Mapped tracks - hasFile counts: ${mappedTracks.filter(t => t.hasFile).length}/${mappedTracks.length}`,
+            `[LibraryManager] Mapped tracks - hasFile counts: ${mappedTracks.filter((t) => t.hasFile).length}/${mappedTracks.length}`,
           );
           return mappedTracks;
         }
@@ -608,15 +598,20 @@ export class LibraryManager {
     }
   }
 
-  mapLidarrTrack(lidarrTrack, lidarrAlbum, trackNumber = 0, albumIsComplete = false) {
+  mapLidarrTrack(
+    lidarrTrack,
+    lidarrAlbum,
+    trackNumber = 0,
+    albumIsComplete = false,
+  ) {
     const path = lidarrTrack.path || null;
     const size = lidarrTrack.sizeOnDisk || lidarrTrack.size || 0;
     const hasFileExplicit = lidarrTrack.hasFile;
     const hasFileFromPathOrSize = !!(path || size > 0);
     const albumSizeOnDisk = lidarrAlbum.statistics?.sizeOnDisk || 0;
-    
+
     let hasFile = false;
-    
+
     if (albumIsComplete || albumSizeOnDisk > 0) {
       hasFile = true;
     } else if (hasFileExplicit === true) {
@@ -626,7 +621,7 @@ export class LibraryManager {
     } else if (hasFileExplicit === false) {
       hasFile = false;
     }
-    
+
     console.log(
       `[LibraryManager] Track "${lidarrTrack.title || lidarrTrack.trackTitle}" - hasFile: ${hasFile}, albumIsComplete: ${albumIsComplete}, albumSizeOnDisk: ${albumSizeOnDisk}, hasFileExplicit: ${hasFileExplicit}, path: ${!!path}, size: ${size}`,
     );
@@ -693,7 +688,6 @@ export class LibraryManager {
   }
 
   sanitizePath(name) {
-    // Remove invalid characters for file paths
     return name.replace(/[<>:"/\\|?*]/g, "_").trim();
   }
 

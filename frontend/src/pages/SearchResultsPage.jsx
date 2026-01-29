@@ -1,13 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Loader, Music, ArrowLeft } from "lucide-react";
-import {
-  searchArtists,
-  searchArtistsByTag,
-  getDiscovery,
-} from "../utils/api";
+import { searchArtists, searchArtistsByTag, getDiscovery } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
-import { useToast } from "../contexts/ToastContext";
 
 const PAGE_SIZE = 24;
 
@@ -25,7 +20,6 @@ function SearchResultsPage() {
   const [hasMore, setHasMore] = useState(false);
   const [searchTotalCount, setSearchTotalCount] = useState(0);
   const navigate = useNavigate();
-  const { showSuccess } = useToast();
 
   const dedupe = useCallback((artists) => {
     const seen = new Set();
@@ -44,9 +38,10 @@ function SearchResultsPage() {
         setError(null);
         try {
           const data = await getDiscovery();
-          const list = type === "recommended"
-            ? (data.recommendations || [])
-            : (data.globalTop || []);
+          const list =
+            type === "recommended"
+              ? data.recommendations || []
+              : data.globalTop || [];
           setFullList(list);
           setResults(list);
           setVisibleCount(PAGE_SIZE);
@@ -54,7 +49,8 @@ function SearchResultsPage() {
           if (list.length > 0) {
             const imagesMap = {};
             list.forEach((artist) => {
-              if (artist.image && artist.id) imagesMap[artist.id] = artist.image;
+              if (artist.image && artist.id)
+                imagesMap[artist.id] = artist.image;
             });
             setArtistImages(imagesMap);
           }
@@ -127,7 +123,9 @@ function SearchResultsPage() {
   const loadMore = useCallback(async () => {
     if (type === "recommended" || type === "trending") {
       const next = visibleCount + PAGE_SIZE;
-      setVisibleCount((c) => Math.min(c + PAGE_SIZE, fullList?.length ?? c + PAGE_SIZE));
+      setVisibleCount((c) =>
+        Math.min(c + PAGE_SIZE, fullList?.length ?? c + PAGE_SIZE),
+      );
       setHasMore((fullList?.length ?? 0) > next);
       return;
     }
@@ -174,7 +172,7 @@ function SearchResultsPage() {
     } finally {
       setLoadingMore(false);
     }
-  }, [type, fullList, visibleCount, query, results.length, dedupe]);
+  }, [type, fullList, visibleCount, query, results, dedupe]);
 
   const getArtistType = (artistType) => {
     const types = {
@@ -193,23 +191,14 @@ function SearchResultsPage() {
       ? results.slice(0, visibleCount)
       : results;
 
-  const formatLifeSpan = (lifeSpan) => {
-    if (!lifeSpan) return null;
-    const { begin, end, ended } = lifeSpan;
-    if (!begin) return null;
-
-    const beginYear = begin.split("-")[0];
-    if (ended && end) {
-      const endYear = end.split("-")[0];
-      return `${beginYear} - ${endYear}`;
-    }
-    return `${beginYear} - Present`;
-  };
-
-  const showContent = !loading && (query || type === "recommended" || type === "trending");
+  const showContent =
+    !loading && (query || type === "recommended" || type === "trending");
   const isEmpty = displayedArtists.length === 0;
   const showBackButton =
-    type === "recommended" || type === "trending" || type === "tag" || !!query.trim();
+    type === "recommended" ||
+    type === "trending" ||
+    type === "tag" ||
+    !!query.trim();
   const showLoadMore =
     hasMore &&
     (type === "recommended" || type === "trending"
@@ -238,14 +227,15 @@ function SearchResultsPage() {
               : type === "tag"
                 ? "Genre Results"
                 : query.trim()
-                  ? (loading
-                      ? `Showing results for "${query}"`
-                      : `Showing ${results.length} results for "${query}"`)
+                  ? loading
+                    ? `Showing results for "${query}"`
+                    : `Showing ${results.length} results for "${query}"`
                   : "Search Results"}
         </h1>
         {type === "recommended" && (
           <p style={{ color: "#c1c1c3" }}>
-            {results.length} artist{results.length !== 1 ? "s" : ""} we think you&apos;ll like
+            {results.length} artist{results.length !== 1 ? "s" : ""} we think
+            you&apos;ll like
           </p>
         )}
         {type === "trending" && (
@@ -264,7 +254,10 @@ function SearchResultsPage() {
 
       {loading && (
         <div className="flex justify-center items-center py-20">
-          <Loader className="w-12 h-12 animate-spin" style={{ color: "#c1c1c3" }} />
+          <Loader
+            className="w-12 h-12 animate-spin"
+            style={{ color: "#c1c1c3" }}
+          />
         </div>
       )}
 
@@ -299,11 +292,14 @@ function SearchResultsPage() {
                     className="group relative flex flex-col w-full min-w-0"
                   >
                     <div
-                      onClick={() => navigate(`/artist/${artist.id}`, { state: { artistName: artist.name } })}
+                      onClick={() =>
+                        navigate(`/artist/${artist.id}`, {
+                          state: { artistName: artist.name },
+                        })
+                      }
                       className="relative aspect-square mb-3 overflow-hidden cursor-pointer shadow-sm group-hover:shadow-md transition-all"
                       style={{ backgroundColor: "#211f27" }}
                     >
-                      {/* Artist Image */}
                       <ArtistImage
                         src={
                           artistImages[artist.id] ||
@@ -316,12 +312,15 @@ function SearchResultsPage() {
                         className="h-full w-full group-hover:scale-105 transition-transform duration-300"
                         showLoading={false}
                       />
-
                     </div>
 
                     <div className="flex flex-col min-w-0">
                       <h3
-                        onClick={() => navigate(`/artist/${artist.id}`, { state: { artistName: artist.name } })}
+                        onClick={() =>
+                          navigate(`/artist/${artist.id}`, {
+                            state: { artistName: artist.name },
+                          })
+                        }
                         className="font-semibold truncate hover:underline cursor-pointer"
                         style={{ color: "#fff" }}
                       >

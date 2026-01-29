@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   CheckCircle,
@@ -22,25 +22,24 @@ import api, {
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
 
+const allReleaseTypes = [
+  "Album",
+  "EP",
+  "Single",
+  "Broadcast",
+  "Soundtrack",
+  "Spokenword",
+  "Remix",
+  "Live",
+  "Compilation",
+  "Demo",
+];
+
 function SettingsPage() {
   const [health, setHealth] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [refreshingDiscovery, setRefreshingDiscovery] = useState(false);
   const [clearingCache, setClearingCache] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  const allReleaseTypes = [
-    "Album",
-    "EP",
-    "Single",
-    "Broadcast",
-    "Soundtrack",
-    "Spokenword",
-    "Remix",
-    "Live",
-    "Compilation",
-    "Demo",
-  ];
 
   const { showSuccess, showError, showInfo } = useToast();
 
@@ -52,7 +51,12 @@ function SettingsPage() {
       navidrome: { url: "", username: "", password: "" },
       lastfm: { username: "" },
       slskd: { url: "", apiKey: "" },
-      lidarr: { url: "", apiKey: "", qualityProfileId: null, searchOnAdd: false },
+      lidarr: {
+        url: "",
+        apiKey: "",
+        qualityProfileId: null,
+        searchOnAdd: false,
+      },
       musicbrainz: { email: "" },
       general: { authUser: "", authPassword: "" },
     },
@@ -76,8 +80,7 @@ function SettingsPage() {
     hasUnsavedChangesRef.current = hasUnsavedChanges;
   }, [hasUnsavedChanges]);
 
-  const fetchSettings = async () => {
-    setLoading(true);
+  const fetchSettings = useCallback(async () => {
     comparisonEnabledRef.current = false;
     try {
       const [healthData, savedSettings] = await Promise.all([
@@ -146,26 +149,18 @@ function SettingsPage() {
             updatedSettings.integrations.lidarr.apiKey,
           );
           setLidarrProfiles(profiles);
-        } catch (profileErr) {
-          console.error(
-            "Failed to load profiles on settings fetch:",
-            profileErr,
-          );
+        } catch {
         } finally {
           setLoadingLidarrProfiles(false);
         }
       }
-    } catch (err) {
-      console.error("Failed to fetch settings:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    } catch {}
+  }, []);
 
   useEffect(() => {
     fetchSettings();
     previousLocationRef.current = location.pathname;
-  }, []);
+  }, [fetchSettings, location.pathname]);
   const handleSaveSettings = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -298,8 +293,7 @@ function SettingsPage() {
               `Default quality profile set to '${result.results.qualityProfile.name}'`,
             );
           }
-        } catch (profileErr) {
-          console.error("Failed to refresh profiles:", profileErr);
+        } catch {
         } finally {
           setLoadingLidarrProfiles(false);
         }
@@ -356,8 +350,6 @@ function SettingsPage() {
     }
   };
 
-  // Removed - now handled inline in the release types section
-
   const [activeTab, setActiveTab] = useState("integrations");
   const [hoveredTabIndex, setHoveredTabIndex] = useState(null);
   const tabsRef = useRef(null);
@@ -365,20 +357,24 @@ function SettingsPage() {
   const hoverBubbleRef = useRef(null);
   const tabRefs = useRef({});
 
-  const tabs = [
-    { id: "integrations", label: "Integrations", icon: Server },
-    { id: "discovery", label: "Discovery", icon: Sparkles },
-    { id: "metadata", label: "Metadata", icon: TrendingUp },
-    { id: "auth", label: "Authentication", icon: Shield },
-  ];
+  const tabs = useMemo(
+    () => [
+      { id: "integrations", label: "Integrations", icon: Server },
+      { id: "discovery", label: "Discovery", icon: Sparkles },
+      { id: "metadata", label: "Metadata", icon: TrendingUp },
+      { id: "auth", label: "Authentication", icon: Shield },
+    ],
+    [],
+  );
 
   useEffect(() => {
     if (activeTab === "discovery") {
-      checkHealth().then(setHealth).catch(() => {});
+      checkHealth()
+        .then(setHealth)
+        .catch(() => {});
     }
   }, [activeTab]);
 
-  // Update active bubble position
   useEffect(() => {
     const updateActiveBubble = () => {
       if (!tabsRef.current || !activeBubbleRef.current) return;
@@ -413,7 +409,6 @@ function SettingsPage() {
     };
   }, [activeTab, tabs]);
 
-  // Update hover bubble position
   useEffect(() => {
     const updateHoverBubble = () => {
       if (!tabsRef.current || !hoverBubbleRef.current) return;
@@ -500,7 +495,10 @@ function SettingsPage() {
                 </div>
               </dl>
               {health?.discovery?.isUpdating && (
-                <p className="text-sm flex items-center gap-2" style={{ color: "#c1c1c3" }}>
+                <p
+                  className="text-sm flex items-center gap-2"
+                  style={{ color: "#c1c1c3" }}
+                >
                   <RefreshCw className="w-4 h-4 animate-spin" />
                   Updating…
                 </p>
@@ -557,7 +555,11 @@ function SettingsPage() {
                 {saving ? "Saving..." : "Save"}
               </button>
             </div>
-            <form onSubmit={handleSaveSettings} className="space-y-6" autoComplete="off">
+            <form
+              onSubmit={handleSaveSettings}
+              className="space-y-6"
+              autoComplete="off"
+            >
               <div
                 className="p-6 rounded-lg space-y-4"
                 style={{
@@ -666,11 +668,7 @@ function SettingsPage() {
                                     `Loaded ${profiles.length} quality profile(s)`,
                                   );
                                 }
-                              } catch (profileErr) {
-                                console.error(
-                                  "Failed to load profiles:",
-                                  profileErr,
-                                );
+                              } catch {
                               } finally {
                                 setLoadingLidarrProfiles(false);
                               }
@@ -808,7 +806,9 @@ function SettingsPage() {
                       <input
                         type="checkbox"
                         className="checkbox"
-                        checked={settings.integrations?.lidarr?.searchOnAdd || false}
+                        checked={
+                          settings.integrations?.lidarr?.searchOnAdd || false
+                        }
                         onChange={(e) =>
                           updateSettings({
                             ...settings,
@@ -822,12 +822,19 @@ function SettingsPage() {
                           })
                         }
                       />
-                      <span className="text-sm font-medium" style={{ color: "#fff" }}>
+                      <span
+                        className="text-sm font-medium"
+                        style={{ color: "#fff" }}
+                      >
                         Search on Add
                       </span>
                     </label>
-                    <p className="mt-1 text-xs ml-6" style={{ color: "#c1c1c3" }}>
-                      Automatically search for albums when adding them to library
+                    <p
+                      className="mt-1 text-xs ml-6"
+                      style={{ color: "#c1c1c3" }}
+                    >
+                      Automatically search for albums when adding them to
+                      library
                     </p>
                   </div>
 
@@ -1007,7 +1014,11 @@ function SettingsPage() {
                 {saving ? "Saving..." : "Save"}
               </button>
             </div>
-            <form onSubmit={handleSaveSettings} className="space-y-6" autoComplete="off">
+            <form
+              onSubmit={handleSaveSettings}
+              className="space-y-6"
+              autoComplete="off"
+            >
               <div
                 className="p-6 rounded-lg space-y-4"
                 style={{
@@ -1214,7 +1225,11 @@ function SettingsPage() {
                 {saving ? "Saving..." : "Save"}
               </button>
             </div>
-            <form onSubmit={handleSaveSettings} className="space-y-6" autoComplete="off">
+            <form
+              onSubmit={handleSaveSettings}
+              className="space-y-6"
+              autoComplete="off"
+            >
               <div
                 className="p-6 rounded-lg space-y-4"
                 style={{
@@ -1361,11 +1376,11 @@ function SettingsPage() {
           >
             <div className="mb-4">
               <h3 className="text-xl font-bold mb-2" style={{ color: "#fff" }}>
-                Apply Davo's Recommended Settings
+                Apply Davo&apos;s Recommended Settings
               </h3>
               <p className="mb-4" style={{ color: "#c1c1c3" }}>
-                This will apply Davo's Community Lidarr Guide settings to your
-                Lidarr instance:
+                This will apply Davo&apos;s Community Lidarr Guide settings to
+                your Lidarr instance:
               </p>
               <ul className="space-y-2 mb-4" style={{ color: "#c1c1c3" }}>
                 <li className="flex items-start">
@@ -1388,8 +1403,8 @@ function SettingsPage() {
                 <li className="flex items-start">
                   <span className="mr-2">•</span>
                   <span>
-                    Create <strong>"Aurral - HQ"</strong> quality profile (FLAC
-                    + MP3-320)
+                    Create <strong>&quot;Aurral - HQ&quot;</strong> quality
+                    profile (FLAC + MP3-320)
                   </span>
                 </li>
               </ul>
@@ -1440,14 +1455,12 @@ function SettingsPage() {
             className="relative p-1.5 inline-flex"
             style={{ backgroundColor: "#0f0f12" }}
           >
-            {/* Active bubble */}
             <div
               ref={activeBubbleRef}
               className="absolute transition-all duration-300 ease-out z-10 opacity-0"
               style={{ backgroundColor: "#211f27" }}
             />
 
-            {/* Hover bubble - covers entire nav by default, shrinks to hovered tab */}
             <div
               ref={hoverBubbleRef}
               className="absolute transition-all duration-200 ease-out z-0"
@@ -1460,7 +1473,6 @@ function SettingsPage() {
             >
               {tabs.map((tab, index) => {
                 const Icon = tab.icon;
-                const isActive = activeTab === tab.id;
                 return (
                   <button
                     key={tab.id}
