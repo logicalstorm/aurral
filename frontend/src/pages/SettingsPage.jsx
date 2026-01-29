@@ -1141,6 +1141,43 @@ function SettingsPage() {
                       based on your listening history.
                     </p>
                   </div>
+                  <div>
+                    <label
+                      className="block text-sm font-medium mb-1"
+                      style={{ color: "#fff" }}
+                    >
+                      Discovery period
+                    </label>
+                    <select
+                      className="input"
+                      value={
+                        settings.integrations?.lastfm?.discoveryPeriod ||
+                        "1month"
+                      }
+                      onChange={(e) =>
+                        updateSettings({
+                          ...settings,
+                          integrations: {
+                            ...settings.integrations,
+                            lastfm: {
+                              ...(settings.integrations?.lastfm || {}),
+                              discoveryPeriod: e.target.value,
+                            },
+                          },
+                        })
+                      }
+                    >
+                      <option value="7day">Last 7 days</option>
+                      <option value="1month">This month</option>
+                      <option value="3month">3 months</option>
+                      <option value="6month">6 months</option>
+                      <option value="12month">12 months</option>
+                      <option value="overall">All time</option>
+                    </select>
+                    <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
+                      Which Last.fm listening period to use for discovery seeds.
+                    </p>
+                  </div>
                   <p className="text-xs" style={{ color: "#c1c1c3" }}>
                     API key is required for high-quality images, better
                     recommendations, and weekly flow. Username enables

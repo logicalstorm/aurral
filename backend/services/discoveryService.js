@@ -12,6 +12,13 @@ const getLastfmUsername = () => {
   return settings.integrations?.lastfm?.username || null;
 };
 
+const LASTFM_PERIODS = ["7day", "1month", "3month", "6month", "12month", "overall"];
+const getLastfmDiscoveryPeriod = () => {
+  const settings = dbOps.getSettings();
+  const p = settings.integrations?.lastfm?.discoveryPeriod;
+  return p && LASTFM_PERIODS.includes(p) ? p : "1month";
+};
+
 // Initialize cache - but check if discovery is actually configured first
 let discoveryCache = {
   recommendations: [],
@@ -121,12 +128,13 @@ export const updateDiscoveryCache = async () => {
     // Fetch Last.fm user's top artists if username is configured
     let lastfmArtists = [];
     if (hasLastfmUser) {
-      console.log(`Fetching Last.fm user top artists for ${lastfmUsername}...`);
+      const discoveryPeriod = getLastfmDiscoveryPeriod();
+      console.log(`Fetching Last.fm user top artists for ${lastfmUsername} (period: ${discoveryPeriod})...`);
       try {
         const userTopArtists = await lastfmRequest("user.getTopArtists", {
           user: lastfmUsername,
           limit: 50,
-          period: "overall", // overall, 7day, 1month, 3month, 6month, 12month
+          period: discoveryPeriod,
         });
 
         if (!userTopArtists) {
@@ -297,37 +305,82 @@ export const updateDiscoveryCache = async () => {
     );
 
     if (getLastfmApiKey()) {
-      console.log("Fetching Global Trending artists from Last.fm...");
+      console.log("Fetching Global Trending (real-time style) from Last.fm...");
       try {
-        const topData = await lastfmRequest("chart.getTopArtists", {
+        const trackData = await lastfmRequest("chart.getTopTracks", {
           limit: 100,
         });
-        if (topData?.artists?.artist) {
-          const topArtists = Array.isArray(topData.artists.artist)
-            ? topData.artists.artist
-            : [topData.artists.artist];
-          discoveryCache.globalTop = topArtists
-            .map((a) => {
-              let img = null;
-              if (a.image && Array.isArray(a.image)) {
-                const i =
-                  a.image.find((img) => img.size === "extralarge") ||
-                  a.image.find((img) => img.size === "large");
-                if (
-                  i &&
-                  i["#text"] &&
-                  !i["#text"].includes("2a96cbd8b46e442fc41c2b86b821562f")
-                )
-                  img = i["#text"];
-              }
-              return { id: a.mbid, name: a.name, image: img, type: "Artist" };
-            })
-            .filter((a) => a.id && !existingArtistIds.has(a.id))
-            .slice(0, 32);
-          console.log(
-            `Found ${discoveryCache.globalTop.length} trending artists.`,
-          );
+        const seenMbids = new Set();
+        const seenNames = new Set();
+        const artistsFromTracks = [];
+        if (trackData?.tracks?.track) {
+          const tracks = Array.isArray(trackData.tracks.track)
+            ? trackData.tracks.track
+            : [trackData.tracks.track];
+          for (const t of tracks) {
+            const artist = t.artist;
+            if (!artist) continue;
+            const mbid = (artist.mbid && artist.mbid.trim()) || null;
+            const name = artist.name || artist["#text"];
+            if (!name) continue;
+            if ((mbid && seenMbids.has(mbid)) || (!mbid && seenNames.has(name.toLowerCase())))
+              continue;
+            if (mbid) seenMbids.add(mbid);
+            seenNames.add(name.toLowerCase());
+            let img = null;
+            if (t.image && Array.isArray(t.image)) {
+              const i =
+                t.image.find((im) => im.size === "extralarge") ||
+                t.image.find((im) => im.size === "large");
+              if (i && i["#text"] && !i["#text"].includes("2a96cbd8b46e442fc41c2b86b821562f"))
+                img = i["#text"];
+            }
+            artistsFromTracks.push({
+              id: mbid,
+              name,
+              image: img,
+              type: "Artist",
+            });
+          }
         }
+        let globalTop = artistsFromTracks
+          .filter((a) => !a.id || !existingArtistIds.has(a.id))
+          .slice(0, 32);
+        if (globalTop.length < 12) {
+          const topData = await lastfmRequest("chart.getTopArtists", {
+            limit: 100,
+          });
+          if (topData?.artists?.artist) {
+            const topArtists = Array.isArray(topData.artists.artist)
+              ? topData.artists.artist
+              : [topData.artists.artist];
+            const fromArtists = topArtists
+              .map((a) => {
+                let img = null;
+                if (a.image && Array.isArray(a.image)) {
+                  const i =
+                    a.image.find((im) => im.size === "extralarge") ||
+                    a.image.find((im) => im.size === "large");
+                  if (i && i["#text"] && !i["#text"].includes("2a96cbd8b46e442fc41c2b86b821562f"))
+                    img = i["#text"];
+                }
+                return { id: a.mbid, name: a.name, image: img, type: "Artist" };
+              })
+              .filter((a) => a.id && !existingArtistIds.has(a.id));
+            const fillMbids = new Set(globalTop.map((a) => a.id).filter(Boolean));
+            for (const a of fromArtists) {
+              if (globalTop.length >= 32) break;
+              if (a.id && !fillMbids.has(a.id)) {
+                fillMbids.add(a.id);
+                globalTop.push(a);
+              }
+            }
+          }
+        }
+        discoveryCache.globalTop = globalTop;
+        console.log(
+          `Found ${discoveryCache.globalTop.length} trending artists (from top tracks).`,
+        );
       } catch (e) {
         console.error(`Failed to fetch Global Top: ${e.message}`);
       }

@@ -168,10 +168,6 @@ router.get("/", async (req, res) => {
   );
   globalTop = globalTop.filter((artist) => !existingArtistIds.has(artist.id));
 
-  if (basedOn && Array.isArray(basedOn)) {
-    basedOn = basedOn.filter((artist) => !existingArtistIds.has(artist.id));
-  }
-
   if (
     recommendations.length > 0 ||
     globalTop.length > 0 ||
