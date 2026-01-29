@@ -1,13 +1,9 @@
 services:
   aurral:
     build: .
-    container_name: aurral
-    restart: unless-stopped
     ports:
       - "3001:3001"
     volumes:
       - ./backend/data:/app/data
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
+      - /data/downloads/tmp:/app/weekly-flow
+      - /data/music:/app/navidrome-music:ro
