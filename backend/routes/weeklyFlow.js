@@ -4,8 +4,10 @@ import { weeklyFlowWorker } from "../services/weeklyFlowWorker.js";
 import { playlistSource } from "../services/weeklyFlowPlaylistSource.js";
 import { soulseekClient } from "../services/simpleSoulseekClient.js";
 import { playlistManager } from "../services/weeklyFlowPlaylistManager.js";
+import { flowPlaylistConfig } from "../services/weeklyFlowPlaylistConfig.js";
 
 const router = express.Router();
+const DEFAULT_LIMIT = 30;
 
 router.post("/start/:playlistType", async (req, res) => {
   try {
@@ -52,12 +54,97 @@ router.get("/status", (req, res) => {
   const workerStatus = weeklyFlowWorker.getStatus();
   const stats = downloadTracker.getStats();
   const allJobs = downloadTracker.getAll();
+  const playlists = flowPlaylistConfig.getPlaylists();
 
   res.json({
     worker: workerStatus,
     stats,
     jobs: allJobs,
+    playlists,
   });
+});
+
+router.put("/playlist/:playlistType/enabled", async (req, res) => {
+  try {
+    const { playlistType } = req.params;
+    const { enabled } = req.body;
+
+    if (typeof enabled !== "boolean") {
+      return res.status(400).json({ error: "enabled must be a boolean" });
+    }
+
+    const validTypes = ["recommended", "mix", "trending"];
+    if (!validTypes.includes(playlistType)) {
+      return res.status(400).json({ error: "Invalid playlist type" });
+    }
+
+    if (enabled) {
+      if (!soulseekClient.isConfigured()) {
+        return res.status(400).json({
+          error: "Soulseek credentials not configured",
+        });
+      }
+
+      weeklyFlowWorker.stop();
+      playlistManager.updateConfig();
+      await playlistManager.weeklyReset([playlistType]);
+      downloadTracker.clearByPlaylistType(playlistType);
+
+      const tracks = await playlistSource.getTracksForPlaylist(
+        playlistType,
+        DEFAULT_LIMIT,
+      );
+      if (tracks.length === 0) {
+        flowPlaylistConfig.setEnabled(playlistType, true);
+        flowPlaylistConfig.scheduleNextRun(playlistType);
+        return res.json({
+          success: true,
+          playlistType,
+          enabled: true,
+          tracksQueued: 0,
+          message: "Playlist enabled; no tracks available yet.",
+        });
+      }
+
+      downloadTracker.addJobs(tracks, playlistType);
+      if (!weeklyFlowWorker.running) {
+        await weeklyFlowWorker.start();
+      }
+
+      flowPlaylistConfig.setEnabled(playlistType, true);
+      flowPlaylistConfig.scheduleNextRun(playlistType);
+
+      res.json({
+        success: true,
+        playlistType,
+        enabled: true,
+        tracksQueued: tracks.length,
+      });
+    } else {
+      weeklyFlowWorker.stop();
+      playlistManager.updateConfig();
+      await playlistManager.weeklyReset([playlistType]);
+      downloadTracker.clearByPlaylistType(playlistType);
+
+      flowPlaylistConfig.setEnabled(playlistType, false);
+
+      const stillPending = downloadTracker.getNextPending();
+      if (stillPending && !weeklyFlowWorker.running) {
+        await weeklyFlowWorker.start();
+      }
+
+      res.json({
+        success: true,
+        playlistType,
+        enabled: false,
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to update playlist",
+      message: error.message,
+    });
+  }
 });
 
 router.get("/jobs/:playlistType", (req, res) => {

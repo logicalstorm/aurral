@@ -4,19 +4,13 @@ import {
   Sparkles,
   Music2,
   TrendingUp,
-  Play,
-  RotateCcw,
   Loader2,
   CheckCircle2,
   Clock,
 } from "lucide-react";
-import {
-  getFlowStatus,
-  startFlowPlaylist,
-  resetFlowPlaylists,
-  stopFlowWorker,
-} from "../utils/api";
+import { getFlowStatus, setFlowPlaylistEnabled } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
+import PowerSwitch from "../components/PowerSwitch";
 
 const PLAYLIST_CONFIG = [
   {
@@ -44,13 +38,23 @@ const PLAYLIST_CONFIG = [
   },
 ];
 
-const LIMIT_OPTIONS = [10, 20, 30];
+function formatNextRun(nextRunAt) {
+  if (!nextRunAt) return null;
+  const ts =
+    typeof nextRunAt === "number" ? nextRunAt : parseInt(nextRunAt, 10);
+  if (!Number.isFinite(ts)) return null;
+  const now = Date.now();
+  const diff = ts - now;
+  if (diff <= 0) return "Refreshing soon";
+  const days = Math.ceil(diff / (24 * 60 * 60 * 1000));
+  return days === 1 ? "Resets tomorrow" : `Resets in ${days} days`;
+}
 
 function FlowPage() {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [starting, setStarting] = useState(null);
-  const [resetting, setResetting] = useState(null);
+  const [toggling, setToggling] = useState(null);
+  const [optimisticEnabled, setOptimisticEnabled] = useState({});
   const { showSuccess, showError } = useToast();
 
   const fetchStatus = async () => {
@@ -95,32 +99,31 @@ function FlowPage() {
     return "idle";
   };
 
-  const handleStart = async (backendType, limit = 30) => {
-    setStarting(backendType);
+  const isEnabled = (backendType) =>
+    status?.playlists?.[backendType]?.enabled === true;
+
+  const handleToggle = async (backendType, enabled) => {
+    setOptimisticEnabled((prev) => ({ ...prev, [backendType]: enabled }));
+    setToggling(backendType);
     try {
-      await startFlowPlaylist(backendType, limit);
-      showSuccess(`Started ${backendType} (${limit} tracks)`);
+      await setFlowPlaylistEnabled(backendType, enabled);
+      showSuccess(
+        enabled
+          ? `${backendType} playlist on (30 tracks)`
+          : `${backendType} playlist off`,
+      );
       await fetchStatus();
     } catch (err) {
+      setOptimisticEnabled((prev) => {
+        const next = { ...prev };
+        delete next[backendType];
+        return next;
+      });
       showError(
-        err.response?.data?.message || err.message || "Failed to start",
+        err.response?.data?.message || err.message || "Failed to update",
       );
     } finally {
-      setStarting(null);
-    }
-  };
-
-  const handleReset = async (playlistTypes) => {
-    setResetting(true);
-    try {
-      await stopFlowWorker();
-      await resetFlowPlaylists(playlistTypes);
-      showSuccess("Reset complete");
-      await fetchStatus();
-    } catch (err) {
-      showError(err.response?.data?.message || err.message || "Reset failed");
-    } finally {
-      setResetting(false);
+      setToggling(null);
     }
   };
 
@@ -139,7 +142,8 @@ function FlowPage() {
         <div>
           <h1 className="text-2xl font-semibold text-white">Flow</h1>
           <p className="text-sm text-[#c1c1c3]">
-            Weekly playlists built from Soulseek. Resets weekly or on demand.
+            Weekly playlists (30 tracks). Turn on to run in the background;
+            resets every week.
           </p>
         </div>
       </div>
@@ -171,80 +175,66 @@ function FlowPage() {
         </div>
       )}
 
-      <div className="space-y-6">
+      <div className="space-y-4">
         {PLAYLIST_CONFIG.map((config) => {
           const Icon = config.icon;
           const stats = getPlaylistStats(config.backendType);
           const state = getPlaylistState(config.backendType);
-          const isStarting = starting === config.backendType;
+          const enabled =
+            optimisticEnabled[config.backendType] ??
+            isEnabled(config.backendType);
+          const nextRun = formatNextRun(
+            status?.playlists?.[config.backendType]?.nextRunAt,
+          );
+          const isToggling = toggling === config.backendType;
 
           return (
             <div
               key={config.id}
-              className="p-6 bg-card rounded-lg border border-white/5"
+              className="p-5 bg-card rounded-lg border border-white/5"
             >
-              <div className="flex items-start gap-4">
-                <div className="p-2 rounded-lg bg-white/5">
-                  <Icon className="w-6 h-6 text-[#707e61]" />
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <div className="p-2 rounded-lg bg-white/5 flex-shrink-0">
+                    <Icon className="w-5 h-5 text-[#707e61]" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base font-medium text-white">
+                        {config.title}
+                      </h2>
+                      {isToggling && (
+                        <Loader2 className="w-4 h-4 animate-spin text-[#707e61] flex-shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-sm text-[#c1c1c3] mt-0.5">
+                      {config.description}
+                    </p>
+                    <div className="mt-2 flex items-center gap-2 text-sm text-[#c1c1c3]">
+                      {state === "running" && (
+                        <span className="inline-flex items-center gap-1.5 text-[#707e61]">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          {stats.done + stats.failed}/{stats.total}
+                        </span>
+                      )}
+                      {state === "completed" && stats.total > 0 && (
+                        <span className="inline-flex items-center gap-1.5 text-[#707e61]">
+                          <CheckCircle2 className="w-4 h-4" />
+                          {stats.done} done
+                          {stats.failed > 0 && ` · ${stats.failed} failed`}
+                        </span>
+                      )}
+                      {enabled && nextRun && <span>{nextRun}</span>}
+                    </div>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-lg font-medium text-white">
-                    {config.title}
-                  </h2>
-                  <p className="text-sm text-[#c1c1c3] mt-1">
-                    {config.description}
-                  </p>
-
-                  <div className="mt-4 flex flex-wrap items-center gap-3">
-                    {state === "running" && (
-                      <span className="inline-flex items-center gap-1.5 text-sm text-[#707e61]">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        {stats.done + stats.failed}/{stats.total} tracks
-                      </span>
-                    )}
-                    {state === "completed" && stats.total > 0 && (
-                      <span className="inline-flex items-center gap-1.5 text-sm text-[#707e61]">
-                        <CheckCircle2 className="w-4 h-4" />
-                        {stats.done} done
-                        {stats.failed > 0 && ` · ${stats.failed} failed`}
-                      </span>
-                    )}
-                    {state === "idle" && (
-                      <span className="text-sm text-[#c1c1c3]">
-                        Not running · Resets weekly
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {LIMIT_OPTIONS.map((limit) => (
-                      <button
-                        key={limit}
-                        onClick={() => handleStart(config.backendType, limit)}
-                        disabled={isStarting || state === "running"}
-                        className="px-3 py-1.5 text-sm font-medium rounded bg-[#707e61]/20 text-[#707e61] hover:bg-[#707e61]/30 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isStarting ? (
-                          <Loader2 className="w-4 h-4 animate-spin inline" />
-                        ) : (
-                          <Play className="w-4 h-4 inline mr-1 -mt-0.5" />
-                        )}{" "}
-                        Start {limit}
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => handleReset([config.backendType])}
-                      disabled={resetting || state === "idle"}
-                      className="px-3 py-1.5 text-sm font-medium rounded bg-white/10 text-[#c1c1c3] hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1"
-                    >
-                      {resetting ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <RotateCcw className="w-4 h-4" />
-                      )}{" "}
-                      Reset
-                    </button>
-                  </div>
+                <div className="flex-shrink-0">
+                  <PowerSwitch
+                    checked={enabled}
+                    onChange={(e) =>
+                      handleToggle(config.backendType, e.target.checked)
+                    }
+                  />
                 </div>
               </div>
             </div>

@@ -20,6 +20,17 @@ export const dbOps = {
       db.prepare("SELECT value FROM settings WHERE key = ?").get("releaseTypes")
         ?.value,
     );
+    const weeklyFlowPlaylists = dbHelpers.parseJSON(
+      db
+        .prepare("SELECT value FROM settings WHERE key = ?")
+        .get("weeklyFlowPlaylists")?.value,
+    );
+
+    const defaultFlowPlaylists = {
+      recommended: { enabled: false, nextRunAt: null },
+      mix: { enabled: false, nextRunAt: null },
+      trending: { enabled: false, nextRunAt: null },
+    };
 
     return {
       integrations: integrations || {},
@@ -27,6 +38,9 @@ export const dbOps = {
       queueCleaner: queueCleaner || {},
       rootFolderPath: rootFolderPath || null,
       releaseTypes: releaseTypes || [],
+      weeklyFlowPlaylists: weeklyFlowPlaylists
+        ? { ...defaultFlowPlaylists, ...weeklyFlowPlaylists }
+        : defaultFlowPlaylists,
     };
   },
 
@@ -52,6 +66,12 @@ export const dbOps = {
     }
     if (settings.releaseTypes) {
       stmt.run("releaseTypes", dbHelpers.stringifyJSON(settings.releaseTypes));
+    }
+    if (settings.weeklyFlowPlaylists !== undefined) {
+      stmt.run(
+        "weeklyFlowPlaylists",
+        dbHelpers.stringifyJSON(settings.weeklyFlowPlaylists),
+      );
     }
   },
 

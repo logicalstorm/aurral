@@ -353,6 +353,14 @@ export const getFlowJobs = async (playlistType) => {
   return response.data;
 };
 
+export const setFlowPlaylistEnabled = async (playlistType, enabled) => {
+  const response = await api.put(
+    `/weekly-flow/playlist/${playlistType}/enabled`,
+    { enabled },
+  );
+  return response.data;
+};
+
 export const startFlowPlaylist = async (playlistType, limit = 30) => {
   const response = await api.post(`/weekly-flow/start/${playlistType}`, {
     limit,
