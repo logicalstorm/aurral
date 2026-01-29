@@ -1,15 +1,7 @@
 import { useState, useEffect, useMemo, memo, useCallback, useRef } from "react";
 import PropTypes from "prop-types";
 import { useNavigate } from "react-router-dom";
-import {
-  Loader,
-  Music,
-  Sparkles,
-  CheckCircle,
-  Tag,
-  Clock,
-  History,
-} from "lucide-react";
+import { Loader, Music, Sparkles, Tag, Clock } from "lucide-react";
 import {
   getDiscovery,
   getRequests,
@@ -64,17 +56,18 @@ function DiscoverPage() {
             getRecentlyAdded(),
           ]);
 
-        const hasData = discoveryData && (
-          (discoveryData.recommendations && discoveryData.recommendations.length > 0) ||
-          (discoveryData.globalTop && discoveryData.globalTop.length > 0) ||
-          (discoveryData.topGenres && discoveryData.topGenres.length > 0)
-        );
+        const hasData =
+          discoveryData &&
+          ((discoveryData.recommendations &&
+            discoveryData.recommendations.length > 0) ||
+            (discoveryData.globalTop && discoveryData.globalTop.length > 0) ||
+            (discoveryData.topGenres && discoveryData.topGenres.length > 0));
 
         setData(discoveryData);
         setRequests(requestsData);
         setRecentlyAdded(recentlyAddedData);
         downloadStatusesRef.current = {};
-        
+
         if (hasData) {
           setLoading(false);
         } else {
@@ -179,15 +172,15 @@ function DiscoverPage() {
   const ArtistCard = memo(
     ({ artist, status }) => {
       const navigateTo = artist.navigateTo || artist.id;
-      const hasValidMbid = navigateTo && navigateTo !== "null" && navigateTo !== "undefined";
-      const handleClick = useCallback(
-        () => {
-          if (hasValidMbid) {
-            navigate(`/artist/${navigateTo}`, { state: { artistName: artist.name } });
-          }
-        },
-        [navigateTo, hasValidMbid, artist.name],
-      );
+      const hasValidMbid =
+        navigateTo && navigateTo !== "null" && navigateTo !== "undefined";
+      const handleClick = useCallback(() => {
+        if (hasValidMbid) {
+          navigate(`/artist/${navigateTo}`, {
+            state: { artistName: artist.name },
+          });
+        }
+      }, [navigateTo, hasValidMbid, artist.name]);
 
       return (
         <div className="group relative flex flex-col w-full min-w-0">
@@ -269,11 +262,11 @@ function DiscoverPage() {
     status: PropTypes.string,
   };
 
-  const hasData = data && (
-    (data.recommendations && data.recommendations.length > 0) ||
-    (data.globalTop && data.globalTop.length > 0) ||
-    (data.topGenres && data.topGenres.length > 0)
-  );
+  const hasData =
+    data &&
+    ((data.recommendations && data.recommendations.length > 0) ||
+      (data.globalTop && data.globalTop.length > 0) ||
+      (data.topGenres && data.topGenres.length > 0));
   const isActuallyUpdating = data?.isUpdating && !hasData;
 
   if (loading && !hasData && !isActuallyUpdating) {
@@ -480,7 +473,6 @@ function DiscoverPage() {
               className="text-2xl font-bold flex items-center"
               style={{ color: "#fff" }}
             >
-              <History className="w-6 h-6 mr-3" style={{ color: "#707e61" }} />
               Recent Requests
             </h2>
             <button
@@ -498,8 +490,14 @@ function DiscoverPage() {
               .slice(0, 6)
               .map((request) => {
                 const artistMbid = request.artistMbid || request.mbid;
-                const navigateTo = request.type === "album" ? artistMbid : (request.albumMbid || request.mbid);
-                const hasValidMbid = navigateTo && navigateTo !== "null" && navigateTo !== "undefined";
+                const navigateTo =
+                  request.type === "album"
+                    ? artistMbid
+                    : request.albumMbid || request.mbid;
+                const hasValidMbid =
+                  navigateTo &&
+                  navigateTo !== "null" &&
+                  navigateTo !== "undefined";
 
                 return (
                   <ArtistCard
@@ -537,10 +535,6 @@ function DiscoverPage() {
               className="text-2xl font-bold flex items-center"
               style={{ color: "#fff" }}
             >
-              <CheckCircle
-                className="w-6 h-6 mr-3"
-                style={{ color: "#c1c1c3" }}
-              />
               Recently Added
             </h2>
           </div>

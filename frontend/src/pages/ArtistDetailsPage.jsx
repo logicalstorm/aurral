@@ -1651,7 +1651,6 @@ function ArtistDetailsPage() {
             className="text-lg font-semibold mb-2 flex items-center"
             style={{ color: "#fff" }}
           >
-            <Radio className="w-4 h-4 mr-2" style={{ color: "#c1c1c3" }} />
             Preview
             {loadingPreview && (
               <Loader
@@ -1764,10 +1763,6 @@ function ArtistDetailsPage() {
                 className="text-lg font-semibold mb-2 flex items-center"
                 style={{ color: "#fff" }}
               >
-                <FileMusic
-                  className="w-4 h-4 mr-2"
-                  style={{ color: "#c1c1c3" }}
-                />
                 Albums in Your Library ({downloadedAlbums.length})
               </h2>
               <div className="space-y-1">
