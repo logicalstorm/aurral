@@ -35,6 +35,20 @@ db.exec(`
     cache_age INTEGER,
     created_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS weekly_flow_jobs (
+    id TEXT PRIMARY KEY,
+    artist_name TEXT NOT NULL,
+    track_name TEXT NOT NULL,
+    playlist_type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    staging_path TEXT,
+    final_path TEXT,
+    error TEXT,
+    started_at INTEGER,
+    completed_at INTEGER,
+    created_at INTEGER NOT NULL
+  );
 `);
 
 export const dbHelpers = {

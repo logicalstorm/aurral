@@ -3,10 +3,13 @@ import fs from "fs/promises";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { soulseekClient } from "./simpleSoulseekClient.js";
 import { playlistManager } from "./weeklyFlowPlaylistManager.js";
+import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 
 export class WeeklyFlowWorker {
   constructor(weeklyFlowRoot = "./weekly-flow") {
-    this.weeklyFlowRoot = weeklyFlowRoot;
+    this.weeklyFlowRoot = path.isAbsolute(weeklyFlowRoot)
+      ? weeklyFlowRoot
+      : path.resolve(process.cwd(), weeklyFlowRoot);
     this.running = false;
     this.intervalId = null;
     this.processing = false;
@@ -177,6 +180,9 @@ export class WeeklyFlowWorker {
       try {
         await playlistManager.createPlaylist(playlistType, playlistName);
         await playlistManager.triggerNavidromeScan();
+        if (flowPlaylistConfig.isEnabled(playlistType)) {
+          flowPlaylistConfig.scheduleNextRun(playlistType);
+        }
       } catch (error) {
         console.error(
           `[WeeklyFlowWorker] Failed to create playlist for ${playlistType}:`,

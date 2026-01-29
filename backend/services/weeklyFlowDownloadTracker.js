@@ -1,8 +1,91 @@
 import { randomUUID } from "crypto";
+import { db } from "../config/db-sqlite.js";
+
+function rowToJob(row) {
+  return {
+    id: row.id,
+    artistName: row.artist_name,
+    trackName: row.track_name,
+    playlistType: row.playlist_type,
+    status: row.status,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    stagingPath: row.staging_path,
+    finalPath: row.final_path,
+    error: row.error,
+  };
+}
+
+const insertStmt = db.prepare(`
+  INSERT INTO weekly_flow_jobs (id, artist_name, track_name, playlist_type, status, staging_path, final_path, error, started_at, completed_at, created_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+
+const updateStmt = db.prepare(`
+  UPDATE weekly_flow_jobs SET status = ?, staging_path = ?, final_path = ?, error = ?, started_at = ?, completed_at = ?
+  WHERE id = ?
+`);
+
+const deleteStmt = db.prepare("DELETE FROM weekly_flow_jobs WHERE id = ?");
+const deleteAllStmt = db.prepare("DELETE FROM weekly_flow_jobs");
+const selectAllStmt = db.prepare("SELECT * FROM weekly_flow_jobs");
 
 export class WeeklyFlowDownloadTracker {
   constructor() {
     this.jobs = new Map();
+    this._load();
+  }
+
+  _load() {
+    const rows = selectAllStmt.all();
+    for (const row of rows) {
+      const job = rowToJob(row);
+      if (job.status === "downloading") {
+        job.status = "pending";
+        job.startedAt = null;
+        job.stagingPath = null;
+        updateStmt.run(
+          job.status,
+          job.stagingPath,
+          job.finalPath,
+          job.error,
+          job.startedAt,
+          job.completedAt,
+          job.id,
+        );
+      }
+      this.jobs.set(job.id, job);
+    }
+  }
+
+  _insert(job) {
+    const createdAt = job.createdAt ?? Date.now();
+    job.createdAt = createdAt;
+    insertStmt.run(
+      job.id,
+      job.artistName,
+      job.trackName,
+      job.playlistType,
+      job.status,
+      job.stagingPath ?? null,
+      job.finalPath ?? null,
+      job.error ?? null,
+      job.startedAt ?? null,
+      job.completedAt ?? null,
+      createdAt,
+    );
+  }
+
+  _update(job) {
+    updateStmt.run(
+      job.status,
+      job.stagingPath ?? null,
+      job.finalPath ?? null,
+      job.error ?? null,
+      job.startedAt ?? null,
+      job.completedAt ?? null,
+      job.id,
+    );
   }
 
   addJob(artistName, trackName, playlistType) {
@@ -18,8 +101,10 @@ export class WeeklyFlowDownloadTracker {
       stagingPath: null,
       finalPath: null,
       error: null,
+      createdAt: Date.now(),
     };
     this.jobs.set(id, job);
+    this._insert(job);
     return id;
   }
 
@@ -63,6 +148,7 @@ export class WeeklyFlowDownloadTracker {
     if (stagingPath) {
       job.stagingPath = stagingPath;
     }
+    this._update(job);
     return true;
   }
 
@@ -72,6 +158,7 @@ export class WeeklyFlowDownloadTracker {
     job.status = "done";
     job.completedAt = Date.now();
     job.finalPath = finalPath;
+    this._update(job);
     return true;
   }
 
@@ -80,7 +167,9 @@ export class WeeklyFlowDownloadTracker {
     if (!job) return false;
     job.status = "failed";
     job.completedAt = Date.now();
-    job.error = error;
+    job.error =
+      typeof error === "string" ? error : (error && error.message) || null;
+    this._update(job);
     return true;
   }
 
@@ -131,6 +220,21 @@ export class WeeklyFlowDownloadTracker {
     }
     for (const id of toDelete) {
       this.jobs.delete(id);
+      deleteStmt.run(id);
+    }
+    return toDelete.length;
+  }
+
+  clearByPlaylistType(playlistType) {
+    const toDelete = [];
+    for (const [id, job] of this.jobs.entries()) {
+      if (job.playlistType === playlistType) {
+        toDelete.push(id);
+      }
+    }
+    for (const id of toDelete) {
+      this.jobs.delete(id);
+      deleteStmt.run(id);
     }
     return toDelete.length;
   }
@@ -138,6 +242,7 @@ export class WeeklyFlowDownloadTracker {
   clearAll() {
     const count = this.jobs.size;
     this.jobs.clear();
+    deleteAllStmt.run();
     return count;
   }
 }

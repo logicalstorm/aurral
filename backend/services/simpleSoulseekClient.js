@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import { dbOps } from "../config/db-helpers.js";
 import path from "path";
 import fs from "fs/promises";
+import { createWriteStream } from "fs";
 
 export class SimpleSoulseekClient {
   constructor() {
@@ -154,21 +155,63 @@ export class SimpleSoulseekClient {
       await this.connect();
     }
 
-    const dir = path.dirname(destinationPath);
+    const absPath = path.resolve(destinationPath);
+    const dir = path.dirname(absPath);
     await fs.mkdir(dir, { recursive: true });
 
+    const normalizedResult = {
+      ...result,
+      file: (result.file || "").replace(/\\/g, "/"),
+    };
+
+    const DOWNLOAD_TIMEOUT_MS = 120000;
+
     return new Promise((resolve, reject) => {
-      this.client.download(
-        {
-          file: result,
-          path: destinationPath,
-        },
-        (err, data) => {
+      let settled = false;
+      const settle = (fn) => (val) => {
+        if (settled) return;
+        settled = true;
+        fn(val);
+      };
+
+      const timeoutId = setTimeout(async () => {
+        clearTimeout(timeoutId);
+        try {
+          const stat = await fs.stat(absPath).catch(() => null);
+          if (stat && stat.size > 0) {
+            settle(resolve)(absPath);
+          } else {
+            settle(reject)(new Error("Download timeout"));
+          }
+        } catch (e) {
+          settle(reject)(e);
+        }
+      }, DOWNLOAD_TIMEOUT_MS);
+
+      this.client.downloadStream(
+        { file: normalizedResult },
+        (err, readStream) => {
           if (err) {
+            clearTimeout(timeoutId);
             reject(err);
             return;
           }
-          resolve(destinationPath);
+          const writeStream = createWriteStream(absPath);
+          readStream.pipe(writeStream);
+          writeStream.on("finish", () => {
+            clearTimeout(timeoutId);
+            settle(resolve)(absPath);
+          });
+          writeStream.on("error", (e) => {
+            clearTimeout(timeoutId);
+            readStream.destroy();
+            settle(reject)(e);
+          });
+          readStream.on("error", (e) => {
+            clearTimeout(timeoutId);
+            writeStream.destroy();
+            settle(reject)(e);
+          });
         },
       );
     });

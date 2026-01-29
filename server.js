@@ -64,6 +64,21 @@ app.use("/api/requests", requestsRouter);
 app.use("/api/health", healthRouter);
 app.use("/api/weekly-flow", weeklyFlowRouter);
 
+const HOUR_MS = 60 * 60 * 1000;
+setInterval(() => {
+  import("./backend/services/weeklyFlowScheduler.js")
+    .then((m) => m.runScheduledRefresh())
+    .catch((err) => console.error("Weekly flow scheduler error:", err.message));
+}, HOUR_MS);
+
+setTimeout(() => {
+  import("./backend/services/weeklyFlowScheduler.js")
+    .then((m) => m.startWorkerIfPending())
+    .catch((err) =>
+      console.error("Weekly flow startup check error:", err.message),
+    );
+}, 2000);
+
 const frontendDist = path.join(__dirname, "frontend", "dist");
 
 if (fs.existsSync(frontendDist)) {
