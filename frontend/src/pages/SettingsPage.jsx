@@ -95,7 +95,6 @@ function SettingsPage() {
           lidarr: {
             url: "",
             apiKey: "",
-            qualityProfileId: null,
             searchOnAdd: false,
             ...lidarr,
             qualityProfileId:

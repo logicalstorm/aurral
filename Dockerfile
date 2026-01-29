@@ -18,7 +18,7 @@ RUN addgroup -g 1001 -S nodejs && \
     chown -R nodejs:nodejs /app
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN apk add --no-cache python3 make g++ && npm ci --omit=dev
 
 COPY backend/ ./backend/
 COPY server.js ./

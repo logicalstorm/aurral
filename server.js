@@ -5,6 +5,7 @@ import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import path from "path";
 import fs from "fs";
+import { createServer } from "http";
 import { fileURLToPath } from "url";
 
 import { createAuthMiddleware } from "./backend/middleware/auth.js";
@@ -12,6 +13,7 @@ import {
   updateDiscoveryCache,
   getDiscoveryCache,
 } from "./backend/services/discoveryService.js";
+import { websocketService } from "./backend/services/websocketService.js";
 
 import settingsRouter from "./backend/routes/settings.js";
 import artistsRouter from "./backend/routes/artists.js";
@@ -147,7 +149,10 @@ setTimeout(async () => {
   }
 }, 5000);
 
-const server = app.listen(PORT, async () => {
+const httpServer = createServer(app);
+websocketService.initialize(httpServer);
+
+httpServer.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   try {
     const { libraryManager } =
@@ -160,7 +165,7 @@ const server = app.listen(PORT, async () => {
   }
 });
 
-server.on("error", (error) => {
+httpServer.on("error", (error) => {
   if (error.code === "EADDRINUSE") {
     console.error(
       `Port ${PORT} is already in use. Please stop the other process or use a different port.`,
