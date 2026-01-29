@@ -29,7 +29,7 @@ const parseLastFmDate = (dateStr) => {
 // Handle both /search and /artists endpoints for search
 const handleSearch = async (req, res) => {
   try {
-    const { query, limit = 20, offset = 0 } = req.query;
+    const { query, limit = 24, offset = 0 } = req.query;
 
     if (!query) {
       return res.status(400).json({ error: "Query parameter is required" });
@@ -37,7 +37,7 @@ const handleSearch = async (req, res) => {
 
     if (getLastfmApiKey()) {
       try {
-        const limitInt = parseInt(limit) || 20;
+        const limitInt = parseInt(limit) || 24;
         const offsetInt = parseInt(offset) || 0;
         const page = Math.floor(offsetInt / limitInt) + 1;
 

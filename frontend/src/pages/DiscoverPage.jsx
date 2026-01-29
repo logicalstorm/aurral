@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, memo, useCallback, useRef } from "react";
 import PropTypes from "prop-types";
 import { useNavigate } from "react-router-dom";
-import { Loader, Music, Sparkles, Tag, Clock } from "lucide-react";
+import { Loader, Music, Sparkles, Clock } from "lucide-react";
 import {
   getDiscovery,
   getRequests,
@@ -602,6 +602,13 @@ function DiscoverPage() {
           <h2 className="text-2xl font-bold text-white flex items-center">
             Recommended for You
           </h2>
+          <button
+            onClick={() => navigate("/search?type=recommended")}
+            className="text-sm font-medium hover:underline"
+            style={{ color: "#c1c1c3" }}
+          >
+            View All
+          </button>
         </div>
 
         {recommendations.length > 0 ? (
@@ -635,6 +642,13 @@ function DiscoverPage() {
             >
               Global Trending
             </h2>
+            <button
+              onClick={() => navigate("/search?type=trending")}
+              className="text-sm font-medium hover:underline"
+              style={{ color: "#c1c1c3" }}
+            >
+              View All
+            </button>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
@@ -684,7 +698,6 @@ function DiscoverPage() {
       {topTags.length > 0 && (
         <section className="p-8" style={{ backgroundColor: "#211f27" }}>
           <div className="flex items-center mb-6">
-            <Tag className="w-5 h-5 mr-2" style={{ color: "#c1c1c3" }} />
             <h3 className="text-lg font-semibold" style={{ color: "#fff" }}>
               Explore by Tag
             </h3>

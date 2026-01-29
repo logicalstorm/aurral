@@ -1,64 +1,107 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Loader, Music } from "lucide-react";
+import { Loader, Music, ArrowLeft } from "lucide-react";
 import {
   searchArtists,
-  getArtistCover,
   searchArtistsByTag,
+  getDiscovery,
 } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
 import { useToast } from "../contexts/ToastContext";
+
+const PAGE_SIZE = 24;
 
 function SearchResultsPage() {
   const [searchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
   const type = searchParams.get("type");
   const [results, setResults] = useState([]);
+  const [fullList, setFullList] = useState(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
   const [artistImages, setArtistImages] = useState({});
+  const [hasMore, setHasMore] = useState(false);
   const navigate = useNavigate();
   const { showSuccess } = useToast();
 
+  const dedupe = useCallback((artists) => {
+    const seen = new Set();
+    return artists.filter((artist) => {
+      if (!artist.id) return false;
+      if (seen.has(artist.id)) return false;
+      seen.add(artist.id);
+      return true;
+    });
+  }, []);
+
   useEffect(() => {
     const performSearch = async () => {
-      if (!query.trim()) {
+      if (type === "recommended" || type === "trending") {
+        setLoading(true);
+        setError(null);
+        try {
+          const data = await getDiscovery();
+          const list = type === "recommended"
+            ? (data.recommendations || [])
+            : (data.globalTop || []);
+          setFullList(list);
+          setResults(list);
+          setVisibleCount(PAGE_SIZE);
+          setHasMore(list.length > PAGE_SIZE);
+          if (list.length > 0) {
+            const imagesMap = {};
+            list.forEach((artist) => {
+              if (artist.image && artist.id) imagesMap[artist.id] = artist.image;
+            });
+            setArtistImages(imagesMap);
+          }
+        } catch (err) {
+          setError(
+            err.response?.data?.message || "Failed to load. Please try again.",
+          );
+          setFullList(null);
+          setResults([]);
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (!query.trim() && type !== "recommended" && type !== "trending") {
         setResults([]);
+        setFullList(null);
+        setHasMore(false);
         return;
       }
 
       setLoading(true);
       setError(null);
+      setVisibleCount(PAGE_SIZE);
 
       try {
         let artists = [];
-
+        let totalCount = 0;
         if (type === "tag") {
-          const data = await searchArtistsByTag(query.trim());
+          const data = await searchArtistsByTag(query.trim(), PAGE_SIZE, 0);
           artists = data.recommendations || [];
         } else {
-          const data = await searchArtists(query.trim());
+          const data = await searchArtists(query.trim(), PAGE_SIZE, 0);
           artists = data.artists || [];
+          totalCount = data?.count ?? 0;
         }
-
-        // Remove duplicates by MBID (keep first occurrence)
-        const seen = new Set();
-        const uniqueArtists = artists.filter((artist) => {
-          if (!artist.id) return false; // Skip artists without MBID
-          if (seen.has(artist.id)) return false;
-          seen.add(artist.id);
-          return true;
-        });
-
+        const uniqueArtists = dedupe(artists);
         setResults(uniqueArtists);
-
+        setFullList(null);
+        setHasMore(
+          (type === "tag" && uniqueArtists.length >= PAGE_SIZE) ||
+            (type !== "tag" && totalCount > uniqueArtists.length),
+        );
         if (uniqueArtists.length > 0) {
           const imagesMap = {};
-
           uniqueArtists.forEach((artist) => {
-            if (artist.image && artist.id) {
-              imagesMap[artist.id] = artist.image;
-            }
+            if (artist.image && artist.id) imagesMap[artist.id] = artist.image;
           });
           setArtistImages(imagesMap);
         }
@@ -68,15 +111,62 @@ function SearchResultsPage() {
             "Failed to search artists. Please try again.",
         );
         setResults([]);
+        setHasMore(false);
       } finally {
         setLoading(false);
       }
     };
 
     performSearch();
-  }, [query, type]);
+  }, [query, type, dedupe]);
 
-  const getArtistType = (type) => {
+  const loadMore = useCallback(async () => {
+    if (type === "recommended" || type === "trending") {
+      const next = visibleCount + PAGE_SIZE;
+      setVisibleCount((c) => Math.min(c + PAGE_SIZE, fullList?.length ?? c + PAGE_SIZE));
+      setHasMore((fullList?.length ?? 0) > next);
+      return;
+    }
+    if (type === "tag") {
+      setLoadingMore(true);
+      try {
+        const data = await searchArtistsByTag(
+          query.trim(),
+          PAGE_SIZE,
+          results.length,
+        );
+        const newArtists = data.recommendations || [];
+        const combined = dedupe([...results, ...newArtists]);
+        setResults(combined);
+        setHasMore(newArtists.length >= PAGE_SIZE);
+        newArtists.forEach((artist) => {
+          if (artist.image && artist.id) {
+            setArtistImages((prev) => ({ ...prev, [artist.id]: artist.image }));
+          }
+        });
+      } finally {
+        setLoadingMore(false);
+      }
+      return;
+    }
+    setLoadingMore(true);
+    try {
+      const data = await searchArtists(query.trim(), PAGE_SIZE, results.length);
+      const newArtists = data.artists || [];
+      const combined = dedupe([...results, ...newArtists]);
+      setResults(combined);
+      setHasMore((data.count ?? 0) > combined.length);
+      newArtists.forEach((artist) => {
+        if (artist.image && artist.id) {
+          setArtistImages((prev) => ({ ...prev, [artist.id]: artist.image }));
+        }
+      });
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [type, fullList, visibleCount, query, results, dedupe]);
+
+  const getArtistType = (artistType) => {
     const types = {
       Person: "Solo Artist",
       Group: "Band",
@@ -85,8 +175,13 @@ function SearchResultsPage() {
       Character: "Character",
       Other: "Other",
     };
-    return types[type] || type;
+    return types[artistType] || artistType;
   };
+
+  const displayedArtists =
+    type === "recommended" || type === "trending"
+      ? results.slice(0, visibleCount)
+      : results;
 
   const formatLifeSpan = (lifeSpan) => {
     if (!lifeSpan) return null;
@@ -101,13 +196,38 @@ function SearchResultsPage() {
     return `${beginYear} - Present`;
   };
 
+  const showContent = !loading && (query || type === "recommended" || type === "trending");
+  const isEmpty = displayedArtists.length === 0;
+  const showBackButton = type === "recommended" || type === "trending" || type === "tag";
+
   return (
     <div className="animate-fade-in">
       <div className="mb-6">
+        {showBackButton && (
+          <button
+            onClick={() => navigate(-1)}
+            className="btn btn-secondary mb-6 inline-flex items-center"
+          >
+            <ArrowLeft className="w-5 h-5 mr-2" />
+            Back
+          </button>
+        )}
         <h1 className="text-2xl font-bold" style={{ color: "#fff" }}>
-          {type === "tag" ? "Genre Results" : "Search Results"}
+          {type === "recommended"
+            ? "Recommended for You"
+            : type === "trending"
+              ? "Global Trending"
+              : type === "tag"
+                ? "Genre Results"
+                : "Search Results"}
         </h1>
-        {query && (
+        {type === "recommended" && (
+          <p style={{ color: "#c1c1c3" }}>Artists we think you&apos;ll like</p>
+        )}
+        {type === "trending" && (
+          <p style={{ color: "#c1c1c3" }}>Trending artists right now</p>
+        )}
+        {query && type !== "recommended" && type !== "trending" && (
           <p style={{ color: "#c1c1c3" }}>
             {type === "tag"
               ? `Top artists for tag "${query}"`
@@ -128,9 +248,9 @@ function SearchResultsPage() {
         </div>
       )}
 
-      {!loading && query && (
+      {showContent && (
         <div className="animate-slide-up">
-          {results.length === 0 ? (
+          {isEmpty ? (
             <div className="card text-center py-12">
               <Music
                 className="w-16 h-16 mx-auto mb-4"
@@ -143,21 +263,25 @@ function SearchResultsPage() {
                 No Results Found
               </h3>
               <p style={{ color: "#c1c1c3" }}>
-                {type === "tag"
-                  ? `We couldn't find any top artists for tag "${query}"`
-                  : `We couldn't find any artists matching "${query}"`}
+                {type === "recommended" || type === "trending"
+                  ? "Nothing to show here yet."
+                  : type === "tag"
+                    ? `We couldn't find any top artists for tag "${query}"`
+                    : `We couldn't find any artists matching "${query}"`}
               </p>
             </div>
           ) : (
             <>
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-xl font-semibold" style={{ color: "#fff" }}>
-                  Found {results.length} result{results.length !== 1 ? "s" : ""}
+                  {type === "recommended" || type === "trending"
+                    ? `${results.length} artist${results.length !== 1 ? "s" : ""}`
+                    : `Found ${results.length} result${results.length !== 1 ? "s" : ""}`}
                 </h2>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-                {results.map((artist, index) => (
+                {displayedArtists.map((artist, index) => (
                   <div
                     key={artist.id || `artist-${index}`}
                     className="group relative flex flex-col w-full min-w-0"
@@ -212,6 +336,29 @@ function SearchResultsPage() {
                   </div>
                 ))}
               </div>
+
+              {hasMore && (
+                <div className="mt-8 flex justify-center">
+                  <button
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    className="px-6 py-3 font-medium rounded-lg transition-colors disabled:opacity-50"
+                    style={{
+                      backgroundColor: "#43454f",
+                      color: "#fff",
+                    }}
+                  >
+                    {loadingMore ? (
+                      <span className="flex items-center gap-2">
+                        <Loader className="w-5 h-5 animate-spin" />
+                        Loading...
+                      </span>
+                    ) : (
+                      "Load more"
+                    )}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
