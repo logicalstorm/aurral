@@ -2195,7 +2195,8 @@ function ArtistDetailsPage() {
               style={{ color: "#fff" }}
             >
               Albums & Releases (
-              {artist["release-groups"].filter(matchesReleaseTypeFilter).length}
+              {artist["release-groups"].filter(matchesReleaseTypeFilter).length}/
+              {artist["release-groups"].length}
               )
             </h2>
             <div className="flex items-center gap-2 flex-wrap">
