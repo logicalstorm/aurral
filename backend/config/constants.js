@@ -163,7 +163,7 @@ export const defaultData = {
     ],
     integrations: {
       navidrome: { url: "", username: "", password: "" },
-      lastfm: { username: "" },
+      lastfm: { username: "", discoveryPeriod: "1month" },
       slskd: { url: "", apiKey: "" },
       lidarr: {
         url: "",

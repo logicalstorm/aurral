@@ -269,6 +269,31 @@ function DiscoverPage() {
       (data.topGenres && data.topGenres.length > 0));
   const isActuallyUpdating = data?.isUpdating && !hasData;
 
+  const {
+    recommendations = [],
+    globalTop = [],
+    topGenres = [],
+    topTags = [],
+    basedOn = [],
+    lastUpdated,
+    isUpdating,
+    configured = true,
+  } = data || {};
+
+  const heroBasedOn = useMemo(() => {
+    if (basedOn && basedOn.length > 0) return basedOn;
+    const seen = new Set();
+    const names = [];
+    for (const r of recommendations || []) {
+      const name = r.sourceArtist || r.source;
+      if (name && !seen.has(name)) {
+        seen.add(name);
+        names.push({ name });
+      }
+    }
+    return names;
+  }, [basedOn, recommendations]);
+
   if (loading && !hasData && !isActuallyUpdating) {
     return (
       <div className="flex flex-col items-center justify-center py-32">
@@ -322,17 +347,6 @@ function DiscoverPage() {
     );
   }
 
-  const {
-    recommendations = [],
-    globalTop = [],
-    topGenres = [],
-    topTags = [],
-    basedOn = [],
-    lastUpdated,
-    isUpdating,
-    configured = true,
-  } = data || {};
-
   // Show configuration message if discovery isn't set up
   // Only show "not configured" if explicitly set to false AND no data exists
   if (
@@ -382,8 +396,12 @@ function DiscoverPage() {
   return (
     <div className="space-y-10 pb-12">
       <section
-        className="relative overflow-hidden shadow-sm"
-        style={{ color: "#fff" }}
+        className="relative overflow-hidden"
+        style={{
+          color: "#fff",
+          background:
+            "linear-gradient(90deg, rgba(33,31,39,0.5) 50%, transparent 100%), linear-gradient(90deg, rgba(33,31,39,0.2) 0%, transparent 100%)",
+        }}
       >
         <div className="relative p-8 md:p-12">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-8">
@@ -450,15 +468,21 @@ function DiscoverPage() {
               </div>
             </div>
 
-            {basedOn.length > 0 && (
+            {heroBasedOn.length > 0 && (
               <div className="pt-2">
                 <p className="text-xs" style={{ color: "#c1c1c3" }}>
-                  Inspired by{" "}
-                  {basedOn
-                    .slice(0, 3)
-                    .map((a) => a.name)
-                    .join(", ")}{" "}
-                  {basedOn.length > 3 && `and ${basedOn.length - 3} others`}
+                  Based on{" "}
+                  {heroBasedOn.length === 1
+                    ? heroBasedOn[0].name
+                    : heroBasedOn.length === 2
+                      ? `${heroBasedOn[0].name} and ${heroBasedOn[1].name}`
+                      : heroBasedOn.length === 3
+                        ? `${heroBasedOn[0].name}, ${heroBasedOn[1].name} and ${heroBasedOn[2].name}`
+                        : heroBasedOn
+                            .slice(0, 2)
+                            .map((a) => a.name)
+                            .join(", ") +
+                          ` and ${heroBasedOn.length - 2} other artist${heroBasedOn.length - 2 === 1 ? "" : "s"}`}
                 </p>
               </div>
             )}
