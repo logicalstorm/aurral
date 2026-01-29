@@ -1518,7 +1518,7 @@ function ArtistDetailsPage() {
               className="text-xs font-semibold uppercase tracking-wider mb-2"
               style={{ color: "#c1c1c3" }}
             >
-              Genres & tags
+              Tags
             </h3>
             <div className="flex flex-wrap gap-2">
               {artist.genres &&
@@ -1530,7 +1530,7 @@ function ArtistDetailsPage() {
                       key={`genre-${idx}`}
                       onClick={() =>
                         navigate(
-                          `/search?q=${encodeURIComponent(name)}&type=tag`,
+                          `/search?q=${encodeURIComponent(`#${name}`)}&type=tag`,
                         )
                       }
                       className="badge genre-tag-pill text-sm px-3 py-1 cursor-pointer"
@@ -1538,9 +1538,9 @@ function ArtistDetailsPage() {
                         backgroundColor: getTagColor(name),
                         color: "#fff",
                       }}
-                      title={`View artists with genre: ${name}`}
+                      title={`View artists with tag: ${name}`}
                     >
-                      {name}
+                      #{name}
                     </button>
                   );
                 })}
@@ -1553,7 +1553,7 @@ function ArtistDetailsPage() {
                       key={`tag-${idx}`}
                       onClick={() =>
                         navigate(
-                          `/search?q=${encodeURIComponent(name)}&type=tag`,
+                          `/search?q=${encodeURIComponent(`#${name}`)}&type=tag`,
                         )
                       }
                       className="badge genre-tag-pill text-sm px-3 py-1 cursor-pointer"
@@ -1563,14 +1563,14 @@ function ArtistDetailsPage() {
                       }}
                       title={`View artists with tag: ${name}`}
                     >
-                      {name}
+                      #{name}
                     </button>
                   );
                 })}
               {(!artist.genres || artist.genres.length === 0) &&
                 (!artist.tags || artist.tags.length === 0) && (
                   <span className="text-sm" style={{ color: "#c1c1c3" }}>
-                    No genres or tags
+                    No tags
                   </span>
                 )}
             </div>

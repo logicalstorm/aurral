@@ -21,13 +21,15 @@ Aurral analyzes your existing music library and Last.fm listening history to pro
 ## Features
 
 ### Music Discovery
+
 - **Personalized Recommendations:** Analyzes your library and Last.fm scrobbles to suggest new artists
-- **Genre Analysis:** Identifies your top genres and tags to explore new musical territories
+- **Tag Analysis:** Identifies your top tags to explore new musical territories
 - **Global Trending:** Discover what's popular on Last.fm
-- **Tag-Based Search:** Find artists by specific genres or tags
-- **Discovery Preferences:** Exclude genres or artists from recommendations
+- **Tag-Based Search:** Find artists by specific tags (use # prefix, e.g., #rock)
+- **Discovery Preferences:** Exclude tags or artists from recommendations
 
 ### Library Management
+
 - **Artist & Album Management:** Add artists to your library and select specific albums to download
 - **Automatic Monitoring:** Configure monitoring options (all releases, latest, first, missing, future)
 - **File Scanner:** Discover and import your existing music collection
@@ -35,6 +37,7 @@ Aurral analyzes your existing music library and Last.fm listening history to pro
 - **Statistics:** Track library size, completion percentage, and file counts
 
 ### Download Management
+
 - **SLSKD Integration:** Direct integration with slskd for Soulseek downloads
 - **Smart Queue System:** Priority-based queue with configurable concurrent downloads
 - **State Machine:** Explicit state transitions (requested → searching → downloading → processing → completed)
@@ -46,11 +49,13 @@ Aurral analyzes your existing music library and Last.fm listening history to pro
 - **Queue Scheduling:** Schedule downloads for specific times (e.g., night-time only)
 
 ### Weekly Flow
+
 - **Discovery Playlist:** 40-track rotating playlist of new music
 - **Automatic Rotation:** 10 tracks rotate weekly
 - **Navidrome Sync:** Sync playlist to your Navidrome server
 
 ### Integrations
+
 - **SLSKD:** Download music from Soulseek
 - **MusicBrainz:** Artist and album metadata
 - **Last.fm:** Scrobble history, recommendations, artist images
@@ -58,6 +63,7 @@ Aurral analyzes your existing music library and Last.fm listening history to pro
 - **Navidrome/Subsonic:** Playlist sync
 
 ### Technical Features
+
 - **WebSocket Support:** Real-time UI updates without polling
 - **Structured Logging:** Configurable log levels per category
 - **Metrics & Health:** Download success rates, queue health, system status
@@ -69,6 +75,7 @@ Aurral analyzes your existing music library and Last.fm listening history to pro
 ## Screenshots
 
 ### Desktop Experience
+
 <p align="center">
   <img src="frontend/images/desktop-discovery.webp" width="800" alt="Desktop Discovery View">
 </p>
@@ -78,6 +85,7 @@ Aurral analyzes your existing music library and Last.fm listening history to pro
 </p>
 
 ### Mobile Experience
+
 <p align="center">
   <img src="frontend/images/mobile-discovery.webp" width="190" alt="Mobile Discovery">
   <img src="frontend/images/mobile-discovery2.webp" width="190" alt="Mobile Discovery Alternate">
@@ -115,22 +123,24 @@ Access at `http://localhost:3001`.
 
 ## Configuration
 
-All configuration is done through the web interface at `/settings`. 
+All configuration is done through the web interface at `/settings`.
 
 ### Required Setup
+
 1. **SLSKD:** Configure your slskd URL and API key
 2. **MusicBrainz:** Set your contact email (required for API access)
 
 ### Optional Integrations
+
 - **Last.fm:** API key and username for personalized recommendations
 - **Navidrome:** URL and credentials for playlist sync
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PORT` | Server port | `3001` |
-| `MUSIC_ROOT` | Music library root path | `/data` |
+| Variable             | Description                        | Default      |
+| -------------------- | ---------------------------------- | ------------ |
+| `PORT`               | Server port                        | `3001`       |
+| `MUSIC_ROOT`         | Music library root path            | `/data`      |
 | `SLSKD_COMPLETE_DIR` | slskd complete downloads directory | `/downloads` |
 
 ---
@@ -166,6 +176,7 @@ All configuration is done through the web interface at `/settings`.
 ## API Endpoints
 
 ### Downloads
+
 - `GET /api/downloads` - List all downloads
 - `GET /api/downloads/queue` - Queue status
 - `GET /api/downloads/health/metrics` - Health metrics
@@ -175,18 +186,21 @@ All configuration is done through the web interface at `/settings`.
 - `POST /api/downloads/queue/schedule` - Set schedule
 
 ### Library
+
 - `GET /api/library/artists` - List artists
 - `POST /api/library/downloads/album` - Queue album download
 - `GET /api/library/integrity/missing/:artistId` - Find missing tracks
 - `POST /api/library/integrity/albums/:albumId/requeue-missing` - Requeue missing
 
 ### Discovery
+
 - `GET /api/discover` - Get recommendations
 - `GET /api/discover/filtered` - Get filtered recommendations
 - `GET /api/discover/preferences` - Get preferences
 - `POST /api/discover/preferences` - Set preferences
 
 ### WebSocket
+
 - `ws://localhost:3001/ws` - Real-time updates
   - Channels: `downloads`, `queue`, `library`, `discovery`, `notifications`
 

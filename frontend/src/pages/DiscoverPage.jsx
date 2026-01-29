@@ -439,7 +439,7 @@ function DiscoverPage() {
                 className="text-sm font-semibold uppercase tracking-wider mb-3"
                 style={{ color: "#fff" }}
               >
-                Your Top Genres
+                Your Top Tags
               </h3>
               <div className="flex flex-wrap gap-2 max-h-[5.5rem] overflow-hidden">
                 {topGenres.map((genre, i) => (
@@ -447,7 +447,7 @@ function DiscoverPage() {
                     key={i}
                     onClick={() =>
                       navigate(
-                        `/search?q=${encodeURIComponent(genre)}&type=tag`,
+                        `/search?q=${encodeURIComponent(`#${genre}`)}&type=tag`,
                       )
                     }
                     className="genre-tag-pill px-4 py-2 text-sm font-medium"
@@ -456,7 +456,7 @@ function DiscoverPage() {
                       color: "#fff",
                     }}
                   >
-                    {genre}
+                    #{genre}
                   </button>
                 ))}
               </div>
@@ -685,12 +685,12 @@ function DiscoverPage() {
               <span style={{ color: "#c1c1c3" }}>
                 Because you like{"\u00A0"}
               </span>
-              {section.genre}
+              #{section.genre}
             </h2>
             <button
               onClick={() =>
                 navigate(
-                  `/search?q=${encodeURIComponent(section.genre)}&type=tag`,
+                  `/search?q=${encodeURIComponent(`#${section.genre}`)}&type=tag`,
                 )
               }
               className="text-sm font-medium hover:underline"
@@ -723,7 +723,9 @@ function DiscoverPage() {
               <button
                 key={i}
                 onClick={() =>
-                  navigate(`/search?q=${encodeURIComponent(tag)}&type=tag`)
+                  navigate(
+                    `/search?q=${encodeURIComponent(`#${tag}`)}&type=tag`,
+                  )
                 }
                 className="genre-tag-pill px-3 py-1.5 text-sm"
                 style={{ backgroundColor: getTagColor(tag), color: "#fff" }}

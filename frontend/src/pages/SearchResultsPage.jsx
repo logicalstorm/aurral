@@ -242,7 +242,7 @@ function SearchResultsPage() {
             : type === "trending"
               ? "Global Trending"
               : isTagSearch
-                ? "Genre Results"
+                ? "Tag Results"
                 : trimmedQuery
                   ? loading
                     ? `Showing results for "${trimmedQuery}"`
