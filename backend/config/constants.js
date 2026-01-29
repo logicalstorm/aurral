@@ -165,9 +165,13 @@ export const defaultData = {
       navidrome: { url: "", username: "", password: "" },
       lastfm: { username: "" },
       slskd: { url: "", apiKey: "" },
-      lidarr: { url: "", apiKey: "", qualityProfileId: null, searchOnAdd: false },
+      lidarr: {
+        url: "",
+        apiKey: "",
+        qualityProfileId: null,
+        searchOnAdd: false,
+      },
       musicbrainz: { email: "" },
-      spotify: { clientId: "", clientSecret: "" },
       general: { authUser: "", authPassword: "" },
     },
     queueCleaner: {

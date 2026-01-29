@@ -183,10 +183,10 @@ function DiscoverPage() {
       const handleClick = useCallback(
         () => {
           if (hasValidMbid) {
-            navigate(`/artist/${navigateTo}`);
+            navigate(`/artist/${navigateTo}`, { state: { artistName: artist.name } });
           }
         },
-        [navigateTo, hasValidMbid],
+        [navigateTo, hasValidMbid, artist.name],
       );
 
       return (
@@ -199,6 +199,7 @@ function DiscoverPage() {
             <ArtistImage
               src={artist.image || artist.imageUrl}
               mbid={artist.id}
+              artistName={artist.name}
               alt={artist.name}
               className="h-full w-full group-hover:scale-105 transition-transform duration-300"
               showLoading={false}
@@ -444,7 +445,7 @@ function DiscoverPage() {
                         `/search?q=${encodeURIComponent(genre)}&type=tag`,
                       )
                     }
-                    className="px-4 py-2 transition-colors transition-[border-radius] ease hover:!rounded-[50px] text-sm font-medium shadow-sm"
+                    className="genre-tag-pill px-4 py-2 text-sm font-medium"
                     style={{
                       backgroundColor: getTagColor(genre),
                       color: "#fff",
@@ -701,7 +702,7 @@ function DiscoverPage() {
                 onClick={() =>
                   navigate(`/search?q=${encodeURIComponent(tag)}&type=tag`)
                 }
-                className="px-3 py-1.5 text-sm transition-colors transition-[border-radius] ease hover:!rounded-[50px]"
+                className="genre-tag-pill px-3 py-1.5 text-sm"
                 style={{ backgroundColor: getTagColor(tag), color: "#fff" }}
               >
                 #{tag}

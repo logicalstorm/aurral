@@ -1,9 +1,5 @@
 import express from "express";
-import {
-  getLastfmApiKey,
-  getSpotifyClientId,
-  getSpotifyClientSecret,
-} from "../services/apiClients.js";
+import { getLastfmApiKey } from "../services/apiClients.js";
 import { getAuthUser, getAuthPassword } from "../middleware/auth.js";
 import { getDiscoveryCache } from "../services/discoveryService.js";
 import { libraryManager } from "../services/libraryManager.js";
@@ -34,7 +30,6 @@ router.get("/", noCache, async (req, res) => {
         dbOps.getSettings().integrations?.musicbrainz?.email ||
         process.env.CONTACT_EMAIL
       ),
-      spotifyConfigured: !!(getSpotifyClientId() && getSpotifyClientSecret()),
       library: {
         artistCount: (await libraryManager.getAllArtists()).length,
         lastScan: null,

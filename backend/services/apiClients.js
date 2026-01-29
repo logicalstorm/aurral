@@ -1,7 +1,12 @@
 import axios from "axios";
 import Bottleneck from "bottleneck";
 import { dbOps } from "../config/db-helpers.js";
-import { MUSICBRAINZ_API, LASTFM_API, APP_NAME, APP_VERSION } from "../config/constants.js";
+import {
+  MUSICBRAINZ_API,
+  LASTFM_API,
+  APP_NAME,
+  APP_VERSION,
+} from "../config/constants.js";
 
 export const getLastfmApiKey = () => {
   const settings = dbOps.getSettings();
@@ -10,22 +15,16 @@ export const getLastfmApiKey = () => {
 
 export const getMusicBrainzContact = () => {
   const settings = dbOps.getSettings();
-  return settings.integrations?.musicbrainz?.email || process.env.CONTACT_EMAIL || "user@example.com";
-};
-
-export const getSpotifyClientId = () => {
-  const settings = dbOps.getSettings();
-  return settings.integrations?.spotify?.clientId || process.env.SPOTIFY_CLIENT_ID;
-};
-
-export const getSpotifyClientSecret = () => {
-  const settings = dbOps.getSettings();
-  return settings.integrations?.spotify?.clientSecret || process.env.SPOTIFY_CLIENT_SECRET;
+  return (
+    settings.integrations?.musicbrainz?.email ||
+    process.env.CONTACT_EMAIL ||
+    "user@example.com"
+  );
 };
 
 const mbLimiter = new Bottleneck({
-  maxConcurrent: 3,
-  minTime: 350,
+  maxConcurrent: 1,
+  minTime: 1000,
 });
 
 const lastfmLimiter = new Bottleneck({
@@ -33,13 +32,14 @@ const lastfmLimiter = new Bottleneck({
   minTime: 200,
 });
 
-const spotifyLimiter = new Bottleneck({
-  maxConcurrent: 10,
-  minTime: 100,
-});
+let musicbrainzLast503Log = 0;
 
-const musicbrainzRequestWithRetry = async (endpoint, params = {}, retryCount = 0) => {
-  const MAX_RETRIES = 3;
+const musicbrainzRequestWithRetry = async (
+  endpoint,
+  params = {},
+  retryCount = 0,
+) => {
+  const MAX_RETRIES = 1;
   const queryParams = new URLSearchParams({
     fmt: "json",
     ...params,
@@ -59,33 +59,41 @@ const musicbrainzRequestWithRetry = async (endpoint, params = {}, retryCount = 0
       "ERR_INTERNET_DISCONNECTED",
     ];
     return (
-      connectionErrors.some((err) => error.code === err || error.message.includes(err)) ||
-      (error.code && (error.code.startsWith("E") || error.code.startsWith("ERR_")))
+      connectionErrors.some(
+        (err) => error.code === err || error.message.includes(err),
+      ) ||
+      (error.code &&
+        (error.code.startsWith("E") || error.code.startsWith("ERR_")))
     );
   };
 
+  const isServerUnavailable = (error) =>
+    error.response && [502, 503, 504].includes(error.response.status);
+
+  const contact =
+    (getMusicBrainzContact() || "").trim() || "https://github.com/aurral";
+  const userAgent = `${APP_NAME}/${APP_VERSION} ( ${contact} )`;
   try {
     const response = await axios.get(
       `${MUSICBRAINZ_API}${endpoint}?${queryParams}`,
       {
-        headers: {
-          "User-Agent": `${APP_NAME}/${APP_VERSION} ( ${getMusicBrainzContact()} )`,
-        },
-        timeout: 5000,
+        headers: { "User-Agent": userAgent },
+        timeout: 3000,
       },
     );
     return response.data;
   } catch (error) {
-    const shouldRetry = 
-      (isConnectionError(error) || 
-       (error.response && [503, 429, 500, 502, 504].includes(error.response.status))) &&
-      retryCount < MAX_RETRIES;
-    
+    const shouldRetry =
+      retryCount < MAX_RETRIES &&
+      !isServerUnavailable(error) &&
+      (isConnectionError(error) ||
+        (error.response && [429, 500].includes(error.response.status)));
+
     if (shouldRetry) {
-      const delay = Math.min(300 * Math.pow(2, retryCount), 1000);
-      const errorType = error.response 
-        ? `HTTP ${error.response.status}` 
-        : (error.code || error.message);
+      const delay = 300;
+      const errorType = error.response
+        ? `HTTP ${error.response.status}`
+        : error.code || error.message;
       console.warn(
         `MusicBrainz error (${errorType}), retrying in ${delay}ms... (attempt ${retryCount + 1}/${MAX_RETRIES})`,
       );
@@ -98,7 +106,20 @@ const musicbrainzRequestWithRetry = async (endpoint, params = {}, retryCount = 0
       throw error;
     }
 
-    console.error("MusicBrainz API error:", error.message);
+    const status = error.response?.status;
+    if (status === 502 || status === 503 || status === 504) {
+      if (
+        !musicbrainzLast503Log ||
+        Date.now() - musicbrainzLast503Log > 15000
+      ) {
+        musicbrainzLast503Log = Date.now();
+        console.warn(
+          `MusicBrainz ${status} (suppressing further logs for 15s)`,
+        );
+      }
+    } else {
+      console.error("MusicBrainz API error:", error.message);
+    }
     throw error;
   }
 };
@@ -121,153 +142,60 @@ export const lastfmRequest = lastfmLimiter.wrap(async (method, params = {}) => {
     });
     return response.data;
   } catch (error) {
-    if (error.code !== 'ECONNABORTED') {
+    if (error.code !== "ECONNABORTED") {
       console.error(`Last.fm API error (${method}):`, error.message);
     }
     return null;
   }
 });
 
-// Spotify API token cache
-let spotifyTokenCache = {
-  token: null,
-  expiresAt: 0,
-};
-
-const getSpotifyAccessToken = async () => {
-  const clientId = getSpotifyClientId();
-  const clientSecret = getSpotifyClientSecret();
-
-  // If no credentials, return null (will gracefully degrade)
-  if (!clientId || !clientSecret) {
-    return null;
-  }
-
-  // Return cached token if still valid
-  if (spotifyTokenCache.token && Date.now() < spotifyTokenCache.expiresAt) {
-    return spotifyTokenCache.token;
-  }
-
+export async function deezerSearchArtist(artistName) {
   try {
-    const authString = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-    const response = await axios.post(
-      'https://accounts.spotify.com/api/token',
-      'grant_type=client_credentials',
+    const searchRes = await axios.get(
+      "https://api.deezer.com/search/artist",
       {
-        headers: {
-          'Authorization': `Basic ${authString}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        timeout: 5000,
-      }
+        params: { q: artistName, limit: 1 },
+        timeout: 3000,
+      },
     );
-
-    if (response.data?.access_token) {
-      // Cache token with 50 minute expiry (tokens last 1 hour)
-      spotifyTokenCache = {
-        token: response.data.access_token,
-        expiresAt: Date.now() + (response.data.expires_in - 600) * 1000,
-      };
-      return spotifyTokenCache.token;
-    }
-    return null;
-  } catch (error) {
-    console.warn('Spotify token request failed:', error.message);
+    const artists = searchRes.data?.data;
+    if (!artists?.length || !artists[0]?.id) return null;
+    const a = artists[0];
+    const imageUrl = a.picture_big || a.picture_medium || a.picture || null;
+    return imageUrl ? { id: a.id, name: a.name, imageUrl } : null;
+  } catch (e) {
     return null;
   }
-};
+}
 
-export const spotifySearchArtist = spotifyLimiter.wrap(async (artistName) => {
-  const token = await getSpotifyAccessToken();
-  if (!token) {
-    // Don't log - credentials might not be configured (this is expected)
-    return null;
-  }
-
+export async function deezerGetArtistTopTracks(artistName) {
   try {
-    const response = await axios.get('https://api.spotify.com/v1/search', {
-      params: {
-        q: artistName,
-        type: 'artist',
-        limit: 1,
+    const searchRes = await axios.get(
+      "https://api.deezer.com/search/artist",
+      {
+        params: { q: artistName, limit: 1 },
+        timeout: 3000,
       },
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-      timeout: 2000,
-    });
-
-    if (response.data?.artists?.items?.[0]) {
-      return response.data.artists.items[0];
-    }
-    return null;
-  } catch (error) {
-    if (error.response?.status === 401) {
-      // Token expired, clear cache and retry once
-      spotifyTokenCache = { token: null, expiresAt: 0 };
-      const newToken = await getSpotifyAccessToken();
-      if (newToken) {
-        try {
-          const retryResponse = await axios.get('https://api.spotify.com/v1/search', {
-            params: {
-              q: artistName,
-              type: 'artist',
-              limit: 1,
-            },
-            headers: {
-              'Authorization': `Bearer ${newToken}`,
-            },
-            timeout: 2000,
-          });
-          if (retryResponse.data?.artists?.items?.[0]) {
-            return retryResponse.data.artists.items[0];
-          }
-        } catch (retryError) {
-          // Ignore retry errors
-        }
-      }
-    }
-    if (error.code !== 'ECONNABORTED' && error.response?.status !== 401) {
-      console.warn(`Spotify API error (search):`, error.message);
-    }
-    return null;
+    );
+    const artists = searchRes.data?.data;
+    if (!artists?.length || !artists[0]?.id) return [];
+    const artist = artists[0];
+    const topRes = await axios.get(
+      `https://api.deezer.com/artist/${artist.id}/top`,
+      { params: { limit: 5 }, timeout: 3000 },
+    );
+    const tracks = topRes.data?.data || [];
+    return tracks
+      .filter((t) => t.preview)
+      .slice(0, 5)
+      .map((t) => ({
+        id: String(t.id),
+        title: t.title,
+        album: t.album?.title ?? null,
+        preview_url: t.preview,
+        duration_ms: (t.duration || 0) * 1000,
+      }));
+  } catch (e) {
+    return [];
   }
-});
-
-export const spotifyGetArtist = spotifyLimiter.wrap(async (spotifyId) => {
-  const token = await getSpotifyAccessToken();
-  if (!token) return null;
-
-  try {
-    const response = await axios.get(`https://api.spotify.com/v1/artists/${spotifyId}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-      timeout: 2000,
-    });
-    return response.data;
-  } catch (error) {
-    if (error.response?.status === 401) {
-      // Token expired, clear cache and retry once
-      spotifyTokenCache = { token: null, expiresAt: 0 };
-      const newToken = await getSpotifyAccessToken();
-      if (newToken) {
-        try {
-          const retryResponse = await axios.get(`https://api.spotify.com/v1/artists/${spotifyId}`, {
-            headers: {
-              'Authorization': `Bearer ${newToken}`,
-            },
-            timeout: 2000,
-          });
-          return retryResponse.data;
-        } catch (retryError) {
-          // Ignore retry errors
-        }
-      }
-    }
-    if (error.code !== 'ECONNABORTED' && error.response?.status !== 401) {
-      console.warn(`Spotify API error (getArtist):`, error.message);
-    }
-    return null;
-  }
-});
+}

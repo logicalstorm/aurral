@@ -34,6 +34,7 @@ const ArtistImage = ({
   mbid,
   src,
   alt,
+  artistName,
   className = "",
   showLoading = true,
 }) => {
@@ -42,7 +43,7 @@ const ArtistImage = ({
   const [hasError, setHasError] = useState(false);
   const fetchingRef = useRef(false);
 
-  const fetchBackendCover = useCallback(async (mbidToFetch) => {
+  const fetchBackendCover = useCallback(async (mbidToFetch, nameForCover) => {
     if (!mbidToFetch || fetchingRef.current) {
       return;
     }
@@ -53,7 +54,7 @@ const ArtistImage = ({
 
       const data = await scheduleFetch(() =>
         Promise.race([
-          getArtistCover(mbidToFetch),
+          getArtistCover(mbidToFetch, nameForCover),
           new Promise((_, reject) =>
             setTimeout(() => reject(new Error("Timeout")), 5000),
           ),
@@ -94,13 +95,13 @@ const ArtistImage = ({
       setCurrentSrc(null);
       setHasError(false);
       setIsLoading(true);
-      fetchBackendCover(mbid);
+      fetchBackendCover(mbid, artistName);
     } else {
       setCurrentSrc(null);
       setIsLoading(false);
       setHasError(true);
     }
-  }, [src, mbid, fetchBackendCover]);
+  }, [src, mbid, artistName, fetchBackendCover]);
 
   const handleLoad = () => {
     setIsLoading(false);

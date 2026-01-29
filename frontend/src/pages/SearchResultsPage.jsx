@@ -163,7 +163,7 @@ function SearchResultsPage() {
                     className="group relative flex flex-col w-full min-w-0"
                   >
                     <div
-                      onClick={() => navigate(`/artist/${artist.id}`)}
+                      onClick={() => navigate(`/artist/${artist.id}`, { state: { artistName: artist.name } })}
                       className="relative aspect-square mb-3 overflow-hidden cursor-pointer shadow-sm group-hover:shadow-md transition-all"
                       style={{ backgroundColor: "#211f27" }}
                     >
@@ -175,6 +175,7 @@ function SearchResultsPage() {
                           artist.imageUrl
                         }
                         mbid={artist.id}
+                        artistName={artist.name}
                         alt={artist.name}
                         className="h-full w-full group-hover:scale-105 transition-transform duration-300"
                         showLoading={false}
@@ -184,7 +185,7 @@ function SearchResultsPage() {
 
                     <div className="flex flex-col min-w-0">
                       <h3
-                        onClick={() => navigate(`/artist/${artist.id}`)}
+                        onClick={() => navigate(`/artist/${artist.id}`, { state: { artistName: artist.name } })}
                         className="font-semibold truncate hover:underline cursor-pointer"
                         style={{ color: "#fff" }}
                       >

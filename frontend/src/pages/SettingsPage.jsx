@@ -113,11 +113,6 @@ function SettingsPage() {
             email: "",
             ...(savedSettings.integrations?.musicbrainz || {}),
           },
-          spotify: {
-            clientId: "",
-            clientSecret: "",
-            ...(savedSettings.integrations?.spotify || {}),
-          },
           general: {
             authUser: "",
             authPassword: "",
@@ -1035,97 +1030,6 @@ function SettingsPage() {
                     recommendations, and weekly flow. Username enables
                     personalized recommendations from your Last.fm listening
                     history.
-                  </p>
-                </div>
-              </div>
-
-              <div
-                className="p-6 rounded-lg space-y-4"
-                style={{
-                  backgroundColor: "#1a1a1e",
-                  border: "1px solid #2a2a2e",
-                }}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <h3
-                    className="text-lg font-medium flex items-center"
-                    style={{ color: "#fff" }}
-                  >
-                    <TrendingUp className="w-5 h-5 mr-2" /> Spotify API
-                  </h3>
-                  {health?.spotifyConfigured && (
-                    <span className="flex items-center text-sm text-green-400">
-                      <CheckCircle className="w-4 h-4 mr-1" />
-                      Configured
-                    </span>
-                  )}
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <label
-                      className="block text-sm font-medium mb-1"
-                      style={{ color: "#fff" }}
-                    >
-                      Client ID
-                    </label>
-                    <input
-                      type="text"
-                      className="input"
-                      placeholder="Spotify Client ID"
-                      value={settings.integrations?.spotify?.clientId || ""}
-                      onChange={(e) =>
-                        updateSettings({
-                          ...settings,
-                          integrations: {
-                            ...settings.integrations,
-                            spotify: {
-                              ...(settings.integrations?.spotify || {}),
-                              clientId: e.target.value,
-                            },
-                          },
-                        })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label
-                      className="block text-sm font-medium mb-1"
-                      style={{ color: "#fff" }}
-                    >
-                      Client Secret
-                    </label>
-                    <input
-                      type="password"
-                      className="input"
-                      placeholder="Spotify Client Secret"
-                      value={settings.integrations?.spotify?.clientSecret || ""}
-                      onChange={(e) =>
-                        updateSettings({
-                          ...settings,
-                          integrations: {
-                            ...settings.integrations,
-                            spotify: {
-                              ...(settings.integrations?.spotify || {}),
-                              clientSecret: e.target.value,
-                            },
-                          },
-                        })
-                      }
-                    />
-                  </div>
-                  <p className="text-xs" style={{ color: "#c1c1c3" }}>
-                    Optional but recommended. Provides faster, higher-quality
-                    artist images. Get credentials from{" "}
-                    <a
-                      href="https://developer.spotify.com/dashboard"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline"
-                      style={{ color: "#60a5fa" }}
-                    >
-                      Spotify Developer Dashboard
-                    </a>
-                    . Create an app and use Client Credentials flow.
                   </p>
                 </div>
               </div>
