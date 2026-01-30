@@ -1,8 +1,15 @@
 import path from "path";
 import fs from "fs/promises";
+import NodeID3 from "node-id3";
 import { dbOps } from "../config/db-helpers.js";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { NavidromeClient } from "./navidrome.js";
+
+const PLAYLIST_GENRE = {
+  discover: "Aurral Discover",
+  mix: "Aurral Mix",
+  trending: "Aurral Trending",
+};
 
 export class WeeklyFlowPlaylistManager {
   constructor(weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER || "./weekly-flow") {
@@ -35,17 +42,68 @@ export class WeeklyFlowPlaylistManager {
     } else {
       this.navidromeClient = null;
     }
+    if (this.navidromeMusicFolder) {
+      this.ensureSmartPlaylists().catch((err) =>
+        console.warn(
+          "[WeeklyFlowPlaylistManager] ensureSmartPlaylists on config:",
+          err?.message,
+        ),
+      );
+    }
   }
 
   _sanitize(str) {
     return String(str || "").replace(/[<>:"/\\|?*]/g, "_").trim();
   }
 
+  tagFileWithPlaylistType(filePath, playlistType) {
+    const genre = PLAYLIST_GENRE[playlistType];
+    if (!genre) return;
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext !== ".mp3") return;
+    try {
+      NodeID3.update({ genre }, filePath);
+    } catch (err) {
+      console.warn(
+        `[WeeklyFlowPlaylistManager] Failed to tag ${filePath}:`,
+        err?.message,
+      );
+    }
+  }
+
+  async ensureSmartPlaylists() {
+    if (!this.navidromeMusicFolder) return;
+    const dir = path.join(this.navidromeMusicFolder, ".aurral-weekly-flow");
+    const playlists = [
+      { name: "Aurral Discover", genre: "Aurral Discover" },
+      { name: "Aurral Mix", genre: "Aurral Mix" },
+      { name: "Aurral Trending", genre: "Aurral Trending" },
+    ];
+    try {
+      await fs.mkdir(dir, { recursive: true });
+      for (const { name, genre } of playlists) {
+        const nspPath = path.join(dir, `${name}.nsp`);
+        const payload = {
+          all: [{ is: { genre } }],
+          sort: "title",
+          order: "asc",
+          limit: 1000,
+        };
+        await fs.writeFile(nspPath, JSON.stringify(payload), "utf8");
+      }
+    } catch (err) {
+      console.warn(
+        "[WeeklyFlowPlaylistManager] Failed to write smart playlists:",
+        err?.message,
+      );
+    }
+  }
+
   async createSymlink(sourcePath, playlistType) {
     if (!this.navidromeMusicFolder) {
       return null;
     }
-
+    this.tagFileWithPlaylistType(sourcePath, playlistType);
     try {
       await fs.access(path.dirname(this.navidromeMusicFolder));
     } catch {

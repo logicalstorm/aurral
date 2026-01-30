@@ -214,22 +214,16 @@ router.post("/playlist/:playlistType/create", async (req, res) => {
   try {
     const { playlistType } = req.params;
     playlistManager.updateConfig();
-    const playlistName = playlistManager.getPlaylistName(playlistType);
-    const playlist = await playlistManager.createPlaylist(
-      playlistType,
-      playlistName,
-    );
-
-    if (!playlist) {
-      return res.status(404).json({
-        error: `No completed downloads found for ${playlistType}`,
-      });
-    }
-
-    res.json({ success: true, playlist });
+    await playlistManager.ensureSmartPlaylists();
+    await playlistManager.triggerNavidromeScan();
+    res.json({
+      success: true,
+      message:
+        "Smart playlists ensured and Navidrome scan triggered. Tracks tagged with genre (Aurral Discover/Mix/Trending) will appear in the matching smart playlist.",
+    });
   } catch (error) {
     res.status(500).json({
-      error: "Failed to create playlist",
+      error: "Failed to ensure smart playlists or trigger scan",
       message: error.message,
     });
   }
