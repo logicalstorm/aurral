@@ -4,6 +4,7 @@ import NodeID3 from "node-id3";
 import { dbOps } from "../config/db-helpers.js";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { NavidromeClient } from "./navidrome.js";
+import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 
 const PLAYLIST_GENRE = {
   discover: "Aurral Discover",
@@ -57,13 +58,74 @@ export class WeeklyFlowPlaylistManager {
     return String(str || "").replace(/[<>:"/\\|?*]/g, "_").trim();
   }
 
-  tagFileWithPlaylistType(filePath, playlistType) {
+  async _tagFlacGenre(filePath, genre) {
+    const buf = await fs.readFile(filePath);
+    if (buf.length < 12 || buf.toString("ascii", 0, 4) !== "fLaC") return;
+    let offset = 4;
+    let blockStart = 4;
+    let blockType = -1;
+    let blockLen = 0;
+    let lastBlock = false;
+    while (offset < buf.length && !lastBlock) {
+      blockStart = offset;
+      lastBlock = (buf[offset] & 0x80) !== 0;
+      blockType = buf[offset] & 0x7f;
+      blockLen = buf.readUInt32BE(offset + 1) & 0xffffff;
+      offset += 4 + blockLen;
+      if (blockType !== 4) continue;
+      const data = buf.subarray(blockStart + 4, blockStart + 4 + blockLen);
+      const vendorLen = data.readUInt32LE(0);
+      let pos = 4 + vendorLen;
+      if (pos + 4 > data.length) return;
+      const vendor = data.toString("utf8", 4, 4 + vendorLen);
+      const numComments = data.readUInt32LE(pos);
+      pos += 4;
+      const comments = [];
+      for (let i = 0; i < numComments; i++) {
+        if (pos + 4 > data.length) break;
+        const len = data.readUInt32LE(pos);
+        pos += 4;
+        if (pos + len > data.length) break;
+        const kv = data.toString("utf8", pos, pos + len);
+        pos += len;
+        if (!/^GENRE=/i.test(kv)) comments.push(kv);
+      }
+      comments.push(`GENRE=${genre}`);
+      const vendorBuf = Buffer.from(vendor, "utf8");
+      const commentBufs = comments.map((c) => Buffer.from(c, "utf8"));
+      let newLen = 4 + vendorBuf.length + 4;
+      for (const b of commentBufs) newLen += 4 + b.length;
+      const newData = Buffer.alloc(newLen);
+      let w = 0;
+      newData.writeUInt32LE(vendorBuf.length, w); w += 4;
+      vendorBuf.copy(newData, w); w += vendorBuf.length;
+      newData.writeUInt32LE(commentBufs.length, w); w += 4;
+      for (const b of commentBufs) {
+        newData.writeUInt32LE(b.length, w); w += 4;
+        b.copy(newData, w); w += b.length;
+      }
+      const newBlockHeader = Buffer.alloc(4);
+      newBlockHeader[0] = (lastBlock ? 0x80 : 0) | 4;
+      newBlockHeader[1] = (newLen >> 16) & 0xff;
+      newBlockHeader[2] = (newLen >> 8) & 0xff;
+      newBlockHeader[3] = newLen & 0xff;
+      const before = buf.subarray(0, blockStart);
+      const after = buf.subarray(blockStart + 4 + blockLen);
+      await fs.writeFile(filePath, Buffer.concat([before, newBlockHeader, newData, after]));
+      return;
+    }
+  }
+
+  async tagFileWithPlaylistType(filePath, playlistType) {
     const genre = PLAYLIST_GENRE[playlistType];
     if (!genre) return;
     const ext = path.extname(filePath).toLowerCase();
-    if (ext !== ".mp3") return;
     try {
-      NodeID3.update({ genre }, filePath);
+      if (ext === ".mp3") {
+        NodeID3.update({ genre }, filePath);
+      } else if (ext === ".flac") {
+        await this._tagFlacGenre(filePath, genre);
+      }
     } catch (err) {
       console.warn(
         `[WeeklyFlowPlaylistManager] Failed to tag ${filePath}:`,
@@ -75,22 +137,30 @@ export class WeeklyFlowPlaylistManager {
   async ensureSmartPlaylists() {
     if (!this.navidromeMusicFolder) return;
     const dir = path.join(this.navidromeMusicFolder, WEEKLY_FLOW_NAVIDROME_DIR);
-    const playlists = [
-      { name: "Aurral Discover", genre: "Aurral Discover" },
-      { name: "Aurral Mix", genre: "Aurral Mix" },
-      { name: "Aurral Trending", genre: "Aurral Trending" },
+    const allPlaylists = [
+      { type: "discover", name: "Aurral Discover", genre: "Aurral Discover" },
+      { type: "mix", name: "Aurral Mix", genre: "Aurral Mix" },
+      { type: "trending", name: "Aurral Trending", genre: "Aurral Trending" },
     ];
+    const config = flowPlaylistConfig.getPlaylists();
     try {
       await fs.mkdir(dir, { recursive: true });
-      for (const { name, genre } of playlists) {
+      for (const { type, name, genre } of allPlaylists) {
         const nspPath = path.join(dir, `${name}.nsp`);
-        const payload = {
-          all: [{ is: { genre } }],
-          sort: "title",
-          order: "asc",
-          limit: 1000,
-        };
-        await fs.writeFile(nspPath, JSON.stringify(payload), "utf8");
+        const isEnabled = config[type]?.enabled;
+        if (isEnabled) {
+          const payload = {
+            all: [{ is: { genre } }],
+            sort: "title",
+            order: "asc",
+            limit: 1000,
+          };
+          await fs.writeFile(nspPath, JSON.stringify(payload), "utf8");
+        } else {
+          try {
+            await fs.unlink(nspPath);
+          } catch {}
+        }
       }
     } catch (err) {
       console.warn(
@@ -100,11 +170,41 @@ export class WeeklyFlowPlaylistManager {
     }
   }
 
+  async _tagDirRecursive(dirPath, playlistType) {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true }).catch(() => []);
+    for (const e of entries) {
+      const full = path.join(dirPath, e.name);
+      if (e.isDirectory()) {
+        await this._tagDirRecursive(full, playlistType);
+      } else {
+        const ext = path.extname(e.name).toLowerCase();
+        if (ext === ".mp3" || ext === ".flac") {
+          await this.tagFileWithPlaylistType(full, playlistType);
+        }
+      }
+    }
+  }
+
+  async retagExistingForEnabledTypes() {
+    const config = flowPlaylistConfig.getPlaylists();
+    for (const type of ["discover", "mix", "trending"]) {
+      if (!config[type]?.enabled) continue;
+      const flowDir = path.join(this.weeklyFlowRoot, type);
+      try {
+        const entries = await fs.readdir(flowDir, { withFileTypes: true });
+        for (const e of entries) {
+          if (!e.isDirectory()) continue;
+          await this._tagDirRecursive(path.join(flowDir, e.name), type);
+        }
+      } catch {}
+    }
+  }
+
   async createSymlink(sourcePath, playlistType) {
     if (!this.navidromeMusicFolder) {
       return null;
     }
-    this.tagFileWithPlaylistType(sourcePath, playlistType);
+    await this.tagFileWithPlaylistType(sourcePath, playlistType);
     try {
       await fs.access(path.dirname(this.navidromeMusicFolder));
     } catch {

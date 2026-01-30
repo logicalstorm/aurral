@@ -215,6 +215,7 @@ router.post("/playlist/:playlistType/create", async (req, res) => {
     const { playlistType } = req.params;
     playlistManager.updateConfig();
     await playlistManager.ensureSmartPlaylists();
+    await playlistManager.retagExistingForEnabledTypes();
     await playlistManager.triggerNavidromeScan();
     res.json({
       success: true,
