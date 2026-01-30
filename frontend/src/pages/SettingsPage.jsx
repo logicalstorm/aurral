@@ -6,7 +6,6 @@ import {
   Trash2,
   TrendingUp,
   Save,
-  Music,
   Shield,
   Server,
   AlertTriangle,
@@ -447,7 +446,6 @@ function SettingsPage() {
               className="text-2xl font-bold flex items-center mb-2"
               style={{ color: "#fff" }}
             >
-              <Sparkles className="w-6 h-6 mr-2" />
               Discovery
             </h2>
             <p className="mb-6" style={{ color: "#c1c1c3" }}>
@@ -572,7 +570,7 @@ function SettingsPage() {
                     className="text-lg font-medium flex items-center"
                     style={{ color: "#fff" }}
                   >
-                    <Server className="w-5 h-5 mr-2" /> Lidarr
+                    Lidarr
                   </h3>
                   {health?.lidarrConfigured && (
                     <span className="flex items-center text-sm text-green-400">
@@ -895,7 +893,7 @@ function SettingsPage() {
                     className="text-lg font-medium flex items-center"
                     style={{ color: "#fff" }}
                   >
-                    <Music className="w-5 h-5 mr-2" /> Subsonic / Navidrome
+                    Subsonic / Navidrome
                   </h3>
                   {settings.integrations?.navidrome?.url && (
                     <span className="flex items-center text-sm text-green-400">
@@ -1031,7 +1029,7 @@ function SettingsPage() {
                     className="text-lg font-medium flex items-center"
                     style={{ color: "#fff" }}
                   >
-                    <TrendingUp className="w-5 h-5 mr-2" /> MusicBrainz
+                    MusicBrainz
                   </h3>
                   {health?.musicbrainzConfigured && (
                     <span className="flex items-center text-sm text-green-400">
@@ -1084,7 +1082,7 @@ function SettingsPage() {
                     className="text-lg font-medium flex items-center"
                     style={{ color: "#fff" }}
                   >
-                    <TrendingUp className="w-5 h-5 mr-2" /> Last.fm API
+                    Last.fm API
                   </h3>
                   {health?.lastfmConfigured && (
                     <span className="flex items-center text-sm text-green-400">
@@ -1242,7 +1240,7 @@ function SettingsPage() {
                     className="text-lg font-medium flex items-center"
                     style={{ color: "#fff" }}
                   >
-                    <Shield className="w-5 h-5 mr-2" /> App Authentication
+                    App Authentication
                   </h3>
                   {settings.integrations?.general?.authPassword && (
                     <span className="flex items-center text-sm text-green-400">

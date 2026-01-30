@@ -6,11 +6,21 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
+  const [onboardingRequired, setOnboardingRequired] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const checkAuthStatus = async () => {
     try {
       const healthData = await checkHealth();
+      const isOnboarding = !!healthData.onboardingRequired;
+      setOnboardingRequired(isOnboarding);
+
+      if (isOnboarding) {
+        setIsAuthenticated(false);
+        setIsLoading(false);
+        return;
+      }
+
       const isRequired = healthData.authRequired;
       const authUser = healthData.authUser || "admin";
       setAuthRequired(isRequired);
@@ -75,7 +85,15 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider
-      value={{ isAuthenticated, isLoading, login, logout, authRequired }}
+      value={{
+        isAuthenticated,
+        isLoading,
+        login,
+        logout,
+        authRequired,
+        onboardingRequired,
+        refreshAuth: checkAuthStatus,
+      }}
     >
       {children}
     </AuthContext.Provider>

@@ -115,6 +115,25 @@ function DiscoverPage() {
     return () => clearInterval(interval);
   }, []);
 
+  const hasDataForPoll =
+    data &&
+    ((data.recommendations && data.recommendations.length > 0) ||
+      (data.globalTop && data.globalTop.length > 0) ||
+      (data.topGenres && data.topGenres.length > 0));
+
+  useEffect(() => {
+    if (!data?.isUpdating || hasDataForPoll) return;
+    const pollDiscovery = async () => {
+      try {
+        const discoveryData = await getDiscovery(true);
+        setData(discoveryData);
+      } catch {}
+    };
+    pollDiscovery();
+    const id = setInterval(pollDiscovery, 8000);
+    return () => clearInterval(id);
+  }, [data?.isUpdating, hasDataForPoll]);
+
   const getLibraryArtistImage = (artist) => {
     if (artist.images && artist.images.length > 0) {
       const posterImage = artist.images.find(
@@ -292,30 +311,36 @@ function DiscoverPage() {
 
   if (loading && !hasData && !isActuallyUpdating) {
     return (
-      <div className="flex flex-col items-center justify-center py-32">
+      <div className="flex flex-col items-center justify-center py-32 px-4 max-w-md mx-auto text-center">
         <Loader
           className="w-12 h-12 animate-spin mb-4"
           style={{ color: "#c1c1c3" }}
         />
-        <h2 className="text-xl font-semibold" style={{ color: "#fff" }}>
+        <h2 className="text-xl font-semibold mb-2" style={{ color: "#fff" }}>
           Loading recommendations...
         </h2>
+        <p className="text-sm" style={{ color: "#c1c1c3" }}>
+          Please wait. If Last.fm is configured, the first scan can take up to
+          10 minutes to fully populate.
+        </p>
       </div>
     );
   }
 
   if (isActuallyUpdating) {
     return (
-      <div className="flex flex-col items-center justify-center py-32">
+      <div className="flex flex-col items-center justify-center py-32 px-4 max-w-md mx-auto text-center">
         <Loader
           className="w-12 h-12 animate-spin mb-4"
           style={{ color: "#c1c1c3" }}
         />
-        <h2 className="text-xl font-semibold" style={{ color: "#fff" }}>
-          Curating your recommendations...
+        <h2 className="text-xl font-semibold mb-2" style={{ color: "#fff" }}>
+          Building your recommendations...
         </h2>
-        <p className="mt-2" style={{ color: "#c1c1c3" }}>
-          Analyzing your library to find hidden gems
+        <p className="text-sm" style={{ color: "#c1c1c3" }}>
+          The app is scanning your library and Last.fm data. Please wait — this
+          can take up to 10 minutes when Last.fm is configured. The page will
+          update when ready.
         </p>
       </div>
     );
@@ -635,15 +660,19 @@ function DiscoverPage() {
           </div>
         ) : (
           <div
-            className="text-center py-12"
+            className="text-center py-12 px-4"
             style={{ backgroundColor: "#211f27" }}
           >
             <Music
               className="w-12 h-12 mx-auto mb-3"
               style={{ color: "#c1c1c3" }}
             />
-            <p style={{ color: "#c1c1c3" }}>
+            <p className="mb-1" style={{ color: "#c1c1c3" }}>
               Not enough data to generate recommendations yet.
+            </p>
+            <p className="text-sm" style={{ color: "#8a8a8f" }}>
+              If you just set up Last.fm, the first scan may take up to 10
+              minutes.
             </p>
           </div>
         )}

@@ -5,7 +5,7 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
-  Trash2,
+  X,
   Music,
   ArrowLeft,
 } from "lucide-react";
@@ -51,28 +51,15 @@ function RequestsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleDelete = async (mbid, name) => {
-    if (
-      !window.confirm(
-        `Are you sure you want to remove the request for "${name}" from your history?`,
-      )
-    )
-      return;
+  const handleStopDownload = async (request) => {
+    if (!request.inQueue || !request.albumId) return;
     try {
-      await deleteRequest(mbid);
-      setRequests((prev) => prev.filter((r) => r.mbid !== mbid));
-    } catch {
-      showError("Failed to delete request");
-    }
-  };
-
-  const removeRequestById = (idOrAlbumId, isAlbum) => {
-    if (isAlbum && idOrAlbumId != null) {
+      await deleteRequest(request.albumId);
       setRequests((prev) =>
-        prev.filter((r) => String(r.albumId) !== String(idOrAlbumId)),
+        prev.filter((r) => String(r.albumId) !== String(request.albumId)),
       );
-    } else if (idOrAlbumId) {
-      setRequests((prev) => prev.filter((r) => r.mbid !== idOrAlbumId));
+    } catch {
+      showError("Failed to stop download");
     }
   };
 
@@ -155,37 +142,6 @@ function RequestsPage() {
             </p>
           </div>
         </div>
-        {requests.length > 0 && (
-          <button
-            onClick={async () => {
-              if (
-                !window.confirm(
-                  `Are you sure you want to remove all ${requests.length} requests from history?`,
-                )
-              )
-                return;
-              setRequests([]);
-              try {
-                await Promise.all(
-                  requests.map((request) => {
-                    if (request.type === "album" && request.albumId) {
-                      return deleteRequest(request.albumId).catch(() => null);
-                    }
-                    return deleteRequest(request.mbid).catch(() => null);
-                  }),
-                );
-                await fetchRequests();
-              } catch {
-                showError("Failed to clear some requests");
-                fetchRequests();
-              }
-            }}
-            className="btn btn-secondary flex items-center gap-2"
-          >
-            <Trash2 className="w-4 h-4" />
-            Clear All
-          </button>
-        )}
       </div>
 
       {error && (
@@ -226,31 +182,16 @@ function RequestsPage() {
                 key={request.id || request.mbid}
                 className="card group hover:shadow-md transition-all relative p-3"
               >
-                <button
-                  onClick={async () => {
-                    if (isAlbum && request.albumId) {
-                      removeRequestById(request.albumId, true);
-                      try {
-                        await deleteRequest(request.albumId);
-                        await fetchRequests();
-                      } catch {
-                        showError("Failed to delete request");
-                        fetchRequests();
-                      }
-                    } else {
-                      handleDelete(request.mbid, displayName);
-                    }
-                  }}
-                  className="absolute top-1.5 right-1.5 p-1.5 hover:text-red-400 hover:bg-red-500/20 transition-all z-10 rounded"
-                  style={{ color: "#fff" }}
-                  title={
-                    isAlbum && request.albumId
-                      ? "Remove from queue/history"
-                      : "Remove from history"
-                  }
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                {request.inQueue && request.albumId && (
+                  <button
+                    onClick={() => handleStopDownload(request)}
+                    className="absolute top-1.5 right-1.5 p-1.5 hover:text-red-400 hover:bg-red-500/20 transition-all z-10 rounded"
+                    style={{ color: "#fff" }}
+                    title="Stop download"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
 
                 <div className="flex items-center gap-3">
                   <div
