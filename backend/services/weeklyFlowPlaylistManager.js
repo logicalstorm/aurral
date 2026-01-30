@@ -10,6 +10,7 @@ const PLAYLIST_GENRE = {
   mix: "Aurral Mix",
   trending: "Aurral Trending",
 };
+const WEEKLY_FLOW_NAVIDROME_DIR = "aurral-weekly-flow";
 
 export class WeeklyFlowPlaylistManager {
   constructor(weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER || "./weekly-flow") {
@@ -73,7 +74,7 @@ export class WeeklyFlowPlaylistManager {
 
   async ensureSmartPlaylists() {
     if (!this.navidromeMusicFolder) return;
-    const dir = path.join(this.navidromeMusicFolder, ".aurral-weekly-flow");
+    const dir = path.join(this.navidromeMusicFolder, WEEKLY_FLOW_NAVIDROME_DIR);
     const playlists = [
       { name: "Aurral Discover", genre: "Aurral Discover" },
       { name: "Aurral Mix", genre: "Aurral Mix" },
@@ -119,7 +120,7 @@ export class WeeklyFlowPlaylistManager {
       }
       const symlinkPath = path.join(
         this.navidromeMusicFolder,
-        ".aurral-weekly-flow",
+        WEEKLY_FLOW_NAVIDROME_DIR,
         playlistType,
         relativePath,
       );
@@ -166,7 +167,7 @@ export class WeeklyFlowPlaylistManager {
       if (artistDir !== sanitizedArtist || albumDir !== sanitizedAlbum) continue;
       const symlinkPath = path.join(
         this.navidromeMusicFolder,
-        ".aurral-weekly-flow",
+        WEEKLY_FLOW_NAVIDROME_DIR,
         "discover",
         relativePath,
       );
@@ -298,7 +299,7 @@ export class WeeklyFlowPlaylistManager {
       for (const playlistType of playlistTypes) {
         const symlinkDir = path.join(
           this.navidromeMusicFolder,
-          ".aurral-weekly-flow",
+          WEEKLY_FLOW_NAVIDROME_DIR,
           playlistType,
         );
         try {
