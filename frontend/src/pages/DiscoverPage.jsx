@@ -8,6 +8,7 @@ import {
   getRecentlyAdded,
   getAllDownloadStatus,
 } from "../utils/api";
+import { useWebSocketChannel } from "../hooks/useWebSocket";
 import ArtistImage from "../components/ArtistImage";
 
 const TAG_COLORS = [
@@ -40,48 +41,54 @@ function DiscoverPage() {
   const [data, setData] = useState(null);
   const [requests, setRequests] = useState([]);
   const [recentlyAdded, setRecentlyAdded] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const downloadStatusesRef = useRef({});
   const navigate = useNavigate();
 
+  useWebSocketChannel("discovery", (msg) => {
+    if (msg.type === "discovery_update" && msg.recommendations) {
+      setData({
+        recommendations: msg.recommendations || [],
+        globalTop: msg.globalTop || [],
+        basedOn: msg.basedOn || [],
+        topTags: msg.topTags || [],
+        topGenres: msg.topGenres || [],
+        lastUpdated: msg.lastUpdated || null,
+        isUpdating: false,
+        configured: true,
+      });
+    }
+  });
+
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [discoveryData, requestsData, recentlyAddedData] =
-          await Promise.all([
-            getDiscovery(),
-            getRequests(),
-            getRecentlyAdded(),
-          ]);
-
-        const hasData =
-          discoveryData &&
-          ((discoveryData.recommendations &&
-            discoveryData.recommendations.length > 0) ||
-            (discoveryData.globalTop && discoveryData.globalTop.length > 0) ||
-            (discoveryData.topGenres && discoveryData.topGenres.length > 0));
-
+    getDiscovery()
+      .then((discoveryData) => {
         setData(discoveryData);
-        setRequests(requestsData);
-        setRecentlyAdded(recentlyAddedData);
-        downloadStatusesRef.current = {};
-
-        if (hasData) {
-          setLoading(false);
-        } else {
-          setTimeout(() => setLoading(false), 500);
-        }
-      } catch (err) {
+        setError(null);
+      })
+      .catch((err) => {
         setError(
           err.response?.data?.message || "Failed to load discovery data",
         );
-        setLoading(false);
-      }
-    };
+        setData({
+          recommendations: [],
+          globalTop: [],
+          basedOn: [],
+          topTags: [],
+          topGenres: [],
+          lastUpdated: null,
+          isUpdating: false,
+          configured: false,
+        });
+      });
 
-    fetchData();
+    getRequests()
+      .then(setRequests)
+      .catch(() => {});
+
+    getRecentlyAdded()
+      .then(setRecentlyAdded)
+      .catch(() => {});
 
     const pollDownloadStatus = async () => {
       try {
@@ -123,13 +130,11 @@ function DiscoverPage() {
 
   useEffect(() => {
     if (!data?.isUpdating || hasDataForPoll) return;
-    const pollDiscovery = async () => {
-      try {
-        const discoveryData = await getDiscovery(true);
-        setData(discoveryData);
-      } catch {}
+    const pollDiscovery = () => {
+      getDiscovery(true)
+        .then(setData)
+        .catch(() => {});
     };
-    pollDiscovery();
     const id = setInterval(pollDiscovery, 8000);
     return () => clearInterval(id);
   }, [data?.isUpdating, hasDataForPoll]);
@@ -309,7 +314,7 @@ function DiscoverPage() {
     return names;
   }, [basedOn, recommendations]);
 
-  if (loading && !hasData && !isActuallyUpdating) {
+  if (data === null && !error) {
     return (
       <div className="flex flex-col items-center justify-center py-32 px-4 max-w-md mx-auto text-center">
         <Loader
@@ -320,8 +325,7 @@ function DiscoverPage() {
           Loading recommendations...
         </h2>
         <p className="text-sm" style={{ color: "#c1c1c3" }}>
-          Please wait. If Last.fm is configured, the first scan can take up to
-          10 minutes to fully populate.
+          Recommendations will appear as they load.
         </p>
       </div>
     );

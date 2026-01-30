@@ -449,6 +449,24 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
         }
 
         if (pendingArtistRequests.has(mbid)) {
+          if (streamArtistName) {
+            sendSSE(res, "artist", {
+              id: mbid,
+              name: streamArtistName,
+              "sort-name": streamArtistName,
+              disambiguation: "",
+              "type-id": null,
+              type: null,
+              country: null,
+              "life-span": { begin: null, end: null, ended: false },
+              tags: [],
+              genres: [],
+              "release-groups": [],
+              relations: [],
+              "release-group-count": 0,
+              "release-count": 0,
+            });
+          }
           console.log(
             `[Artists Stream] Request for ${mbid} already in progress, waiting...`,
           );
@@ -508,6 +526,24 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
             }
           })();
           pendingArtistRequests.set(mbid, fetchPromise);
+          if (streamArtistName) {
+            sendSSE(res, "artist", {
+              id: mbid,
+              name: streamArtistName,
+              "sort-name": streamArtistName,
+              disambiguation: "",
+              "type-id": null,
+              type: null,
+              country: null,
+              "life-span": { begin: null, end: null, ended: false },
+              tags: [],
+              genres: [],
+              "release-groups": [],
+              relations: [],
+              "release-group-count": 0,
+              "release-count": 0,
+            });
+          }
           try {
             artistData = await fetchPromise;
             sendSSE(res, "artist", artistData);

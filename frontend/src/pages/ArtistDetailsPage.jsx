@@ -73,12 +73,35 @@ const getTagColor = (name) => {
   return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
 };
 
+const emptyArtistShape = {
+  disambiguation: "",
+  "type-id": null,
+  type: null,
+  country: null,
+  "life-span": { begin: null, end: null, ended: false },
+  tags: [],
+  genres: [],
+  relations: [],
+  "release-group-count": 0,
+  "release-count": 0,
+};
+
 function ArtistDetailsPage() {
   const { mbid } = useParams();
   const { state: locationState } = useLocation();
   const navigate = useNavigate();
   const artistNameFromNav = locationState?.artistName;
-  const [artist, setArtist] = useState(null);
+  const initialArtist =
+    mbid && artistNameFromNav
+      ? {
+          id: mbid,
+          name: artistNameFromNav,
+          "sort-name": artistNameFromNav,
+          ...emptyArtistShape,
+          "release-groups": [],
+        }
+      : null;
+  const [artist, setArtist] = useState(initialArtist);
   const [coverImages, setCoverImages] = useState([]);
   const [libraryArtist, setLibraryArtist] = useState(null);
   const [libraryAlbums, setLibraryAlbums] = useState([]);
@@ -95,7 +118,7 @@ function ArtistDetailsPage() {
     });
   };
   const [similarArtists, setSimilarArtists] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialArtist);
   const [error, setError] = useState(null);
   const [existsInLibrary, setExistsInLibrary] = useState(false);
   const [requestingAlbum, setRequestingAlbum] = useState(null);
