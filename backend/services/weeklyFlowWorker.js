@@ -240,11 +240,6 @@ export class WeeklyFlowWorker {
       const playlistName = playlistManager.getPlaylistName(playlistType);
 
       try {
-        await playlistManager.triggerNavidromeScan();
-        console.log(
-          "[WeeklyFlowWorker] Waiting 90s for Navidrome to index new files...",
-        );
-        await new Promise((r) => setTimeout(r, 90000));
         await playlistManager.createPlaylist(playlistType, playlistName);
         if (flowPlaylistConfig.isEnabled(playlistType)) {
           flowPlaylistConfig.scheduleNextRun(playlistType);
