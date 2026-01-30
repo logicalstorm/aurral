@@ -20,6 +20,9 @@ RUN addgroup -g 1001 -S nodejs && \
 COPY package*.json ./
 RUN apk add --no-cache python3 make g++ && npm ci --omit=dev
 
+COPY backend/package*.json ./backend/
+RUN cd backend && npm ci --omit=dev
+
 COPY backend/ ./backend/
 COPY server.js loadEnv.js ./
 COPY --from=builder /app/frontend/dist ./frontend/dist
