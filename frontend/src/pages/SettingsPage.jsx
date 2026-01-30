@@ -983,6 +983,16 @@ function SettingsPage() {
                     />
                   </div>
                 </div>
+                <p
+                  className="mt-3 text-xs"
+                  style={{ color: "#8a8a8e" }}
+                >
+                  When using Weekly Flow: set Navidrome&apos;s{" "}
+                  <code>Scanner.PurgeMissing</code> to{" "}
+                  <code>always</code> or <code>full</code> (e.g.{" "}
+                  <code>ND_SCANNER_PURGEMISSING=always</code>) so turning off a
+                  flow removes those tracks from the library.
+                </p>
               </div>
             </form>
           </div>
