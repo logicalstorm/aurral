@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader, Music, AlertCircle, RefreshCw } from "lucide-react";
+import { Loader, Music, AlertCircle } from "lucide-react";
 import { getLibraryArtists } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
 
@@ -88,19 +88,6 @@ function LibraryPage() {
                 ? "Loading..."
                 : `${artists.length} artist${artists.length !== 1 ? "s" : ""} in your collection`}
             </p>
-          </div>
-          <div className="flex gap-2 mt-2 md:mt-0">
-            <button
-              onClick={() => fetchArtists()}
-              disabled={loading}
-              className="btn btn-secondary btn-sm disabled:opacity-50"
-              title="Refresh library from Lidarr"
-            >
-              <RefreshCw
-                className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`}
-              />
-              Refresh
-            </button>
           </div>
         </div>
 
