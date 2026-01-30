@@ -240,8 +240,9 @@ export class WeeklyFlowWorker {
       const playlistName = playlistManager.getPlaylistName(playlistType);
 
       try {
-        await playlistManager.createPlaylist(playlistType, playlistName);
         await playlistManager.triggerNavidromeScan();
+        await new Promise((r) => setTimeout(r, 45000));
+        await playlistManager.createPlaylist(playlistType, playlistName);
         if (flowPlaylistConfig.isEnabled(playlistType)) {
           flowPlaylistConfig.scheduleNextRun(playlistType);
         }
