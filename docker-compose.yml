@@ -4,6 +4,6 @@ services:
     ports:
       - "3001:3001"
     volumes:
-      - ./backend/data:/app/data
+      - ./backend/data:/app/backend/data
       - /data/downloads/tmp:/app/weekly-flow
       - /data/music:/app/navidrome-music:ro
