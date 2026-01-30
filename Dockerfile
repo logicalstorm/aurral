@@ -21,7 +21,7 @@ COPY package*.json ./
 RUN apk add --no-cache python3 make g++ && npm ci --omit=dev
 
 COPY backend/ ./backend/
-COPY server.js ./
+COPY server.js loadEnv.js ./
 COPY --from=builder /app/frontend/dist ./frontend/dist
 
 RUN chown -R nodejs:nodejs /app
