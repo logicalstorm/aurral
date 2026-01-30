@@ -1,9 +1,10 @@
 services:
   aurral:
     build: .
+    user: "0:0"
     ports:
       - "3001:3001"
     volumes:
       - ./backend/data:/app/backend/data
       - /data/downloads/tmp:/app/weekly-flow
-      - /data/music:/app/navidrome-music:ro
+      - /data/music:/app/navidrome-music
