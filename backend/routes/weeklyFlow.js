@@ -98,6 +98,7 @@ router.put("/playlist/:playlistType/enabled", async (req, res) => {
       if (tracks.length === 0) {
         flowPlaylistConfig.setEnabled(playlistType, true);
         flowPlaylistConfig.scheduleNextRun(playlistType);
+        await playlistManager.ensureSmartPlaylists();
         return res.json({
           success: true,
           playlistType,
@@ -115,6 +116,8 @@ router.put("/playlist/:playlistType/enabled", async (req, res) => {
       flowPlaylistConfig.setEnabled(playlistType, true);
       flowPlaylistConfig.scheduleNextRun(playlistType);
 
+      await playlistManager.ensureSmartPlaylists();
+
       res.json({
         success: true,
         playlistType,
@@ -128,6 +131,7 @@ router.put("/playlist/:playlistType/enabled", async (req, res) => {
       downloadTracker.clearByPlaylistType(playlistType);
 
       flowPlaylistConfig.setEnabled(playlistType, false);
+      await playlistManager.ensureSmartPlaylists();
 
       const stillPending = downloadTracker.getNextPending();
       if (stillPending && !weeklyFlowWorker.running) {
@@ -215,12 +219,10 @@ router.post("/playlist/:playlistType/create", async (req, res) => {
     const { playlistType } = req.params;
     playlistManager.updateConfig();
     await playlistManager.ensureSmartPlaylists();
-    await playlistManager.retagExistingForEnabledTypes();
-    await playlistManager.triggerNavidromeScan();
     res.json({
       success: true,
       message:
-        "Smart playlists ensured and Navidrome scan triggered. Tracks tagged with genre (Aurral Discover/Mix/Trending) will appear in the matching smart playlist.",
+        "Smart playlists ensured. Tracks in aurral-weekly-flow/discover (or mix/trending) will appear in the matching smart playlist when Navidrome scans.",
     });
   } catch (error) {
     res.status(500).json({
