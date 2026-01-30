@@ -4,6 +4,8 @@ services:
     user: "0:0"
     ports:
       - "3001:3001"
+    environment:
+      - WEEKLY_FLOW_HOST_PATH=/data/downloads/tmp
     volumes:
       - ./backend/data:/app/backend/data
       - /data/downloads/tmp:/app/weekly-flow
