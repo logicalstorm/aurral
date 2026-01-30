@@ -1,6 +1,7 @@
+import "./loadEnv.js";
+
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import path from "path";
@@ -26,8 +27,6 @@ import weeklyFlowRouter from "./backend/routes/weeklyFlow.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-dotenv.config({ path: path.join(__dirname, "backend", ".env") });
 
 process.on("uncaughtException", (error) => {
   console.error("Uncaught Exception:", error);

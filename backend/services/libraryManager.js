@@ -202,8 +202,6 @@ export class LibraryManager {
         trackCount: 0,
         sizeOnDisk: 0,
       },
-      images: lidarrArtist.images || [],
-      imageUrl: lidarrArtist.images?.[0]?.url || null,
     };
   }
 

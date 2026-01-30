@@ -352,7 +352,6 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
                 id: lidarrArtist.id,
                 monitored: lidarrArtist.monitored,
                 statistics: lidarrArtist.statistics,
-                images: lidarrArtist.images || [],
               },
             };
 
@@ -497,7 +496,6 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
                   id: lidarrArtist.id,
                   monitored: lidarrArtist.monitored,
                   statistics: lidarrArtist.statistics,
-                  images: lidarrArtist.images || [],
                 };
               }
 
@@ -584,57 +582,6 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
                 return;
               }
             } catch (e) {}
-          }
-
-          if (artistData?.["release-groups"]?.length > 0) {
-            const releaseGroups = artistData["release-groups"]
-              .filter(
-                (rg) =>
-                  rg["primary-type"] === "Album" || rg["primary-type"] === "EP",
-              )
-              .sort((a, b) => {
-                const dateA = a["first-release-date"] || "";
-                const dateB = b["first-release-date"] || "";
-                return dateB.localeCompare(dateA);
-              })
-              .slice(0, 2);
-
-            for (const rg of releaseGroups) {
-              try {
-                const coverArtResponse = await axios
-                  .get(`https://coverartarchive.org/release-group/${rg.id}`, {
-                    headers: { Accept: "application/json" },
-                    timeout: 2000,
-                  })
-                  .catch(() => null);
-
-                if (coverArtResponse?.data?.images?.length > 0) {
-                  const frontImage =
-                    coverArtResponse.data.images.find((img) => img.front) ||
-                    coverArtResponse.data.images[0];
-                  if (frontImage) {
-                    const imageUrl =
-                      frontImage.thumbnails?.["500"] ||
-                      frontImage.thumbnails?.["large"] ||
-                      frontImage.image;
-                    if (imageUrl) {
-                      dbOps.setImage(mbid, imageUrl);
-
-                      sendSSE(res, "cover", {
-                        images: [
-                          {
-                            image: imageUrl,
-                            front: true,
-                            types: frontImage.types || ["Front"],
-                          },
-                        ],
-                      });
-                      return;
-                    }
-                  }
-                }
-              } catch (e) {}
-            }
           }
 
           dbOps.setImage(mbid, "NOT_FOUND");
@@ -952,7 +899,6 @@ router.get("/:mbid", cacheMiddleware(300), async (req, res) => {
           id: lidarrArtist.id,
           monitored: lidarrArtist.monitored,
           statistics: lidarrArtist.statistics,
-          images: lidarrArtist.images || [],
         },
       };
 
@@ -1052,7 +998,6 @@ router.get("/:mbid", cacheMiddleware(300), async (req, res) => {
             id: lidarrArtist.id,
             monitored: lidarrArtist.monitored,
             statistics: lidarrArtist.statistics,
-            images: lidarrArtist.images || [],
           };
         }
 
@@ -1180,46 +1125,8 @@ const fetchCoverInBackground = async (mbid) => {
           const deezer = await deezerSearchArtist(artistName);
           if (deezer?.imageUrl) {
             dbOps.setImage(mbid, deezer.imageUrl);
-            return;
           }
         } catch (e) {}
-      }
-
-      if (mbResult?.["release-groups"]?.length > 0) {
-        const releaseGroups = mbResult["release-groups"]
-          .filter(
-            (rg) =>
-              rg["primary-type"] === "Album" || rg["primary-type"] === "EP",
-          )
-          .sort((a, b) => {
-            const dateA = a["first-release-date"] || "";
-            const dateB = b["first-release-date"] || "";
-            return dateB.localeCompare(dateA);
-          })
-          .slice(0, 2);
-        for (const rg of releaseGroups) {
-          try {
-            const coverRes = await axios
-              .get(`https://coverartarchive.org/release-group/${rg.id}`, {
-                headers: { Accept: "application/json" },
-                timeout: 2000,
-              })
-              .catch(() => null);
-            if (coverRes?.data?.images?.length > 0) {
-              const front =
-                coverRes.data.images.find((img) => img.front) ||
-                coverRes.data.images[0];
-              const imageUrl =
-                front.thumbnails?.["500"] ||
-                front.thumbnails?.["large"] ||
-                front.image;
-              if (imageUrl) {
-                dbOps.setImage(mbid, imageUrl);
-                return;
-              }
-            }
-          } catch (e) {}
-        }
       }
     } catch (e) {}
   })();
@@ -1353,65 +1260,6 @@ router.get("/:mbid/cover", async (req, res) => {
             );
           }
         }
-
-        if (!artistName || !mbResult?.["release-groups"]) {
-          return { images: [] };
-        }
-
-        try {
-          const artistDataForRG = mbResult;
-          if (artistDataForRG?.["release-groups"]?.length > 0) {
-            const releaseGroups = artistDataForRG["release-groups"]
-              .filter(
-                (rg) =>
-                  rg["primary-type"] === "Album" || rg["primary-type"] === "EP",
-              )
-              .sort((a, b) => {
-                const dateA = a["first-release-date"] || "";
-                const dateB = b["first-release-date"] || "";
-                return dateB.localeCompare(dateA);
-              })
-              .slice(0, 2);
-            const coverArtResults = await Promise.allSettled(
-              releaseGroups.map((rg) =>
-                axios
-                  .get(`https://coverartarchive.org/release-group/${rg.id}`, {
-                    headers: { Accept: "application/json" },
-                    timeout: 2000,
-                  })
-                  .catch(() => null),
-              ),
-            );
-            for (const result of coverArtResults) {
-              if (
-                result.status === "fulfilled" &&
-                result.value?.data?.images?.length > 0
-              ) {
-                const frontImage =
-                  result.value.data.images.find((img) => img.front) ||
-                  result.value.data.images[0];
-                if (frontImage) {
-                  const imageUrl =
-                    frontImage.thumbnails?.["500"] ||
-                    frontImage.thumbnails?.["large"] ||
-                    frontImage.image;
-                  if (imageUrl) {
-                    dbOps.setImage(mbid, imageUrl);
-                    return {
-                      images: [
-                        {
-                          image: imageUrl,
-                          front: true,
-                          types: frontImage.types || ["Front"],
-                        },
-                      ],
-                    };
-                  }
-                }
-              }
-            }
-          }
-        } catch (e) {}
 
         return { images: [] };
       } catch (error) {
