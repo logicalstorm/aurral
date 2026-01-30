@@ -232,6 +232,46 @@ router.get("/similar", (req, res) => {
   });
 });
 
+router.get("/tags", async (req, res) => {
+  try {
+    const { q = "", limit = 10 } = req.query;
+    const limitInt = Math.min(parseInt(limit) || 10, 20);
+    const prefix = String(q).trim().toLowerCase();
+    let tagNames = [];
+    if (getLastfmApiKey()) {
+      const data = await lastfmRequest("chart.getTopTags", { limit: 100 });
+      if (data?.tags?.tag) {
+        const tags = Array.isArray(data.tags.tag)
+          ? data.tags.tag
+          : [data.tags.tag];
+        tagNames = tags.map((t) => (t.name != null ? String(t.name).trim() : "")).filter(Boolean);
+      }
+    }
+    if (tagNames.length === 0) {
+      const discoveryCache = getDiscoveryCache();
+      const cached = [
+        ...(discoveryCache.topTags || []),
+        ...(discoveryCache.topGenres || []),
+      ].map((t) => (t != null ? String(t).trim() : "")).filter(Boolean);
+      tagNames = [...new Set(cached)];
+    }
+    const seen = new Set();
+    const filtered = tagNames.filter((name) => {
+      const key = name.toLowerCase();
+      if (seen.has(key)) return false;
+      if (prefix && !key.startsWith(prefix)) return false;
+      seen.add(key);
+      return true;
+    });
+    res.json({ tags: filtered.slice(0, limitInt) });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to fetch tag suggestions",
+      message: error.message,
+    });
+  }
+});
+
 router.get("/by-tag", async (req, res) => {
   try {
     const { tag, limit = 24, offset = 0 } = req.query;
