@@ -167,7 +167,7 @@ setTimeout(async () => {
 const httpServer = createServer(app);
 websocketService.initialize(httpServer);
 
-httpServer.listen(PORT, async () => {
+httpServer.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server running on port ${PORT}`);
 });
 
