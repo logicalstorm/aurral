@@ -1,6 +1,5 @@
 import { dbOps } from "../config/db-helpers.js";
 import { musicbrainzRequest, deezerSearchArtist } from "./apiClients.js";
-import axios from "axios";
 
 const negativeImageCache = new Set();
 const pendingImageRequests = new Map();
@@ -73,80 +72,6 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
                 { image: deezer.imageUrl, front: true, types: ["Front"] },
               ],
             };
-          }
-        } catch (e) {}
-      }
-
-      if (artistName || artistData) {
-        try {
-          const artistDataForRG = artistData?.["release-groups"]
-            ? artistData
-            : await Promise.race([
-                musicbrainzRequest(`/artist/${mbid}`, {
-                  inc: "release-groups",
-                }),
-                new Promise((_, reject) =>
-                  setTimeout(
-                    () => reject(new Error("MusicBrainz timeout")),
-                    2000,
-                  ),
-                ),
-              ]).catch(() => null);
-
-          if (artistDataForRG?.["release-groups"]?.length > 0) {
-            const releaseGroups = artistDataForRG["release-groups"]
-              .filter(
-                (rg) =>
-                  rg["primary-type"] === "Album" || rg["primary-type"] === "EP",
-              )
-              .sort((a, b) => {
-                const dateA = a["first-release-date"] || "";
-                const dateB = b["first-release-date"] || "";
-                return dateB.localeCompare(dateA);
-              })
-              .slice(0, 2);
-
-            const coverArtResults = await Promise.allSettled(
-              releaseGroups.map((rg) =>
-                axios
-                  .get(`https://coverartarchive.org/release-group/${rg.id}`, {
-                    headers: { Accept: "application/json" },
-                    timeout: 2000,
-                  })
-                  .catch(() => null),
-              ),
-            );
-
-            for (const result of coverArtResults) {
-              if (
-                result.status === "fulfilled" &&
-                result.value?.data?.images?.length > 0
-              ) {
-                const frontImage =
-                  result.value.data.images.find((img) => img.front) ||
-                  result.value.data.images[0];
-                if (frontImage) {
-                  const imageUrl =
-                    frontImage.thumbnails?.["500"] ||
-                    frontImage.thumbnails?.["large"] ||
-                    frontImage.image;
-                  if (imageUrl) {
-                    dbOps.setImage(mbid, imageUrl);
-
-                    return {
-                      url: imageUrl,
-                      images: [
-                        {
-                          image: imageUrl,
-                          front: true,
-                          types: frontImage.types || ["Front"],
-                        },
-                      ],
-                    };
-                  }
-                }
-              }
-            }
           }
         } catch (e) {}
       }

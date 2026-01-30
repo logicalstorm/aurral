@@ -524,76 +524,8 @@ export const updateDiscoveryCache = async () => {
                   const deezer = await deezerSearchArtist(artistName);
                   if (deezer?.imageUrl) {
                     item.image = deezer.imageUrl;
-                    return;
                   }
                 } catch (e) {}
-              }
-
-              const artistDataWithRGs = await Promise.race([
-                musicbrainzRequest(`/artist/${item.id}`, {
-                  inc: "release-groups",
-                }),
-                new Promise((_, reject) =>
-                  setTimeout(
-                    () => reject(new Error("MusicBrainz timeout")),
-                    2000,
-                  ),
-                ),
-              ]).catch(() => null);
-
-              if (
-                artistDataWithRGs?.["release-groups"] &&
-                artistDataWithRGs["release-groups"].length > 0
-              ) {
-                const releaseGroups = artistDataWithRGs["release-groups"]
-                  .filter(
-                    (rg) =>
-                      rg["primary-type"] === "Album" ||
-                      rg["primary-type"] === "EP",
-                  )
-                  .sort((a, b) => {
-                    const dateA = a["first-release-date"] || "";
-                    const dateB = b["first-release-date"] || "";
-                    return dateB.localeCompare(dateA);
-                  });
-
-                const coverArtPromises = releaseGroups.slice(0, 2).map((rg) =>
-                  Promise.race([
-                    axios.get(
-                      `https://coverartarchive.org/release-group/${rg.id}`,
-                      {
-                        headers: { Accept: "application/json" },
-                        timeout: 1500,
-                      },
-                    ),
-                    new Promise((_, reject) =>
-                      setTimeout(
-                        () => reject(new Error("Cover Art timeout")),
-                        1500,
-                      ),
-                    ),
-                  ]).catch(() => null),
-                );
-
-                const coverArtResults =
-                  await Promise.allSettled(coverArtPromises);
-
-                for (const result of coverArtResults) {
-                  if (result.status !== "fulfilled" || !result.value) continue;
-
-                  const coverArtJson = result.value;
-
-                  if (coverArtJson?.data?.images) {
-                    const frontImage =
-                      coverArtJson.data.images.find((img) => img.front) ||
-                      coverArtJson.data.images[0];
-                    if (frontImage?.thumbnails?.["500"] || frontImage?.image) {
-                      item.image =
-                        frontImage.thumbnails?.["500"] || frontImage.image;
-                      break;
-                    }
-                  }
-                }
               }
             } catch (e) {}
           } catch (e) {}

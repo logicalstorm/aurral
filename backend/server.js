@@ -1,6 +1,7 @@
+import "./loadEnv.js";
+
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import { fileURLToPath } from "url";
@@ -23,10 +24,8 @@ import requestsRouter from "./routes/requests.js";
 import healthRouter from "./routes/health.js";
 import weeklyFlowRouter from "./routes/weeklyFlow.js";
 
-// Load .env file from the backend directory
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-dotenv.config({ path: join(__dirname, ".env") });
 
 const app = express();
 const PORT = process.env.PORT || 3001;

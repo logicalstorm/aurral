@@ -60,21 +60,6 @@ function LibraryPage() {
 
   const filteredArtists = getFilteredAndSortedArtists();
 
-  const getArtistImage = (artist) => {
-    if (artist.imageUrl) {
-      return artist.imageUrl;
-    }
-
-    if (artist.images && artist.images.length > 0) {
-      const posterImage = artist.images.find(
-        (img) => img.coverType === "poster" || img.coverType === "fanart",
-      );
-      const image = posterImage || artist.images[0];
-      return image?.remoteUrl || image?.url || null;
-    }
-    return null;
-  };
-
   return (
     <div className="animate-fade-in">
       <div className="mb-4 p-4">
@@ -174,7 +159,6 @@ function LibraryPage() {
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
             {filteredArtists.map((artist) => {
-              const lidarrImage = getArtistImage(artist);
               const monitorOption =
                 artist.addOptions?.monitor ||
                 artist.monitorNewItems ||
@@ -194,7 +178,6 @@ function LibraryPage() {
                     }
                   >
                     <ArtistImage
-                      src={lidarrImage || undefined}
                       mbid={artist.foreignArtistId}
                       artistName={artist.artistName}
                       alt={artist.artistName}
