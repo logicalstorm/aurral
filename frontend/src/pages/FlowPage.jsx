@@ -189,7 +189,7 @@ function FlowPage() {
           return (
             <div
               key={config.id}
-              className="p-5 bg-card rounded-lg border border-white/5"
+              className="p-5 bg-card rounded-lg border border-white/5 overflow-hidden"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-3 min-w-0 flex-1">
