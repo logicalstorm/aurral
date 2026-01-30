@@ -53,7 +53,8 @@ export class WeeklyFlowPlaylistManager {
     }
 
     try {
-      let relativePath = path.relative(this.weeklyFlowRoot, sourcePath);
+      const relativePathFull = path.relative(this.weeklyFlowRoot, sourcePath);
+      let relativePath = relativePathFull;
       const prefix = playlistType + path.sep;
       if (relativePath.startsWith(prefix)) {
         relativePath = relativePath.slice(prefix.length);
@@ -73,8 +74,10 @@ export class WeeklyFlowPlaylistManager {
         await fs.unlink(symlinkPath);
       } catch {}
 
-      const absoluteSource = path.resolve(sourcePath);
-      await fs.symlink(absoluteSource, symlinkPath);
+      const symlinkTarget = process.env.WEEKLY_FLOW_HOST_PATH
+        ? path.join(process.env.WEEKLY_FLOW_HOST_PATH, relativePathFull)
+        : path.resolve(sourcePath);
+      await fs.symlink(symlinkTarget, symlinkPath);
 
       return symlinkPath;
     } catch (error) {
