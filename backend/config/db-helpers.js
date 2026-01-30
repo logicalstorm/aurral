@@ -25,6 +25,8 @@ export const dbOps = {
         .prepare("SELECT value FROM settings WHERE key = ?")
         .get("weeklyFlowPlaylists")?.value,
     );
+    const onboardingComplete =
+      db.prepare("SELECT value FROM settings WHERE key = ?").get("onboardingComplete")?.value === "true";
 
     const defaultFlowPlaylists = {
       discover: { enabled: false, nextRunAt: null },
@@ -50,6 +52,7 @@ export const dbOps = {
       rootFolderPath: rootFolderPath || null,
       releaseTypes: releaseTypes || [],
       weeklyFlowPlaylists: merged,
+      onboardingComplete: !!onboardingComplete,
     };
   },
 
@@ -80,6 +83,12 @@ export const dbOps = {
       stmt.run(
         "weeklyFlowPlaylists",
         dbHelpers.stringifyJSON(settings.weeklyFlowPlaylists),
+      );
+    }
+    if (settings.onboardingComplete !== undefined) {
+      stmt.run(
+        "onboardingComplete",
+        settings.onboardingComplete ? "true" : "false",
       );
     }
   },

@@ -12,6 +12,7 @@ const router = express.Router();
 
 router.get("/", noCache, async (req, res) => {
   try {
+    lidarrClient.updateConfig();
     const authUser = getAuthUser();
     const authPassword = getAuthPassword();
     const lidarrConfigured = lidarrClient.isConfigured();
@@ -30,13 +31,16 @@ router.get("/", noCache, async (req, res) => {
       ),
     ]).catch(() => 0);
 
+    const settings = dbOps.getSettings();
+    const onboardingDone =
+      settings.onboardingComplete || authPassword.length > 0;
     res.json({
       status: "ok",
       rootFolderConfigured: lidarrConfigured,
       lidarrConfigured,
       lastfmConfigured: !!getLastfmApiKey(),
       musicbrainzConfigured: !!(
-        dbOps.getSettings().integrations?.musicbrainz?.email ||
+        settings.integrations?.musicbrainz?.email ||
         process.env.CONTACT_EMAIL
       ),
       library: {
@@ -58,6 +62,7 @@ router.get("/", noCache, async (req, res) => {
       },
       authRequired: authPassword.length > 0,
       authUser: authUser,
+      onboardingRequired: !onboardingDone,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

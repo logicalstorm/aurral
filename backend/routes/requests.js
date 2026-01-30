@@ -132,6 +132,7 @@ router.get("/", noCache, async (req, res) => {
         mbid: artistMbid,
         name: albumName,
         image: null,
+        inQueue: true,
       });
     }
 
@@ -228,6 +229,7 @@ router.get("/", noCache, async (req, res) => {
         mbid: artistMbid,
         name: albumName,
         image: null,
+        inQueue: false,
       });
     }
 

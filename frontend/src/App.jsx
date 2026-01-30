@@ -15,6 +15,7 @@ import ArtistDetailsPage from "./pages/ArtistDetailsPage";
 import RequestsPage from "./pages/RequestsPage";
 import FlowPage from "./pages/FlowPage";
 import Login from "./pages/Login";
+import Onboarding from "./pages/Onboarding";
 import { checkHealth } from "./utils/api";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ToastProvider } from "./contexts/ToastContext";
@@ -22,7 +23,7 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import ReloadPrompt from "./components/ReloadPrompt";
 
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, isLoading, authRequired } = useAuth();
+  const { isAuthenticated, isLoading, authRequired, onboardingRequired } = useAuth();
 
   if (isLoading) {
     return (
@@ -33,6 +34,10 @@ const ProtectedRoute = ({ children }) => {
         ></div>
       </div>
     );
+  }
+
+  if (onboardingRequired) {
+    return <Onboarding />;
   }
 
   if (authRequired && !isAuthenticated) {

@@ -39,6 +39,30 @@ export const checkHealth = async () => {
   return response.data;
 };
 
+export const completeOnboarding = async (payload) => {
+  const response = await api.post("/onboarding/complete", payload);
+  return response.data;
+};
+
+export const testLidarrOnboarding = async (url, apiKey) => {
+  const params = new URLSearchParams();
+  if (url) params.append("url", url.replace(/\/+$/, ""));
+  if (apiKey) params.append("apiKey", apiKey);
+  const response = await api.get(
+    `/onboarding/lidarr/test${params.toString() ? `?${params.toString()}` : ""}`,
+  );
+  return response.data;
+};
+
+export const testNavidromeOnboarding = async (url, username, password) => {
+  const response = await api.post("/onboarding/navidrome/test", {
+    url: url?.replace(/\/+$/, ""),
+    username,
+    password,
+  });
+  return response.data;
+};
+
 export const getAuthConfig = async () => {
   const response = await api.get("/auth/config");
   return response.data;
@@ -265,8 +289,9 @@ export const getRecentlyAdded = async () => {
   return response.data;
 };
 
-export const getDiscovery = async () => {
-  const response = await api.get("/discover");
+export const getDiscovery = async (cacheBust = false) => {
+  const params = cacheBust ? { _: Date.now() } : {};
+  const response = await api.get("/discover", { params });
   return response.data;
 };
 

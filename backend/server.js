@@ -15,6 +15,7 @@ import {
 import { websocketService } from "./services/websocketService.js";
 
 import settingsRouter from "./routes/settings.js";
+import onboardingRouter from "./routes/onboarding.js";
 import artistsRouter from "./routes/artists.js";
 import libraryRouter from "./routes/library.js";
 import discoveryRouter from "./routes/discovery.js";
@@ -43,6 +44,7 @@ const limiter = rateLimit({
 app.use("/api/", limiter);
 
 app.use("/api/settings", settingsRouter);
+app.use("/api/onboarding", onboardingRouter);
 app.use("/api/search", artistsRouter);
 app.use("/api/artists", artistsRouter);
 app.use("/api/library", libraryRouter);

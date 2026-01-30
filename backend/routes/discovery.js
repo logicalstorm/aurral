@@ -118,7 +118,14 @@ router.get("/", async (req, res) => {
     discoveryCache.globalTop?.length > 0 ||
     discoveryCache.topGenres?.length > 0;
 
-  const isUpdating = discoveryCache.isUpdating || false;
+  let isUpdating = discoveryCache.isUpdating || false;
+
+  if (!hasData && !isUpdating) {
+    updateDiscoveryCache().catch((err) => {
+      console.error("[Discover] Lazy discovery refresh failed:", err.message);
+    });
+    isUpdating = true;
+  }
 
   const dbHasData =
     dbData.recommendations?.length > 0 ||
