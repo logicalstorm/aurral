@@ -2,6 +2,7 @@ import path from "path";
 import fs from "fs/promises";
 import { dbOps } from "../config/db-helpers.js";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
+import { NavidromeClient } from "./navidrome.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 
 const WEEKLY_FLOW_NAVIDROME_DIR = "aurral-weekly-flow";
@@ -11,6 +12,7 @@ export class WeeklyFlowPlaylistManager {
     this.weeklyFlowRoot = path.isAbsolute(weeklyFlowRoot)
       ? weeklyFlowRoot
       : path.resolve(process.cwd(), weeklyFlowRoot);
+    this.navidromeClient = null;
     this.navidromeMusicFolder = null;
     this.updateConfig();
   }
@@ -22,6 +24,20 @@ export class WeeklyFlowPlaylistManager {
       settings.integrations?.navidrome?.musicFolder ||
       process.env.NAVIDROME_MUSIC_FOLDER ||
       "/app/navidrome-music";
+
+    if (
+      navidromeConfig.url &&
+      navidromeConfig.username &&
+      navidromeConfig.password
+    ) {
+      this.navidromeClient = new NavidromeClient(
+        navidromeConfig.url,
+        navidromeConfig.username,
+        navidromeConfig.password,
+      );
+    } else {
+      this.navidromeClient = null;
+    }
 
     if (this.navidromeMusicFolder) {
       this.ensureSmartPlaylists().catch((err) =>
@@ -62,6 +78,20 @@ export class WeeklyFlowPlaylistManager {
           };
           await fs.writeFile(nspPath, JSON.stringify(payload), "utf8");
         } else {
+          if (this.navidromeClient?.isConfigured()) {
+            try {
+              const playlists = await this.navidromeClient.getPlaylists();
+              const existing = playlists.find((p) => p.name === name);
+              if (existing) {
+                await this.navidromeClient.deletePlaylist(existing.id);
+              }
+            } catch (err) {
+              console.warn(
+                `[WeeklyFlowPlaylistManager] Failed to delete playlist "${name}" from Navidrome:`,
+                err?.message,
+              );
+            }
+          }
           try {
             await fs.unlink(nspPath);
           } catch {}
