@@ -309,6 +309,13 @@ export const getSimilarArtists = async (limit = 20) => {
   return response.data;
 };
 
+export const getTagSuggestions = async (q, limit = 10) => {
+  const response = await api.get("/discover/tags", {
+    params: { q: q.trim(), limit },
+  });
+  return response.data;
+};
+
 export const searchArtistsByTag = async (tag, limit = 24, offset = 0) => {
   const response = await api.get("/discover/by-tag", {
     params: { tag, limit, offset },
