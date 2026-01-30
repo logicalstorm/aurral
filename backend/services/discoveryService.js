@@ -6,6 +6,7 @@ import {
   musicbrainzRequest,
   deezerSearchArtist,
 } from "./apiClients.js";
+import { websocketService } from "./websocketService.js";
 
 const getLastfmUsername = () => {
   const settings = dbOps.getSettings();
@@ -541,6 +542,16 @@ export const updateDiscoveryCache = async () => {
     console.log(
       `Summary: ${recommendationsArray.length} recommendations, ${discoveryCache.topGenres.length} genres, ${discoveryCache.globalTop.length} trending artists`,
     );
+    websocketService.emitDiscoveryUpdate({
+      recommendations: discoveryData.recommendations,
+      globalTop: discoveryData.globalTop,
+      basedOn: discoveryData.basedOn,
+      topTags: discoveryData.topTags,
+      topGenres: discoveryData.topGenres,
+      lastUpdated: discoveryData.lastUpdated,
+      isUpdating: false,
+      configured: true,
+    });
   } catch (error) {
     console.error("Failed to update discovery cache:", error.message);
     console.error("Stack trace:", error.stack);

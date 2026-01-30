@@ -46,6 +46,10 @@ export default defineConfig({
         timeout: 10000,
         proxyTimeout: 10000,
       },
+      "/ws": {
+        target: "ws://localhost:3001",
+        ws: true,
+      },
     },
   },
 });
