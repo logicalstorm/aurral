@@ -53,7 +53,11 @@ export class WeeklyFlowPlaylistManager {
     }
 
     try {
-      const relativePath = path.relative(this.weeklyFlowRoot, sourcePath);
+      let relativePath = path.relative(this.weeklyFlowRoot, sourcePath);
+      const prefix = playlistType + path.sep;
+      if (relativePath.startsWith(prefix)) {
+        relativePath = relativePath.slice(prefix.length);
+      }
       const symlinkPath = path.join(
         this.navidromeMusicFolder,
         ".aurral-weekly-flow",
@@ -89,11 +93,15 @@ export class WeeklyFlowPlaylistManager {
     const jobs = downloadTracker.getByPlaylistType("discover");
     for (const job of jobs) {
       if (job.status !== "done" || !job.finalPath) continue;
-      const relativePath = path.relative(this.weeklyFlowRoot, job.finalPath);
+      let relativePath = path.relative(this.weeklyFlowRoot, job.finalPath);
+      const prefix = "discover" + path.sep;
+      if (relativePath.startsWith(prefix)) {
+        relativePath = relativePath.slice(prefix.length);
+      }
       const parts = relativePath.split(path.sep).filter(Boolean);
-      if (parts.length < 4 || parts[0] !== "discover") continue;
-      const artistDir = parts[1];
-      const albumDir = parts[2];
+      if (parts.length < 3) continue;
+      const artistDir = parts[0];
+      const albumDir = parts[1];
       if (artistDir !== sanitizedArtist || albumDir !== sanitizedAlbum) continue;
       const symlinkPath = path.join(
         this.navidromeMusicFolder,
