@@ -228,7 +228,7 @@ export class WeeklyFlowWorker {
 
     if (allDone && hasDone) {
       console.log(
-        `[WeeklyFlowWorker] All jobs complete for ${playlistType}, ensuring smart playlists and triggering scan...`,
+        `[WeeklyFlowWorker] All jobs complete for ${playlistType}, ensuring smart playlists...`,
       );
       try {
         await fs.rm(path.join(this.weeklyFlowRoot, "_fallback"), {
@@ -239,14 +239,12 @@ export class WeeklyFlowWorker {
       playlistManager.updateConfig();
       try {
         await playlistManager.ensureSmartPlaylists();
-        await playlistManager.retagExistingForEnabledTypes();
-        await playlistManager.triggerNavidromeScan();
         if (flowPlaylistConfig.isEnabled(playlistType)) {
           flowPlaylistConfig.scheduleNextRun(playlistType);
         }
       } catch (error) {
         console.error(
-          `[WeeklyFlowWorker] Failed to ensure smart playlists / scan for ${playlistType}:`,
+          `[WeeklyFlowWorker] Failed to ensure smart playlists for ${playlistType}:`,
           error.message,
         );
       }
