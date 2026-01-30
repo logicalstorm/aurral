@@ -9,7 +9,7 @@ const CONCURRENCY = 1;
 const FALLBACK_MP3_REGEX = /^[^/\\]+-[a-f0-9]{8}\.mp3$/i;
 
 export class WeeklyFlowWorker {
-  constructor(weeklyFlowRoot = "./weekly-flow") {
+  constructor(weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER || "./weekly-flow") {
     this.weeklyFlowRoot = path.isAbsolute(weeklyFlowRoot)
       ? weeklyFlowRoot
       : path.resolve(process.cwd(), weeklyFlowRoot);

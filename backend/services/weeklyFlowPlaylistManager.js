@@ -5,8 +5,10 @@ import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { NavidromeClient } from "./navidrome.js";
 
 export class WeeklyFlowPlaylistManager {
-  constructor(weeklyFlowRoot = "./weekly-flow") {
-    this.weeklyFlowRoot = weeklyFlowRoot;
+  constructor(weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER || "./weekly-flow") {
+    this.weeklyFlowRoot = path.isAbsolute(weeklyFlowRoot)
+      ? weeklyFlowRoot
+      : path.resolve(process.cwd(), weeklyFlowRoot);
     this.navidromeClient = null;
     this.navidromeMusicFolder = null;
     this.updateConfig();
