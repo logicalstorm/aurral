@@ -43,6 +43,7 @@ const ArtistImage = ({
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const fetchingRef = useRef(false);
+  const triedBackendFallbackRef = useRef(false);
 
   const fetchBackendCover = useCallback(async (mbidToFetch, nameForCover) => {
     if (!mbidToFetch || fetchingRef.current) {
@@ -85,6 +86,7 @@ const ArtistImage = ({
 
   useEffect(() => {
     fetchingRef.current = false;
+    triedBackendFallbackRef.current = false;
 
     if (src) {
       setCurrentSrc(src);
@@ -107,6 +109,13 @@ const ArtistImage = ({
   };
 
   const handleError = () => {
+    if (mbid && !triedBackendFallbackRef.current) {
+      triedBackendFallbackRef.current = true;
+      setIsLoading(true);
+      setHasError(false);
+      fetchBackendCover(mbid, artistName);
+      return;
+    }
     setHasError(true);
     setIsLoading(false);
   };

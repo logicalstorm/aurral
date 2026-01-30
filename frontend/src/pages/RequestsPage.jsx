@@ -245,7 +245,6 @@ function RequestsPage() {
                       >
                         {displayName}
                       </h3>
-                      {getStatusBadge(request)}
                     </div>
 
                     <div
@@ -270,6 +269,10 @@ function RequestsPage() {
                         )}
                       </span>
                     </div>
+                  </div>
+
+                  <div className="flex-shrink-0 pr-8">
+                    {getStatusBadge(request)}
                   </div>
                 </div>
               </div>
