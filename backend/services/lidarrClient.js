@@ -122,7 +122,8 @@ export class LidarrClient {
       }
 
       return response.data;
-    } catch (error) {
+    } catch (raw) {
+      const error = raw && typeof raw === "object" ? raw : {};
       if (
         !error.response &&
         (error.request || error.code === "ECONNABORTED")
@@ -196,16 +197,15 @@ export class LidarrClient {
           }`
         );
       } else if (error.request) {
-        console.error(
-          "Lidarr API request failed - no response:",
-          error.message
-        );
+        const msg = error.message != null ? String(error.message) : String(raw);
+        console.error("Lidarr API request failed - no response:", msg);
         throw new Error(
           `Cannot connect to Lidarr at ${this.config.url}. Check if Lidarr is running and the URL is correct.`
         );
       } else {
-        console.error("Lidarr API error:", error.message);
-        throw error;
+        const msg = error.message != null ? String(error.message) : String(raw);
+        console.error("Lidarr API error:", msg);
+        throw raw instanceof Error ? raw : new Error(msg);
       }
     }
   }
