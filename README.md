@@ -133,7 +133,21 @@ All configuration is done through the web interface at `/settings`.
 ### Optional Integrations
 
 - **Last.fm:** API key and username for personalized recommendations
-- **Navidrome:** URL and credentials for playlist sync. Set `DOWNLOAD_FOLDER` to the host path Navidrome can see (e.g. `/data/downloads/tmp`). Aurral creates a second library "Aurral Weekly Flow" at `{DOWNLOAD_FOLDER}/aurral-weekly-flow` via the Navidrome API when ensuring smart playlists; the Navidrome user must be an admin.
+- **Navidrome:** URL and credentials for playlist sync (see Navidrome Weekly Flow below).
+
+### Navidrome Weekly Flow
+
+When you enable a weekly flow playlist (Discover, Mix, or Trending), Aurral:
+
+1. Downloads tracks into the folder mounted at `/app/downloads` (e.g. `DOWNLOAD_FOLDER` on the host).
+2. Creates or finds a second Navidrome library named **"Aurral Weekly Flow"** pointing at `{DOWNLOAD_FOLDER}/aurral-weekly-flow` via the Navidrome API.
+3. Writes smart playlist files (`.nsp`) there so Navidrome shows only flow tracks in "Aurral Discover", "Aurral Mix", and "Aurral Trending".
+
+**To see the new music in Navidrome:**
+
+- Set `DOWNLOAD_FOLDER` in compose (or env) to the same host path you mount as the downloads volume, so Navidrome can read that path (e.g. `/data/downloads/tmp`).
+- In Navidrome, **enable access to both libraries** for your user: your main music library and the **Aurral Weekly Flow** library. If the second library is not enabled for your user, playlists will be empty or you won't see the flow tracks.
+- The Navidrome user used in Settings must be an admin so Aurral can create the library and manage playlists.
 
 ### Environment Variables
 
