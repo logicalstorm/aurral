@@ -5,8 +5,7 @@ services:
     ports:
       - "3001:3001"
     environment:
-      - WEEKLY_FLOW_HOST_PATH=/data/downloads/tmp
+      - SYMLINK_PATH=/data/downloads/tmp
     volumes:
-      - ./backend/data:/app/backend/data
-      - /data/downloads/tmp:/app/weekly-flow
-      - /data/music:/app/navidrome-music
+      - /data/downloads/tmp:/app/downloads
+      - /data/aurral-weekly-flow:/app/flow
