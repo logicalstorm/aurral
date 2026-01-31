@@ -6,7 +6,9 @@ import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 
 export class WeeklyFlowPlaylistManager {
-  constructor(weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER || "./weekly-flow") {
+  constructor(
+    weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER || "./weekly-flow"
+  ) {
     this.weeklyFlowRoot = path.isAbsolute(weeklyFlowRoot)
       ? weeklyFlowRoot
       : path.resolve(process.cwd(), weeklyFlowRoot);
@@ -32,7 +34,7 @@ export class WeeklyFlowPlaylistManager {
       this.navidromeClient = new NavidromeClient(
         navidromeConfig.url,
         navidromeConfig.username,
-        navidromeConfig.password,
+        navidromeConfig.password
       );
     } else {
       this.navidromeClient = null;
@@ -41,18 +43,19 @@ export class WeeklyFlowPlaylistManager {
     this.ensureSmartPlaylists().catch((err) =>
       console.warn(
         "[WeeklyFlowPlaylistManager] ensureSmartPlaylists on config:",
-        err?.message,
-      ),
+        err?.message
+      )
     );
   }
 
   _sanitize(str) {
-    return String(str || "").replace(/[<>:"/\\|?*]/g, "_").trim();
+    return String(str || "")
+      .replace(/[<>:"/\\|?*]/g, "_")
+      .trim();
   }
 
   _getWeeklyFlowLibraryHostPath() {
-    const base =
-      process.env.WEEKLY_FLOW_DOWNLOADS || "/data/downloads/tmp";
+    const base = process.env.WEEKLY_FLOW_DOWNLOADS || "/data/downloads/tmp";
     return `${base.replace(/\\/g, "/").replace(/\/+$/, "")}/aurral-weekly-flow`;
   }
 
@@ -63,21 +66,31 @@ export class WeeklyFlowPlaylistManager {
       { type: "trending", name: "Aurral Trending" },
     ];
     const config = flowPlaylistConfig.getPlaylists();
+    let libraryId = null;
     try {
       if (this.navidromeClient?.isConfigured()) {
         const hostPath = this._getWeeklyFlowLibraryHostPath();
-        await this.navidromeClient.ensureWeeklyFlowLibrary(hostPath);
+        const library = await this.navidromeClient.ensureWeeklyFlowLibrary(hostPath);
+        if (library != null && (library.id !== undefined && library.id !== null)) {
+          libraryId = library.id;
+        } else if (library != null) {
+          console.warn(
+            "[WeeklyFlowPlaylistManager] Aurral library has no id; smart playlists will not be scoped by library."
+          );
+        }
       }
       await fs.mkdir(this.libraryRoot, { recursive: true });
       for (const { type, name } of allPlaylists) {
         const nspPath = path.join(this.libraryRoot, `${name}.nsp`);
         const isEnabled = config[type]?.enabled;
         if (isEnabled) {
+          const pathCondition = { contains: { filepath: type } };
+          const all =
+            libraryId != null
+              ? [{ is: { library_id: libraryId } }, pathCondition]
+              : [pathCondition];
           const payload = {
-            all: [
-              { contains: { filepath: "aurral-weekly-flow" } },
-              { contains: { filepath: type } },
-            ],
+            all,
             sort: "random",
             limit: 1000,
           };
@@ -93,7 +106,7 @@ export class WeeklyFlowPlaylistManager {
             } catch (err) {
               console.warn(
                 `[WeeklyFlowPlaylistManager] Failed to delete playlist "${name}" from Navidrome:`,
-                err?.message,
+                err?.message
               );
             }
           }
@@ -105,7 +118,7 @@ export class WeeklyFlowPlaylistManager {
     } catch (err) {
       console.warn(
         "[WeeklyFlowPlaylistManager] Failed to write smart playlists:",
-        err?.message,
+        err?.message
       );
     }
   }
@@ -134,12 +147,12 @@ export class WeeklyFlowPlaylistManager {
       try {
         await fs.rm(playlistDir, { recursive: true, force: true });
         console.log(
-          `[WeeklyFlowPlaylistManager] Deleted files for ${playlistType}`,
+          `[WeeklyFlowPlaylistManager] Deleted files for ${playlistType}`
         );
       } catch (error) {
         console.warn(
           `[WeeklyFlowPlaylistManager] Failed to delete files for ${playlistType}:`,
-          error.message,
+          error.message
         );
       }
       downloadTracker.clearByPlaylistType(playlistType);
