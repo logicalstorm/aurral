@@ -8,4 +8,3 @@ services:
       - SYMLINK_PATH=/data/downloads/tmp
     volumes:
       - /data/downloads/tmp:/app/downloads
-      - /data/aurral-weekly-flow:/app/flow
