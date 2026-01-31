@@ -2,7 +2,10 @@ import path from "path";
 import fs from "fs/promises";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { soulseekClient } from "./simpleSoulseekClient.js";
-import { playlistManager } from "./weeklyFlowPlaylistManager.js";
+import {
+  playlistManager,
+  WEEKLY_FLOW_LIBRARY_SUBFOLDER,
+} from "./weeklyFlowPlaylistManager.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 
 const CONCURRENCY = 1;
@@ -188,6 +191,7 @@ export class WeeklyFlowWorker {
         : "Unknown Album";
       const finalDir = path.join(
         this.weeklyFlowRoot,
+        WEEKLY_FLOW_LIBRARY_SUBFOLDER,
         job.playlistType,
         artistDir,
         albumDir,
@@ -201,7 +205,6 @@ export class WeeklyFlowWorker {
       await fs.rm(stagingDir, { recursive: true, force: true });
 
       playlistManager.updateConfig();
-      await playlistManager.createSymlink(finalPath, job.playlistType);
 
       downloadTracker.setDone(job.id, finalPath);
       console.log(`[WeeklyFlowWorker] Job ${job.id} completed: ${finalPath}`);
