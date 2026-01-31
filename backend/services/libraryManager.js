@@ -29,6 +29,10 @@ function scheduleLidarrRetry(instance) {
   }, LIDARR_RETRY_MS);
 }
 
+export function getCachedArtistCount() {
+  return Array.isArray(_cachedArtists) ? _cachedArtists.length : 0;
+}
+
 function getSettings() {
   return dbOps.getSettings();
 }
@@ -171,33 +175,38 @@ export class LibraryManager {
   }
 
   async getAllArtists() {
-    const lidarr = await getLidarrClient();
-    if (!lidarr || !lidarr.isConfigured()) {
-      return [];
-    }
-    if (_lastLidarrFailureAt && Date.now() - _lastLidarrFailureAt < LIDARR_RETRY_MS) {
-      scheduleLidarrRetry(this);
-      return _cachedArtists;
-    }
     try {
-      const lidarrArtists = await lidarr.request("/artist");
-      _lastLidarrFailureAt = 0;
-      if (!Array.isArray(lidarrArtists)) {
+      const lidarr = await getLidarrClient();
+      if (!lidarr || !lidarr.isConfigured()) {
         return _cachedArtists;
       }
-      _cachedArtists = lidarrArtists.map((a) => this.mapLidarrArtist(a));
-      return _cachedArtists;
-    } catch (error) {
-      const wasHealthy = _lastLidarrFailureAt === 0;
-      _lastLidarrFailureAt = Date.now();
-      scheduleLidarrRetry(this);
-      if (wasHealthy) {
-        console.warn(
-          "[LibraryManager] Lidarr unavailable:",
-          error.message,
-          "- using cached artists (if any). Retrying every 60s.",
-        );
+      if (_lastLidarrFailureAt && Date.now() - _lastLidarrFailureAt < LIDARR_RETRY_MS) {
+        scheduleLidarrRetry(this);
+        return _cachedArtists;
       }
+      try {
+        const lidarrArtists = await lidarr.request("/artist");
+        _lastLidarrFailureAt = 0;
+        if (!Array.isArray(lidarrArtists)) {
+          return _cachedArtists;
+        }
+        _cachedArtists = lidarrArtists.map((a) => this.mapLidarrArtist(a));
+        return _cachedArtists;
+      } catch (error) {
+        const wasHealthy = _lastLidarrFailureAt === 0;
+        _lastLidarrFailureAt = Date.now();
+        scheduleLidarrRetry(this);
+        if (wasHealthy) {
+          const msg = (error && error.message) || String(error);
+          console.warn(
+            "[LibraryManager] Lidarr unavailable:",
+            msg,
+            "- using cached artists (if any). Retrying every 60s.",
+          );
+        }
+        return _cachedArtists;
+      }
+    } catch (_) {
       return _cachedArtists;
     }
   }

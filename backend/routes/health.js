@@ -2,7 +2,7 @@ import express from "express";
 import { getLastfmApiKey } from "../services/apiClients.js";
 import { getAuthUser, getAuthPassword } from "../middleware/auth.js";
 import { getDiscoveryCache } from "../services/discoveryService.js";
-import { libraryManager } from "../services/libraryManager.js";
+import { getCachedArtistCount } from "../services/libraryManager.js";
 import { lidarrClient } from "../services/lidarrClient.js";
 import { dbOps } from "../config/db-helpers.js";
 import { websocketService } from "../services/websocketService.js";
@@ -24,22 +24,7 @@ router.get("/", noCache, async (req, res) => {
     const discoveryCache = getDiscoveryCache();
     const wsStats = websocketService.getStats();
 
-    let artistCount = 0;
-    try {
-      const artistCountPromise = libraryManager
-        .getAllArtists()
-        .then((a) => (Array.isArray(a) ? a.length : 0));
-      const timeoutMs = 5000;
-      artistCount = await Promise.race([
-        artistCountPromise,
-        new Promise((resolve) =>
-          setTimeout(() => resolve(0), timeoutMs),
-        ),
-      ]);
-      if (typeof artistCount !== "number") artistCount = 0;
-    } catch (_) {
-      artistCount = 0;
-    }
+    const artistCount = getCachedArtistCount();
 
     const settings = dbOps.getSettings();
     const onboardingDone =

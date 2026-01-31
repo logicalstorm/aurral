@@ -1,6 +1,7 @@
 services:
   aurral:
     build: .
+    restart: unless-stopped
     user: "0:0"
     ports:
       - "3001:3001"
