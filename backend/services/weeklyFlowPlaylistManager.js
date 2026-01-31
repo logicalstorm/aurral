@@ -76,7 +76,10 @@ export class WeeklyFlowPlaylistManager {
         const isEnabled = config[type]?.enabled;
         if (isEnabled) {
           const payload = {
-            all: [{ contains: { filepath: type } }],
+            all: [
+              { contains: { filepath: WEEKLY_FLOW_LIBRARY_SUBFOLDER } },
+              { contains: { filepath: type } },
+            ],
             sort: "random",
             limit: 1000,
           };
