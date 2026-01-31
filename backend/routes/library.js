@@ -108,7 +108,9 @@ router.post("/artists", async (req, res) => {
     const artist = await libraryManager.addArtist(mbid, artistName, {
       quality: quality || settings.quality || "standard",
     });
-
+    if (artist?.error) {
+      return res.status(503).json({ error: artist.error });
+    }
     res.status(201).json(artist);
   } catch (error) {
     res.status(500).json({
@@ -126,6 +128,9 @@ router.put("/artists/:mbid", async (req, res) => {
     }
 
     const artist = await libraryManager.updateArtist(mbid, req.body);
+    if (artist?.error) {
+      return res.status(503).json({ error: artist.error });
+    }
     res.json(artist);
   } catch (error) {
     res.status(500).json({
@@ -144,8 +149,10 @@ router.delete("/artists/:mbid", async (req, res) => {
       return res.status(400).json({ error: "Invalid MBID format" });
     }
 
-    await libraryManager.deleteArtist(mbid, deleteFiles === "true");
-
+    const result = await libraryManager.deleteArtist(mbid, deleteFiles === "true");
+    if (!result?.success) {
+      return res.status(503).json({ error: result?.error || "Failed to delete artist" });
+    }
     res.json({ success: true, message: "Artist deleted successfully" });
   } catch (error) {
     res.status(500).json({
@@ -204,21 +211,21 @@ router.post("/albums", async (req, res) => {
         triggerSearch: searchOnAdd,
       },
     );
-
+    if (album?.error) {
+      return res.status(503).json({ error: album.error });
+    }
     if (album.artistName && album.albumName) {
       playlistManager.removeDiscoverSymlinksForAlbum(
         album.artistName,
         album.albumName,
       ).catch(() => {});
     }
-
     const formatted = {
       ...album,
       foreignAlbumId: album.mbid,
       title: album.albumName,
       albumType: "Album",
     };
-
     res.status(201).json(formatted);
   } catch (error) {
     res.status(500).json({
@@ -248,6 +255,9 @@ router.put("/albums/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const album = await libraryManager.updateAlbum(id, req.body);
+    if (album?.error) {
+      return res.status(503).json({ error: album.error });
+    }
     res.json(album);
   } catch (error) {
     res.status(500).json({
@@ -261,7 +271,10 @@ router.delete("/albums/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const { deleteFiles = false } = req.query;
-    await libraryManager.deleteAlbum(id, deleteFiles === "true");
+    const result = await libraryManager.deleteAlbum(id, deleteFiles === "true");
+    if (!result?.success) {
+      return res.status(503).json({ error: result?.error || "Failed to delete album" });
+    }
     res.json({ success: true, message: "Album deleted successfully" });
   } catch (error) {
     res.status(500).json({
@@ -365,14 +378,11 @@ router.post("/downloads/album", async (req, res) => {
     let artist = artistId ? await libraryManager.getArtistById(artistId) : null;
 
     if (!artist && artistMbid && artistName) {
-      try {
-        artist = await libraryManager.addArtist(artistMbid, artistName, {
-          monitorOption: "none",
-          quality: dbOps.getSettings().quality || "standard",
-        });
-      } catch (error) {
-        console.error("Failed to add artist automatically:", error);
-      }
+      artist = await libraryManager.addArtist(artistMbid, artistName, {
+        monitorOption: "none",
+        quality: dbOps.getSettings().quality || "standard",
+      });
+      if (artist?.error) artist = null;
     }
 
     if (!artist && album.artistId) {

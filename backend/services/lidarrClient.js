@@ -1,10 +1,14 @@
 import axios from "axios";
 import { dbOps } from "../config/db-helpers.js";
 
+const CIRCUIT_COOLDOWN_MS = 60000;
+
 export class LidarrClient {
   constructor() {
     this.config = null;
     this.apiPath = "/api/v1";
+    this._circuitOpen = false;
+    this._circuitOpenedAt = 0;
     this.updateConfig();
   }
 
@@ -45,15 +49,24 @@ export class LidarrClient {
     endpoint,
     method = "GET",
     data = null,
-    skipConfigUpdate = false,
+    skipConfigUpdate = false
   ) {
-    // Update config before making request to get latest settings (unless testing)
     if (!skipConfigUpdate) {
       this.updateConfig();
     }
 
     if (!this.isConfigured()) {
       throw new Error("Lidarr API key not configured");
+    }
+
+    const now = Date.now();
+    if (this._circuitOpen) {
+      if (now - this._circuitOpenedAt < CIRCUIT_COOLDOWN_MS) {
+        throw new Error(
+          "Lidarr unavailable (circuit open). Will retry after cooldown."
+        );
+      }
+      this._circuitOpen = false;
     }
 
     const authHeaders = this.getAuthHeaders();
@@ -69,7 +82,7 @@ export class LidarrClient {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        timeout: 30000,
+        timeout: 8000,
         validateStatus: function (status) {
           return status < 500;
         },
@@ -94,6 +107,14 @@ export class LidarrClient {
 
       return response.data;
     } catch (error) {
+      if (
+        !error.response &&
+        (error.request || error.code === "ECONNABORTED")
+      ) {
+        this._circuitOpen = true;
+        this._circuitOpenedAt = Date.now();
+      }
+
       if (error.response) {
         const status = error.response.status;
         const statusText = error.response.statusText;
@@ -131,12 +152,14 @@ export class LidarrClient {
 
         if (status === 400) {
           throw new Error(
-            `Lidarr API returned 400 Bad Request: ${errorMsg}${errorDetails ? `\n\nFull Response: ${errorDetails}` : ""}`,
+            `Lidarr API returned 400 Bad Request: ${errorMsg}${
+              errorDetails ? `\n\nFull Response: ${errorDetails}` : ""
+            }`
           );
         }
         if (status === 401) {
           throw new Error(
-            `Lidarr API authentication failed. Check your API key.`,
+            `Lidarr API authentication failed. Check your API key.`
           );
         }
         if (status === 404) {
@@ -145,19 +168,24 @@ export class LidarrClient {
             return null;
           }
           throw new Error(
-            `Lidarr endpoint not found: ${endpoint}. Check if Lidarr is running and the API version is correct.`,
+            `Lidarr endpoint not found: ${endpoint}. Check if Lidarr is running and the API version is correct.`
           );
         }
         throw new Error(
-          `Lidarr API error: ${status} - ${responseData?.message || responseData?.error || statusText || "Unknown error"}`,
+          `Lidarr API error: ${status} - ${
+            responseData?.message ||
+            responseData?.error ||
+            statusText ||
+            "Unknown error"
+          }`
         );
       } else if (error.request) {
         console.error(
           "Lidarr API request failed - no response:",
-          error.message,
+          error.message
         );
         throw new Error(
-          `Cannot connect to Lidarr at ${this.config.url}. Check if Lidarr is running and the URL is correct.`,
+          `Cannot connect to Lidarr at ${this.config.url}. Check if Lidarr is running and the URL is correct.`
         );
       } else {
         console.error("Lidarr API error:", error.message);
@@ -186,7 +214,7 @@ export class LidarrClient {
             "/rootFolder",
             "GET",
             null,
-            skipConfigUpdate,
+            skipConfigUpdate
           );
           return {
             connected: true,
@@ -207,7 +235,7 @@ export class LidarrClient {
                 "/system/status",
                 "GET",
                 null,
-                skipConfigUpdate,
+                skipConfigUpdate
               );
               return {
                 connected: true,
@@ -415,7 +443,7 @@ export class LidarrClient {
     page = 1,
     pageSize = 20,
     sortKey = "date",
-    sortDirection = "descending",
+    sortDirection = "descending"
   ) {
     const params = new URLSearchParams({
       page: page.toString(),
@@ -463,7 +491,7 @@ export class LidarrClient {
       `/qualityprofile/${profileId}`,
       "GET",
       null,
-      skipConfigUpdate,
+      skipConfigUpdate
     );
   }
 
@@ -472,7 +500,7 @@ export class LidarrClient {
       "/qualityprofile",
       "POST",
       profileData,
-      skipConfigUpdate,
+      skipConfigUpdate
     );
   }
 
@@ -501,7 +529,7 @@ export class LidarrClient {
       `/qualitydefinition/${id}`,
       "PUT",
       data,
-      skipConfigUpdate,
+      skipConfigUpdate
     );
   }
 }

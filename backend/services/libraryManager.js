@@ -23,28 +23,25 @@ export class LibraryManager {
   async addArtist(mbid, artistName, options = {}) {
     const lidarr = await getLidarrClient();
     if (!lidarr || !lidarr.isConfigured()) {
-      throw new Error("Lidarr is not configured");
+      return { error: "Lidarr is not configured" };
     }
-
     try {
       const existing = await lidarr.getArtistByMbid(mbid);
       if (existing) {
         return this.mapLidarrArtist(existing);
       }
-
       const lidarrSettings = getSettings();
       const lidarrArtist = await lidarr.addArtist(mbid, artistName, {
         monitorOption: "none",
         qualityProfileId: lidarrSettings.integrations?.lidarr?.qualityProfileId,
       });
-
       console.log(`[LibraryManager] Added artist "${artistName}" to Lidarr`);
       return this.mapLidarrArtist(lidarrArtist);
     } catch (error) {
       console.error(
         `[LibraryManager] Failed to add artist to Lidarr: ${error.message}`,
       );
-      throw error;
+      return { error: error.message };
     }
   }
 
@@ -58,13 +55,12 @@ export class LibraryManager {
         const releaseGroups = artistData["release-groups"].slice(0, 50);
 
         for (const rg of releaseGroups) {
-          try {
-            await this.addAlbum(artistId, rg.id, rg.title, {
-              releaseDate: rg["first-release-date"] || null,
-              triggerSearch: false,
-            });
-          } catch (err) {
-            console.error(`Failed to add album ${rg.title}:`, err.message);
+          const result = await this.addAlbum(artistId, rg.id, rg.title, {
+            releaseDate: rg["first-release-date"] || null,
+            triggerSearch: false,
+          });
+          if (result?.error) {
+            console.error(`Failed to add album ${rg.title}:`, result.error);
           }
         }
       }
@@ -138,11 +134,13 @@ export class LibraryManager {
     if (!lidarr || !lidarr.isConfigured()) {
       return null;
     }
-    const lidarrArtist = await lidarr.getArtistByMbid(mbid);
-    if (!lidarrArtist) {
+    try {
+      const lidarrArtist = await lidarr.getArtistByMbid(mbid);
+      if (!lidarrArtist) return null;
+      return this.mapLidarrArtist(lidarrArtist);
+    } catch {
       return null;
     }
-    return this.mapLidarrArtist(lidarrArtist);
   }
 
   async getArtistById(id) {
@@ -208,103 +206,100 @@ export class LibraryManager {
   async updateArtist(mbid, updates) {
     const lidarr = await getLidarrClient();
     if (!lidarr || !lidarr.isConfigured()) {
-      throw new Error("Lidarr is not configured");
+      return { error: "Lidarr is not configured" };
     }
-
-    const lidarrArtist = await lidarr.getArtistByMbid(mbid);
-    if (!lidarrArtist) {
-      throw new Error("Artist not found in Lidarr");
-    }
-
-    if (
-      updates.monitored !== undefined ||
-      updates.monitorOption !== undefined
-    ) {
-      const monitorOption =
-        updates.monitorOption || lidarrArtist.monitor || "none";
-      await lidarr.updateArtistMonitoring(lidarrArtist.id, monitorOption);
-      console.log(
-        `[LibraryManager] Updated Lidarr monitoring for "${lidarrArtist.artistName}" to "${monitorOption}"`,
-      );
-
-      const updated = await lidarr.getArtist(lidarrArtist.id);
-      const mapped = this.mapLidarrArtist(updated);
-
-      if (mapped.monitored && mapped.monitorOption !== "none") {
-        import("./monitoringService.js")
-          .then(({ monitoringService }) => {
-            monitoringService.processArtistMonitoring(mapped).catch((err) => {
-              console.error(
-                `[LibraryManager] Error triggering monitoring for ${mapped.artistName}:`,
-                err.message,
-              );
-            });
-          })
-          .catch((err) => {
-            console.error(
-              `[LibraryManager] Failed to import monitoring service:`,
-              err.message,
-            );
-          });
+    try {
+      const lidarrArtist = await lidarr.getArtistByMbid(mbid);
+      if (!lidarrArtist) return { error: "Artist not found in Lidarr" };
+      if (
+        updates.monitored !== undefined ||
+        updates.monitorOption !== undefined
+      ) {
+        const monitorOption =
+          updates.monitorOption || lidarrArtist.monitor || "none";
+        await lidarr.updateArtistMonitoring(lidarrArtist.id, monitorOption);
+        console.log(
+          `[LibraryManager] Updated Lidarr monitoring for "${lidarrArtist.artistName}" to "${monitorOption}"`,
+        );
+        const updated = await lidarr.getArtist(lidarrArtist.id);
+        const mapped = this.mapLidarrArtist(updated);
+        if (mapped.monitored && mapped.monitorOption !== "none") {
+          import("./monitoringService.js")
+            .then(({ monitoringService }) => {
+              monitoringService.processArtistMonitoring(mapped).catch((err) => {
+                console.error(
+                  `[LibraryManager] Error triggering monitoring for ${mapped.artistName}:`,
+                  err.message,
+                );
+              });
+            })
+            .catch(() => {});
+        }
+        return mapped;
       }
-
-      return mapped;
+      return this.mapLidarrArtist(lidarrArtist);
+    } catch (error) {
+      console.error(
+        `[LibraryManager] Failed to update artist in Lidarr: ${error.message}`,
+      );
+      return { error: error.message };
     }
-
-    return this.mapLidarrArtist(lidarrArtist);
   }
 
   async deleteArtist(mbid, deleteFiles = false) {
     const lidarr = await getLidarrClient();
     if (!lidarr || !lidarr.isConfigured()) {
-      throw new Error("Lidarr is not configured");
+      return { success: false, error: "Lidarr is not configured" };
     }
-
-    const lidarrArtist = await lidarr.getArtistByMbid(mbid);
-    if (!lidarrArtist) {
-      throw new Error("Artist not found in Lidarr");
+    try {
+      const lidarrArtist = await lidarr.getArtistByMbid(mbid);
+      if (!lidarrArtist) return { success: false, error: "Artist not found in Lidarr" };
+      await lidarr.deleteArtist(lidarrArtist.id, deleteFiles);
+      console.log(
+        `[LibraryManager] Deleted artist "${lidarrArtist.artistName}" from Lidarr`,
+      );
+      return { success: true };
+    } catch (error) {
+      console.error(
+        `[LibraryManager] Failed to delete artist from Lidarr: ${error.message}`,
+      );
+      return { success: false, error: error.message };
     }
-
-    await lidarr.deleteArtist(lidarrArtist.id, deleteFiles);
-    console.log(
-      `[LibraryManager] Deleted artist "${lidarrArtist.artistName}" from Lidarr`,
-    );
-    return { success: true };
   }
 
   async addAlbum(artistId, releaseGroupMbid, albumName, options = {}) {
     const lidarr = await getLidarrClient();
     if (!lidarr || !lidarr.isConfigured()) {
-      throw new Error("Lidarr is not configured");
+      return { error: "Lidarr is not configured" };
     }
-
-    const lidarrArtist = await lidarr.getArtist(artistId);
-    if (!lidarrArtist) {
-      throw new Error("Artist not found in Lidarr");
+    try {
+      const lidarrArtist = await lidarr.getArtist(artistId);
+      if (!lidarrArtist) return { error: "Artist not found in Lidarr" };
+      const existing = await lidarr.getAlbumByMbid(releaseGroupMbid);
+      if (existing) {
+        return this.mapLidarrAlbum(existing, lidarrArtist);
+      }
+      const settings = getSettings();
+      const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
+      const lidarrAlbum = await lidarr.addAlbum(
+        artistId,
+        releaseGroupMbid,
+        albumName,
+        {
+          monitored: true,
+          triggerSearch:
+            options.triggerSearch === true ||
+            (options.triggerSearch === undefined && searchOnAdd),
+        },
+      );
+      const updatedArtist = await lidarr.getArtist(artistId);
+      return this.mapLidarrAlbum(lidarrAlbum, updatedArtist);
+    } catch (error) {
+      console.error(
+        `[LibraryManager] Failed to add album to Lidarr: ${error.message}`,
+      );
+      return { error: error.message };
     }
-
-    const existing = await lidarr.getAlbumByMbid(releaseGroupMbid);
-    if (existing) {
-      return this.mapLidarrAlbum(existing, lidarrArtist);
-    }
-
-    const settings = getSettings();
-    const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
-
-    const lidarrAlbum = await lidarr.addAlbum(
-      artistId,
-      releaseGroupMbid,
-      albumName,
-      {
-        monitored: true,
-        triggerSearch:
-          options.triggerSearch === true ||
-          (options.triggerSearch === undefined && searchOnAdd),
-      },
-    );
-
-    const updatedArtist = await lidarr.getArtist(artistId);
-    return this.mapLidarrAlbum(lidarrAlbum, updatedArtist);
   }
 
   async getAlbums(artistId) {
@@ -395,31 +390,39 @@ export class LibraryManager {
   async updateAlbum(id, updates) {
     const lidarr = await getLidarrClient();
     if (!lidarr || !lidarr.isConfigured()) {
-      throw new Error("Lidarr is not configured");
+      return { error: "Lidarr is not configured" };
     }
-
-    const lidarrAlbum = await lidarr.getAlbum(id);
-    if (!lidarrAlbum) {
-      throw new Error("Album not found in Lidarr");
+    try {
+      const lidarrAlbum = await lidarr.getAlbum(id);
+      if (!lidarrAlbum) return { error: "Album not found in Lidarr" };
+      if (updates.monitored !== undefined) {
+        await lidarr.monitorAlbum(id, updates.monitored);
+      }
+      const updated = await lidarr.getAlbum(id);
+      const lidarrArtist = await lidarr.getArtist(updated.artistId);
+      return this.mapLidarrAlbum(updated, lidarrArtist);
+    } catch (error) {
+      console.error(
+        `[LibraryManager] Failed to update album in Lidarr: ${error.message}`,
+      );
+      return { error: error.message };
     }
-
-    if (updates.monitored !== undefined) {
-      await lidarr.monitorAlbum(id, updates.monitored);
-    }
-
-    const updated = await lidarr.getAlbum(id);
-    const lidarrArtist = await lidarr.getArtist(updated.artistId);
-    return this.mapLidarrAlbum(updated, lidarrArtist);
   }
 
   async deleteAlbum(id, deleteFiles = false) {
     const lidarr = await getLidarrClient();
     if (!lidarr || !lidarr.isConfigured()) {
-      throw new Error("Lidarr is not configured");
+      return { success: false, error: "Lidarr is not configured" };
     }
-
-    await lidarr.deleteAlbum(id, deleteFiles);
-    return { success: true };
+    try {
+      await lidarr.deleteAlbum(id, deleteFiles);
+      return { success: true };
+    } catch (error) {
+      console.error(
+        `[LibraryManager] Failed to delete album from Lidarr: ${error.message}`,
+      );
+      return { success: false, error: error.message };
+    }
   }
 
   async addTrack(albumId, trackMbid, trackName, trackNumber, options = {}) {
@@ -618,21 +621,18 @@ export class LibraryManager {
   async updateTrack(id, updates) {
     const lidarr = await getLidarrClient();
     if (!lidarr || !lidarr.isConfigured()) {
-      throw new Error("Lidarr is not configured");
+      return null;
     }
-
-    const lidarrAlbum = await lidarr.getAlbum(id.split("-")[0]);
-    if (!lidarrAlbum) {
-      throw new Error("Track not found");
+    try {
+      const lidarrAlbum = await lidarr.getAlbum(id.split("-")[0]);
+      if (!lidarrAlbum) return null;
+      const tracks = await this.getTracks(lidarrAlbum.id.toString());
+      const track = tracks.find((t) => t.id === id);
+      if (!track) return null;
+      return { ...track, ...updates };
+    } catch {
+      return null;
     }
-
-    const tracks = await this.getTracks(lidarrAlbum.id.toString());
-    const track = tracks.find((t) => t.id === id);
-    if (!track) {
-      throw new Error("Track not found");
-    }
-
-    return { ...track, ...updates };
   }
 
   async scanLibrary(discover = false) {
