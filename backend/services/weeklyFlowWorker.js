@@ -2,10 +2,7 @@ import path from "path";
 import fs from "fs/promises";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { soulseekClient } from "./simpleSoulseekClient.js";
-import {
-  playlistManager,
-  WEEKLY_FLOW_LIBRARY_SUBFOLDER,
-} from "./weeklyFlowPlaylistManager.js";
+import { playlistManager } from "./weeklyFlowPlaylistManager.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 
 const CONCURRENCY = 1;
@@ -191,7 +188,7 @@ export class WeeklyFlowWorker {
         : "Unknown Album";
       const finalDir = path.join(
         this.weeklyFlowRoot,
-        WEEKLY_FLOW_LIBRARY_SUBFOLDER,
+        "aurral-weekly-flow",
         job.playlistType,
         artistDir,
         albumDir,
