@@ -7,24 +7,19 @@ import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 
 export class WeeklyFlowPlaylistManager {
   constructor(
-    weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER || "./weekly-flow"
+    weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER || "/app/downloads"
   ) {
     this.weeklyFlowRoot = path.isAbsolute(weeklyFlowRoot)
       ? weeklyFlowRoot
       : path.resolve(process.cwd(), weeklyFlowRoot);
     this.libraryRoot = path.join(this.weeklyFlowRoot, "aurral-weekly-flow");
     this.navidromeClient = null;
-    this.navidromeMusicFolder = null;
     this.updateConfig();
   }
 
   updateConfig() {
     const settings = dbOps.getSettings();
     const navidromeConfig = settings.integrations?.navidrome || {};
-    this.navidromeMusicFolder =
-      settings.integrations?.navidrome?.musicFolder ||
-      process.env.NAVIDROME_MUSIC_FOLDER ||
-      "/app/navidrome-music";
 
     if (
       navidromeConfig.url &&
@@ -55,7 +50,7 @@ export class WeeklyFlowPlaylistManager {
   }
 
   _getWeeklyFlowLibraryHostPath() {
-    const base = process.env.WEEKLY_FLOW_DOWNLOADS || "/data/downloads/tmp";
+    const base = process.env.DOWNLOAD_FOLDER || "/data/downloads/tmp";
     return `${base.replace(/\\/g, "/").replace(/\/+$/, "")}/aurral-weekly-flow`;
   }
 
