@@ -4,7 +4,5 @@ services:
     user: "0:0"
     ports:
       - "3001:3001"
-    environment:
-      - SYMLINK_PATH=/data/downloads/tmp
     volumes:
       - /data/downloads/tmp:/app/downloads
