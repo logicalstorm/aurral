@@ -4,5 +4,8 @@ services:
     user: "0:0"
     ports:
       - "3001:3001"
+    environment:
+      - DOWNLOAD_FOLDER=/data/downloads/tmp
     volumes:
       - /data/downloads/tmp:/app/downloads
+      - ./data:/app/backend/data
