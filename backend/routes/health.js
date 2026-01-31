@@ -10,6 +10,10 @@ import { noCache } from "../middleware/cache.js";
 
 const router = express.Router();
 
+router.get("/live", noCache, (_req, res) => {
+  res.json({ status: "ok" });
+});
+
 router.get("/", noCache, async (req, res) => {
   try {
     lidarrClient.updateConfig();
