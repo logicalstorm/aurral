@@ -5,14 +5,12 @@ import { NavidromeClient } from "./navidrome.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 
-export const WEEKLY_FLOW_LIBRARY_SUBFOLDER = "aurral-weekly-flow";
-
 export class WeeklyFlowPlaylistManager {
   constructor(weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER || "./weekly-flow") {
     this.weeklyFlowRoot = path.isAbsolute(weeklyFlowRoot)
       ? weeklyFlowRoot
       : path.resolve(process.cwd(), weeklyFlowRoot);
-    this.libraryRoot = path.join(this.weeklyFlowRoot, WEEKLY_FLOW_LIBRARY_SUBFOLDER);
+    this.libraryRoot = path.join(this.weeklyFlowRoot, "aurral-weekly-flow");
     this.navidromeClient = null;
     this.navidromeMusicFolder = null;
     this.updateConfig();
@@ -55,7 +53,7 @@ export class WeeklyFlowPlaylistManager {
   _getWeeklyFlowLibraryHostPath() {
     const base =
       process.env.WEEKLY_FLOW_DOWNLOADS || "/data/downloads/tmp";
-    return `${base.replace(/\\/g, "/").replace(/\/+$/, "")}/${WEEKLY_FLOW_LIBRARY_SUBFOLDER}`;
+    return `${base.replace(/\\/g, "/").replace(/\/+$/, "")}/aurral-weekly-flow`;
   }
 
   async ensureSmartPlaylists() {
@@ -77,7 +75,7 @@ export class WeeklyFlowPlaylistManager {
         if (isEnabled) {
           const payload = {
             all: [
-              { contains: { filepath: WEEKLY_FLOW_LIBRARY_SUBFOLDER } },
+              { contains: { filepath: "aurral-weekly-flow" } },
               { contains: { filepath: type } },
             ],
             sort: "random",
