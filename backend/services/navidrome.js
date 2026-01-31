@@ -185,4 +185,68 @@ export class NavidromeClient {
       throw new Error(`Failed to remove song from playlist: ${error.message}`);
     }
   }
+
+  async _nativeLogin() {
+    if (!this.isConfigured()) throw new Error("Navidrome not configured");
+    const { data } = await axios.post(
+      `${this.url}/auth/login`,
+      { username: this.user, password: this.password },
+      { headers: { "Content-Type": "application/json" } },
+    );
+    const token = data.token || data.Token;
+    if (!token) throw new Error("No token in login response");
+    return token;
+  }
+
+  async _nativeRequest(method, path, body = null) {
+    let token = await this._nativeLogin();
+    const base = this.url;
+    const url = path.startsWith("/") ? `${base}${path}` : `${base}/api/${path}`;
+    const headers = {
+      "Content-Type": "application/json",
+      "X-ND-Authorization": `Bearer ${token}`,
+    };
+    let response;
+    if (method === "GET") {
+      response = await axios.get(url, { headers });
+    } else if (method === "POST") {
+      response = await axios.post(url, body, { headers });
+    } else {
+      throw new Error(`Unsupported method: ${method}`);
+    }
+    const newToken = response.headers["x-nd-authorization"];
+    if (newToken) token = newToken;
+    return response.data;
+  }
+
+  async getLibraries() {
+    return this._nativeRequest("GET", "/api/library");
+  }
+
+  async createLibrary(name, path) {
+    return this._nativeRequest("POST", "/api/library", { name, path });
+  }
+
+  async ensureWeeklyFlowLibrary(libraryPath) {
+    if (!this.isConfigured()) return null;
+    const name = "Aurral Weekly Flow";
+    try {
+      const libs = await this.getLibraries();
+      const list = Array.isArray(libs) ? libs : [];
+      const exists = list.some(
+        (lib) =>
+          (lib.path && lib.path === libraryPath) ||
+          (lib.name && lib.name === name),
+      );
+      if (exists) return list.find((l) => l.path === libraryPath || l.name === name);
+      const created = await this.createLibrary(name, libraryPath);
+      return created;
+    } catch (err) {
+      console.warn(
+        "[Navidrome] ensureWeeklyFlowLibrary failed:",
+        err?.response?.data?.error || err.message,
+      );
+      return null;
+    }
+  }
 }

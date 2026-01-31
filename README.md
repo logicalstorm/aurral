@@ -133,15 +133,16 @@ All configuration is done through the web interface at `/settings`.
 ### Optional Integrations
 
 - **Last.fm:** API key and username for personalized recommendations
-- **Navidrome:** URL and credentials for playlist sync
+- **Navidrome:** URL and credentials for playlist sync. Set `WEEKLY_FLOW_DOWNLOADS` to the host path Navidrome can see (e.g. `/data/downloads/tmp`). Aurral creates a second library "Aurral Weekly Flow" at `{WEEKLY_FLOW_DOWNLOADS}/aurral-weekly-flow` via the Navidrome API when ensuring smart playlists; the Navidrome user must be an admin.
 
 ### Environment Variables
 
-| Variable             | Description                        | Default      |
-| -------------------- | ---------------------------------- | ------------ |
-| `PORT`               | Server port                        | `3001`       |
-| `MUSIC_ROOT`         | Music library root path            | `/data`      |
-| `SLSKD_COMPLETE_DIR` | slskd complete downloads directory | `/downloads` |
+| Variable                 | Description                                      | Default              |
+| ------------------------ | ------------------------------------------------- | -------------------- |
+| `PORT`                   | Server port                                       | `3001`               |
+| `WEEKLY_FLOW_DOWNLOADS`  | Host path for weekly-flow (Navidrome second library parent) | `/data/downloads/tmp` |
+| `MUSIC_ROOT`             | Music library root path                           | `/data`              |
+| `SLSKD_COMPLETE_DIR`     | slskd complete downloads directory                | `/downloads`         |
 
 ---
 

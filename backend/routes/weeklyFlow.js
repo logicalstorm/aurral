@@ -222,7 +222,7 @@ router.post("/playlist/:playlistType/create", async (req, res) => {
     res.json({
       success: true,
       message:
-        "Smart playlists ensured. Tracks in aurral-weekly-flow/discover (or mix/trending) will appear in the matching smart playlist when Navidrome scans.",
+        "Smart playlists ensured. Tracks in aurral-weekly-flow/discover|mix|trending will appear in the matching smart playlist when Navidrome scans the second library.",
     });
   } catch (error) {
     res.status(500).json({
