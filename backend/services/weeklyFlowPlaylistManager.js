@@ -4,18 +4,16 @@ import { dbOps } from "../config/db-helpers.js";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { NavidromeClient } from "./navidrome.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
-import { lidarrClient } from "./lidarrClient.js";
 
 const WEEKLY_FLOW_NAVIDROME_DIR = "aurral-weekly-flow";
 
 export class WeeklyFlowPlaylistManager {
-  constructor(weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER || "./downloads") {
+  constructor(weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER || "./weekly-flow") {
     this.weeklyFlowRoot = path.isAbsolute(weeklyFlowRoot)
       ? weeklyFlowRoot
       : path.resolve(process.cwd(), weeklyFlowRoot);
     this.navidromeClient = null;
     this.navidromeMusicFolder = null;
-    this.weeklyFlowSymlinkRoot = null;
     this.updateConfig();
   }
 
@@ -25,12 +23,7 @@ export class WeeklyFlowPlaylistManager {
     this.navidromeMusicFolder =
       settings.integrations?.navidrome?.musicFolder ||
       process.env.NAVIDROME_MUSIC_FOLDER ||
-      null;
-    this.weeklyFlowSymlinkRoot =
-      process.env.WEEKLY_FLOW_SYMLINK_ROOT ||
-      (this.navidromeMusicFolder
-        ? path.join(path.dirname(this.navidromeMusicFolder), WEEKLY_FLOW_NAVIDROME_DIR)
-        : null);
+      "/app/navidrome-music";
 
     if (
       navidromeConfig.url &&
@@ -46,32 +39,13 @@ export class WeeklyFlowPlaylistManager {
       this.navidromeClient = null;
     }
 
-    if (this.navidromeMusicFolder && this.weeklyFlowSymlinkRoot) {
+    if (this.navidromeMusicFolder) {
       this.ensureSmartPlaylists().catch((err) =>
         console.warn(
           "[WeeklyFlowPlaylistManager] ensureSmartPlaylists on config:",
           err?.message,
         ),
       );
-    } else if (!this.navidromeMusicFolder && lidarrClient.isConfigured()) {
-      lidarrClient.getRootFolders().then((folders) => {
-        const pathFromLidarr = folders?.[0]?.path;
-        if (pathFromLidarr && !this.navidromeMusicFolder) {
-          this.navidromeMusicFolder = pathFromLidarr;
-          if (!this.weeklyFlowSymlinkRoot) {
-            this.weeklyFlowSymlinkRoot = path.join(
-              path.dirname(this.navidromeMusicFolder),
-              WEEKLY_FLOW_NAVIDROME_DIR,
-            );
-          }
-          this.ensureSmartPlaylists().catch((err) =>
-            console.warn(
-              "[WeeklyFlowPlaylistManager] ensureSmartPlaylists (from Lidarr):",
-              err?.message,
-            ),
-          );
-        }
-      }).catch(() => {});
     }
   }
 
@@ -80,8 +54,8 @@ export class WeeklyFlowPlaylistManager {
   }
 
   async ensureSmartPlaylists() {
-    if (!this.weeklyFlowSymlinkRoot) return;
-    const dir = this.weeklyFlowSymlinkRoot;
+    if (!this.navidromeMusicFolder) return;
+    const dir = path.join(this.navidromeMusicFolder, WEEKLY_FLOW_NAVIDROME_DIR);
     const allPlaylists = [
       { type: "discover", name: "Aurral Discover" },
       { type: "mix", name: "Aurral Mix" },
@@ -96,7 +70,7 @@ export class WeeklyFlowPlaylistManager {
         if (isEnabled) {
           const payload = {
             all: [
-              { contains: { filepath: path.basename(this.weeklyFlowSymlinkRoot) } },
+              { contains: { filepath: WEEKLY_FLOW_NAVIDROME_DIR } },
               { contains: { filepath: type } },
             ],
             sort: "random",
@@ -132,11 +106,11 @@ export class WeeklyFlowPlaylistManager {
   }
 
   async createSymlink(sourcePath, playlistType) {
-    if (!this.weeklyFlowSymlinkRoot) {
+    if (!this.navidromeMusicFolder) {
       return null;
     }
     try {
-      await fs.access(path.dirname(this.weeklyFlowSymlinkRoot));
+      await fs.access(path.dirname(this.navidromeMusicFolder));
     } catch {
       return null;
     }
@@ -149,7 +123,8 @@ export class WeeklyFlowPlaylistManager {
         relativePath = relativePath.slice(prefix.length);
       }
       const symlinkPath = path.join(
-        this.weeklyFlowSymlinkRoot,
+        this.navidromeMusicFolder,
+        WEEKLY_FLOW_NAVIDROME_DIR,
         playlistType,
         relativePath,
       );
@@ -162,8 +137,8 @@ export class WeeklyFlowPlaylistManager {
         await fs.unlink(symlinkPath);
       } catch {}
 
-      const symlinkTarget = process.env.SYMLINK_PATH
-        ? path.join(process.env.SYMLINK_PATH, relativePathFull)
+      const symlinkTarget = process.env.WEEKLY_FLOW_HOST_PATH
+        ? path.join(process.env.WEEKLY_FLOW_HOST_PATH, relativePathFull)
         : path.resolve(sourcePath);
       await fs.symlink(symlinkTarget, symlinkPath);
 
@@ -178,7 +153,7 @@ export class WeeklyFlowPlaylistManager {
   }
 
   async removeDiscoverSymlinksForAlbum(artistName, albumName) {
-    if (!this.weeklyFlowSymlinkRoot) return;
+    if (!this.navidromeMusicFolder) return;
     const sanitizedArtist = this._sanitize(artistName);
     const sanitizedAlbum = this._sanitize(albumName);
     const jobs = downloadTracker.getByPlaylistType("discover");
@@ -195,7 +170,8 @@ export class WeeklyFlowPlaylistManager {
       const albumDir = parts[1];
       if (artistDir !== sanitizedArtist || albumDir !== sanitizedAlbum) continue;
       const symlinkPath = path.join(
-        this.weeklyFlowSymlinkRoot,
+        this.navidromeMusicFolder,
+        WEEKLY_FLOW_NAVIDROME_DIR,
         "discover",
         relativePath,
       );
@@ -206,10 +182,11 @@ export class WeeklyFlowPlaylistManager {
   }
 
   async weeklyReset(playlistTypes = ["discover", "mix", "trending"]) {
-    if (this.weeklyFlowSymlinkRoot) {
+    if (this.navidromeMusicFolder) {
       for (const playlistType of playlistTypes) {
         const symlinkDir = path.join(
-          this.weeklyFlowSymlinkRoot,
+          this.navidromeMusicFolder,
+          WEEKLY_FLOW_NAVIDROME_DIR,
           playlistType,
         );
         try {

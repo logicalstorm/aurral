@@ -135,10 +135,6 @@ All configuration is done through the web interface at `/settings`.
 - **Last.fm:** API key and username for personalized recommendations
 - **Navidrome:** URL and credentials for playlist sync
 
-### Weekly Flow and Lidarr
-
-Flow tracks are symlinked into a folder **outside** your Lidarr root (by default a sibling `flow` directory) so Lidarr does not scan them and trigger album downloads. For Navidrome to see both your main library and the flow playlists, set Navidrome’s Music Folder to the **parent** of your music directory (e.g. `/data` if your library is `/data/music`). With Docker, ensure the flow volume is mounted (see `docker-compose.yml`). The music library path is taken from Lidarr’s root folder when not set via settings or `NAVIDROME_MUSIC_FOLDER`; the music directory does not need to be mounted in the container. Override the symlink location with `WEEKLY_FLOW_SYMLINK_ROOT` if needed.
-
 ### Environment Variables
 
 | Variable             | Description                        | Default      |
