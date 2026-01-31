@@ -24,16 +24,22 @@ router.get("/", noCache, async (req, res) => {
     const discoveryCache = getDiscoveryCache();
     const wsStats = websocketService.getStats();
 
-    const artistCountPromise = libraryManager
-      .getAllArtists()
-      .then((a) => a.length);
-    const timeoutMs = 5000;
-    const artistCount = await Promise.race([
-      artistCountPromise,
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Lidarr timeout")), timeoutMs),
-      ),
-    ]).catch(() => 0);
+    let artistCount = 0;
+    try {
+      const artistCountPromise = libraryManager
+        .getAllArtists()
+        .then((a) => (Array.isArray(a) ? a.length : 0));
+      const timeoutMs = 5000;
+      artistCount = await Promise.race([
+        artistCountPromise,
+        new Promise((resolve) =>
+          setTimeout(() => resolve(0), timeoutMs),
+        ),
+      ]);
+      if (typeof artistCount !== "number") artistCount = 0;
+    } catch (_) {
+      artistCount = 0;
+    }
 
     const settings = dbOps.getSettings();
     const onboardingDone =

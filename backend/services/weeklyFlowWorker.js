@@ -236,8 +236,8 @@ export class WeeklyFlowWorker {
           force: true,
         });
       } catch {}
-      playlistManager.updateConfig();
       try {
+        playlistManager.updateConfig(false);
         await playlistManager.ensureSmartPlaylists();
         if (flowPlaylistConfig.isEnabled(playlistType)) {
           flowPlaylistConfig.scheduleNextRun(playlistType);

@@ -17,7 +17,7 @@ export class WeeklyFlowPlaylistManager {
     this.updateConfig();
   }
 
-  updateConfig() {
+  updateConfig(triggerEnsurePlaylists = true) {
     const settings = dbOps.getSettings();
     const navidromeConfig = settings.integrations?.navidrome || {};
 
@@ -35,12 +35,14 @@ export class WeeklyFlowPlaylistManager {
       this.navidromeClient = null;
     }
 
-    this.ensureSmartPlaylists().catch((err) =>
-      console.warn(
-        "[WeeklyFlowPlaylistManager] ensureSmartPlaylists on config:",
-        err?.message
-      )
-    );
+    if (triggerEnsurePlaylists) {
+      this.ensureSmartPlaylists().catch((err) =>
+        console.warn(
+          "[WeeklyFlowPlaylistManager] ensureSmartPlaylists on config:",
+          err?.message
+        )
+      );
+    }
   }
 
   _sanitize(str) {

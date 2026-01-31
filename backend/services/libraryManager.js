@@ -4,7 +4,13 @@ import { dbOps } from "../config/db-helpers.js";
 import { dbHelpers } from "../config/db-sqlite.js";
 import { musicbrainzRequest } from "./apiClients.js";
 
+const LIDARR_RETRY_MS = 60000;
+
 let lidarrClient = null;
+let _cachedArtists = [];
+let _lastLidarrFailureAt = 0;
+let _retryTimeoutId = null;
+
 async function getLidarrClient() {
   if (!lidarrClient) {
     try {
@@ -13,6 +19,14 @@ async function getLidarrClient() {
     } catch (err) {}
   }
   return lidarrClient;
+}
+
+function scheduleLidarrRetry(instance) {
+  if (_retryTimeoutId) return;
+  _retryTimeoutId = setTimeout(() => {
+    _retryTimeoutId = null;
+    instance.getAllArtists().catch(() => {});
+  }, LIDARR_RETRY_MS);
 }
 
 function getSettings() {
@@ -161,18 +175,30 @@ export class LibraryManager {
     if (!lidarr || !lidarr.isConfigured()) {
       return [];
     }
+    if (_lastLidarrFailureAt && Date.now() - _lastLidarrFailureAt < LIDARR_RETRY_MS) {
+      scheduleLidarrRetry(this);
+      return _cachedArtists;
+    }
     try {
       const lidarrArtists = await lidarr.request("/artist");
+      _lastLidarrFailureAt = 0;
       if (!Array.isArray(lidarrArtists)) {
-        return [];
+        return _cachedArtists;
       }
-      return lidarrArtists.map((a) => this.mapLidarrArtist(a));
+      _cachedArtists = lidarrArtists.map((a) => this.mapLidarrArtist(a));
+      return _cachedArtists;
     } catch (error) {
-      console.error(
-        "[LibraryManager] Failed to fetch artists from Lidarr:",
-        error.message,
-      );
-      return [];
+      const wasHealthy = _lastLidarrFailureAt === 0;
+      _lastLidarrFailureAt = Date.now();
+      scheduleLidarrRetry(this);
+      if (wasHealthy) {
+        console.warn(
+          "[LibraryManager] Lidarr unavailable:",
+          error.message,
+          "- using cached artists (if any). Retrying every 60s.",
+        );
+      }
+      return _cachedArtists;
     }
   }
 
