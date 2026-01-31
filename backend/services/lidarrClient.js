@@ -1,4 +1,5 @@
 import axios from "axios";
+import https from "https";
 import { dbOps } from "../config/db-helpers.js";
 
 const CIRCUIT_COOLDOWN_MS = 60000;
@@ -19,9 +20,15 @@ export class LidarrClient {
 
     url = url.replace(/\/+$/, "");
 
+    const insecure =
+      dbConfig.insecure === true ||
+      process.env.LIDARR_INSECURE === "true" ||
+      process.env.LIDARR_INSECURE === "1";
+
     const newConfig = {
       url: url,
       apiKey: (dbConfig.apiKey || process.env.LIDARR_API_KEY || "").trim(),
+      insecure: !!insecure,
     };
 
     this.config = newConfig;
@@ -74,7 +81,7 @@ export class LidarrClient {
     try {
       const fullUrl = `${this.config.url}${this.apiPath}${endpoint}`;
 
-      const config = {
+      const requestConfig = {
         method,
         url: fullUrl,
         headers: {
@@ -88,11 +95,20 @@ export class LidarrClient {
         },
       };
 
-      if (data) {
-        config.data = data;
+      if (
+        this.config.insecure &&
+        (fullUrl.startsWith("https:") || fullUrl.startsWith("HTTPS:"))
+      ) {
+        requestConfig.httpsAgent = new https.Agent({
+          rejectUnauthorized: false,
+        });
       }
 
-      const response = await axios(config);
+      if (data) {
+        requestConfig.data = data;
+      }
+
+      const response = await axios(requestConfig);
 
       if (response.status >= 400) {
         throw {
