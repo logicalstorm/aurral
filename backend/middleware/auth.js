@@ -32,7 +32,7 @@ export const createAuthMiddleware = () => {
 
   return (req, res, next) => {
     if (!req.path.startsWith("/api")) return next();
-    if (req.path === "/api/health") return next();
+    if (req.path.startsWith("/api/health")) return next();
     if (req.path.startsWith("/api/onboarding")) return next();
     if (req.path.endsWith("/stream") || req.path.includes("/stream/")) return next();
     return auth(req, res, next);
