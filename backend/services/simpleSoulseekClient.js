@@ -78,9 +78,10 @@ export class SimpleSoulseekClient {
     if (this.client && this.connected) {
       try {
         this.client.destroy();
-      } catch (err) {
-        console.error("Error disconnecting Soulseek client:", err.message);
-      }
+      } catch (err) {}
+      try {
+        slsk.disconnect();
+      } catch (err) {}
       this.client = null;
       this.connected = false;
     }
@@ -91,9 +92,9 @@ export class SimpleSoulseekClient {
       stack.downloadTokens = {};
       stack.peerSearchMatches = {};
       stack.peerSearchRequests = [];
-    } catch (err) {
-      console.warn("Failed to clear slsk-client stack:", err.message);
-    }
+      stack.login = undefined;
+      stack.currentLogin = undefined;
+    } catch (err) {}
   }
 
   isConnected() {
@@ -161,9 +162,7 @@ export class SimpleSoulseekClient {
   }
 
   async download(result, destinationPath) {
-    if (!this.isConnected()) {
-      await this.connect();
-    }
+    await this.connect();
 
     const absPath = path.resolve(destinationPath);
     const dir = path.dirname(absPath);
@@ -171,70 +170,56 @@ export class SimpleSoulseekClient {
 
     const DOWNLOAD_TIMEOUT_MS = 300000;
 
-    return new Promise((resolve, reject) => {
-      let settled = false;
-      const refs = { readStream: null, writeStream: null, timeoutId: null };
+    try {
+      const filePath = await new Promise((resolve, reject) => {
+        let settled = false;
+        let timeoutId = null;
 
-      const cleanup = () => {
-        if (refs.timeoutId) {
-          clearTimeout(refs.timeoutId);
-          refs.timeoutId = null;
-        }
-        if (refs.readStream) {
-          refs.readStream.removeAllListeners();
-          if (!refs.readStream.destroyed) {
-            refs.readStream.destroy();
-          }
-        }
-        if (refs.writeStream) {
-          refs.writeStream.removeAllListeners();
-          if (!refs.writeStream.destroyed) {
-            refs.writeStream.destroy();
-          }
-        }
-      };
+        const settle = (fn) => (val) => {
+          if (settled) return;
+          settled = true;
+          if (timeoutId) clearTimeout(timeoutId);
+          fn(val);
+        };
 
-      const settle = (fn) => (val) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        fn(val);
-      };
-
-      refs.timeoutId = setTimeout(async () => {
-        if (settled) return;
-        try {
+        timeoutId = setTimeout(async () => {
+          if (settled) return;
           const stat = await fs.stat(absPath).catch(() => null);
           if (stat && stat.size > 0) {
             settle(resolve)(absPath);
           } else {
             settle(reject)(new Error("Download timeout"));
           }
-        } catch (e) {
-          settle(reject)(e);
-        }
-      }, DOWNLOAD_TIMEOUT_MS);
+        }, DOWNLOAD_TIMEOUT_MS);
 
-      this.client.downloadStream({ file: result }, (err, readStream) => {
-        if (err) {
-          settle(reject)(err);
-          return;
-        }
-        refs.readStream = readStream;
-        const writeStream = createWriteStream(absPath);
-        refs.writeStream = writeStream;
-        readStream.pipe(writeStream);
-        writeStream.on("finish", () => {
-          settle(resolve)(absPath);
-        });
-        writeStream.on("error", (e) => {
-          settle(reject)(e);
-        });
-        readStream.on("error", (e) => {
-          settle(reject)(e);
+        this.client.downloadStream({ file: result }, (err, readStream) => {
+          if (err) {
+            settle(reject)(err);
+            return;
+          }
+
+          const writeStream = createWriteStream(absPath);
+
+          writeStream.on("error", (e) => {
+            if (e.code === "ERR_STREAM_DESTROYED" || settled) return;
+            settle(reject)(e);
+          });
+          readStream.on("error", (e) => {
+            if (e.code === "ERR_STREAM_DESTROYED" || settled) return;
+            settle(reject)(e);
+          });
+          writeStream.on("finish", () => settle(resolve)(absPath));
+
+          readStream.pipe(writeStream);
         });
       });
-    });
+
+      await this.disconnect();
+      return filePath;
+    } catch (err) {
+      await this.disconnect();
+      throw err;
+    }
   }
 }
 

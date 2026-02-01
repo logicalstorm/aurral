@@ -8,6 +8,22 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { createServer } from "http";
 
+process.on("uncaughtException", (err) => {
+  if (err.code === "ERR_STREAM_DESTROYED") {
+    console.warn("[Process] Caught stream destroyed error (safe to ignore):", err.message);
+    return;
+  }
+  console.error("[Process] Uncaught Exception:", err);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  if (reason?.code === "ERR_STREAM_DESTROYED") {
+    console.warn("[Process] Caught stream destroyed rejection (safe to ignore)");
+    return;
+  }
+  console.error("[Process] Unhandled Rejection:", reason);
+});
+
 import { createAuthMiddleware } from "./middleware/auth.js";
 import {
   updateDiscoveryCache,
