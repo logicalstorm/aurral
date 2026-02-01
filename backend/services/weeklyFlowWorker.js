@@ -230,7 +230,6 @@ export class WeeklyFlowWorker {
       console.log(
         `[WeeklyFlowWorker] All jobs complete for ${playlistType}, ensuring smart playlists...`,
       );
-      downloadTracker.clearCompleted();
       try {
         await fs.rm(path.join(this.weeklyFlowRoot, "_fallback"), {
           recursive: true,
