@@ -65,6 +65,12 @@ router.post("/", async (req, res) => {
               ...integrations.general,
             }
           : mergedIntegrations.general,
+        gotify: integrations.gotify
+          ? {
+              ...(mergedIntegrations.gotify || {}),
+              ...integrations.gotify,
+            }
+          : mergedIntegrations.gotify,
       };
     }
 
@@ -250,6 +256,37 @@ router.get("/lidarr/test", async (req, res) => {
       message: error.message,
       stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
+  }
+});
+
+router.post("/gotify/test", async (req, res) => {
+  try {
+    const { sendGotifyTest } = await import("../services/notificationService.js");
+    const url = req.body?.url?.trim();
+    const token = req.body?.token?.trim();
+    if (!url || !token) {
+      return res.status(400).json({
+        error: "URL and token required",
+        message: "Provide Gotify URL and application token in the request body",
+      });
+    }
+    await sendGotifyTest(url, token);
+    res.json({ success: true, message: "Test notification sent" });
+  } catch (error) {
+    if (error.code === "MISSING_CONFIG") {
+      return res.status(400).json({
+        error: "Invalid configuration",
+        message: error.message,
+      });
+    }
+    const status = error.response?.status;
+    const msg =
+      error.response?.data?.description ||
+      error.response?.data?.error ||
+      error.message;
+    res
+      .status(status && status >= 400 ? status : 500)
+      .json({ error: "Gotify test failed", message: msg });
   }
 });
 
