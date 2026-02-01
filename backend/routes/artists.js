@@ -99,7 +99,7 @@ const handleSearch = async (req, res) => {
             return res.json({
               artists: formattedArtists,
               count: parseInt(
-                lastfmData.results["opensearch:totalResults"] || 0,
+                lastfmData.results["opensearch:totalResults"] || 0
               ),
               offset: offsetInt,
             });
@@ -205,7 +205,7 @@ router.get("/release-group/:mbid/cover", async (req, res) => {
   } catch (error) {
     console.error(
       `Error in release-group cover route for ${req.params.mbid}:`,
-      error.message,
+      error.message
     );
     res.set("Cache-Control", "public, max-age=60");
     res.json({ images: [] });
@@ -316,7 +316,7 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
           lidarrArtist = await lidarrClient.getArtistByMbid(mbid);
           if (lidarrArtist) {
             console.log(
-              `[Artists Stream] Found artist in Lidarr: ${lidarrArtist.artistName}`,
+              `[Artists Stream] Found artist in Lidarr: ${lidarrArtist.artistName}`
             );
             const libraryArtist = await libraryManager.getArtist(mbid);
             if (libraryArtist) {
@@ -367,8 +367,8 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
                     new Promise((_, reject) =>
                       setTimeout(
                         () => reject(new Error("MusicBrainz timeout")),
-                        2000,
-                      ),
+                        2000
+                      )
                     ),
                   ]).catch(() => null);
 
@@ -379,7 +379,7 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
 
                     if (mbData["release-groups"]) {
                       const lidarrAlbumMap = new Map(
-                        lidarrAlbums.map((a) => [a.mbid, a]),
+                        lidarrAlbums.map((a) => [a.mbid, a])
                       );
                       enrichedData["release-groups"] = mbData[
                         "release-groups"
@@ -415,7 +415,7 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
           }
         } catch (error) {
           console.warn(
-            `[Artists Stream] Failed to fetch from Lidarr: ${error.message}`,
+            `[Artists Stream] Failed to fetch from Lidarr: ${error.message}`
           );
         }
       }
@@ -468,7 +468,7 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
             });
           }
           console.log(
-            `[Artists Stream] Request for ${mbid} already in progress, waiting...`,
+            `[Artists Stream] Request for ${mbid} already in progress, waiting...`
           );
           try {
             artistData = await pendingArtistRequests.get(mbid);
@@ -490,7 +490,7 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
 
               if (lidarrArtist && data) {
                 const lidarrAlbumMap = new Map(
-                  lidarrAlbums.map((a) => [a.mbid, a]),
+                  lidarrAlbums.map((a) => [a.mbid, a])
                 );
 
                 if (data["release-groups"]) {
@@ -578,8 +578,9 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
 
       const coverTask = (async () => {
         try {
-          const { libraryManager } =
-            await import("../services/libraryManager.js");
+          const { libraryManager } = await import(
+            "../services/libraryManager.js"
+          );
           const libraryArtist = libraryManager.getArtist(mbid);
           let artistName =
             libraryArtist?.artistName ||
@@ -683,7 +684,7 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
           const releaseGroups = artistData["release-groups"]
             .filter(
               (rg) =>
-                rg["primary-type"] === "Album" || rg["primary-type"] === "EP",
+                rg["primary-type"] === "Album" || rg["primary-type"] === "EP"
             )
             .slice(0, 20);
 
@@ -796,7 +797,7 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
     } catch (error) {
       console.error(
         `[Artists Stream] Error for artist ${mbid}:`,
-        error.message,
+        error.message
       );
       if (!artistData) {
         sendSSE(res, "error", {
@@ -828,14 +829,14 @@ router.get("/:mbid/preview", cacheMiddleware(60), async (req, res) => {
     if (!artistName && !shouldSkipMusicBrainz()) {
       try {
         const mb = await musicbrainzRequest(`/artist/${mbid}`, {}).catch(
-          () => null,
+          () => null
         );
         if (mb?.name) artistName = mb.name;
       } catch (e) {}
     }
     if (!artistName) {
       console.warn(
-        `[Preview] No artist name for mbid=${mbid} (pass ?artistName= in query or ensure MusicBrainz is up)`,
+        `[Preview] No artist name for mbid=${mbid} (pass ?artistName= in query or ensure MusicBrainz is up)`
       );
       return res.json({ tracks: [] });
     }
@@ -862,7 +863,7 @@ router.get("/:mbid", cacheMiddleware(300), async (req, res) => {
 
     if (pendingArtistRequests.has(mbid)) {
       console.log(
-        `[Artists Route] Request for ${mbid} already in progress, waiting...`,
+        `[Artists Route] Request for ${mbid} already in progress, waiting...`
       );
       try {
         const data = await pendingArtistRequests.get(mbid);
@@ -891,7 +892,7 @@ router.get("/:mbid", cacheMiddleware(300), async (req, res) => {
         lidarrArtist = await lidarrClient.getArtistByMbid(mbid);
         if (lidarrArtist) {
           console.log(
-            `[Artists Route] Found artist in Lidarr: ${lidarrArtist.artistName}`,
+            `[Artists Route] Found artist in Lidarr: ${lidarrArtist.artistName}`
           );
           const libraryArtist = await libraryManager.getArtist(mbid);
           if (libraryArtist) {
@@ -900,7 +901,7 @@ router.get("/:mbid", cacheMiddleware(300), async (req, res) => {
         }
       } catch (error) {
         console.warn(
-          `[Artists Route] Failed to fetch from Lidarr: ${error.message}`,
+          `[Artists Route] Failed to fetch from Lidarr: ${error.message}`
         );
       }
     }
@@ -949,10 +950,7 @@ router.get("/:mbid", cacheMiddleware(300), async (req, res) => {
                 inc: "tags+genres+release-groups",
               }),
               new Promise((_, reject) =>
-                setTimeout(
-                  () => reject(new Error("MusicBrainz timeout")),
-                  3000,
-                ),
+                setTimeout(() => reject(new Error("MusicBrainz timeout")), 3000)
               ),
             ]).catch(() => null);
 
@@ -970,7 +968,7 @@ router.get("/:mbid", cacheMiddleware(300), async (req, res) => {
 
     if (shouldSkipMusicBrainz()) {
       console.log(
-        `[Artists Route] MusicBrainz circuit breaker is open, but artist not in Lidarr. Returning basic artist data.`,
+        `[Artists Route] MusicBrainz circuit breaker is open, but artist not in Lidarr. Returning basic artist data.`
       );
 
       const basicData = {
@@ -1042,7 +1040,7 @@ router.get("/:mbid", cacheMiddleware(300), async (req, res) => {
         recordMusicBrainzFailure();
         console.error(
           `[Artists Route] MusicBrainz error for artist ${mbid}:`,
-          error.message,
+          error.message
         );
         throw error;
       } finally {
@@ -1080,7 +1078,7 @@ router.get("/:mbid", cacheMiddleware(300), async (req, res) => {
   } catch (error) {
     console.error(
       `[Artists Route] Unexpected error in artist details route:`,
-      error.message,
+      error.message
     );
     console.error(`[Artists Route] Error stack:`, error.stack);
     res.status(500).json({
@@ -1138,7 +1136,7 @@ const fetchCoverInBackground = async (mbid) => {
           mbResult = await Promise.race([
             musicbrainzRequest(`/artist/${mbid}`, { inc: "release-groups" }),
             new Promise((_, reject) =>
-              setTimeout(() => reject(new Error("MusicBrainz timeout")), 2800),
+              setTimeout(() => reject(new Error("MusicBrainz timeout")), 2800)
             ),
           ]).catch((e) => {
             recordMusicBrainzFailure();
@@ -1239,8 +1237,9 @@ router.get("/:mbid/cover", async (req, res) => {
 
     const fetchPromise = (async () => {
       try {
-        const { libraryManager } =
-          await import("../services/libraryManager.js");
+        const { libraryManager } = await import(
+          "../services/libraryManager.js"
+        );
         const libraryArtist = libraryManager.getArtist(mbid);
 
         let artistName =
@@ -1252,10 +1251,7 @@ router.get("/:mbid/cover", async (req, res) => {
             mbResult = await Promise.race([
               musicbrainzRequest(`/artist/${mbid}`, { inc: "release-groups" }),
               new Promise((_, reject) =>
-                setTimeout(
-                  () => reject(new Error("MusicBrainz timeout")),
-                  2800,
-                ),
+                setTimeout(() => reject(new Error("MusicBrainz timeout")), 2800)
               ),
             ]).catch((e) => {
               recordMusicBrainzFailure();
@@ -1287,12 +1283,12 @@ router.get("/:mbid/cover", async (req, res) => {
               };
             }
             console.log(
-              `[Cover Route] Deezer returned no image for: ${artistName}`,
+              `[Cover Route] Deezer returned no image for: ${artistName}`
             );
           } catch (e) {
             console.log(
               `[Cover Route] Deezer error for ${artistName}:`,
-              e.message,
+              e.message
             );
           }
         }
@@ -1312,7 +1308,7 @@ router.get("/:mbid/cover", async (req, res) => {
       res.set("Cache-Control", "public, max-age=31536000, immutable");
     } else {
       console.log(
-        `[Cover Route] No cover found for ${mbid}, caching NOT_FOUND`,
+        `[Cover Route] No cover found for ${mbid}, caching NOT_FOUND`
       );
       dbOps.setImage(mbid, "NOT_FOUND");
       res.set("Cache-Control", "public, max-age=3600");

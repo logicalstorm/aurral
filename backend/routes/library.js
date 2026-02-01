@@ -284,7 +284,7 @@ router.delete("/albums/:id", async (req, res) => {
   }
 });
 
-router.get("/tracks", cacheMiddleware(30), async (req, res) => {
+router.get("/tracks", cacheMiddleware(120), async (req, res) => {
   try {
     const { albumId, releaseGroupMbid } = req.query;
 
