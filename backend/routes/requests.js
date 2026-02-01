@@ -40,18 +40,12 @@ router.get("/", noCache, async (req, res) => {
       ]),
     );
     
-    console.log(`[Requests] Loaded ${artistById.size} artists into map. Sample:`, Array.from(artistById.entries()).slice(0, 3).map(([id, info]) => ({ id, name: info.artistName, mbid: info.foreignArtistId })));
-
     const requestsByAlbumId = new Map();
 
     const queueItems = Array.isArray(queue) ? queue : queue?.records || [];
-    console.log(`[Requests] Found ${queueItems.length} items in queue`);
     for (const item of queueItems) {
       const albumId = item?.albumId ?? item?.album?.id;
-      if (albumId == null) {
-        console.log(`[Requests] Queue item has no albumId, skipping:`, JSON.stringify(item, null, 2));
-        continue;
-      }
+      if (albumId == null) continue;
 
       const artistId = item?.artistId ?? item?.artist?.id ?? item?.album?.artistId;
       const artistInfo = artistId != null ? artistById.get(artistId) : null;
@@ -81,13 +75,7 @@ router.get("/", noCache, async (req, res) => {
           if (libraryArtist) {
             artistMbid = libraryArtist.foreignArtistId || libraryArtist.mbid || null;
           }
-        } catch (e) {
-          console.warn(`[Requests] Failed to fetch artist MBID for artistId ${artistId}:`, e.message);
-        }
-      }
-      
-      if (!artistMbid) {
-        console.warn(`[Requests] No artist MBID found for queue item album ${albumId}, artistId: ${artistId}, artistName: ${artistName}, artistInfo:`, artistInfo, `artistById.has(${artistId}):`, artistById.has(artistId));
+        } catch {}
       }
 
       const queueStatus = String(item.status || "").toLowerCase();
@@ -115,8 +103,6 @@ router.get("/", noCache, async (req, res) => {
         statusMessages.includes("unmatched");
       
       const status = isFailed ? "processing" : "processing";
-      
-      console.log(`[Requests] Queue item for album ${albumId}: status="${item.status}", title="${item.title}", trackedDownloadState="${item.trackedDownloadState}", trackedDownloadStatus="${item.trackedDownloadStatus}", errorMessage="${item.errorMessage}", statusMessages="${JSON.stringify(item.statusMessages)}", isFailed=${isFailed}, finalStatus=${status}`);
 
       requestsByAlbumId.set(String(albumId), {
         id: `lidarr-queue-${item.id ?? albumId}`,
@@ -147,10 +133,7 @@ router.get("/", noCache, async (req, res) => {
       if (albumId == null) continue;
 
       const existing = requestsByAlbumId.get(String(albumId));
-      if (existing) {
-        console.log(`[Requests] Skipping history for album ${albumId} - already in queue with status: ${existing.status}`);
-        continue;
-      }
+      if (existing) continue;
 
       const artistId = record?.artistId;
       const artistInfo = artistId != null ? artistById.get(artistId) : null;
@@ -180,13 +163,7 @@ router.get("/", noCache, async (req, res) => {
           if (libraryArtist) {
             artistMbid = libraryArtist.foreignArtistId || libraryArtist.mbid || null;
           }
-        } catch (e) {
-          console.warn(`[Requests] Failed to fetch artist MBID for history artistId ${artistId}:`, e.message);
-        }
-      }
-      
-      if (!artistMbid) {
-        console.warn(`[Requests] No artist MBID found for history album ${albumId}, artistId: ${artistId}, artistName: ${artistName}, artistInfo:`, artistInfo, `artistById.has(${artistId}):`, artistById.has(artistId));
+        } catch {}
       }
 
       const eventType = String(record?.eventType || "").toLowerCase();
@@ -212,8 +189,6 @@ router.get("/", noCache, async (req, res) => {
       
       const isSuccessfulImport = eventType.includes("import") && !isFailedImport && eventType !== "albumimportincomplete";
       const status = isSuccessfulImport ? "available" : "processing";
-      
-      console.log(`[Requests] History item for album ${albumId}: eventType="${record.eventType}", sourceTitle="${record.sourceTitle}", statusMessages="${statusMessages}", errorMessage="${errorMessage}", isFailedImport=${isFailedImport}, isSuccessfulImport=${isSuccessfulImport}, finalStatus=${status}`);
 
       requestsByAlbumId.set(String(albumId), {
         id: `lidarr-history-${record.id ?? albumId}`,
