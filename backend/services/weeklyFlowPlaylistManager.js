@@ -77,6 +77,18 @@ export class WeeklyFlowPlaylistManager {
         }
       }
       await fs.mkdir(this.libraryRoot, { recursive: true });
+      let playlists = null;
+      if (this.navidromeClient?.isConfigured()) {
+        try {
+          const raw = await this.navidromeClient.getPlaylists();
+          playlists = Array.isArray(raw) ? raw : raw ? [raw] : [];
+        } catch (err) {
+          console.warn(
+            "[WeeklyFlowPlaylistManager] getPlaylists failed:",
+            err?.message
+          );
+        }
+      }
       for (const { type, name } of allPlaylists) {
         const nspPath = path.join(this.libraryRoot, `${name}.nsp`);
         const isEnabled = config[type]?.enabled;
@@ -93,18 +105,17 @@ export class WeeklyFlowPlaylistManager {
           };
           await fs.writeFile(nspPath, JSON.stringify(payload), "utf8");
         } else {
-          if (this.navidromeClient?.isConfigured()) {
-            try {
-              const playlists = await this.navidromeClient.getPlaylists();
-              const existing = playlists.find((p) => p.name === name);
-              if (existing) {
+          if (playlists?.length) {
+            const existing = playlists.find((p) => p.name === name);
+            if (existing) {
+              try {
                 await this.navidromeClient.deletePlaylist(existing.id);
+              } catch (err) {
+                console.warn(
+                  `[WeeklyFlowPlaylistManager] Failed to delete playlist "${name}" from Navidrome:`,
+                  err?.message
+                );
               }
-            } catch (err) {
-              console.warn(
-                `[WeeklyFlowPlaylistManager] Failed to delete playlist "${name}" from Navidrome:`,
-                err?.message
-              );
             }
           }
           try {
