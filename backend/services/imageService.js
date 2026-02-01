@@ -1,8 +1,26 @@
 import { dbOps } from "../config/db-helpers.js";
 import { musicbrainzRequest, deezerSearchArtist } from "./apiClients.js";
 
+const MAX_NEGATIVE_CACHE = 1000;
+const MAX_PENDING_REQUESTS = 100;
 const negativeImageCache = new Set();
 const pendingImageRequests = new Map();
+
+const addToNegativeCache = (mbid) => {
+  if (negativeImageCache.size >= MAX_NEGATIVE_CACHE) {
+    const firstKey = negativeImageCache.values().next().value;
+    negativeImageCache.delete(firstKey);
+  }
+  negativeImageCache.add(mbid);
+};
+
+const addToPendingRequests = (mbid, promise) => {
+  if (pendingImageRequests.size >= MAX_PENDING_REQUESTS) {
+    const firstKey = pendingImageRequests.keys().next().value;
+    pendingImageRequests.delete(firstKey);
+  }
+  pendingImageRequests.set(mbid, promise);
+};
 
 export const getArtistImage = async (mbid, forceRefresh = false) => {
   if (!mbid) return { url: null, images: [] };
@@ -79,13 +97,13 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
       console.warn(`Failed to fetch image for ${mbid}:`, e.message);
     }
 
-    negativeImageCache.add(mbid);
+    addToNegativeCache(mbid);
     dbOps.setImage(mbid, "NOT_FOUND");
 
     return { url: null, images: [] };
   })();
 
-  pendingImageRequests.set(mbid, fetchPromise);
+  addToPendingRequests(mbid, fetchPromise);
   try {
     return await fetchPromise;
   } finally {

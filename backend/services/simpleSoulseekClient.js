@@ -77,12 +77,22 @@ export class SimpleSoulseekClient {
   async disconnect() {
     if (this.client && this.connected) {
       try {
-        this.client.disconnect();
+        this.client.destroy();
       } catch (err) {
         console.error("Error disconnecting Soulseek client:", err.message);
       }
       this.client = null;
       this.connected = false;
+    }
+    try {
+      const { default: stack } = await import("slsk-client/lib/stack.js");
+      stack.search = {};
+      stack.download = {};
+      stack.downloadTokens = {};
+      stack.peerSearchMatches = {};
+      stack.peerSearchRequests = [];
+    } catch (err) {
+      console.warn("Failed to clear slsk-client stack:", err.message);
     }
   }
 
@@ -101,7 +111,7 @@ export class SimpleSoulseekClient {
       this.client.search(
         {
           req: query,
-          timeout: 10000,
+          timeout: 5000,
         },
         (err, results) => {
           if (err) {
@@ -170,11 +180,17 @@ export class SimpleSoulseekClient {
           clearTimeout(refs.timeoutId);
           refs.timeoutId = null;
         }
-        if (refs.readStream && !refs.readStream.destroyed) {
-          refs.readStream.destroy();
+        if (refs.readStream) {
+          refs.readStream.removeAllListeners();
+          if (!refs.readStream.destroyed) {
+            refs.readStream.destroy();
+          }
         }
-        if (refs.writeStream && !refs.writeStream.destroyed) {
-          refs.writeStream.destroy();
+        if (refs.writeStream) {
+          refs.writeStream.removeAllListeners();
+          if (!refs.writeStream.destroyed) {
+            refs.writeStream.destroy();
+          }
         }
       };
 

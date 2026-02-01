@@ -556,6 +556,15 @@ export const updateDiscoveryCache = async () => {
       isUpdating: false,
       configured: true,
     });
+
+    try {
+      const cleaned = dbOps.cleanOldImageCache(30);
+      if (cleaned?.changes > 0) {
+        console.log(`[Discovery] Cleaned ${cleaned.changes} old image cache entries`);
+      }
+    } catch (e) {
+      console.warn("[Discovery] Failed to clean old image cache:", e.message);
+    }
   } catch (error) {
     console.error("Failed to update discovery cache:", error.message);
     console.error("Stack trace:", error.stack);
