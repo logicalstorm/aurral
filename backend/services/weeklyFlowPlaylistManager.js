@@ -120,6 +120,11 @@ export class WeeklyFlowPlaylistManager {
     }
   }
 
+  async scanLibrary() {
+    if (!this.navidromeClient?.isConfigured()) return null;
+    return this.navidromeClient.scanLibrary();
+  }
+
   async createSymlink(sourcePath, playlistType) {
     return null;
   }
