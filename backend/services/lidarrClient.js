@@ -3,7 +3,7 @@ import https from "https";
 import { dbOps } from "../config/db-helpers.js";
 
 const CIRCUIT_COOLDOWN_MS = 60000;
-const LIDARR_MAX_CONCURRENT = 6;
+const LIDARR_MAX_CONCURRENT = 12;
 
 export class LidarrClient {
   constructor() {

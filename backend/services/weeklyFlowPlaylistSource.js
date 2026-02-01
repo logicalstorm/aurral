@@ -117,7 +117,7 @@ export class WeeklyFlowPlaylistSource {
   async getLibraryTrackTitles(libraryManager, artistId) {
     const albums = await libraryManager.getAlbums(artistId);
     const titles = new Set();
-    const maxAlbums = 15;
+    const maxAlbums = 30;
     for (const album of albums.slice(0, maxAlbums)) {
       const tracks = await libraryManager.getTracks(album.id);
       for (const t of tracks) {
@@ -141,7 +141,7 @@ export class WeeklyFlowPlaylistSource {
 
     const shuffled = [...artists].sort(() => 0.5 - Math.random());
     const tracks = [];
-    const maxArtistsToTry = Math.min(30, Math.max(limit * 2, 20));
+    const maxArtistsToTry = Math.min(45, Math.max(limit * 2, 30));
 
     for (
       let i = 0;
