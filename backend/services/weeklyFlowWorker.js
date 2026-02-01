@@ -89,6 +89,7 @@ export class WeeklyFlowWorker {
       this.intervalId = null;
     }
     downloadTracker.resetDownloadingToPending();
+    soulseekClient.disconnect().catch(() => {});
     console.log("[WeeklyFlowWorker] Worker stopped");
   }
 
@@ -260,6 +261,9 @@ export class WeeklyFlowWorker {
           err.message,
         ),
       );
+      if (!downloadTracker.getNextPending()) {
+        this.stop();
+      }
     }
   }
 
