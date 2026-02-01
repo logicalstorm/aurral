@@ -201,7 +201,7 @@ export class WeeklyFlowWorker {
 
       await fs.rm(stagingDir, { recursive: true, force: true });
 
-      playlistManager.updateConfig();
+      playlistManager.updateConfig(false);
 
       downloadTracker.setDone(job.id, finalPath);
       console.log(`[WeeklyFlowWorker] Job ${job.id} completed: ${finalPath}`);
