@@ -5,14 +5,17 @@ import {
   RefreshCw,
   Trash2,
   TrendingUp,
-  Save,
-  Shield,
   Server,
   AlertTriangle,
-  Sparkles,
   Bell,
+  Users,
+  UserPlus,
+  Lock,
+  Pencil,
+  X,
 } from "lucide-react";
-import PowerSwitch from "../components/PowerSwitch";
+import PillToggle from "../components/PillToggle";
+import FlipSaveButton from "../components/FlipSaveButton";
 import api, {
   checkHealth,
   getAppSettings,
@@ -21,8 +24,14 @@ import api, {
   testLidarrConnection,
   testGotifyConnection,
   applyLidarrCommunityGuide,
+  getUsers,
+  createUser,
+  updateUser,
+  deleteUser,
+  changeMyPassword,
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
+import { useAuth } from "../contexts/AuthContext";
 
 const allReleaseTypes = [
   "Album",
@@ -44,6 +53,7 @@ function SettingsPage() {
   const [saving, setSaving] = useState(false);
 
   const { showSuccess, showError, showInfo } = useToast();
+  const { user: authUser, hasPermission } = useAuth();
 
   const [settings, setSettings] = useState({
     rootFolderPath: "",
@@ -79,6 +89,35 @@ function SettingsPage() {
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState(null);
   const [showCommunityGuideModal, setShowCommunityGuideModal] = useState(false);
+  const [usersList, setUsersList] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [newUserUsername, setNewUserUsername] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const GRANULAR_PERMISSIONS = {
+    addArtist: true,
+    addAlbum: true,
+    changeMonitoring: false,
+    deleteArtist: false,
+    deleteAlbum: false,
+  };
+  const [newUserPermissions, setNewUserPermissions] = useState({
+    ...GRANULAR_PERMISSIONS,
+  });
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [editUser, setEditUser] = useState(null);
+  const [editPassword, setEditPassword] = useState("");
+  const [editCurrentPassword, setEditCurrentPassword] = useState("");
+  const [editPermissions, setEditPermissions] = useState({
+    ...GRANULAR_PERMISSIONS,
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [changePwCurrent, setChangePwCurrent] = useState("");
+  const [changePwNew, setChangePwNew] = useState("");
+  const [changePwConfirm, setChangePwConfirm] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [deleteUserTarget, setDeleteUserTarget] = useState(null);
+  const [deletingUser, setDeletingUser] = useState(false);
   const location = useLocation();
   const navigateBase = useNavigate();
   const previousLocationRef = useRef("/settings");
@@ -162,7 +201,7 @@ function SettingsPage() {
         try {
           const profiles = await getLidarrProfiles(
             updatedSettings.integrations.lidarr.url,
-            updatedSettings.integrations.lidarr.apiKey,
+            updatedSettings.integrations.lidarr.apiKey
           );
           setLidarrProfiles(profiles);
         } catch {
@@ -306,7 +345,7 @@ function SettingsPage() {
               },
             });
             showInfo(
-              `Default quality profile set to '${result.results.qualityProfile.name}'`,
+              `Default quality profile set to '${result.results.qualityProfile.name}'`
             );
           }
         } catch {
@@ -329,14 +368,14 @@ function SettingsPage() {
     try {
       await api.post("/discover/refresh");
       showInfo(
-        "Discovery refresh started in background. This may take a few minutes to fully hydrate images.",
+        "Discovery refresh started in background. This may take a few minutes to fully hydrate images."
       );
       const healthData = await checkHealth();
       setHealth(healthData);
     } catch (err) {
       showError(
         "Failed to start refresh: " +
-          (err.response?.data?.message || err.message),
+          (err.response?.data?.message || err.message)
       );
     } finally {
       setRefreshingDiscovery(false);
@@ -346,7 +385,7 @@ function SettingsPage() {
   const handleClearCache = async () => {
     if (
       !window.confirm(
-        "Are you sure you want to clear the discovery and image cache? This will reset all recommendations until the next refresh.",
+        "Are you sure you want to clear the discovery and image cache? This will reset all recommendations until the next refresh."
       )
     )
       return;
@@ -358,8 +397,7 @@ function SettingsPage() {
       setHealth(healthData);
     } catch (err) {
       showError(
-        "Failed to clear cache: " +
-          (err.response?.data?.message || err.message),
+        "Failed to clear cache: " + (err.response?.data?.message || err.message)
       );
     } finally {
       setClearingCache(false);
@@ -373,24 +411,40 @@ function SettingsPage() {
   const hoverBubbleRef = useRef(null);
   const tabRefs = useRef({});
 
-  const tabs = useMemo(
-    () => [
+  const tabs = useMemo(() => {
+    const all = [
       { id: "integrations", label: "Integrations", icon: Server },
-      { id: "discovery", label: "Discovery", icon: Sparkles },
       { id: "metadata", label: "Metadata", icon: TrendingUp },
       { id: "notifications", label: "Notifications", icon: Bell },
-      { id: "auth", label: "Authentication", icon: Shield },
-    ],
-    [],
-  );
+      { id: "users", label: "Users", icon: Users },
+    ];
+    if (authUser?.role !== "admin") {
+      return all.filter((t) => t.id === "users");
+    }
+    return all;
+  }, [authUser?.role]);
 
   useEffect(() => {
-    if (activeTab === "discovery") {
+    const validIds = tabs.map((t) => t.id);
+    if (!validIds.includes(activeTab)) {
+      setActiveTab(validIds[0] || "users");
+    }
+  }, [tabs, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "metadata") {
       checkHealth()
         .then(setHealth)
         .catch(() => {});
     }
-  }, [activeTab]);
+    if (activeTab === "users" && authUser?.role === "admin") {
+      setLoadingUsers(true);
+      getUsers()
+        .then(setUsersList)
+        .catch(() => setUsersList([]))
+        .finally(() => setLoadingUsers(false));
+    }
+  }, [activeTab, authUser?.role]);
 
   useEffect(() => {
     const updateActiveBubble = () => {
@@ -457,96 +511,6 @@ function SettingsPage() {
 
   const renderTabContent = () => {
     switch (activeTab) {
-      case "discovery":
-        return (
-          <div className="card animate-fade-in">
-            <h2
-              className="text-2xl font-bold flex items-center mb-2"
-              style={{ color: "#fff" }}
-            >
-              Discovery
-            </h2>
-            <p className="mb-6" style={{ color: "#c1c1c3" }}>
-              Refresh recommendations or clear the discovery and image cache.
-            </p>
-            <div
-              className="p-6 rounded-lg mb-6 space-y-3"
-              style={{
-                backgroundColor: "#1a1a1e",
-                border: "1px solid #2a2a2e",
-              }}
-            >
-              <h3
-                className="text-lg font-medium flex items-center"
-                style={{ color: "#fff" }}
-              >
-                Cache status
-              </h3>
-              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                <div>
-                  <dt style={{ color: "#c1c1c3" }}>Last updated</dt>
-                  <dd style={{ color: "#fff" }}>
-                    {health?.discovery?.lastUpdated
-                      ? new Date(health.discovery.lastUpdated).toLocaleString()
-                      : "—"}
-                  </dd>
-                </div>
-                <div>
-                  <dt style={{ color: "#c1c1c3" }}>Recommendations</dt>
-                  <dd style={{ color: "#fff" }}>
-                    {health?.discovery?.recommendationsCount ?? "—"}
-                  </dd>
-                </div>
-                <div>
-                  <dt style={{ color: "#c1c1c3" }}>Global trending</dt>
-                  <dd style={{ color: "#fff" }}>
-                    {health?.discovery?.globalTopCount ?? "—"}
-                  </dd>
-                </div>
-                <div>
-                  <dt style={{ color: "#c1c1c3" }}>Cached images</dt>
-                  <dd style={{ color: "#fff" }}>
-                    {health?.discovery?.cachedImagesCount ?? "—"}
-                  </dd>
-                </div>
-              </dl>
-              {health?.discovery?.isUpdating && (
-                <p
-                  className="text-sm flex items-center gap-2"
-                  style={{ color: "#c1c1c3" }}
-                >
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Updating…
-                </p>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={handleRefreshDiscovery}
-                disabled={refreshingDiscovery}
-                className="btn btn-secondary flex items-center"
-              >
-                <RefreshCw
-                  className={`w-4 h-4 mr-2 ${refreshingDiscovery ? "animate-spin" : ""}`}
-                />
-                {refreshingDiscovery ? "Refreshing..." : "Refresh Discovery"}
-              </button>
-              <button
-                type="button"
-                onClick={handleClearCache}
-                disabled={clearingCache}
-                className="btn btn-secondary flex items-center"
-              >
-                <Trash2
-                  className={`w-4 h-4 mr-2 ${clearingCache ? "animate-spin" : ""}`}
-                />
-                {clearingCache ? "Clearing..." : "Clear Cache"}
-              </button>
-            </div>
-          </div>
-        );
-
       case "integrations":
         return (
           <div className="card animate-fade-in">
@@ -557,19 +521,11 @@ function SettingsPage() {
               >
                 Integrations
               </h2>
-              <button
-                type="button"
+              <FlipSaveButton
+                saving={saving}
+                disabled={!hasUnsavedChanges}
                 onClick={handleSaveSettings}
-                disabled={!hasUnsavedChanges || saving}
-                className={`btn flex items-center ${
-                  hasUnsavedChanges
-                    ? "btn-primary"
-                    : "btn-secondary opacity-50 cursor-not-allowed"
-                }`}
-              >
-                <Save className="w-4 h-4 mr-2" />
-                {saving ? "Saving..." : "Save"}
-              </button>
+              />
             </div>
             <form
               onSubmit={handleSaveSettings}
@@ -666,22 +622,24 @@ function SettingsPage() {
                             }
                             const result = await testLidarrConnection(
                               url,
-                              apiKey,
+                              apiKey
                             );
                             if (result.success) {
                               showSuccess(
-                                `Lidarr connection successful! (${result.instanceName || "Lidarr"})`,
+                                `Lidarr connection successful! (${
+                                  result.instanceName || "Lidarr"
+                                })`
                               );
                               setLoadingLidarrProfiles(true);
                               try {
                                 const profiles = await getLidarrProfiles(
                                   url,
-                                  apiKey,
+                                  apiKey
                                 );
                                 setLidarrProfiles(profiles);
                                 if (profiles.length > 0) {
                                   showInfo(
-                                    `Loaded ${profiles.length} quality profile(s)`,
+                                    `Loaded ${profiles.length} quality profile(s)`
                                   );
                                 }
                               } catch {
@@ -690,7 +648,9 @@ function SettingsPage() {
                               }
                             } else {
                               showError(
-                                `Connection failed: ${result.message || result.error}${result.details ? `\n${result.details}` : ""}`,
+                                `Connection failed: ${
+                                  result.message || result.error
+                                }${result.details ? `\n${result.details}` : ""}`
                               );
                             }
                           } catch (err) {
@@ -730,7 +690,7 @@ function SettingsPage() {
                         value={
                           settings.integrations?.lidarr?.qualityProfileId
                             ? String(
-                                settings.integrations.lidarr.qualityProfileId,
+                                settings.integrations.lidarr.qualityProfileId
                               )
                             : ""
                         }
@@ -754,8 +714,8 @@ function SettingsPage() {
                           {loadingLidarrProfiles
                             ? "Loading profiles..."
                             : lidarrProfiles.length === 0
-                              ? "No profiles available (test connection first)"
-                              : "Select a profile"}
+                            ? "No profiles available (test connection first)"
+                            : "Select a profile"}
                         </option>
                         {lidarrProfiles.map((profile) => (
                           <option key={profile.id} value={profile.id}>
@@ -771,7 +731,7 @@ function SettingsPage() {
 
                           if (!url || !apiKey) {
                             showError(
-                              "Please enter Lidarr URL and API key first",
+                              "Please enter Lidarr URL and API key first"
                             );
                             return;
                           }
@@ -780,12 +740,12 @@ function SettingsPage() {
                           try {
                             const profiles = await getLidarrProfiles(
                               url,
-                              apiKey,
+                              apiKey
                             );
                             setLidarrProfiles(profiles);
                             if (profiles.length > 0) {
                               showSuccess(
-                                `Loaded ${profiles.length} quality profile(s)`,
+                                `Loaded ${profiles.length} quality profile(s)`
                               );
                             } else {
                               showInfo("No quality profiles found in Lidarr");
@@ -808,7 +768,9 @@ function SettingsPage() {
                         className="btn btn-secondary"
                       >
                         <RefreshCw
-                          className={`w-4 h-4 ${loadingLidarrProfiles ? "animate-spin" : ""}`}
+                          className={`w-4 h-4 ${
+                            loadingLidarrProfiles ? "animate-spin" : ""
+                          }`}
                         />
                       </button>
                     </div>
@@ -866,7 +828,7 @@ function SettingsPage() {
                           !settings.integrations?.lidarr?.apiKey
                         ) {
                           showError(
-                            "Please configure Lidarr URL and API key first",
+                            "Please configure Lidarr URL and API key first"
                           );
                           return;
                         }
@@ -1001,13 +963,10 @@ function SettingsPage() {
                     />
                   </div>
                 </div>
-                <p
-                  className="mt-3 text-xs"
-                  style={{ color: "#8a8a8e" }}
-                >
+                <p className="mt-3 text-xs" style={{ color: "#8a8a8e" }}>
                   When using Weekly Flow: set Navidrome&apos;s{" "}
-                  <code>Scanner.PurgeMissing</code> to{" "}
-                  <code>always</code> or <code>full</code> (e.g.{" "}
+                  <code>Scanner.PurgeMissing</code> to <code>always</code> or{" "}
+                  <code>full</code> (e.g.{" "}
                   <code>ND_SCANNER_PURGEMISSING=always</code>) so turning off a
                   flow removes those tracks from the library.
                 </p>
@@ -1026,19 +985,11 @@ function SettingsPage() {
               >
                 Metadata Services
               </h2>
-              <button
-                type="button"
+              <FlipSaveButton
+                saving={saving}
+                disabled={!hasUnsavedChanges}
                 onClick={handleSaveSettings}
-                disabled={!hasUnsavedChanges || saving}
-                className={`btn flex items-center ${
-                  hasUnsavedChanges
-                    ? "btn-primary"
-                    : "btn-secondary opacity-50 cursor-not-allowed"
-                }`}
-              >
-                <Save className="w-4 h-4 mr-2" />
-                {saving ? "Saving..." : "Save"}
-              </button>
+              />
             </div>
             <form
               onSubmit={handleSaveSettings}
@@ -1223,6 +1174,94 @@ function SettingsPage() {
                   </p>
                 </div>
               </div>
+
+              <div
+                className="p-6 rounded-lg space-y-4"
+                style={{
+                  backgroundColor: "#1a1a1e",
+                  border: "1px solid #2a2a2e",
+                }}
+              >
+                <h3
+                  className="text-lg font-medium flex items-center"
+                  style={{ color: "#fff" }}
+                >
+                  Cache status
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-6 items-start">
+                  <div className="space-y-3 min-w-0">
+                    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <dt style={{ color: "#c1c1c3" }}>Last updated</dt>
+                        <dd style={{ color: "#fff" }}>
+                          {health?.discovery?.lastUpdated
+                            ? new Date(
+                                health.discovery.lastUpdated
+                              ).toLocaleString()
+                            : "—"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt style={{ color: "#c1c1c3" }}>Recommendations</dt>
+                        <dd style={{ color: "#fff" }}>
+                          {health?.discovery?.recommendationsCount ?? "—"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt style={{ color: "#c1c1c3" }}>Global trending</dt>
+                        <dd style={{ color: "#fff" }}>
+                          {health?.discovery?.globalTopCount ?? "—"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt style={{ color: "#c1c1c3" }}>Cached images</dt>
+                        <dd style={{ color: "#fff" }}>
+                          {health?.discovery?.cachedImagesCount ?? "—"}
+                        </dd>
+                      </div>
+                    </dl>
+                    {health?.discovery?.isUpdating && (
+                      <p
+                        className="text-sm flex items-center gap-2"
+                        style={{ color: "#c1c1c3" }}
+                      >
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Updating…
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2 w-full md:w-auto md:min-w-[180px]">
+                    <button
+                      type="button"
+                      onClick={handleRefreshDiscovery}
+                      disabled={refreshingDiscovery}
+                      className="btn btn-primary flex items-center justify-center gap-2 py-2.5 px-4 font-medium shadow-md hover:opacity-90"
+                    >
+                      <RefreshCw
+                        className={`w-4 h-4 flex-shrink-0 ${
+                          refreshingDiscovery ? "animate-spin" : ""
+                        }`}
+                      />
+                      {refreshingDiscovery
+                        ? "Refreshing..."
+                        : "Refresh Discovery"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClearCache}
+                      disabled={clearingCache}
+                      className="btn btn-secondary flex items-center justify-center gap-2 py-2.5 px-4 font-medium shadow-md"
+                    >
+                      <Trash2
+                        className={`w-4 h-4 flex-shrink-0 ${
+                          clearingCache ? "animate-spin" : ""
+                        }`}
+                      />
+                      {clearingCache ? "Clearing..." : "Clear Cache"}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </form>
           </div>
         );
@@ -1237,19 +1276,11 @@ function SettingsPage() {
               >
                 Notifications
               </h2>
-              <button
-                type="button"
+              <FlipSaveButton
+                saving={saving}
+                disabled={!hasUnsavedChanges}
                 onClick={handleSaveSettings}
-                disabled={!hasUnsavedChanges || saving}
-                className={`btn flex items-center ${
-                  hasUnsavedChanges
-                    ? "btn-primary"
-                    : "btn-secondary opacity-50 cursor-not-allowed"
-                }`}
-              >
-                <Save className="w-4 h-4 mr-2" />
-                {saving ? "Saving..." : "Save"}
-              </button>
+              />
             </div>
             <form
               onSubmit={handleSaveSettings}
@@ -1339,8 +1370,7 @@ function SettingsPage() {
                           setTestingGotify(true);
                           try {
                             const url = settings.integrations?.gotify?.url;
-                            const token =
-                              settings.integrations?.gotify?.token;
+                            const token = settings.integrations?.gotify?.token;
                             if (!url || !token) {
                               showError("Enter Gotify URL and token first");
                               return;
@@ -1382,7 +1412,7 @@ function SettingsPage() {
                       >
                         Notify when daily Discover is updated
                       </span>
-                      <PowerSwitch
+                      <PillToggle
                         checked={
                           settings.integrations?.gotify
                             ?.notifyDiscoveryUpdated || false
@@ -1408,10 +1438,10 @@ function SettingsPage() {
                       >
                         Notify when weekly flow finishes
                       </span>
-                      <PowerSwitch
+                      <PillToggle
                         checked={
-                          settings.integrations?.gotify
-                            ?.notifyWeeklyFlowDone || false
+                          settings.integrations?.gotify?.notifyWeeklyFlowDone ||
+                          false
                         }
                         onChange={(e) =>
                           updateSettings({
@@ -1434,118 +1464,641 @@ function SettingsPage() {
           </div>
         );
 
-      case "auth":
+      case "users":
+        const isSelfEdit = editUser && editUser.id === authUser?.id;
+        const granularPerms = [
+          { key: "addArtist", label: "Add artist" },
+          { key: "addAlbum", label: "Add album" },
+          { key: "changeMonitoring", label: "Change artist monitoring" },
+          { key: "deleteArtist", label: "Delete artists" },
+          { key: "deleteAlbum", label: "Delete albums" },
+        ];
         return (
-          <div className="card animate-fade-in">
-            <div className="flex items-center justify-between mb-6">
+          <div className="card animate-fade-in space-y-6">
+            <div className="flex items-center justify-between">
               <h2
                 className="text-2xl font-bold flex items-center"
                 style={{ color: "#fff" }}
               >
-                Authentication
+                Users
               </h2>
-              <button
-                type="button"
-                onClick={handleSaveSettings}
-                disabled={!hasUnsavedChanges || saving}
-                className={`btn flex items-center ${
-                  hasUnsavedChanges
-                    ? "btn-primary"
-                    : "btn-secondary opacity-50 cursor-not-allowed"
-                }`}
-              >
-                <Save className="w-4 h-4 mr-2" />
-                {saving ? "Saving..." : "Save"}
-              </button>
+              {authUser?.role === "admin" && (
+                <button
+                  type="button"
+                  className="btn btn-primary flex items-center gap-2"
+                  onClick={() => {
+                    setNewUserUsername("");
+                    setNewUserPassword("");
+                    setNewUserPermissions({ ...GRANULAR_PERMISSIONS });
+                    setShowAddUserModal(true);
+                  }}
+                >
+                  <UserPlus className="w-4 h-4" />
+                  Add user
+                </button>
+              )}
             </div>
-            <form
-              onSubmit={handleSaveSettings}
-              className="space-y-6"
-              autoComplete="off"
-            >
+
+            {authUser?.role !== "admin" ? (
               <div
-                className="p-6 rounded-lg space-y-4"
+                className="p-6 rounded-lg space-y-5 max-w-md"
                 style={{
                   backgroundColor: "#1a1a1e",
-                  border: "1px solid #2a2a2e",
+                  boxShadow: "0 0 0 1px #2a2a2e",
                 }}
               >
-                <div className="flex items-center justify-between mb-2">
-                  <h3
-                    className="text-lg font-medium flex items-center"
-                    style={{ color: "#fff" }}
+                <h3 className="text-lg font-medium flex items-center gap-2 text-main">
+                  <Lock className="w-5 h-5 text-[#707e61]" />
+                  Change my password
+                </h3>
+                <form
+                  className="space-y-4"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (changePwNew !== changePwConfirm) {
+                      showError("New passwords do not match");
+                      return;
+                    }
+                    setChangingPassword(true);
+                    try {
+                      await changeMyPassword(changePwCurrent, changePwNew);
+                      showSuccess("Password changed");
+                      setChangePwCurrent("");
+                      setChangePwNew("");
+                      setChangePwConfirm("");
+                    } catch (err) {
+                      showError(
+                        err.response?.data?.error ||
+                          err.message ||
+                          "Failed to change password"
+                      );
+                    } finally {
+                      setChangingPassword(false);
+                    }
+                  }}
+                >
+                  <div className="space-y-1">
+                    <label htmlFor="change-pw-current" className="label">
+                      Current password
+                    </label>
+                    <input
+                      id="change-pw-current"
+                      type="password"
+                      className="input w-full"
+                      placeholder="Current password"
+                      autoComplete="current-password"
+                      value={changePwCurrent}
+                      onChange={(e) => setChangePwCurrent(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label htmlFor="change-pw-new" className="label">
+                      New password
+                    </label>
+                    <input
+                      id="change-pw-new"
+                      type="password"
+                      className="input w-full"
+                      placeholder="New password"
+                      autoComplete="new-password"
+                      value={changePwNew}
+                      onChange={(e) => setChangePwNew(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label htmlFor="change-pw-confirm" className="label">
+                      Confirm new password
+                    </label>
+                    <input
+                      id="change-pw-confirm"
+                      type="password"
+                      className="input w-full"
+                      placeholder="Confirm new password"
+                      autoComplete="new-password"
+                      value={changePwConfirm}
+                      onChange={(e) => setChangePwConfirm(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={
+                      changingPassword ||
+                      !changePwCurrent ||
+                      !changePwNew ||
+                      changePwNew !== changePwConfirm
+                    }
                   >
-                    App Authentication
-                  </h3>
-                  {settings.integrations?.general?.authPassword && (
-                    <span className="flex items-center text-sm text-green-400">
-                      <CheckCircle className="w-4 h-4 mr-1" />
-                      Enabled
-                    </span>
+                    {changingPassword ? "Changing…" : "Change password"}
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <>
+                <div className="rounded-lg overflow-hidden">
+                  {loadingUsers ? (
+                    <div className="p-8 text-center">
+                      <p className="text-sub">Loading…</p>
+                    </div>
+                  ) : (
+                    <ul>
+                      {usersList.map((u, i) => (
+                        <li
+                          key={u.id}
+                          className={`flex items-center justify-between gap-4 px-5 py-4 ${
+                            i % 2 === 1 ? "bg-[#1a1a1e]" : ""
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="font-medium text-main truncate">
+                              {u.username}
+                            </span>
+                            <span
+                              className={`badge shrink-0 ${
+                                u.role === "admin"
+                                  ? "badge-primary"
+                                  : "badge-neutral"
+                              }`}
+                              style={{
+                                backgroundColor:
+                                  u.role === "admin" ? "#2a2a2e" : undefined,
+                                color: "#c1c1c3",
+                              }}
+                            >
+                              {u.role}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-ghost gap-1.5"
+                              onClick={() => {
+                                setEditUser(u);
+                                setEditPassword("");
+                                setEditCurrentPassword("");
+                                setEditPermissions(
+                                  u.permissions
+                                    ? {
+                                        ...GRANULAR_PERMISSIONS,
+                                        ...u.permissions,
+                                      }
+                                    : { ...GRANULAR_PERMISSIONS }
+                                );
+                              }}
+                            >
+                              <Pencil className="w-4 h-4" />
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-sm gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                              style={{
+                                backgroundColor: "transparent",
+                                color: "#ef4444",
+                              }}
+                              disabled={u.role === "admin"}
+                              onClick={() =>
+                                u.role !== "admin" && setDeleteUserTarget(u)
+                              }
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Delete
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      className="block text-sm font-medium mb-1"
-                      style={{ color: "#fff" }}
+
+                {deleteUserTarget && (
+                  <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    style={{ backgroundColor: "rgba(0,0,0,0.75)" }}
+                    onClick={() => !deletingUser && setDeleteUserTarget(null)}
+                  >
+                    <div
+                      className="card max-w-md w-full shadow-xl"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      App Username
-                    </label>
-                    <input
-                      type="text"
-                      className="input"
-                      placeholder="admin"
-                      autoComplete="off"
-                      value={settings.integrations?.general?.authUser || ""}
-                      onChange={(e) =>
-                        updateSettings({
-                          ...settings,
-                          integrations: {
-                            ...settings.integrations,
-                            general: {
-                              ...(settings.integrations?.general || {}),
-                              authUser: e.target.value,
-                            },
-                          },
-                        })
-                      }
-                    />
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-xl font-bold text-main">
+                          Delete user
+                        </h3>
+                        <button
+                          type="button"
+                          className="p-2 rounded transition-colors hover:bg-[#2a2a2e] text-sub disabled:opacity-50"
+                          onClick={() =>
+                            !deletingUser && setDeleteUserTarget(null)
+                          }
+                          aria-label="Close"
+                          disabled={deletingUser}
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                      <p className="text-sub mb-6">
+                        Are you sure you want to delete{" "}
+                        <span className="font-medium text-main">
+                          {deleteUserTarget.username}
+                        </span>
+                        ? This cannot be undone.
+                      </p>
+                      <div
+                        className="flex gap-3 justify-end pt-4"
+                        style={{ boxShadow: "inset 0 1px 0 #2a2a2e" }}
+                      >
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() =>
+                            !deletingUser && setDeleteUserTarget(null)
+                          }
+                          disabled={deletingUser}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-danger"
+                          disabled={deletingUser}
+                          onClick={async () => {
+                            setDeletingUser(true);
+                            try {
+                              await deleteUser(deleteUserTarget.id);
+                              showSuccess("User deleted");
+                              setDeleteUserTarget(null);
+                              setUsersList(await getUsers());
+                            } catch (err) {
+                              showError(
+                                err.response?.data?.error || "Failed to delete"
+                              );
+                            } finally {
+                              setDeletingUser(false);
+                            }
+                          }}
+                        >
+                          {deletingUser ? "Deleting…" : "Delete"}
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label
-                      className="block text-sm font-medium mb-1"
-                      style={{ color: "#fff" }}
+                )}
+
+                {showAddUserModal && (
+                  <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    style={{ backgroundColor: "rgba(0,0,0,0.75)" }}
+                    onClick={() => setShowAddUserModal(false)}
+                  >
+                    <div
+                      className="card max-w-md w-full max-h-[90vh] overflow-y-auto shadow-xl"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      App Password
-                    </label>
-                    <input
-                      type="password"
-                      className="input"
-                      placeholder="Leave empty to disable auth"
-                      autoComplete="off"
-                      value={settings.integrations?.general?.authPassword || ""}
-                      onChange={(e) =>
-                        updateSettings({
-                          ...settings,
-                          integrations: {
-                            ...settings.integrations,
-                            general: {
-                              ...(settings.integrations?.general || {}),
-                              authPassword: e.target.value,
-                            },
-                          },
-                        })
-                      }
-                    />
+                      <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-xl font-bold text-main">
+                          Add user
+                        </h3>
+                        <button
+                          type="button"
+                          className="p-2 rounded transition-colors hover:bg-[#2a2a2e] text-sub"
+                          onClick={() => setShowAddUserModal(false)}
+                          aria-label="Close"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                      <form
+                        className="space-y-6"
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          if (!newUserUsername.trim() || !newUserPassword) {
+                            showError("Username and password required");
+                            return;
+                          }
+                          setCreatingUser(true);
+                          try {
+                            await createUser(
+                              newUserUsername.trim(),
+                              newUserPassword,
+                              "user",
+                              newUserPermissions
+                            );
+                            showSuccess("User created");
+                            setShowAddUserModal(false);
+                            setNewUserUsername("");
+                            setNewUserPassword("");
+                            setNewUserPermissions({ ...GRANULAR_PERMISSIONS });
+                            setUsersList(await getUsers());
+                          } catch (err) {
+                            showError(
+                              err.response?.data?.error ||
+                                err.message ||
+                                "Failed to create user"
+                            );
+                          } finally {
+                            setCreatingUser(false);
+                          }
+                        }}
+                      >
+                        <div className="space-y-4">
+                          <label className="label text-sub font-normal text-xs uppercase tracking-wider">
+                            Account
+                          </label>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <label
+                                htmlFor="add-user-username"
+                                className="label text-sm normal-case tracking-normal"
+                              >
+                                Username
+                              </label>
+                              <input
+                                id="add-user-username"
+                                type="text"
+                                className="input"
+                                placeholder="Username"
+                                autoComplete="off"
+                                value={newUserUsername}
+                                onChange={(e) =>
+                                  setNewUserUsername(e.target.value)
+                                }
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label
+                                htmlFor="add-user-password"
+                                className="label text-sm normal-case tracking-normal"
+                              >
+                                Password
+                              </label>
+                              <input
+                                id="add-user-password"
+                                type="password"
+                                className="input"
+                                placeholder="Password"
+                                autoComplete="new-password"
+                                value={newUserPassword}
+                                onChange={(e) =>
+                                  setNewUserPassword(e.target.value)
+                                }
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="space-y-3">
+                          <label className="label text-sub font-normal text-xs uppercase tracking-wider">
+                            Permissions
+                          </label>
+                          <div
+                            className="p-4 rounded-lg space-y-3"
+                            style={{
+                              backgroundColor: "#1a1a1e",
+                              boxShadow: "0 0 0 1px #2a2a2e",
+                            }}
+                          >
+                            {granularPerms.map(({ key, label }) => (
+                              <label
+                                key={key}
+                                className="flex items-center gap-3 cursor-pointer text-sub hover:text-main transition-colors"
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="rounded border-gray-600 text-[#707e61] focus:ring-[#707e61]"
+                                  checked={!!newUserPermissions[key]}
+                                  onChange={(e) =>
+                                    setNewUserPermissions((p) => ({
+                                      ...p,
+                                      [key]: e.target.checked,
+                                    }))
+                                  }
+                                />
+                                <span className="text-sm">{label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                        <div
+                          className="flex gap-3 justify-end pt-4 mt-4"
+                          style={{ boxShadow: "inset 0 1px 0 #2a2a2e" }}
+                        >
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => setShowAddUserModal(false)}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            className="btn btn-primary"
+                            disabled={creatingUser}
+                          >
+                            {creatingUser ? "Creating…" : "Create user"}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
                   </div>
-                </div>
-                <p className="text-xs" style={{ color: "#c1c1c3" }}>
-                  Leave password empty to disable authentication. When enabled,
-                  all API requests will require these credentials.
-                </p>
-              </div>
-            </form>
+                )}
+
+                {editUser && (
+                  <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    style={{ backgroundColor: "rgba(0,0,0,0.75)" }}
+                    onClick={() => setEditUser(null)}
+                  >
+                    <div
+                      className="card max-w-md w-full max-h-[90vh] overflow-y-auto shadow-xl"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-xl font-bold text-main">
+                          Edit {editUser.username}
+                        </h3>
+                        <button
+                          type="button"
+                          className="p-2 rounded transition-colors hover:bg-[#2a2a2e] text-sub"
+                          onClick={() => setEditUser(null)}
+                          aria-label="Close"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                      <form
+                        className="space-y-6"
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          if (isSelfEdit) {
+                            if (!editPassword) {
+                              setEditUser(null);
+                              return;
+                            }
+                            if (!editCurrentPassword) {
+                              showError("Current password required");
+                              return;
+                            }
+                            setSavingEdit(true);
+                            try {
+                              await updateUser(editUser.id, {
+                                currentPassword: editCurrentPassword,
+                                password: editPassword,
+                              });
+                              showSuccess("Password changed");
+                              setEditUser(null);
+                            } catch (err) {
+                              showError(
+                                err.response?.data?.error ||
+                                  err.message ||
+                                  "Failed to update"
+                              );
+                            } finally {
+                              setSavingEdit(false);
+                            }
+                            return;
+                          }
+                          setSavingEdit(true);
+                          try {
+                            await updateUser(editUser.id, {
+                              ...(editPassword
+                                ? { password: editPassword }
+                                : {}),
+                              permissions: editPermissions,
+                            });
+                            showSuccess("User updated");
+                            setEditUser(null);
+                            setUsersList(await getUsers());
+                          } catch (err) {
+                            showError(
+                              err.response?.data?.error ||
+                                err.message ||
+                                "Failed to update"
+                            );
+                          } finally {
+                            setSavingEdit(false);
+                          }
+                        }}
+                      >
+                        <div className="space-y-4">
+                          <label className="label text-sub font-normal text-xs uppercase tracking-wider">
+                            {isSelfEdit
+                              ? "Change password"
+                              : "Password (optional)"}
+                          </label>
+                          {isSelfEdit ? (
+                            <div className="space-y-3">
+                              <div className="space-y-1">
+                                <label
+                                  htmlFor="edit-current-password"
+                                  className="label text-sm normal-case tracking-normal"
+                                >
+                                  Current password
+                                </label>
+                                <input
+                                  id="edit-current-password"
+                                  type="password"
+                                  className="input w-full"
+                                  placeholder="Current password"
+                                  autoComplete="current-password"
+                                  value={editCurrentPassword}
+                                  onChange={(e) =>
+                                    setEditCurrentPassword(e.target.value)
+                                  }
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label
+                                  htmlFor="edit-new-password"
+                                  className="label text-sm normal-case tracking-normal"
+                                >
+                                  New password
+                                </label>
+                                <input
+                                  id="edit-new-password"
+                                  type="password"
+                                  className="input w-full"
+                                  placeholder="New password"
+                                  autoComplete="new-password"
+                                  value={editPassword}
+                                  onChange={(e) =>
+                                    setEditPassword(e.target.value)
+                                  }
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <input
+                              type="password"
+                              className="input w-full"
+                              placeholder="Leave blank to keep current password"
+                              autoComplete="new-password"
+                              value={editPassword}
+                              onChange={(e) => setEditPassword(e.target.value)}
+                            />
+                          )}
+                        </div>
+                        {!isSelfEdit && (
+                          <div className="space-y-3">
+                            <label className="label text-sub font-normal text-xs uppercase tracking-wider">
+                              Permissions
+                            </label>
+                            <div
+                              className="p-4 rounded-lg space-y-3"
+                              style={{
+                                backgroundColor: "#1a1a1e",
+                                boxShadow: "0 0 0 1px #2a2a2e",
+                              }}
+                            >
+                              {granularPerms.map(({ key, label }) => (
+                                <label
+                                  key={key}
+                                  className="flex items-center gap-3 cursor-pointer text-sub hover:text-main transition-colors"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="rounded border-gray-600 text-[#707e61] focus:ring-[#707e61]"
+                                    checked={!!editPermissions[key]}
+                                    onChange={(e) =>
+                                      setEditPermissions((p) => ({
+                                        ...p,
+                                        [key]: e.target.checked,
+                                      }))
+                                    }
+                                  />
+                                  <span className="text-sm">{label}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <div
+                          className="flex gap-3 justify-end pt-4 mt-4"
+                          style={{ boxShadow: "inset 0 1px 0 #2a2a2e" }}
+                        >
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => setEditUser(null)}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            className="btn btn-primary"
+                            disabled={savingEdit}
+                          >
+                            {savingEdit ? "Saving…" : "Save"}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         );
 

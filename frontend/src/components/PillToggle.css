@@ -1,0 +1,86 @@
+.pill-toggle {
+  --pill-bg: #9a9a9a;
+  --pill-coal: #333;
+  --pill-white: #fff;
+  --pill-focus: #002a2a;
+  --w: 44px;
+  --h: calc(var(--w) / 2);
+  --br: calc(var(--w) / 1);
+  --size: calc(var(--w) / 3);
+  --offset: calc(var(--w) / 12);
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.pill-toggle input {
+  position: absolute;
+  opacity: 0;
+}
+
+.pill-toggle input + label {
+  outline: 2px solid transparent;
+  transform: scale(1, 1);
+  transition: outline 0.25s ease, transform 0.15s ease, background 0.35s ease;
+}
+
+.pill-toggle input:focus + label {
+  outline: 2px solid var(--pill-focus);
+}
+
+.pill-toggle input:active + label {
+  transform: scale(1.05);
+}
+
+.pill-toggle label {
+  position: relative;
+  background: var(--pill-white);
+  display: block;
+  width: var(--w);
+  height: var(--h);
+  border-radius: var(--br);
+  box-shadow: 0px calc(var(--w) / 7.5) calc(var(--w) / 3.75) 0px
+    rgba(51, 51, 51, 0.1);
+  cursor: pointer;
+  text-indent: 200vw;
+  overflow: hidden;
+}
+
+.pill-toggle input:checked + label {
+  background: var(--pill-coal);
+}
+
+.pill-toggle label::before,
+.pill-toggle label::after {
+  content: "";
+  position: absolute;
+}
+
+.pill-toggle label::before {
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  background: var(--pill-coal);
+  left: 0;
+  top: 50%;
+  transform: translate(var(--offset), -50%);
+  box-shadow: calc(var(--w) - calc(var(--offset) * 2) - var(--size)) 0px 0px
+    var(--pill-white);
+  z-index: 1;
+}
+
+.pill-toggle label::after {
+  width: var(--size);
+  height: var(--size);
+  left: 0;
+  top: 50%;
+  background: var(--pill-coal);
+  transform: translate(-100%, -50%) scale(1);
+  transform-origin: left;
+  border-radius: 50%;
+  transition: transform 0.35s ease;
+}
+
+.pill-toggle input:checked + label::after {
+  transform: translate(-100%, -50%) scale(5);
+}

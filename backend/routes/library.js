@@ -9,6 +9,11 @@ import { musicbrainzRequest } from "../services/apiClients.js";
 import { dbOps } from "../config/db-helpers.js";
 import { cacheMiddleware, noCache } from "../middleware/cache.js";
 import { verifyTokenAuth } from "../middleware/auth.js";
+import {
+  requireAuth,
+  requirePermission,
+} from "../middleware/requirePermission.js";
+import { hasPermission } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -90,77 +95,97 @@ router.get("/artists/:mbid", cacheMiddleware(120), async (req, res) => {
   }
 });
 
-router.post("/artists", async (req, res) => {
-  try {
-    const { foreignArtistId: mbid, artistName, quality } = req.body;
+router.post(
+  "/artists",
+  requireAuth,
+  requirePermission("addArtist"),
+  async (req, res) => {
+    try {
+      const { foreignArtistId: mbid, artistName, quality } = req.body;
 
-    if (!mbid || !artistName) {
-      return res.status(400).json({
-        error: "foreignArtistId and artistName are required",
+      if (!mbid || !artistName) {
+        return res.status(400).json({
+          error: "foreignArtistId and artistName are required",
+        });
+      }
+
+      if (!UUID_REGEX.test(mbid)) {
+        return res.status(400).json({ error: "Invalid MBID format" });
+      }
+
+      const settings = dbOps.getSettings();
+      const artist = await libraryManager.addArtist(mbid, artistName, {
+        quality: quality || settings.quality || "standard",
+      });
+      if (artist?.error) {
+        return res.status(503).json({ error: artist.error });
+      }
+      res.status(201).json(artist);
+    } catch (error) {
+      res.status(500).json({
+        error: "Failed to add artist",
+        message: error.message,
       });
     }
-
-    if (!UUID_REGEX.test(mbid)) {
-      return res.status(400).json({ error: "Invalid MBID format" });
-    }
-
-    const settings = dbOps.getSettings();
-    const artist = await libraryManager.addArtist(mbid, artistName, {
-      quality: quality || settings.quality || "standard",
-    });
-    if (artist?.error) {
-      return res.status(503).json({ error: artist.error });
-    }
-    res.status(201).json(artist);
-  } catch (error) {
-    res.status(500).json({
-      error: "Failed to add artist",
-      message: error.message,
-    });
   }
-});
+);
 
-router.put("/artists/:mbid", async (req, res) => {
-  try {
-    const { mbid } = req.params;
-    if (!UUID_REGEX.test(mbid)) {
-      return res.status(400).json({ error: "Invalid MBID format" });
-    }
+router.put(
+  "/artists/:mbid",
+  requireAuth,
+  requirePermission("changeMonitoring"),
+  async (req, res) => {
+    try {
+      const { mbid } = req.params;
+      if (!UUID_REGEX.test(mbid)) {
+        return res.status(400).json({ error: "Invalid MBID format" });
+      }
 
-    const artist = await libraryManager.updateArtist(mbid, req.body);
-    if (artist?.error) {
-      return res.status(503).json({ error: artist.error });
+      const artist = await libraryManager.updateArtist(mbid, req.body);
+      if (artist?.error) {
+        return res.status(503).json({ error: artist.error });
+      }
+      res.json(artist);
+    } catch (error) {
+      res.status(500).json({
+        error: "Failed to update artist",
+        message: error.message,
+      });
     }
-    res.json(artist);
-  } catch (error) {
-    res.status(500).json({
-      error: "Failed to update artist",
-      message: error.message,
-    });
   }
-});
+);
 
-router.delete("/artists/:mbid", async (req, res) => {
-  try {
-    const { mbid } = req.params;
-    const { deleteFiles = false } = req.query;
+router.delete(
+  "/artists/:mbid",
+  requireAuth,
+  requirePermission("deleteArtist"),
+  async (req, res) => {
+    try {
+      const { mbid } = req.params;
+      const { deleteFiles = false } = req.query;
 
-    if (!UUID_REGEX.test(mbid)) {
-      return res.status(400).json({ error: "Invalid MBID format" });
+      if (!UUID_REGEX.test(mbid)) {
+        return res.status(400).json({ error: "Invalid MBID format" });
+      }
+
+      const result = await libraryManager.deleteArtist(
+        mbid,
+        deleteFiles === "true"
+      );
+      if (!result?.success) {
+        return res
+          .status(503)
+          .json({ error: result?.error || "Failed to delete artist" });
+      }
+      res.json({ success: true, message: "Artist deleted successfully" });
+    } catch (error) {
+      res.status(500).json({
+        error: "Failed to delete artist",
+        message: error.message,
+      });
     }
-
-    const result = await libraryManager.deleteArtist(mbid, deleteFiles === "true");
-    if (!result?.success) {
-      return res.status(503).json({ error: result?.error || "Failed to delete artist" });
-    }
-    res.json({ success: true, message: "Artist deleted successfully" });
-  } catch (error) {
-    res.status(500).json({
-      error: "Failed to delete artist",
-      message: error.message,
-    });
   }
-});
+);
 
 router.get("/albums", cacheMiddleware(120), async (req, res) => {
   try {
@@ -190,50 +215,54 @@ router.get("/albums", cacheMiddleware(120), async (req, res) => {
   }
 });
 
-router.post("/albums", async (req, res) => {
-  try {
-    const { artistId, releaseGroupMbid, albumName } = req.body;
+router.post(
+  "/albums",
+  requireAuth,
+  requirePermission("addAlbum"),
+  async (req, res) => {
+    try {
+      const { artistId, releaseGroupMbid, albumName } = req.body;
 
-    if (!artistId || !releaseGroupMbid || !albumName) {
-      return res.status(400).json({
-        error: "artistId, releaseGroupMbid, and albumName are required",
+      if (!artistId || !releaseGroupMbid || !albumName) {
+        return res.status(400).json({
+          error: "artistId, releaseGroupMbid, and albumName are required",
+        });
+      }
+
+      const settings = dbOps.getSettings();
+      const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
+
+      const album = await libraryManager.addAlbum(
+        artistId,
+        releaseGroupMbid,
+        albumName,
+        {
+          triggerSearch: searchOnAdd,
+        }
+      );
+      if (album?.error) {
+        return res.status(503).json({ error: album.error });
+      }
+      if (album.artistName && album.albumName) {
+        playlistManager
+          .removeDiscoverSymlinksForAlbum(album.artistName, album.albumName)
+          .catch(() => {});
+      }
+      const formatted = {
+        ...album,
+        foreignAlbumId: album.mbid,
+        title: album.albumName,
+        albumType: "Album",
+      };
+      res.status(201).json(formatted);
+    } catch (error) {
+      res.status(500).json({
+        error: "Failed to add album",
+        message: error.message,
       });
     }
-
-    const settings = dbOps.getSettings();
-    const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
-
-    const album = await libraryManager.addAlbum(
-      artistId,
-      releaseGroupMbid,
-      albumName,
-      {
-        triggerSearch: searchOnAdd,
-      },
-    );
-    if (album?.error) {
-      return res.status(503).json({ error: album.error });
-    }
-    if (album.artistName && album.albumName) {
-      playlistManager.removeDiscoverSymlinksForAlbum(
-        album.artistName,
-        album.albumName,
-      ).catch(() => {});
-    }
-    const formatted = {
-      ...album,
-      foreignAlbumId: album.mbid,
-      title: album.albumName,
-      albumType: "Album",
-    };
-    res.status(201).json(formatted);
-  } catch (error) {
-    res.status(500).json({
-      error: "Failed to add album",
-      message: error.message,
-    });
   }
-});
+);
 
 router.get("/albums/:id", cacheMiddleware(120), async (req, res) => {
   try {
@@ -267,22 +296,32 @@ router.put("/albums/:id", async (req, res) => {
   }
 });
 
-router.delete("/albums/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { deleteFiles = false } = req.query;
-    const result = await libraryManager.deleteAlbum(id, deleteFiles === "true");
-    if (!result?.success) {
-      return res.status(503).json({ error: result?.error || "Failed to delete album" });
+router.delete(
+  "/albums/:id",
+  requireAuth,
+  requirePermission("deleteAlbum"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { deleteFiles = false } = req.query;
+      const result = await libraryManager.deleteAlbum(
+        id,
+        deleteFiles === "true"
+      );
+      if (!result?.success) {
+        return res
+          .status(503)
+          .json({ error: result?.error || "Failed to delete album" });
+      }
+      res.json({ success: true, message: "Album deleted successfully" });
+    } catch (error) {
+      res.status(500).json({
+        error: "Failed to delete album",
+        message: error.message,
+      });
     }
-    res.json({ success: true, message: "Album deleted successfully" });
-  } catch (error) {
-    res.status(500).json({
-      error: "Failed to delete album",
-      message: error.message,
-    });
   }
-});
+);
 
 router.get("/tracks", cacheMiddleware(120), async (req, res) => {
   try {
@@ -299,7 +338,7 @@ router.get("/tracks", cacheMiddleware(120), async (req, res) => {
       try {
         const rgData = await musicbrainzRequest(
           `/release-group/${releaseGroupMbid}`,
-          { inc: "releases" },
+          { inc: "releases" }
         );
 
         if (rgData.releases && rgData.releases.length > 0) {
@@ -308,7 +347,7 @@ router.get("/tracks", cacheMiddleware(120), async (req, res) => {
             `/release/${releaseId}`,
             {
               inc: "recordings",
-            },
+            }
           );
 
           if (releaseData.media && releaseData.media.length > 0) {
@@ -338,7 +377,7 @@ router.get("/tracks", cacheMiddleware(120), async (req, res) => {
         }
       } catch (mbError) {
         console.warn(
-          `[Library] Failed to fetch tracks from MusicBrainz: ${mbError.message}`,
+          `[Library] Failed to fetch tracks from MusicBrainz: ${mbError.message}`
         );
       }
     }
@@ -357,83 +396,99 @@ router.get("/tracks", cacheMiddleware(120), async (req, res) => {
   }
 });
 
-router.post("/downloads/album", async (req, res) => {
-  try {
-    const { artistId, albumId, artistMbid, artistName } = req.body;
-
-    if (!albumId) {
-      return res.status(400).json({ error: "albumId is required" });
-    }
-
-    const { lidarrClient } = await import("../services/lidarrClient.js");
-    if (!lidarrClient || !lidarrClient.isConfigured()) {
-      return res.status(400).json({ error: "Lidarr is not configured" });
-    }
-
-    const album = await libraryManager.getAlbumById(albumId);
-    if (!album) {
-      return res.status(404).json({ error: "Album not found" });
-    }
-
-    let artist = artistId ? await libraryManager.getArtistById(artistId) : null;
-
-    if (!artist && artistMbid && artistName) {
-      artist = await libraryManager.addArtist(artistMbid, artistName, {
-        monitorOption: "none",
-        quality: dbOps.getSettings().quality || "standard",
-      });
-      if (artist?.error) artist = null;
-    }
-
-    if (!artist && album.artistId) {
-      artist = await libraryManager.getArtistById(album.artistId);
-    }
-
-    if (!artist) {
-      return res.status(404).json({
-        error: "Artist not found. Please add the artist to your library first.",
-      });
-    }
-
+router.post(
+  "/downloads/album",
+  requireAuth,
+  requirePermission("addAlbum"),
+  async (req, res) => {
     try {
-      if (!album.monitored) {
-        await libraryManager.updateAlbum(albumId, { monitored: true });
+      const { artistId, albumId, artistMbid, artistName } = req.body;
+
+      if (!albumId) {
+        return res.status(400).json({ error: "albumId is required" });
       }
 
-      const settings = dbOps.getSettings();
-      const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
+      const { lidarrClient } = await import("../services/lidarrClient.js");
+      if (!lidarrClient || !lidarrClient.isConfigured()) {
+        return res.status(400).json({ error: "Lidarr is not configured" });
+      }
 
-      if (searchOnAdd) {
-        await lidarrClient.request("/command", "POST", {
-          name: "AlbumSearch",
-          albumIds: [parseInt(albumId, 10)],
+      const album = await libraryManager.getAlbumById(albumId);
+      if (!album) {
+        return res.status(404).json({ error: "Album not found" });
+      }
+
+      let artist = artistId
+        ? await libraryManager.getArtistById(artistId)
+        : null;
+
+      if (!artist && artistMbid && artistName) {
+        if (!hasPermission(req.user, "addArtist")) {
+          return res
+            .status(403)
+            .json({
+              error: "Forbidden",
+              message: "Permission required: addArtist",
+            });
+        }
+        artist = await libraryManager.addArtist(artistMbid, artistName, {
+          monitorOption: "none",
+          quality: dbOps.getSettings().quality || "standard",
+        });
+        if (artist?.error) artist = null;
+      }
+
+      if (!artist && album.artistId) {
+        artist = await libraryManager.getArtistById(album.artistId);
+      }
+
+      if (!artist) {
+        return res.status(404).json({
+          error:
+            "Artist not found. Please add the artist to your library first.",
         });
       }
 
-      res.json({
-        success: true,
-        message: searchOnAdd
-          ? "Album search triggered"
-          : "Album added to library",
-      });
+      try {
+        if (!album.monitored) {
+          await libraryManager.updateAlbum(albumId, { monitored: true });
+        }
+
+        const settings = dbOps.getSettings();
+        const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
+
+        if (searchOnAdd) {
+          await lidarrClient.request("/command", "POST", {
+            name: "AlbumSearch",
+            albumIds: [parseInt(albumId, 10)],
+          });
+        }
+
+        res.json({
+          success: true,
+          message: searchOnAdd
+            ? "Album search triggered"
+            : "Album added to library",
+        });
+      } catch (error) {
+        console.error(
+          `Failed to trigger album search ${albumId}:`,
+          error.message
+        );
+        res.status(500).json({
+          error: "Failed to trigger album search",
+          message: error.message,
+        });
+      }
     } catch (error) {
-      console.error(
-        `Failed to trigger album search ${albumId}:`,
-        error.message,
-      );
+      console.error("Error initiating album download:", error);
       res.status(500).json({
-        error: "Failed to trigger album search",
+        error: "Failed to initiate album download",
         message: error.message,
       });
     }
-  } catch (error) {
-    console.error("Error initiating album download:", error);
-    res.status(500).json({
-      error: "Failed to initiate album download",
-      message: error.message,
-    });
   }
-});
+);
 
 router.post("/downloads/track", async (req, res) => {
   res
@@ -461,7 +516,7 @@ router.get("/downloads", async (req, res) => {
           ? Math.round((1 - item.sizeleft / item.size) * 100)
           : 0,
         source: "lidarr",
-      })),
+      }))
     );
   } catch (error) {
     res.status(500).json({
@@ -512,13 +567,13 @@ router.get("/downloads/status", noCache, async (req, res) => {
             const queueStatus = String(queueItem.status || "").toLowerCase();
             const title = String(queueItem.title || "").toLowerCase();
             const trackedDownloadState = String(
-              queueItem.trackedDownloadState || "",
+              queueItem.trackedDownloadState || ""
             ).toLowerCase();
             const trackedDownloadStatus = String(
-              queueItem.trackedDownloadStatus || "",
+              queueItem.trackedDownloadStatus || ""
             ).toLowerCase();
             const errorMessage = String(
-              queueItem.errorMessage || "",
+              queueItem.errorMessage || ""
             ).toLowerCase();
             const statusMessages = Array.isArray(queueItem.statusMessages)
               ? queueItem.statusMessages
@@ -559,12 +614,12 @@ router.get("/downloads/status", noCache, async (req, res) => {
           }
 
           const recentHistory = historyItems.find(
-            (h) => h.albumId === lidarrAlbumId,
+            (h) => h.albumId === lidarrAlbumId
           );
 
           if (recentHistory) {
             const eventType = String(
-              recentHistory.eventType || "",
+              recentHistory.eventType || ""
             ).toLowerCase();
             const data = recentHistory?.data || {};
             const statusMessages = Array.isArray(data?.statusMessages)
@@ -649,13 +704,13 @@ router.get("/downloads/status/all", noCache, async (req, res) => {
             const queueStatus = String(queueItem.status || "").toLowerCase();
             const title = String(queueItem.title || "").toLowerCase();
             const trackedDownloadState = String(
-              queueItem.trackedDownloadState || "",
+              queueItem.trackedDownloadState || ""
             ).toLowerCase();
             const trackedDownloadStatus = String(
-              queueItem.trackedDownloadStatus || "",
+              queueItem.trackedDownloadStatus || ""
             ).toLowerCase();
             const errorMessage = String(
-              queueItem.errorMessage || "",
+              queueItem.errorMessage || ""
             ).toLowerCase();
             const statusMessages = Array.isArray(queueItem.statusMessages)
               ? queueItem.statusMessages
@@ -699,7 +754,7 @@ router.get("/downloads/status/all", noCache, async (req, res) => {
 
           if (recentHistory) {
             const eventType = String(
-              recentHistory.eventType || "",
+              recentHistory.eventType || ""
             ).toLowerCase();
             const data = recentHistory?.data || {};
             const statusMessages = Array.isArray(data?.statusMessages)
@@ -721,7 +776,7 @@ router.get("/downloads/status/all", noCache, async (req, res) => {
               !isFailedImport &&
               eventType !== "albumimportincomplete";
             const historyDate = new Date(
-              recentHistory.date || recentHistory.eventDate || 0,
+              recentHistory.date || recentHistory.eventDate || 0
             );
             const oneHourAgo = Date.now() - 60 * 60 * 1000;
 
@@ -841,7 +896,7 @@ router.get("/recent", async (req, res) => {
     const recent = [...artists]
       .sort(
         (a, b) =>
-          new Date(b.addedAt || b.added) - new Date(a.addedAt || a.added),
+          new Date(b.addedAt || b.added) - new Date(a.addedAt || a.added)
       )
       .slice(0, 20)
       .map((artist) => ({
@@ -889,7 +944,7 @@ router.post("/artists/:mbid/refresh", async (req, res) => {
       await libraryManager.updateAlbumStatistics(album.id).catch((err) => {
         console.error(
           `Failed to update statistics for album ${album.albumName}:`,
-          err.message,
+          err.message
         );
       });
     }
@@ -930,7 +985,7 @@ router.post("/artists/:mbid/refresh", async (req, res) => {
             ...albums.filter((a) => {
               const stats = a.statistics || {};
               return !a.monitored && (stats.percentOfTracks || 0) < 100;
-            }),
+            })
           );
           break;
         case "future": {
@@ -941,7 +996,7 @@ router.post("/artists/:mbid/refresh", async (req, res) => {
               if (!a.releaseDate) return false;
               const releaseDate = new Date(a.releaseDate);
               return releaseDate > artistAddedDate;
-            }),
+            })
           );
           break;
         }
@@ -958,7 +1013,7 @@ router.post("/artists/:mbid/refresh", async (req, res) => {
           } catch (err) {
             console.error(
               `Failed to monitor/search album ${album.albumName}:`,
-              err.message,
+              err.message
             );
           }
         }

@@ -1,5 +1,6 @@
 import express from "express";
-import { dbOps } from "../config/db-helpers.js";
+import bcrypt from "bcrypt";
+import { dbOps, userOps } from "../config/db-helpers.js";
 import { defaultData } from "../config/constants.js";
 
 const router = express.Router();
@@ -59,38 +60,50 @@ router.post("/navidrome/test", async (req, res) => {
 
 router.post("/complete", async (req, res) => {
   try {
-    const {
-      authUser,
-      authPassword,
-      lidarr,
-      musicbrainz,
-      navidrome,
-      lastfm,
-    } = req.body;
+    const { authUser, authPassword, lidarr, musicbrainz, navidrome, lastfm } =
+      req.body;
 
     const current = dbOps.getSettings();
     const integrations = {
       ...(current.integrations || defaultData.settings.integrations || {}),
       general: {
         ...(current.integrations?.general || {}),
-        authUser: authUser != null ? String(authUser).trim() : current.integrations?.general?.authUser || "admin",
-        authPassword: authPassword != null ? String(authPassword) : current.integrations?.general?.authPassword || "",
+        authUser:
+          authUser != null
+            ? String(authUser).trim()
+            : current.integrations?.general?.authUser || "admin",
+        authPassword:
+          authPassword != null
+            ? String(authPassword)
+            : current.integrations?.general?.authPassword || "",
       },
-      lidarr: lidarr && (lidarr.url || lidarr.apiKey)
-        ? { ...(current.integrations?.lidarr || {}), ...lidarr }
-        : current.integrations?.lidarr,
-      musicbrainz: musicbrainz && musicbrainz.email != null
-        ? { ...(current.integrations?.musicbrainz || {}), email: String(musicbrainz.email).trim() }
-        : current.integrations?.musicbrainz,
-      navidrome: navidrome && (navidrome.url || navidrome.username)
-        ? { ...(current.integrations?.navidrome || {}), ...navidrome }
-        : current.integrations?.navidrome,
+      lidarr:
+        lidarr && (lidarr.url || lidarr.apiKey)
+          ? { ...(current.integrations?.lidarr || {}), ...lidarr }
+          : current.integrations?.lidarr,
+      musicbrainz:
+        musicbrainz && musicbrainz.email != null
+          ? {
+              ...(current.integrations?.musicbrainz || {}),
+              email: String(musicbrainz.email).trim(),
+            }
+          : current.integrations?.musicbrainz,
+      navidrome:
+        navidrome && (navidrome.url || navidrome.username)
+          ? { ...(current.integrations?.navidrome || {}), ...navidrome }
+          : current.integrations?.navidrome,
       lastfm:
         lastfm && (lastfm.apiKey || lastfm.username)
           ? {
               ...(current.integrations?.lastfm || {}),
-              apiKey: lastfm.apiKey != null ? String(lastfm.apiKey).trim() : (current.integrations?.lastfm?.apiKey ?? ""),
-              username: lastfm.username != null ? String(lastfm.username).trim() : (current.integrations?.lastfm?.username ?? ""),
+              apiKey:
+                lastfm.apiKey != null
+                  ? String(lastfm.apiKey).trim()
+                  : current.integrations?.lastfm?.apiKey ?? "",
+              username:
+                lastfm.username != null
+                  ? String(lastfm.username).trim()
+                  : current.integrations?.lastfm?.username ?? "",
             }
           : current.integrations?.lastfm,
     };
@@ -100,6 +113,13 @@ router.post("/complete", async (req, res) => {
       integrations,
       onboardingComplete: true,
     });
+
+    const authUserFinal = integrations?.general?.authUser || "admin";
+    const authPasswordFinal = integrations?.general?.authPassword || "";
+    if (authPasswordFinal && userOps.getAllUsers().length === 0) {
+      const hash = bcrypt.hashSync(authPasswordFinal, 10);
+      userOps.createUser(authUserFinal, hash, "admin", null);
+    }
 
     const hasLastfm =
       integrations?.lastfm?.apiKey && integrations?.lastfm?.username;

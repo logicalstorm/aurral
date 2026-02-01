@@ -1,0 +1,88 @@
+.btn-flip-wrap {
+  --flip-speed: 0.5s;
+  perspective: 400px;
+  display: inline-block;
+}
+
+.btn-flip {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  min-width: 120px;
+  height: 40px;
+  outline: 0;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 500;
+  text-align: center;
+  background: transparent;
+}
+
+.btn-flip:disabled {
+  cursor: not-allowed;
+}
+
+.btn-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform var(--flip-speed) ease;
+  transform-style: preserve-3d;
+}
+
+.btn-flip-wrap.flipped .btn-flip-inner {
+  transform: rotateX(180deg);
+}
+
+.btn-flip-front,
+.btn-flip-back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0 1rem;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.btn-flip-front {
+  background-color: #707e61;
+  color: #fff;
+  border-radius: 2px;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+.btn-flip:focus-visible {
+  outline: none;
+}
+
+.btn-flip:focus-visible .btn-flip-front {
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05), 0 0 0 2px #18181c,
+    0 0 0 4px #c1c1c3;
+}
+
+.btn-flip-front:hover {
+  opacity: 0.9;
+}
+
+.btn-flip-back {
+  background-color: #323237;
+  color: #a0a0a4;
+  border-radius: 2px;
+  transform: rotateX(180deg);
+}
+
+.btn-flip:disabled .btn-flip-front {
+  opacity: 0.5;
+}
+
+.btn-flip:not(:disabled) .btn-flip-front:hover {
+  opacity: 0.9;
+}
