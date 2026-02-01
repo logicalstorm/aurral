@@ -6,6 +6,7 @@ import { playlistManager } from "./weeklyFlowPlaylistManager.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 
 const CONCURRENCY = 1;
+const JOB_COOLDOWN_MS = 2000;
 const FALLBACK_MP3_REGEX = /^[^/\\]+-[a-f0-9]{8}\.mp3$/i;
 
 export class WeeklyFlowWorker {
@@ -68,7 +69,7 @@ export class WeeklyFlowWorker {
           .finally(() => {
             this.activeCount--;
             this.moveFallbackMp3sToDir().catch(() => {});
-            if (this.running) setImmediate(processLoop);
+            if (this.running) setTimeout(processLoop, JOB_COOLDOWN_MS);
           });
       }
     };
@@ -124,6 +125,7 @@ export class WeeklyFlowWorker {
           ? extFromSoulseek
           : ".mp3";
 
+      await new Promise((r) => setImmediate(r));
       await fs.mkdir(stagingDir, { recursive: true });
       const stagingFile = `${job.artistName} - ${job.trackName}${ext}`;
       const stagingFilePath = path.join(stagingDir, stagingFile);
