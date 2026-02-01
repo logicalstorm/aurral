@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import { Loader, Music, Sparkles, Clock } from "lucide-react";
 import {
   getDiscovery,
-  getRequests,
   getRecentlyAdded,
   getAllDownloadStatus,
 } from "../utils/api";
@@ -39,7 +38,6 @@ const getTagColor = (name) => {
 
 function DiscoverPage() {
   const [data, setData] = useState(null);
-  const [requests, setRequests] = useState([]);
   const [recentlyAdded, setRecentlyAdded] = useState([]);
   const [error, setError] = useState(null);
   const downloadStatusesRef = useRef({});
@@ -81,10 +79,6 @@ function DiscoverPage() {
           configured: false,
         });
       });
-
-    getRequests()
-      .then(setRequests)
-      .catch(() => {});
 
     getRecentlyAdded()
       .then(setRecentlyAdded)
@@ -513,65 +507,7 @@ function DiscoverPage() {
         </div>
       </section>
 
-      {requests.filter((r) => r.status !== "available").length > 0 && (
-        <section className="animate-slide-up">
-          <div className="flex items-center justify-between mb-6">
-            <h2
-              className="text-2xl font-bold flex items-center"
-              style={{ color: "#fff" }}
-            >
-              Recent Requests
-            </h2>
-            <button
-              onClick={() => navigate("/requests")}
-              className="text-sm font-medium hover:underline"
-              style={{ color: "#c1c1c3" }}
-            >
-              View All
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-            {requests
-              .filter((r) => r.status !== "available")
-              .slice(0, 6)
-              .map((request) => {
-                const artistMbid = request.artistMbid || request.mbid;
-                const navigateTo =
-                  request.type === "album"
-                    ? artistMbid
-                    : request.albumMbid || request.mbid;
-                const hasValidMbid =
-                  navigateTo &&
-                  navigateTo !== "null" &&
-                  navigateTo !== "undefined";
-
-                return (
-                  <ArtistCard
-                    key={request.id || request.mbid}
-                    status={request.status}
-                    artist={{
-                      id: request.albumMbid || request.mbid,
-                      name:
-                        request.type === "album"
-                          ? request.albumName
-                          : request.name,
-                      image: request.image,
-                      subtitle:
-                        request.type === "album"
-                          ? `${request.artistName} • ${new Date(request.requestedAt).toLocaleDateString()}`
-                          : `Requested ${new Date(request.requestedAt).toLocaleDateString()}`,
-                      navigateTo: hasValidMbid ? navigateTo : null,
-                    }}
-                  />
-                );
-              })}
-          </div>
-        </section>
-      )}
-
-      {(recentlyAdded.length > 0 ||
-        requests.filter((r) => r.status === "available").length > 0) && (
+      {recentlyAdded.length > 0 && (
         <section
           className="animate-slide-up"
           style={{ animationDelay: "0.1s" }}
@@ -586,43 +522,8 @@ function DiscoverPage() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-            {requests
-              .filter((r) => r.status === "available")
-              .slice(0, 6)
-              .map((request) => {
-                const artistMbid = request.artistMbid || request.mbid;
-
-                return (
-                  <ArtistCard
-                    key={`request-${request.id || request.mbid}`}
-                    status="available"
-                    artist={{
-                      id: request.albumMbid || request.mbid,
-                      name:
-                        request.type === "album"
-                          ? request.albumName
-                          : request.name,
-                      image: request.image,
-                      subtitle:
-                        request.type === "album"
-                          ? `${request.artistName} • ${new Date(request.requestedAt).toLocaleDateString()}`
-                          : `Added ${new Date(request.requestedAt).toLocaleDateString()}`,
-                      navigateTo:
-                        request.type === "album"
-                          ? artistMbid
-                          : request.albumMbid || request.mbid,
-                    }}
-                  />
-                );
-              })}
             {recentlyAdded
-              .slice(
-                0,
-                Math.max(
-                  0,
-                  6 - requests.filter((r) => r.status === "available").length,
-                ),
-              )
+              .slice(0, 6)
               .map((artist) => {
                 return (
                   <ArtistCard
