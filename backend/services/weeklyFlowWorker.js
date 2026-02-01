@@ -15,7 +15,6 @@ export class WeeklyFlowWorker {
       ? weeklyFlowRoot
       : path.resolve(process.cwd(), weeklyFlowRoot);
     this.running = false;
-    this.intervalId = null;
     this.activeCount = 0;
   }
 
@@ -43,7 +42,7 @@ export class WeeklyFlowWorker {
     } catch {}
   }
 
-  async start(intervalMs = 5000) {
+  async start() {
     if (this.running) {
       return;
     }
@@ -53,18 +52,21 @@ export class WeeklyFlowWorker {
     await this.moveFallbackMp3sToDir();
 
     const processLoop = () => {
+      if (!this.running) return;
+
       while (this.activeCount < CONCURRENCY) {
         const job = downloadTracker.getNextPending();
         if (!job) break;
 
         this.activeCount++;
         this.processJob(job)
-          .catch((error) => {
+          .catch(async (error) => {
             console.error(
               `[WeeklyFlowWorker] Error processing job ${job.id}:`,
               error.message,
             );
             downloadTracker.setFailed(job.id, error.message);
+            await this.checkPlaylistComplete(job.playlistType);
           })
           .finally(() => {
             this.activeCount--;
@@ -74,7 +76,6 @@ export class WeeklyFlowWorker {
       }
     };
 
-    this.intervalId = setInterval(processLoop, intervalMs);
     processLoop();
   }
 
@@ -84,10 +85,6 @@ export class WeeklyFlowWorker {
     }
 
     this.running = false;
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-    }
     downloadTracker.resetDownloadingToPending();
     soulseekClient.disconnect().catch(() => {});
     console.log("[WeeklyFlowWorker] Worker stopped");

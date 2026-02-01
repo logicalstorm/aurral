@@ -300,6 +300,13 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
 
+    let clientDisconnected = false;
+    req.on("close", () => {
+      clientDisconnected = true;
+    });
+
+    const isClientConnected = () => !clientDisconnected && !req.socket.destroyed;
+
     sendSSE(res, "connected", { mbid });
 
     let artistData = null;
@@ -577,6 +584,7 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
       const backgroundTasks = [];
 
       const coverTask = (async () => {
+        if (!isClientConnected()) return;
         try {
           const { libraryManager } = await import(
             "../services/libraryManager.js"
@@ -630,6 +638,7 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
       backgroundTasks.push(coverTask);
 
       const similarTask = (async () => {
+        if (!isClientConnected()) return;
         if (getLastfmApiKey()) {
           try {
             const similarData = await lastfmRequest("artist.getSimilar", {
@@ -679,6 +688,7 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
       backgroundTasks.push(similarTask);
 
       const releaseGroupCoversTask = (async () => {
+        if (!isClientConnected()) return;
         if (shouldSkipMusicBrainz()) return;
         if (artistData?.["release-groups"]?.length > 0) {
           const releaseGroups = artistData["release-groups"]
@@ -695,6 +705,7 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
             const batch = releaseGroups.slice(i, i + batchSize);
 
             const batchPromises = batch.map(async (rg) => {
+              if (!isClientConnected()) return;
               try {
                 const cacheKey = `rg:${rg.id}`;
 
@@ -781,6 +792,7 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
       backgroundTasks.push(releaseGroupCoversTask);
 
       const albumRatingsTask = (async () => {
+        if (!isClientConnected()) return;
         if (!getLastfmApiKey()) return;
         if (artistData?.["release-groups"]?.length === 0) return;
         const artistName =
@@ -792,33 +804,36 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
               rg["primary-type"] === "Album" || rg["primary-type"] === "EP"
           )
           .slice(0, 30);
-        for (const rg of releaseGroups) {
-          try {
-            const title = rg.title?.trim();
-            if (!title) {
+        await Promise.allSettled(
+          releaseGroups.map(async (rg) => {
+            if (!isClientConnected()) return;
+            try {
+              const title = rg.title?.trim();
+              if (!title) {
+                sendSSE(res, "albumRating", { mbid: rg.id, listeners: null, playcount: null });
+                return;
+              }
+              const data = await lastfmRequest("album.getInfo", {
+                artist: artistName,
+                album: title,
+              });
+              const album = data?.album;
+              if (!album) {
+                sendSSE(res, "albumRating", { mbid: rg.id, listeners: null, playcount: null });
+                return;
+              }
+              const listeners = parseInt(album.listeners, 10) || 0;
+              const playcount = parseInt(album.playcount, 10) || 0;
+              sendSSE(res, "albumRating", {
+                mbid: rg.id,
+                listeners: listeners || null,
+                playcount: playcount || null,
+              });
+            } catch (e) {
               sendSSE(res, "albumRating", { mbid: rg.id, listeners: null, playcount: null });
-              continue;
             }
-            const data = await lastfmRequest("album.getInfo", {
-              artist: artistName,
-              album: title,
-            });
-            const album = data?.album;
-            if (!album) {
-              sendSSE(res, "albumRating", { mbid: rg.id, listeners: null, playcount: null });
-              continue;
-            }
-            const listeners = parseInt(album.listeners, 10) || 0;
-            const playcount = parseInt(album.playcount, 10) || 0;
-            sendSSE(res, "albumRating", {
-              mbid: rg.id,
-              listeners: listeners || null,
-              playcount: playcount || null,
-            });
-          } catch (e) {
-            sendSSE(res, "albumRating", { mbid: rg.id, listeners: null, playcount: null });
-          }
-        }
+          })
+        );
       })();
       backgroundTasks.push(albumRatingsTask);
 

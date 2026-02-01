@@ -1,32 +1,49 @@
 import { db, dbHelpers } from "./db-sqlite.js";
 
+const getSettingStmt = db.prepare("SELECT value FROM settings WHERE key = ?");
+const upsertSettingStmt = db.prepare(
+  "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)"
+);
+
+const getDiscoveryCacheStmt = db.prepare(
+  "SELECT value, last_updated FROM discovery_cache WHERE key = ?"
+);
+const getDiscoveryCacheLastUpdatedStmt = db.prepare(
+  "SELECT last_updated FROM discovery_cache ORDER BY last_updated DESC LIMIT 1"
+);
+const upsertDiscoveryCacheStmt = db.prepare(
+  "INSERT OR REPLACE INTO discovery_cache (key, value, last_updated) VALUES (?, ?, ?)"
+);
+
+const getImageStmt = db.prepare("SELECT * FROM images_cache WHERE mbid = ?");
+const upsertImageStmt = db.prepare(
+  "INSERT OR REPLACE INTO images_cache (mbid, image_url, cache_age, created_at) VALUES (?, ?, ?, ?)"
+);
+const getAllImagesStmt = db.prepare("SELECT * FROM images_cache");
+const deleteImageStmt = db.prepare("DELETE FROM images_cache WHERE mbid = ?");
+const clearImagesStmt = db.prepare("DELETE FROM images_cache");
+const cleanOldImagesStmt = db.prepare(
+  "DELETE FROM images_cache WHERE cache_age < ?"
+);
+
 export const dbOps = {
   getSettings() {
     const integrations = dbHelpers.parseJSON(
-      db.prepare("SELECT value FROM settings WHERE key = ?").get("integrations")
-        ?.value,
+      getSettingStmt.get("integrations")?.value
     );
-    const quality = db
-      .prepare("SELECT value FROM settings WHERE key = ?")
-      .get("quality")?.value;
+    const quality = getSettingStmt.get("quality")?.value;
     const queueCleaner = dbHelpers.parseJSON(
-      db.prepare("SELECT value FROM settings WHERE key = ?").get("queueCleaner")
-        ?.value,
+      getSettingStmt.get("queueCleaner")?.value
     );
-    const rootFolderPath = db
-      .prepare("SELECT value FROM settings WHERE key = ?")
-      .get("rootFolderPath")?.value;
+    const rootFolderPath = getSettingStmt.get("rootFolderPath")?.value;
     const releaseTypes = dbHelpers.parseJSON(
-      db.prepare("SELECT value FROM settings WHERE key = ?").get("releaseTypes")
-        ?.value,
+      getSettingStmt.get("releaseTypes")?.value
     );
     const weeklyFlowPlaylists = dbHelpers.parseJSON(
-      db
-        .prepare("SELECT value FROM settings WHERE key = ?")
-        .get("weeklyFlowPlaylists")?.value,
+      getSettingStmt.get("weeklyFlowPlaylists")?.value
     );
     const onboardingComplete =
-      db.prepare("SELECT value FROM settings WHERE key = ?").get("onboardingComplete")?.value === "true";
+      getSettingStmt.get("onboardingComplete")?.value === "true";
 
     const defaultFlowPlaylists = {
       discover: { enabled: false, nextRunAt: null },
@@ -57,83 +74,64 @@ export const dbOps = {
   },
 
   updateSettings(settings) {
-    const stmt = db.prepare(
-      "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
-    );
-
     if (settings.integrations) {
-      stmt.run("integrations", dbHelpers.stringifyJSON(settings.integrations));
+      upsertSettingStmt.run(
+        "integrations",
+        dbHelpers.stringifyJSON(settings.integrations)
+      );
     }
     if (settings.quality) {
-      stmt.run("quality", settings.quality);
+      upsertSettingStmt.run("quality", settings.quality);
     }
     if (settings.queueCleaner) {
-      stmt.run("queueCleaner", dbHelpers.stringifyJSON(settings.queueCleaner));
+      upsertSettingStmt.run(
+        "queueCleaner",
+        dbHelpers.stringifyJSON(settings.queueCleaner)
+      );
     }
     if (
       settings.rootFolderPath !== undefined &&
       settings.rootFolderPath !== null
     ) {
-      stmt.run("rootFolderPath", settings.rootFolderPath);
+      upsertSettingStmt.run("rootFolderPath", settings.rootFolderPath);
     }
     if (settings.releaseTypes) {
-      stmt.run("releaseTypes", dbHelpers.stringifyJSON(settings.releaseTypes));
+      upsertSettingStmt.run(
+        "releaseTypes",
+        dbHelpers.stringifyJSON(settings.releaseTypes)
+      );
     }
     if (settings.weeklyFlowPlaylists !== undefined) {
-      stmt.run(
+      upsertSettingStmt.run(
         "weeklyFlowPlaylists",
-        dbHelpers.stringifyJSON(settings.weeklyFlowPlaylists),
+        dbHelpers.stringifyJSON(settings.weeklyFlowPlaylists)
       );
     }
     if (settings.onboardingComplete !== undefined) {
-      stmt.run(
+      upsertSettingStmt.run(
         "onboardingComplete",
-        settings.onboardingComplete ? "true" : "false",
+        settings.onboardingComplete ? "true" : "false"
       );
     }
   },
 
   getDiscoveryCache() {
     const recommendations = dbHelpers.parseJSON(
-      db
-        .prepare(
-          "SELECT value, last_updated FROM discovery_cache WHERE key = ?",
-        )
-        .get("recommendations")?.value,
+      getDiscoveryCacheStmt.get("recommendations")?.value
     );
     const globalTop = dbHelpers.parseJSON(
-      db
-        .prepare(
-          "SELECT value, last_updated FROM discovery_cache WHERE key = ?",
-        )
-        .get("globalTop")?.value,
+      getDiscoveryCacheStmt.get("globalTop")?.value
     );
     const basedOn = dbHelpers.parseJSON(
-      db
-        .prepare(
-          "SELECT value, last_updated FROM discovery_cache WHERE key = ?",
-        )
-        .get("basedOn")?.value,
+      getDiscoveryCacheStmt.get("basedOn")?.value
     );
     const topTags = dbHelpers.parseJSON(
-      db
-        .prepare(
-          "SELECT value, last_updated FROM discovery_cache WHERE key = ?",
-        )
-        .get("topTags")?.value,
+      getDiscoveryCacheStmt.get("topTags")?.value
     );
     const topGenres = dbHelpers.parseJSON(
-      db
-        .prepare(
-          "SELECT value, last_updated FROM discovery_cache WHERE key = ?",
-        )
-        .get("topGenres")?.value,
+      getDiscoveryCacheStmt.get("topGenres")?.value
     );
-    const lastUpdated = db
-      .prepare(
-        "SELECT last_updated FROM discovery_cache ORDER BY last_updated DESC LIMIT 1",
-      )
-      .get()?.last_updated;
+    const lastUpdated = getDiscoveryCacheLastUpdatedStmt.get()?.last_updated;
 
     return {
       recommendations: recommendations || [],
@@ -146,36 +144,47 @@ export const dbOps = {
   },
 
   updateDiscoveryCache(discovery) {
-    const stmt = db.prepare(
-      "INSERT OR REPLACE INTO discovery_cache (key, value, last_updated) VALUES (?, ?, ?)",
-    );
     const now = new Date().toISOString();
 
     if (discovery.recommendations) {
-      stmt.run(
+      upsertDiscoveryCacheStmt.run(
         "recommendations",
         dbHelpers.stringifyJSON(discovery.recommendations),
-        now,
+        now
       );
     }
     if (discovery.globalTop) {
-      stmt.run("globalTop", dbHelpers.stringifyJSON(discovery.globalTop), now);
+      upsertDiscoveryCacheStmt.run(
+        "globalTop",
+        dbHelpers.stringifyJSON(discovery.globalTop),
+        now
+      );
     }
     if (discovery.basedOn) {
-      stmt.run("basedOn", dbHelpers.stringifyJSON(discovery.basedOn), now);
+      upsertDiscoveryCacheStmt.run(
+        "basedOn",
+        dbHelpers.stringifyJSON(discovery.basedOn),
+        now
+      );
     }
     if (discovery.topTags) {
-      stmt.run("topTags", dbHelpers.stringifyJSON(discovery.topTags), now);
+      upsertDiscoveryCacheStmt.run(
+        "topTags",
+        dbHelpers.stringifyJSON(discovery.topTags),
+        now
+      );
     }
     if (discovery.topGenres) {
-      stmt.run("topGenres", dbHelpers.stringifyJSON(discovery.topGenres), now);
+      upsertDiscoveryCacheStmt.run(
+        "topGenres",
+        dbHelpers.stringifyJSON(discovery.topGenres),
+        now
+      );
     }
   },
 
   getImage(mbid) {
-    const row = db
-      .prepare("SELECT * FROM images_cache WHERE mbid = ?")
-      .get(mbid);
+    const row = getImageStmt.get(mbid);
     if (!row) return null;
     return {
       mbid: row.mbid,
@@ -185,14 +194,11 @@ export const dbOps = {
   },
 
   setImage(mbid, imageUrl) {
-    const stmt = db.prepare(
-      "INSERT OR REPLACE INTO images_cache (mbid, image_url, cache_age, created_at) VALUES (?, ?, ?, ?)",
-    );
-    stmt.run(mbid, imageUrl, Date.now(), new Date().toISOString());
+    upsertImageStmt.run(mbid, imageUrl, Date.now(), new Date().toISOString());
   },
 
   getAllImages() {
-    const rows = db.prepare("SELECT * FROM images_cache").all();
+    const rows = getAllImagesStmt.all();
     const images = {};
     for (const row of rows) {
       images[row.mbid] = row.image_url;
@@ -201,10 +207,15 @@ export const dbOps = {
   },
 
   deleteImage(mbid) {
-    return db.prepare("DELETE FROM images_cache WHERE mbid = ?").run(mbid);
+    return deleteImageStmt.run(mbid);
   },
 
   clearImages() {
-    return db.prepare("DELETE FROM images_cache").run();
+    return clearImagesStmt.run();
+  },
+
+  cleanOldImageCache(maxAgeDays = 30) {
+    const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+    return cleanOldImagesStmt.run(cutoff);
   },
 };
