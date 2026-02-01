@@ -248,6 +248,17 @@ export class WeeklyFlowWorker {
           error.message,
         );
       }
+      const completed = jobs.filter((j) => j.status === "done").length;
+      const failed = jobs.filter((j) => j.status === "failed").length;
+      const { notifyWeeklyFlowDone } = await import(
+        "./notificationService.js"
+      );
+      notifyWeeklyFlowDone(playlistType, { completed, failed }).catch((err) =>
+        console.warn(
+          "[WeeklyFlowWorker] Gotify notification failed:",
+          err.message,
+        ),
+      );
     }
   }
 

@@ -174,6 +174,12 @@ export const defaultData = {
       },
       musicbrainz: { email: "" },
       general: { authUser: "", authPassword: "" },
+      gotify: {
+        url: "",
+        token: "",
+        notifyDiscoveryUpdated: false,
+        notifyWeeklyFlowDone: false,
+      },
     },
     queueCleaner: {
       enabled: true,

@@ -501,6 +501,10 @@ export const updateDiscoveryCache = async () => {
 
     Object.assign(discoveryCache, discoveryData);
     dbOps.updateDiscoveryCache(discoveryData);
+    const { notifyDiscoveryUpdated } = await import("./notificationService.js");
+    notifyDiscoveryUpdated().catch((err) =>
+      console.warn("[Discovery] Gotify notification failed:", err.message),
+    );
     console.log(
       `Discovery data written to database: ${discoveryData.recommendations.length} recommendations, ${discoveryData.topGenres.length} genres, ${discoveryData.globalTop.length} trending`,
     );

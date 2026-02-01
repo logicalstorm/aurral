@@ -374,6 +374,11 @@ export const testLidarrConnection = async (url, apiKey) => {
   return response.data;
 };
 
+export const testGotifyConnection = async (url, token) => {
+  const response = await api.post("/settings/gotify/test", { url, token });
+  return response.data;
+};
+
 export const applyLidarrCommunityGuide = async () => {
   const response = await api.post("/settings/lidarr/apply-community-guide");
   return response.data;
