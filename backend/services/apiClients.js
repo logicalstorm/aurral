@@ -142,7 +142,7 @@ export const lastfmRequest = lastfmLimiter.wrap(async (method, params = {}) => {
     });
     return response.data;
   } catch (error) {
-    if (error.code !== "ECONNABORTED" && error.response?.status !== 404) {
+    if (error.code !== "ECONNABORTED") {
       console.error(`Last.fm API error (${method}):`, error.message);
     }
     return null;

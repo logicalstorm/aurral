@@ -65,12 +65,10 @@ export class WeeklyFlowWorker {
             );
             downloadTracker.setFailed(job.id, error.message);
           })
-          .finally(async () => {
+          .finally(() => {
             this.activeCount--;
-            try {
-              await this.moveFallbackMp3sToDir();
-            } catch {}
-            if (this.running) processLoop();
+            this.moveFallbackMp3sToDir().catch(() => {});
+            if (this.running) setImmediate(processLoop);
           });
       }
     };
@@ -230,6 +228,7 @@ export class WeeklyFlowWorker {
       console.log(
         `[WeeklyFlowWorker] All jobs complete for ${playlistType}, ensuring smart playlists...`,
       );
+      downloadTracker.clearCompleted();
       try {
         await fs.rm(path.join(this.weeklyFlowRoot, "_fallback"), {
           recursive: true,

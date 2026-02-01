@@ -163,14 +163,30 @@ export class SimpleSoulseekClient {
 
     return new Promise((resolve, reject) => {
       let settled = false;
+      const refs = { readStream: null, writeStream: null, timeoutId: null };
+
+      const cleanup = () => {
+        if (refs.timeoutId) {
+          clearTimeout(refs.timeoutId);
+          refs.timeoutId = null;
+        }
+        if (refs.readStream && !refs.readStream.destroyed) {
+          refs.readStream.destroy();
+        }
+        if (refs.writeStream && !refs.writeStream.destroyed) {
+          refs.writeStream.destroy();
+        }
+      };
+
       const settle = (fn) => (val) => {
         if (settled) return;
         settled = true;
+        cleanup();
         fn(val);
       };
 
-      const timeoutId = setTimeout(async () => {
-        clearTimeout(timeoutId);
+      refs.timeoutId = setTimeout(async () => {
+        if (settled) return;
         try {
           const stat = await fs.stat(absPath).catch(() => null);
           if (stat && stat.size > 0) {
@@ -185,24 +201,20 @@ export class SimpleSoulseekClient {
 
       this.client.downloadStream({ file: result }, (err, readStream) => {
         if (err) {
-          clearTimeout(timeoutId);
-          reject(err);
+          settle(reject)(err);
           return;
         }
+        refs.readStream = readStream;
         const writeStream = createWriteStream(absPath);
+        refs.writeStream = writeStream;
         readStream.pipe(writeStream);
         writeStream.on("finish", () => {
-          clearTimeout(timeoutId);
           settle(resolve)(absPath);
         });
         writeStream.on("error", (e) => {
-          clearTimeout(timeoutId);
-          readStream.destroy();
           settle(reject)(e);
         });
         readStream.on("error", (e) => {
-          clearTimeout(timeoutId);
-          writeStream.destroy();
           settle(reject)(e);
         });
       });
