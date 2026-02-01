@@ -7,7 +7,6 @@ import {
   AlertCircle,
   X,
   Music,
-  ArrowLeft,
 } from "lucide-react";
 import { getRequests, deleteRequest, getAllDownloadStatus } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
@@ -56,7 +55,7 @@ function RequestsPage() {
     try {
       await deleteRequest(request.albumId);
       setRequests((prev) =>
-        prev.filter((r) => String(r.albumId) !== String(request.albumId)),
+        prev.filter((r) => String(r.albumId) !== String(request.albumId))
       );
     } catch {
       showError("Failed to stop download");
@@ -73,7 +72,7 @@ function RequestsPage() {
             status.status === "downloading" ||
             status.status === "moving")
         );
-      },
+      }
     );
 
     const hasActiveDownloads = artistDownloadStatuses.length > 0;
@@ -124,12 +123,6 @@ function RequestsPage() {
     <div className="animate-fade-in pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate(-1)}
-            className="p-2 hover:bg-gray-900/50 transition-colors"
-          >
-            <ArrowLeft className="w-6 h-6" />
-          </button>
           <div>
             <h1
               className="text-2xl font-bold flex items-center"
@@ -195,7 +188,11 @@ function RequestsPage() {
 
                 <div className="flex items-center gap-3">
                   <div
-                    className={`w-16 h-16 flex-shrink-0 overflow-hidden rounded ${hasValidMbid ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
+                    className={`w-16 h-16 flex-shrink-0 overflow-hidden rounded ${
+                      hasValidMbid
+                        ? "cursor-pointer"
+                        : "cursor-not-allowed opacity-50"
+                    }`}
                     style={{ backgroundColor: "#211f27" }}
                     onClick={() => {
                       if (hasValidMbid) {
@@ -207,7 +204,7 @@ function RequestsPage() {
                             state: {
                               artistName: isAlbum ? artistName : displayName,
                             },
-                          },
+                          }
                         );
                       }
                     }}
@@ -224,7 +221,11 @@ function RequestsPage() {
                   <div className="flex-1 text-left min-w-0">
                     <div className="flex items-center gap-2 mb-0.5 min-w-0">
                       <h3
-                        className={`text-base font-semibold truncate ${hasValidMbid ? "hover:underline cursor-pointer" : "cursor-not-allowed opacity-75"}`}
+                        className={`text-base font-semibold truncate ${
+                          hasValidMbid
+                            ? "hover:underline cursor-pointer"
+                            : "cursor-not-allowed opacity-75"
+                        }`}
                         style={{ color: "#fff" }}
                         onClick={() => {
                           if (hasValidMbid) {
@@ -238,7 +239,7 @@ function RequestsPage() {
                                     ? artistName
                                     : displayName,
                                 },
-                              },
+                              }
                             );
                           }
                         }}
@@ -265,7 +266,7 @@ function RequestsPage() {
                             month: "short",
                             day: "numeric",
                             year: "numeric",
-                          },
+                          }
                         )}
                       </span>
                     </div>
