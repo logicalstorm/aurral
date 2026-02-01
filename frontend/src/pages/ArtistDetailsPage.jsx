@@ -23,6 +23,7 @@ import {
   Disc3,
   Play,
   Pause,
+  Star,
 } from "lucide-react";
 import {
   getArtistDetails,
@@ -71,6 +72,14 @@ const getTagColor = (name) => {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
   return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
+};
+
+const starsFromListeners = (listeners) => {
+  if (listeners == null || listeners <= 0) return null;
+  return Math.min(
+    5,
+    Math.max(1, Math.round(1 + (4 * Math.log10(listeners + 1)) / 7))
+  );
 };
 
 const emptyArtistShape = {
@@ -179,6 +188,7 @@ function ArtistDetailsPage() {
   const [showMonitorOptionMenu, setShowMonitorOptionMenu] = useState(false);
   const [updatingMonitor, setUpdatingMonitor] = useState(false);
   const [albumCovers, setAlbumCovers] = useState({});
+  const [albumRatings, setAlbumRatings] = useState({});
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [loadingCover, setLoadingCover] = useState(true);
   const [loadingSimilar, setLoadingSimilar] = useState(true);
@@ -309,6 +319,23 @@ function ArtistDetailsPage() {
           err,
           event.data
         );
+      }
+    });
+
+    eventSource.addEventListener("albumRating", (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.mbid) {
+          setAlbumRatings((prev) => ({
+            ...prev,
+            [data.mbid]: {
+              listeners: data.listeners ?? null,
+              playcount: data.playcount ?? null,
+            },
+          }));
+        }
+      } catch (err) {
+        console.error("Error parsing album rating data:", err, event.data);
       }
     });
 
@@ -1857,6 +1884,26 @@ function ArtistDetailsPage() {
                                     )}
                                   </span>
                                 )}
+                                {(() => {
+                                  const rgId = libraryAlbum.mbid || libraryAlbum.foreignAlbumId;
+                                  const rating = rgId ? albumRatings[rgId] : null;
+                                  const stars = rating?.listeners != null ? starsFromListeners(rating.listeners) : null;
+                                  if (stars == null) return null;
+                                  return (
+                                    <span className="flex items-center gap-0.5 ml-1" title={rating?.listeners != null ? `${rating.listeners.toLocaleString()} listeners on Last.fm` : undefined}>
+                                      {[1, 2, 3, 4, 5].map((n) => (
+                                        <Star
+                                          key={n}
+                                          className="w-3.5 h-3.5 flex-shrink-0"
+                                          style={{
+                                            color: n <= stars ? "#eab308" : "#4b5563",
+                                            fill: n <= stars ? "#eab308" : "transparent",
+                                          }}
+                                        />
+                                      ))}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                             </div>
                           </div>
@@ -2471,6 +2518,25 @@ function ArtistDetailsPage() {
                                   {releaseGroup["secondary-types"].join(", ")}
                                 </span>
                               )}
+                            {(() => {
+                              const rating = albumRatings[releaseGroup.id];
+                              const stars = rating?.listeners != null ? starsFromListeners(rating.listeners) : null;
+                              if (stars == null) return null;
+                              return (
+                                <span className="flex items-center gap-0.5 ml-1" title={rating.listeners != null ? `${rating.listeners.toLocaleString()} listeners on Last.fm` : undefined}>
+                                  {[1, 2, 3, 4, 5].map((n) => (
+                                    <Star
+                                      key={n}
+                                      className="w-3.5 h-3.5 flex-shrink-0"
+                                      style={{
+                                        color: n <= stars ? "#eab308" : "#4b5563",
+                                        fill: n <= stars ? "#eab308" : "transparent",
+                                      }}
+                                    />
+                                  ))}
+                                </span>
+                              );
+                            })()}
                           </div>
                         </div>
                       </div>
