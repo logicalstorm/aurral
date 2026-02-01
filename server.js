@@ -43,7 +43,7 @@ app.use(cors());
 app.use(
   helmet({
     contentSecurityPolicy: false,
-  }),
+  })
 );
 app.use(express.json());
 
@@ -76,9 +76,9 @@ setTimeout(() => {
   import("./backend/services/weeklyFlowScheduler.js")
     .then((m) => m.startWorkerIfPending())
     .catch((err) =>
-      console.error("Weekly flow startup check error:", err.message),
+      console.error("Weekly flow startup check error:", err.message)
     );
-}, 2000);
+}, 5000);
 
 const frontendDist = path.join(__dirname, "frontend", "dist");
 
@@ -100,19 +100,17 @@ if (fs.existsSync(frontendDist)) {
   });
 }
 
-setInterval(
-  () => {
-    updateDiscoveryCache().catch((err) => {
-      console.error("Error in scheduled discovery update:", err.message);
-    });
-  },
-  24 * 60 * 60 * 1000,
-);
+setInterval(() => {
+  updateDiscoveryCache().catch((err) => {
+    console.error("Error in scheduled discovery update:", err.message);
+  });
+}, 24 * 60 * 60 * 1000);
 
 setTimeout(async () => {
   const { getLastfmApiKey } = await import("./backend/services/apiClients.js");
-  const { libraryManager } =
-    await import("./backend/services/libraryManager.js");
+  const { libraryManager } = await import(
+    "./backend/services/libraryManager.js"
+  );
   const { dbOps } = await import("./backend/config/db-helpers.js");
 
   const hasLastfm = !!getLastfmApiKey();
@@ -121,7 +119,7 @@ setTimeout(async () => {
 
   if (!hasLastfm && !hasArtists) {
     console.log(
-      "Discovery not configured (no Last.fm key and no artists). Clearing cache.",
+      "Discovery not configured (no Last.fm key and no artists). Clearing cache."
     );
     try {
       dbOps.updateDiscoveryCache({
@@ -159,10 +157,10 @@ setTimeout(async () => {
     });
   } else {
     console.log(
-      `Discovery cache is fresh (last updated ${lastUpdated}). Skipping initial update.`,
+      `Discovery cache is fresh (last updated ${lastUpdated}). Skipping initial update.`
     );
   }
-}, 5000);
+}, 15000);
 
 const httpServer = createServer(app);
 websocketService.initialize(httpServer);
@@ -174,7 +172,7 @@ httpServer.listen(PORT, "0.0.0.0", async () => {
 httpServer.on("error", (error) => {
   if (error.code === "EADDRINUSE") {
     console.error(
-      `Port ${PORT} is already in use. Please stop the other process or use a different port.`,
+      `Port ${PORT} is already in use. Please stop the other process or use a different port.`
     );
     process.exit(1);
   } else {

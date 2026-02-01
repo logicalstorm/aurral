@@ -22,7 +22,7 @@ api.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error);
-  },
+  }
 );
 
 api.interceptors.response.use(
@@ -31,7 +31,7 @@ api.interceptors.response.use(
   },
   (error) => {
     return Promise.reject(error);
-  },
+  }
 );
 
 export const checkHealth = async () => {
@@ -49,7 +49,7 @@ export const testLidarrOnboarding = async (url, apiKey) => {
   if (url) params.append("url", url.replace(/\/+$/, ""));
   if (apiKey) params.append("apiKey", apiKey);
   const response = await api.get(
-    `/onboarding/lidarr/test${params.toString() ? `?${params.toString()}` : ""}`,
+    `/onboarding/lidarr/test${params.toString() ? `?${params.toString()}` : ""}`
   );
   return response.data;
 };
@@ -203,7 +203,7 @@ export const getLibraryAlbums = async (artistId) => {
 export const addLibraryAlbum = async (
   artistId,
   releaseGroupMbid,
-  albumName,
+  albumName
 ) => {
   const response = await api.post("/library/albums", {
     artistId,
@@ -355,7 +355,9 @@ export const getLidarrProfiles = async (url, apiKey) => {
   if (url) params.append("url", url);
   if (apiKey) params.append("apiKey", apiKey);
   const queryString = params.toString();
-  const endpoint = `/settings/lidarr/profiles${queryString ? `?${queryString}` : ""}`;
+  const endpoint = `/settings/lidarr/profiles${
+    queryString ? `?${queryString}` : ""
+  }`;
   const response = await api.get(endpoint);
   return response.data;
 };
@@ -365,7 +367,9 @@ export const testLidarrConnection = async (url, apiKey) => {
   if (url) params.append("url", url);
   if (apiKey) params.append("apiKey", apiKey);
   const queryString = params.toString();
-  const endpoint = `/settings/lidarr/test${queryString ? `?${queryString}` : ""}`;
+  const endpoint = `/settings/lidarr/test${
+    queryString ? `?${queryString}` : ""
+  }`;
   const response = await api.get(endpoint);
   return response.data;
 };
@@ -388,7 +392,7 @@ export const getFlowJobs = async (playlistType) => {
 export const setFlowPlaylistEnabled = async (playlistType, enabled) => {
   const response = await api.put(
     `/weekly-flow/playlist/${playlistType}/enabled`,
-    { enabled },
+    { enabled }
   );
   return response.data;
 };
@@ -401,7 +405,7 @@ export const startFlowPlaylist = async (playlistType, limit = 30) => {
 };
 
 export const resetFlowPlaylists = async (
-  playlistTypes = ["discover", "mix", "trending"],
+  playlistTypes = ["discover", "mix", "trending"]
 ) => {
   const response = await api.post("/weekly-flow/reset", {
     playlistTypes,

@@ -5,11 +5,14 @@ import { dbHelpers } from "../config/db-sqlite.js";
 import { musicbrainzRequest } from "./apiClients.js";
 
 const LIDARR_RETRY_MS = 60000;
+const TRACKS_CACHE_TTL_MS = 120000;
+const TRACKS_CACHE_MAX = 300;
 
 let lidarrClient = null;
 let _cachedArtists = [];
 let _lastLidarrFailureAt = 0;
 let _retryTimeoutId = null;
+const _tracksCache = new Map();
 
 async function getLidarrClient() {
   if (!lidarrClient) {
@@ -489,11 +492,13 @@ export class LibraryManager {
 
   async getTracks(albumId) {
     if (!albumId || albumId === "undefined") {
-      console.warn(
-        "[LibraryManager] getTracks called with invalid albumId:",
-        albumId,
-      );
       return [];
+    }
+
+    const key = String(albumId);
+    const cached = _tracksCache.get(key);
+    if (cached && cached.expires > Date.now()) {
+      return cached.tracks;
     }
 
     const lidarr = await getLidarrClient();
@@ -520,49 +525,30 @@ export class LibraryManager {
 
       const isAlbumComplete = normalizedPercent >= 100 || albumSizeOnDisk > 0;
 
-      console.log(
-        `[LibraryManager] Album ${albumId} - Raw percent: ${rawPercent}, Normalized: ${normalizedPercent}%, Complete: ${isAlbumComplete}`,
-      );
+      let result = [];
 
       if (
         lidarrAlbum.tracks &&
         Array.isArray(lidarrAlbum.tracks) &&
         lidarrAlbum.tracks.length > 0
       ) {
-        console.log(
-          `[LibraryManager] Found ${lidarrAlbum.tracks.length} tracks in lidarrAlbum.tracks for album ${albumId}`,
-        );
-        const mappedTracks = lidarrAlbum.tracks.map((t, index) =>
+        result = lidarrAlbum.tracks.map((t, index) =>
           this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete),
         );
-        console.log(
-          `[LibraryManager] Mapped tracks - hasFile counts: ${mappedTracks.filter((t) => t.hasFile).length}/${mappedTracks.length}`,
-        );
-        return mappedTracks;
-      }
-
-      if (lidarrAlbum.albumReleases && lidarrAlbum.albumReleases.length > 0) {
+      } else if (lidarrAlbum.albumReleases && lidarrAlbum.albumReleases.length > 0) {
         for (const release of lidarrAlbum.albumReleases) {
           if (
             release.tracks &&
             Array.isArray(release.tracks) &&
             release.tracks.length > 0
           ) {
-            console.log(
-              `[LibraryManager] Found ${release.tracks.length} tracks in albumReleases for album ${albumId}`,
-            );
-            const mappedTracks = release.tracks.map((t, index) =>
+            result = release.tracks.map((t, index) =>
               this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete),
             );
-            console.log(
-              `[LibraryManager] Mapped tracks - hasFile counts: ${mappedTracks.filter((t) => t.hasFile).length}/${mappedTracks.length}`,
-            );
-            return mappedTracks;
+            break;
           }
         }
-      }
-
-      if (
+      } else if (
         lidarrAlbum.media &&
         Array.isArray(lidarrAlbum.media) &&
         lidarrAlbum.media.length > 0
@@ -574,24 +560,30 @@ export class LibraryManager {
           }
         }
         if (allTracks.length > 0) {
-          console.log(
-            `[LibraryManager] Found ${allTracks.length} tracks in media for album ${albumId}`,
-          );
-          const mappedTracks = allTracks.map((t, index) =>
+          result = allTracks.map((t, index) =>
             this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete),
           );
-          console.log(
-            `[LibraryManager] Mapped tracks - hasFile counts: ${mappedTracks.filter((t) => t.hasFile).length}/${mappedTracks.length}`,
-          );
-          return mappedTracks;
         }
       }
 
-      console.warn(
-        `[LibraryManager] No tracks found in album ${albumId} structure. Available keys: ${Object.keys(lidarrAlbum).join(", ")}`,
-      );
+      if (result.length === 0) {
+        const lidarrTracks = await lidarr.getTracksByAlbumId(albumId);
+        if (lidarrTracks && lidarrTracks.length > 0) {
+          result = lidarrTracks.map((t, index) =>
+            this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete),
+          );
+        }
+      }
 
-      return [];
+      if (_tracksCache.size >= TRACKS_CACHE_MAX) {
+        const firstKey = _tracksCache.keys().next().value;
+        if (firstKey !== undefined) _tracksCache.delete(firstKey);
+      }
+      _tracksCache.set(key, {
+        tracks: result,
+        expires: Date.now() + TRACKS_CACHE_TTL_MS,
+      });
+      return result;
     } catch (error) {
       if (error.message && error.message.includes("404")) {
         return [];
@@ -626,10 +618,6 @@ export class LibraryManager {
     } else if (hasFileExplicit === false) {
       hasFile = false;
     }
-
-    console.log(
-      `[LibraryManager] Track "${lidarrTrack.title || lidarrTrack.trackTitle}" - hasFile: ${hasFile}, albumIsComplete: ${albumIsComplete}, albumSizeOnDisk: ${albumSizeOnDisk}, hasFileExplicit: ${hasFileExplicit}, path: ${!!path}, size: ${size}`,
-    );
 
     return {
       id:

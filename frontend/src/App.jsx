@@ -23,7 +23,8 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import ReloadPrompt from "./components/ReloadPrompt";
 
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, isLoading, authRequired, onboardingRequired } = useAuth();
+  const { isAuthenticated, isLoading, authRequired, onboardingRequired } =
+    useAuth();
 
   if (isLoading) {
     return (

@@ -3,6 +3,7 @@ import https from "https";
 import { dbOps } from "../config/db-helpers.js";
 
 const CIRCUIT_COOLDOWN_MS = 60000;
+const LIDARR_MAX_CONCURRENT = 6;
 
 export class LidarrClient {
   constructor() {
@@ -10,7 +11,28 @@ export class LidarrClient {
     this.apiPath = "/api/v1";
     this._circuitOpen = false;
     this._circuitOpenedAt = 0;
+    this._concurrent = 0;
+    this._waitQueue = [];
     this.updateConfig();
+  }
+
+  _acquireSlot() {
+    if (this._concurrent < LIDARR_MAX_CONCURRENT) {
+      this._concurrent++;
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      this._waitQueue.push(resolve);
+    });
+  }
+
+  _releaseSlot() {
+    this._concurrent--;
+    if (this._waitQueue.length > 0) {
+      this._concurrent++;
+      const next = this._waitQueue.shift();
+      if (next) next();
+    }
   }
 
   updateConfig() {
@@ -79,7 +101,9 @@ export class LidarrClient {
     const authHeaders = this.getAuthHeaders();
 
     try {
-      const fullUrl = `${this.config.url}${this.apiPath}${endpoint}`;
+      await this._acquireSlot();
+      try {
+        const fullUrl = `${this.config.url}${this.apiPath}${endpoint}`;
 
       const requestConfig = {
         method,
@@ -121,7 +145,10 @@ export class LidarrClient {
         };
       }
 
-      return response.data;
+        return response.data;
+      } finally {
+        this._releaseSlot();
+      }
     } catch (raw) {
       const error = raw && typeof raw === "object" ? raw : {};
       if (
@@ -407,6 +434,17 @@ export class LidarrClient {
 
   async getAlbum(albumId) {
     return this.request(`/album/${albumId}`);
+  }
+
+  async getTracksByAlbumId(albumId) {
+    try {
+      const result = await this.request(`/track?albumId=${albumId}`);
+      if (Array.isArray(result)) return result;
+      if (result?.records && Array.isArray(result.records)) return result.records;
+      return [];
+    } catch {
+      return [];
+    }
   }
 
   async getAlbumByMbid(albumMbid) {
