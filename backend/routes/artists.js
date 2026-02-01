@@ -780,6 +780,48 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
       })();
       backgroundTasks.push(releaseGroupCoversTask);
 
+      const albumRatingsTask = (async () => {
+        if (!getLastfmApiKey()) return;
+        if (artistData?.["release-groups"]?.length === 0) return;
+        const artistName =
+          artistData?.name?.trim() || streamArtistName?.trim();
+        if (!artistName) return;
+        const releaseGroups = artistData["release-groups"]
+          .filter(
+            (rg) =>
+              rg["primary-type"] === "Album" || rg["primary-type"] === "EP"
+          )
+          .slice(0, 30);
+        for (const rg of releaseGroups) {
+          try {
+            const title = rg.title?.trim();
+            if (!title) {
+              sendSSE(res, "albumRating", { mbid: rg.id, listeners: null, playcount: null });
+              continue;
+            }
+            const data = await lastfmRequest("album.getInfo", {
+              artist: artistName,
+              album: title,
+            });
+            const album = data?.album;
+            if (!album) {
+              sendSSE(res, "albumRating", { mbid: rg.id, listeners: null, playcount: null });
+              continue;
+            }
+            const listeners = parseInt(album.listeners, 10) || 0;
+            const playcount = parseInt(album.playcount, 10) || 0;
+            sendSSE(res, "albumRating", {
+              mbid: rg.id,
+              listeners: listeners || null,
+              playcount: playcount || null,
+            });
+          } catch (e) {
+            sendSSE(res, "albumRating", { mbid: rg.id, listeners: null, playcount: null });
+          }
+        }
+      })();
+      backgroundTasks.push(albumRatingsTask);
+
       Promise.allSettled(backgroundTasks)
         .then(() => {
           sendSSE(res, "complete", {});
