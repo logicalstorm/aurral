@@ -19,6 +19,8 @@ import { cacheMiddleware, noCache } from "../middleware/cache.js";
 
 const router = express.Router();
 
+let releaseGroupTracks503Log = 0;
+
 const parseLastFmDate = (dateStr) => {
   if (!dateStr) return "";
   const d = new Date(dateStr.split(",")[0].trim());
@@ -256,10 +258,22 @@ router.get("/release-group/:mbid/tracks", async (req, res) => {
 
     res.json(tracks);
   } catch (error) {
-    console.error("Error fetching release group tracks:", error);
-    res.status(500).json({
+    const status = error.response?.status;
+    const msg = error.response?.data?.error || error.message;
+    if (status === 503) {
+      if (
+        !releaseGroupTracks503Log ||
+        Date.now() - releaseGroupTracks503Log > 15000
+      ) {
+        releaseGroupTracks503Log = Date.now();
+        console.warn("MusicBrainz rate limit (release-group tracks):", msg);
+      }
+    } else {
+      console.error("Error fetching release group tracks:", msg);
+    }
+    res.status(status && status >= 400 ? status : 500).json({
       error: "Failed to fetch tracks",
-      message: error.message,
+      message: status === 503 ? "MusicBrainz rate limit; try again shortly." : msg,
     });
   }
 });
