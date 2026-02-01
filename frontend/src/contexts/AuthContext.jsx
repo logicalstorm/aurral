@@ -7,6 +7,7 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
   const [onboardingRequired, setOnboardingRequired] = useState(false);
+  const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const checkAuthStatus = async () => {
@@ -17,6 +18,7 @@ export const AuthProvider = ({ children }) => {
 
       if (isOnboarding) {
         setIsAuthenticated(false);
+        setUser(null);
         setIsLoading(false);
         return;
       }
@@ -30,6 +32,20 @@ export const AuthProvider = ({ children }) => {
       }
 
       if (!isRequired) {
+        setUser(
+          healthData.user || {
+            role: "admin",
+            permissions: {
+              accessSettings: true,
+              accessFlow: true,
+              addArtist: true,
+              addAlbum: true,
+              changeMonitoring: true,
+              deleteArtist: true,
+              deleteAlbum: true,
+            },
+          }
+        );
         setIsAuthenticated(true);
         setIsLoading(false);
         return;
@@ -41,15 +57,26 @@ export const AuthProvider = ({ children }) => {
       if (storedPassword) {
         try {
           const isValid = await verifyCredentials(storedPassword, storedUser);
-          setIsAuthenticated(isValid);
-          if (!isValid) {
+          if (isValid) {
+            const healthWithAuth = await checkHealth();
+            setUser(healthWithAuth.user || null);
+            setIsAuthenticated(!!healthWithAuth.user);
+          } else {
             localStorage.removeItem("auth_password");
+            setUser(null);
+            setIsAuthenticated(false);
           }
-        } catch (e) {}
+        } catch (e) {
+          setUser(null);
+          setIsAuthenticated(false);
+        }
       } else {
+        setUser(null);
         setIsAuthenticated(false);
       }
     } catch (error) {
+      setUser(null);
+      setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
     }
@@ -68,6 +95,8 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem("auth_password", password);
         localStorage.setItem("auth_user", username);
         setIsAuthenticated(true);
+        const healthWithAuth = await checkHealth();
+        setUser(healthWithAuth.user || null);
         window.location.reload();
         return true;
       }
@@ -81,6 +110,13 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem("auth_password");
     localStorage.removeItem("auth_user");
     setIsAuthenticated(false);
+    setUser(null);
+  };
+
+  const hasPermission = (perm) => {
+    if (!user) return false;
+    if (user.role === "admin") return true;
+    return !!user.permissions?.[perm];
   };
 
   return (
@@ -88,11 +124,13 @@ export const AuthProvider = ({ children }) => {
       value={{
         isAuthenticated,
         isLoading,
+        user,
         login,
         logout,
         authRequired,
         onboardingRequired,
         refreshAuth: checkAuthStatus,
+        hasPermission,
       }}
     >
       {children}

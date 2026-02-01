@@ -26,6 +26,134 @@ const cleanOldImagesStmt = db.prepare(
   "DELETE FROM images_cache WHERE cache_age < ?"
 );
 
+const getUserByUsernameStmt = db.prepare(
+  "SELECT * FROM users WHERE username = ?"
+);
+const getAllUsersStmt = db.prepare(
+  "SELECT id, username, role, permissions FROM users ORDER BY username"
+);
+const getUserByIdStmt = db.prepare("SELECT * FROM users WHERE id = ?");
+const insertUserStmt = db.prepare(
+  "INSERT INTO users (username, password_hash, role, permissions) VALUES (?, ?, ?, ?)"
+);
+const updateUserStmt = db.prepare(
+  "UPDATE users SET username = ?, password_hash = ?, role = ?, permissions = ? WHERE id = ?"
+);
+const deleteUserStmt = db.prepare("DELETE FROM users WHERE id = ?");
+
+const DEFAULT_PERMISSIONS = {
+  addArtist: true,
+  addAlbum: true,
+  changeMonitoring: false,
+  deleteArtist: false,
+  deleteAlbum: false,
+};
+
+export const userOps = {
+  getDefaultPermissions() {
+    return { ...DEFAULT_PERMISSIONS };
+  },
+  getUserByUsername(username) {
+    const row = getUserByUsernameStmt.get(
+      String(username).trim().toLowerCase()
+    );
+    if (!row) return null;
+    return {
+      id: row.id,
+      username: row.username,
+      passwordHash: row.password_hash,
+      role: row.role || "user",
+      permissions: dbHelpers.parseJSON(row.permissions) || {
+        ...DEFAULT_PERMISSIONS,
+      },
+    };
+  },
+  getUserById(id) {
+    const row = getUserByIdStmt.get(parseInt(id, 10));
+    if (!row) return null;
+    return {
+      id: row.id,
+      username: row.username,
+      passwordHash: row.password_hash,
+      role: row.role || "user",
+      permissions: dbHelpers.parseJSON(row.permissions) || {
+        ...DEFAULT_PERMISSIONS,
+      },
+    };
+  },
+  getAllUsers() {
+    const rows = getAllUsersStmt.all();
+    return rows.map((r) => ({
+      id: r.id,
+      username: r.username,
+      role: r.role || "user",
+      permissions: dbHelpers.parseJSON(r.permissions) || {
+        ...DEFAULT_PERMISSIONS,
+      },
+    }));
+  },
+  createUser(username, passwordHash, role = "user", permissions = null) {
+    const un = String(username).trim();
+    if (!un) return null;
+    const perms = permissions
+      ? { ...DEFAULT_PERMISSIONS, ...permissions }
+      : { ...DEFAULT_PERMISSIONS };
+    try {
+      const result = insertUserStmt.run(
+        un.toLowerCase(),
+        passwordHash,
+        role,
+        dbHelpers.stringifyJSON(perms)
+      );
+      return {
+        id: result.lastInsertRowid,
+        username: un,
+        role,
+        permissions: perms,
+      };
+    } catch (e) {
+      return null;
+    }
+  },
+  updateUser(id, data) {
+    const existing = userOps.getUserById(id);
+    if (!existing) return null;
+    const username =
+      data.username !== undefined
+        ? String(data.username).trim()
+        : existing.username;
+    const passwordHash =
+      data.passwordHash !== undefined
+        ? data.passwordHash
+        : existing.passwordHash;
+    const role = data.role !== undefined ? data.role : existing.role;
+    const permissions =
+      data.permissions !== undefined
+        ? { ...DEFAULT_PERMISSIONS, ...data.permissions }
+        : existing.permissions;
+    try {
+      updateUserStmt.run(
+        username.toLowerCase(),
+        passwordHash,
+        role,
+        dbHelpers.stringifyJSON(permissions),
+        parseInt(id, 10)
+      );
+      return { id: parseInt(id, 10), username, role, permissions };
+    } catch (e) {
+      return null;
+    }
+  },
+  deleteUser(id) {
+    try {
+      deleteUserStmt.run(parseInt(id, 10));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  },
+};
+
 export const dbOps = {
   getSettings() {
     const integrations = dbHelpers.parseJSON(

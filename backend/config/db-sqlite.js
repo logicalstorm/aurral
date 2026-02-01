@@ -36,6 +36,14 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'user',
+    permissions TEXT
+  );
+
   CREATE TABLE IF NOT EXISTS weekly_flow_jobs (
     id TEXT PRIMARY KEY,
     artist_name TEXT NOT NULL,

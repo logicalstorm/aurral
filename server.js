@@ -18,6 +18,7 @@ import { websocketService } from "./backend/services/websocketService.js";
 
 import settingsRouter from "./backend/routes/settings.js";
 import onboardingRouter from "./backend/routes/onboarding.js";
+import usersRouter from "./backend/routes/users.js";
 import artistsRouter from "./backend/routes/artists.js";
 import libraryRouter from "./backend/routes/library.js";
 import discoveryRouter from "./backend/routes/discovery.js";
@@ -57,6 +58,7 @@ app.use("/api/", limiter);
 
 app.use("/api/settings", settingsRouter);
 app.use("/api/onboarding", onboardingRouter);
+app.use("/api/users", usersRouter);
 app.use("/api/search", artistsRouter);
 app.use("/api/artists", artistsRouter);
 app.use("/api/library", libraryRouter);

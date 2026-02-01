@@ -48,6 +48,19 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
+const PermissionRoute = ({ children, permission }) => {
+  const { hasPermission } = useAuth();
+  if (permission && !hasPermission(permission)) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+};
+
+PermissionRoute.propTypes = {
+  children: PropTypes.node.isRequired,
+  permission: PropTypes.string,
+};
+
 ProtectedRoute.propTypes = {
   children: PropTypes.node.isRequired,
 };
@@ -129,7 +142,14 @@ function AppContent() {
             <Route path="/search" element={<SearchResultsPage />} />
             <Route path="/discover" element={<Navigate to="/" replace />} />
             <Route path="/library" element={<LibraryPage />} />
-            <Route path="/flow" element={<FlowPage />} />
+            <Route
+              path="/flow"
+              element={
+                <PermissionRoute permission="accessFlow">
+                  <FlowPage />
+                </PermissionRoute>
+              }
+            />
             <Route path="/requests" element={<RequestsPage />} />
             <Route path="/artist/:mbid" element={<ArtistDetailsPage />} />
             <Route path="/settings" element={<SettingsPage />} />

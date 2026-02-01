@@ -2,8 +2,10 @@ import express from "express";
 import { dbOps } from "../config/db-helpers.js";
 import { defaultData } from "../config/constants.js";
 import { noCache } from "../middleware/cache.js";
+import { requireAuth } from "../middleware/requirePermission.js";
 
 const router = express.Router();
+router.use(requireAuth);
 
 router.get("/", noCache, (req, res) => {
   try {
@@ -261,7 +263,9 @@ router.get("/lidarr/test", async (req, res) => {
 
 router.post("/gotify/test", async (req, res) => {
   try {
-    const { sendGotifyTest } = await import("../services/notificationService.js");
+    const { sendGotifyTest } = await import(
+      "../services/notificationService.js"
+    );
     const url = req.body?.url?.trim();
     const token = req.body?.token?.trim();
     if (!url || !token) {
@@ -315,10 +319,10 @@ router.post("/lidarr/apply-community-guide", async (req, res) => {
       const qualityDefs = await lidarrClient.getQualityDefinitions();
 
       const flacDef = qualityDefs.find(
-        (q) => q.quality?.name === "FLAC" || q.title === "FLAC",
+        (q) => q.quality?.name === "FLAC" || q.title === "FLAC"
       );
       const flac24Def = qualityDefs.find(
-        (q) => q.quality?.name === "FLAC 24bit" || q.title === "FLAC 24bit",
+        (q) => q.quality?.name === "FLAC 24bit" || q.title === "FLAC 24bit"
       );
 
       if (flacDef) {
@@ -342,7 +346,7 @@ router.post("/lidarr/apply-community-guide", async (req, res) => {
             minSize: 0,
             maxSize: 1495,
             preferredSize: 895,
-          },
+          }
         );
         results.qualityDefinitions.push({
           name: "FLAC 24bit",
@@ -441,7 +445,7 @@ router.post("/lidarr/apply-community-guide", async (req, res) => {
             results.customFormats.push(created);
           } catch (err) {
             results.errors.push(
-              `Failed to create custom format "${format.name}": ${err.message}`,
+              `Failed to create custom format "${format.name}": ${err.message}`
             );
           }
         } else {
@@ -466,7 +470,7 @@ router.post("/lidarr/apply-community-guide", async (req, res) => {
 
       const existingProfiles = await lidarrClient.getQualityProfiles();
       let aurralProfile = existingProfiles.find(
-        (p) => p.name === "Aurral - HQ",
+        (p) => p.name === "Aurral - HQ"
       );
 
       if (!aurralProfile) {

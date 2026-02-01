@@ -326,18 +326,47 @@ export const searchArtistsByTag = async (tag, limit = 24, offset = 0) => {
 export const verifyCredentials = async (password, username = "admin") => {
   const token = btoa(`${username}:${password}`);
   try {
-    await api.get("/settings", {
-      headers: {
-        Authorization: `Basic ${token}`,
-      },
+    const res = await api.get("/health", {
+      headers: { Authorization: `Basic ${token}` },
     });
-    return true;
+    return !!res.data?.user;
   } catch (error) {
-    if (error.response && error.response.status === 401) {
+    if (
+      error.response &&
+      (error.response.status === 401 || error.response.status === 403)
+    ) {
       return false;
     }
     throw error;
   }
+};
+
+export const getUsers = async () => {
+  const response = await api.get("/users");
+  return response.data;
+};
+
+export const createUser = async (username, password, role, permissions) => {
+  const response = await api.post("/users", {
+    username,
+    password,
+    role,
+    permissions,
+  });
+  return response.data;
+};
+
+export const updateUser = async (id, data) => {
+  const response = await api.patch(`/users/${id}`, data);
+  return response.data;
+};
+
+export const deleteUser = async (id) => {
+  await api.delete(`/users/${id}`);
+};
+
+export const changeMyPassword = async (currentPassword, newPassword) => {
+  await api.post("/users/me/password", { currentPassword, newPassword });
 };
 
 export const getAppSettings = async () => {

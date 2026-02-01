@@ -5,8 +5,14 @@ import { playlistSource } from "../services/weeklyFlowPlaylistSource.js";
 import { soulseekClient } from "../services/simpleSoulseekClient.js";
 import { playlistManager } from "../services/weeklyFlowPlaylistManager.js";
 import { flowPlaylistConfig } from "../services/weeklyFlowPlaylistConfig.js";
+import {
+  requireAuth,
+  requirePermission,
+} from "../middleware/requirePermission.js";
 
 const router = express.Router();
+router.use(requireAuth);
+router.use(requirePermission("accessFlow"));
 const DEFAULT_LIMIT = 30;
 const QUEUE_LIMIT = 35;
 
@@ -23,7 +29,7 @@ router.post("/start/:playlistType", async (req, res) => {
 
     const tracks = await playlistSource.getTracksForPlaylist(
       playlistType,
-      limit,
+      limit
     );
     if (tracks.length === 0) {
       return res.status(400).json({
@@ -93,7 +99,7 @@ router.put("/playlist/:playlistType/enabled", async (req, res) => {
 
       const tracks = await playlistSource.getTracksForPlaylist(
         playlistType,
-        QUEUE_LIMIT,
+        QUEUE_LIMIT
       );
       if (tracks.length === 0) {
         flowPlaylistConfig.setEnabled(playlistType, true);
@@ -293,7 +299,7 @@ router.post("/test/download", async (req, res) => {
       Promise.race([
         soulseekClient.search(artistName, trackName),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Search timed out")), ms),
+          setTimeout(() => reject(new Error("Search timed out")), ms)
         ),
       ]);
 

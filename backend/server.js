@@ -10,7 +10,10 @@ import { createServer } from "http";
 
 process.on("uncaughtException", (err) => {
   if (err.code === "ERR_STREAM_DESTROYED") {
-    console.warn("[Process] Caught stream destroyed error (safe to ignore):", err.message);
+    console.warn(
+      "[Process] Caught stream destroyed error (safe to ignore):",
+      err.message
+    );
     return;
   }
   console.error("[Process] Uncaught Exception:", err);
@@ -18,7 +21,9 @@ process.on("uncaughtException", (err) => {
 
 process.on("unhandledRejection", (reason, promise) => {
   if (reason?.code === "ERR_STREAM_DESTROYED") {
-    console.warn("[Process] Caught stream destroyed rejection (safe to ignore)");
+    console.warn(
+      "[Process] Caught stream destroyed rejection (safe to ignore)"
+    );
     return;
   }
   console.error("[Process] Unhandled Rejection:", reason);
@@ -33,6 +38,7 @@ import { websocketService } from "./services/websocketService.js";
 
 import settingsRouter from "./routes/settings.js";
 import onboardingRouter from "./routes/onboarding.js";
+import usersRouter from "./routes/users.js";
 import artistsRouter from "./routes/artists.js";
 import libraryRouter from "./routes/library.js";
 import discoveryRouter from "./routes/discovery.js";
@@ -60,6 +66,7 @@ app.use("/api/", limiter);
 
 app.use("/api/settings", settingsRouter);
 app.use("/api/onboarding", onboardingRouter);
+app.use("/api/users", usersRouter);
 app.use("/api/search", artistsRouter);
 app.use("/api/artists", artistsRouter);
 app.use("/api/library", libraryRouter);
@@ -79,7 +86,7 @@ setTimeout(async () => {
     updateDiscoveryCache();
   } else {
     console.log(
-      `Discovery cache is fresh (last updated ${lastUpdated}). Skipping initial update.`,
+      `Discovery cache is fresh (last updated ${lastUpdated}). Skipping initial update.`
     );
   }
 }, 5000);

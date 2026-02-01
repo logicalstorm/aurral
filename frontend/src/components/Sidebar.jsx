@@ -15,7 +15,7 @@ import { useAuth } from "../contexts/AuthContext";
 
 function Sidebar({ isOpen, onClose }) {
   const location = useLocation();
-  const { authRequired, logout } = useAuth();
+  const { authRequired, logout, user, hasPermission } = useAuth();
   const navRef = useRef(null);
   const activeBubbleRef = useRef(null);
   const hoverBubbleRef = useRef(null);
@@ -27,19 +27,34 @@ function Sidebar({ isOpen, onClose }) {
       if (path === "/discover" && location.pathname === "/") return true;
       return location.pathname === path;
     },
-    [location.pathname],
+    [location.pathname]
   );
 
-  const navItems = useMemo(
-    () => [
+  const navItems = useMemo(() => {
+    const items = [
       { path: "/discover", label: "Discover", icon: Sparkles },
       { path: "/library", label: "Library", icon: Library },
-      { path: "/flow", label: "Flow", icon: AudioWaveform },
+      {
+        path: "/flow",
+        label: "Flow",
+        icon: AudioWaveform,
+        permission: "accessFlow",
+      },
       { path: "/requests", label: "Requests", icon: History },
-      { path: "/settings", label: "Settings", icon: Settings },
-    ],
-    [],
-  );
+      {
+        path: "/settings",
+        label: "Settings",
+        icon: Settings,
+        permission: "accessSettings",
+      },
+    ];
+    return items.filter(
+      (item) =>
+        !item.permission ||
+        user?.role === "admin" ||
+        !!user?.permissions?.[item.permission]
+    );
+  }, [user]);
 
   useEffect(() => {
     const updateBubblePosition = () => {
