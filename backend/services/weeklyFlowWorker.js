@@ -239,6 +239,7 @@ export class WeeklyFlowWorker {
       try {
         playlistManager.updateConfig(false);
         await playlistManager.ensureSmartPlaylists();
+        await playlistManager.scanLibrary();
         if (flowPlaylistConfig.isEnabled(playlistType)) {
           flowPlaylistConfig.scheduleNextRun(playlistType);
         }

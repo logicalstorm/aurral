@@ -227,6 +227,16 @@ export class NavidromeClient {
     return this._nativeRequest("POST", "/api/library", { name, path });
   }
 
+  async scanLibrary() {
+    if (!this.isConfigured()) return null;
+    try {
+      return await this.request("startScan");
+    } catch (err) {
+      console.warn("[Navidrome] scanLibrary failed:", err?.message);
+      return null;
+    }
+  }
+
   async ensureWeeklyFlowLibrary(libraryPath) {
     if (!this.isConfigured()) return null;
     const name = "Aurral Weekly Flow";
