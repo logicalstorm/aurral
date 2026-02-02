@@ -19,7 +19,7 @@ function FlipSaveButton({ disabled, saving, onClick }) {
         <div className="btn-flip-inner">
           <span className="btn-flip-front">
             <Save className="w-4 h-4" />
-            {saving ? "Saving..." : "Save"}
+            Save
           </span>
           <span className="btn-flip-back">
             <Save className="w-4 h-4" />

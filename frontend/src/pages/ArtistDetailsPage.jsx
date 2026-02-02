@@ -913,6 +913,7 @@ function ArtistDetailsPage() {
 
       showSuccess(`Downloading album: ${title}`);
     } catch (err) {
+      setRequestingAlbum(null);
       if (addedOptimistic) {
         setLibraryAlbums((prev) =>
           prev.filter((a) => a.id !== `pending-${albumId}`)
@@ -924,8 +925,6 @@ function ArtistDetailsPage() {
         });
       }
       showError(`Failed to add album: ${err.message}`);
-    } finally {
-      setRequestingAlbum(null);
     }
   };
 
@@ -1081,6 +1080,16 @@ function ArtistDetailsPage() {
         const albumIds = libraryAlbums.map((a) => a.id).filter(Boolean);
         if (albumIds.length > 0) {
           const statuses = await getDownloadStatus(albumIds);
+          if (requestingAlbum) {
+            const album = libraryAlbums.find(
+              (a) =>
+                a.mbid === requestingAlbum ||
+                a.foreignAlbumId === requestingAlbum
+            );
+            if (album && statuses[album.id]) {
+              setRequestingAlbum(null);
+            }
+          }
           setDownloadStatuses((prevStatuses) => {
             const hasNewlyAdded = Object.keys(statuses).some((albumId) => {
               const currentStatus = statuses[albumId]?.status;
@@ -1124,7 +1133,7 @@ function ArtistDetailsPage() {
     const interval = setInterval(pollDownloadStatus, 15000);
 
     return () => clearInterval(interval);
-  }, [libraryAlbums, libraryArtist]);
+  }, [libraryAlbums, libraryArtist, requestingAlbum]);
 
   useEffect(() => {
     if (!libraryArtist) return;
@@ -1431,109 +1440,103 @@ function ArtistDetailsPage() {
                       <CheckCircle className="w-5 h-5 mr-2" />
                       In Your Library
                     </button>
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setShowRemoveDropdown(!showRemoveDropdown)
-                        }
-                        className="btn btn-success inline-flex items-center -ml-1 px-2"
-                        title="Options"
-                      >
-                        <ChevronDown
-                          className={`w-4 h-7 transition-transform ${
-                            showRemoveDropdown ? "rotate-180" : ""
-                          }`}
+                    <button
+                      type="button"
+                      onClick={() => setShowRemoveDropdown(!showRemoveDropdown)}
+                      className="btn btn-success inline-flex items-center -ml-1 px-2"
+                      title="Options"
+                    >
+                      <ChevronDown
+                        className={`w-4 h-7 transition-transform ${
+                          showRemoveDropdown ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                    {showRemoveDropdown && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-10"
+                          onClick={() => setShowRemoveDropdown(false)}
                         />
-                      </button>
-                      {showRemoveDropdown && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-10"
-                            onClick={() => setShowRemoveDropdown(false)}
-                          />
-                          <div
-                            className="absolute right-0 mt-2 w-56 z-20 py-1"
-                            style={{ backgroundColor: "#211f27" }}
-                            onClick={(e) => e.stopPropagation()}
+                        <div
+                          className="absolute right-0 top-full w-56 z-20 py-1 rounded shadow-lg border border-white/10"
+                          style={{ backgroundColor: "#2a2830" }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowMonitorOptionMenu(!showMonitorOptionMenu);
+                            }}
+                            disabled={updatingMonitor}
+                            className="w-full text-left px-4 py-2 text-sm  hover:bg-gray-900/50 transition-colors flex items-center justify-between"
+                            style={{ color: "#fff" }}
                           >
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setShowMonitorOptionMenu(
-                                  !showMonitorOptionMenu
-                                );
-                              }}
-                              disabled={updatingMonitor}
-                              className="w-full text-left px-4 py-2 text-sm  hover:bg-gray-900/50 transition-colors flex items-center justify-between"
-                              style={{ color: "#fff" }}
-                            >
-                              <span>Change Monitor Option</span>
-                              <ChevronDown
-                                className={`w-4 h-4 transition-transform ${
-                                  showMonitorOptionMenu ? "rotate-180" : ""
-                                }`}
-                              />
-                            </button>
+                            <span>Change Monitor Option</span>
+                            <ChevronDown
+                              className={`w-4 h-4 transition-transform ${
+                                showMonitorOptionMenu ? "rotate-180" : ""
+                              }`}
+                            />
+                          </button>
 
-                            {showMonitorOptionMenu && (
-                              <>
-                                <div className="my-1" />
-                                {[
-                                  {
-                                    value: "none",
-                                    label: "None (Artist Only)",
-                                  },
-                                  { value: "all", label: "All Albums" },
-                                  { value: "future", label: "Future Albums" },
-                                  { value: "missing", label: "Missing Albums" },
-                                  { value: "latest", label: "Latest Album" },
-                                  { value: "first", label: "First Album" },
-                                ].map((option) => (
-                                  <button
-                                    key={option.value}
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleUpdateMonitorOption(option.value);
-                                      setShowMonitorOptionMenu(false);
-                                      setShowRemoveDropdown(false);
-                                    }}
-                                    disabled={updatingMonitor}
-                                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-900/50 transition-colors"
-                                    style={
-                                      getCurrentMonitorOption() === option.value
-                                        ? {
-                                            backgroundColor: "#211f27",
-                                            color: "#fff",
-                                            fontWeight: "500",
-                                          }
-                                        : { color: "#fff" }
-                                    }
-                                  >
-                                    {option.label}
-                                  </button>
-                                ))}
-                              </>
-                            )}
+                          {showMonitorOptionMenu && (
+                            <>
+                              <div className="my-1" />
+                              {[
+                                {
+                                  value: "none",
+                                  label: "None (Artist Only)",
+                                },
+                                { value: "all", label: "All Albums" },
+                                { value: "future", label: "Future Albums" },
+                                { value: "missing", label: "Missing Albums" },
+                                { value: "latest", label: "Latest Album" },
+                                { value: "first", label: "First Album" },
+                              ].map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUpdateMonitorOption(option.value);
+                                    setShowMonitorOptionMenu(false);
+                                    setShowRemoveDropdown(false);
+                                  }}
+                                  disabled={updatingMonitor}
+                                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-900/50 transition-colors"
+                                  style={
+                                    getCurrentMonitorOption() === option.value
+                                      ? {
+                                          backgroundColor: "#211f27",
+                                          color: "#fff",
+                                          fontWeight: "500",
+                                        }
+                                      : { color: "#fff" }
+                                  }
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </>
+                          )}
 
-                            <div className=" my-1" />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleDeleteClick();
-                                setShowRemoveDropdown(false);
-                              }}
-                              className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20 transition-colors flex items-center"
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Remove from Library
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
+                          <div className=" my-1" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleDeleteClick();
+                              setShowRemoveDropdown(false);
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20 transition-colors flex items-center"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Remove from Library
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </>
               ) : (
@@ -1738,10 +1741,14 @@ function ArtistDetailsPage() {
         libraryAlbums.length > 0 &&
         (() => {
           const downloadedAlbums = libraryAlbums.filter((album) => {
+            if (String(album.id ?? "").startsWith("pending-")) return false;
             return (
               album.statistics?.percentOfTracks > 0 ||
               album.statistics?.sizeOnDisk > 0 ||
-              downloadStatuses[album.id]
+              downloadStatuses[album.id] ||
+              (requestingAlbum &&
+                (album.mbid === requestingAlbum ||
+                  album.foreignAlbumId === requestingAlbum))
             );
           });
 
@@ -1885,19 +1892,39 @@ function ArtistDetailsPage() {
                                   </span>
                                 )}
                                 {(() => {
-                                  const rgId = libraryAlbum.mbid || libraryAlbum.foreignAlbumId;
-                                  const rating = rgId ? albumRatings[rgId] : null;
-                                  const stars = rating?.listeners != null ? starsFromListeners(rating.listeners) : null;
+                                  const rgId =
+                                    libraryAlbum.mbid ||
+                                    libraryAlbum.foreignAlbumId;
+                                  const rating = rgId
+                                    ? albumRatings[rgId]
+                                    : null;
+                                  const stars =
+                                    rating?.listeners != null
+                                      ? starsFromListeners(rating.listeners)
+                                      : null;
                                   if (stars == null) return null;
                                   return (
-                                    <span className="flex items-center gap-0.5 ml-1" title={rating?.listeners != null ? `${rating.listeners.toLocaleString()} listeners on Last.fm` : undefined}>
+                                    <span
+                                      className="flex items-center gap-0.5 ml-1"
+                                      title={
+                                        rating?.listeners != null
+                                          ? `${rating.listeners.toLocaleString()} listeners on Last.fm`
+                                          : undefined
+                                      }
+                                    >
                                       {[1, 2, 3, 4, 5].map((n) => (
                                         <Star
                                           key={n}
                                           className="w-3.5 h-3.5 flex-shrink-0"
                                           style={{
-                                            color: n <= stars ? "#eab308" : "#4b5563",
-                                            fill: n <= stars ? "#eab308" : "transparent",
+                                            color:
+                                              n <= stars
+                                                ? "#eab308"
+                                                : "#4b5563",
+                                            fill:
+                                              n <= stars
+                                                ? "#eab308"
+                                                : "transparent",
                                           }}
                                         />
                                       ))}
@@ -2520,17 +2547,31 @@ function ArtistDetailsPage() {
                               )}
                             {(() => {
                               const rating = albumRatings[releaseGroup.id];
-                              const stars = rating?.listeners != null ? starsFromListeners(rating.listeners) : null;
+                              const stars =
+                                rating?.listeners != null
+                                  ? starsFromListeners(rating.listeners)
+                                  : null;
                               if (stars == null) return null;
                               return (
-                                <span className="flex items-center gap-0.5 ml-1" title={rating.listeners != null ? `${rating.listeners.toLocaleString()} listeners on Last.fm` : undefined}>
+                                <span
+                                  className="flex items-center gap-0.5 ml-1"
+                                  title={
+                                    rating.listeners != null
+                                      ? `${rating.listeners.toLocaleString()} listeners on Last.fm`
+                                      : undefined
+                                  }
+                                >
                                   {[1, 2, 3, 4, 5].map((n) => (
                                     <Star
                                       key={n}
                                       className="w-3.5 h-3.5 flex-shrink-0"
                                       style={{
-                                        color: n <= stars ? "#eab308" : "#4b5563",
-                                        fill: n <= stars ? "#eab308" : "transparent",
+                                        color:
+                                          n <= stars ? "#eab308" : "#4b5563",
+                                        fill:
+                                          n <= stars
+                                            ? "#eab308"
+                                            : "transparent",
                                       }}
                                     />
                                   ))}
