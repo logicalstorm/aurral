@@ -58,9 +58,9 @@ const ArtistImage = ({
         Promise.race([
           getArtistCover(mbidToFetch, nameForCover),
           new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Timeout")), 5000),
+            setTimeout(() => reject(new Error("Timeout")), 5000)
           ),
-        ]),
+        ])
       );
       if (data?.images && data.images.length > 0) {
         const front = data.images.find((img) => img.front) || data.images[0];
@@ -176,7 +176,7 @@ const ArtistImage = ({
           onError={handleError}
           loading="lazy"
           decoding="async"
-          fetchpriority={showLoading ? "high" : "auto"}
+          fetchPriority={showLoading ? "high" : "auto"}
           style={{ contentVisibility: "auto" }}
         />
       )}

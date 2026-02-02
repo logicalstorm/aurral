@@ -15,7 +15,7 @@ import { useAuth } from "../contexts/AuthContext";
 
 function Sidebar({ isOpen, onClose }) {
   const location = useLocation();
-  const { authRequired, logout, user, hasPermission } = useAuth();
+  const { authRequired, logout, user } = useAuth();
   const navRef = useRef(null);
   const activeBubbleRef = useRef(null);
   const hoverBubbleRef = useRef(null);
