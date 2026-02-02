@@ -122,7 +122,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - run: git tag -f test && git push -f origin test
+      - run: |
+          git tag -f test
+          git push -f origin refs/tags/test
+          git push -f origin refs/heads/test
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: softprops/action-gh-release@v2
