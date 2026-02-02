@@ -53,7 +53,8 @@ export class LibraryManager {
       }
       const lidarrSettings = getSettings();
       const lidarrArtist = await lidarr.addArtist(mbid, artistName, {
-        monitorOption: "none",
+        albumOnly: options.albumOnly === true,
+        monitorOption: options.monitorOption || "none",
         qualityProfileId: lidarrSettings.integrations?.lidarr?.qualityProfileId,
       });
       console.log(`[LibraryManager] Added artist "${artistName}" to Lidarr`);
@@ -315,8 +316,12 @@ export class LibraryManager {
       return { error: "Lidarr is not configured" };
     }
     try {
-      const lidarrArtist = await lidarr.getArtist(artistId);
+      let lidarrArtist = await lidarr.getArtist(artistId);
       if (!lidarrArtist) return { error: "Artist not found in Lidarr" };
+      if (!lidarrArtist.monitored) {
+        await lidarr.updateArtistMonitoring(artistId, "missing");
+        lidarrArtist = await lidarr.getArtist(artistId);
+      }
       const existing = await lidarr.getAlbumByMbid(releaseGroupMbid);
       if (existing) {
         return this.mapLidarrAlbum(existing, lidarrArtist);
@@ -334,6 +339,26 @@ export class LibraryManager {
             (options.triggerSearch === undefined && searchOnAdd),
         }
       );
+      const allAlbums = await lidarr.request("/album");
+      const artistAlbumIds = Array.isArray(allAlbums)
+        ? allAlbums
+            .filter(
+              (a) =>
+                a.artistId === parseInt(artistId) &&
+                a.foreignAlbumId !== releaseGroupMbid
+            )
+            .map((a) => a.id)
+        : [];
+      for (const albumId of artistAlbumIds) {
+        try {
+          await lidarr.updateAlbum(albumId, { monitored: false });
+        } catch (err) {
+          console.error(
+            `[LibraryManager] Failed to unmonitor album ${albumId}:`,
+            err.message
+          );
+        }
+      }
       const updatedArtist = await lidarr.getArtist(artistId);
       return this.mapLidarrAlbum(lidarrAlbum, updatedArtist);
     } catch (error) {

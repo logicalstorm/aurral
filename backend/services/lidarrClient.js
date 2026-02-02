@@ -105,45 +105,45 @@ export class LidarrClient {
       try {
         const fullUrl = `${this.config.url}${this.apiPath}${endpoint}`;
 
-      const requestConfig = {
-        method,
-        url: fullUrl,
-        headers: {
-          ...authHeaders,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        timeout: 8000,
-        validateStatus: function (status) {
-          return status < 500;
-        },
-      };
-
-      if (
-        this.config.insecure &&
-        (fullUrl.startsWith("https:") || fullUrl.startsWith("HTTPS:"))
-      ) {
-        requestConfig.httpsAgent = new https.Agent({
-          rejectUnauthorized: false,
-        });
-      }
-
-      if (data) {
-        requestConfig.data = data;
-      }
-
-      const response = await axios(requestConfig);
-
-      if (response.status >= 400) {
-        throw {
-          response: {
-            status: response.status,
-            statusText: response.statusText,
-            data: response.data,
-            headers: response.headers,
+        const requestConfig = {
+          method,
+          url: fullUrl,
+          headers: {
+            ...authHeaders,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          timeout: 8000,
+          validateStatus: function (status) {
+            return status < 500;
           },
         };
-      }
+
+        if (
+          this.config.insecure &&
+          (fullUrl.startsWith("https:") || fullUrl.startsWith("HTTPS:"))
+        ) {
+          requestConfig.httpsAgent = new https.Agent({
+            rejectUnauthorized: false,
+          });
+        }
+
+        if (data) {
+          requestConfig.data = data;
+        }
+
+        const response = await axios(requestConfig);
+
+        if (response.status >= 400) {
+          throw {
+            response: {
+              status: response.status,
+              statusText: response.statusText,
+              data: response.data,
+              headers: response.headers,
+            },
+          };
+        }
 
         return response.data;
       } finally {
@@ -151,10 +151,7 @@ export class LidarrClient {
       }
     } catch (raw) {
       const error = raw && typeof raw === "object" ? raw : {};
-      if (
-        !error.response &&
-        (error.request || error.code === "ECONNABORTED")
-      ) {
+      if (!error.response && (error.request || error.code === "ECONNABORTED")) {
         this._circuitOpen = true;
         this._circuitOpenedAt = Date.now();
       }
@@ -344,7 +341,11 @@ export class LidarrClient {
     const rootFolder = rootFolders[0];
     const settings = dbOps.getSettings();
 
+    const albumOnly = options.albumOnly === true;
     const monitorOption = options.monitorOption || options.monitor || "none";
+    const artistMonitored = albumOnly || monitorOption !== "none";
+    const effectiveMonitor = albumOnly ? "missing" : monitorOption;
+
     const defaultQualityProfileId =
       settings.integrations?.lidarr?.qualityProfileId;
     const qualityProfileId =
@@ -357,12 +358,12 @@ export class LidarrClient {
       rootFolderPath: rootFolder.path,
       qualityProfileId: qualityProfileId,
       metadataProfileId: metadataProfileId,
-      monitored: false,
-      monitor: "none",
+      monitored: artistMonitored,
+      monitor: effectiveMonitor,
       monitorNewItems: "none",
       albumsToMonitor: [],
       addOptions: {
-        monitor: "none",
+        monitor: effectiveMonitor,
         searchForMissingAlbums: false,
       },
     };
@@ -440,7 +441,8 @@ export class LidarrClient {
     try {
       const result = await this.request(`/track?albumId=${albumId}`);
       if (Array.isArray(result)) return result;
-      if (result?.records && Array.isArray(result.records)) return result.records;
+      if (result?.records && Array.isArray(result.records))
+        return result.records;
       return [];
     } catch {
       return [];

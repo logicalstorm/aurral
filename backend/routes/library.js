@@ -424,15 +424,13 @@ router.post(
 
       if (!artist && artistMbid && artistName) {
         if (!hasPermission(req.user, "addArtist")) {
-          return res
-            .status(403)
-            .json({
-              error: "Forbidden",
-              message: "Permission required: addArtist",
-            });
+          return res.status(403).json({
+            error: "Forbidden",
+            message: "Permission required: addArtist",
+          });
         }
         artist = await libraryManager.addArtist(artistMbid, artistName, {
-          monitorOption: "none",
+          albumOnly: true,
           quality: dbOps.getSettings().quality || "standard",
         });
         if (artist?.error) artist = null;
