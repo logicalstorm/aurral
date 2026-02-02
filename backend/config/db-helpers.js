@@ -1,4 +1,6 @@
+import crypto from "crypto";
 import { db, dbHelpers } from "./db-sqlite.js";
+import { decryptIntegrations, encryptIntegrations } from "./encryption.js";
 
 const getSettingStmt = db.prepare("SELECT value FROM settings WHERE key = ?");
 const upsertSettingStmt = db.prepare(
@@ -154,11 +156,22 @@ export const userOps = {
   },
 };
 
+function getOrCreateEncryptionKey() {
+  const row = getSettingStmt.get("_encryptionKey");
+  if (row?.value) {
+    return Buffer.from(row.value, "base64");
+  }
+  const key = crypto.randomBytes(32);
+  upsertSettingStmt.run("_encryptionKey", key.toString("base64"));
+  return key;
+}
+
 export const dbOps = {
   getSettings() {
     const integrations = dbHelpers.parseJSON(
       getSettingStmt.get("integrations")?.value
     );
+    const encKey = getOrCreateEncryptionKey();
     const quality = getSettingStmt.get("quality")?.value;
     const queueCleaner = dbHelpers.parseJSON(
       getSettingStmt.get("queueCleaner")?.value
@@ -191,7 +204,7 @@ export const dbOps = {
     delete merged.recommended;
 
     return {
-      integrations: integrations || {},
+      integrations: decryptIntegrations(integrations, encKey) || {},
       quality: quality || "standard",
       queueCleaner: queueCleaner || {},
       rootFolderPath: rootFolderPath || null,
@@ -203,9 +216,12 @@ export const dbOps = {
 
   updateSettings(settings) {
     if (settings.integrations) {
+      const encKey = getOrCreateEncryptionKey();
       upsertSettingStmt.run(
         "integrations",
-        dbHelpers.stringifyJSON(settings.integrations)
+        dbHelpers.stringifyJSON(
+          encryptIntegrations(settings.integrations, encKey)
+        )
       );
     }
     if (settings.quality) {
