@@ -16,7 +16,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Trash2,
-  Radio,
   FileMusic,
   MoreVertical,
   Disc,
@@ -75,11 +74,11 @@ const getTagColor = (name) => {
   return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
 };
 
-const starsFromListeners = (listeners) => {
-  if (listeners == null || listeners <= 0) return null;
+const starsFromCount = (count) => {
+  if (count == null || count <= 0) return null;
   return Math.min(
     5,
-    Math.max(1, Math.round(1 + (4 * Math.log10(listeners + 1)) / 7))
+    Math.max(1, Math.round(1 + (4 * Math.log10(count + 1)) / 7))
   );
 };
 
@@ -191,7 +190,6 @@ function ArtistDetailsPage() {
   const [showMonitorOptionMenu, setShowMonitorOptionMenu] = useState(false);
   const [updatingMonitor, setUpdatingMonitor] = useState(false);
   const [albumCovers, setAlbumCovers] = useState({});
-  const [albumRatings, setAlbumRatings] = useState({});
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [loadingCover, setLoadingCover] = useState(true);
   const [loadingSimilar, setLoadingSimilar] = useState(true);
@@ -323,23 +321,6 @@ function ArtistDetailsPage() {
           err,
           event.data
         );
-      }
-    });
-
-    eventSource.addEventListener("albumRating", (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.mbid) {
-          setAlbumRatings((prev) => ({
-            ...prev,
-            [data.mbid]: {
-              listeners: data.listeners ?? null,
-              playcount: data.playcount ?? null,
-            },
-          }));
-        }
-      } catch (err) {
-        console.error("Error parsing album rating data:", err, event.data);
       }
     });
 
@@ -794,18 +775,6 @@ function ArtistDetailsPage() {
     return libraryArtist.monitored ? "all" : "none";
   };
 
-  const getMonitorOptionLabel = (option) => {
-    const labels = {
-      none: "None (Artist Only)",
-      all: "All Albums",
-      future: "Future Albums",
-      missing: "Missing Albums",
-      latest: "Latest Album",
-      first: "First Album",
-    };
-    return labels[option] || "None (Artist Only)";
-  };
-
   const handleAddToLibrary = async () => {
     if (!artist) {
       showError("Artist information not available");
@@ -1027,7 +996,11 @@ function ArtistDetailsPage() {
           const tracks = await getLibraryTracks(libraryAlbumId, releaseGroupId);
           setAlbumTracks((prev) => ({ ...prev, [trackKey]: tracks }));
         } else {
-          const tracks = await getReleaseGroupTracks(releaseGroupId);
+          const rg = artist?.["release-groups"]?.find(
+            (r) => r.id === releaseGroupId
+          );
+          const deezerId = rg?._deezerAlbumId ?? null;
+          const tracks = await getReleaseGroupTracks(releaseGroupId, deezerId);
           setAlbumTracks((prev) => ({ ...prev, [trackKey]: tracks }));
         }
       } catch (err) {
@@ -1450,6 +1423,16 @@ function ArtistDetailsPage() {
               </p>
             )}
 
+            {artist.bio && (
+              <p
+                className="text-sm mb-4 line-clamp-6 max-w-2xl"
+                style={{ color: "#c1c1c3" }}
+                title={artist.bio}
+              >
+                {artist.bio}
+              </p>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
               {artist.type && (
                 <div className="flex items-center" style={{ color: "#fff" }}>
@@ -1493,33 +1476,6 @@ function ArtistDetailsPage() {
                   <span className="font-medium mr-2">Area:</span>
                   <span>{artist.area.name}</span>
                 </div>
-              )}
-
-              {loadingLibrary && existsInLibrary ? (
-                <div className="flex items-center " style={{ color: "#fff" }}>
-                  <Radio
-                    className="w-5 h-5 mr-2 "
-                    style={{ color: "#c1c1c3" }}
-                  />
-                  <span className="font-medium mr-2">Monitoring:</span>
-                  <Loader
-                    className="w-4 h-4 animate-spin"
-                    style={{ color: "#c1c1c3" }}
-                  />
-                </div>
-              ) : (
-                existsInLibrary && (
-                  <div className="flex items-center " style={{ color: "#fff" }}>
-                    <Radio
-                      className="w-5 h-5 mr-2 "
-                      style={{ color: "#c1c1c3" }}
-                    />
-                    <span className="font-medium mr-2">Monitoring:</span>
-                    <span>
-                      {getMonitorOptionLabel(getCurrentMonitorOption())}
-                    </span>
-                  </div>
-                )
               )}
             </div>
 
@@ -1659,17 +1615,20 @@ function ArtistDetailsPage() {
                 <ExternalLink className="w-5 h-5 mr-2" />
                 View on Last.fm
               </a>
-              {artist.id && (
-                <a
-                  href={`https://musicbrainz.org/artist/${artist.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn-secondary inline-flex items-center"
-                >
-                  <ExternalLink className="w-5 h-5 mr-2" />
-                  View on MusicBrainz
-                </a>
-              )}
+              {artist.id &&
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+                  artist.id
+                ) && (
+                  <a
+                    href={`https://musicbrainz.org/artist/${artist.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-secondary inline-flex items-center"
+                  >
+                    <ExternalLink className="w-5 h-5 mr-2" />
+                    View on MusicBrainz
+                  </a>
+                )}
             </div>
           </div>
         </div>
@@ -1989,20 +1948,19 @@ function ArtistDetailsPage() {
                                   const rgId =
                                     libraryAlbum.mbid ||
                                     libraryAlbum.foreignAlbumId;
-                                  const rating = rgId
-                                    ? albumRatings[rgId]
-                                    : null;
+                                  const rg = artist?.["release-groups"]?.find(
+                                    (r) => r.id === rgId
+                                  );
+                                  const fans = rg?.fans;
                                   const stars =
-                                    rating?.listeners != null
-                                      ? starsFromListeners(rating.listeners)
-                                      : null;
+                                    fans != null ? starsFromCount(fans) : null;
                                   if (stars == null) return null;
                                   return (
                                     <span
                                       className="flex items-center gap-0.5 ml-1"
                                       title={
-                                        rating?.listeners != null
-                                          ? `${rating.listeners.toLocaleString()} listeners on Last.fm`
+                                        fans != null
+                                          ? `${fans.toLocaleString()} fans on Deezer`
                                           : undefined
                                       }
                                     >
@@ -2653,18 +2611,16 @@ function ArtistDetailsPage() {
                                 </span>
                               )}
                             {(() => {
-                              const rating = albumRatings[releaseGroup.id];
+                              const fans = releaseGroup.fans;
                               const stars =
-                                rating?.listeners != null
-                                  ? starsFromListeners(rating.listeners)
-                                  : null;
+                                fans != null ? starsFromCount(fans) : null;
                               if (stars == null) return null;
                               return (
                                 <span
                                   className="flex items-center gap-0.5 ml-1"
                                   title={
-                                    rating.listeners != null
-                                      ? `${rating.listeners.toLocaleString()} listeners on Last.fm`
+                                    fans != null
+                                      ? `${fans.toLocaleString()} fans on Deezer`
                                       : undefined
                                   }
                                 >

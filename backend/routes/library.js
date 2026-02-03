@@ -229,17 +229,33 @@ router.post(
         });
       }
 
+      let mbid = releaseGroupMbid;
+      if (String(releaseGroupMbid).startsWith("dz-")) {
+        const { resolveDeezerAlbumToMbid } = await import(
+          "../services/apiClients.js"
+        );
+        const artist = await libraryManager.getArtistById(artistId);
+        const artistName = artist?.artistName || "";
+        mbid =
+          (await resolveDeezerAlbumToMbid(
+            artistName,
+            albumName,
+            releaseGroupMbid
+          )) || null;
+        if (!mbid) {
+          return res.status(400).json({
+            error:
+              "Could not find MusicBrainz release group for this album. Try adding the artist to Lidarr first or use a different album.",
+          });
+        }
+      }
+
       const settings = dbOps.getSettings();
       const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
 
-      const album = await libraryManager.addAlbum(
-        artistId,
-        releaseGroupMbid,
-        albumName,
-        {
-          triggerSearch: searchOnAdd,
-        }
-      );
+      const album = await libraryManager.addAlbum(artistId, mbid, albumName, {
+        triggerSearch: searchOnAdd,
+      });
       if (album?.error) {
         return res.status(503).json({ error: album.error });
       }
@@ -334,51 +350,68 @@ router.get("/tracks", cacheMiddleware(120), async (req, res) => {
     }
 
     if (tracks.length === 0 && releaseGroupMbid) {
-      const { musicbrainzRequest } = await import("../services/apiClients.js");
-      try {
-        const rgData = await musicbrainzRequest(
-          `/release-group/${releaseGroupMbid}`,
-          { inc: "releases" }
+      if (String(releaseGroupMbid).startsWith("dz-")) {
+        const { deezerGetAlbumTracks } = await import(
+          "../services/apiClients.js"
         );
-
-        if (rgData.releases && rgData.releases.length > 0) {
-          const releaseId = rgData.releases[0].id;
-          const releaseData = await musicbrainzRequest(
-            `/release/${releaseId}`,
-            {
-              inc: "recordings",
-            }
+        const dzTracks = await deezerGetAlbumTracks(releaseGroupMbid);
+        tracks = dzTracks.map((t) => ({
+          ...t,
+          path: null,
+          hasFile: false,
+          size: 0,
+          quality: null,
+          addedAt: new Date().toISOString(),
+        }));
+      } else {
+        const { musicbrainzRequest } = await import(
+          "../services/apiClients.js"
+        );
+        try {
+          const rgData = await musicbrainzRequest(
+            `/release-group/${releaseGroupMbid}`,
+            { inc: "releases" }
           );
 
-          if (releaseData.media && releaseData.media.length > 0) {
-            tracks = [];
-            for (const medium of releaseData.media) {
-              if (medium.tracks) {
-                for (const track of medium.tracks) {
-                  const recording = track.recording;
-                  if (recording) {
-                    tracks.push({
-                      id: recording.id,
-                      mbid: recording.id,
-                      trackName: recording.title,
-                      trackNumber: track.position || 0,
-                      title: recording.title,
-                      path: null,
-                      hasFile: false,
-                      size: 0,
-                      quality: null,
-                      addedAt: new Date().toISOString(),
-                    });
+          if (rgData.releases && rgData.releases.length > 0) {
+            const releaseId = rgData.releases[0].id;
+            const releaseData = await musicbrainzRequest(
+              `/release/${releaseId}`,
+              {
+                inc: "recordings",
+              }
+            );
+
+            if (releaseData.media && releaseData.media.length > 0) {
+              tracks = [];
+              for (const medium of releaseData.media) {
+                if (medium.tracks) {
+                  for (const track of medium.tracks) {
+                    const recording = track.recording;
+                    if (recording) {
+                      tracks.push({
+                        id: recording.id,
+                        mbid: recording.id,
+                        trackName: recording.title,
+                        trackNumber: track.position || 0,
+                        title: recording.title,
+                        path: null,
+                        hasFile: false,
+                        size: 0,
+                        quality: null,
+                        addedAt: new Date().toISOString(),
+                      });
+                    }
                   }
                 }
               }
             }
           }
+        } catch (mbError) {
+          console.warn(
+            `[Library] Failed to fetch tracks from MusicBrainz: ${mbError.message}`
+          );
         }
-      } catch (mbError) {
-        console.warn(
-          `[Library] Failed to fetch tracks from MusicBrainz: ${mbError.message}`
-        );
       }
     }
 
