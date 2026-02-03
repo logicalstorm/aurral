@@ -1,5 +1,9 @@
 import { dbOps } from "../config/db-helpers.js";
-import { musicbrainzRequest, deezerSearchArtist } from "./apiClients.js";
+import {
+  deezerSearchArtist,
+  lastfmGetArtistNameByMbid,
+  getLastfmApiKey,
+} from "./apiClients.js";
 
 const MAX_NEGATIVE_CACHE = 1000;
 const MAX_PENDING_REQUESTS = 100;
@@ -61,23 +65,9 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
     try {
       const { libraryManager } = await import("./libraryManager.js");
       const libraryArtist = libraryManager.getArtist(mbid);
-      let artistName = libraryArtist?.artistName || null;
-
-      let artistData = null;
-      if (!artistName) {
-        try {
-          artistData = await Promise.race([
-            musicbrainzRequest(`/artist/${mbid}`, {}),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error("MusicBrainz timeout")), 2000),
-            ),
-          ]).catch(() => null);
-
-          if (artistData?.name) {
-            artistName = artistData.name;
-          }
-        } catch (e) {}
-      }
+      let artistName =
+        libraryArtist?.artistName ||
+        (getLastfmApiKey() ? await lastfmGetArtistNameByMbid(mbid) : null);
 
       if (artistName) {
         try {

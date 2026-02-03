@@ -5,8 +5,14 @@ import {
   musicbrainzRequest,
   getLastfmApiKey,
   lastfmRequest,
+  lastfmGetArtistNameByMbid,
   deezerGetArtistTopTracks,
   deezerSearchArtist,
+  deezerGetArtistAlbums,
+  deezerGetAlbumTracks,
+  musicbrainzGetArtistReleaseGroups,
+  enrichReleaseGroupsWithDeezer,
+  getArtistBio,
 } from "../services/apiClients.js";
 import { imagePrefetchService } from "../services/imagePrefetchService.js";
 import {
@@ -217,6 +223,19 @@ router.get("/release-group/:mbid/cover", async (req, res) => {
 router.get("/release-group/:mbid/tracks", async (req, res) => {
   try {
     const { mbid } = req.params;
+    const deezerAlbumId = req.query.deezerAlbumId
+      ? String(req.query.deezerAlbumId).trim()
+      : null;
+    if (deezerAlbumId) {
+      const tracks = await deezerGetAlbumTracks(
+        deezerAlbumId.startsWith("dz-") ? deezerAlbumId : `dz-${deezerAlbumId}`
+      );
+      return res.json(tracks);
+    }
+    if (String(mbid).startsWith("dz-")) {
+      const tracks = await deezerGetAlbumTracks(mbid);
+      return res.json(tracks);
+    }
     if (!UUID_REGEX.test(mbid)) {
       return res.status(400).json({ error: "Invalid MBID format" });
     }
@@ -333,8 +352,21 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
               lidarrAlbums = await libraryManager.getAlbums(libraryArtist.id);
             }
 
+            const artistMbid = lidarrArtist.foreignArtistId || mbid;
+            const [bio, tagsData] = await Promise.all([
+              getArtistBio(lidarrArtist.artistName, artistMbid),
+              getLastfmApiKey()
+                ? lastfmRequest("artist.getTopTags", { mbid: artistMbid })
+                : null,
+            ]);
+            const tags = tagsData?.toptags?.tag
+              ? (Array.isArray(tagsData.toptags.tag)
+                  ? tagsData.toptags.tag
+                  : [tagsData.toptags.tag]
+                ).map((t) => ({ name: t.name, count: t.count || 0 }))
+              : [];
             artistData = {
-              id: lidarrArtist.foreignArtistId || mbid,
+              id: artistMbid,
               name: lidarrArtist.artistName,
               "sort-name": lidarrArtist.artistName,
               disambiguation: "",
@@ -346,7 +378,7 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
                 end: null,
                 ended: false,
               },
-              tags: [],
+              tags,
               genres: [],
               "release-groups": lidarrAlbums.map((album) => ({
                 id: album.mbid,
@@ -363,6 +395,7 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
                 monitored: lidarrArtist.monitored,
                 statistics: lidarrArtist.statistics,
               },
+              ...(bio ? { bio } : {}),
             };
 
             sendSSE(res, "artist", artistData);
@@ -387,62 +420,6 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
                 },
               })),
             });
-
-            if (!shouldSkipMusicBrainz()) {
-              (async () => {
-                try {
-                  const mbData = await Promise.race([
-                    musicbrainzRequest(`/artist/${mbid}`, {
-                      inc: "tags+genres+release-groups",
-                    }),
-                    new Promise((_, reject) =>
-                      setTimeout(
-                        () => reject(new Error("MusicBrainz timeout")),
-                        2000
-                      )
-                    ),
-                  ]).catch(() => null);
-
-                  if (mbData) {
-                    recordMusicBrainzSuccess();
-
-                    const enrichedData = { ...artistData };
-
-                    if (mbData["release-groups"]) {
-                      const lidarrAlbumMap = new Map(
-                        lidarrAlbums.map((a) => [a.mbid, a])
-                      );
-                      enrichedData["release-groups"] = mbData[
-                        "release-groups"
-                      ].map((rg) => {
-                        const lidarrAlbum = lidarrAlbumMap.get(rg.id);
-                        if (lidarrAlbum) {
-                          return {
-                            ...rg,
-                            _lidarrData: {
-                              id: lidarrAlbum.id,
-                              monitored: lidarrAlbum.monitored,
-                              statistics: lidarrAlbum.statistics,
-                            },
-                          };
-                        }
-                        return rg;
-                      });
-                    }
-
-                    enrichedData.tags = mbData.tags || [];
-                    enrichedData.genres = mbData.genres || [];
-                    enrichedData.disambiguation = mbData.disambiguation || "";
-                    enrichedData["life-span"] =
-                      mbData["life-span"] || enrichedData["life-span"];
-
-                    sendSSE(res, "artist", enrichedData);
-                  }
-                } catch (error) {
-                  recordMusicBrainzFailure();
-                }
-              })();
-            }
           }
         } catch (error) {
           console.warn(
@@ -452,33 +429,6 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
       }
 
       if (!artistData) {
-        if (shouldSkipMusicBrainz()) {
-          const basicData = {
-            id: mbid,
-            name: streamArtistName || "Unknown Artist",
-            "sort-name": "Unknown Artist",
-            disambiguation: "",
-            "type-id": null,
-            type: null,
-            country: null,
-            "life-span": {
-              begin: null,
-              end: null,
-              ended: false,
-            },
-            tags: [],
-            genres: [],
-            "release-groups": [],
-            relations: [],
-            "release-group-count": 0,
-            "release-count": 0,
-          };
-          sendSSE(res, "artist", basicData);
-          sendSSE(res, "complete", {});
-          setTimeout(() => res.end(), 100);
-          return;
-        }
-
         if (pendingArtistRequests.has(mbid)) {
           if (streamArtistName) {
             sendSSE(res, "artist", {
@@ -513,48 +463,41 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
           }
         } else {
           const fetchPromise = (async () => {
-            try {
-              const data = await musicbrainzRequest(`/artist/${mbid}`, {
-                inc: "tags+genres+release-groups",
-              });
-              recordMusicBrainzSuccess();
-
-              if (lidarrArtist && data) {
-                const lidarrAlbumMap = new Map(
-                  lidarrAlbums.map((a) => [a.mbid, a])
-                );
-
-                if (data["release-groups"]) {
-                  data["release-groups"] = data["release-groups"].map((rg) => {
-                    const lidarrAlbum = lidarrAlbumMap.get(rg.id);
-                    if (lidarrAlbum) {
-                      return {
-                        ...rg,
-                        _lidarrData: {
-                          id: lidarrAlbum.id,
-                          monitored: lidarrAlbum.monitored,
-                          statistics: lidarrAlbum.statistics,
-                        },
-                      };
-                    }
-                    return rg;
-                  });
-                }
-
-                data._lidarrData = {
-                  id: lidarrArtist.id,
-                  monitored: lidarrArtist.monitored,
-                  statistics: lidarrArtist.statistics,
-                };
-              }
-
-              return data;
-            } catch (error) {
-              recordMusicBrainzFailure();
-              throw error;
-            } finally {
-              pendingArtistRequests.delete(mbid);
-            }
+            const name =
+              streamArtistName ||
+              (getLastfmApiKey()
+                ? await lastfmGetArtistNameByMbid(mbid)
+                : null) ||
+              "Unknown Artist";
+            const tagsData = getLastfmApiKey()
+              ? await lastfmRequest("artist.getTopTags", { mbid })
+              : null;
+            const tags = tagsData?.toptags?.tag
+              ? (Array.isArray(tagsData.toptags.tag)
+                  ? tagsData.toptags.tag
+                  : [tagsData.toptags.tag]
+                ).map((t) => ({ name: t.name, count: t.count || 0 }))
+              : [];
+            const releaseGroups = await musicbrainzGetArtistReleaseGroups(mbid);
+            await enrichReleaseGroupsWithDeezer(releaseGroups, name);
+            const bio = await getArtistBio(name, mbid);
+            return {
+              id: mbid,
+              name,
+              "sort-name": name,
+              disambiguation: "",
+              "type-id": null,
+              type: null,
+              country: null,
+              "life-span": { begin: null, end: null, ended: false },
+              tags,
+              genres: [],
+              "release-groups": releaseGroups,
+              relations: [],
+              "release-group-count": releaseGroups.length,
+              "release-count": releaseGroups.length,
+              bio: bio || undefined,
+            };
           })();
           pendingArtistRequests.set(mbid, fetchPromise);
           if (streamArtistName) {
@@ -579,28 +522,26 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
             artistData = await fetchPromise;
             sendSSE(res, "artist", artistData);
           } catch (err) {
-            if (streamArtistName) {
-              const fallback = {
-                id: mbid,
-                name: streamArtistName,
-                "sort-name": streamArtistName,
-                disambiguation: "",
-                "type-id": null,
-                type: null,
-                country: null,
-                "life-span": { begin: null, end: null, ended: false },
-                tags: [],
-                genres: [],
-                "release-groups": [],
-                relations: [],
-                "release-group-count": 0,
-                "release-count": 0,
-              };
-              artistData = fallback;
-              sendSSE(res, "artist", fallback);
-            } else {
-              throw err;
-            }
+            const fallback = {
+              id: mbid,
+              name: streamArtistName || "Unknown Artist",
+              "sort-name": streamArtistName || "Unknown Artist",
+              disambiguation: "",
+              "type-id": null,
+              type: null,
+              country: null,
+              "life-span": { begin: null, end: null, ended: false },
+              tags: [],
+              genres: [],
+              "release-groups": [],
+              relations: [],
+              "release-group-count": 0,
+              "release-count": 0,
+            };
+            artistData = fallback;
+            sendSSE(res, "artist", fallback);
+          } finally {
+            pendingArtistRequests.delete(mbid);
           }
         }
       }
@@ -706,179 +647,112 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
 
       const releaseGroupCoversTask = (async () => {
         if (!isClientConnected()) return;
-        if (shouldSkipMusicBrainz()) return;
-        if (artistData?.["release-groups"]?.length > 0) {
-          const releaseGroups = artistData["release-groups"]
-            .filter(
-              (rg) =>
-                rg["primary-type"] === "Album" || rg["primary-type"] === "EP"
-            )
-            .slice(0, 20);
-
-          const cacheKeys = releaseGroups.map((rg) => `rg:${rg.id}`);
-          const cachedCovers = dbOps.getImages(cacheKeys);
-
-          for (const rg of releaseGroups) {
-            if (!isClientConnected()) return;
-            const cacheKey = `rg:${rg.id}`;
-            const cachedCover = cachedCovers[cacheKey];
-
-            if (
-              cachedCover &&
-              cachedCover.imageUrl &&
-              cachedCover.imageUrl !== "NOT_FOUND"
-            ) {
-              sendSSE(res, "releaseGroupCover", {
-                mbid: rg.id,
-                images: [
-                  {
-                    image: cachedCover.imageUrl,
-                    front: true,
-                    types: ["Front"],
-                  },
-                ],
-              });
-              continue;
-            }
-
-            if (cachedCover && cachedCover.imageUrl === "NOT_FOUND") {
-              sendSSE(res, "releaseGroupCover", {
-                mbid: rg.id,
-                images: [],
-              });
-              continue;
-            }
-          }
-
-          const uncachedGroups = releaseGroups.filter((rg) => {
-            const cachedCover = cachedCovers[`rg:${rg.id}`];
-            return !cachedCover;
-          });
-
-          const BATCH_SIZE = 4;
-          for (let i = 0; i < uncachedGroups.length; i += BATCH_SIZE) {
-            if (!isClientConnected()) return;
-            const batch = uncachedGroups.slice(i, i + BATCH_SIZE);
-
-            await Promise.allSettled(
-              batch.map(async (rg) => {
-                if (!isClientConnected()) return;
-                const cacheKey = `rg:${rg.id}`;
-                try {
-                  const coverArtResponse = await axios
-                    .get(`https://coverartarchive.org/release-group/${rg.id}`, {
-                      headers: { Accept: "application/json" },
-                      timeout: 3000,
-                    })
-                    .catch(() => null);
-
-                  if (coverArtResponse?.data?.images?.length > 0) {
-                    const frontImage =
-                      coverArtResponse.data.images.find((img) => img.front) ||
-                      coverArtResponse.data.images[0];
-                    if (frontImage) {
-                      const imageUrl =
-                        frontImage.thumbnails?.["500"] ||
-                        frontImage.thumbnails?.["large"] ||
-                        frontImage.image;
-                      if (imageUrl) {
-                        dbOps.setImage(cacheKey, imageUrl);
-                        sendSSE(res, "releaseGroupCover", {
-                          mbid: rg.id,
-                          images: [
-                            {
-                              image: imageUrl,
-                              front: true,
-                              types: frontImage.types || ["Front"],
-                            },
-                          ],
-                        });
-                        return;
-                      }
-                    }
-                  }
-
-                  dbOps.setImage(cacheKey, "NOT_FOUND");
-                  sendSSE(res, "releaseGroupCover", {
-                    mbid: rg.id,
-                    images: [],
-                  });
-                } catch (e) {
-                  sendSSE(res, "releaseGroupCover", {
-                    mbid: rg.id,
-                    images: [],
-                  });
-                }
-              })
-            );
-          }
-        }
-      })();
-      nonCriticalTasks.push(releaseGroupCoversTask);
-
-      const albumRatingsTask = (async () => {
-        if (!isClientConnected()) return;
-        if (!getLastfmApiKey()) return;
         if (artistData?.["release-groups"]?.length === 0) return;
-        const artistName = artistData?.name?.trim() || streamArtistName?.trim();
-        if (!artistName) return;
-        const releaseGroups = artistData["release-groups"]
+        const releaseGroups = (artistData["release-groups"] || [])
           .filter(
             (rg) =>
-              rg["primary-type"] === "Album" || rg["primary-type"] === "EP"
+              rg["primary-type"] === "Album" ||
+              rg["primary-type"] === "EP" ||
+              rg["primary-type"] === "Single"
           )
           .slice(0, 20);
 
-        const BATCH_SIZE = 5;
-        for (let i = 0; i < releaseGroups.length; i += BATCH_SIZE) {
-          if (!isClientConnected()) return;
-          const batch = releaseGroups.slice(i, i + BATCH_SIZE);
+        const cacheKeys = releaseGroups.map((rg) => `rg:${rg.id}`);
+        const cachedCovers = dbOps.getImages(cacheKeys);
 
+        for (const rg of releaseGroups) {
+          if (!isClientConnected()) return;
+          const cacheKey = `rg:${rg.id}`;
+          const cachedCover = cachedCovers[cacheKey];
+          if (rg._coverUrl) {
+            dbOps.setImage(cacheKey, rg._coverUrl);
+            sendSSE(res, "releaseGroupCover", {
+              mbid: rg.id,
+              images: [{ image: rg._coverUrl, front: true, types: ["Front"] }],
+            });
+            continue;
+          }
+          if (
+            cachedCover &&
+            cachedCover.imageUrl &&
+            cachedCover.imageUrl !== "NOT_FOUND"
+          ) {
+            sendSSE(res, "releaseGroupCover", {
+              mbid: rg.id,
+              images: [
+                {
+                  image: cachedCover.imageUrl,
+                  front: true,
+                  types: ["Front"],
+                },
+              ],
+            });
+            continue;
+          }
+          if (cachedCover && cachedCover.imageUrl === "NOT_FOUND") {
+            sendSSE(res, "releaseGroupCover", { mbid: rg.id, images: [] });
+            continue;
+          }
+          if (String(rg.id).startsWith("dz-")) continue;
+        }
+
+        const uncachedGroups = releaseGroups.filter((rg) => {
+          if (rg._coverUrl || String(rg.id).startsWith("dz-")) return false;
+          const cachedCover = cachedCovers[`rg:${rg.id}`];
+          return !cachedCover;
+        });
+
+        const BATCH_SIZE = 4;
+        for (let i = 0; i < uncachedGroups.length; i += BATCH_SIZE) {
+          if (!isClientConnected()) return;
+          const batch = uncachedGroups.slice(i, i + BATCH_SIZE);
           await Promise.allSettled(
             batch.map(async (rg) => {
               if (!isClientConnected()) return;
+              const cacheKey = `rg:${rg.id}`;
               try {
-                const title = rg.title?.trim();
-                if (!title) {
-                  sendSSE(res, "albumRating", {
-                    mbid: rg.id,
-                    listeners: null,
-                    playcount: null,
-                  });
-                  return;
+                const coverArtResponse = await axios
+                  .get(`https://coverartarchive.org/release-group/${rg.id}`, {
+                    headers: { Accept: "application/json" },
+                    timeout: 3000,
+                  })
+                  .catch(() => null);
+
+                if (coverArtResponse?.data?.images?.length > 0) {
+                  const frontImage =
+                    coverArtResponse.data.images.find((img) => img.front) ||
+                    coverArtResponse.data.images[0];
+                  if (frontImage) {
+                    const imageUrl =
+                      frontImage.thumbnails?.["500"] ||
+                      frontImage.thumbnails?.["large"] ||
+                      frontImage.image;
+                    if (imageUrl) {
+                      dbOps.setImage(cacheKey, imageUrl);
+                      sendSSE(res, "releaseGroupCover", {
+                        mbid: rg.id,
+                        images: [
+                          {
+                            image: imageUrl,
+                            front: true,
+                            types: frontImage.types || ["Front"],
+                          },
+                        ],
+                      });
+                      return;
+                    }
+                  }
                 }
-                const data = await lastfmRequest("album.getInfo", {
-                  artist: artistName,
-                  album: title,
-                });
-                const album = data?.album;
-                if (!album) {
-                  sendSSE(res, "albumRating", {
-                    mbid: rg.id,
-                    listeners: null,
-                    playcount: null,
-                  });
-                  return;
-                }
-                const listeners = parseInt(album.listeners, 10) || 0;
-                const playcount = parseInt(album.playcount, 10) || 0;
-                sendSSE(res, "albumRating", {
-                  mbid: rg.id,
-                  listeners: listeners || null,
-                  playcount: playcount || null,
-                });
+                dbOps.setImage(cacheKey, "NOT_FOUND");
+                sendSSE(res, "releaseGroupCover", { mbid: rg.id, images: [] });
               } catch (e) {
-                sendSSE(res, "albumRating", {
-                  mbid: rg.id,
-                  listeners: null,
-                  playcount: null,
-                });
+                sendSSE(res, "releaseGroupCover", { mbid: rg.id, images: [] });
               }
             })
           );
         }
       })();
-      nonCriticalTasks.push(albumRatingsTask);
+      nonCriticalTasks.push(releaseGroupCoversTask);
 
       Promise.allSettled(criticalTasks)
         .then(() => {
@@ -930,19 +804,11 @@ router.get("/:mbid/preview", cacheMiddleware(60), async (req, res) => {
     if (!UUID_REGEX.test(mbid)) {
       return res.status(400).json({ error: "Invalid MBID format", tracks: [] });
     }
-    let artistName = artistNameParam || null;
-    if (!artistName && !shouldSkipMusicBrainz()) {
-      try {
-        const mb = await musicbrainzRequest(`/artist/${mbid}`, {}).catch(
-          () => null
-        );
-        if (mb?.name) artistName = mb.name;
-      } catch (e) {}
-    }
+    let artistName =
+      artistNameParam ||
+      (getLastfmApiKey() ? await lastfmGetArtistNameByMbid(mbid) : null) ||
+      null;
     if (!artistName) {
-      console.warn(
-        `[Preview] No artist name for mbid=${mbid} (pass ?artistName= in query or ensure MusicBrainz is up)`
-      );
       return res.json({ tracks: [] });
     }
     const normalized =
@@ -1012,8 +878,21 @@ router.get("/:mbid", cacheMiddleware(300), async (req, res) => {
     }
 
     if (lidarrArtist) {
-      const musicbrainzData = {
-        id: lidarrArtist.foreignArtistId || mbid,
+      const artistMbid = lidarrArtist.foreignArtistId || mbid;
+      const [bio, tagsData] = await Promise.all([
+        getArtistBio(lidarrArtist.artistName, artistMbid),
+        getLastfmApiKey()
+          ? lastfmRequest("artist.getTopTags", { mbid: artistMbid })
+          : null,
+      ]);
+      const tags = tagsData?.toptags?.tag
+        ? (Array.isArray(tagsData.toptags.tag)
+            ? tagsData.toptags.tag
+            : [tagsData.toptags.tag]
+          ).map((t) => ({ name: t.name, count: t.count || 0 }))
+        : [];
+      const payload = {
+        id: artistMbid,
         name: lidarrArtist.artistName,
         "sort-name": lidarrArtist.artistName,
         disambiguation: "",
@@ -1025,7 +904,7 @@ router.get("/:mbid", cacheMiddleware(300), async (req, res) => {
           end: null,
           ended: false,
         },
-        tags: [],
+        tags,
         genres: [],
         "release-groups": lidarrAlbums.map((album) => ({
           id: album.mbid,
@@ -1042,115 +921,48 @@ router.get("/:mbid", cacheMiddleware(300), async (req, res) => {
           monitored: lidarrArtist.monitored,
           statistics: lidarrArtist.statistics,
         },
+        ...(bio ? { bio } : {}),
       };
 
       res.setHeader("Content-Type", "application/json");
-      res.json(musicbrainzData);
-
-      if (!shouldSkipMusicBrainz()) {
-        (async () => {
-          try {
-            const mbData = await Promise.race([
-              musicbrainzRequest(`/artist/${mbid}`, {
-                inc: "tags+genres+release-groups",
-              }),
-              new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("MusicBrainz timeout")), 3000)
-              ),
-            ]).catch(() => null);
-
-            if (mbData) {
-              recordMusicBrainzSuccess();
-            }
-          } catch (error) {
-            recordMusicBrainzFailure();
-          }
-        })();
-      }
-
+      res.json(payload);
       return;
     }
 
-    if (shouldSkipMusicBrainz()) {
-      console.log(
-        `[Artists Route] MusicBrainz circuit breaker is open, but artist not in Lidarr. Returning basic artist data.`
-      );
-
-      const basicData = {
+    const fetchPromise = (async () => {
+      const name =
+        (req.query.artistName || "").trim() ||
+        (getLastfmApiKey() ? await lastfmGetArtistNameByMbid(mbid) : null) ||
+        "Unknown Artist";
+      const tagsData = getLastfmApiKey()
+        ? await lastfmRequest("artist.getTopTags", { mbid })
+        : null;
+      const tags = tagsData?.toptags?.tag
+        ? (Array.isArray(tagsData.toptags.tag)
+            ? tagsData.toptags.tag
+            : [tagsData.toptags.tag]
+          ).map((t) => ({ name: t.name, count: t.count || 0 }))
+        : [];
+      const releaseGroups = await musicbrainzGetArtistReleaseGroups(mbid);
+      await enrichReleaseGroupsWithDeezer(releaseGroups, name);
+      const bio = await getArtistBio(name, mbid);
+      return {
         id: mbid,
-        name: "Unknown Artist",
-        "sort-name": "Unknown Artist",
+        name,
+        "sort-name": name,
         disambiguation: "",
         "type-id": null,
         type: null,
         country: null,
-        "life-span": {
-          begin: null,
-          end: null,
-          ended: false,
-        },
-        tags: [],
+        "life-span": { begin: null, end: null, ended: false },
+        tags,
         genres: [],
-        "release-groups": [],
+        "release-groups": releaseGroups,
         relations: [],
-        "release-group-count": 0,
-        "release-count": 0,
+        "release-group-count": releaseGroups.length,
+        "release-count": releaseGroups.length,
+        bio: bio || undefined,
       };
-
-      res.setHeader("Content-Type", "application/json");
-      return res.json(basicData);
-    }
-
-    const fetchPromise = (async () => {
-      try {
-        console.log(`[Artists Route] Calling MusicBrainz for ${mbid}`);
-        const musicbrainzData = await musicbrainzRequest(`/artist/${mbid}`, {
-          inc: "tags+genres+release-groups",
-        });
-
-        console.log(`[Artists Route] Successfully fetched artist ${mbid}`);
-        recordMusicBrainzSuccess();
-
-        if (lidarrArtist && musicbrainzData) {
-          const lidarrAlbumMap = new Map(lidarrAlbums.map((a) => [a.mbid, a]));
-
-          if (musicbrainzData["release-groups"]) {
-            musicbrainzData["release-groups"] = musicbrainzData[
-              "release-groups"
-            ].map((rg) => {
-              const lidarrAlbum = lidarrAlbumMap.get(rg.id);
-              if (lidarrAlbum) {
-                return {
-                  ...rg,
-                  _lidarrData: {
-                    id: lidarrAlbum.id,
-                    monitored: lidarrAlbum.monitored,
-                    statistics: lidarrAlbum.statistics,
-                  },
-                };
-              }
-              return rg;
-            });
-          }
-
-          musicbrainzData._lidarrData = {
-            id: lidarrArtist.id,
-            monitored: lidarrArtist.monitored,
-            statistics: lidarrArtist.statistics,
-          };
-        }
-
-        return musicbrainzData;
-      } catch (error) {
-        recordMusicBrainzFailure();
-        console.error(
-          `[Artists Route] MusicBrainz error for artist ${mbid}:`,
-          error.message
-        );
-        throw error;
-      } finally {
-        pendingArtistRequests.delete(mbid);
-      }
     })();
 
     pendingArtistRequests.set(mbid, fetchPromise);
@@ -1179,6 +991,8 @@ router.get("/:mbid", cacheMiddleware(300), async (req, res) => {
       };
       res.setHeader("Content-Type", "application/json");
       res.json(fallback);
+    } finally {
+      pendingArtistRequests.delete(mbid);
     }
   } catch (error) {
     console.error(
@@ -1196,36 +1010,6 @@ router.get("/:mbid", cacheMiddleware(300), async (req, res) => {
 const pendingCoverRequests = new Map();
 const pendingArtistRequests = new Map();
 
-let musicbrainzFailureCount = 0;
-let musicbrainzLastFailure = 0;
-const MUSICBRAINZ_CIRCUIT_BREAKER_THRESHOLD = 2;
-const MUSICBRAINZ_CIRCUIT_BREAKER_RESET_MS = 120000;
-
-const shouldSkipMusicBrainz = () => {
-  const timeSinceLastFailure = Date.now() - musicbrainzLastFailure;
-  if (
-    musicbrainzFailureCount >= MUSICBRAINZ_CIRCUIT_BREAKER_THRESHOLD &&
-    timeSinceLastFailure < MUSICBRAINZ_CIRCUIT_BREAKER_RESET_MS
-  ) {
-    return true;
-  }
-  if (timeSinceLastFailure >= MUSICBRAINZ_CIRCUIT_BREAKER_RESET_MS) {
-    musicbrainzFailureCount = 0;
-  }
-  return false;
-};
-
-const recordMusicBrainzFailure = () => {
-  musicbrainzFailureCount++;
-  musicbrainzLastFailure = Date.now();
-};
-
-const recordMusicBrainzSuccess = () => {
-  if (musicbrainzFailureCount > 0) {
-    musicbrainzFailureCount = Math.max(0, musicbrainzFailureCount - 1);
-  }
-};
-
 const fetchCoverInBackground = async (mbid) => {
   if (pendingCoverRequests.has(mbid)) return;
 
@@ -1233,31 +1017,9 @@ const fetchCoverInBackground = async (mbid) => {
     try {
       const { libraryManager } = await import("../services/libraryManager.js");
       const libraryArtist = libraryManager.getArtist(mbid);
-      let artistName = libraryArtist?.artistName || null;
-      let mbResult = null;
-
-      if (!artistName && !shouldSkipMusicBrainz()) {
-        try {
-          mbResult = await Promise.race([
-            musicbrainzRequest(`/artist/${mbid}`, { inc: "release-groups" }),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error("MusicBrainz timeout")), 2800)
-            ),
-          ]).catch((e) => {
-            recordMusicBrainzFailure();
-            return null;
-          });
-
-          if (mbResult?.name) {
-            artistName = mbResult.name;
-            recordMusicBrainzSuccess();
-          } else if (mbResult === null) {
-            recordMusicBrainzFailure();
-          }
-        } catch (e) {
-          recordMusicBrainzFailure();
-        }
-      }
+      let artistName =
+        libraryArtist?.artistName ||
+        (getLastfmApiKey() ? await lastfmGetArtistNameByMbid(mbid) : null);
 
       if (artistName) {
         try {
@@ -1348,31 +1110,9 @@ router.get("/:mbid/cover", async (req, res) => {
         const libraryArtist = libraryManager.getArtist(mbid);
 
         let artistName =
-          libraryArtist?.artistName || artistNameFromQuery || null;
-
-        let mbResult = null;
-        if (!artistName && !shouldSkipMusicBrainz()) {
-          try {
-            mbResult = await Promise.race([
-              musicbrainzRequest(`/artist/${mbid}`, { inc: "release-groups" }),
-              new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("MusicBrainz timeout")), 2800)
-              ),
-            ]).catch((e) => {
-              recordMusicBrainzFailure();
-              return null;
-            });
-
-            if (mbResult?.name) {
-              artistName = mbResult.name;
-              recordMusicBrainzSuccess();
-            } else if (mbResult === null) {
-              recordMusicBrainzFailure();
-            }
-          } catch (e) {
-            recordMusicBrainzFailure();
-          }
-        }
+          libraryArtist?.artistName ||
+          artistNameFromQuery ||
+          (getLastfmApiKey() ? await lastfmGetArtistNameByMbid(mbid) : null);
 
         if (artistName) {
           try {

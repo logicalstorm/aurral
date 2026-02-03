@@ -28,6 +28,13 @@ const cleanOldImagesStmt = db.prepare(
   "DELETE FROM images_cache WHERE cache_age < ?"
 );
 
+const getDeezerMbidCacheStmt = db.prepare(
+  "SELECT mbid FROM deezer_mbid_cache WHERE cache_key = ?"
+);
+const setDeezerMbidCacheStmt = db.prepare(
+  "INSERT OR REPLACE INTO deezer_mbid_cache (cache_key, mbid) VALUES (?, ?)"
+);
+
 const getUserByUsernameStmt = db.prepare(
   "SELECT * FROM users WHERE username = ?"
 );
@@ -393,5 +400,14 @@ export const dbOps = {
   cleanOldImageCache(maxAgeDays = 30) {
     const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
     return cleanOldImagesStmt.run(cutoff);
+  },
+
+  getDeezerMbidCache(cacheKey) {
+    const row = getDeezerMbidCacheStmt.get(cacheKey);
+    return row?.mbid ?? null;
+  },
+
+  setDeezerMbidCache(cacheKey, mbid) {
+    setDeezerMbidCacheStmt.run(cacheKey, mbid);
   },
 };
