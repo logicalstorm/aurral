@@ -32,6 +32,7 @@ import {
   getLibraryAlbums,
   getLibraryTracks,
   getReleaseGroupTracks,
+  getReleaseGroupCover,
   updateLibraryAlbum,
   getSimilarArtistsForArtist,
   getAppSettings,
@@ -142,6 +143,7 @@ function ArtistDetailsPage() {
   const [appSettings, setAppSettings] = useState(null);
   const [refreshingArtist, setRefreshingArtist] = useState(false);
   const similarArtistsScrollRef = useRef(null);
+  const requestedAlbumCoversRef = useRef(new Set());
   const primaryReleaseTypes = ["Album", "EP", "Single"];
   const secondaryReleaseTypes = [
     "Live",
@@ -233,6 +235,7 @@ function ArtistDetailsPage() {
     let streamComplete = false;
     let coverReceived = false;
     let similarReceived = false;
+    let libraryReceived = false;
 
     const fallbackTimeout = setTimeout(() => {
       if (!coverReceived) {
@@ -339,10 +342,29 @@ function ArtistDetailsPage() {
       }
     });
 
+    eventSource.addEventListener("library", (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        libraryReceived = true;
+        if (data.exists && data.artist) {
+          setExistsInLibrary(true);
+          setLibraryArtist(data.artist);
+          setLibraryAlbums(data.albums || []);
+        }
+        setLoadingLibrary(false);
+      } catch (err) {
+        console.error("Error parsing library data:", err, event.data);
+      }
+    });
+
     eventSource.addEventListener("complete", () => {
       streamComplete = true;
       clearTimeout(fallbackTimeout);
       eventSource.close();
+
+      if (libraryReceived) {
+        return;
+      }
 
       setLoadingLibrary(true);
       lookupArtistInLibrary(mbid)
@@ -483,6 +505,42 @@ function ArtistDetailsPage() {
       eventSource.close();
     };
   }, [mbid, artistNameFromNav, artist?.name]);
+
+  const artistMbidRef = useRef(mbid);
+  if (artistMbidRef.current !== mbid) {
+    artistMbidRef.current = mbid;
+    requestedAlbumCoversRef.current = new Set();
+  }
+  useEffect(() => {
+    if (!mbid) return;
+    const releaseGroupIds =
+      artist?.["release-groups"]?.map((rg) => rg.id).filter(Boolean) || [];
+    const libraryMbids = (libraryAlbums || [])
+      .map((a) => a.mbid || a.foreignAlbumId)
+      .filter(Boolean);
+    const needed = [...new Set([...releaseGroupIds, ...libraryMbids])];
+    const missing = needed.filter(
+      (id) => !albumCovers[id] && !requestedAlbumCoversRef.current.has(id)
+    );
+    missing.forEach((rgId) => {
+      requestedAlbumCoversRef.current.add(rgId);
+      getReleaseGroupCover(rgId)
+        .then((data) => {
+          if (data?.images?.length > 0) {
+            const front =
+              data.images.find((img) => img.front) || data.images[0];
+            const url = front?.image;
+            if (url) {
+              setAlbumCovers((prev) => ({ ...prev, [rgId]: url }));
+            }
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          requestedAlbumCoversRef.current.delete(rgId);
+        });
+    });
+  }, [mbid, artist, libraryAlbums, albumCovers]);
 
   useEffect(() => {
     const name = artistNameFromNav || artist?.name;

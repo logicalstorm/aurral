@@ -51,45 +51,47 @@ const handleSearch = async (req, res) => {
             ? lastfmData.results.artistmatches.artist
             : [lastfmData.results.artistmatches.artist];
 
-          const formattedArtists = artists
-            .filter((a) => a.mbid)
-            .map((a) => {
-              let img = null;
-              if (a.image && Array.isArray(a.image)) {
-                const i =
-                  a.image.find((img) => img.size === "extralarge") ||
-                  a.image.find((img) => img.size === "large") ||
-                  a.image.find((img) => img.size === "medium");
-                if (
-                  i &&
-                  i["#text"] &&
-                  !i["#text"].includes("2a96cbd8b46e442fc41c2b86b821562f")
-                ) {
-                  img = i["#text"];
-                }
-              }
+          const filteredArtists = artists.filter((a) => a.mbid);
+          const mbids = filteredArtists.map((a) => a.mbid);
+          const cachedImages = dbOps.getImages(mbids);
 
-              const result = {
-                id: a.mbid,
-                name: a.name,
-                "sort-name": a.name,
-                image: img,
-                imageUrl: img,
-                listeners: a.listeners,
-              };
-
-              const cachedImage = dbOps.getImage(a.mbid);
+          const formattedArtists = filteredArtists.map((a) => {
+            let img = null;
+            if (a.image && Array.isArray(a.image)) {
+              const i =
+                a.image.find((img) => img.size === "extralarge") ||
+                a.image.find((img) => img.size === "large") ||
+                a.image.find((img) => img.size === "medium");
               if (
-                cachedImage &&
-                cachedImage.imageUrl &&
-                cachedImage.imageUrl !== "NOT_FOUND"
+                i &&
+                i["#text"] &&
+                !i["#text"].includes("2a96cbd8b46e442fc41c2b86b821562f")
               ) {
-                result.imageUrl = cachedImage.imageUrl;
-                result.image = cachedImage.imageUrl;
+                img = i["#text"];
               }
+            }
 
-              return result;
-            });
+            const result = {
+              id: a.mbid,
+              name: a.name,
+              "sort-name": a.name,
+              image: img,
+              imageUrl: img,
+              listeners: a.listeners,
+            };
+
+            const cachedImage = cachedImages[a.mbid];
+            if (
+              cachedImage &&
+              cachedImage.imageUrl &&
+              cachedImage.imageUrl !== "NOT_FOUND"
+            ) {
+              result.imageUrl = cachedImage.imageUrl;
+              result.image = cachedImage.imageUrl;
+            }
+
+            return result;
+          });
 
           if (formattedArtists.length > 0) {
             imagePrefetchService
@@ -305,7 +307,8 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
       clientDisconnected = true;
     });
 
-    const isClientConnected = () => !clientDisconnected && !req.socket.destroyed;
+    const isClientConnected = () =>
+      !clientDisconnected && !req.socket.destroyed;
 
     sendSSE(res, "connected", { mbid });
 
@@ -363,6 +366,27 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
             };
 
             sendSSE(res, "artist", artistData);
+
+            const libArtist = libraryManager.mapLidarrArtist(lidarrArtist);
+            sendSSE(res, "library", {
+              exists: true,
+              artist: {
+                ...libArtist,
+                foreignArtistId: libArtist.foreignArtistId || libArtist.mbid,
+                added: libArtist.addedAt,
+              },
+              albums: lidarrAlbums.map((a) => ({
+                ...a,
+                foreignAlbumId: a.foreignAlbumId || a.mbid,
+                title: a.albumName,
+                albumType: "Album",
+                statistics: a.statistics || {
+                  trackCount: 0,
+                  sizeOnDisk: 0,
+                  percentOfTracks: 0,
+                },
+              })),
+            });
 
             if (!shouldSkipMusicBrainz()) {
               (async () => {
@@ -581,20 +605,13 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
         }
       }
 
-      const backgroundTasks = [];
+      const criticalTasks = [];
+      const nonCriticalTasks = [];
 
       const coverTask = (async () => {
         if (!isClientConnected()) return;
         try {
-          const { libraryManager } = await import(
-            "../services/libraryManager.js"
-          );
-          const libraryArtist = libraryManager.getArtist(mbid);
-          let artistName =
-            libraryArtist?.artistName ||
-            artistData?.name ||
-            streamArtistName ||
-            null;
+          const artistName = artistData?.name || streamArtistName || null;
 
           const cachedImage = dbOps.getImage(mbid);
           if (
@@ -635,7 +652,7 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
           sendSSE(res, "cover", { images: [] });
         }
       })();
-      backgroundTasks.push(coverTask);
+      criticalTasks.push(coverTask);
 
       const similarTask = (async () => {
         if (!isClientConnected()) return;
@@ -643,7 +660,7 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
           try {
             const similarData = await lastfmRequest("artist.getSimilar", {
               mbid,
-              limit: 20,
+              limit: 10,
             });
 
             if (similarData?.similarartists?.artist) {
@@ -685,7 +702,7 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
           sendSSE(res, "similar", { artists: [] });
         }
       })();
-      backgroundTasks.push(similarTask);
+      criticalTasks.push(similarTask);
 
       const releaseGroupCoversTask = (async () => {
         if (!isClientConnected()) return;
@@ -698,155 +715,186 @@ router.get("/:mbid/stream", noCache, async (req, res) => {
             )
             .slice(0, 20);
 
-          const batchSize = 5;
-          const allCoverPromises = [];
+          const cacheKeys = releaseGroups.map((rg) => `rg:${rg.id}`);
+          const cachedCovers = dbOps.getImages(cacheKeys);
 
-          for (let i = 0; i < releaseGroups.length; i += batchSize) {
-            const batch = releaseGroups.slice(i, i + batchSize);
+          for (const rg of releaseGroups) {
+            if (!isClientConnected()) return;
+            const cacheKey = `rg:${rg.id}`;
+            const cachedCover = cachedCovers[cacheKey];
 
-            const batchPromises = batch.map(async (rg) => {
-              if (!isClientConnected()) return;
-              try {
+            if (
+              cachedCover &&
+              cachedCover.imageUrl &&
+              cachedCover.imageUrl !== "NOT_FOUND"
+            ) {
+              sendSSE(res, "releaseGroupCover", {
+                mbid: rg.id,
+                images: [
+                  {
+                    image: cachedCover.imageUrl,
+                    front: true,
+                    types: ["Front"],
+                  },
+                ],
+              });
+              continue;
+            }
+
+            if (cachedCover && cachedCover.imageUrl === "NOT_FOUND") {
+              sendSSE(res, "releaseGroupCover", {
+                mbid: rg.id,
+                images: [],
+              });
+              continue;
+            }
+          }
+
+          const uncachedGroups = releaseGroups.filter((rg) => {
+            const cachedCover = cachedCovers[`rg:${rg.id}`];
+            return !cachedCover;
+          });
+
+          const BATCH_SIZE = 4;
+          for (let i = 0; i < uncachedGroups.length; i += BATCH_SIZE) {
+            if (!isClientConnected()) return;
+            const batch = uncachedGroups.slice(i, i + BATCH_SIZE);
+
+            await Promise.allSettled(
+              batch.map(async (rg) => {
+                if (!isClientConnected()) return;
                 const cacheKey = `rg:${rg.id}`;
+                try {
+                  const coverArtResponse = await axios
+                    .get(`https://coverartarchive.org/release-group/${rg.id}`, {
+                      headers: { Accept: "application/json" },
+                      timeout: 3000,
+                    })
+                    .catch(() => null);
 
-                const cachedCover = dbOps.getImage(cacheKey);
-                if (
-                  cachedCover &&
-                  cachedCover.imageUrl &&
-                  cachedCover.imageUrl !== "NOT_FOUND"
-                ) {
-                  sendSSE(res, "releaseGroupCover", {
-                    mbid: rg.id,
-                    images: [
-                      {
-                        image: cachedCover.imageUrl,
-                        front: true,
-                        types: ["Front"],
-                      },
-                    ],
-                  });
-                  return;
-                }
+                  if (coverArtResponse?.data?.images?.length > 0) {
+                    const frontImage =
+                      coverArtResponse.data.images.find((img) => img.front) ||
+                      coverArtResponse.data.images[0];
+                    if (frontImage) {
+                      const imageUrl =
+                        frontImage.thumbnails?.["500"] ||
+                        frontImage.thumbnails?.["large"] ||
+                        frontImage.image;
+                      if (imageUrl) {
+                        dbOps.setImage(cacheKey, imageUrl);
+                        sendSSE(res, "releaseGroupCover", {
+                          mbid: rg.id,
+                          images: [
+                            {
+                              image: imageUrl,
+                              front: true,
+                              types: frontImage.types || ["Front"],
+                            },
+                          ],
+                        });
+                        return;
+                      }
+                    }
+                  }
 
-                if (cachedCover && cachedCover.imageUrl === "NOT_FOUND") {
+                  dbOps.setImage(cacheKey, "NOT_FOUND");
                   sendSSE(res, "releaseGroupCover", {
                     mbid: rg.id,
                     images: [],
                   });
-                  return;
+                } catch (e) {
+                  sendSSE(res, "releaseGroupCover", {
+                    mbid: rg.id,
+                    images: [],
+                  });
                 }
-
-                const coverArtResponse = await axios
-                  .get(`https://coverartarchive.org/release-group/${rg.id}`, {
-                    headers: { Accept: "application/json" },
-                    timeout: 2000,
-                  })
-                  .catch(() => null);
-
-                if (coverArtResponse?.data?.images?.length > 0) {
-                  const frontImage =
-                    coverArtResponse.data.images.find((img) => img.front) ||
-                    coverArtResponse.data.images[0];
-                  if (frontImage) {
-                    const imageUrl =
-                      frontImage.thumbnails?.["500"] ||
-                      frontImage.thumbnails?.["large"] ||
-                      frontImage.image;
-                    if (imageUrl) {
-                      dbOps.setImage(cacheKey, imageUrl);
-
-                      sendSSE(res, "releaseGroupCover", {
-                        mbid: rg.id,
-                        images: [
-                          {
-                            image: imageUrl,
-                            front: true,
-                            types: frontImage.types || ["Front"],
-                          },
-                        ],
-                      });
-                      return;
-                    }
-                  }
-                }
-
-                dbOps.setImage(cacheKey, "NOT_FOUND");
-                sendSSE(res, "releaseGroupCover", {
-                  mbid: rg.id,
-                  images: [],
-                });
-              } catch (e) {
-                sendSSE(res, "releaseGroupCover", {
-                  mbid: rg.id,
-                  images: [],
-                });
-              }
-            });
-
-            allCoverPromises.push(...batchPromises);
+              })
+            );
           }
-
-          await Promise.allSettled(allCoverPromises);
         }
       })();
-      backgroundTasks.push(releaseGroupCoversTask);
+      nonCriticalTasks.push(releaseGroupCoversTask);
 
       const albumRatingsTask = (async () => {
         if (!isClientConnected()) return;
         if (!getLastfmApiKey()) return;
         if (artistData?.["release-groups"]?.length === 0) return;
-        const artistName =
-          artistData?.name?.trim() || streamArtistName?.trim();
+        const artistName = artistData?.name?.trim() || streamArtistName?.trim();
         if (!artistName) return;
         const releaseGroups = artistData["release-groups"]
           .filter(
             (rg) =>
               rg["primary-type"] === "Album" || rg["primary-type"] === "EP"
           )
-          .slice(0, 30);
-        await Promise.allSettled(
-          releaseGroups.map(async (rg) => {
-            if (!isClientConnected()) return;
-            try {
-              const title = rg.title?.trim();
-              if (!title) {
-                sendSSE(res, "albumRating", { mbid: rg.id, listeners: null, playcount: null });
-                return;
-              }
-              const data = await lastfmRequest("album.getInfo", {
-                artist: artistName,
-                album: title,
-              });
-              const album = data?.album;
-              if (!album) {
-                sendSSE(res, "albumRating", { mbid: rg.id, listeners: null, playcount: null });
-                return;
-              }
-              const listeners = parseInt(album.listeners, 10) || 0;
-              const playcount = parseInt(album.playcount, 10) || 0;
-              sendSSE(res, "albumRating", {
-                mbid: rg.id,
-                listeners: listeners || null,
-                playcount: playcount || null,
-              });
-            } catch (e) {
-              sendSSE(res, "albumRating", { mbid: rg.id, listeners: null, playcount: null });
-            }
-          })
-        );
-      })();
-      backgroundTasks.push(albumRatingsTask);
+          .slice(0, 20);
 
-      Promise.allSettled(backgroundTasks)
+        const BATCH_SIZE = 5;
+        for (let i = 0; i < releaseGroups.length; i += BATCH_SIZE) {
+          if (!isClientConnected()) return;
+          const batch = releaseGroups.slice(i, i + BATCH_SIZE);
+
+          await Promise.allSettled(
+            batch.map(async (rg) => {
+              if (!isClientConnected()) return;
+              try {
+                const title = rg.title?.trim();
+                if (!title) {
+                  sendSSE(res, "albumRating", {
+                    mbid: rg.id,
+                    listeners: null,
+                    playcount: null,
+                  });
+                  return;
+                }
+                const data = await lastfmRequest("album.getInfo", {
+                  artist: artistName,
+                  album: title,
+                });
+                const album = data?.album;
+                if (!album) {
+                  sendSSE(res, "albumRating", {
+                    mbid: rg.id,
+                    listeners: null,
+                    playcount: null,
+                  });
+                  return;
+                }
+                const listeners = parseInt(album.listeners, 10) || 0;
+                const playcount = parseInt(album.playcount, 10) || 0;
+                sendSSE(res, "albumRating", {
+                  mbid: rg.id,
+                  listeners: listeners || null,
+                  playcount: playcount || null,
+                });
+              } catch (e) {
+                sendSSE(res, "albumRating", {
+                  mbid: rg.id,
+                  listeners: null,
+                  playcount: null,
+                });
+              }
+            })
+          );
+        }
+      })();
+      nonCriticalTasks.push(albumRatingsTask);
+
+      Promise.allSettled(criticalTasks)
         .then(() => {
           sendSSE(res, "complete", {});
+        })
+        .catch(() => {
+          sendSSE(res, "complete", {});
+        });
 
+      Promise.allSettled([...criticalTasks, ...nonCriticalTasks])
+        .then(() => {
           setTimeout(() => {
             res.end();
           }, 100);
         })
         .catch(() => {
-          sendSSE(res, "complete", {});
           setTimeout(() => {
             res.end();
           }, 100);
@@ -1391,15 +1439,16 @@ router.get("/:mbid/similar", async (req, res) => {
       return res.status(400).json({ error: "Invalid MBID format" });
     }
 
-    const { limit = 20 } = req.query;
+    const { limit = 10 } = req.query;
 
     if (!getLastfmApiKey()) {
       return res.json({ artists: [] });
     }
 
+    const limitInt = Math.min(Math.max(parseInt(limit, 10) || 7, 1), 20);
     const data = await lastfmRequest("artist.getSimilar", {
       mbid,
-      limit,
+      limit: limitInt,
     });
 
     if (!data?.similarartists?.artist) {

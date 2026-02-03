@@ -57,7 +57,7 @@ export class WeeklyFlowPlaylistSource {
     } catch (error) {
       console.error(
         "[WeeklyFlowPlaylistSource] Error fetching discover tracks:",
-        error.message,
+        error.message
       );
       throw error;
     }
@@ -70,7 +70,7 @@ export class WeeklyFlowPlaylistSource {
 
     if (recommendations.length === 0 && globalTop.length === 0) {
       throw new Error(
-        "No discovery recommendations available. Update discovery cache first.",
+        "No discovery recommendations available. Update discovery cache first."
       );
     }
 
@@ -106,7 +106,7 @@ export class WeeklyFlowPlaylistSource {
       } catch (error) {
         console.warn(
           `[WeeklyFlowPlaylistSource] Failed to get tracks for ${artistName}:`,
-          error.message,
+          error.message
         );
       }
     }
@@ -155,7 +155,7 @@ export class WeeklyFlowPlaylistSource {
       try {
         const ownedTitles = await this.getLibraryTrackTitles(
           libraryManager,
-          artist.id,
+          artist.id
         );
         const topTracks = await lastfmRequest("artist.getTopTracks", {
           artist: artistName,
@@ -180,10 +180,9 @@ export class WeeklyFlowPlaylistSource {
       } catch (error) {
         console.warn(
           `[WeeklyFlowPlaylistSource] Failed to get Mix tracks for ${artistName}:`,
-          error.message,
+          error.message
         );
       }
-      await new Promise((r) => setTimeout(r, 150));
     }
 
     return tracks;

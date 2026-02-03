@@ -166,8 +166,17 @@ function getOrCreateEncryptionKey() {
   return key;
 }
 
+let settingsCache = null;
+let settingsCacheTime = 0;
+const SETTINGS_CACHE_TTL = 5000;
+
 export const dbOps = {
   getSettings() {
+    const now = Date.now();
+    if (settingsCache && now - settingsCacheTime < SETTINGS_CACHE_TTL) {
+      return settingsCache;
+    }
+
     const integrations = dbHelpers.parseJSON(
       getSettingStmt.get("integrations")?.value
     );
@@ -203,7 +212,7 @@ export const dbOps = {
     }
     delete merged.recommended;
 
-    return {
+    const result = {
       integrations: decryptIntegrations(integrations, encKey) || {},
       quality: quality || "standard",
       queueCleaner: queueCleaner || {},
@@ -212,51 +221,58 @@ export const dbOps = {
       weeklyFlowPlaylists: merged,
       onboardingComplete: !!onboardingComplete,
     };
+    settingsCache = result;
+    settingsCacheTime = Date.now();
+    return result;
   },
 
   updateSettings(settings) {
-    if (settings.integrations) {
-      const encKey = getOrCreateEncryptionKey();
-      upsertSettingStmt.run(
-        "integrations",
-        dbHelpers.stringifyJSON(
-          encryptIntegrations(settings.integrations, encKey)
-        )
-      );
-    }
-    if (settings.quality) {
-      upsertSettingStmt.run("quality", settings.quality);
-    }
-    if (settings.queueCleaner) {
-      upsertSettingStmt.run(
-        "queueCleaner",
-        dbHelpers.stringifyJSON(settings.queueCleaner)
-      );
-    }
-    if (
-      settings.rootFolderPath !== undefined &&
-      settings.rootFolderPath !== null
-    ) {
-      upsertSettingStmt.run("rootFolderPath", settings.rootFolderPath);
-    }
-    if (settings.releaseTypes) {
-      upsertSettingStmt.run(
-        "releaseTypes",
-        dbHelpers.stringifyJSON(settings.releaseTypes)
-      );
-    }
-    if (settings.weeklyFlowPlaylists !== undefined) {
-      upsertSettingStmt.run(
-        "weeklyFlowPlaylists",
-        dbHelpers.stringifyJSON(settings.weeklyFlowPlaylists)
-      );
-    }
-    if (settings.onboardingComplete !== undefined) {
-      upsertSettingStmt.run(
-        "onboardingComplete",
-        settings.onboardingComplete ? "true" : "false"
-      );
-    }
+    settingsCache = null;
+    const updateFn = db.transaction(() => {
+      if (settings.integrations) {
+        const encKey = getOrCreateEncryptionKey();
+        upsertSettingStmt.run(
+          "integrations",
+          dbHelpers.stringifyJSON(
+            encryptIntegrations(settings.integrations, encKey)
+          )
+        );
+      }
+      if (settings.quality) {
+        upsertSettingStmt.run("quality", settings.quality);
+      }
+      if (settings.queueCleaner) {
+        upsertSettingStmt.run(
+          "queueCleaner",
+          dbHelpers.stringifyJSON(settings.queueCleaner)
+        );
+      }
+      if (
+        settings.rootFolderPath !== undefined &&
+        settings.rootFolderPath !== null
+      ) {
+        upsertSettingStmt.run("rootFolderPath", settings.rootFolderPath);
+      }
+      if (settings.releaseTypes) {
+        upsertSettingStmt.run(
+          "releaseTypes",
+          dbHelpers.stringifyJSON(settings.releaseTypes)
+        );
+      }
+      if (settings.weeklyFlowPlaylists !== undefined) {
+        upsertSettingStmt.run(
+          "weeklyFlowPlaylists",
+          dbHelpers.stringifyJSON(settings.weeklyFlowPlaylists)
+        );
+      }
+      if (settings.onboardingComplete !== undefined) {
+        upsertSettingStmt.run(
+          "onboardingComplete",
+          settings.onboardingComplete ? "true" : "false"
+        );
+      }
+    });
+    updateFn();
   },
 
   getDiscoveryCache() {
@@ -289,42 +305,44 @@ export const dbOps = {
 
   updateDiscoveryCache(discovery) {
     const now = new Date().toISOString();
-
-    if (discovery.recommendations) {
-      upsertDiscoveryCacheStmt.run(
-        "recommendations",
-        dbHelpers.stringifyJSON(discovery.recommendations),
-        now
-      );
-    }
-    if (discovery.globalTop) {
-      upsertDiscoveryCacheStmt.run(
-        "globalTop",
-        dbHelpers.stringifyJSON(discovery.globalTop),
-        now
-      );
-    }
-    if (discovery.basedOn) {
-      upsertDiscoveryCacheStmt.run(
-        "basedOn",
-        dbHelpers.stringifyJSON(discovery.basedOn),
-        now
-      );
-    }
-    if (discovery.topTags) {
-      upsertDiscoveryCacheStmt.run(
-        "topTags",
-        dbHelpers.stringifyJSON(discovery.topTags),
-        now
-      );
-    }
-    if (discovery.topGenres) {
-      upsertDiscoveryCacheStmt.run(
-        "topGenres",
-        dbHelpers.stringifyJSON(discovery.topGenres),
-        now
-      );
-    }
+    const updateFn = db.transaction(() => {
+      if (discovery.recommendations) {
+        upsertDiscoveryCacheStmt.run(
+          "recommendations",
+          dbHelpers.stringifyJSON(discovery.recommendations),
+          now
+        );
+      }
+      if (discovery.globalTop) {
+        upsertDiscoveryCacheStmt.run(
+          "globalTop",
+          dbHelpers.stringifyJSON(discovery.globalTop),
+          now
+        );
+      }
+      if (discovery.basedOn) {
+        upsertDiscoveryCacheStmt.run(
+          "basedOn",
+          dbHelpers.stringifyJSON(discovery.basedOn),
+          now
+        );
+      }
+      if (discovery.topTags) {
+        upsertDiscoveryCacheStmt.run(
+          "topTags",
+          dbHelpers.stringifyJSON(discovery.topTags),
+          now
+        );
+      }
+      if (discovery.topGenres) {
+        upsertDiscoveryCacheStmt.run(
+          "topGenres",
+          dbHelpers.stringifyJSON(discovery.topGenres),
+          now
+        );
+      }
+    });
+    updateFn();
   },
 
   getImage(mbid) {
@@ -335,6 +353,20 @@ export const dbOps = {
       imageUrl: row.image_url,
       cacheAge: row.cache_age,
     };
+  },
+
+  getImages(mbids) {
+    if (!mbids || !mbids.length) return {};
+    const placeholders = mbids.map(() => "?").join(",");
+    const stmt = db.prepare(
+      `SELECT mbid, image_url, cache_age FROM images_cache WHERE mbid IN (${placeholders})`
+    );
+    const rows = stmt.all(...mbids);
+    const result = {};
+    for (const row of rows) {
+      result[row.mbid] = { imageUrl: row.image_url, cacheAge: row.cache_age };
+    }
+    return result;
   },
 
   setImage(mbid, imageUrl) {

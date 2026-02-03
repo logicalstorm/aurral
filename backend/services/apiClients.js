@@ -1,5 +1,6 @@
 import axios from "axios";
 import Bottleneck from "bottleneck";
+import NodeCache from "node-cache";
 import { dbOps } from "../config/db-helpers.js";
 import {
   MUSICBRAINZ_API,
@@ -7,6 +8,18 @@ import {
   APP_NAME,
   APP_VERSION,
 } from "../config/constants.js";
+
+const mbCache = new NodeCache({ stdTTL: 300, checkperiod: 60, maxKeys: 500 });
+const lastfmCache = new NodeCache({
+  stdTTL: 300,
+  checkperiod: 60,
+  maxKeys: 500,
+});
+const deezerArtistCache = new NodeCache({
+  stdTTL: 3600,
+  checkperiod: 120,
+  maxKeys: 1000,
+});
 
 export const getLastfmApiKey = () => {
   const settings = dbOps.getSettings();
@@ -37,8 +50,12 @@ let musicbrainzLast503Log = 0;
 const musicbrainzRequestWithRetry = async (
   endpoint,
   params = {},
-  retryCount = 0,
+  retryCount = 0
 ) => {
+  const cacheKey = `mb:${endpoint}:${JSON.stringify(params)}`;
+  const cached = mbCache.get(cacheKey);
+  if (cached) return cached;
+
   const MAX_RETRIES = 1;
   const queryParams = new URLSearchParams({
     fmt: "json",
@@ -60,7 +77,7 @@ const musicbrainzRequestWithRetry = async (
     ];
     return (
       connectionErrors.some(
-        (err) => error.code === err || error.message.includes(err),
+        (err) => error.code === err || error.message.includes(err)
       ) ||
       (error.code &&
         (error.code.startsWith("E") || error.code.startsWith("ERR_")))
@@ -79,8 +96,9 @@ const musicbrainzRequestWithRetry = async (
       {
         headers: { "User-Agent": userAgent },
         timeout: 3000,
-      },
+      }
     );
+    mbCache.set(cacheKey, response.data);
     return response.data;
   } catch (error) {
     const shouldRetry =
@@ -95,7 +113,9 @@ const musicbrainzRequestWithRetry = async (
         ? `HTTP ${error.response.status}`
         : error.code || error.message;
       console.warn(
-        `MusicBrainz error (${errorType}), retrying in ${delay}ms... (attempt ${retryCount + 1}/${MAX_RETRIES})`,
+        `MusicBrainz error (${errorType}), retrying in ${delay}ms... (attempt ${
+          retryCount + 1
+        }/${MAX_RETRIES})`
       );
       await new Promise((resolve) => setTimeout(resolve, delay));
       return musicbrainzRequestWithRetry(endpoint, params, retryCount + 1);
@@ -114,7 +134,7 @@ const musicbrainzRequestWithRetry = async (
       ) {
         musicbrainzLast503Log = Date.now();
         console.warn(
-          `MusicBrainz ${status} (suppressing further logs for 15s)`,
+          `MusicBrainz ${status} (suppressing further logs for 15s)`
         );
       }
     } else {
@@ -130,6 +150,10 @@ export const lastfmRequest = lastfmLimiter.wrap(async (method, params = {}) => {
   const apiKey = getLastfmApiKey();
   if (!apiKey) return null;
 
+  const cacheKey = `lfm:${method}:${JSON.stringify(params)}`;
+  const cached = lastfmCache.get(cacheKey);
+  if (cached) return cached;
+
   try {
     const response = await axios.get(LASTFM_API, {
       params: {
@@ -140,6 +164,7 @@ export const lastfmRequest = lastfmLimiter.wrap(async (method, params = {}) => {
       },
       timeout: 3000,
     });
+    lastfmCache.set(cacheKey, response.data);
     return response.data;
   } catch (error) {
     if (error.code !== "ECONNABORTED") {
@@ -149,40 +174,76 @@ export const lastfmRequest = lastfmLimiter.wrap(async (method, params = {}) => {
   }
 });
 
-export async function deezerSearchArtist(artistName) {
+async function getDeezerArtist(artistName) {
+  const normalizedName = artistName.toLowerCase().trim();
+  const cached = deezerArtistCache.get(normalizedName);
+  if (cached !== undefined) return cached;
+
   try {
-    const searchRes = await axios.get(
-      "https://api.deezer.com/search/artist",
-      {
-        params: { q: artistName, limit: 1 },
-        timeout: 3000,
-      },
-    );
+    const searchRes = await axios.get("https://api.deezer.com/search/artist", {
+      params: { q: artistName, limit: 5 },
+      timeout: 3000,
+    });
     const artists = searchRes.data?.data;
-    if (!artists?.length || !artists[0]?.id) return null;
-    const a = artists[0];
-    const imageUrl = a.picture_big || a.picture_medium || a.picture || null;
-    return imageUrl ? { id: a.id, name: a.name, imageUrl } : null;
+    if (!artists?.length) {
+      deezerArtistCache.set(normalizedName, null);
+      return null;
+    }
+
+    const searchLower = normalizedName.replace(/^the\s+/i, "");
+    let bestMatch = null;
+
+    for (const a of artists) {
+      if (!a?.id) continue;
+      const aNameLower = (a.name || "").toLowerCase().replace(/^the\s+/i, "");
+      if (aNameLower === searchLower || aNameLower === normalizedName) {
+        bestMatch = a;
+        break;
+      }
+      if (!bestMatch && aNameLower.includes(searchLower)) {
+        bestMatch = a;
+      }
+    }
+
+    if (!bestMatch) {
+      bestMatch = artists[0];
+    }
+
+    if (!bestMatch?.id) {
+      deezerArtistCache.set(normalizedName, null);
+      return null;
+    }
+
+    const result = {
+      id: bestMatch.id,
+      name: bestMatch.name,
+      imageUrl:
+        bestMatch.picture_big ||
+        bestMatch.picture_medium ||
+        bestMatch.picture ||
+        null,
+    };
+    deezerArtistCache.set(normalizedName, result);
+    return result;
   } catch (e) {
     return null;
   }
 }
 
+export async function deezerSearchArtist(artistName) {
+  const artist = await getDeezerArtist(artistName);
+  if (!artist || !artist.imageUrl) return null;
+  return artist;
+}
+
 export async function deezerGetArtistTopTracks(artistName) {
   try {
-    const searchRes = await axios.get(
-      "https://api.deezer.com/search/artist",
-      {
-        params: { q: artistName, limit: 1 },
-        timeout: 3000,
-      },
-    );
-    const artists = searchRes.data?.data;
-    if (!artists?.length || !artists[0]?.id) return [];
-    const artist = artists[0];
+    const artist = await getDeezerArtist(artistName);
+    if (!artist) return [];
+
     const topRes = await axios.get(
       `https://api.deezer.com/artist/${artist.id}/top`,
-      { params: { limit: 5 }, timeout: 3000 },
+      { params: { limit: 5 }, timeout: 3000 }
     );
     const tracks = topRes.data?.data || [];
     return tracks
@@ -198,4 +259,10 @@ export async function deezerGetArtistTopTracks(artistName) {
   } catch (e) {
     return [];
   }
+}
+
+export function clearApiCaches() {
+  mbCache.flushAll();
+  lastfmCache.flushAll();
+  deezerArtistCache.flushAll();
 }
