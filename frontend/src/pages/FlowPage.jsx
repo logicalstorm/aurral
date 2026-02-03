@@ -55,6 +55,7 @@ function FlowPage() {
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(null);
   const [optimisticEnabled, setOptimisticEnabled] = useState({});
+  const [confirmTurnOff, setConfirmTurnOff] = useState(null);
   const { showSuccess, showError } = useToast();
 
   const fetchStatus = async () => {
@@ -108,7 +109,7 @@ function FlowPage() {
     try {
       await setFlowPlaylistEnabled(backendType, enabled);
       showSuccess(
-        enabled ? `${backendType} playlist on` : `${backendType} playlist off`,
+        enabled ? `${backendType} playlist on` : `${backendType} playlist off`
       );
       await fetchStatus();
     } catch (err) {
@@ -118,11 +119,28 @@ function FlowPage() {
         return next;
       });
       showError(
-        err.response?.data?.message || err.message || "Failed to update",
+        err.response?.data?.message || err.message || "Failed to update"
       );
     } finally {
       setToggling(null);
     }
+  };
+
+  const handleSwitchChange = (config, checked) => {
+    if (checked) {
+      handleToggle(config.backendType, true);
+    } else {
+      setConfirmTurnOff({
+        backendType: config.backendType,
+        title: config.title,
+      });
+    }
+  };
+
+  const handleConfirmTurnOff = async () => {
+    if (!confirmTurnOff) return;
+    await handleToggle(confirmTurnOff.backendType, false);
+    setConfirmTurnOff(null);
   };
 
   if (loading && !status) {
@@ -182,7 +200,7 @@ function FlowPage() {
             optimisticEnabled[config.backendType] ??
             isEnabled(config.backendType);
           const nextRun = formatNextRun(
-            status?.playlists?.[config.backendType]?.nextRunAt,
+            status?.playlists?.[config.backendType]?.nextRunAt
           );
           const isToggling = toggling === config.backendType;
 
@@ -230,7 +248,7 @@ function FlowPage() {
                   <PowerSwitch
                     checked={enabled}
                     onChange={(e) =>
-                      handleToggle(config.backendType, e.target.checked)
+                      handleSwitchChange(config, e.target.checked)
                     }
                   />
                 </div>
@@ -247,6 +265,42 @@ function FlowPage() {
           Flow playlists by genre and tags.
         </p>
       </div>
+
+      {confirmTurnOff && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
+          onClick={() => setConfirmTurnOff(null)}
+        >
+          <div
+            className="card max-w-md w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-xl font-bold mb-2 text-white">
+              Turn off {confirmTurnOff.title}?
+            </h3>
+            <p className="text-[#c1c1c3] mb-6">
+              This flow will stop running and won&apos;t refresh until you turn
+              it back on.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmTurnOff(null)}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmTurnOff}
+                className="btn btn-primary"
+                style={{ backgroundColor: "#ef4444" }}
+              >
+                Turn off
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

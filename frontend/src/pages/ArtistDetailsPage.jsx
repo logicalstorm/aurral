@@ -137,7 +137,8 @@ function ArtistDetailsPage() {
   const [showDeleteAlbumModal, setShowDeleteAlbumModal] = useState(null);
   const [deleteAlbumFiles, setDeleteAlbumFiles] = useState(false);
   const [processingBulk, setProcessingBulk] = useState(false);
-  const [expandedAlbum, setExpandedAlbum] = useState(null);
+  const [expandedLibraryAlbum, setExpandedLibraryAlbum] = useState(null);
+  const [expandedReleaseGroup, setExpandedReleaseGroup] = useState(null);
   const [albumTracks, setAlbumTracks] = useState({});
   const [loadingTracks, setLoadingTracks] = useState({});
   const [appSettings, setAppSettings] = useState(null);
@@ -986,14 +987,38 @@ function ArtistDetailsPage() {
     }
   };
 
-  const handleAlbumClick = async (releaseGroupId, libraryAlbumId) => {
-    if (expandedAlbum === releaseGroupId) {
-      setExpandedAlbum(null);
+  const handleLibraryAlbumClick = async (releaseGroupId, libraryAlbumId) => {
+    if (expandedLibraryAlbum === releaseGroupId) {
+      setExpandedLibraryAlbum(null);
       return;
     }
+    setExpandedLibraryAlbum(releaseGroupId);
+    setExpandedReleaseGroup(null);
+    const trackKey = libraryAlbumId || releaseGroupId;
+    if (!albumTracks[trackKey]) {
+      setLoadingTracks((prev) => ({ ...prev, [trackKey]: true }));
+      try {
+        const tracks = await getLibraryTracks(libraryAlbumId, releaseGroupId);
+        setAlbumTracks((prev) => ({ ...prev, [trackKey]: tracks }));
+      } catch (err) {
+        console.error("Failed to fetch tracks:", err);
+        showError("Failed to fetch track list");
+      } finally {
+        setLoadingTracks((prev) => ({ ...prev, [trackKey]: false }));
+      }
+    }
+  };
 
-    setExpandedAlbum(releaseGroupId);
-
+  const handleReleaseGroupAlbumClick = async (
+    releaseGroupId,
+    libraryAlbumId
+  ) => {
+    if (expandedReleaseGroup === releaseGroupId) {
+      setExpandedReleaseGroup(null);
+      return;
+    }
+    setExpandedReleaseGroup(releaseGroupId);
+    setExpandedLibraryAlbum(null);
     const trackKey = libraryAlbumId || releaseGroupId;
     if (!albumTracks[trackKey]) {
       setLoadingTracks((prev) => ({ ...prev, [trackKey]: true }));
@@ -1083,6 +1108,22 @@ function ArtistDetailsPage() {
     }
     return !allReleaseTypes.every((type) =>
       selectedReleaseTypes.includes(type)
+    );
+  };
+
+  const isReleaseGroupDownloadedInLibrary = (releaseGroupId) => {
+    if (!existsInLibrary || !libraryAlbums?.length) return false;
+    const album = libraryAlbums.find(
+      (a) => a.mbid === releaseGroupId || a.foreignAlbumId === releaseGroupId
+    );
+    if (!album || String(album.id ?? "").startsWith("pending-")) return false;
+    return (
+      (album.statistics?.percentOfTracks ?? 0) > 0 ||
+      (album.statistics?.sizeOnDisk ?? 0) > 0 ||
+      !!downloadStatuses[album.id] ||
+      (requestingAlbum &&
+        (album.mbid === requestingAlbum ||
+          album.foreignAlbumId === requestingAlbum))
     );
   };
 
@@ -1827,42 +1868,43 @@ function ArtistDetailsPage() {
                     const dateB = b.releaseDate || "";
                     return dateB.localeCompare(dateA);
                   })
-                  .map((libraryAlbum) => {
-                    const isExpanded =
-                      expandedAlbum === libraryAlbum.mbid ||
-                      expandedAlbum === libraryAlbum.foreignAlbumId;
+                  .map((libraryAlbum, libraryAlbumIdx) => {
+                    const rgId =
+                      libraryAlbum.mbid || libraryAlbum.foreignAlbumId;
+                    const isExpanded = expandedLibraryAlbum === rgId;
                     const trackKey = libraryAlbum.id;
                     const tracks = albumTracks[trackKey] || null;
                     const isLoadingTracks = loadingTracks[trackKey] || false;
                     const downloadStatus = downloadStatuses[libraryAlbum.id];
                     const isComplete =
                       libraryAlbum.statistics?.percentOfTracks === 100;
+                    const rowBg = isExpanded
+                      ? "#2a2830"
+                      : libraryAlbumIdx % 2 === 0
+                      ? "#211f27"
+                      : "#1c1a22";
+                    const rowHoverBg = isExpanded ? "#2a2830" : "#25232b";
 
                     return (
                       <div
                         key={libraryAlbum.id}
                         className="transition-colors"
-                        style={{
-                          backgroundColor: isExpanded ? "#2a2830" : "#211f27",
-                        }}
+                        style={{ backgroundColor: rowBg }}
                         onMouseEnter={(e) => {
                           if (!isExpanded) {
-                            e.currentTarget.style.backgroundColor = "#25232b";
+                            e.currentTarget.style.backgroundColor = rowHoverBg;
                           }
                         }}
                         onMouseLeave={(e) => {
                           if (!isExpanded) {
-                            e.currentTarget.style.backgroundColor = "#211f27";
+                            e.currentTarget.style.backgroundColor = rowBg;
                           }
                         }}
                       >
                         <div
                           className="flex items-center justify-between py-2.5 px-3 cursor-pointer"
                           onClick={() =>
-                            handleAlbumClick(
-                              libraryAlbum.mbid || libraryAlbum.foreignAlbumId,
-                              libraryAlbum.id
-                            )
+                            handleLibraryAlbumClick(rgId, libraryAlbum.id)
                           }
                         >
                           <div className="flex-1 flex items-center gap-2">
@@ -1870,11 +1912,7 @@ function ArtistDetailsPage() {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleAlbumClick(
-                                  libraryAlbum.mbid ||
-                                    libraryAlbum.foreignAlbumId,
-                                  libraryAlbum.id
-                                );
+                                handleLibraryAlbumClick(rgId, libraryAlbum.id);
                               }}
                               className="hover:text-gray-300 transition-colors"
                               style={{ color: "#c1c1c3" }}
@@ -1885,9 +1923,7 @@ function ArtistDetailsPage() {
                                 <ChevronDown className="w-4 h-4" />
                               )}
                             </button>
-                            {albumCovers[
-                              libraryAlbum.mbid || libraryAlbum.foreignAlbumId
-                            ] ? (
+                            {albumCovers[rgId] ? (
                               <img
                                 src={
                                   albumCovers[
@@ -2039,12 +2075,7 @@ function ArtistDetailsPage() {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setAlbumDropdownOpen(
-                                    albumDropdownOpen ===
-                                      (libraryAlbum.mbid ||
-                                        libraryAlbum.foreignAlbumId)
-                                      ? null
-                                      : libraryAlbum.mbid ||
-                                          libraryAlbum.foreignAlbumId
+                                    albumDropdownOpen === rgId ? null : rgId
                                   );
                                 }}
                                 className="btn btn-secondary btn-sm p-2"
@@ -2052,9 +2083,7 @@ function ArtistDetailsPage() {
                               >
                                 <MoreVertical className="w-4 h-4" />
                               </button>
-                              {albumDropdownOpen ===
-                                (libraryAlbum.mbid ||
-                                  libraryAlbum.foreignAlbumId) && (
+                              {albumDropdownOpen === rgId && (
                                 <>
                                   <div
                                     className="fixed inset-0 z-10"
@@ -2064,8 +2093,11 @@ function ArtistDetailsPage() {
                                     }}
                                   />
                                   <div
-                                    className="absolute right-0 top-full mt-2 w-48  shadow-lg  z-20 py-1"
-                                    style={{ backgroundColor: "#211f27" }}
+                                    className="absolute right-0 top-full mt-2 w-48 shadow-xl z-20 py-1 rounded-md border border-white/10"
+                                    style={{
+                                      backgroundColor: "#2d2b35",
+                                      boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+                                    }}
                                   >
                                     <a
                                       href={`https://www.last.fm/music/${encodeURIComponent(
@@ -2075,21 +2107,20 @@ function ArtistDetailsPage() {
                                       )}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="w-full text-left px-4 py-2 text-sm  hover:bg-gray-900/50 transition-colors flex items-center"
+                                      className="w-full text-left px-4 py-2 text-sm hover:bg-white/10 transition-colors flex items-center"
                                       style={{ color: "#fff" }}
                                       onClick={() => setAlbumDropdownOpen(null)}
                                     >
                                       <ExternalLink className="w-4 h-4 mr-2" />
                                       View on Last.fm
                                     </a>
-                                    <div className="my-1" />
+                                    <div className="my-1 border-t border-white/10" />
                                     <button
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleDeleteAlbumClick(
-                                          libraryAlbum.mbid ||
-                                            libraryAlbum.foreignAlbumId,
+                                          rgId,
                                           libraryAlbum.albumName
                                         );
                                       }}
@@ -2108,7 +2139,12 @@ function ArtistDetailsPage() {
                         {isExpanded && (
                           <div
                             className="px-3 py-2 overflow-hidden"
-                            style={{ backgroundColor: "#211f27" }}
+                            style={{
+                              backgroundColor:
+                                libraryAlbumIdx % 2 === 0
+                                  ? "#1c1a22"
+                                  : "#211f27",
+                            }}
                           >
                             <div className="mb-2 pb-2">
                               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
@@ -2301,7 +2337,12 @@ function ArtistDetailsPage() {
               style={{ color: "#fff" }}
             >
               Albums & Releases (
-              {artist["release-groups"].filter(matchesReleaseTypeFilter).length}
+              {
+                artist["release-groups"]
+                  .filter(matchesReleaseTypeFilter)
+                  .filter((rg) => !isReleaseGroupDownloadedInLibrary(rg.id))
+                  .length
+              }
               /{artist["release-groups"].length})
             </h2>
             <div className="flex items-center gap-2 flex-wrap">
@@ -2492,40 +2533,48 @@ function ArtistDetailsPage() {
           <div className="space-y-1">
             {artist["release-groups"]
               .filter(matchesReleaseTypeFilter)
+              .filter((rg) => !isReleaseGroupDownloadedInLibrary(rg.id))
               .sort((a, b) => {
                 const dateA = a["first-release-date"] || "";
                 const dateB = b["first-release-date"] || "";
                 return dateB.localeCompare(dateA);
               })
-              .map((releaseGroup) => {
+              .map((releaseGroup, releaseGroupIdx) => {
                 const status = getAlbumStatus(releaseGroup.id);
-                const isExpanded = expandedAlbum === releaseGroup.id;
+                const isExpanded = expandedReleaseGroup === releaseGroup.id;
                 const libraryAlbumId = status?.libraryId;
                 const trackKey = libraryAlbumId || releaseGroup.id;
                 const tracks = albumTracks[trackKey] || null;
                 const isLoadingTracks = loadingTracks[trackKey] || false;
+                const rowBg = isExpanded
+                  ? "#2a2830"
+                  : releaseGroupIdx % 2 === 0
+                  ? "#211f27"
+                  : "#1c1a22";
+                const rowHoverBg = isExpanded ? "#2a2830" : "#25232b";
                 return (
                   <div
                     key={releaseGroup.id}
                     className="transition-colors"
-                    style={{
-                      backgroundColor: isExpanded ? "#2a2830" : "#211f27",
-                    }}
+                    style={{ backgroundColor: rowBg }}
                     onMouseEnter={(e) => {
                       if (!isExpanded) {
-                        e.currentTarget.style.backgroundColor = "#25232b";
+                        e.currentTarget.style.backgroundColor = rowHoverBg;
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!isExpanded) {
-                        e.currentTarget.style.backgroundColor = "#211f27";
+                        e.currentTarget.style.backgroundColor = rowBg;
                       }
                     }}
                   >
                     <div
                       className="flex items-center justify-between py-2.5 px-3 cursor-pointer"
                       onClick={() =>
-                        handleAlbumClick(releaseGroup.id, status?.libraryId)
+                        handleReleaseGroupAlbumClick(
+                          releaseGroup.id,
+                          status?.libraryId
+                        )
                       }
                     >
                       <div className="flex-1 flex items-center gap-2">
@@ -2533,7 +2582,7 @@ function ArtistDetailsPage() {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleAlbumClick(
+                            handleReleaseGroupAlbumClick(
                               releaseGroup.id,
                               status?.libraryId
                             );
@@ -2675,8 +2724,11 @@ function ArtistDetailsPage() {
                                       }}
                                     />
                                     <div
-                                      className="absolute right-0 top-full mt-2 w-48  shadow-lg  z-20 py-1"
-                                      style={{ backgroundColor: "#211f27" }}
+                                      className="absolute right-0 top-full mt-2 w-48 shadow-xl z-20 py-1 rounded-md border border-white/10"
+                                      style={{
+                                        backgroundColor: "#2d2b35",
+                                        boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+                                      }}
                                     >
                                       <a
                                         href={`https://www.last.fm/music/${encodeURIComponent(
@@ -2686,7 +2738,7 @@ function ArtistDetailsPage() {
                                         )}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="w-full text-left px-4 py-2 text-sm  hover:bg-gray-900/50 transition-colors flex items-center"
+                                        className="w-full text-left px-4 py-2 text-sm hover:bg-white/10 transition-colors flex items-center"
                                         style={{ color: "#fff" }}
                                         onClick={() =>
                                           setAlbumDropdownOpen(null)
@@ -2695,7 +2747,7 @@ function ArtistDetailsPage() {
                                         <ExternalLink className="w-4 h-4 mr-2" />
                                         View on Last.fm
                                       </a>
-                                      <div className="my-1" />
+                                      <div className="my-1 border-t border-white/10" />
                                       <button
                                         type="button"
                                         onClick={(e) => {
@@ -2757,8 +2809,11 @@ function ArtistDetailsPage() {
                                       }}
                                     />
                                     <div
-                                      className="absolute right-0 top-full mt-2 w-48  shadow-lg  z-20 py-1"
-                                      style={{ backgroundColor: "#211f27" }}
+                                      className="absolute right-0 top-full mt-2 w-48 shadow-xl z-20 py-1 rounded-md border border-white/10"
+                                      style={{
+                                        backgroundColor: "#2d2b35",
+                                        boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+                                      }}
                                     >
                                       <a
                                         href={`https://www.last.fm/music/${encodeURIComponent(
@@ -2768,7 +2823,7 @@ function ArtistDetailsPage() {
                                         )}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="w-full text-left px-4 py-2 text-sm  hover:bg-gray-900/50 transition-colors flex items-center"
+                                        className="w-full text-left px-4 py-2 text-sm hover:bg-white/10 transition-colors flex items-center"
                                         style={{ color: "#fff" }}
                                         onClick={() =>
                                           setAlbumDropdownOpen(null)
@@ -2777,7 +2832,7 @@ function ArtistDetailsPage() {
                                         <ExternalLink className="w-4 h-4 mr-2" />
                                         View on Last.fm
                                       </a>
-                                      <div className="my-1" />
+                                      <div className="my-1 border-t border-white/10" />
                                       <button
                                         type="button"
                                         onClick={(e) => {
@@ -2841,7 +2896,10 @@ function ArtistDetailsPage() {
                     {isExpanded && (
                       <div
                         className="px-3 py-2 overflow-hidden"
-                        style={{ backgroundColor: "#211f27" }}
+                        style={{
+                          backgroundColor:
+                            releaseGroupIdx % 2 === 0 ? "#1c1a22" : "#211f27",
+                        }}
                       >
                         <div>
                           {isLoadingTracks ? (
