@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader, Music, AlertCircle } from "lucide-react";
 import { getLibraryArtists } from "../utils/api";
@@ -20,7 +20,7 @@ function LibraryPage() {
       setArtists(data);
     } catch (err) {
       setError(
-        err.response?.data?.message || "Failed to fetch artists from library",
+        err.response?.data?.message || "Failed to fetch artists from library"
       );
     } finally {
       setLoading(false);
@@ -31,16 +31,16 @@ function LibraryPage() {
     fetchArtists();
   }, []);
 
-  const getFilteredAndSortedArtists = () => {
+  const filteredArtists = useMemo(() => {
     let filtered = artists;
 
     if (searchTerm) {
       filtered = filtered.filter((artist) =>
-        artist.artistName.toLowerCase().includes(searchTerm.toLowerCase()),
+        artist.artistName.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
-    const sorted = [...filtered].sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       switch (sortBy) {
         case "name":
           return a.artistName.localeCompare(b.artistName);
@@ -54,11 +54,7 @@ function LibraryPage() {
           return 0;
       }
     });
-
-    return sorted;
-  };
-
-  const filteredArtists = getFilteredAndSortedArtists();
+  }, [artists, searchTerm, sortBy]);
 
   return (
     <div className="animate-fade-in">
@@ -71,7 +67,9 @@ function LibraryPage() {
             <p className="text-sm" style={{ color: "#c1c1c3" }}>
               {loading
                 ? "Loading..."
-                : `${artists.length} artist${artists.length !== 1 ? "s" : ""} in your collection`}
+                : `${artists.length} artist${
+                    artists.length !== 1 ? "s" : ""
+                  } in your collection`}
             </p>
           </div>
         </div>

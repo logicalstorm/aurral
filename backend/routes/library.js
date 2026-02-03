@@ -938,14 +938,16 @@ router.post("/artists/:mbid/refresh", async (req, res) => {
 
     const albums = await libraryManager.getAlbums(artist.id);
 
-    for (const album of albums) {
-      await libraryManager.updateAlbumStatistics(album.id).catch((err) => {
-        console.error(
-          `Failed to update statistics for album ${album.albumName}:`,
-          err.message
-        );
-      });
-    }
+    await Promise.allSettled(
+      albums.map((album) =>
+        libraryManager.updateAlbumStatistics(album.id).catch((err) => {
+          console.error(
+            `Failed to update statistics for album ${album.albumName}:`,
+            err.message
+          );
+        })
+      )
+    );
 
     await libraryManager.updateArtistStatistics(artist.id);
 
@@ -1001,20 +1003,22 @@ router.post("/artists/:mbid/refresh", async (req, res) => {
       }
 
       if (lidarrClient && lidarrClient.isConfigured()) {
-        for (const album of albumsToMonitor) {
-          try {
-            await libraryManager.updateAlbum(album.id, { monitored: true });
-            await lidarrClient.request("/command", "POST", {
-              name: "AlbumSearch",
-              albumIds: [parseInt(album.id, 10)],
-            });
-          } catch (err) {
-            console.error(
-              `Failed to monitor/search album ${album.albumName}:`,
-              err.message
-            );
-          }
-        }
+        await Promise.allSettled(
+          albumsToMonitor.map(async (album) => {
+            try {
+              await libraryManager.updateAlbum(album.id, { monitored: true });
+              await lidarrClient.request("/command", "POST", {
+                name: "AlbumSearch",
+                albumIds: [parseInt(album.id, 10)],
+              });
+            } catch (err) {
+              console.error(
+                `Failed to monitor/search album ${album.albumName}:`,
+                err.message
+              );
+            }
+          })
+        );
       }
     }
 

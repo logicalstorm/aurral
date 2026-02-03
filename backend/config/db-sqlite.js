@@ -57,6 +57,10 @@ db.exec(`
     completed_at INTEGER,
     created_at INTEGER NOT NULL
   );
+
+  CREATE INDEX IF NOT EXISTS idx_weekly_flow_jobs_status ON weekly_flow_jobs(status);
+  CREATE INDEX IF NOT EXISTS idx_weekly_flow_jobs_playlist_type ON weekly_flow_jobs(playlist_type);
+  CREATE INDEX IF NOT EXISTS idx_images_cache_cache_age ON images_cache(cache_age);
 `);
 
 export const dbHelpers = {

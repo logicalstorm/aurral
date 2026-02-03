@@ -3,13 +3,20 @@ import {
   getDiscoveryCache,
   updateDiscoveryCache,
 } from "../services/discoveryService.js";
-import { lastfmRequest, getLastfmApiKey } from "../services/apiClients.js";
+import {
+  lastfmRequest,
+  getLastfmApiKey,
+  clearApiCaches,
+} from "../services/apiClients.js";
 import { libraryManager } from "../services/libraryManager.js";
 import { dbOps } from "../config/db-helpers.js";
 import { imagePrefetchService } from "../services/imagePrefetchService.js";
 import { defaultDiscoveryPreferences } from "../config/constants.js";
 
 const router = express.Router();
+
+const pendingTagRequests = new Map();
+const pendingTagSuggestRequest = { promise: null, expiry: 0 };
 
 let discoveryPreferences = { ...defaultDiscoveryPreferences };
 
@@ -50,9 +57,20 @@ router.post("/clear", async (req, res) => {
     lastUpdated: null,
     isUpdating: false,
   });
+
+  clearApiCaches();
+
+  if (clearImages) {
+    dbOps.clearImages();
+  }
+
+  pendingTagRequests.clear();
+  pendingTagSuggestRequest.promise = null;
+  pendingTagSuggestRequest.expiry = 0;
+
   res.json({
     message: clearImages
-      ? "Discovery cache cleared (image cache clearing not yet implemented)"
+      ? "Discovery and image caches cleared"
       : "Discovery cache cleared",
   });
 });
@@ -164,7 +182,7 @@ router.get("/", async (req, res) => {
   const existingArtistIds = new Set(libraryArtists.map((a) => a.mbid));
 
   recommendations = recommendations.filter(
-    (artist) => !existingArtistIds.has(artist.id),
+    (artist) => !existingArtistIds.has(artist.id)
   );
   globalTop = globalTop.filter((artist) => !existingArtistIds.has(artist.id));
 
@@ -239,12 +257,26 @@ router.get("/tags", async (req, res) => {
     const prefix = String(q).trim().toLowerCase();
     let tagNames = [];
     if (getLastfmApiKey()) {
-      const data = await lastfmRequest("chart.getTopTags", { limit: 100 });
+      let data;
+      const now = Date.now();
+      if (
+        pendingTagSuggestRequest.promise &&
+        pendingTagSuggestRequest.expiry > now
+      ) {
+        data = await pendingTagSuggestRequest.promise;
+      } else {
+        const fetchPromise = lastfmRequest("chart.getTopTags", { limit: 100 });
+        pendingTagSuggestRequest.promise = fetchPromise;
+        pendingTagSuggestRequest.expiry = now + 60000;
+        data = await fetchPromise;
+      }
       if (data?.tags?.tag) {
         const tags = Array.isArray(data.tags.tag)
           ? data.tags.tag
           : [data.tags.tag];
-        tagNames = tags.map((t) => (t.name != null ? String(t.name).trim() : "")).filter(Boolean);
+        tagNames = tags
+          .map((t) => (t.name != null ? String(t.name).trim() : ""))
+          .filter(Boolean);
       }
     }
     if (tagNames.length === 0) {
@@ -252,7 +284,9 @@ router.get("/tags", async (req, res) => {
       const cached = [
         ...(discoveryCache.topTags || []),
         ...(discoveryCache.topGenres || []),
-      ].map((t) => (t != null ? String(t).trim() : "")).filter(Boolean);
+      ]
+        .map((t) => (t != null ? String(t).trim() : ""))
+        .filter(Boolean);
       tagNames = [...new Set(cached)];
     }
     const seen = new Set();
@@ -283,16 +317,28 @@ router.get("/by-tag", async (req, res) => {
     const limitInt = Math.min(parseInt(limit) || 24, 50);
     const offsetInt = parseInt(offset) || 0;
     const page = Math.floor(offsetInt / limitInt) + 1;
+    const cacheKey = `tag:${tag.toLowerCase()}:${limitInt}:${page}`;
 
     let recommendations = [];
 
     if (getLastfmApiKey()) {
       try {
-        const data = await lastfmRequest("tag.getTopArtists", {
-          tag,
-          limit: limitInt,
-          page,
-        });
+        let data;
+        if (pendingTagRequests.has(cacheKey)) {
+          data = await pendingTagRequests.get(cacheKey);
+        } else {
+          const fetchPromise = lastfmRequest("tag.getTopArtists", {
+            tag,
+            limit: limitInt,
+            page,
+          });
+          pendingTagRequests.set(cacheKey, fetchPromise);
+          try {
+            data = await fetchPromise;
+          } finally {
+            pendingTagRequests.delete(cacheKey);
+          }
+        }
 
         if (data?.topartists?.artist) {
           const artists = Array.isArray(data.topartists.artist)
@@ -336,7 +382,7 @@ router.get("/by-tag", async (req, res) => {
     const existingArtistIds = new Set(libraryArtists.map((a) => a.mbid));
 
     const filtered = recommendations.filter(
-      (artist) => !existingArtistIds.has(artist.id),
+      (artist) => !existingArtistIds.has(artist.id)
     );
 
     res.json({
@@ -414,7 +460,7 @@ router.delete("/preferences/exclude-genre/:genre", (req, res) => {
     const { genre } = req.params;
     discoveryPreferences.excludedGenres =
       discoveryPreferences.excludedGenres.filter(
-        (g) => g !== genre.toLowerCase(),
+        (g) => g !== genre.toLowerCase()
       );
 
     res.json({
@@ -459,7 +505,7 @@ router.delete("/preferences/exclude-artist/:artistId", (req, res) => {
     const { artistId } = req.params;
     discoveryPreferences.excludedArtists =
       discoveryPreferences.excludedArtists.filter(
-        (a) => a.artistId !== artistId,
+        (a) => a.artistId !== artistId
       );
 
     res.json({
@@ -484,13 +530,13 @@ router.get("/filtered", async (req, res) => {
     const existingArtistIds = new Set(libraryArtists.map((a) => a.mbid));
 
     recommendations = recommendations.filter(
-      (artist) => !existingArtistIds.has(artist.id),
+      (artist) => !existingArtistIds.has(artist.id)
     );
     globalTop = globalTop.filter((artist) => !existingArtistIds.has(artist.id));
 
     if (discoveryPreferences.excludedGenres.length > 0) {
       const excludedGenresLower = discoveryPreferences.excludedGenres.map((g) =>
-        g.toLowerCase(),
+        g.toLowerCase()
       );
 
       recommendations = recommendations.filter((artist) => {
@@ -506,10 +552,10 @@ router.get("/filtered", async (req, res) => {
 
     if (discoveryPreferences.excludedArtists.length > 0) {
       const excludedIds = new Set(
-        discoveryPreferences.excludedArtists.map((a) => a.artistId),
+        discoveryPreferences.excludedArtists.map((a) => a.artistId)
       );
       recommendations = recommendations.filter(
-        (artist) => !excludedIds.has(artist.id),
+        (artist) => !excludedIds.has(artist.id)
       );
       globalTop = globalTop.filter((artist) => !excludedIds.has(artist.id));
     }
@@ -517,7 +563,7 @@ router.get("/filtered", async (req, res) => {
     if (discoveryPreferences.maxRecommendations > 0) {
       recommendations = recommendations.slice(
         0,
-        discoveryPreferences.maxRecommendations,
+        discoveryPreferences.maxRecommendations
       );
     }
 

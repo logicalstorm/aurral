@@ -21,8 +21,8 @@
     ]
   },
   "dependencies": {
-    "bcrypt": "^5.1.1",
     "axios": "^1.7.9",
+    "bcrypt": "^5.1.1",
     "better-sqlite3": "^12.6.2",
     "bottleneck": "^2.19.5",
     "cors": "^2.8.5",
@@ -33,6 +33,7 @@
     "helmet": "^8.1.0",
     "lowdb": "^7.0.1",
     "music-metadata": "^11.10.6",
+    "node-cache": "^5.1.2",
     "slsk-client": "^1.1.0",
     "uuid": "^11.0.0",
     "ws": "^8.18.0"

@@ -4,16 +4,9 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense, lazy } from "react";
 import PropTypes from "prop-types";
 import Layout from "./components/Layout";
-import SearchResultsPage from "./pages/SearchResultsPage";
-import DiscoverPage from "./pages/DiscoverPage";
-import LibraryPage from "./pages/LibraryPage";
-import SettingsPage from "./pages/SettingsPage";
-import ArtistDetailsPage from "./pages/ArtistDetailsPage";
-import RequestsPage from "./pages/RequestsPage";
-import FlowPage from "./pages/FlowPage";
 import Login from "./pages/Login";
 import Onboarding from "./pages/Onboarding";
 import { checkHealth } from "./utils/api";
@@ -21,6 +14,23 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { ToastProvider } from "./contexts/ToastContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import ReloadPrompt from "./components/ReloadPrompt";
+
+const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
+const DiscoverPage = lazy(() => import("./pages/DiscoverPage"));
+const LibraryPage = lazy(() => import("./pages/LibraryPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const ArtistDetailsPage = lazy(() => import("./pages/ArtistDetailsPage"));
+const RequestsPage = lazy(() => import("./pages/RequestsPage"));
+const FlowPage = lazy(() => import("./pages/FlowPage"));
+
+const PageLoader = () => (
+  <div className="flex items-center justify-center min-h-[200px]">
+    <div
+      className="animate-spin h-8 w-8"
+      style={{ borderBottom: "2px solid #707e61" }}
+    ></div>
+  </div>
+);
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, isLoading, authRequired, onboardingRequired } =
@@ -137,23 +147,25 @@ function AppContent() {
             </div>
           )}
 
-          <Routes>
-            <Route path="/" element={<DiscoverPage />} />
-            <Route path="/search" element={<SearchResultsPage />} />
-            <Route path="/discover" element={<Navigate to="/" replace />} />
-            <Route path="/library" element={<LibraryPage />} />
-            <Route
-              path="/flow"
-              element={
-                <PermissionRoute permission="accessFlow">
-                  <FlowPage />
-                </PermissionRoute>
-              }
-            />
-            <Route path="/requests" element={<RequestsPage />} />
-            <Route path="/artist/:mbid" element={<ArtistDetailsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Routes>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/" element={<DiscoverPage />} />
+              <Route path="/search" element={<SearchResultsPage />} />
+              <Route path="/discover" element={<Navigate to="/" replace />} />
+              <Route path="/library" element={<LibraryPage />} />
+              <Route
+                path="/flow"
+                element={
+                  <PermissionRoute permission="accessFlow">
+                    <FlowPage />
+                  </PermissionRoute>
+                }
+              />
+              <Route path="/requests" element={<RequestsPage />} />
+              <Route path="/artist/:mbid" element={<ArtistDetailsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Routes>
+          </Suspense>
         </Layout>
       </ProtectedRoute>
     </Router>

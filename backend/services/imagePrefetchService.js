@@ -5,17 +5,19 @@ class ImagePrefetchService {
   constructor() {
     this.queue = [];
     this.processing = false;
-    this.batchSize = 5;
-    this.delayBetweenBatches = 100; // ms
+    this.batchSize = 10;
+    this.delayBetweenBatches = 50;
   }
 
   enqueue(mbids) {
     if (!Array.isArray(mbids)) return;
 
-    const uniqueMbids = [...new Set(mbids)];
+    const uniqueMbids = [...new Set(mbids)].filter(Boolean);
+    if (uniqueMbids.length === 0) return;
+
+    const cachedImages = dbOps.getImages(uniqueMbids);
     const uncached = uniqueMbids.filter((mbid) => {
-      if (!mbid) return false;
-      const cached = dbOps.getImage(mbid);
+      const cached = cachedImages[mbid];
       return !cached || cached.imageUrl === "NOT_FOUND";
     });
 
@@ -35,13 +37,13 @@ class ImagePrefetchService {
         batch.map((mbid) =>
           getArtistImage(mbid).catch((err) => {
             return null;
-          }),
-        ),
+          })
+        )
       );
 
       if (this.queue.length > 0) {
         await new Promise((resolve) =>
-          setTimeout(resolve, this.delayBetweenBatches),
+          setTimeout(resolve, this.delayBetweenBatches)
         );
       }
     }
@@ -54,7 +56,7 @@ class ImagePrefetchService {
 
     if (discoveryData?.recommendations) {
       mbids.push(
-        ...discoveryData.recommendations.map((a) => a.id).filter(Boolean),
+        ...discoveryData.recommendations.map((a) => a.id).filter(Boolean)
       );
     }
 

@@ -4,6 +4,7 @@ import { dbOps } from "../config/db-helpers.js";
 
 const CIRCUIT_COOLDOWN_MS = 60000;
 const LIDARR_MAX_CONCURRENT = 12;
+const LIDARR_LIST_CACHE_MS = 30000;
 
 export class LidarrClient {
   constructor() {
@@ -13,6 +14,8 @@ export class LidarrClient {
     this._circuitOpenedAt = 0;
     this._concurrent = 0;
     this._waitQueue = [];
+    this._artistListCache = null;
+    this._albumListCache = null;
     this.updateConfig();
   }
 
@@ -54,6 +57,8 @@ export class LidarrClient {
     };
 
     this.config = newConfig;
+    this._artistListCache = null;
+    this._albumListCache = null;
   }
 
   getConfig() {
@@ -100,6 +105,36 @@ export class LidarrClient {
 
     const authHeaders = this.getAuthHeaders();
 
+    if (method === "GET" && endpoint === "/artist") {
+      const now = Date.now();
+      if (
+        this._artistListCache &&
+        now - this._artistListCache.at < LIDARR_LIST_CACHE_MS
+      ) {
+        return this._artistListCache.data;
+      }
+    }
+    if (method === "GET" && endpoint === "/album") {
+      const now = Date.now();
+      if (
+        this._albumListCache &&
+        now - this._albumListCache.at < LIDARR_LIST_CACHE_MS
+      ) {
+        return this._albumListCache.data;
+      }
+    }
+
+    if (
+      method !== "GET" &&
+      (endpoint === "/artist" ||
+        endpoint.startsWith("/artist/") ||
+        endpoint === "/album" ||
+        endpoint.startsWith("/album/"))
+    ) {
+      this._artistListCache = null;
+      this._albumListCache = null;
+    }
+
     try {
       await this._acquireSlot();
       try {
@@ -143,6 +178,13 @@ export class LidarrClient {
               headers: response.headers,
             },
           };
+        }
+
+        if (method === "GET" && endpoint === "/artist") {
+          this._artistListCache = { data: response.data, at: Date.now() };
+        }
+        if (method === "GET" && endpoint === "/album") {
+          this._albumListCache = { data: response.data, at: Date.now() };
         }
 
         return response.data;
