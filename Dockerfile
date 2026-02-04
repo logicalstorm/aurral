@@ -22,10 +22,10 @@ RUN addgroup -g 1001 -S nodejs && \
     chown -R nodejs:nodejs /app
 
 COPY package*.json ./
-RUN apk add --no-cache python3 make g++ && HUSKY=0 npm ci --omit=dev
+RUN apk add --no-cache python3 make g++ && npm ci --omit=dev --ignore-scripts
 
 COPY backend/package*.json ./backend/
-RUN cd backend && HUSKY=0 npm ci --omit=dev
+RUN cd backend && npm ci --omit=dev --ignore-scripts && npm rebuild bcrypt --build-from-source
 
 COPY backend/ ./backend/
 COPY server.js loadEnv.js ./
