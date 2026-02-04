@@ -14,12 +14,16 @@ const router = express.Router();
 router.use(requireAuth);
 router.use(requirePermission("accessFlow"));
 const DEFAULT_LIMIT = 30;
-const QUEUE_LIMIT = 35;
+const QUEUE_LIMIT = 50;
 
-router.post("/start/:playlistType", async (req, res) => {
+router.post("/start/:flowId", async (req, res) => {
   try {
-    const { playlistType } = req.params;
-    const { limit = 30 } = req.body;
+    const { flowId } = req.params;
+    const { limit } = req.body;
+    const flow = flowPlaylistConfig.getFlow(flowId);
+    if (!flow) {
+      return res.status(404).json({ error: "Flow not found" });
+    }
 
     if (!soulseekClient.isConfigured()) {
       return res.status(400).json({
@@ -27,17 +31,21 @@ router.post("/start/:playlistType", async (req, res) => {
       });
     }
 
-    const tracks = await playlistSource.getTracksForPlaylist(
-      playlistType,
-      limit
-    );
+    const size =
+      Number.isFinite(Number(limit)) && Number(limit) > 0
+        ? Number(limit)
+        : flow.size || DEFAULT_LIMIT;
+    const tracks = await playlistSource.getTracksForFlow({
+      ...flow,
+      size,
+    });
     if (tracks.length === 0) {
       return res.status(400).json({
-        error: `No tracks found for playlist type: ${playlistType}`,
+        error: `No tracks found for flow: ${flow.name}`,
       });
     }
 
-    const jobIds = downloadTracker.addJobs(tracks, playlistType);
+    const jobIds = downloadTracker.addJobs(tracks, flowId);
 
     if (!weeklyFlowWorker.running) {
       await weeklyFlowWorker.start();
@@ -45,7 +53,7 @@ router.post("/start/:playlistType", async (req, res) => {
 
     res.json({
       success: true,
-      playlistType,
+      flowId,
       tracksQueued: tracks.length,
       jobIds,
     });
@@ -61,28 +69,88 @@ router.get("/status", (req, res) => {
   const workerStatus = weeklyFlowWorker.getStatus();
   const stats = downloadTracker.getStats();
   const allJobs = downloadTracker.getAll();
-  const playlists = flowPlaylistConfig.getPlaylists();
+  const flows = flowPlaylistConfig.getFlows();
 
   res.json({
     worker: workerStatus,
     stats,
     jobs: allJobs,
-    playlists,
+    flows,
   });
 });
 
-router.put("/playlist/:playlistType/enabled", async (req, res) => {
+router.post("/flows", async (req, res) => {
   try {
-    const { playlistType } = req.params;
+    const { name, mix, size } = req.body || {};
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: "name is required" });
+    }
+    const flow = flowPlaylistConfig.createFlow({ name, mix, size });
+    await playlistManager.ensureSmartPlaylists();
+    res.json({ success: true, flow });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to create flow",
+      message: error.message,
+    });
+  }
+});
+
+router.put("/flows/:flowId", async (req, res) => {
+  try {
+    const { flowId } = req.params;
+    const { name, mix, size } = req.body || {};
+    const updated = flowPlaylistConfig.updateFlow(flowId, { name, mix, size });
+    if (!updated) {
+      return res.status(404).json({ error: "Flow not found" });
+    }
+    await playlistManager.ensureSmartPlaylists();
+    res.json({ success: true, flow: updated });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to update flow",
+      message: error.message,
+    });
+  }
+});
+
+router.delete("/flows/:flowId", async (req, res) => {
+  try {
+    const { flowId } = req.params;
+    weeklyFlowWorker.stop();
+    playlistManager.updateConfig();
+    await playlistManager.weeklyReset([flowId]);
+    downloadTracker.clearByPlaylistType(flowId);
+    const deleted = flowPlaylistConfig.deleteFlow(flowId);
+    await playlistManager.ensureSmartPlaylists();
+    const stillPending = downloadTracker.getNextPending();
+    if (stillPending && !weeklyFlowWorker.running) {
+      await weeklyFlowWorker.start();
+    }
+    if (!deleted) {
+      return res.status(404).json({ error: "Flow not found" });
+    }
+    res.json({ success: true, flowId });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to delete flow",
+      message: error.message,
+    });
+  }
+});
+
+router.put("/flows/:flowId/enabled", async (req, res) => {
+  try {
+    const { flowId } = req.params;
     const { enabled } = req.body;
 
     if (typeof enabled !== "boolean") {
       return res.status(400).json({ error: "enabled must be a boolean" });
     }
 
-    const validTypes = ["discover", "mix", "trending"];
-    if (!validTypes.includes(playlistType)) {
-      return res.status(400).json({ error: "Invalid playlist type" });
+    const flow = flowPlaylistConfig.getFlow(flowId);
+    if (!flow) {
+      return res.status(404).json({ error: "Flow not found" });
     }
 
     if (enabled) {
@@ -94,49 +162,46 @@ router.put("/playlist/:playlistType/enabled", async (req, res) => {
 
       weeklyFlowWorker.stop();
       playlistManager.updateConfig();
-      await playlistManager.weeklyReset([playlistType]);
-      downloadTracker.clearByPlaylistType(playlistType);
+      await playlistManager.weeklyReset([flowId]);
+      downloadTracker.clearByPlaylistType(flowId);
 
-      const tracks = await playlistSource.getTracksForPlaylist(
-        playlistType,
-        QUEUE_LIMIT
-      );
+      const tracks = await playlistSource.getTracksForFlow(flow);
       if (tracks.length === 0) {
-        flowPlaylistConfig.setEnabled(playlistType, true);
-        flowPlaylistConfig.scheduleNextRun(playlistType);
+        flowPlaylistConfig.setEnabled(flowId, true);
+        flowPlaylistConfig.scheduleNextRun(flowId);
         await playlistManager.ensureSmartPlaylists();
         return res.json({
           success: true,
-          playlistType,
+          flowId,
           enabled: true,
           tracksQueued: 0,
-          message: "Playlist enabled; no tracks available yet.",
+          message: "Flow enabled; no tracks available yet.",
         });
       }
 
-      downloadTracker.addJobs(tracks, playlistType);
+      downloadTracker.addJobs(tracks, flowId);
       if (!weeklyFlowWorker.running) {
         await weeklyFlowWorker.start();
       }
 
-      flowPlaylistConfig.setEnabled(playlistType, true);
-      flowPlaylistConfig.scheduleNextRun(playlistType);
+      flowPlaylistConfig.setEnabled(flowId, true);
+      flowPlaylistConfig.scheduleNextRun(flowId);
 
       await playlistManager.ensureSmartPlaylists();
 
       res.json({
         success: true,
-        playlistType,
+        flowId,
         enabled: true,
         tracksQueued: tracks.length,
       });
     } else {
       weeklyFlowWorker.stop();
       playlistManager.updateConfig();
-      await playlistManager.weeklyReset([playlistType]);
-      downloadTracker.clearByPlaylistType(playlistType);
+      await playlistManager.weeklyReset([flowId]);
+      downloadTracker.clearByPlaylistType(flowId);
 
-      flowPlaylistConfig.setEnabled(playlistType, false);
+      flowPlaylistConfig.setEnabled(flowId, false);
       await playlistManager.ensureSmartPlaylists();
 
       const stillPending = downloadTracker.getNextPending();
@@ -146,21 +211,21 @@ router.put("/playlist/:playlistType/enabled", async (req, res) => {
 
       res.json({
         success: true,
-        playlistType,
+        flowId,
         enabled: false,
       });
     }
   } catch (error) {
     res.status(500).json({
-      error: "Failed to update playlist",
+      error: "Failed to update flow",
       message: error.message,
     });
   }
 });
 
-router.get("/jobs/:playlistType", (req, res) => {
-  const { playlistType } = req.params;
-  const jobs = downloadTracker.getByPlaylistType(playlistType);
+router.get("/jobs/:flowId", (req, res) => {
+  const { flowId } = req.params;
+  const jobs = downloadTracker.getByPlaylistType(flowId);
   res.json(jobs);
 });
 
@@ -201,8 +266,8 @@ router.delete("/jobs/all", (req, res) => {
 
 router.post("/reset", async (req, res) => {
   try {
-    const { playlistTypes } = req.body;
-    const types = playlistTypes || ["discover", "mix", "trending"];
+    const { flowIds } = req.body;
+    const types = flowIds || flowPlaylistConfig.getFlows().map((flow) => flow.id);
 
     weeklyFlowWorker.stop();
     playlistManager.updateConfig();
@@ -222,13 +287,12 @@ router.post("/reset", async (req, res) => {
 
 router.post("/playlist/:playlistType/create", async (req, res) => {
   try {
-    const { playlistType } = req.params;
     playlistManager.updateConfig();
     await playlistManager.ensureSmartPlaylists();
     res.json({
       success: true,
       message:
-        "Smart playlists ensured. Tracks in aurral-weekly-flow/discover|mix|trending will appear in the matching smart playlist when Navidrome scans the second library.",
+        "Smart playlists ensured. Tracks in aurral-weekly-flow/<flow-id> will appear in matching smart playlists after Navidrome scans the flow library.",
     });
   } catch (error) {
     res.status(500).json({

@@ -2,6 +2,120 @@ import { lastfmRequest, getLastfmApiKey } from "./apiClients.js";
 import { getDiscoveryCache } from "./discoveryService.js";
 
 export class WeeklyFlowPlaylistSource {
+  _buildCounts(size, mix) {
+    const weights = [
+      { key: "discover", value: Number(mix?.discover ?? 0) },
+      { key: "mix", value: Number(mix?.mix ?? 0) },
+      { key: "trending", value: Number(mix?.trending ?? 0) },
+    ];
+    const sum = weights.reduce((acc, w) => acc + (Number.isFinite(w.value) ? w.value : 0), 0);
+    if (sum <= 0 || !Number.isFinite(sum)) {
+      return { discover: 0, mix: 0, trending: 0 };
+    }
+    const scaled = weights.map((w) => ({
+      ...w,
+      raw: (w.value / sum) * size,
+    }));
+    const floored = scaled.map((w) => ({
+      ...w,
+      count: Math.floor(w.raw),
+      remainder: w.raw - Math.floor(w.raw),
+    }));
+    let remaining = size - floored.reduce((acc, w) => acc + w.count, 0);
+    const ordered = [...floored].sort((a, b) => b.remainder - a.remainder);
+    for (let i = 0; i < ordered.length && remaining > 0; i++) {
+      ordered[i].count += 1;
+      remaining -= 1;
+    }
+    const out = {};
+    for (const item of ordered) {
+      out[item.key] = item.count;
+    }
+    return out;
+  }
+
+  _dedupeAndFill(size, sources, counts) {
+    const seen = new Set();
+    const picked = [];
+    const indices = {
+      discover: 0,
+      mix: 0,
+      trending: 0,
+    };
+
+    const takeFrom = (type, count) => {
+      const list = sources[type] || [];
+      let added = 0;
+      while (indices[type] < list.length && added < count) {
+        const track = list[indices[type]];
+        indices[type] += 1;
+        const key = `${track.artistName}`.toLowerCase() + "::" + `${track.trackName}`.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        picked.push(track);
+        added += 1;
+      }
+    };
+
+    takeFrom("discover", counts.discover || 0);
+    takeFrom("mix", counts.mix || 0);
+    takeFrom("trending", counts.trending || 0);
+
+    const order = ["discover", "mix", "trending"];
+    let looped = false;
+    while (picked.length < size) {
+      let progress = false;
+      for (const type of order) {
+        const list = sources[type] || [];
+        while (indices[type] < list.length) {
+          const track = list[indices[type]];
+          indices[type] += 1;
+          const key =
+            `${track.artistName}`.toLowerCase() +
+            "::" +
+            `${track.trackName}`.toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          picked.push(track);
+          progress = true;
+          break;
+        }
+        if (picked.length >= size) break;
+      }
+      if (!progress) {
+        if (looped) break;
+        looped = true;
+      } else {
+        looped = false;
+      }
+    }
+
+    return picked.slice(0, size);
+  }
+
+  async getTracksForFlow(flow) {
+    const size = Number(flow?.size || 0);
+    const limit = Number.isFinite(size) && size > 0 ? size : 30;
+    const counts = this._buildCounts(limit, flow?.mix);
+    const perTypeLimit = Math.max(limit, 50);
+
+    const [discoverTracks, mixTracks, trendingTracks] = await Promise.all([
+      this.getRecommendedTracks(perTypeLimit).catch(() => []),
+      this.getMixTracks(perTypeLimit).catch(() => []),
+      this.getDiscoverTracks(perTypeLimit).catch(() => []),
+    ]);
+
+    return this._dedupeAndFill(
+      limit,
+      {
+        discover: discoverTracks,
+        mix: mixTracks,
+        trending: trendingTracks,
+      },
+      counts,
+    );
+  }
+
   async getTracksForPlaylist(playlistType, limit = 30) {
     switch (playlistType) {
       case "discover":

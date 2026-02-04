@@ -57,12 +57,7 @@ export class WeeklyFlowPlaylistManager {
   }
 
   async ensureSmartPlaylists() {
-    const allPlaylists = [
-      { type: "discover", name: "Aurral Discover" },
-      { type: "mix", name: "Aurral Mix" },
-      { type: "trending", name: "Aurral Trending" },
-    ];
-    const config = flowPlaylistConfig.getPlaylists();
+    const flows = flowPlaylistConfig.getFlows();
     let libraryId = null;
     try {
       if (this.navidromeClient?.isConfigured()) {
@@ -89,11 +84,15 @@ export class WeeklyFlowPlaylistManager {
           );
         }
       }
-      for (const { type, name } of allPlaylists) {
-        const nspPath = path.join(this.libraryRoot, `${name}.nsp`);
-        const isEnabled = config[type]?.enabled;
-        if (isEnabled) {
-          const pathCondition = { contains: { filepath: type } };
+      const existingFiles = await fs.readdir(this.libraryRoot).catch(() => []);
+      const expectedFiles = new Set();
+      for (const flow of flows) {
+        const playlistName = `Aurral-${flow.name}`;
+        const fileName = `${this._sanitize(playlistName)}.nsp`;
+        const nspPath = path.join(this.libraryRoot, fileName);
+        expectedFiles.add(fileName);
+        if (flow.enabled) {
+          const pathCondition = { contains: { filepath: flow.id } };
           const all =
             libraryId != null
               ? [{ is: { library_id: libraryId } }, pathCondition]
@@ -106,13 +105,13 @@ export class WeeklyFlowPlaylistManager {
           await fs.writeFile(nspPath, JSON.stringify(payload), "utf8");
         } else {
           if (playlists?.length) {
-            const existing = playlists.find((p) => p.name === name);
+            const existing = playlists.find((p) => p.name === playlistName);
             if (existing) {
               try {
                 await this.navidromeClient.deletePlaylist(existing.id);
               } catch (err) {
                 console.warn(
-                  `[WeeklyFlowPlaylistManager] Failed to delete playlist "${name}" from Navidrome:`,
+                  `[WeeklyFlowPlaylistManager] Failed to delete playlist "${playlistName}" from Navidrome:`,
                   err?.message
                 );
               }
@@ -122,6 +121,14 @@ export class WeeklyFlowPlaylistManager {
             await fs.unlink(nspPath);
           } catch {}
         }
+      }
+      const toRemove = existingFiles.filter(
+        (file) => file.endsWith(".nsp") && !expectedFiles.has(file),
+      );
+      for (const file of toRemove) {
+        try {
+          await fs.unlink(path.join(this.libraryRoot, file));
+        } catch {}
       }
     } catch (err) {
       console.warn(
@@ -142,13 +149,17 @@ export class WeeklyFlowPlaylistManager {
 
   async removeDiscoverSymlinksForAlbum(artistName, albumName) {}
 
-  async weeklyReset(playlistTypes = ["discover", "mix", "trending"]) {
+  async weeklyReset(playlistTypes = null) {
+    const targets =
+      playlistTypes && playlistTypes.length
+        ? playlistTypes
+        : flowPlaylistConfig.getFlows().map((flow) => flow.id);
     const fallbackDir = path.join(this.weeklyFlowRoot, "_fallback");
     try {
       await fs.rm(fallbackDir, { recursive: true, force: true });
     } catch {}
 
-    for (const playlistType of playlistTypes) {
+    for (const playlistType of targets) {
       const jobs = downloadTracker.getByPlaylistType(playlistType);
       for (const job of jobs) {
         const stagingDir = path.join(this.weeklyFlowRoot, "_staging", job.id);
@@ -173,12 +184,9 @@ export class WeeklyFlowPlaylistManager {
   }
 
   getPlaylistName(playlistType) {
-    const names = {
-      discover: "Aurral Discover",
-      mix: "Aurral Mix",
-      trending: "Aurral Trending",
-    };
-    return names[playlistType] || `Aurral ${playlistType}`;
+    const flow = flowPlaylistConfig.getFlow(playlistType);
+    if (flow) return `Aurral-${flow.name}`;
+    return `Aurral-${playlistType}`;
   }
 }
 

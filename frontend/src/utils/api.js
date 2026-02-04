@@ -422,31 +422,44 @@ export const getFlowStatus = async () => {
   return response.data;
 };
 
-export const getFlowJobs = async (playlistType) => {
-  const response = await api.get(`/weekly-flow/jobs/${playlistType}`);
+export const getFlowJobs = async (flowId) => {
+  const response = await api.get(`/weekly-flow/jobs/${flowId}`);
   return response.data;
 };
 
-export const setFlowPlaylistEnabled = async (playlistType, enabled) => {
+export const createFlow = async (payload) => {
+  const response = await api.post("/weekly-flow/flows", payload);
+  return response.data;
+};
+
+export const updateFlow = async (flowId, payload) => {
+  const response = await api.put(`/weekly-flow/flows/${flowId}`, payload);
+  return response.data;
+};
+
+export const deleteFlow = async (flowId) => {
+  const response = await api.delete(`/weekly-flow/flows/${flowId}`);
+  return response.data;
+};
+
+export const setFlowEnabled = async (flowId, enabled) => {
   const response = await api.put(
-    `/weekly-flow/playlist/${playlistType}/enabled`,
+    `/weekly-flow/flows/${flowId}/enabled`,
     { enabled }
   );
   return response.data;
 };
 
-export const startFlowPlaylist = async (playlistType, limit = 30) => {
-  const response = await api.post(`/weekly-flow/start/${playlistType}`, {
+export const startFlowPlaylist = async (flowId, limit = 30) => {
+  const response = await api.post(`/weekly-flow/start/${flowId}`, {
     limit,
   });
   return response.data;
 };
 
-export const resetFlowPlaylists = async (
-  playlistTypes = ["discover", "mix", "trending"]
-) => {
+export const resetFlowPlaylists = async (flowIds) => {
   const response = await api.post("/weekly-flow/reset", {
-    playlistTypes,
+    flowIds,
   });
   return response.data;
 };
