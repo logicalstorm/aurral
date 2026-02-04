@@ -33,7 +33,7 @@ jobs:
 
       - name: Get version
         id: version
-        run: echo "app_version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+        run: echo "app_version=$(node -p 'require(\"./package.json\").version')" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -86,7 +86,7 @@ jobs:
 
       - name: Get version
         id: version
-        run: echo "app_version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+        run: echo "app_version=$(node -p 'require(\"./package.json\").version')" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
