@@ -39,7 +39,7 @@ jobs:
     if: needs.release.outputs.next_version != ''
     uses: ./.github/workflows/docker-publish.yml
     permissions:
-      contents: read
+      contents: write
       packages: write
     with:
       app_version: ${{ needs.release.outputs.next_version }}
