@@ -29,5 +29,6 @@ export default {
     "scope-case": [2, "always", "kebab-case"],
     "subject-empty": [2, "never"],
     "breaking-exclamation-required": [2, "always"],
+    "body-max-line-length": [0],
   },
 };
