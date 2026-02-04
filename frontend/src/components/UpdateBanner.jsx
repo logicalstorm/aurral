@@ -15,10 +15,15 @@ const UpdateBanner = ({ currentVersion }) => {
 
   useEffect(() => {
     const currentVersion = resolvedVersion;
+    const formatSha = (value) => (value ? value.slice(0, 7) : "");
+    const isSha = (value) => /^[0-9a-f]{7,40}$/i.test(value || "");
+    const normalizeVersion = (value) => (value || "").replace(/^v/, "");
     const repo = import.meta.env.VITE_GITHUB_REPO || "lklynet/aurral";
     if (!currentVersion || currentVersion === "unknown" || !repo) {
       return;
     }
+    const currentIsSha = isSha(currentVersion);
+    const currentLabel = normalizeVersion(currentVersion);
     let active = true;
     const checkForUpdate = async () => {
       try {
@@ -31,7 +36,8 @@ const UpdateBanner = ({ currentVersion }) => {
           return;
         }
         const data = await res.json();
-        let latest = "";
+        let latestSha = "";
+        let latestLabel = "";
         let releaseUrl = `https://github.com/${repo}/releases/latest`;
         if (isTestChannel) {
           const releases = Array.isArray(data) ? data : [];
@@ -41,33 +47,45 @@ const UpdateBanner = ({ currentVersion }) => {
           if (!testRelease) {
             return;
           }
-          latest = (testRelease.tag_name || "").replace(/^v/, "");
+          latestSha = (testRelease.target_commitish || "").trim();
+          latestLabel = normalizeVersion(testRelease.tag_name || "");
           releaseUrl = testRelease.html_url || releaseUrl;
         } else {
-          latest = (data.tag_name || "").replace(/^v/, "");
+          latestSha = (data.target_commitish || "").trim();
+          latestLabel = normalizeVersion(data.tag_name || "");
           releaseUrl = data.html_url || releaseUrl;
         }
-        if (!latest || latest === currentVersion) {
+        const latestKey = currentIsSha ? latestSha : latestLabel;
+        if (!latestKey) {
+          return;
+        }
+        if (
+          (currentIsSha && latestSha === currentVersion) ||
+          (!currentIsSha && latestLabel === currentLabel)
+        ) {
           return;
         }
         const dismissedVersion =
           dismissedUpdateRef.current ??
           localStorage.getItem(dismissKey);
-        if (dismissedVersion === latest) {
+        if (dismissedVersion === latestKey) {
           return;
         }
-        if (updateNotifiedRef.current === latest) {
+        if (updateNotifiedRef.current === latestKey) {
           return;
         }
         if (!active) {
           return;
         }
         setUpdateInfo({
-          current: currentVersion,
-          latest,
+          current: currentIsSha ? formatSha(currentVersion) : currentLabel,
+          latest: currentIsSha
+            ? latestLabel || formatSha(latestSha)
+            : latestLabel,
+          latestKey,
           url: releaseUrl,
         });
-        updateNotifiedRef.current = latest;
+        updateNotifiedRef.current = latestKey;
       } catch {}
     };
     checkForUpdate();
@@ -79,11 +97,11 @@ const UpdateBanner = ({ currentVersion }) => {
   }, [dismissKey, resolvedVersion]);
 
   const dismissUpdate = () => {
-    if (!updateInfo?.latest) {
+    if (!updateInfo?.latestKey) {
       return;
     }
-    dismissedUpdateRef.current = updateInfo.latest;
-    localStorage.setItem(dismissKey, updateInfo.latest);
+    dismissedUpdateRef.current = updateInfo.latestKey;
+    localStorage.setItem(dismissKey, updateInfo.latestKey);
     setUpdateInfo(null);
   };
 
