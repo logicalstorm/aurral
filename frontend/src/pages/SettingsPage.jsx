@@ -1155,6 +1155,7 @@ function SettingsPage() {
                         })
                       }
                     >
+                      <option value="none">None (Library only)</option>
                       <option value="7day">Last 7 days</option>
                       <option value="1month">This month</option>
                       <option value="3month">3 months</option>
