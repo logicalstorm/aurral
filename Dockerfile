@@ -6,6 +6,10 @@ COPY frontend/package*.json ./frontend/
 RUN cd frontend && npm ci
 
 COPY frontend/ ./frontend/
+ARG APP_VERSION=unknown
+ARG GITHUB_REPO=lklynet/aurral
+ENV VITE_APP_VERSION=$APP_VERSION
+ENV VITE_GITHUB_REPO=$GITHUB_REPO
 RUN cd frontend && npm run build
 
 FROM node:20-alpine

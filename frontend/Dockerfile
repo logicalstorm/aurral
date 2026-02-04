@@ -8,6 +8,11 @@ RUN npm ci
 
 COPY . .
 
+ARG APP_VERSION=unknown
+ARG GITHUB_REPO=lklynet/aurral
+ENV VITE_APP_VERSION=$APP_VERSION
+ENV VITE_GITHUB_REPO=$GITHUB_REPO
+
 RUN npm run build
 
 FROM nginx:alpine
