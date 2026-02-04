@@ -79,6 +79,7 @@ ProtectedRoute.propTypes = {
 function AppContent() {
   const [isHealthy, setIsHealthy] = useState(null);
   const [rootFolderConfigured, setRootFolderConfigured] = useState(false);
+  const [appVersion, setAppVersion] = useState(null);
   const { isAuthenticated } = useAuth();
 
   useEffect(() => {
@@ -87,8 +88,10 @@ function AppContent() {
         const health = await checkHealth();
         setIsHealthy(health.status === "ok");
         setRootFolderConfigured(health.rootFolderConfigured || false);
+        setAppVersion(health.appVersion || null);
       } catch {
         setIsHealthy(false);
+        setAppVersion(null);
       }
     };
 
@@ -103,8 +106,9 @@ function AppContent() {
         <Layout
           isHealthy={isHealthy}
           rootFolderConfigured={rootFolderConfigured}
+          appVersion={appVersion}
         >
-          <UpdateBanner />
+          <UpdateBanner currentVersion={appVersion} />
           {isHealthy === false && (
             <div className="mb-6 bg-red-500/20 border border-red-500/30 p-4">
               <div className="flex items-center">

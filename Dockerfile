@@ -14,6 +14,8 @@ ENV VITE_GITHUB_REPO=$GITHUB_REPO
 RUN cd frontend && npm run build
 
 FROM node:20-alpine
+ARG APP_VERSION=unknown
+ENV APP_VERSION=$APP_VERSION
 
 WORKDIR /app
 

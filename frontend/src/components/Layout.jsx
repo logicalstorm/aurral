@@ -19,7 +19,7 @@ function normalizeArtistName(s) {
     .trim();
 }
 
-function Layout({ children }) {
+function Layout({ children, appVersion }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
@@ -174,7 +174,11 @@ function Layout({ children }) {
 
   return (
     <div className="min-h-screen font-sans antialiased transition-colors duration-200">
-      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+      <Sidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        appVersion={appVersion}
+      />
 
       <div className="md:ml-52 flex flex-col min-h-screen transition-all duration-300 ease-in-out">
         <header
@@ -300,6 +304,7 @@ function Layout({ children }) {
 
 Layout.propTypes = {
   children: PropTypes.node.isRequired,
+  appVersion: PropTypes.string,
 };
 
 export default Layout;

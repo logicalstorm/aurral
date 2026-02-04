@@ -1,4 +1,5 @@
 import express from "express";
+import { readFileSync } from "fs";
 import { getLastfmApiKey } from "../services/apiClients.js";
 import {
   resolveRequestUser,
@@ -12,6 +13,12 @@ import { dbOps } from "../config/db-helpers.js";
 import { userOps } from "../config/db-helpers.js";
 import { websocketService } from "../services/websocketService.js";
 import { noCache } from "../middleware/cache.js";
+
+let rootPackageVersion = "unknown";
+try {
+  const raw = readFileSync(new URL("../../package.json", import.meta.url), "utf-8");
+  rootPackageVersion = JSON.parse(raw)?.version || "unknown";
+} catch {}
 
 const router = express.Router();
 
@@ -37,6 +44,7 @@ router.get("/", noCache, async (req, res) => {
     const currentUser = resolveRequestUser(req);
     const payload = {
       status: "ok",
+      appVersion: process.env.APP_VERSION || rootPackageVersion || "unknown",
       rootFolderConfigured: lidarrConfigured,
       lidarrConfigured,
       lastfmConfigured: !!getLastfmApiKey(),
