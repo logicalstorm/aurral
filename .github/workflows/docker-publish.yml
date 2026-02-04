@@ -1,8 +1,9 @@
 name: Docker
 
 on:
-  push:
-    tags: ["v*"]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
   pull_request:
     branches: ["main", "test"]
 
@@ -11,7 +12,7 @@ env:
 
 jobs:
   build-main:
-    if: (github.event_name == 'pull_request' && github.base_ref == 'main') || (startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-test.'))
+    if: (github.event_name == 'pull_request' && github.base_ref == 'main') || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -29,6 +30,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -37,8 +40,15 @@ jobs:
       - name: Get version
         id: version
         run: |
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            next_version="${GITHUB_REF_NAME#v}"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+            git fetch --tags --force
+            tag=$(git tag --list "v*" --sort=-v:refname | grep -v -- '-test\.' | head -n1)
+            if [ -n "$tag" ]; then
+              git checkout "$tag"
+              next_version="${tag#v}"
+            else
+              next_version=$(node -p 'require("./package.json").version')
+            fi
           else
             next_version=$(node -p 'require("./package.json").version')
           fi
@@ -66,7 +76,8 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-test.') }}
+            type=raw,value=${{ steps.version.outputs.app_version }}
+            type=raw,value=latest,enable=${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main' }}
 
       - name: Build and push Docker image
         id: build-and-push
@@ -83,7 +94,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   build-test:
-    if: (github.event_name == 'pull_request' && github.base_ref == 'test') || (startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-test.'))
+    if: (github.event_name == 'pull_request' && github.base_ref == 'test') || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'test')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -92,6 +103,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -100,8 +113,15 @@ jobs:
       - name: Get version
         id: version
         run: |
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            next_version="${GITHUB_REF_NAME#v}"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+            git fetch --tags --force
+            tag=$(git tag --list "v*-test.*" --sort=-v:refname | head -n1)
+            if [ -n "$tag" ]; then
+              git checkout "$tag"
+              next_version="${tag#v}"
+            else
+              next_version=$(node -p 'require("./package.json").version')
+            fi
           else
             next_version=$(node -p 'require("./package.json").version')
           fi
@@ -128,7 +148,8 @@ jobs:
             type=ref,event=pr
             type=ref,event=tag
             type=sha
-            type=raw,value=test,enable=${{ contains(github.ref, '-test.') }}
+            type=raw,value=${{ steps.version.outputs.app_version }}
+            type=raw,value=test,enable=${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'test' }}
 
       - name: Build and push Docker image
         id: build-and-push
@@ -146,7 +167,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   release-test:
-    if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-test.')
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'test'
     needs: build-test
     runs-on: ubuntu-latest
     permissions:
