@@ -7,7 +7,6 @@ import { useReleaseTypeFilter } from "./hooks/useReleaseTypeFilter";
 import { usePreviewPlayer } from "./hooks/usePreviewPlayer";
 import { useArtistDetailsLibrary } from "./hooks/useArtistDetailsLibrary";
 import { ArtistDetailsHero } from "./components/ArtistDetailsHero";
-import { ArtistDetailsPreview } from "./components/ArtistDetailsPreview";
 import { ArtistDetailsLibraryAlbums } from "./components/ArtistDetailsLibraryAlbums";
 import { ArtistDetailsReleaseGroups } from "./components/ArtistDetailsReleaseGroups";
 import { ArtistDetailsSimilar } from "./components/ArtistDetailsSimilar";
@@ -144,19 +143,14 @@ function ArtistDetailsPage() {
         handleRefreshArtist={library.handleRefreshArtist}
         refreshingArtist={library.refreshingArtist}
         onNavigate={(path) => navigate(path)}
+        loadingPreview={loadingPreview}
+        previewTracks={previewTracks}
+        previewAudioRef={previewAudioRef}
+        playingPreviewId={playingPreviewId}
+        previewProgress={previewProgress}
+        previewSnappingBack={previewSnappingBack}
+        handlePreviewPlay={handlePreviewPlay}
       />
-
-      {(artist || artistNameFromNav) && (
-        <ArtistDetailsPreview
-          loadingPreview={loadingPreview}
-          previewTracks={previewTracks}
-          previewAudioRef={previewAudioRef}
-          playingPreviewId={playingPreviewId}
-          previewProgress={previewProgress}
-          previewSnappingBack={previewSnappingBack}
-          handlePreviewPlay={handlePreviewPlay}
-        />
-      )}
 
       {existsInLibrary && libraryAlbums && libraryAlbums.length > 0 && (
         <ArtistDetailsLibraryAlbums

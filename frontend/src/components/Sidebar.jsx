@@ -7,15 +7,15 @@ import {
   Sparkles,
   History,
   LogOut,
-  Github,
-  Heart,
   AudioWaveform,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import LogoutButton from "./LogoutButton";
 
 function Sidebar({ isOpen, onClose }) {
   const location = useLocation();
   const { authRequired, logout, user } = useAuth();
+  const appVersion = import.meta.env.VITE_APP_VERSION || "unknown";
   const navRef = useRef(null);
   const activeBubbleRef = useRef(null);
   const hoverBubbleRef = useRef(null);
@@ -205,40 +205,14 @@ function Sidebar({ isOpen, onClose }) {
           </div>
         </div>
 
-        {authRequired && (
-          <div className="p-3">
-            <button
-              onClick={logout}
-              className="flex items-center justify-center w-full px-3 py-2 space-x-2 text-xs font-medium transition-colors shadow-sm"
-              style={{ backgroundColor: "#211f27", color: "#fff" }}
-            >
-              <LogOut className="w-4 h-4" />
-              <span>Logout</span>
-            </button>
+        <div className="flex flex-col items-center gap-2 p-3 mt-auto border-t" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+          {authRequired && (
+            <LogoutButton onClick={logout} />
+          )}
+          
+          <div className="text-[10px] font-mono opacity-30 select-none" style={{ color: "#c1c1c3" }}>
+            v{appVersion}
           </div>
-        )}
-
-        <div className="p-3 flex items-center justify-center space-x-3">
-          <a
-            href="https://github.com/lklynet/aurral"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-2 transition-colors"
-            style={{ color: "#c1c1c3" }}
-            aria-label="GitHub Repository"
-          >
-            <Github className="w-4 h-4" />
-          </a>
-          <a
-            href="https://github.com/sponsors/lklynet/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-2 transition-colors"
-            style={{ color: "#c1c1c3" }}
-            aria-label="GitHub Sponsors"
-          >
-            <Heart className="w-4 h-4" />
-          </a>
         </div>
       </aside>
     </>
