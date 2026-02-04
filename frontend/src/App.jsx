@@ -86,7 +86,7 @@ function AppContent() {
         const health = await checkHealth();
         setIsHealthy(health.status === "ok");
         setRootFolderConfigured(health.rootFolderConfigured || false);
-      } catch (error) {
+      } catch {
         setIsHealthy(false);
       }
     };
