@@ -7,6 +7,8 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      next_version: ${{ steps.next_version.outputs.next_version }}
     permissions:
       contents: write
       issues: write
@@ -20,7 +22,23 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
+      - name: Compute next version
+        id: next_version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          next_version=$(npx semantic-release --dry-run --no-ci | sed -nE 's/.*next release version is ([0-9A-Za-z.-]+).*/\1/p' | head -n1)
+          echo "next_version=$next_version" >> "$GITHUB_OUTPUT"
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx semantic-release
+
+  docker-publish:
+    needs: release
+    if: needs.release.outputs.next_version != ''
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      app_version: ${{ needs.release.outputs.next_version }}
+      release_channel: ${{ github.ref_name }}
+    secrets: inherit

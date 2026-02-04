@@ -97,13 +97,13 @@ export function useArtistDetailsLibrary({
       showSuccess(
         `Successfully removed ${artist?.name || "artist"} from library${
           deleteFiles ? " and deleted files" : ""
-        }`
+        }`,
       );
       setShowDeleteModal(false);
       setDeleteFiles(false);
     } catch (err) {
       showError(
-        `Failed to delete artist: ${err.response?.data?.message || err.message}`
+        `Failed to delete artist: ${err.response?.data?.message || err.message}`,
       );
     } finally {
       setDeletingArtist(false);
@@ -139,14 +139,14 @@ export function useArtistDetailsLibrary({
         first: "First Album",
       };
       showSuccess(
-        `Monitor option updated to: ${monitorLabels[newMonitorOption]}`
+        `Monitor option updated to: ${monitorLabels[newMonitorOption]}`,
       );
     } catch (err) {
       console.error("Update error:", err);
       showError(
         `Failed to update monitor option: ${
           err.response?.data?.message || err.message
-        }`
+        }`,
       );
     } finally {
       setUpdatingMonitor(false);
@@ -163,7 +163,7 @@ export function useArtistDetailsLibrary({
     if (
       monitorOption &&
       ["none", "all", "future", "missing", "latest", "first"].includes(
-        monitorOption
+        monitorOption,
       )
     ) {
       return monitorOption;
@@ -186,12 +186,12 @@ export function useArtistDetailsLibrary({
       const lookup = await lookupArtistInLibrary(artist.id);
       if (lookup.exists && lookup.artist) {
         const fullArtist = await getLibraryArtist(
-          lookup.artist.mbid || lookup.artist.foreignArtistId
+          lookup.artist.mbid || lookup.artist.foreignArtistId,
         );
         setLibraryArtist(fullArtist);
         setExistsInLibrary(true);
         await refreshLibraryArtist(
-          fullArtist.mbid || fullArtist.foreignArtistId
+          fullArtist.mbid || fullArtist.foreignArtistId,
         );
         const albums = await getLibraryAlbums(fullArtist.id);
         setLibraryAlbums(deduplicateAlbums(albums));
@@ -202,7 +202,7 @@ export function useArtistDetailsLibrary({
       showError(
         `Failed to add artist to library: ${
           err.response?.data?.message || err.message
-        }`
+        }`,
       );
       return false;
     }
@@ -226,12 +226,12 @@ export function useArtistDetailsLibrary({
         const lookup = await lookupArtistInLibrary(artist.id);
         if (lookup.exists && lookup.artist) {
           const fullArtist = await getLibraryArtist(
-            lookup.artist.mbid || lookup.artist.foreignArtistId
+            lookup.artist.mbid || lookup.artist.foreignArtistId,
           );
           setLibraryArtist(fullArtist);
           setExistsInLibrary(true);
           await refreshLibraryArtist(
-            fullArtist.mbid || fullArtist.foreignArtistId
+            fullArtist.mbid || fullArtist.foreignArtistId,
           );
           const albums = await getLibraryAlbums(fullArtist.id);
           setLibraryAlbums(deduplicateAlbums(albums));
@@ -243,7 +243,7 @@ export function useArtistDetailsLibrary({
         (await lookupArtistInLibrary(artist.id).then((l) =>
           l.artist
             ? getLibraryArtist(l.artist.mbid || l.artist.foreignArtistId)
-            : null
+            : null,
         ));
       if (!currentLibraryArtist?.id) {
         throw new Error("Failed to get library artist");
@@ -252,7 +252,7 @@ export function useArtistDetailsLibrary({
       let libraryAlbum = libraryAlbums.find(
         (a) =>
           (a.mbid === albumId || a.foreignAlbumId === albumId) &&
-          a.artistId === currentLibraryArtist.id
+          a.artistId === currentLibraryArtist.id,
       );
 
       if (!libraryAlbum) {
@@ -281,14 +281,14 @@ export function useArtistDetailsLibrary({
           addedAlbum = await addLibraryAlbum(
             currentLibraryArtist.id,
             albumId,
-            title
+            title,
           );
           setDownloadStatuses((prev) => ({
             ...prev,
             [addedAlbum.id]: { status: "processing" },
           }));
           const refreshedAlbums = await getLibraryAlbums(
-            currentLibraryArtist.id
+            currentLibraryArtist.id,
           );
           const uniqueAlbums = deduplicateAlbums(refreshedAlbums);
           setLibraryAlbums(uniqueAlbums);
@@ -296,11 +296,11 @@ export function useArtistDetailsLibrary({
             uniqueAlbums.find(
               (a) =>
                 (a.mbid === albumId || a.foreignAlbumId === albumId) &&
-                a.artistId === currentLibraryArtist.id
+                a.artistId === currentLibraryArtist.id,
             ) ?? addedAlbum;
         } catch {
           await refreshLibraryArtist(
-            currentLibraryArtist.mbid || currentLibraryArtist.foreignArtistId
+            currentLibraryArtist.mbid || currentLibraryArtist.foreignArtistId,
           );
           const albums = await getLibraryAlbums(currentLibraryArtist.id);
           const uniqueAlbums = deduplicateAlbums(albums);
@@ -308,11 +308,11 @@ export function useArtistDetailsLibrary({
           libraryAlbum = uniqueAlbums.find(
             (a) =>
               (a.mbid === albumId || a.foreignAlbumId === albumId) &&
-              a.artistId === currentLibraryArtist.id
+              a.artistId === currentLibraryArtist.id,
           );
           if (!libraryAlbum) {
             throw new Error(
-              "Album not found for this artist. Please try again."
+              "Album not found for this artist. Please try again.",
             );
           }
         }
@@ -324,8 +324,8 @@ export function useArtistDetailsLibrary({
       });
       setLibraryAlbums((prev) =>
         prev.map((a) =>
-          a.id === libraryAlbum.id ? { ...a, monitored: true } : a
-        )
+          a.id === libraryAlbum.id ? { ...a, monitored: true } : a,
+        ),
       );
       await downloadAlbum(currentLibraryArtist.id, libraryAlbum.id, {
         artistMbid:
@@ -340,7 +340,7 @@ export function useArtistDetailsLibrary({
       setRequestingAlbum(null);
       if (addedOptimistic) {
         setLibraryAlbums((prev) =>
-          prev.filter((a) => a.id !== `pending-${albumId}`)
+          prev.filter((a) => a.id !== `pending-${albumId}`),
         );
         setDownloadStatuses((prev) => {
           const next = { ...prev };
@@ -376,7 +376,7 @@ export function useArtistDetailsLibrary({
 
   const handleReleaseGroupAlbumClick = async (
     releaseGroupId,
-    libraryAlbumId
+    libraryAlbumId,
   ) => {
     if (expandedReleaseGroup === releaseGroupId) {
       setExpandedReleaseGroup(null);
@@ -393,7 +393,7 @@ export function useArtistDetailsLibrary({
           setAlbumTracks((prev) => ({ ...prev, [trackKey]: tracks }));
         } else {
           const rg = artist?.["release-groups"]?.find(
-            (r) => r.id === releaseGroupId
+            (r) => r.id === releaseGroupId,
           );
           const deezerId = rg?._deezerAlbumId ?? null;
           const tracks = await getReleaseGroupTracks(releaseGroupId, deezerId);
@@ -424,14 +424,14 @@ export function useArtistDetailsLibrary({
     const { id: albumId, title } = showDeleteAlbumModal;
     try {
       const libraryAlbum = libraryAlbums.find(
-        (a) => a.foreignAlbumId === albumId
+        (a) => a.foreignAlbumId === albumId,
       );
       if (!libraryAlbum) throw new Error("Album not found in library");
       setRemovingAlbum(albumId);
       if (deleteAlbumFiles) {
         await deleteAlbumFromLibrary(libraryAlbum.id, true);
         setLibraryAlbums((prev) =>
-          prev.filter((a) => a.id !== libraryAlbum.id)
+          prev.filter((a) => a.id !== libraryAlbum.id),
         );
         showSuccess(`Successfully deleted ${title} and files`);
       } else {
@@ -439,8 +439,8 @@ export function useArtistDetailsLibrary({
         unmonitoredAtRef.current[libraryAlbum.id] = Date.now();
         setLibraryAlbums((prev) =>
           prev.map((a) =>
-            a.id === libraryAlbum.id ? { ...a, monitored: false } : a
-          )
+            a.id === libraryAlbum.id ? { ...a, monitored: false } : a,
+          ),
         );
         showSuccess(`Successfully unmonitored ${title}`);
       }
@@ -450,7 +450,7 @@ export function useArtistDetailsLibrary({
       showError(
         `Failed to ${deleteAlbumFiles ? "delete" : "unmonitor"} album: ${
           err.response?.data?.message || err.message
-        }`
+        }`,
       );
     } finally {
       setRemovingAlbum(null);
@@ -460,7 +460,7 @@ export function useArtistDetailsLibrary({
   const isReleaseGroupDownloadedInLibrary = (releaseGroupId) => {
     if (!existsInLibrary || !libraryAlbums?.length) return false;
     const album = libraryAlbums.find(
-      (a) => a.mbid === releaseGroupId || a.foreignAlbumId === releaseGroupId
+      (a) => a.mbid === releaseGroupId || a.foreignAlbumId === releaseGroupId,
     );
     if (!album || String(album.id ?? "").startsWith("pending-")) return false;
     return (
@@ -476,11 +476,11 @@ export function useArtistDetailsLibrary({
   const handleMonitorAll = async () => {
     if (!libraryAlbums.length || !artist?.["release-groups"]) return;
     const visibleReleaseGroups = artist["release-groups"].filter((rg) =>
-      matchesReleaseTypeFilter(rg, selectedReleaseTypes)
+      matchesReleaseTypeFilter(rg, selectedReleaseTypes),
     );
     const visibleMbids = new Set(visibleReleaseGroups.map((rg) => rg.id));
     const unmonitored = libraryAlbums.filter(
-      (a) => !a.monitored && visibleMbids.has(a.mbid)
+      (a) => !a.monitored && visibleMbids.has(a.mbid),
     );
     if (unmonitored.length === 0) {
       showSuccess("No new unmonitored albums in current view!");
@@ -497,7 +497,7 @@ export function useArtistDetailsLibrary({
         }
       }
       setLibraryAlbums((prev) =>
-        prev.map((a) => (ids.includes(a.id) ? { ...a, monitored: true } : a))
+        prev.map((a) => (ids.includes(a.id) ? { ...a, monitored: true } : a)),
       );
       showSuccess(`Added ${ids.length} albums to monitor`);
     } catch (err) {
@@ -513,7 +513,7 @@ export function useArtistDetailsLibrary({
       return null;
     }
     const album = libraryAlbums.find(
-      (a) => a.mbid === releaseGroupId || a.foreignAlbumId === releaseGroupId
+      (a) => a.mbid === releaseGroupId || a.foreignAlbumId === releaseGroupId,
     );
     if (!album) return null;
     const isComplete =
@@ -572,7 +572,7 @@ export function useArtistDetailsLibrary({
             const album = libraryAlbums.find(
               (a) =>
                 a.mbid === requestingAlbum ||
-                a.foreignAlbumId === requestingAlbum
+                a.foreignAlbumId === requestingAlbum,
             );
             if (album && statuses[album.id]) {
               setRequestingAlbum(null);
@@ -589,24 +589,20 @@ export function useArtistDetailsLibrary({
                 s &&
                 (s.status === "downloading" ||
                   s.status === "processing" ||
-                  s.status === "adding")
+                  s.status === "adding"),
             );
             if (hasNewlyAdded || hasActiveDownloads) {
               setTimeout(
                 async () => {
                   try {
                     const refreshedAlbums = await getLibraryAlbums(
-                      libraryArtist.id
+                      libraryArtist.id,
                     );
                     const now = Date.now();
                     const cutoff = now - 120000;
                     const merged = refreshedAlbums.map((a) => {
                       const at = unmonitoredAtRef.current[a.id];
-                      if (
-                        at != null &&
-                        at >= cutoff &&
-                        a.monitored
-                      )
+                      if (at != null && at >= cutoff && a.monitored)
                         return { ...a, monitored: false };
                       return a;
                     });
@@ -615,7 +611,7 @@ export function useArtistDetailsLibrary({
                     console.error("Failed to refresh albums:", err);
                   }
                 },
-                hasNewlyAdded ? 2000 : 5000
+                hasNewlyAdded ? 2000 : 5000,
               );
             }
             return statuses;
