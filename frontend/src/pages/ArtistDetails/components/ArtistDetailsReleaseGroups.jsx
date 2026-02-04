@@ -15,6 +15,7 @@ import {
   Disc3,
   FileMusic,
 } from "lucide-react";
+import AddAlbumButton from "../../../components/AddAlbumButton";
 import { starsFromCount } from "../utils";
 import { matchesReleaseTypeFilter, hasActiveFilters } from "../utils";
 
@@ -531,7 +532,7 @@ export function ArtistDetailsReleaseGroups({
                           </div>
                         </>
                       ) : (
-                        <button
+                        <AddAlbumButton
                           onClick={(e) => {
                             e.stopPropagation();
                             handleRequestAlbum(
@@ -539,23 +540,16 @@ export function ArtistDetailsReleaseGroups({
                               releaseGroup.title
                             );
                           }}
+                          isLoading={requestingAlbum === releaseGroup.id}
                           disabled={requestingAlbum === releaseGroup.id}
-                          className="btn btn-secondary btn-sm inline-flex items-center"
                           style={{
                             backgroundColor: itemBg,
                             borderColor: itemBg,
-                            color: "#c1c1c3",
                           }}
-                        >
-                          {requestingAlbum === releaseGroup.id ? (
-                            <Loader className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Plus className="w-4 h-4" />
-                          )}
-                        </button>
+                        />
                       )
                     ) : (
-                      <button
+                      <AddAlbumButton
                         onClick={(e) => {
                           e.stopPropagation();
                           handleRequestAlbum(
@@ -563,20 +557,13 @@ export function ArtistDetailsReleaseGroups({
                             releaseGroup.title
                           );
                         }}
+                        isLoading={requestingAlbum === releaseGroup.id}
                         disabled={requestingAlbum === releaseGroup.id}
-                        className="btn btn-secondary btn-sm inline-flex items-center"
                         style={{
                           backgroundColor: itemBg,
                           borderColor: itemBg,
-                          color: "#c1c1c3",
                         }}
-                      >
-                        {requestingAlbum === releaseGroup.id ? (
-                          <Loader className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Plus className="w-4 h-4" />
-                        )}
-                      </button>
+                      />
                     )}
                   </div>
                 </div>

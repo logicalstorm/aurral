@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import PropTypes from "prop-types";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Search, Menu, Loader2 } from "lucide-react";
+import { Search, Menu, Loader2, Github, Heart } from "lucide-react";
 import Sidebar from "./Sidebar";
 import { searchArtists, getTagSuggestions } from "../utils/api";
 
@@ -193,7 +193,7 @@ function Layout({ children }) {
           <form
             ref={searchContainerRef}
             onSubmit={handleSearch}
-            className="relative w-full"
+            className="relative flex-1"
           >
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-5 w-5" style={{ color: "#c1c1c3" }} />
@@ -265,6 +265,29 @@ function Layout({ children }) {
               </ul>
             )}
           </form>
+
+          <div className="flex items-center space-x-2">
+            <a
+              href="https://github.com/lklynet/aurral"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-2 transition-colors rounded-md hover:bg-white/5 group"
+              style={{ color: "#c1c1c3" }}
+              aria-label="GitHub Repository"
+            >
+              <Github className="w-5 h-5 transition-colors group-hover:text-white" />
+            </a>
+            <a
+              href="https://github.com/sponsors/lklynet/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-2 transition-colors rounded-md hover:bg-white/5 group"
+              style={{ color: "#c1c1c3" }}
+              aria-label="GitHub Sponsors"
+            >
+              <Heart className="w-5 h-5 transition-colors group-hover:text-pink-500" />
+            </a>
+          </div>
         </header>
 
         <main className="flex-1 w-full max-w-[1600px] mx-auto p-4 md:p-8 lg:p-10">

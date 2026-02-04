@@ -52,6 +52,18 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+const trustProxyValue =
+  process.env.TRUST_PROXY === undefined
+    ? 1
+    : process.env.TRUST_PROXY === "true"
+      ? true
+      : process.env.TRUST_PROXY === "false"
+        ? false
+        : Number.isNaN(Number(process.env.TRUST_PROXY))
+          ? process.env.TRUST_PROXY
+          : Number(process.env.TRUST_PROXY);
+app.set("trust proxy", trustProxyValue);
+
 app.use(cors());
 app.use(helmet());
 app.use(express.json());

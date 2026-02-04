@@ -197,12 +197,14 @@ export function useArtistDetailsLibrary({
         setLibraryAlbums(deduplicateAlbums(albums));
       }
       showSuccess(`${artist.name} added to library successfully!`);
+      return true;
     } catch (err) {
       showError(
         `Failed to add artist to library: ${
           err.response?.data?.message || err.message
         }`
       );
+      return false;
     }
   };
 
