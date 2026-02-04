@@ -59,6 +59,11 @@ export function ArtistDetailsLibraryAlbums({
           .map((libraryAlbum, libraryAlbumIdx) => {
             const rgId =
               libraryAlbum.mbid || libraryAlbum.foreignAlbumId;
+            const rg = artist?.["release-groups"]?.find(
+              (r) => r.id === libraryAlbum.mbid || r.id === libraryAlbum.foreignAlbumId
+            );
+            const albumType =
+              rg?.["primary-type"] || libraryAlbum.albumType || "Album";
             const isExpanded = expandedLibraryAlbum === rgId;
             const trackKey = libraryAlbum.id;
             const tracks = albumTracks[trackKey] || null;
@@ -153,9 +158,9 @@ export function ArtistDetailsLibraryAlbums({
                             {libraryAlbum.releaseDate.split("-")[0]}
                           </span>
                         )}
-                        {libraryAlbum.albumType && (
+                        {albumType && (
                           <span className="badge badge-primary text-xs">
-                            {libraryAlbum.albumType}
+                            {albumType}
                           </span>
                         )}
                         {libraryAlbum.statistics && (
@@ -433,7 +438,7 @@ export function ArtistDetailsLibraryAlbums({
                             </span>
                           </div>
                         )}
-                        {libraryAlbum.albumType && (
+                        {albumType && (
                           <div>
                             <span
                               className=""
@@ -445,7 +450,7 @@ export function ArtistDetailsLibraryAlbums({
                               className="ml-2 font-medium "
                               style={{ color: "#fff" }}
                             >
-                              {libraryAlbum.albumType}
+                              {albumType}
                             </span>
                           </div>
                         )}
