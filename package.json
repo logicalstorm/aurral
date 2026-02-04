@@ -1,6 +1,6 @@
 {
   "name": "aurral",
-  "version": "1.0.0",
+  "version": "0.11.0-test.1",
   "description": "Aurral artist request manager",
   "main": "server.js",
   "type": "module",
@@ -52,9 +52,18 @@
     "wait-on": "^8.0.1"
   },
   "nodemonConfig": {
-    "watch": ["backend", "server.js"],
+    "watch": [
+      "backend",
+      "server.js"
+    ],
     "ext": "js,json",
-    "ignore": ["node_modules", "frontend", "backend/data", "*.log", "frontend/dist"],
+    "ignore": [
+      "node_modules",
+      "frontend",
+      "backend/data",
+      "*.log",
+      "frontend/dist"
+    ],
     "delay": 2000,
     "restartable": "rs"
   }
