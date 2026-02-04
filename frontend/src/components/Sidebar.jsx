@@ -11,10 +11,11 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import LogoutButton from "./LogoutButton";
 
-function Sidebar({ isOpen, onClose }) {
+function Sidebar({ isOpen, onClose, appVersion }) {
   const location = useLocation();
   const { authRequired, logout, user } = useAuth();
-  const appVersion = import.meta.env.VITE_APP_VERSION || "unknown";
+  const resolvedVersion =
+    appVersion || import.meta.env.VITE_APP_VERSION || "unknown";
   const navRef = useRef(null);
   const activeBubbleRef = useRef(null);
   const hoverBubbleRef = useRef(null);
@@ -210,7 +211,7 @@ function Sidebar({ isOpen, onClose }) {
           )}
           
           <div className="text-[10px] font-mono opacity-30 select-none" style={{ color: "#c1c1c3" }}>
-            v{appVersion}
+            v{resolvedVersion}
           </div>
         </div>
       </aside>
@@ -221,6 +222,7 @@ function Sidebar({ isOpen, onClose }) {
 Sidebar.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
+  appVersion: PropTypes.string,
 };
 
 export default Sidebar;

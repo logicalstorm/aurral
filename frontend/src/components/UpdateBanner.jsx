@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const UpdateBanner = () => {
+const UpdateBanner = ({ currentVersion }) => {
   const [updateInfo, setUpdateInfo] = useState(null);
   const updateNotifiedRef = useRef(null);
   const dismissedUpdateRef = useRef(null);
+  const resolvedVersion = currentVersion || import.meta.env.VITE_APP_VERSION;
   const dismissKey = useMemo(
     () =>
       `aurral:updateDismissed:${
@@ -13,7 +14,7 @@ const UpdateBanner = () => {
   );
 
   useEffect(() => {
-    const currentVersion = import.meta.env.VITE_APP_VERSION;
+    const currentVersion = resolvedVersion;
     const repo = import.meta.env.VITE_GITHUB_REPO || "lklynet/aurral";
     if (!currentVersion || currentVersion === "unknown" || !repo) {
       return;
@@ -75,7 +76,7 @@ const UpdateBanner = () => {
       active = false;
       clearInterval(intervalId);
     };
-  }, [dismissKey]);
+  }, [dismissKey, resolvedVersion]);
 
   const dismissUpdate = () => {
     if (!updateInfo?.latest) {
