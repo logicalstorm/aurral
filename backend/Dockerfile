@@ -6,7 +6,7 @@ RUN apk add --no-cache su-exec
 
 COPY package*.json ./
 
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts
 
 COPY . .
 COPY docker-entrypoint.sh /usr/local/bin/
@@ -24,4 +24,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "server.js"]
-
