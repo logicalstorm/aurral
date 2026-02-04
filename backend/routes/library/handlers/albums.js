@@ -8,7 +8,7 @@ import {
 } from "../../../middleware/requirePermission.js";
 
 export default function registerAlbums(router) {
-  router.get("/albums", cacheMiddleware(120), async (req, res) => {
+  router.get("/albums", cacheMiddleware(5), async (req, res) => {
     try {
       const { artistId } = req.query;
       if (!artistId) {
@@ -20,7 +20,6 @@ export default function registerAlbums(router) {
         ...album,
         foreignAlbumId: album.foreignAlbumId || album.mbid,
         title: album.albumName,
-        albumType: "Album",
         statistics: album.statistics || {
           trackCount: 0,
           sizeOnDisk: 0,

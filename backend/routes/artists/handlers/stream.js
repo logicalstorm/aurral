@@ -71,6 +71,26 @@ export default function registerStream(router) {
               }
 
               const artistMbid = lidarrArtist.foreignArtistId || mbid;
+              let releaseGroups = [];
+              try {
+                releaseGroups = await musicbrainzGetArtistReleaseGroups(mbid);
+                await enrichReleaseGroupsWithDeezer(
+                  releaseGroups,
+                  lidarrArtist.artistName
+                );
+              } catch (e) {
+                releaseGroups = lidarrAlbums.map((album) => ({
+                  id: album.mbid,
+                  title: album.albumName,
+                  "first-release-date": album.releaseDate || null,
+                  "primary-type": "Album",
+                  "secondary-types": [],
+                }));
+              }
+              const mbidToType = new Map(
+                releaseGroups.map((rg) => [rg.id, rg["primary-type"]])
+              );
+
               const [bio, tagsData] = await Promise.all([
                 getArtistBio(lidarrArtist.artistName, artistMbid),
                 getLastfmApiKey()
@@ -98,16 +118,10 @@ export default function registerStream(router) {
                 },
                 tags,
                 genres: [],
-                "release-groups": lidarrAlbums.map((album) => ({
-                  id: album.mbid,
-                  title: album.albumName,
-                  "first-release-date": album.releaseDate || null,
-                  "primary-type": "Album",
-                  "secondary-types": [],
-                })),
+                "release-groups": releaseGroups,
                 relations: [],
-                "release-group-count": lidarrAlbums.length,
-                "release-count": lidarrAlbums.length,
+                "release-group-count": releaseGroups.length,
+                "release-count": releaseGroups.length,
                 _lidarrData: {
                   id: lidarrArtist.id,
                   monitored: lidarrArtist.monitored,
@@ -130,7 +144,8 @@ export default function registerStream(router) {
                   ...a,
                   foreignAlbumId: a.foreignAlbumId || a.mbid,
                   title: a.albumName,
-                  albumType: "Album",
+                  albumType:
+                    mbidToType.get(a.mbid || a.foreignAlbumId) || "Album",
                   statistics: a.statistics || {
                     trackCount: 0,
                     sizeOnDisk: 0,

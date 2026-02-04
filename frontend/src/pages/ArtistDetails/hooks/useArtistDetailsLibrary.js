@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   getLibraryAlbums,
   getLibraryTracks,
@@ -48,6 +48,7 @@ export function useArtistDetailsLibrary({
   const [updatingMonitor, setUpdatingMonitor] = useState(false);
   const [refreshingArtist, setRefreshingArtist] = useState(false);
   const [downloadStatuses, setDownloadStatuses] = useState({});
+  const unmonitoredAtRef = useRef({});
 
   const handleRefreshArtist = async () => {
     if (!libraryArtist?.mbid && !libraryArtist?.foreignArtistId) return;
@@ -273,26 +274,28 @@ export function useArtistDetailsLibrary({
         addedOptimistic = true;
 
         const { addLibraryAlbum } = await import("../../../utils/api");
+        let addedAlbum = null;
         try {
-          libraryAlbum = await addLibraryAlbum(
+          addedAlbum = await addLibraryAlbum(
             currentLibraryArtist.id,
             albumId,
             title
           );
           setDownloadStatuses((prev) => ({
             ...prev,
-            [libraryAlbum.id]: { status: "processing" },
+            [addedAlbum.id]: { status: "processing" },
           }));
           const refreshedAlbums = await getLibraryAlbums(
             currentLibraryArtist.id
           );
           const uniqueAlbums = deduplicateAlbums(refreshedAlbums);
           setLibraryAlbums(uniqueAlbums);
-          libraryAlbum = uniqueAlbums.find(
-            (a) =>
-              (a.mbid === albumId || a.foreignAlbumId === albumId) &&
-              a.artistId === currentLibraryArtist.id
-          );
+          libraryAlbum =
+            uniqueAlbums.find(
+              (a) =>
+                (a.mbid === albumId || a.foreignAlbumId === albumId) &&
+                a.artistId === currentLibraryArtist.id
+            ) ?? addedAlbum;
         } catch {
           await refreshLibraryArtist(
             currentLibraryArtist.mbid || currentLibraryArtist.foreignArtistId
@@ -431,6 +434,7 @@ export function useArtistDetailsLibrary({
         showSuccess(`Successfully deleted ${title} and files`);
       } else {
         await updateLibraryAlbum(libraryAlbum.id, { monitored: false });
+        unmonitoredAtRef.current[libraryAlbum.id] = Date.now();
         setLibraryAlbums((prev) =>
           prev.map((a) =>
             a.id === libraryAlbum.id ? { ...a, monitored: false } : a
@@ -592,7 +596,19 @@ export function useArtistDetailsLibrary({
                     const refreshedAlbums = await getLibraryAlbums(
                       libraryArtist.id
                     );
-                    setLibraryAlbums(deduplicateAlbums(refreshedAlbums));
+                    const now = Date.now();
+                    const cutoff = now - 120000;
+                    const merged = refreshedAlbums.map((a) => {
+                      const at = unmonitoredAtRef.current[a.id];
+                      if (
+                        at != null &&
+                        at >= cutoff &&
+                        a.monitored
+                      )
+                        return { ...a, monitored: false };
+                      return a;
+                    });
+                    setLibraryAlbums(deduplicateAlbums(merged));
                   } catch (err) {
                     console.error("Failed to refresh albums:", err);
                   }
@@ -617,7 +633,15 @@ export function useArtistDetailsLibrary({
     const refreshAlbums = async () => {
       try {
         const refreshedAlbums = await getLibraryAlbums(libraryArtist.id);
-        setLibraryAlbums(deduplicateAlbums(refreshedAlbums));
+        const now = Date.now();
+        const cutoff = now - 120000;
+        const merged = refreshedAlbums.map((a) => {
+          const at = unmonitoredAtRef.current[a.id];
+          if (at != null && at >= cutoff && a.monitored)
+            return { ...a, monitored: false };
+          return a;
+        });
+        setLibraryAlbums(deduplicateAlbums(merged));
       } catch (err) {
         console.error("Failed to refresh albums:", err);
       }
