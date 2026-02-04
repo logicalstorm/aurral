@@ -6,7 +6,7 @@ RUN apk add --no-cache su-exec
 
 COPY package*.json ./
 
-RUN HUSKY=0 npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts && npm rebuild bcrypt --build-from-source
 
 COPY . .
 COPY docker-entrypoint.sh /usr/local/bin/
