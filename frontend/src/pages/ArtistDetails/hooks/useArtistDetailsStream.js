@@ -50,6 +50,10 @@ export function useArtistDetailsStream(mbid, artistNameFromNav) {
     setError(null);
     setLoadingCover(true);
     setLoadingSimilar(true);
+    setLibraryArtist(null);
+    setLibraryAlbums([]);
+    setExistsInLibrary(false);
+    setLoadingLibrary(true);
 
     getAppSettings()
       .then(setAppSettings)
