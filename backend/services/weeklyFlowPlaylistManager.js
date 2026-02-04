@@ -87,7 +87,7 @@ export class WeeklyFlowPlaylistManager {
       const existingFiles = await fs.readdir(this.libraryRoot).catch(() => []);
       const expectedFiles = new Set();
       for (const flow of flows) {
-        const playlistName = `Aurral-${flow.name}`;
+        const playlistName = `Aurral ${flow.name}`;
         const fileName = `${this._sanitize(playlistName)}.nsp`;
         const nspPath = path.join(this.libraryRoot, fileName);
         expectedFiles.add(fileName);
@@ -185,8 +185,8 @@ export class WeeklyFlowPlaylistManager {
 
   getPlaylistName(playlistType) {
     const flow = flowPlaylistConfig.getFlow(playlistType);
-    if (flow) return `Aurral-${flow.name}`;
-    return `Aurral-${playlistType}`;
+    if (flow) return `Aurral ${flow.name}`;
+    return `Aurral ${playlistType}`;
   }
 }
 
