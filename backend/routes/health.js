@@ -16,7 +16,10 @@ import { noCache } from "../middleware/cache.js";
 
 let rootPackageVersion = "unknown";
 try {
-  const raw = readFileSync(new URL("../../package.json", import.meta.url), "utf-8");
+  const raw = readFileSync(
+    new URL("../../package.json", import.meta.url),
+    "utf-8",
+  );
   rootPackageVersion = JSON.parse(raw)?.version || "unknown";
 } catch {}
 
