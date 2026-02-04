@@ -2,8 +2,7 @@ name: Docker
 
 on:
   push:
-    branches: ["main", "test"]
-    tags: ["v*.*.*", "test-v*.*.*"]
+    tags: ["v*"]
   pull_request:
     branches: ["main", "test"]
 
@@ -12,7 +11,7 @@ env:
 
 jobs:
   build-main:
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'pull_request' && github.base_ref == 'main')
+    if: (github.event_name == 'pull_request' && github.base_ref == 'main') || (startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-test.'))
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -31,9 +30,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Get version
         id: version
-        run: echo "app_version=$(node -p 'require(\"./package.json\").version')" >> "$GITHUB_OUTPUT"
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            next_version="${GITHUB_REF_NAME#v}"
+          else
+            next_version=$(node -p 'require("./package.json").version')
+          fi
+          echo "app_version=$next_version" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -57,7 +66,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-test.') }}
 
       - name: Build and push Docker image
         id: build-and-push
@@ -74,7 +83,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   build-test:
-    if: github.ref == 'refs/heads/test' || startsWith(github.ref, 'refs/tags/test-v') || (github.event_name == 'pull_request' && github.base_ref == 'test')
+    if: (github.event_name == 'pull_request' && github.base_ref == 'test') || (startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-test.'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -84,9 +93,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Get version
         id: version
-        run: echo "app_version=$(node -p 'require(\"./package.json\").version')" >> "$GITHUB_OUTPUT"
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            next_version="${GITHUB_REF_NAME#v}"
+          else
+            next_version=$(node -p 'require("./package.json").version')
+          fi
+          echo "app_version=$next_version" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -109,7 +128,7 @@ jobs:
             type=ref,event=pr
             type=ref,event=tag
             type=sha
-            type=raw,value=test,enable=${{ github.ref == 'refs/heads/test' }}
+            type=raw,value=test,enable=${{ contains(github.ref, '-test.') }}
 
       - name: Build and push Docker image
         id: build-and-push
@@ -127,7 +146,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   release-test:
-    if: github.ref == 'refs/heads/test' && github.event_name == 'push'
+    if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-test.')
     needs: build-test
     runs-on: ubuntu-latest
     permissions:
