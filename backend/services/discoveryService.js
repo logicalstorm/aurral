@@ -13,6 +13,7 @@ const getLastfmUsername = () => {
 };
 
 const LASTFM_PERIODS = [
+  "none",
   "7day",
   "1month",
   "3month",
@@ -128,62 +129,66 @@ export const updateDiscoveryCache = async () => {
     let lastfmArtists = [];
     if (hasLastfmUser) {
       const discoveryPeriod = getLastfmDiscoveryPeriod();
-      console.log(
-        `Fetching Last.fm user top artists for ${lastfmUsername} (period: ${discoveryPeriod})...`
-      );
-      try {
-        const userTopArtists = await lastfmRequest("user.getTopArtists", {
-          user: lastfmUsername,
-          limit: 50,
-          period: discoveryPeriod,
-        });
+      if (discoveryPeriod === "none") {
+        console.log("Last.fm discovery period set to 'none', skipping Last.fm user top artists.");
+      } else {
+        console.log(
+          `Fetching Last.fm user top artists for ${lastfmUsername} (period: ${discoveryPeriod})...`
+        );
+        try {
+          const userTopArtists = await lastfmRequest("user.getTopArtists", {
+            user: lastfmUsername,
+            limit: 50,
+            period: discoveryPeriod,
+          });
 
-        if (!userTopArtists) {
-          console.warn(
-            "Last.fm user.getTopArtists returned null - check API key and username"
-          );
-        } else if (userTopArtists.error) {
-          console.error(
-            `Last.fm API error: ${
-              userTopArtists.message || userTopArtists.error
-            }`
-          );
-        } else if (userTopArtists?.topartists?.artist) {
-          const artists = Array.isArray(userTopArtists.topartists.artist)
-            ? userTopArtists.topartists.artist
-            : [userTopArtists.topartists.artist];
+          if (!userTopArtists) {
+            console.warn(
+              "Last.fm user.getTopArtists returned null - check API key and username"
+            );
+          } else if (userTopArtists.error) {
+            console.error(
+              `Last.fm API error: ${
+                userTopArtists.message || userTopArtists.error
+              }`
+            );
+          } else if (userTopArtists?.topartists?.artist) {
+            const artists = Array.isArray(userTopArtists.topartists.artist)
+              ? userTopArtists.topartists.artist
+              : [userTopArtists.topartists.artist];
 
-          const artistsWithMbids = [];
-          const artistsWithoutMbids = [];
+            const artistsWithMbids = [];
+            const artistsWithoutMbids = [];
 
-          for (const artist of artists) {
-            if (artist.mbid) {
-              artistsWithMbids.push(artist);
-            } else if (artist.name) {
-              artistsWithoutMbids.push(artist);
+            for (const artist of artists) {
+              if (artist.mbid) {
+                artistsWithMbids.push(artist);
+              } else if (artist.name) {
+                artistsWithoutMbids.push(artist);
+              }
             }
-          }
 
-          for (const artist of artistsWithMbids) {
-            lastfmArtists.push({
-              mbid: artist.mbid,
-              artistName: artist.name,
-              playcount: parseInt(artist.playcount || 0),
-            });
-          }
+            for (const artist of artistsWithMbids) {
+              lastfmArtists.push({
+                mbid: artist.mbid,
+                artistName: artist.name,
+                playcount: parseInt(artist.playcount || 0),
+              });
+            }
 
-          console.log(
-            `Found ${lastfmArtists.length} Last.fm artists with MBIDs.`
-          );
-        } else {
-          console.warn(
-            `Last.fm user.getTopArtists response missing expected data structure. Response:`,
-            JSON.stringify(userTopArtists).substring(0, 200)
-          );
+            console.log(
+              `Found ${lastfmArtists.length} Last.fm artists with MBIDs.`
+            );
+          } else {
+            console.warn(
+              `Last.fm user.getTopArtists response missing expected data structure. Response:`,
+              JSON.stringify(userTopArtists).substring(0, 200)
+            );
+          }
+        } catch (e) {
+          console.error(`Failed to fetch Last.fm user artists: ${e.message}`);
+          console.error(`Stack trace:`, e.stack);
         }
-      } catch (e) {
-        console.error(`Failed to fetch Last.fm user artists: ${e.message}`);
-        console.error(`Stack trace:`, e.stack);
       }
     } else if (hasLastfmKey) {
       console.log(

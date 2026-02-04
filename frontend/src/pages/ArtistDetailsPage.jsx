@@ -875,6 +875,7 @@ function ArtistDetailsPage() {
           releaseDate: null,
           albumType: null,
           statistics: null,
+          monitored: true,
         };
         setLibraryAlbums((prev) => [...prev, optimisticAlbum]);
         setDownloadStatuses((prev) => ({
@@ -890,6 +891,11 @@ function ArtistDetailsPage() {
             albumId,
             title
           );
+
+          setDownloadStatuses((prev) => ({
+            ...prev,
+            [libraryAlbum.id]: { status: "processing" },
+          }));
 
           const refreshedAlbums = await getLibraryAlbums(
             currentLibraryArtist.id
@@ -927,6 +933,12 @@ function ArtistDetailsPage() {
         ...libraryAlbum,
         monitored: true,
       });
+
+      setLibraryAlbums((prev) =>
+        prev.map((a) =>
+          a.id === libraryAlbum.id ? { ...a, monitored: true } : a
+        )
+      );
 
       await downloadAlbum(currentLibraryArtist.id, libraryAlbum.id, {
         artistMbid:
@@ -1012,6 +1024,27 @@ function ArtistDetailsPage() {
     }
   };
 
+  const handleToggleMonitor = async (libraryAlbum) => {
+    try {
+      const newMonitored = !libraryAlbum.monitored;
+      await updateLibraryAlbum(libraryAlbum.id, {
+        monitored: newMonitored,
+      });
+
+      setLibraryAlbums((prev) =>
+        prev.map((a) =>
+          a.id === libraryAlbum.id ? { ...a, monitored: newMonitored } : a
+        )
+      );
+
+      showSuccess(newMonitored ? "Album monitored" : "Album unmonitored");
+      setAlbumDropdownOpen(null);
+    } catch (err) {
+      console.error("Failed to toggle monitor status:", err);
+      showError(`Failed to update album: ${err.message}`);
+    }
+  };
+
   const handleDeleteAlbumClick = (albumId, title) => {
     setShowDeleteAlbumModal({ id: albumId, title });
     setDeleteAlbumFiles(false);
@@ -1038,18 +1071,30 @@ function ArtistDetailsPage() {
       }
 
       setRemovingAlbum(albumId);
-      await deleteAlbumFromLibrary(libraryAlbum.id, deleteAlbumFiles);
 
-      setLibraryAlbums((prev) => prev.filter((a) => a.id !== libraryAlbum.id));
+      if (deleteAlbumFiles) {
+        await deleteAlbumFromLibrary(libraryAlbum.id, true);
+        setLibraryAlbums((prev) =>
+          prev.filter((a) => a.id !== libraryAlbum.id)
+        );
+        showSuccess(`Successfully deleted ${title} and files`);
+      } else {
+        await updateLibraryAlbum(libraryAlbum.id, { monitored: false });
+        setLibraryAlbums((prev) =>
+          prev.map((a) =>
+            a.id === libraryAlbum.id ? { ...a, monitored: false } : a
+          )
+        );
+        showSuccess(`Successfully unmonitored ${title}`);
+      }
 
-      showSuccess(
-        `Successfully deleted ${title}${deleteAlbumFiles ? " and files" : ""}`
-      );
       setShowDeleteAlbumModal(null);
       setDeleteAlbumFiles(false);
     } catch (err) {
       showError(
-        `Failed to delete album: ${err.response?.data?.message || err.message}`
+        `Failed to ${deleteAlbumFiles ? "delete" : "unmonitor"} album: ${
+          err.response?.data?.message || err.message
+        }`
       );
     } finally {
       setRemovingAlbum(null);
@@ -1249,7 +1294,7 @@ function ArtistDetailsPage() {
         downloading: "Downloading...",
         moving: "Moving files...",
         added: "Added",
-        processing: "Processing...",
+        processing: "Searching...",
       };
 
       return {
@@ -1262,19 +1307,29 @@ function ArtistDetailsPage() {
     }
 
     const isAvailable = isComplete;
-    const isProcessing = false;
+    // const isProcessing = false;
+
+    if (isAvailable) {
+      return {
+        status: "available",
+        label: "Complete",
+        libraryId: album.id,
+        albumInfo: album,
+      };
+    }
+
+    if (album.monitored) {
+      return {
+        status: "monitored",
+        label: "Searching...",
+        libraryId: album.id,
+        albumInfo: album,
+      };
+    }
 
     return {
-      status: isAvailable
-        ? "available"
-        : isProcessing
-        ? "processing"
-        : "unmonitored",
-      label: isAvailable
-        ? "Complete"
-        : isProcessing
-        ? "Processing"
-        : "Not Monitored",
+      status: "unmonitored",
+      label: "Not Monitored",
       libraryId: album.id,
       albumInfo: album,
     };
@@ -1801,6 +1856,7 @@ function ArtistDetailsPage() {
           const downloadedAlbums = libraryAlbums.filter((album) => {
             if (String(album.id ?? "").startsWith("pending-")) return false;
             return (
+              album.monitored ||
               album.statistics?.percentOfTracks > 0 ||
               album.statistics?.sizeOnDisk > 0 ||
               downloadStatuses[album.id] ||
@@ -1843,6 +1899,8 @@ function ArtistDetailsPage() {
                       ? "#211f27"
                       : "#1c1a22";
                     const rowHoverBg = isExpanded ? "#2a2830" : "#25232b";
+                    const itemBg =
+                      libraryAlbumIdx % 2 === 0 ? "#1c1a22" : "#211f27";
 
                     return (
                       <div
@@ -1898,7 +1956,7 @@ function ArtistDetailsPage() {
                             ) : (
                               <div
                                 className="w-10 h-10 flex-shrink-0 flex items-center justify-center"
-                                style={{ backgroundColor: "#211f27" }}
+                                style={{ backgroundColor: itemBg }}
                               >
                                 <Music
                                   className="w-5 h-5"
@@ -2004,7 +2062,7 @@ function ArtistDetailsPage() {
                                 <span
                                   className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase cursor-default"
                                   style={{
-                                    backgroundColor: "#211f27",
+                                    backgroundColor: itemBg,
                                     color: "#c1c1c3",
                                   }}
                                 >
@@ -2018,13 +2076,35 @@ function ArtistDetailsPage() {
                                     : downloadStatus.status === "moving"
                                     ? "Moving..."
                                     : downloadStatus.status === "processing"
-                                    ? "Processing..."
+                                    ? "Searching..."
                                     : downloadStatus.status}
                                 </span>
                               )
+                            ) : requestingAlbum === rgId ? (
+                              <span
+                                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase cursor-default"
+                                style={{
+                                  backgroundColor: itemBg,
+                                  color: "#c1c1c3",
+                                }}
+                              >
+                                <Loader className="w-3.5 h-3.5 animate-spin" />
+                                Adding...
+                              </span>
+                            ) : libraryAlbum.monitored ? (
+                              <span
+                                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase cursor-default"
+                                style={{
+                                  backgroundColor: itemBg,
+                                  color: "#c1c1c3",
+                                }}
+                              >
+                                <Loader className="w-3.5 h-3.5 animate-spin" />
+                                Searching...
+                              </span>
                             ) : (
                               <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase bg-yellow-500/20 text-yellow-400 cursor-default">
-                                Incomplete
+                                Unmonitored
                               </span>
                             )}
                             <div className="relative overflow-visible">
@@ -2037,6 +2117,11 @@ function ArtistDetailsPage() {
                                   );
                                 }}
                                 className="btn btn-secondary btn-sm p-2"
+                                style={{
+                                  backgroundColor: itemBg,
+                                  borderColor: itemBg,
+                                  color: "#c1c1c3",
+                                }}
                                 title="Options"
                               >
                                 <MoreVertical className="w-4 h-4" />
@@ -2510,6 +2595,8 @@ function ArtistDetailsPage() {
                   ? "#211f27"
                   : "#1c1a22";
                 const rowHoverBg = isExpanded ? "#2a2830" : "#25232b";
+                const itemBg =
+                  releaseGroupIdx % 2 === 0 ? "#1c1a22" : "#211f27";
                 return (
                   <div
                     key={releaseGroup.id}
@@ -2565,7 +2652,7 @@ function ArtistDetailsPage() {
                         ) : (
                           <div
                             className="w-10 h-10 flex-shrink-0 flex items-center justify-center"
-                            style={{ backgroundColor: "#211f27" }}
+                            style={{ backgroundColor: itemBg }}
                           >
                             <Music
                               className="w-5 h-5"
@@ -2666,6 +2753,11 @@ function ArtistDetailsPage() {
                                     );
                                   }}
                                   className="btn btn-secondary btn-sm p-2"
+                                  style={{
+                                    backgroundColor: itemBg,
+                                    borderColor: itemBg,
+                                    color: "#c1c1c3",
+                                  }}
                                   title="Options"
                                 >
                                   <MoreVertical className="w-4 h-4" />
@@ -2732,7 +2824,7 @@ function ArtistDetailsPage() {
                               <span
                                 className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase cursor-default"
                                 style={{
-                                  backgroundColor: "#211f27",
+                                  backgroundColor: itemBg,
                                   color: "#c1c1c3",
                                 }}
                               >
@@ -2751,6 +2843,11 @@ function ArtistDetailsPage() {
                                     );
                                   }}
                                   className="btn btn-secondary btn-sm p-2"
+                                  style={{
+                                    backgroundColor: itemBg,
+                                    borderColor: itemBg,
+                                    color: "#c1c1c3",
+                                  }}
                                   title="Options"
                                 >
                                   <MoreVertical className="w-4 h-4" />
@@ -2819,6 +2916,11 @@ function ArtistDetailsPage() {
                               }}
                               disabled={requestingAlbum === releaseGroup.id}
                               className="btn btn-secondary btn-sm inline-flex items-center"
+                              style={{
+                                backgroundColor: itemBg,
+                                borderColor: itemBg,
+                                color: "#c1c1c3",
+                              }}
                             >
                               {requestingAlbum === releaseGroup.id ? (
                                 <Loader className="w-4 h-4 animate-spin" />
@@ -2838,6 +2940,11 @@ function ArtistDetailsPage() {
                             }}
                             disabled={requestingAlbum === releaseGroup.id}
                             className="btn btn-secondary btn-sm inline-flex items-center"
+                            style={{
+                              backgroundColor: itemBg,
+                              borderColor: itemBg,
+                              color: "#c1c1c3",
+                            }}
                           >
                             {requestingAlbum === releaseGroup.id ? (
                               <Loader className="w-4 h-4 animate-spin" />
