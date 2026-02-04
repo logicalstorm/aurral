@@ -32,7 +32,7 @@ export function useWebSocketChannel(channel, onMessage) {
             }),
           );
         }
-      } catch (_) {}
+      } catch {}
     };
 
     ws.onmessage = (event) => {
@@ -55,7 +55,7 @@ export function useWebSocketChannel(channel, onMessage) {
           );
           ws.close();
         }
-      } catch (_) {}
+      } catch {}
       wsRef.current = null;
     };
   }, [channel]);

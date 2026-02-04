@@ -66,7 +66,7 @@ export const AuthProvider = ({ children }) => {
             setUser(null);
             setIsAuthenticated(false);
           }
-        } catch (e) {
+        } catch {
           setUser(null);
           setIsAuthenticated(false);
         }
@@ -74,7 +74,7 @@ export const AuthProvider = ({ children }) => {
         setUser(null);
         setIsAuthenticated(false);
       }
-    } catch (error) {
+    } catch {
       setUser(null);
       setIsAuthenticated(false);
     } finally {
@@ -101,7 +101,7 @@ export const AuthProvider = ({ children }) => {
         return true;
       }
       return false;
-    } catch (e) {
+    } catch {
       return false;
     }
   };
@@ -138,4 +138,5 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
+/* eslint-disable-next-line react-refresh/only-export-components */
 export const useAuth = () => useContext(AuthContext);

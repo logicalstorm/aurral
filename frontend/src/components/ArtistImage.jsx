@@ -176,7 +176,7 @@ const ArtistImage = ({
           onError={handleError}
           loading="lazy"
           decoding="async"
-          fetchpriority={showLoading ? "high" : "auto"}
+          fetchPriority={showLoading ? "high" : "auto"}
           style={{ contentVisibility: "auto" }}
         />
       )}
