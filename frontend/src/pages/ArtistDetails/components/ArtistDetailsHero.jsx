@@ -161,18 +161,15 @@ export function ArtistDetailsHero({
             ) : existsInLibrary ? (
               <>
                 <div className="relative inline-flex">
-                  <button className="btn btn-success inline-flex items-center">
-                    <CheckCircle className="w-5 h-5 mr-2" />
-                    In Your Library
-                  </button>
                   <button
                     type="button"
                     onClick={() => setShowRemoveDropdown(!showRemoveDropdown)}
-                    className="btn btn-success inline-flex items-center -ml-1 px-2"
-                    title="Options"
+                    className="btn btn-success inline-flex items-center"
                   >
+                    <CheckCircle className="w-5 h-5 mr-2" />
+                    In Your Library
                     <ChevronDown
-                      className={`w-4 h-7 transition-transform ${
+                      className={`w-4 h-4 ml-2 transition-transform ${
                         showRemoveDropdown ? "rotate-180" : ""
                       }`}
                     />
@@ -264,7 +261,7 @@ export function ArtistDetailsHero({
             ) : (
               <button
                 onClick={handleAddToLibrary}
-                className="btn btn-secondary inline-flex items-center"
+                className="btn bg-[#2a2830] hover:bg-[#3a3840] btn-secondary inline-flex items-center"
               >
                 <Plus className="w-5 h-5 mr-2" />
                 Add to Library

@@ -199,6 +199,9 @@ export const dbOps = {
     const weeklyFlowPlaylists = dbHelpers.parseJSON(
       getSettingStmt.get("weeklyFlowPlaylists")?.value
     );
+    const weeklyFlows = dbHelpers.parseJSON(
+      getSettingStmt.get("weeklyFlows")?.value
+    );
     const onboardingComplete =
       getSettingStmt.get("onboardingComplete")?.value === "true";
 
@@ -226,6 +229,7 @@ export const dbOps = {
       rootFolderPath: rootFolderPath || null,
       releaseTypes: releaseTypes || [],
       weeklyFlowPlaylists: merged,
+      weeklyFlows: weeklyFlows || null,
       onboardingComplete: !!onboardingComplete,
     };
     settingsCache = result;
@@ -270,6 +274,12 @@ export const dbOps = {
         upsertSettingStmt.run(
           "weeklyFlowPlaylists",
           dbHelpers.stringifyJSON(settings.weeklyFlowPlaylists)
+        );
+      }
+      if (settings.weeklyFlows !== undefined) {
+        upsertSettingStmt.run(
+          "weeklyFlows",
+          dbHelpers.stringifyJSON(settings.weeklyFlows)
         );
       }
       if (settings.onboardingComplete !== undefined) {

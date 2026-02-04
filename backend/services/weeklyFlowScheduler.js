@@ -5,8 +5,7 @@ import { playlistManager } from "./weeklyFlowPlaylistManager.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { soulseekClient } from "./simpleSoulseekClient.js";
 
-const DEFAULT_LIMIT = 30;
-const QUEUE_LIMIT = 35;
+const QUEUE_LIMIT = 50;
 
 export async function runScheduledRefresh() {
   if (!soulseekClient.isConfigured()) return;
@@ -14,33 +13,33 @@ export async function runScheduledRefresh() {
   const due = flowPlaylistConfig.getDueForRefresh();
   if (due.length === 0) return;
 
-  for (const playlistType of due) {
+  for (const flow of due) {
     try {
       weeklyFlowWorker.stop();
       playlistManager.updateConfig();
-      await playlistManager.weeklyReset([playlistType]);
-      downloadTracker.clearByPlaylistType(playlistType);
+      await playlistManager.weeklyReset([flow.id]);
+      downloadTracker.clearByPlaylistType(flow.id);
 
-      const tracks = await playlistSource.getTracksForPlaylist(
-        playlistType,
-        QUEUE_LIMIT,
+      const tracks = await playlistSource.getTracksForFlow(
+        flow,
+        Math.max(flow.size || QUEUE_LIMIT, QUEUE_LIMIT),
       );
       if (tracks.length === 0) {
-        flowPlaylistConfig.scheduleNextRun(playlistType);
+        flowPlaylistConfig.scheduleNextRun(flow.id);
         continue;
       }
 
-      downloadTracker.addJobs(tracks, playlistType);
+      downloadTracker.addJobs(tracks, flow.id);
       if (!weeklyFlowWorker.running) {
         await weeklyFlowWorker.start();
       }
-      flowPlaylistConfig.scheduleNextRun(playlistType);
+      flowPlaylistConfig.scheduleNextRun(flow.id);
       console.log(
-        `[WeeklyFlowScheduler] Refreshed ${playlistType} (${tracks.length} tracks)`,
+        `[WeeklyFlowScheduler] Refreshed ${flow.id} (${tracks.length} tracks)`,
       );
     } catch (error) {
       console.error(
-        `[WeeklyFlowScheduler] Failed to refresh ${playlistType}:`,
+        `[WeeklyFlowScheduler] Failed to refresh ${flow.id}:`,
         error.message,
       );
     }

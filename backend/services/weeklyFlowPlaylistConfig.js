@@ -1,69 +1,218 @@
+import { randomUUID } from "crypto";
 import { dbOps } from "../config/db-helpers.js";
 
-const TYPES = ["discover", "mix", "trending"];
-const DEFAULT = { enabled: false, nextRunAt: null };
+const LEGACY_TYPES = ["discover", "mix", "trending"];
+const DEFAULT_MIX = { discover: 34, mix: 33, trending: 33 };
+const DEFAULT_SIZE = 30;
+const MIN_SIZE = 10;
+const MAX_SIZE = 50;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-function getConfig() {
-  const settings = dbOps.getSettings();
-  const playlists = settings.weeklyFlowPlaylists || {};
+const titleCase = (value) =>
+  String(value || "")
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => w[0]?.toUpperCase() + w.slice(1))
+    .join(" ");
+
+const clampSize = (value) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_SIZE;
+  return Math.min(MAX_SIZE, Math.max(MIN_SIZE, Math.round(n)));
+};
+
+const normalizeMix = (mix) => {
+  const raw = {
+    discover: Number(mix?.discover ?? 0),
+    mix: Number(mix?.mix ?? 0),
+    trending: Number(mix?.trending ?? 0),
+  };
+  const sum = raw.discover + raw.mix + raw.trending;
+  if (!Number.isFinite(sum) || sum <= 0) {
+    return { ...DEFAULT_MIX };
+  }
+  const weights = [
+    { key: "discover", value: raw.discover },
+    { key: "mix", value: raw.mix },
+    { key: "trending", value: raw.trending },
+  ];
+  const scaled = weights.map((w) => ({
+    ...w,
+    raw: (w.value / sum) * 100,
+  }));
+  const floored = scaled.map((w) => ({
+    ...w,
+    count: Math.floor(w.raw),
+    remainder: w.raw - Math.floor(w.raw),
+  }));
+  let remaining = 100 - floored.reduce((acc, w) => acc + w.count, 0);
+  const ordered = [...floored].sort((a, b) => b.remainder - a.remainder);
+  for (let i = 0; i < ordered.length && remaining > 0; i++) {
+    ordered[i].count += 1;
+    remaining -= 1;
+  }
   const out = {};
-  for (const type of TYPES) {
-    out[type] = { ...DEFAULT, ...(playlists[type] || {}) };
+  for (const item of ordered) {
+    out[item.key] = item.count;
   }
   return out;
-}
+};
 
-function setConfig(playlists) {
+const normalizeFlow = (flow) => {
+  const name = String(flow?.name || "").trim();
+  return {
+    id: flow?.id || randomUUID(),
+    name: name || "Flow",
+    enabled: flow?.enabled === true,
+    nextRunAt:
+      flow?.nextRunAt != null && Number.isFinite(Number(flow.nextRunAt))
+        ? Number(flow.nextRunAt)
+        : null,
+    size: clampSize(flow?.size),
+    mix: normalizeMix(flow?.mix),
+    createdAt:
+      flow?.createdAt != null && Number.isFinite(Number(flow.createdAt))
+        ? Number(flow.createdAt)
+        : Date.now(),
+  };
+};
+
+const buildLegacyFlows = (settings) => {
+  const playlists = settings.weeklyFlowPlaylists || {};
+  return LEGACY_TYPES.map((type) => {
+    const legacy = playlists[type] || {};
+    const mix = {
+      discover: type === "discover" ? 100 : 0,
+      mix: type === "mix" ? 100 : 0,
+      trending: type === "trending" ? 100 : 0,
+    };
+    return normalizeFlow({
+      id: type,
+      name: titleCase(type),
+      enabled: legacy.enabled === true,
+      nextRunAt: legacy.nextRunAt ?? null,
+      mix,
+      size: DEFAULT_SIZE,
+    });
+  });
+};
+
+const getStoredFlows = () => {
+  const settings = dbOps.getSettings();
+  const stored = settings.weeklyFlows;
+  if (Array.isArray(stored) && stored.length > 0) {
+    return stored.map((flow) => normalizeFlow(flow));
+  }
+  const legacy = buildLegacyFlows(settings);
+  dbOps.updateSettings({
+    ...settings,
+    weeklyFlows: legacy,
+  });
+  return legacy;
+};
+
+const setFlows = (flows) => {
   const current = dbOps.getSettings();
   dbOps.updateSettings({
     ...current,
-    weeklyFlowPlaylists: playlists,
+    weeklyFlows: flows,
   });
-}
+};
 
 export const flowPlaylistConfig = {
-  getPlaylists() {
-    return getConfig();
+  getFlows() {
+    return getStoredFlows();
   },
 
-  isEnabled(playlistType) {
-    const config = getConfig();
-    return config[playlistType]?.enabled === true;
+  getFlow(flowId) {
+    return getStoredFlows().find((flow) => flow.id === flowId) || null;
   },
 
-  setEnabled(playlistType, enabled) {
-    const config = getConfig();
-    if (!TYPES.includes(playlistType)) return;
-    config[playlistType] = { ...(config[playlistType] || DEFAULT), enabled };
-    if (!enabled) {
-      config[playlistType].nextRunAt = null;
+  isEnabled(flowId) {
+    const flow = this.getFlow(flowId);
+    return flow?.enabled === true;
+  },
+
+  createFlow({ name, mix, size }) {
+    const flows = getStoredFlows();
+    const flow = normalizeFlow({
+      id: randomUUID(),
+      name,
+      mix,
+      size,
+      enabled: false,
+      nextRunAt: null,
+    });
+    flows.push(flow);
+    setFlows(flows);
+    return flow;
+  },
+
+  updateFlow(flowId, updates) {
+    const flows = getStoredFlows();
+    const index = flows.findIndex((flow) => flow.id === flowId);
+    if (index === -1) return null;
+    const current = flows[index];
+    const next = normalizeFlow({
+      ...current,
+      name: updates?.name ?? current.name,
+      size: updates?.size ?? current.size,
+      mix: updates?.mix ?? current.mix,
+      enabled: current.enabled,
+      nextRunAt: current.nextRunAt,
+      createdAt: current.createdAt,
+    });
+    flows[index] = next;
+    setFlows(flows);
+    return next;
+  },
+
+  deleteFlow(flowId) {
+    const flows = getStoredFlows();
+    const next = flows.filter((flow) => flow.id !== flowId);
+    if (next.length === flows.length) return false;
+    setFlows(next);
+    return true;
+  },
+
+  setEnabled(flowId, enabled) {
+    const flows = getStoredFlows();
+    const index = flows.findIndex((flow) => flow.id === flowId);
+    if (index === -1) return null;
+    const flow = { ...flows[index], enabled: enabled === true };
+    if (!flow.enabled) {
+      flow.nextRunAt = null;
     }
-    setConfig(config);
+    flows[index] = flow;
+    setFlows(flows);
+    return flow;
   },
 
-  setNextRunAt(playlistType, nextRunAt) {
-    const config = getConfig();
-    if (!TYPES.includes(playlistType)) return;
-    config[playlistType] = {
-      ...(config[playlistType] || DEFAULT),
-      nextRunAt: nextRunAt ?? null,
-    };
-    setConfig(config);
+  setNextRunAt(flowId, nextRunAt) {
+    const flows = getStoredFlows();
+    const index = flows.findIndex((flow) => flow.id === flowId);
+    if (index === -1) return null;
+    const flow = { ...flows[index] };
+    flow.nextRunAt =
+      nextRunAt != null && Number.isFinite(Number(nextRunAt))
+        ? Number(nextRunAt)
+        : null;
+    flows[index] = flow;
+    setFlows(flows);
+    return flow;
   },
 
-  scheduleNextRun(playlistType) {
-    this.setNextRunAt(playlistType, Date.now() + WEEK_MS);
+  scheduleNextRun(flowId) {
+    return this.setNextRunAt(flowId, Date.now() + WEEK_MS);
   },
 
   getDueForRefresh() {
-    const config = getConfig();
     const now = Date.now();
-    return TYPES.filter(
-      (type) =>
-        config[type]?.enabled &&
-        config[type]?.nextRunAt != null &&
-        config[type].nextRunAt <= now,
+    return getStoredFlows().filter(
+      (flow) =>
+        flow.enabled === true &&
+        flow.nextRunAt != null &&
+        flow.nextRunAt <= now,
     );
   },
 };
