@@ -6,7 +6,6 @@ import {
   Settings,
   Sparkles,
   History,
-  LogOut,
   AudioWaveform,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
