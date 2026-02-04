@@ -4,16 +4,17 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import { useState, useEffect, useRef, Suspense, lazy } from "react";
+import { useState, useEffect, Suspense, lazy } from "react";
 import PropTypes from "prop-types";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Onboarding from "./pages/Onboarding";
 import { checkHealth } from "./utils/api";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import { ToastProvider, useToast } from "./contexts/ToastContext";
+import { ToastProvider } from "./contexts/ToastContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import ReloadPrompt from "./components/ReloadPrompt";
+import UpdateBanner from "./components/UpdateBanner";
 
 const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
 const DiscoverPage = lazy(() => import("./pages/DiscoverPage"));
@@ -78,10 +79,7 @@ ProtectedRoute.propTypes = {
 function AppContent() {
   const [isHealthy, setIsHealthy] = useState(null);
   const [rootFolderConfigured, setRootFolderConfigured] = useState(false);
-  const [updateInfo, setUpdateInfo] = useState(null);
   const { isAuthenticated } = useAuth();
-  const { showInfo } = useToast();
-  const updateNotifiedRef = useRef(null);
 
   useEffect(() => {
     const checkApiHealth = async () => {
@@ -99,49 +97,6 @@ function AppContent() {
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
-  useEffect(() => {
-    const currentVersion = import.meta.env.VITE_APP_VERSION;
-    const repo = import.meta.env.VITE_GITHUB_REPO || "lklynet/aurral";
-    if (!currentVersion || currentVersion === "unknown" || !repo) {
-      return;
-    }
-    let active = true;
-    const checkForUpdate = async () => {
-      try {
-        const res = await fetch(
-          `https://api.github.com/repos/${repo}/releases/latest`,
-        );
-        if (!res.ok) {
-          return;
-        }
-        const data = await res.json();
-        const latest = (data.tag_name || "").replace(/^v/, "");
-        if (!latest || latest === currentVersion) {
-          return;
-        }
-        if (updateNotifiedRef.current === latest) {
-          return;
-        }
-        if (!active) {
-          return;
-        }
-        setUpdateInfo({
-          current: currentVersion,
-          latest,
-          url: data.html_url || `https://github.com/${repo}/releases/latest`,
-        });
-        updateNotifiedRef.current = latest;
-        showInfo(`Update available: ${currentVersion} → ${latest}`, 10000);
-      } catch {}
-    };
-    checkForUpdate();
-    const intervalId = setInterval(checkForUpdate, 60 * 60 * 1000);
-    return () => {
-      active = false;
-      clearInterval(intervalId);
-    };
-  }, [showInfo]);
-
   return (
     <Router>
       <ProtectedRoute>
@@ -149,37 +104,7 @@ function AppContent() {
           isHealthy={isHealthy}
           rootFolderConfigured={rootFolderConfigured}
         >
-          {updateInfo && (
-            <div className="mb-6 bg-blue-500/20 border border-blue-500/30 p-4">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center">
-                  <svg
-                    className="w-5 h-5 text-blue-300 mr-3"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M18 10A8 8 0 112 10a8 8 0 0116 0zm-8-4a1 1 0 00-.894.553l-3 6a1 1 0 101.788.894L7.618 12h4.764l.724 1.447a1 1 0 101.788-.894l-3-6A1 1 0 0010 6zm0 3a1 1 0 00-.894.553l-.5 1A1 1 0 009.5 12h1a1 1 0 00.894-1.447l-.5-1A1 1 0 0010 9z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  <p className="text-blue-200 font-medium">
-                    Update available: {updateInfo.current} →{" "}
-                    {updateInfo.latest}
-                  </p>
-                </div>
-                <a
-                  href={updateInfo.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn btn-secondary btn-sm"
-                >
-                  View on GitHub
-                </a>
-              </div>
-            </div>
-          )}
+          <UpdateBanner />
           {isHealthy === false && (
             <div className="mb-6 bg-red-500/20 border border-red-500/30 p-4">
               <div className="flex items-center">
