@@ -21,7 +21,11 @@ export default {
     },
   ],
   rules: {
-    "type-enum": [2, "always", ["fix", "feat", "refactor", "chore", "docs"]],
+    "type-enum": [
+      2,
+      "always",
+      ["fix", "feat", "refactor", "chore", "docs", "ci"],
+    ],
     "scope-case": [2, "always", "kebab-case"],
     "subject-empty": [2, "never"],
     "breaking-exclamation-required": [2, "always"],
