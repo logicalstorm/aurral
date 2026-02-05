@@ -173,7 +173,7 @@ function RequestsPage() {
             return (
               <div
                 key={request.id || request.mbid}
-                className="card group hover:shadow-md transition-all relative p-3"
+                className="card group hover:shadow-md transition-all relative p-3 overflow-hidden"
               >
                 {request.inQueue && request.albumId && (
                   <button
@@ -186,7 +186,7 @@ function RequestsPage() {
                   </button>
                 )}
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center min-w-0">
                   <div
                     className={`w-16 h-16 flex-shrink-0 overflow-hidden rounded ${
                       hasValidMbid
@@ -218,10 +218,10 @@ function RequestsPage() {
                     />
                   </div>
 
-                  <div className="flex-1 text-left min-w-0">
+                  <div className="flex-1 text-left min-w-0 w-full">
                     <div className="flex items-center gap-2 mb-0.5 min-w-0">
                       <h3
-                        className={`text-base font-semibold truncate ${
+                        className={`text-base font-semibold truncate w-full max-w-full ${
                           hasValidMbid
                             ? "hover:underline cursor-pointer"
                             : "cursor-not-allowed opacity-75"
@@ -249,16 +249,16 @@ function RequestsPage() {
                     </div>
 
                     <div
-                      className="text-xs flex items-center gap-3 min-w-0"
+                      className="text-xs flex flex-wrap items-center gap-3 min-w-0"
                       style={{ color: "#c1c1c3" }}
                     >
                       {isAlbum && artistName && (
-                        <span className="flex items-center gap-1 truncate">
+                        <span className="flex items-center gap-1 truncate max-w-full">
                           <Music className="w-3 h-3" />
                           {artistName}
                         </span>
                       )}
-                      <span className="flex items-center gap-1 truncate">
+                      <span className="flex items-center gap-1 truncate max-w-full">
                         <Clock className="w-3 h-3" />
                         {new Date(request.requestedAt).toLocaleDateString(
                           undefined,
@@ -272,7 +272,7 @@ function RequestsPage() {
                     </div>
                   </div>
 
-                  <div className="flex-shrink-0 pr-8">
+                  <div className="flex-shrink-0 sm:ml-auto">
                     {getStatusBadge(request)}
                   </div>
                 </div>

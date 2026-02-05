@@ -6,6 +6,7 @@
   body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    position: relative;
     background: linear-gradient(
       to bottom,
       #050505 0%,
@@ -15,9 +16,11 @@
     background-attachment: fixed;
     background-size: 100% 100vh;
     background-repeat: no-repeat;
+    background-color: #050505;
     color: #fff;
     overscroll-behavior-y: none;
     touch-action: manipulation;
+    min-height: 100%;
   }
 
   .text-white {
@@ -48,6 +51,7 @@
   html {
     scroll-behavior: smooth;
     height: 100%;
+    background-color: #050505;
   }
 
   #root {
@@ -56,6 +60,26 @@
 
   * {
     -webkit-tap-highlight-color: transparent;
+  }
+
+  @supports (-webkit-touch-callout: none) {
+    body {
+      background-attachment: scroll;
+      background-size: 100% 100%;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(
+        to bottom,
+        #050505 0%,
+        #18181c 80%,
+        #18181c 100%
+      );
+      z-index: -1;
+    }
   }
 }
 

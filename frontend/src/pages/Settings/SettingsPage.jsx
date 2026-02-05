@@ -163,7 +163,7 @@ function SettingsPage() {
           </p>
         </div>
 
-        <div className="mb-8 flex justify-center">
+        <div className="mb-8 w-full overflow-x-auto">
           <div
             ref={tabs.tabsRef}
             className="relative p-1.5 inline-flex"

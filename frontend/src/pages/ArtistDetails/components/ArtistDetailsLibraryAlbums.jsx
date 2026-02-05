@@ -97,12 +97,12 @@ export function ArtistDetailsLibraryAlbums({
                 }}
               >
                 <div
-                  className="flex items-center justify-between py-2.5 px-3 cursor-pointer"
+                  className="flex flex-col gap-2 py-2.5 px-3 cursor-pointer sm:flex-row sm:items-center sm:justify-between"
                   onClick={() =>
                     handleLibraryAlbumClick(rgId, libraryAlbum.id)
                   }
                 >
-                  <div className="flex-1 flex items-center gap-2">
+                  <div className="flex-1 flex items-center gap-2 min-w-0">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -150,7 +150,7 @@ export function ArtistDetailsLibraryAlbums({
                         {libraryAlbum.albumName}
                       </h3>
                       <div
-                        className="flex items-center gap-2 mt-0.5 text-xs"
+                        className="flex flex-wrap items-center gap-2 mt-0.5 text-xs"
                         style={{ color: "#c1c1c3" }}
                       >
                         {libraryAlbum.releaseDate && (
@@ -220,7 +220,7 @@ export function ArtistDetailsLibraryAlbums({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 w-full sm:w-auto sm:justify-end">
                     {isComplete ? (
                       <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase bg-green-500/20 text-green-400 cursor-default">
                         <CheckCircle className="w-3.5 h-3.5" />
