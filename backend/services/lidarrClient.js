@@ -50,10 +50,15 @@ export class LidarrClient {
       process.env.LIDARR_INSECURE === "true" ||
       process.env.LIDARR_INSECURE === "1";
 
+    const envTimeoutMs = Number(process.env.LIDARR_TIMEOUT_MS);
+    const timeoutMs =
+      Number.isFinite(envTimeoutMs) && envTimeoutMs > 0 ? envTimeoutMs : 8000;
+
     const newConfig = {
       url: url,
       apiKey: (dbConfig.apiKey || process.env.LIDARR_API_KEY || "").trim(),
       insecure: !!insecure,
+      timeoutMs,
     };
 
     this.config = newConfig;
@@ -148,7 +153,7 @@ export class LidarrClient {
             "Content-Type": "application/json",
             Accept: "application/json",
           },
-          timeout: 8000,
+          timeout: this.config.timeoutMs,
           validateStatus: function (status) {
             return status < 500;
           },
