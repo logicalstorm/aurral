@@ -8,6 +8,7 @@ import {
   musicbrainzGetArtistReleaseGroups,
   enrichReleaseGroupsWithDeezer,
   deezerSearchArtist,
+  getDeezerArtistById,
 } from "../../../services/apiClients.js";
 import { dbOps } from "../../../config/db-helpers.js";
 import { noCache } from "../../../middleware/cache.js";
@@ -50,10 +51,15 @@ export default function registerStream(router) {
       sendSSE(res, "connected", { mbid });
 
       let artistData = null;
+      const override = dbOps.getArtistOverride(mbid);
+      const resolvedMbid = override?.musicbrainzId || mbid;
+      const deezerArtistId = override?.deezerArtistId || null;
 
       try {
-        const { lidarrClient } = await import("../../../services/lidarrClient.js");
-        const { libraryManager } = await import("../../../services/libraryManager.js");
+        const { lidarrClient } =
+          await import("../../../services/lidarrClient.js");
+        const { libraryManager } =
+          await import("../../../services/libraryManager.js");
 
         let lidarrArtist = null;
         let lidarrAlbums = [];
@@ -63,20 +69,23 @@ export default function registerStream(router) {
             lidarrArtist = await lidarrClient.getArtistByMbid(mbid);
             if (lidarrArtist) {
               console.log(
-                `[Artists Stream] Found artist in Lidarr: ${lidarrArtist.artistName}`
+                `[Artists Stream] Found artist in Lidarr: ${lidarrArtist.artistName}`,
               );
               const libraryArtist = await libraryManager.getArtist(mbid);
               if (libraryArtist) {
                 lidarrAlbums = await libraryManager.getAlbums(libraryArtist.id);
               }
 
-              const artistMbid = lidarrArtist.foreignArtistId || mbid;
+              const artistMbid =
+                override?.musicbrainzId || lidarrArtist.foreignArtistId || mbid;
               let releaseGroups = [];
               try {
-                releaseGroups = await musicbrainzGetArtistReleaseGroups(mbid);
+                releaseGroups =
+                  await musicbrainzGetArtistReleaseGroups(artistMbid);
                 await enrichReleaseGroupsWithDeezer(
                   releaseGroups,
-                  lidarrArtist.artistName
+                  lidarrArtist.artistName,
+                  deezerArtistId,
                 );
               } catch (e) {
                 releaseGroups = lidarrAlbums.map((album) => ({
@@ -88,11 +97,15 @@ export default function registerStream(router) {
                 }));
               }
               const mbidToType = new Map(
-                releaseGroups.map((rg) => [rg.id, rg["primary-type"]])
+                releaseGroups.map((rg) => [rg.id, rg["primary-type"]]),
               );
 
               const [bio, tagsData] = await Promise.all([
-                getArtistBio(lidarrArtist.artistName, artistMbid),
+                getArtistBio(
+                  lidarrArtist.artistName,
+                  artistMbid,
+                  deezerArtistId,
+                ),
                 getLastfmApiKey()
                   ? lastfmRequest("artist.getTopTags", { mbid: artistMbid })
                   : null,
@@ -156,7 +169,7 @@ export default function registerStream(router) {
             }
           } catch (error) {
             console.warn(
-              `[Artists Stream] Failed to fetch from Lidarr: ${error.message}`
+              `[Artists Stream] Failed to fetch from Lidarr: ${error.message}`,
             );
           }
         }
@@ -165,7 +178,7 @@ export default function registerStream(router) {
           if (pendingArtistRequests.has(mbid)) {
             if (streamArtistName) {
               sendSSE(res, "artist", {
-                id: mbid,
+                id: resolvedMbid,
                 name: streamArtistName,
                 "sort-name": streamArtistName,
                 disambiguation: "",
@@ -182,7 +195,7 @@ export default function registerStream(router) {
               });
             }
             console.log(
-              `[Artists Stream] Request for ${mbid} already in progress, waiting...`
+              `[Artists Stream] Request for ${mbid} already in progress, waiting...`,
             );
             try {
               artistData = await pendingArtistRequests.get(mbid);
@@ -199,11 +212,13 @@ export default function registerStream(router) {
               const name =
                 streamArtistName ||
                 (getLastfmApiKey()
-                  ? await lastfmGetArtistNameByMbid(mbid)
+                  ? await lastfmGetArtistNameByMbid(resolvedMbid)
                   : null) ||
                 "Unknown Artist";
               const tagsData = getLastfmApiKey()
-                ? await lastfmRequest("artist.getTopTags", { mbid })
+                ? await lastfmRequest("artist.getTopTags", {
+                    mbid: resolvedMbid,
+                  })
                 : null;
               const tags = tagsData?.toptags?.tag
                 ? (Array.isArray(tagsData.toptags.tag)
@@ -211,11 +226,20 @@ export default function registerStream(router) {
                     : [tagsData.toptags.tag]
                   ).map((t) => ({ name: t.name, count: t.count || 0 }))
                 : [];
-              const releaseGroups = await musicbrainzGetArtistReleaseGroups(mbid);
-              await enrichReleaseGroupsWithDeezer(releaseGroups, name);
-              const bio = await getArtistBio(name, mbid);
+              const releaseGroups =
+                await musicbrainzGetArtistReleaseGroups(resolvedMbid);
+              await enrichReleaseGroupsWithDeezer(
+                releaseGroups,
+                name,
+                deezerArtistId,
+              );
+              const bio = await getArtistBio(
+                name,
+                resolvedMbid,
+                deezerArtistId,
+              );
               return {
-                id: mbid,
+                id: resolvedMbid,
                 name,
                 "sort-name": name,
                 disambiguation: "",
@@ -235,7 +259,7 @@ export default function registerStream(router) {
             pendingArtistRequests.set(mbid, fetchPromise);
             if (streamArtistName) {
               sendSSE(res, "artist", {
-                id: mbid,
+                id: resolvedMbid,
                 name: streamArtistName,
                 "sort-name": streamArtistName,
                 disambiguation: "",
@@ -256,7 +280,7 @@ export default function registerStream(router) {
               sendSSE(res, "artist", artistData);
             } catch (err) {
               const fallback = {
-                id: mbid,
+                id: resolvedMbid,
                 name: streamArtistName || "Unknown Artist",
                 "sort-name": streamArtistName || "Unknown Artist",
                 disambiguation: "",
@@ -307,7 +331,9 @@ export default function registerStream(router) {
 
             if (artistName) {
               try {
-                const deezer = await deezerSearchArtist(artistName);
+                const deezer = deezerArtistId
+                  ? await getDeezerArtistById(deezerArtistId)
+                  : await deezerSearchArtist(artistName);
                 if (deezer?.imageUrl) {
                   dbOps.setImage(mbid, deezer.imageUrl);
                   sendSSE(res, "cover", {
@@ -333,7 +359,7 @@ export default function registerStream(router) {
           if (getLastfmApiKey()) {
             try {
               const similarData = await lastfmRequest("artist.getSimilar", {
-                mbid,
+                mbid: resolvedMbid,
                 limit: 10,
               });
 
@@ -386,7 +412,7 @@ export default function registerStream(router) {
               (rg) =>
                 rg["primary-type"] === "Album" ||
                 rg["primary-type"] === "EP" ||
-                rg["primary-type"] === "Single"
+                rg["primary-type"] === "Single",
             )
             .slice(0, 20);
 
@@ -401,7 +427,9 @@ export default function registerStream(router) {
               dbOps.setImage(cacheKey, rg._coverUrl);
               sendSSE(res, "releaseGroupCover", {
                 mbid: rg.id,
-                images: [{ image: rg._coverUrl, front: true, types: ["Front"] }],
+                images: [
+                  { image: rg._coverUrl, front: true, types: ["Front"] },
+                ],
               });
               continue;
             }
@@ -477,11 +505,17 @@ export default function registerStream(router) {
                     }
                   }
                   dbOps.setImage(cacheKey, "NOT_FOUND");
-                  sendSSE(res, "releaseGroupCover", { mbid: rg.id, images: [] });
+                  sendSSE(res, "releaseGroupCover", {
+                    mbid: rg.id,
+                    images: [],
+                  });
                 } catch (e) {
-                  sendSSE(res, "releaseGroupCover", { mbid: rg.id, images: [] });
+                  sendSSE(res, "releaseGroupCover", {
+                    mbid: rg.id,
+                    images: [],
+                  });
                 }
-              })
+              }),
             );
           }
         })();
@@ -509,7 +543,7 @@ export default function registerStream(router) {
       } catch (error) {
         console.error(
           `[Artists Stream] Error for artist ${mbid}:`,
-          error.message
+          error.message,
         );
         if (!artistData) {
           sendSSE(res, "error", {

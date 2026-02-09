@@ -11,6 +11,7 @@ import {
   Trash2,
   Play,
   Pause,
+  Pencil,
 } from "lucide-react";
 import { getCoverImage, getTagColor, formatLifeSpan, getArtistType } from "../utils";
 import AddToLibraryButton from "../../../components/AddToLibraryButton";
@@ -40,6 +41,7 @@ export function ArtistDetailsHero({
   previewProgress,
   previewSnappingBack,
   handlePreviewPlay,
+  onEditIds,
 }) {
   const coverImage = getCoverImage(coverImages);
   const lifeSpan = formatLifeSpan(artist["life-span"]);
@@ -273,6 +275,14 @@ export function ArtistDetailsHero({
               <AddToLibraryButton onClick={handleAddToLibrary} />
             )}
 
+            <button
+              type="button"
+              onClick={onEditIds}
+              className="btn btn-secondary inline-flex items-center"
+            >
+              <Pencil className="w-5 h-5 mr-2" />
+              Edit IDs
+            </button>
             <a
               href={`https://www.last.fm/music/${encodeURIComponent(
                 artist.name
@@ -489,4 +499,5 @@ ArtistDetailsHero.propTypes = {
   previewProgress: PropTypes.number,
   previewSnappingBack: PropTypes.bool,
   handlePreviewPlay: PropTypes.func,
+  onEditIds: PropTypes.func,
 };

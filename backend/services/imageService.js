@@ -3,6 +3,7 @@ import {
   deezerSearchArtist,
   lastfmGetArtistNameByMbid,
   getLastfmApiKey,
+  getDeezerArtistById,
 } from "./apiClients.js";
 
 const MAX_NEGATIVE_CACHE = 1000;
@@ -64,14 +65,21 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
   const fetchPromise = (async () => {
     try {
       const { libraryManager } = await import("./libraryManager.js");
+      const override = dbOps.getArtistOverride(mbid);
+      const resolvedMbid = override?.musicbrainzId || mbid;
+      const deezerArtistId = override?.deezerArtistId || null;
       const libraryArtist = libraryManager.getArtist(mbid);
       let artistName =
         libraryArtist?.artistName ||
-        (getLastfmApiKey() ? await lastfmGetArtistNameByMbid(mbid) : null);
+        (getLastfmApiKey()
+          ? await lastfmGetArtistNameByMbid(resolvedMbid)
+          : null);
 
       if (artistName) {
         try {
-          const deezer = await deezerSearchArtist(artistName);
+          const deezer = deezerArtistId
+            ? await getDeezerArtistById(deezerArtistId)
+            : await deezerSearchArtist(artistName);
           if (deezer?.imageUrl) {
             dbOps.setImage(mbid, deezer.imageUrl);
             return {

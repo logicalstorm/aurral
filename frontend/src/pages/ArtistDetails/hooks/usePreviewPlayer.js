@@ -129,7 +129,9 @@ export function usePreviewPlayer(mbid, artistNameFromNav, artist) {
 
   return {
     previewTracks,
+    setPreviewTracks,
     loadingPreview,
+    setLoadingPreview,
     playingPreviewId,
     previewProgress,
     previewSnappingBack,
