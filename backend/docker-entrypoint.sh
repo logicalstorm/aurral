@@ -2,10 +2,10 @@
 set -e
 
 if [ "$(id -u)" = "0" ]; then
-    mkdir -p /app/data
-    
-    chown -R nodejs:nodejs /app/data
-    
+    mkdir -p /app/backend/data
+
+    chown -R nodejs:nodejs /app/backend/data
+
     exec su-exec nodejs:nodejs "$@"
 fi
 
