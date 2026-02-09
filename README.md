@@ -10,6 +10,16 @@
 
 ---
 
+## Notice: Test branch transition
+
+We’re actively developing a new test branch with a rebuilt app and a single combined container image. It will merge into `main` in the coming weeks.
+
+Please start transitioning to the test-branch `docker-compose` or pin your current deployment to a specific image tag instead of `latest` to avoid breaking changes during the merge.
+
+Test branch details: https://github.com/lklynet/aurral/tree/test
+
+---
+
 ## What is Aurral?
 
 Aurral is a simple web application that allows users to search for artists using the MusicBrainz database and seamlessly add them to their Lidarr music library. Think of it as an Overseerr or Jellyseerr, but specifically focused on music artists and Lidarr integration.
