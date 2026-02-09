@@ -91,10 +91,13 @@ export const getReleaseGroupTracks = async (mbid, deezerAlbumId = null) => {
   return response.data;
 };
 
-export const getArtistCover = async (mbid, artistName) => {
+export const getArtistCover = async (mbid, artistName, refresh = false) => {
   const params = {};
   if (artistName && typeof artistName === "string" && artistName.trim()) {
     params.artistName = artistName.trim();
+  }
+  if (refresh) {
+    params.refresh = true;
   }
   const response = await api.get(`/artists/${mbid}/cover`, {
     params,
@@ -118,6 +121,22 @@ export const getSimilarArtistsForArtist = async (mbid, limit = 20) => {
 export const getArtistPreview = async (mbid, artistName) => {
   const response = await api.get(`/artists/${mbid}/preview`, {
     params: artistName ? { artistName } : {},
+  });
+  return response.data;
+};
+
+export const getArtistOverrides = async (mbid) => {
+  const response = await api.get(`/artists/${mbid}/overrides`);
+  return response.data;
+};
+
+export const updateArtistOverrides = async (
+  mbid,
+  { musicbrainzId = null, deezerArtistId = null } = {},
+) => {
+  const response = await api.put(`/artists/${mbid}/overrides`, {
+    musicbrainzId,
+    deezerArtistId,
   });
   return response.data;
 };

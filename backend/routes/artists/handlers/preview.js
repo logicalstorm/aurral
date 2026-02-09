@@ -3,7 +3,9 @@ import {
   getLastfmApiKey,
   lastfmGetArtistNameByMbid,
   deezerGetArtistTopTracks,
+  deezerGetArtistTopTracksById,
 } from "../../../services/apiClients.js";
+import { dbOps } from "../../../config/db-helpers.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
 
 export default function registerPreview(router) {
@@ -14,9 +16,19 @@ export default function registerPreview(router) {
       if (!UUID_REGEX.test(mbid)) {
         return res.status(400).json({ error: "Invalid MBID format", tracks: [] });
       }
+      const override = dbOps.getArtistOverride(mbid);
+      const resolvedMbid = override?.musicbrainzId || mbid;
+      const deezerArtistId = override?.deezerArtistId || null;
+
+      if (deezerArtistId) {
+        const tracks = await deezerGetArtistTopTracksById(deezerArtistId);
+        return res.json({ tracks });
+      }
       let artistName =
         artistNameParam ||
-        (getLastfmApiKey() ? await lastfmGetArtistNameByMbid(mbid) : null) ||
+        (getLastfmApiKey()
+          ? await lastfmGetArtistNameByMbid(resolvedMbid)
+          : null) ||
         null;
       if (!artistName) {
         return res.json({ tracks: [] });

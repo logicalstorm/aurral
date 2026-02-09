@@ -1,5 +1,6 @@
 import { UUID_REGEX } from "../../../config/constants.js";
 import { getLastfmApiKey, lastfmRequest } from "../../../services/apiClients.js";
+import { dbOps } from "../../../config/db-helpers.js";
 
 export default function registerSimilar(router) {
   router.get("/:mbid/similar", async (req, res) => {
@@ -17,8 +18,10 @@ export default function registerSimilar(router) {
       }
 
       const limitInt = Math.min(Math.max(parseInt(limit, 10) || 7, 1), 20);
+      const override = dbOps.getArtistOverride(mbid);
+      const resolvedMbid = override?.musicbrainzId || mbid;
       const data = await lastfmRequest("artist.getSimilar", {
-        mbid,
+        mbid: resolvedMbid,
         limit: limitInt,
       });
 

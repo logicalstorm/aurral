@@ -2,6 +2,7 @@ import {
   getLastfmApiKey,
   lastfmGetArtistNameByMbid,
   deezerSearchArtist,
+  getDeezerArtistById,
 } from "../../services/apiClients.js";
 import { dbOps } from "../../config/db-helpers.js";
 
@@ -33,14 +34,19 @@ export const fetchCoverInBackground = async (mbid) => {
   const fetchPromise = (async () => {
     try {
       const { libraryManager } = await import("../../services/libraryManager.js");
+      const override = dbOps.getArtistOverride(mbid);
+      const resolvedMbid = override?.musicbrainzId || mbid;
+      const deezerArtistId = override?.deezerArtistId || null;
       const libraryArtist = libraryManager.getArtist(mbid);
       let artistName =
         libraryArtist?.artistName ||
-        (getLastfmApiKey() ? await lastfmGetArtistNameByMbid(mbid) : null);
+        (getLastfmApiKey() ? await lastfmGetArtistNameByMbid(resolvedMbid) : null);
 
       if (artistName) {
         try {
-          const deezer = await deezerSearchArtist(artistName);
+          const deezer = deezerArtistId
+            ? await getDeezerArtistById(deezerArtistId)
+            : await deezerSearchArtist(artistName);
           if (deezer?.imageUrl) {
             dbOps.setImage(mbid, deezer.imageUrl);
           }

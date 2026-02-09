@@ -50,7 +50,7 @@ let musicbrainzLast503Log = 0;
 const musicbrainzRequestWithRetry = async (
   endpoint,
   params = {},
-  retryCount = 0
+  retryCount = 0,
 ) => {
   const cacheKey = `mb:${endpoint}:${JSON.stringify(params)}`;
   const cached = mbCache.get(cacheKey);
@@ -77,7 +77,7 @@ const musicbrainzRequestWithRetry = async (
     ];
     return (
       connectionErrors.some(
-        (err) => error.code === err || error.message.includes(err)
+        (err) => error.code === err || error.message.includes(err),
       ) ||
       (error.code &&
         (error.code.startsWith("E") || error.code.startsWith("ERR_")))
@@ -96,7 +96,7 @@ const musicbrainzRequestWithRetry = async (
       {
         headers: { "User-Agent": userAgent },
         timeout: 3000,
-      }
+      },
     );
     mbCache.set(cacheKey, response.data);
     return response.data;
@@ -115,7 +115,7 @@ const musicbrainzRequestWithRetry = async (
       console.warn(
         `MusicBrainz error (${errorType}), retrying in ${delay}ms... (attempt ${
           retryCount + 1
-        }/${MAX_RETRIES})`
+        }/${MAX_RETRIES})`,
       );
       await new Promise((resolve) => setTimeout(resolve, delay));
       return musicbrainzRequestWithRetry(endpoint, params, retryCount + 1);
@@ -134,7 +134,7 @@ const musicbrainzRequestWithRetry = async (
       ) {
         musicbrainzLast503Log = Date.now();
         console.warn(
-          `MusicBrainz ${status} (suppressing further logs for 15s)`
+          `MusicBrainz ${status} (suppressing further logs for 15s)`,
         );
       }
     } else {
@@ -230,6 +230,37 @@ async function getDeezerArtist(artistName) {
   }
 }
 
+export async function getDeezerArtistById(artistId) {
+  const normalizedId = String(artistId || "").trim();
+  if (!normalizedId) return null;
+  const cacheKey = `id:${normalizedId}`;
+  const cached = deezerArtistCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+  try {
+    const res = await axios.get(
+      `https://api.deezer.com/artist/${normalizedId}`,
+      {
+        timeout: 3000,
+      },
+    );
+    const data = res.data;
+    if (!data?.id) {
+      deezerArtistCache.set(cacheKey, null);
+      return null;
+    }
+    const result = {
+      id: data.id,
+      name: data.name || null,
+      imageUrl: data.picture_big || data.picture_medium || data.picture || null,
+    };
+    deezerArtistCache.set(cacheKey, result);
+    return result;
+  } catch (e) {
+    deezerArtistCache.set(cacheKey, null);
+    return null;
+  }
+}
+
 const deezerBioCache = new NodeCache({
   stdTTL: 3600,
   checkperiod: 120,
@@ -251,6 +282,31 @@ export async function deezerGetArtistBio(artistName) {
     const res = await axios.get(`https://api.deezer.com/artist/${artist.id}`, {
       timeout: 3000,
     });
+    const data = res.data;
+    const bio =
+      (data && (data.biography || data.bio || data.description)) || null;
+    const value = typeof bio === "string" && bio.trim() ? bio.trim() : null;
+    deezerBioCache.set(cacheKey, value);
+    return value;
+  } catch (e) {
+    deezerBioCache.set(cacheKey, null);
+    return null;
+  }
+}
+
+export async function deezerGetArtistBioById(artistId) {
+  const normalizedId = String(artistId || "").trim();
+  if (!normalizedId) return null;
+  const cacheKey = `dz-bio:${normalizedId}`;
+  const cached = deezerBioCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+  try {
+    const res = await axios.get(
+      `https://api.deezer.com/artist/${normalizedId}`,
+      {
+        timeout: 3000,
+      },
+    );
     const data = res.data;
     const bio =
       (data && (data.biography || data.bio || data.description)) || null;
@@ -306,8 +362,10 @@ export async function lastfmGetArtistBio(mbid) {
 /**
  * Get artist biography: try Deezer first, then Last.fm. Returns string or null.
  */
-export async function getArtistBio(artistName, mbid) {
-  const deezerBio = await deezerGetArtistBio(artistName);
+export async function getArtistBio(artistName, mbid, deezerArtistId = null) {
+  const deezerBio = deezerArtistId
+    ? await deezerGetArtistBioById(deezerArtistId)
+    : await deezerGetArtistBio(artistName);
   if (deezerBio) return deezerBio;
   if (mbid) {
     const lastfmBio = await lastfmGetArtistBio(mbid);
@@ -329,7 +387,31 @@ export async function deezerGetArtistTopTracks(artistName) {
 
     const topRes = await axios.get(
       `https://api.deezer.com/artist/${artist.id}/top`,
-      { params: { limit: 5 }, timeout: 3000 }
+      { params: { limit: 5 }, timeout: 3000 },
+    );
+    const tracks = topRes.data?.data || [];
+    return tracks
+      .filter((t) => t.preview)
+      .slice(0, 5)
+      .map((t) => ({
+        id: String(t.id),
+        title: t.title,
+        album: t.album?.title ?? null,
+        preview_url: t.preview,
+        duration_ms: (t.duration || 0) * 1000,
+      }));
+  } catch (e) {
+    return [];
+  }
+}
+
+export async function deezerGetArtistTopTracksById(artistId) {
+  const normalizedId = String(artistId || "").trim();
+  if (!normalizedId) return [];
+  try {
+    const topRes = await axios.get(
+      `https://api.deezer.com/artist/${normalizedId}/top`,
+      { params: { limit: 5 }, timeout: 3000 },
     );
     const tracks = topRes.data?.data || [];
     return tracks
@@ -358,7 +440,7 @@ function normalizeTitle(title) {
     .toLowerCase()
     .replace(
       /\s*[\(\[](deluxe|remaster|anniversary|expanded|bonus|edition|live|mono|stereo|\d{4}).*[\)\]]/gi,
-      ""
+      "",
     )
     .trim();
 }
@@ -379,7 +461,7 @@ export async function musicbrainzGetArtistReleaseGroups(mbid) {
       .filter(
         (rg) =>
           rg.id &&
-          ALLOWED_PRIMARY_TYPES.has((rg["primary-type"] || "").toLowerCase())
+          ALLOWED_PRIMARY_TYPES.has((rg["primary-type"] || "").toLowerCase()),
       )
       .map((rg) => ({
         id: rg.id,
@@ -389,8 +471,8 @@ export async function musicbrainzGetArtistReleaseGroups(mbid) {
           rg["primary-type"] === "EP"
             ? "EP"
             : rg["primary-type"] === "Single"
-            ? "Single"
-            : "Album",
+              ? "Single"
+              : "Album",
         "secondary-types": Array.isArray(rg["secondary-types"])
           ? rg["secondary-types"]
           : [],
@@ -412,16 +494,19 @@ export async function musicbrainzGetArtistReleaseGroups(mbid) {
  */
 export async function enrichReleaseGroupsWithDeezer(
   mbReleaseGroups,
-  artistName
+  artistName,
+  deezerArtistId = null,
 ) {
   if (!mbReleaseGroups?.length || !artistName) return mbReleaseGroups;
   try {
-    const artist = await getDeezerArtist(artistName);
+    const artist = deezerArtistId
+      ? await getDeezerArtistById(deezerArtistId)
+      : await getDeezerArtist(artistName);
     if (!artist) return mbReleaseGroups;
 
     const res = await axios.get(
       `https://api.deezer.com/artist/${artist.id}/albums`,
-      { params: { limit: 100 }, timeout: 3000 }
+      { params: { limit: 100 }, timeout: 3000 },
     );
     const raw = res.data?.data || [];
     const allowed = ["album", "ep", "single"];
@@ -477,12 +562,12 @@ export async function deezerGetArtistAlbums(artistName) {
 
     const res = await axios.get(
       `https://api.deezer.com/artist/${artist.id}/albums`,
-      { params: { limit: 100 }, timeout: 3000 }
+      { params: { limit: 100 }, timeout: 3000 },
     );
     const raw = res.data?.data || [];
     const allowed = ["album", "ep", "single"];
     const filtered = raw.filter((a) =>
-      allowed.includes((a.record_type || a.type || "").toLowerCase())
+      allowed.includes((a.record_type || a.type || "").toLowerCase()),
     );
     const mapped = filtered.map((a) => {
       const rt = (a.record_type || a.type || "album").toLowerCase();
@@ -520,7 +605,7 @@ export async function deezerGetArtistAlbums(artistName) {
       ({ _fans, _normalizedTitle, _releaseDate, ...rest }) => ({
         ...rest,
         fans: _fans,
-      })
+      }),
     );
     deezerAlbumCache.set(cacheKey, albums);
     return albums;
@@ -570,7 +655,7 @@ function normalizeArtistAlbumKey(artistName, albumName) {
 export async function resolveDeezerAlbumToMbid(
   artistName,
   albumName,
-  deezerAlbumId
+  deezerAlbumId,
 ) {
   const dzKey = `dz:${String(deezerAlbumId || "").replace(/^dz-/, "")}`;
   const aaKey = normalizeArtistAlbumKey(artistName, albumName);

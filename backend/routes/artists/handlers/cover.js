@@ -3,6 +3,7 @@ import {
   getLastfmApiKey,
   lastfmGetArtistNameByMbid,
   deezerSearchArtist,
+  getDeezerArtistById,
 } from "../../../services/apiClients.js";
 import { dbOps } from "../../../config/db-helpers.js";
 import { pendingCoverRequests, fetchCoverInBackground } from "../utils.js";
@@ -26,6 +27,10 @@ export default function registerCover(router) {
         const result = await pendingCoverRequests.get(mbid);
         return res.json({ images: result.images || [] });
       }
+
+      const override = dbOps.getArtistOverride(mbid);
+      const resolvedMbid = override?.musicbrainzId || mbid;
+      const deezerArtistId = override?.deezerArtistId || null;
 
       const cachedImage = dbOps.getImage(mbid);
       if (
@@ -80,12 +85,16 @@ export default function registerCover(router) {
           let artistName =
             libraryArtist?.artistName ||
             artistNameFromQuery ||
-            (getLastfmApiKey() ? await lastfmGetArtistNameByMbid(mbid) : null);
+            (getLastfmApiKey()
+              ? await lastfmGetArtistNameByMbid(resolvedMbid)
+              : null);
 
           if (artistName) {
             try {
               console.log(`[Cover Route] Trying Deezer for cover: ${artistName}`);
-              const deezer = await deezerSearchArtist(artistName);
+              const deezer = deezerArtistId
+                ? await getDeezerArtistById(deezerArtistId)
+                : await deezerSearchArtist(artistName);
               if (deezer?.imageUrl) {
                 console.log(`[Cover Route] Deezer cover found for ${mbid}`);
                 dbOps.setImage(mbid, deezer.imageUrl);
