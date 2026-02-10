@@ -8,8 +8,6 @@ import {
   CheckCircle2,
   Clock,
   Trash2,
-  ChevronDown,
-  ChevronUp,
 } from "lucide-react";
 import {
   getFlowStatus,
@@ -40,23 +38,13 @@ function formatNextRun(nextRunAt) {
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
-const adjustMix = (mix, key, value) => {
-  const nextValue = clamp(Math.round(Number(value) || 0), 0, 100);
-  const keys = ["discover", "mix", "trending"];
-  const others = keys.filter((k) => k !== key);
-  const remaining = 100 - nextValue;
-  const totalOther = others.reduce((sum, k) => sum + (mix[k] || 0), 0);
-  const next = { ...mix, [key]: nextValue };
-  if (totalOther <= 0) {
-    next[others[0]] = remaining;
-    next[others[1]] = 0;
-    return next;
-  }
-  const first = Math.round((mix[others[0]] / totalOther) * remaining);
-  next[others[0]] = first;
-  next[others[1]] = remaining - first;
-  return next;
-};
+const updateMixValue = (mix, key, value) => ({
+  ...mix,
+  [key]: clamp(Math.round(Number(value) || 0), 0, 100),
+});
+
+const getMixTotal = (mix) =>
+  (mix?.discover ?? 0) + (mix?.mix ?? 0) + (mix?.trending ?? 0);
 
 function FlowPage() {
   const [status, setStatus] = useState(null);
@@ -249,6 +237,23 @@ function FlowPage() {
     setConfirmDelete(null);
   };
 
+  const flowList = status?.flows || [];
+  const enabledCount = flowList.filter(
+    (flow) => (optimisticEnabled[flow.id] ?? flow.enabled) === true
+  ).length;
+  const runningCount = flowList.filter(
+    (flow) => getPlaylistState(flow.id) === "running"
+  ).length;
+  const completedCount = flowList.filter(
+    (flow) => getPlaylistState(flow.id) === "completed"
+  ).length;
+  const newTotal = getMixTotal(newFlowMix);
+  const editTotal = getMixTotal(editMix);
+  const newRemaining = 100 - newTotal;
+  const editRemaining = 100 - editTotal;
+  const newScale = newTotal > 100 ? 100 / newTotal : 1;
+  const editScale = editTotal > 100 ? 100 / editTotal : 1;
+
 
   if (loading && !status) {
     return (
@@ -259,57 +264,127 @@ function FlowPage() {
   }
 
   return (
-    <div className="flow-page max-w-4xl mx-auto px-4 pb-12">
-      <div className="flex items-center gap-3 mb-8">
-        <AudioWaveform className="w-8 h-8 text-[#707e61]" />
-        <div>
-          <h1 className="text-2xl font-semibold text-white">Flow</h1>
-          <p className="text-sm text-[#c1c1c3]">
-            Create configurable weekly flows and blend Discover, Mix, and
-            Trending into playlists.
-          </p>
+    <div className="flow-page max-w-6xl mx-auto px-4 pb-10">
+      <div className="flex flex-col gap-4 mb-6 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-lg bg-white/5 border border-white/5">
+            <AudioWaveform className="w-5 h-5 text-[#9aa886]" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold text-white">Flow</h1>
+            <p className="text-sm text-[#c1c1c3]">
+              Create configurable weekly flows and blend Discover, Mix, and
+              Trending into playlists.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setShowNewFlow(true)}
+            className="btn btn-primary btn-sm"
+          >
+            + New Flow
+          </button>
         </div>
       </div>
 
-      {status?.worker && (
-        <div className="mb-6 p-4 bg-card rounded-lg flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {status.worker.running ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin text-[#707e61]" />
-                <span className="text-white">
-                  Worker {status.worker.processing ? "processing…" : "running"}
-                </span>
-              </>
-            ) : (
-              <>
-                <Clock className="w-5 h-5 text-[#c1c1c3]" />
-                <span className="text-[#c1c1c3]">Worker stopped</span>
-              </>
-            )}
-          </div>
-          {status.stats && (
-            <span className="text-sm text-[#c1c1c3]">
-              {status.stats.done} done · {status.stats.failed} failed ·{" "}
-              {status.stats.pending} pending · {status.stats.downloading}{" "}
-              downloading
+      <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr] mb-6">
+        <div className="p-4 bg-card rounded-lg border border-white/5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs uppercase tracking-[0.3em] text-[#8b8b90]">
+              Worker
             </span>
+            <span
+              className={`badge ${
+                status?.worker?.running ? "badge-success" : "badge-neutral"
+              }`}
+            >
+              {status?.worker?.running ? "Running" : "Stopped"}
+            </span>
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            {status?.worker?.running ? (
+              <Loader2 className="w-4 h-4 animate-spin text-[#9aa886]" />
+            ) : (
+              <Clock className="w-4 h-4 text-[#c1c1c3]" />
+            )}
+            <div className="text-sm text-white">
+              {status?.worker?.running
+                ? `Worker ${
+                    status?.worker?.processing ? "processing…" : "running"
+                  }`
+                : "Worker stopped"}
+            </div>
+          </div>
+          {status?.stats && (
+            <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-[#c1c1c3]">
+              <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
+                <span>Done</span>
+                <span className="text-white">{status.stats.done}</span>
+              </div>
+              <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
+                <span>Failed</span>
+                <span className="text-white">{status.stats.failed}</span>
+              </div>
+              <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
+                <span>Pending</span>
+                <span className="text-white">{status.stats.pending}</span>
+              </div>
+              <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
+                <span>Downloading</span>
+                <span className="text-white">{status.stats.downloading}</span>
+              </div>
+            </div>
           )}
         </div>
-      )}
-
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-lg font-semibold text-white">Your Flows</h2>
-        <button
-          onClick={() => setShowNewFlow(true)}
-          className="btn btn-primary"
-        >
-          + New Flow
-        </button>
+        <div className="p-4 bg-card rounded-lg border border-white/5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs uppercase tracking-[0.3em] text-[#8b8b90]">
+              Flows
+            </span>
+            <span className="text-xs text-[#c1c1c3]">
+              {enabledCount}/{flowList.length} on
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[#c1c1c3]">
+            <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
+              <span>Total</span>
+              <span className="text-white">{flowList.length}</span>
+            </div>
+            <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
+              <span>Running</span>
+              <span className="text-white">{runningCount}</span>
+            </div>
+            <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
+              <span>Completed</span>
+              <span className="text-white">{completedCount}</span>
+            </div>
+            <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
+              <span>Idle</span>
+              <span className="text-white">
+                {Math.max(flowList.length - runningCount - completedCount, 0)}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="space-y-4">
-        {(status?.flows || []).map((flow) => {
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-xs uppercase tracking-[0.35em] text-[#8b8b90]">
+          Playlists
+        </h2>
+        <span className="text-xs text-[#c1c1c3]">
+          {flowList.length} flows
+        </span>
+      </div>
+
+      <div className="space-y-3">
+        {flowList.length === 0 && (
+          <div className="p-4 bg-card rounded-lg border border-white/5 text-sm text-[#c1c1c3]">
+            No flows yet. Create one to start building weekly playlists.
+          </div>
+        )}
+        {flowList.map((flow) => {
           const stats = getPlaylistStats(flow.id);
           const state = getPlaylistState(flow.id);
           const enabled = optimisticEnabled[flow.id] ?? isEnabled(flow.id);
@@ -325,40 +400,65 @@ function FlowPage() {
               (flow.mix?.mix ?? DEFAULT_MIX.mix) ||
             (editMix?.trending ?? DEFAULT_MIX.trending) !==
               (flow.mix?.trending ?? DEFAULT_MIX.trending);
+          const stateLabel =
+            state === "running"
+              ? "Running"
+              : state === "completed"
+                ? "Completed"
+                : "Idle";
+          const stateBadge =
+            state === "running"
+              ? "badge-success"
+              : state === "completed"
+                ? "badge-primary"
+                : "badge-neutral";
 
           return (
             <div
               key={flow.id}
-              className="p-5 bg-card rounded-lg border border-white/5 overflow-hidden"
+              className="bg-card rounded-lg border border-white/5 overflow-hidden"
             >
-              <div className="flex items-start justify-between gap-4">
+              <div
+                className={`px-4 ${isEditing ? "py-3" : "py-2"} flex flex-col ${
+                  isEditing ? "gap-3" : "gap-2"
+                } md:flex-row md:items-center md:justify-between`}
+              >
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-base font-medium text-white truncate">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold text-white truncate">
                       {flow.name}
-                    </h2>
+                    </h3>
+                    <span className={`badge ${stateBadge}`}>{stateLabel}</span>
+                    <span
+                      className={`badge ${
+                        enabled ? "badge-success" : "badge-neutral"
+                      }`}
+                    >
+                      {enabled ? "On" : "Off"}
+                    </span>
                     {isToggling && (
-                      <Loader2 className="w-4 h-4 animate-spin text-[#707e61] flex-shrink-0" />
+                      <Loader2 className="w-4 h-4 animate-spin text-[#707e61]" />
                     )}
                   </div>
-                  <div className="mt-2 flex items-center gap-2 text-sm text-[#c1c1c3]">
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[#c1c1c3]">
                     <span>{flow.size} tracks</span>
                     <span>·</span>
-                    <span>
-                      {flow.mix?.discover ?? 0}% Discover ·{" "}
-                      {flow.mix?.mix ?? 0}% Mix · {flow.mix?.trending ?? 0}% Trending
-                    </span>
+                    <span>{flow.mix?.discover ?? 0}% Discover</span>
+                    <span>·</span>
+                    <span>{flow.mix?.mix ?? 0}% Mix</span>
+                    <span>·</span>
+                    <span>{flow.mix?.trending ?? 0}% Trending</span>
                   </div>
-                  <div className="mt-2 flex items-center gap-2 text-sm text-[#c1c1c3]">
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#c1c1c3]">
                     {state === "running" && (
-                      <span className="inline-flex items-center gap-1.5 text-[#707e61]">
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                      <span className="inline-flex items-center gap-1.5 text-[#9aa886]">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         {stats.done + stats.failed}/{stats.total}
                       </span>
                     )}
                     {state === "completed" && stats.total > 0 && (
-                      <span className="inline-flex items-center gap-1.5 text-[#707e61]">
-                        <CheckCircle2 className="w-4 h-4" />
+                      <span className="inline-flex items-center gap-1.5 text-[#9aa886]">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
                         {stats.done} done
                         {stats.failed > 0 && ` · ${stats.failed} failed`}
                       </span>
@@ -366,7 +466,13 @@ function FlowPage() {
                     {enabled && nextRun && <span>{nextRun}</span>}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-2 md:justify-end">
+                  <button
+                    onClick={() => (isEditing ? cancelEdit() : startEdit(flow))}
+                    className="btn btn-secondary btn-sm"
+                  >
+                    {isEditing ? "Close" : "Edit"}
+                  </button>
                   <PowerSwitch
                     checked={enabled}
                     onChange={(e) =>
@@ -377,122 +483,168 @@ function FlowPage() {
               </div>
 
               {isEditing && (
-                <div className="pt-4 grid gap-3">
-                  <div>
-                    <label className="text-sm text-[#c1c1c3]">Flow name</label>
-                    <div className="mt-2 flex items-center w-full rounded bg-white/5 border border-white/10 text-white overflow-hidden">
-                      <span className="px-3 text-[#c1c1c3] whitespace-nowrap">
-                        Aurral-
-                      </span>
-                      <input
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        className="flex-1 px-3 py-2 bg-transparent text-white outline-none"
-                      />
+                <div className="px-4 pb-4">
+                  <div className="card-separator mb-4" />
+                  <div className="grid gap-4 md:grid-cols-[1.1fr_1.2fr]">
+                    <div className="grid gap-3">
+                      <div>
+                        <label className="text-xs uppercase tracking-[0.3em] text-[#8b8b90]">
+                          Flow name
+                        </label>
+                        <div className="mt-2 flex items-center w-full rounded bg-white/5 border border-white/10 text-white overflow-hidden">
+                          <span className="px-3 text-[#c1c1c3] whitespace-nowrap">
+                            Aurral-
+                          </span>
+                          <input
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            className="flex-1 px-3 py-2 bg-transparent text-white outline-none text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between text-xs text-[#c1c1c3]">
+                          <span>Playlist size</span>
+                          <span className="text-white">{editSize} tracks</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={MIN_SIZE}
+                          max={MAX_SIZE}
+                          value={editSize}
+                          onChange={(e) => setEditSize(Number(e.target.value))}
+                          className="flow-slider w-full mt-2"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid gap-3">
+                      <div className="flex items-center justify-between text-xs text-[#c1c1c3]">
+                        <span>Mix balance</span>
+                        <span
+                          className={
+                            editTotal === 100 ? "text-[#c1c1c3]" : "text-red-400"
+                          }
+                        >
+                          Total {editTotal}%
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <label className="text-[11px] uppercase tracking-[0.2em] text-[#8b8b90]">
+                            Discover
+                          </label>
+                          <div className="mt-2 flex items-center gap-2">
+                            <Sparkles className="w-3.5 h-3.5 text-[#707e61]" />
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={editMix.discover}
+                              onChange={(e) =>
+                                setEditMix(
+                                  updateMixValue(
+                                    editMix,
+                                    "discover",
+                                    e.target.value
+                                  )
+                                )
+                              }
+                              className="w-full h-8 rounded bg-white/5 border border-white/10 px-2 text-sm text-white outline-none"
+                            />
+                            <span className="text-xs text-[#c1c1c3]">%</span>
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-[11px] uppercase tracking-[0.2em] text-[#8b8b90]">
+                            Mix
+                          </label>
+                          <div className="mt-2 flex items-center gap-2">
+                            <Music2 className="w-3.5 h-3.5 text-[#707e61]" />
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={editMix.mix}
+                              onChange={(e) =>
+                                setEditMix(
+                                  updateMixValue(editMix, "mix", e.target.value)
+                                )
+                              }
+                              className="w-full h-8 rounded bg-white/5 border border-white/10 px-2 text-sm text-white outline-none"
+                            />
+                            <span className="text-xs text-[#c1c1c3]">%</span>
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-[11px] uppercase tracking-[0.2em] text-[#8b8b90]">
+                            Trending
+                          </label>
+                          <div className="mt-2 flex items-center gap-2">
+                            <TrendingUp className="w-3.5 h-3.5 text-[#707e61]" />
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={editMix.trending}
+                              onChange={(e) =>
+                                setEditMix(
+                                  updateMixValue(
+                                    editMix,
+                                    "trending",
+                                    e.target.value
+                                  )
+                                )
+                              }
+                              className="w-full h-8 rounded bg-white/5 border border-white/10 px-2 text-sm text-white outline-none"
+                            />
+                            <span className="text-xs text-[#c1c1c3]">%</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="h-2 w-full rounded-full bg-white/5 overflow-hidden flex">
+                        <div
+                          className="h-full bg-[#707e61]"
+                          style={{ width: `${(editMix.discover ?? 0) * editScale}%` }}
+                        />
+                        <div
+                          className="h-full bg-[#4a5162]"
+                          style={{ width: `${(editMix.mix ?? 0) * editScale}%` }}
+                        />
+                        <div
+                          className="h-full bg-[#7b7f8a]"
+                          style={{ width: `${(editMix.trending ?? 0) * editScale}%` }}
+                        />
+                      </div>
+                      <div className="text-xs text-[#c1c1c3]">
+                        {editRemaining === 0
+                          ? "Balanced at 100%"
+                          : editRemaining > 0
+                            ? `${editRemaining}% remaining`
+                            : `${Math.abs(editRemaining)}% over`}
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <div className="flex items-center justify-between text-sm text-[#c1c1c3]">
-                      <span>Playlist size</span>
-                      <span className="text-white">{editSize} tracks</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={MIN_SIZE}
-                      max={MAX_SIZE}
-                      value={editSize}
-                      onChange={(e) => setEditSize(Number(e.target.value))}
-                      className="flow-slider w-full mt-2"
-                    />
-                  </div>
-                  <div className="grid gap-3">
-                    <div className="flex items-center gap-2 text-sm text-[#c1c1c3]">
-                      <Sparkles className="w-4 h-4 text-[#707e61]" />
-                      <span className="min-w-[84px]">Discover</span>
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        value={editMix.discover}
-                        onChange={(e) =>
-                          setEditMix(adjustMix(editMix, "discover", e.target.value))
-                        }
-                        className="flow-slider flex-1"
-                      />
-                      <span className="w-10 text-right text-white">
-                        {editMix.discover}%
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-[#c1c1c3]">
-                      <Music2 className="w-4 h-4 text-[#707e61]" />
-                      <span className="min-w-[84px]">Mix</span>
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        value={editMix.mix}
-                        onChange={(e) =>
-                          setEditMix(adjustMix(editMix, "mix", e.target.value))
-                        }
-                        className="flow-slider flex-1"
-                      />
-                      <span className="w-10 text-right text-white">
-                        {editMix.mix}%
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-[#c1c1c3]">
-                      <TrendingUp className="w-4 h-4 text-[#707e61]" />
-                      <span className="min-w-[84px]">Trending</span>
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        value={editMix.trending}
-                        onChange={(e) =>
-                          setEditMix(adjustMix(editMix, "trending", e.target.value))
-                        }
-                        className="flow-slider flex-1"
-                      />
-                      <span className="w-10 text-right text-white">
-                        {editMix.trending}%
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="mt-4 flex items-center justify-between gap-2">
                     <button
                       onClick={() => handleDelete(flow)}
-                      className="btn btn-secondary flex items-center gap-2 bg-[#2a2830] hover:bg-red-800"
+                      className="btn btn-danger btn-sm flex items-center gap-2"
                       disabled={deletingId === flow.id}
                     >
                       <Trash2 className="w-4 h-4" />
-                      <span>Delete flow</span>
+                      <span>
+                        {deletingId === flow.id ? "Deleting..." : "Delete"}
+                      </span>
                     </button>
                     <button
                       onClick={() => saveEdit(flow.id)}
-                      className="btn btn-primary"
-                      disabled={!hasChanges}
+                      className="btn btn-primary btn-sm"
+                      disabled={!hasChanges || editTotal !== 100}
                     >
-                      Save
+                      Save changes
                     </button>
                   </div>
                 </div>
               )}
-              <button
-                onClick={() => (isEditing ? cancelEdit() : startEdit(flow))}
-                className="flex w-full items-center justify-center gap-2 text-xs uppercase tracking-[0.2em] text-[#c1c1c3] hover:text-white transition-colors"
-              >
-                {isEditing ? (
-                  <>
-                    <span>Hide settings</span>
-                    <ChevronUp className="w-4 h-4" />
-                  </>
-                ) : (
-                  <>
-                    <span>Edit flow</span>
-                    <ChevronDown className="w-4 h-4" />
-                  </>
-                )}
-              </button>
             </div>
           );
         })}
@@ -590,9 +742,11 @@ function FlowPage() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold text-white">New Flow</h3>
             </div>
-            <div className="grid gap-4">
+            <div className="grid gap-3">
               <div>
-                <label className="text-sm text-[#c1c1c3]">Flow name</label>
+                <label className="text-xs uppercase tracking-[0.3em] text-[#8b8b90]">
+                  Flow name
+                </label>
                 <div className="mt-2 flex items-center w-full rounded bg-white/5 border border-white/10 text-white overflow-hidden">
                   <span className="px-3 text-[#c1c1c3] whitespace-nowrap">
                     Aurral-
@@ -606,7 +760,7 @@ function FlowPage() {
                 </div>
               </div>
               <div>
-                <div className="flex items-center justify-between text-sm text-[#c1c1c3]">
+                <div className="flex items-center justify-between text-xs text-[#c1c1c3]">
                   <span>Playlist size</span>
                   <span className="text-white">{newFlowSize} tracks</span>
                 </div>
@@ -620,73 +774,122 @@ function FlowPage() {
                 />
               </div>
               <div className="grid gap-3">
-                <div className="flex items-center gap-2 text-sm text-[#c1c1c3]">
-                  <Sparkles className="w-4 h-4 text-[#707e61]" />
-                  <span className="min-w-[84px]">Discover</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={newFlowMix.discover}
-                    onChange={(e) =>
-                      setNewFlowMix(
-                        adjustMix(newFlowMix, "discover", e.target.value)
-                      )
+                <div className="flex items-center justify-between text-xs text-[#c1c1c3]">
+                  <span>Mix balance</span>
+                  <span
+                    className={
+                      newTotal === 100 ? "text-[#c1c1c3]" : "text-red-400"
                     }
-                    className="flow-slider flex-1"
-                  />
-                  <span className="w-10 text-right text-white">
-                    {newFlowMix.discover}%
+                  >
+                    Total {newTotal}%
                   </span>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-[#c1c1c3]">
-                  <Music2 className="w-4 h-4 text-[#707e61]" />
-                  <span className="min-w-[84px]">Mix</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={newFlowMix.mix}
-                    onChange={(e) =>
-                      setNewFlowMix(adjustMix(newFlowMix, "mix", e.target.value))
-                    }
-                    className="flow-slider flex-1"
-                  />
-                  <span className="w-10 text-right text-white">
-                    {newFlowMix.mix}%
-                  </span>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <label className="text-[11px] uppercase tracking-[0.2em] text-[#8b8b90]">
+                      Discover
+                    </label>
+                    <div className="mt-2 flex items-center gap-2">
+                      <Sparkles className="w-3.5 h-3.5 text-[#707e61]" />
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={newFlowMix.discover}
+                        onChange={(e) =>
+                          setNewFlowMix(
+                            updateMixValue(
+                              newFlowMix,
+                              "discover",
+                              e.target.value
+                            )
+                          )
+                        }
+                        className="w-full h-8 rounded bg-white/5 border border-white/10 px-2 text-sm text-white outline-none"
+                      />
+                      <span className="text-xs text-[#c1c1c3]">%</span>
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[11px] uppercase tracking-[0.2em] text-[#8b8b90]">
+                      Mix
+                    </label>
+                    <div className="mt-2 flex items-center gap-2">
+                      <Music2 className="w-3.5 h-3.5 text-[#707e61]" />
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={newFlowMix.mix}
+                        onChange={(e) =>
+                          setNewFlowMix(
+                            updateMixValue(newFlowMix, "mix", e.target.value)
+                          )
+                        }
+                        className="w-full h-8 rounded bg-white/5 border border-white/10 px-2 text-sm text-white outline-none"
+                      />
+                      <span className="text-xs text-[#c1c1c3]">%</span>
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[11px] uppercase tracking-[0.2em] text-[#8b8b90]">
+                      Trending
+                    </label>
+                    <div className="mt-2 flex items-center gap-2">
+                      <TrendingUp className="w-3.5 h-3.5 text-[#707e61]" />
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={newFlowMix.trending}
+                        onChange={(e) =>
+                          setNewFlowMix(
+                            updateMixValue(
+                              newFlowMix,
+                              "trending",
+                              e.target.value
+                            )
+                          )
+                        }
+                        className="w-full h-8 rounded bg-white/5 border border-white/10 px-2 text-sm text-white outline-none"
+                      />
+                      <span className="text-xs text-[#c1c1c3]">%</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-[#c1c1c3]">
-                  <TrendingUp className="w-4 h-4 text-[#707e61]" />
-                  <span className="min-w-[84px]">Trending</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={newFlowMix.trending}
-                    onChange={(e) =>
-                      setNewFlowMix(
-                        adjustMix(newFlowMix, "trending", e.target.value)
-                      )
-                    }
-                    className="flow-slider flex-1"
+                <div className="h-2 w-full rounded-full bg-white/5 overflow-hidden flex">
+                  <div
+                    className="h-full bg-[#707e61]"
+                    style={{ width: `${(newFlowMix.discover ?? 0) * newScale}%` }}
                   />
-                  <span className="w-10 text-right text-white">
-                    {newFlowMix.trending}%
-                  </span>
+                  <div
+                    className="h-full bg-[#4a5162]"
+                    style={{ width: `${(newFlowMix.mix ?? 0) * newScale}%` }}
+                  />
+                  <div
+                    className="h-full bg-[#7b7f8a]"
+                    style={{ width: `${(newFlowMix.trending ?? 0) * newScale}%` }}
+                  />
+                </div>
+                <div className="text-xs text-[#c1c1c3]">
+                  {newRemaining === 0
+                    ? "Balanced at 100%"
+                    : newRemaining > 0
+                      ? `${newRemaining}% remaining`
+                      : `${Math.abs(newRemaining)}% over`}
                 </div>
               </div>
               <div className="flex justify-end gap-2">
                 <button
                   onClick={() => setShowNewFlow(false)}
-                  className="btn btn-secondary"
+                  className="btn btn-secondary btn-sm"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleCreateFlow}
-                  className="btn btn-primary"
-                  disabled={creating}
+                  className="btn btn-primary btn-sm"
+                  disabled={creating || newTotal !== 100 || !newFlowName.trim()}
                 >
                   {creating ? "Saving..." : "Save Flow"}
                 </button>
