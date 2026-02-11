@@ -86,7 +86,9 @@ ProtectedRoute.propTypes = {
 };
 
 function AppContent() {
-  const basePath = normalizeBasePath(import.meta.env.BASE_URL);
+  const basePath = normalizeBasePath(
+    import.meta.env.VITE_BASE_PATH || import.meta.env.BASE_URL
+  );
   const [isHealthy, setIsHealthy] = useState(null);
   const [rootFolderConfigured, setRootFolderConfigured] = useState(false);
   const [appVersion, setAppVersion] = useState(null);
