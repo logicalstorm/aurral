@@ -312,6 +312,11 @@ export const getRecentlyAdded = async () => {
   return response.data;
 };
 
+export const getRecentReleases = async () => {
+  const response = await api.get("/library/recent-releases");
+  return response.data;
+};
+
 export const getDiscovery = async (cacheBust = false) => {
   const params = cacheBust ? { _: Date.now() } : {};
   const response = await api.get("/discover", { params });
