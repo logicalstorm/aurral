@@ -16,6 +16,10 @@ export const normalizeSettings = (savedSettings) => {
           lidarr.qualityProfileId != null
             ? parseInt(lidarr.qualityProfileId, 10)
             : null,
+        metadataProfileId:
+          lidarr.metadataProfileId != null
+            ? parseInt(lidarr.metadataProfileId, 10)
+            : null,
       },
       navidrome: {
         url: "",

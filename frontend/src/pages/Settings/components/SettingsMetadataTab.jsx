@@ -1,4 +1,5 @@
-import { CheckCircle, RefreshCw, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
 
 export function SettingsMetadataTab({
@@ -13,6 +14,9 @@ export function SettingsMetadataTab({
   handleRefreshDiscovery,
   handleClearCache,
 }) {
+  const [musicbrainzEditing, setMusicbrainzEditing] = useState(false);
+  const [lastfmEditing, setLastfmEditing] = useState(false);
+
   return (
     <div className="card animate-fade-in">
       <div className="flex items-center justify-between mb-6">
@@ -47,14 +51,34 @@ export function SettingsMetadataTab({
             >
               MusicBrainz
             </h3>
-            {health?.musicbrainzConfigured && (
-              <span className="flex items-center text-sm text-green-400">
-                <CheckCircle className="w-4 h-4 mr-1" />
-                Configured
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {health?.musicbrainzConfigured && (
+                <span className="flex items-center text-sm text-green-400">
+                  <CheckCircle className="w-4 h-4 mr-1" />
+                  Configured
+                </span>
+              )}
+              <button
+                type="button"
+                className={`btn ${
+                  musicbrainzEditing ? "btn-primary" : "btn-secondary"
+                } px-2 py-1`}
+                onClick={() => setMusicbrainzEditing((value) => !value)}
+                aria-label={
+                  musicbrainzEditing
+                    ? "Lock MusicBrainz settings"
+                    : "Edit MusicBrainz settings"
+                }
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-          <div>
+          <fieldset
+            disabled={!musicbrainzEditing}
+            className={`${musicbrainzEditing ? "" : "opacity-60"}`}
+          >
+            <div>
             <label
               className="block text-sm font-medium mb-1"
               style={{ color: "#fff" }}
@@ -83,7 +107,8 @@ export function SettingsMetadataTab({
             <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
               Required by MusicBrainz API to identify the application.
             </p>
-          </div>
+            </div>
+          </fieldset>
         </div>
         <div
           className="p-6 rounded-lg space-y-4"
@@ -99,14 +124,31 @@ export function SettingsMetadataTab({
             >
               Last.fm API
             </h3>
-            {health?.lastfmConfigured && (
-              <span className="flex items-center text-sm text-green-400">
-                <CheckCircle className="w-4 h-4 mr-1" />
-                Configured
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {health?.lastfmConfigured && (
+                <span className="flex items-center text-sm text-green-400">
+                  <CheckCircle className="w-4 h-4 mr-1" />
+                  Configured
+                </span>
+              )}
+              <button
+                type="button"
+                className={`btn ${
+                  lastfmEditing ? "btn-primary" : "btn-secondary"
+                } px-2 py-1`}
+                onClick={() => setLastfmEditing((value) => !value)}
+                aria-label={
+                  lastfmEditing ? "Lock Last.fm settings" : "Edit Last.fm settings"
+                }
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-          <div className="space-y-4">
+          <fieldset
+            disabled={!lastfmEditing}
+            className={`space-y-4 ${lastfmEditing ? "" : "opacity-60"}`}
+          >
             <div>
               <label
                 className="block text-sm font-medium mb-1"
@@ -207,7 +249,7 @@ export function SettingsMetadataTab({
               and weekly flow. Username enables personalized recommendations from
               your Last.fm listening history.
             </p>
-          </div>
+          </fieldset>
         </div>
         <div
           className="p-6 rounded-lg space-y-4"

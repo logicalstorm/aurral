@@ -1,4 +1,5 @@
-import { CheckCircle } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle, Pencil } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
 import PillToggle from "../../../components/PillToggle";
 import { testGotifyConnection } from "../../../utils/api";
@@ -14,6 +15,8 @@ export function SettingsNotificationsTab({
   showSuccess,
   showError,
 }) {
+  const [gotifyEditing, setGotifyEditing] = useState(false);
+
   const handleTestGotify = async () => {
     const url = settings.integrations?.gotify?.url;
     const token = settings.integrations?.gotify?.token;
@@ -70,15 +73,34 @@ export function SettingsNotificationsTab({
             >
               Gotify
             </h3>
-            {settings.integrations?.gotify?.url &&
-              settings.integrations?.gotify?.token && (
-                <span className="flex items-center text-sm text-green-400">
-                  <CheckCircle className="w-4 h-4 mr-1" />
-                  Configured
-                </span>
-              )}
+            <div className="flex items-center gap-2">
+              {settings.integrations?.gotify?.url &&
+                settings.integrations?.gotify?.token && (
+                  <span className="flex items-center text-sm text-green-400">
+                    <CheckCircle className="w-4 h-4 mr-1" />
+                    Configured
+                  </span>
+                )}
+              <button
+                type="button"
+                className={`btn ${
+                  gotifyEditing ? "btn-primary" : "btn-secondary"
+                } px-2 py-1`}
+                onClick={() => setGotifyEditing((value) => !value)}
+                aria-label={
+                  gotifyEditing ? "Lock Gotify settings" : "Edit Gotify settings"
+                }
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-          <div className="grid grid-cols-1 gap-4">
+          <fieldset
+            disabled={!gotifyEditing}
+            className={`grid grid-cols-1 gap-4 ${
+              gotifyEditing ? "" : "opacity-60"
+            }`}
+          >
             <div>
               <label
                 className="block text-sm font-medium mb-1"
@@ -206,7 +228,7 @@ export function SettingsNotificationsTab({
                 />
               </div>
             </div>
-          </div>
+          </fieldset>
         </div>
       </form>
     </div>

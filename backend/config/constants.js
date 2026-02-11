@@ -170,6 +170,7 @@ export const defaultData = {
         url: "",
         apiKey: "",
         qualityProfileId: null,
+        metadataProfileId: null,
         searchOnAdd: false,
       },
       musicbrainz: { email: "" },
