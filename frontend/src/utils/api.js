@@ -1,6 +1,21 @@
 import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
+const normalizeBasePath = (baseUrl) => {
+  const raw = (baseUrl || "/").trim();
+  const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
+  if (withLeadingSlash === "/") return "/";
+  return withLeadingSlash.endsWith("/")
+    ? withLeadingSlash.slice(0, -1)
+    : withLeadingSlash;
+};
+
+const getDefaultApiBaseUrl = () => {
+  const basePath = normalizeBasePath(import.meta.env.BASE_URL);
+  if (basePath === "/") return "/api";
+  return `${basePath}/api`;
+};
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -142,7 +157,7 @@ export const updateArtistOverrides = async (
 };
 
 export const getStreamUrl = (songId) => {
-  const base = import.meta.env.VITE_API_URL || "/api";
+  const base = import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
   const password = localStorage.getItem("auth_password");
   const username = localStorage.getItem("auth_user") || "admin";
   let url = `${base}/library/stream/${encodeURIComponent(songId)}`;

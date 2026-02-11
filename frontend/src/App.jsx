@@ -24,6 +24,15 @@ const ArtistDetailsPage = lazy(() => import("./pages/ArtistDetailsPage"));
 const RequestsPage = lazy(() => import("./pages/RequestsPage"));
 const FlowPage = lazy(() => import("./pages/FlowPage"));
 
+const normalizeBasePath = (baseUrl) => {
+  const raw = (baseUrl || "/").trim();
+  const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
+  if (withLeadingSlash === "/") return "/";
+  return withLeadingSlash.endsWith("/")
+    ? withLeadingSlash.slice(0, -1)
+    : withLeadingSlash;
+};
+
 const PageLoader = () => (
   <div className="flex items-center justify-center min-h-[200px]">
     <div
@@ -77,6 +86,7 @@ ProtectedRoute.propTypes = {
 };
 
 function AppContent() {
+  const basePath = normalizeBasePath(import.meta.env.BASE_URL);
   const [isHealthy, setIsHealthy] = useState(null);
   const [rootFolderConfigured, setRootFolderConfigured] = useState(false);
   const [appVersion, setAppVersion] = useState(null);
@@ -101,7 +111,7 @@ function AppContent() {
   }, [isAuthenticated]);
 
   return (
-    <Router>
+    <Router basename={basePath}>
       <ProtectedRoute>
         <Layout
           isHealthy={isHealthy}

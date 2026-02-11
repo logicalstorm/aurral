@@ -129,3 +129,16 @@ TRUST_PROXY=true
 ```
 
 in your container environment.
+
+### Subpath hosting
+
+To host Aurral under a subpath like `https://example.com/aurral`, set `VITE_BASE_PATH` to the subpath and make sure your reverse proxy forwards that path to the container.
+
+Example `docker-compose.yml` addition:
+
+```yaml
+services:
+  aurral:
+    environment:
+      - VITE_BASE_PATH=/aurral
+```
