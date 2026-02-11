@@ -183,6 +183,61 @@ router.get("/lidarr/profiles", async (req, res) => {
   }
 });
 
+router.get("/lidarr/metadata-profiles", async (req, res) => {
+  try {
+    const { lidarrClient } = await import("../services/lidarrClient.js");
+
+    const testUrl = req.query.url;
+    const testApiKey = req.query.apiKey;
+
+    let url, apiKey;
+    if (testUrl && testApiKey) {
+      url = testUrl.trim();
+      apiKey = testApiKey.trim();
+    } else {
+      lidarrClient.updateConfig();
+      const config = lidarrClient.getConfig();
+      url = config.url;
+      apiKey = config.apiKey;
+    }
+
+    if (!url || !apiKey) {
+      return res.status(400).json({
+        error: "Lidarr not configured",
+        message: "Please configure Lidarr URL and API key in settings first",
+      });
+    }
+
+    const originalConfig = { ...lidarrClient.config };
+    const originalApiPath = lidarrClient.apiPath;
+
+    lidarrClient.config = {
+      url: url.replace(/\/+$/, ""),
+      apiKey: apiKey.trim(),
+    };
+    lidarrClient.apiPath = "/api/v1";
+
+    try {
+      const profiles = await lidarrClient.getMetadataProfiles(true);
+      res.json(profiles);
+    } finally {
+      lidarrClient.config = originalConfig;
+      lidarrClient.apiPath = originalApiPath;
+      lidarrClient.updateConfig();
+    }
+  } catch (error) {
+    console.error(
+      "[Settings] Failed to fetch Lidarr metadata profiles:",
+      error
+    );
+    res.status(500).json({
+      error: "Failed to fetch Lidarr metadata profiles",
+      message: error.message,
+      details: error.response?.data,
+    });
+  }
+});
+
 router.get("/lidarr/test", async (req, res) => {
   try {
     const { lidarrClient } = await import("../services/lidarrClient.js");

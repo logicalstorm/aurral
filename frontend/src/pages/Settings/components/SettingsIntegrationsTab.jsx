@@ -1,6 +1,11 @@
-import { CheckCircle, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle, Pencil, RefreshCw } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
-import { getLidarrProfiles, testLidarrConnection } from "../../../utils/api";
+import {
+  getLidarrMetadataProfiles,
+  getLidarrProfiles,
+  testLidarrConnection,
+} from "../../../utils/api";
 
 export function SettingsIntegrationsTab({
   settings,
@@ -10,6 +15,10 @@ export function SettingsIntegrationsTab({
   loadingLidarrProfiles,
   setLoadingLidarrProfiles,
   setLidarrProfiles,
+  lidarrMetadataProfiles,
+  loadingLidarrMetadataProfiles,
+  setLoadingLidarrMetadataProfiles,
+  setLidarrMetadataProfiles,
   testingLidarr,
   setTestingLidarr,
   applyingCommunityGuide,
@@ -21,6 +30,9 @@ export function SettingsIntegrationsTab({
   showError,
   showInfo,
 }) {
+  const [lidarrEditing, setLidarrEditing] = useState(false);
+  const [navidromeEditing, setNavidromeEditing] = useState(false);
+
   const handleTestLidarr = async () => {
     const url = settings.integrations?.lidarr?.url;
     const apiKey = settings.integrations?.lidarr?.apiKey;
@@ -36,15 +48,24 @@ export function SettingsIntegrationsTab({
           `Lidarr connection successful! (${result.instanceName || "Lidarr"})`
         );
         setLoadingLidarrProfiles(true);
+        setLoadingLidarrMetadataProfiles(true);
         try {
-          const profiles = await getLidarrProfiles(url, apiKey);
+          const [profiles, metadataProfiles] = await Promise.all([
+            getLidarrProfiles(url, apiKey),
+            getLidarrMetadataProfiles(url, apiKey),
+          ]);
           setLidarrProfiles(profiles);
+          setLidarrMetadataProfiles(metadataProfiles);
           if (profiles.length > 0) {
             showInfo(`Loaded ${profiles.length} quality profile(s)`);
+          }
+          if (metadataProfiles.length > 0) {
+            showInfo(`Loaded ${metadataProfiles.length} metadata profile(s)`);
           }
         } catch {
         } finally {
           setLoadingLidarrProfiles(false);
+          setLoadingLidarrMetadataProfiles(false);
         }
       } else {
         showError(
@@ -89,6 +110,33 @@ export function SettingsIntegrationsTab({
     }
   };
 
+  const handleRefreshMetadataProfiles = async () => {
+    const url = settings.integrations?.lidarr?.url;
+    const apiKey = settings.integrations?.lidarr?.apiKey;
+    if (!url || !apiKey) {
+      showError("Please enter Lidarr URL and API key first");
+      return;
+    }
+    setLoadingLidarrMetadataProfiles(true);
+    try {
+      const profiles = await getLidarrMetadataProfiles(url, apiKey);
+      setLidarrMetadataProfiles(profiles);
+      if (profiles.length > 0) {
+        showSuccess(`Loaded ${profiles.length} metadata profile(s)`);
+      } else {
+        showInfo("No metadata profiles found in Lidarr");
+      }
+    } catch (err) {
+      const errorMsg =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message;
+      showError(`Failed to load metadata profiles: ${errorMsg}`);
+    } finally {
+      setLoadingLidarrMetadataProfiles(false);
+    }
+  };
+
   return (
     <div className="card animate-fade-in">
       <div className="flex items-center justify-between mb-6">
@@ -123,14 +171,33 @@ export function SettingsIntegrationsTab({
             >
               Lidarr
             </h3>
-            {health?.lidarrConfigured && (
-              <span className="flex items-center text-sm text-green-400">
-                <CheckCircle className="w-4 h-4 mr-1" />
-                Connected
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {health?.lidarrConfigured && (
+                <span className="flex items-center text-sm text-green-400">
+                  <CheckCircle className="w-4 h-4 mr-1" />
+                  Connected
+                </span>
+              )}
+              <button
+                type="button"
+                className={`btn ${
+                  lidarrEditing ? "btn-primary" : "btn-secondary"
+                } px-2 py-1`}
+                onClick={() => setLidarrEditing((value) => !value)}
+                aria-label={
+                  lidarrEditing ? "Lock Lidarr settings" : "Edit Lidarr settings"
+                }
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-          <div className="grid grid-cols-1 gap-4">
+          <fieldset
+            disabled={!lidarrEditing}
+            className={`grid grid-cols-1 gap-4 ${
+              lidarrEditing ? "" : "opacity-60"
+            }`}
+          >
             <div>
               <label
                 className="block text-sm font-medium mb-1"
@@ -268,6 +335,71 @@ export function SettingsIntegrationsTab({
               </p>
             </div>
             <div>
+              <label
+                className="block text-sm font-medium mb-1"
+                style={{ color: "#fff" }}
+              >
+                Default Metadata Profile
+              </label>
+              <div className="flex gap-2">
+                <select
+                  className="input flex-1"
+                  value={
+                    settings.integrations?.lidarr?.metadataProfileId
+                      ? String(settings.integrations.lidarr.metadataProfileId)
+                      : ""
+                  }
+                  onChange={(e) =>
+                    updateSettings({
+                      ...settings,
+                      integrations: {
+                        ...settings.integrations,
+                        lidarr: {
+                          ...(settings.integrations?.lidarr || {}),
+                          metadataProfileId: e.target.value
+                            ? parseInt(e.target.value)
+                            : null,
+                        },
+                      },
+                    })
+                  }
+                  disabled={loadingLidarrMetadataProfiles}
+                >
+                  <option value="">
+                    {loadingLidarrMetadataProfiles
+                      ? "Loading profiles..."
+                      : lidarrMetadataProfiles.length === 0
+                      ? "No profiles available (test connection first)"
+                      : "Select a profile"}
+                  </option>
+                  {lidarrMetadataProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleRefreshMetadataProfiles}
+                  disabled={
+                    loadingLidarrMetadataProfiles ||
+                    !settings.integrations?.lidarr?.url ||
+                    !settings.integrations?.lidarr?.apiKey
+                  }
+                  className="btn btn-secondary"
+                >
+                  <RefreshCw
+                    className={`w-4 h-4 ${
+                      loadingLidarrMetadataProfiles ? "animate-spin" : ""
+                    }`}
+                  />
+                </button>
+              </div>
+              <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
+                Metadata profile used when adding artists to Lidarr.
+              </p>
+            </div>
+            <div>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -343,7 +475,7 @@ export function SettingsIntegrationsTab({
                 </a>
               </p>
             </div>
-          </div>
+          </fieldset>
         </div>
         <div
           className="p-6 rounded-lg space-y-4"
@@ -359,14 +491,34 @@ export function SettingsIntegrationsTab({
             >
               Subsonic / Navidrome
             </h3>
-            {settings.integrations?.navidrome?.url && (
-              <span className="flex items-center text-sm text-green-400">
-                <CheckCircle className="w-4 h-4 mr-1" />
-                Configured
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {settings.integrations?.navidrome?.url && (
+                <span className="flex items-center text-sm text-green-400">
+                  <CheckCircle className="w-4 h-4 mr-1" />
+                  Configured
+                </span>
+              )}
+              <button
+                type="button"
+                className={`btn ${
+                  navidromeEditing ? "btn-primary" : "btn-secondary"
+                } px-2 py-1`}
+                onClick={() => setNavidromeEditing((value) => !value)}
+                aria-label={
+                  navidromeEditing
+                    ? "Lock Subsonic / Navidrome settings"
+                    : "Edit Subsonic / Navidrome settings"
+                }
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-          <div>
+          <fieldset
+            disabled={!navidromeEditing}
+            className={`${navidromeEditing ? "" : "opacity-60"}`}
+          >
+            <div>
             <label
               className="block text-sm font-medium mb-1"
               style={{ color: "#fff" }}
@@ -392,8 +544,8 @@ export function SettingsIntegrationsTab({
                 })
               }
             />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label
                 className="block text-sm font-medium mb-1"
@@ -446,14 +598,15 @@ export function SettingsIntegrationsTab({
                 }
               />
             </div>
-          </div>
-          <p className="mt-3 text-xs" style={{ color: "#8a8a8e" }}>
-            When using Weekly Flow: set Navidrome&apos;s{" "}
-            <code>Scanner.PurgeMissing</code> to <code>always</code> or{" "}
-            <code>full</code> (e.g.{" "}
-            <code>ND_SCANNER_PURGEMISSING=always</code>) so turning off a flow
-            removes those tracks from the library.
-          </p>
+            </div>
+            <p className="mt-3 text-xs" style={{ color: "#8a8a8e" }}>
+              When using Weekly Flow: set Navidrome&apos;s{" "}
+              <code>Scanner.PurgeMissing</code> to <code>always</code> or{" "}
+              <code>full</code> (e.g.{" "}
+              <code>ND_SCANNER_PURGEMISSING=always</code>) so turning off a flow
+              removes those tracks from the library.
+            </p>
+          </fieldset>
         </div>
       </form>
     </div>

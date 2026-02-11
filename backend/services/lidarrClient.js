@@ -397,7 +397,19 @@ export class LidarrClient {
       settings.integrations?.lidarr?.qualityProfileId;
     const qualityProfileId =
       options.qualityProfileId || defaultQualityProfileId || 1;
-    const metadataProfileId = options.metadataProfileId || 1;
+    const defaultMetadataProfileId =
+      settings.integrations?.lidarr?.metadataProfileId;
+    let metadataProfileId =
+      options.metadataProfileId || defaultMetadataProfileId || null;
+    if (!metadataProfileId) {
+      try {
+        const metadataProfiles = await this.getMetadataProfiles();
+        if (Array.isArray(metadataProfiles) && metadataProfiles.length > 0) {
+          metadataProfileId = metadataProfiles[0].id;
+        }
+      } catch {}
+    }
+    if (!metadataProfileId) metadataProfileId = 1;
 
     const lidarrArtist = {
       artistName: artistName,
@@ -587,6 +599,10 @@ export class LidarrClient {
 
   async getQualityProfiles(skipConfigUpdate = false) {
     return this.request("/qualityprofile", "GET", null, skipConfigUpdate);
+  }
+
+  async getMetadataProfiles(skipConfigUpdate = false) {
+    return this.request("/metadataprofile", "GET", null, skipConfigUpdate);
   }
 
   async getQualityProfile(profileId, skipConfigUpdate = false) {

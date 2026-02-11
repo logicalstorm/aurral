@@ -56,6 +56,8 @@ export class LibraryManager {
         albumOnly: options.albumOnly === true,
         monitorOption: options.monitorOption || "none",
         qualityProfileId: lidarrSettings.integrations?.lidarr?.qualityProfileId,
+        metadataProfileId:
+          lidarrSettings.integrations?.lidarr?.metadataProfileId,
       });
       console.log(`[LibraryManager] Added artist "${artistName}" to Lidarr`);
       return this.mapLidarrArtist(lidarrArtist);

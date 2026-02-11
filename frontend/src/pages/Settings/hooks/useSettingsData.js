@@ -4,6 +4,7 @@ import api, {
   getAppSettings,
   updateAppSettings,
   getLidarrProfiles,
+  getLidarrMetadataProfiles,
   testLidarrConnection,
   testGotifyConnection,
   applyLidarrCommunityGuide,
@@ -23,6 +24,7 @@ const defaultSettings = {
       url: "",
       apiKey: "",
       qualityProfileId: null,
+      metadataProfileId: null,
       searchOnAdd: false,
     },
     musicbrainz: { email: "" },
@@ -46,6 +48,9 @@ export function useSettingsData(showSuccess, showError, showInfo) {
   const [clearingCache, setClearingCache] = useState(false);
   const [lidarrProfiles, setLidarrProfiles] = useState([]);
   const [loadingLidarrProfiles, setLoadingLidarrProfiles] = useState(false);
+  const [lidarrMetadataProfiles, setLidarrMetadataProfiles] = useState([]);
+  const [loadingLidarrMetadataProfiles, setLoadingLidarrMetadataProfiles] =
+    useState(false);
   const [testingLidarr, setTestingLidarr] = useState(false);
   const [testingGotify, setTestingGotify] = useState(false);
   const [applyingCommunityGuide, setApplyingCommunityGuide] = useState(false);
@@ -71,12 +76,18 @@ export function useSettingsData(showSuccess, showError, showInfo) {
       const lidarr = updatedSettings.integrations?.lidarr || {};
       if (lidarr.url && lidarr.apiKey) {
         setLoadingLidarrProfiles(true);
+        setLoadingLidarrMetadataProfiles(true);
         try {
-          const profiles = await getLidarrProfiles(lidarr.url, lidarr.apiKey);
+          const [profiles, metadataProfiles] = await Promise.all([
+            getLidarrProfiles(lidarr.url, lidarr.apiKey),
+            getLidarrMetadataProfiles(lidarr.url, lidarr.apiKey),
+          ]);
           setLidarrProfiles(profiles);
+          setLidarrMetadataProfiles(metadataProfiles);
         } catch {
         } finally {
           setLoadingLidarrProfiles(false);
+          setLoadingLidarrMetadataProfiles(false);
         }
       }
     } catch {}
@@ -226,6 +237,10 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     setLidarrProfiles,
     loadingLidarrProfiles,
     setLoadingLidarrProfiles,
+    lidarrMetadataProfiles,
+    setLidarrMetadataProfiles,
+    loadingLidarrMetadataProfiles,
+    setLoadingLidarrMetadataProfiles,
     testingLidarr,
     setTestingLidarr,
     testingGotify,
