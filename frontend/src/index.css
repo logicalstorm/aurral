@@ -195,6 +195,29 @@
   .genre-tag-pill:hover {
     border-radius: 3rem !important;
   }
+
+  .letter-roll {
+    display: inline-flex;
+    overflow: hidden;
+    text-decoration: none;
+    line-height: 1.1;
+    color: inherit;
+    --roll-offset: 0.18em;
+  }
+
+  .letter-roll span {
+    display: inline-block;
+    text-shadow: 0 calc(-1em - var(--roll-offset)) 0 currentColor;
+    transition: transform 0s 0s cubic-bezier(0.3, 0, 0, 1);
+    transition-delay: 0s;
+    --roll-delay: 0s;
+  }
+
+  .letter-roll:hover span {
+    transform: translateY(calc(1em + var(--roll-offset)));
+    transition-duration: 0.5s;
+    transition-delay: var(--roll-delay);
+  }
 }
 
 .flow-page .flow-slider {

@@ -36,6 +36,16 @@ const getTagColor = (name) => {
   return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
 };
 
+const buildLetterRollSpans = (text) =>
+  ["#", ...text.split("")].map((char, index) => (
+    <span
+      key={`${text}-${index}`}
+      style={{ "--roll-delay": `${(index + 1) * 0.05}s` }}
+    >
+      {char}
+    </span>
+  ));
+
 function DiscoverPage() {
   const [data, setData] = useState(null);
   const [recentlyAdded, setRecentlyAdded] = useState([]);
@@ -619,7 +629,13 @@ function DiscoverPage() {
               <span style={{ color: "#c1c1c3" }}>
                 Because you like{"\u00A0"}
               </span>
-              #{section.genre}
+              <a
+                className="letter-roll"
+                href={`/search?q=${encodeURIComponent(section.genre)}&type=tag`}
+                aria-label={`View tag ${section.genre}`}
+              >
+                {buildLetterRollSpans(section.genre)}
+              </a>
             </h2>
             <button
               onClick={() =>
