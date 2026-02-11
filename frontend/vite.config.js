@@ -25,9 +25,10 @@ const normalizeBasePath = (baseUrl) => {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, cwd(), "");
   const basePath = normalizeBasePath(env.VITE_BASE_PATH || "/");
+  const isDev = mode === "development";
 
   return {
-    base: basePath,
+    base: isDev ? "/" : basePath,
     define: {
       "import.meta.env.VITE_APP_VERSION": JSON.stringify(appVersion),
     },

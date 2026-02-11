@@ -10,7 +10,10 @@ const normalizeBasePath = (baseUrl) => {
 };
 
 const getDefaultApiBaseUrl = () => {
-  const basePath = normalizeBasePath(import.meta.env.BASE_URL);
+  if (import.meta.env.DEV) return "/api";
+  const basePath = normalizeBasePath(
+    import.meta.env.VITE_BASE_PATH || import.meta.env.BASE_URL,
+  );
   if (basePath === "/") return "/api";
   return `${basePath}/api`;
 };
@@ -37,7 +40,7 @@ api.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error);
-  }
+  },
 );
 
 api.interceptors.response.use(
@@ -46,7 +49,7 @@ api.interceptors.response.use(
   },
   (error) => {
     return Promise.reject(error);
-  }
+  },
 );
 
 export const checkHealth = async () => {
@@ -64,7 +67,7 @@ export const testLidarrOnboarding = async (url, apiKey) => {
   if (url) params.append("url", url.replace(/\/+$/, ""));
   if (apiKey) params.append("apiKey", apiKey);
   const response = await api.get(
-    `/onboarding/lidarr/test${params.toString() ? `?${params.toString()}` : ""}`
+    `/onboarding/lidarr/test${params.toString() ? `?${params.toString()}` : ""}`,
   );
   return response.data;
 };
@@ -241,7 +244,7 @@ export const getLibraryAlbums = async (artistId) => {
 export const addLibraryAlbum = async (
   artistId,
   releaseGroupMbid,
-  albumName
+  albumName,
 ) => {
   const response = await api.post("/library/albums", {
     artistId,
@@ -494,10 +497,9 @@ export const deleteFlow = async (flowId) => {
 };
 
 export const setFlowEnabled = async (flowId, enabled) => {
-  const response = await api.put(
-    `/weekly-flow/flows/${flowId}/enabled`,
-    { enabled }
-  );
+  const response = await api.put(`/weekly-flow/flows/${flowId}/enabled`, {
+    enabled,
+  });
   return response.data;
 };
 

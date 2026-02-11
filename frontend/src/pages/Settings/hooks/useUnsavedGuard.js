@@ -25,7 +25,9 @@ export function useUnsavedGuard(hasUnsavedChanges, setHasUnsavedChanges) {
   const location = useLocation();
   const navigate = useNavigate();
   const hasUnsavedChangesRef = useRef(false);
-  const basePath = normalizeBasePath(import.meta.env.BASE_URL);
+  const basePath = normalizeBasePath(
+    import.meta.env.VITE_BASE_PATH || import.meta.env.BASE_URL,
+  );
   const settingsPath = basePath === "/" ? "/settings" : `${basePath}/settings`;
 
   useEffect(() => {
