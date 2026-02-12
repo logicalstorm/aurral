@@ -4,6 +4,7 @@ import {
   lastfmGetArtistNameByMbid,
   deezerSearchArtist,
   getDeezerArtistById,
+  musicbrainzGetArtistNameByMbid,
 } from "../../../services/apiClients.js";
 import { dbOps } from "../../../config/db-helpers.js";
 import { pendingCoverRequests, fetchCoverInBackground } from "../utils.js";
@@ -62,7 +63,12 @@ export default function registerCover(router) {
         });
       }
 
-      if (!refresh && cachedImage && cachedImage.imageUrl === "NOT_FOUND") {
+      if (
+        !refresh &&
+        cachedImage &&
+        cachedImage.imageUrl === "NOT_FOUND" &&
+        !artistNameFromQuery
+      ) {
         console.log(`[Cover Route] NOT_FOUND cache for ${mbid}`);
         res.set("Cache-Control", "public, max-age=3600");
 
@@ -87,7 +93,8 @@ export default function registerCover(router) {
             artistNameFromQuery ||
             (getLastfmApiKey()
               ? await lastfmGetArtistNameByMbid(resolvedMbid)
-              : null);
+              : null) ||
+            (await musicbrainzGetArtistNameByMbid(resolvedMbid));
 
           if (artistName) {
             try {

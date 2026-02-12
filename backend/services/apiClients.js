@@ -642,6 +642,17 @@ export async function lastfmGetArtistNameByMbid(mbid) {
   return name && typeof name === "string" ? name.trim() : null;
 }
 
+export async function musicbrainzGetArtistNameByMbid(mbid) {
+  if (!mbid) return null;
+  try {
+    const data = await musicbrainzRequest(`/artist/${mbid}`);
+    const name = data?.name;
+    return name && typeof name === "string" ? name.trim() : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 function normalizeArtistAlbumKey(artistName, albumName) {
   const a = String(artistName || "")
     .trim()

@@ -4,6 +4,7 @@ import {
   lastfmGetArtistNameByMbid,
   getLastfmApiKey,
   getDeezerArtistById,
+  musicbrainzGetArtistNameByMbid,
 } from "./apiClients.js";
 
 const MAX_NEGATIVE_CACHE = 1000;
@@ -73,7 +74,8 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
         libraryArtist?.artistName ||
         (getLastfmApiKey()
           ? await lastfmGetArtistNameByMbid(resolvedMbid)
-          : null);
+          : null) ||
+        (await musicbrainzGetArtistNameByMbid(resolvedMbid));
 
       if (artistName) {
         try {
