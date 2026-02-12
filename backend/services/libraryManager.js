@@ -63,7 +63,7 @@ export class LibraryManager {
       return this.mapLidarrArtist(lidarrArtist);
     } catch (error) {
       console.error(
-        `[LibraryManager] Failed to add artist to Lidarr: ${error.message}`
+        `[LibraryManager] Failed to add artist to Lidarr: ${error.message}`,
       );
       return { error: error.message };
     }
@@ -91,7 +91,7 @@ export class LibraryManager {
     } catch (error) {
       console.error(
         `Failed to fetch albums for artist ${mbid}:`,
-        error.message
+        error.message,
       );
     }
   }
@@ -102,7 +102,7 @@ export class LibraryManager {
         `/release-group/${releaseGroupMbid}`,
         {
           inc: "releases",
-        }
+        },
       );
 
       if (rgData.releases && rgData.releases.length > 0) {
@@ -124,14 +124,14 @@ export class LibraryManager {
                       albumId,
                       recording.id,
                       recording.title,
-                      track.position || 0
+                      track.position || 0,
                     );
                     tracksAdded++;
                   } catch (err) {
                     if (!err.message.includes("already exists")) {
                       console.error(
                         `Failed to add track ${recording.title}:`,
-                        err.message
+                        err.message,
                       );
                     }
                   }
@@ -148,7 +148,7 @@ export class LibraryManager {
     } catch (error) {
       console.error(
         `Failed to fetch tracks for album ${releaseGroupMbid}:`,
-        error.message
+        error.message,
       );
     }
   }
@@ -210,7 +210,7 @@ export class LibraryManager {
           console.warn(
             "[LibraryManager] Lidarr unavailable:",
             msg,
-            "- using cached artists (if any). Retrying every 60s."
+            "- using cached artists (if any). Retrying every 60s.",
           );
         }
         return _cachedArtists;
@@ -222,6 +222,10 @@ export class LibraryManager {
 
   mapLidarrArtist(lidarrArtist) {
     const artistPath = lidarrArtist.path ?? null;
+    const monitorOption =
+      lidarrArtist.monitor || lidarrArtist.addOptions?.monitor || "none";
+    const normalizedMonitorOption =
+      monitorOption === "existing" ? "all" : monitorOption;
     return {
       id: lidarrArtist.id?.toString() || lidarrArtist.foreignArtistId,
       mbid: lidarrArtist.foreignArtistId,
@@ -230,12 +234,10 @@ export class LibraryManager {
       path: artistPath,
       addedAt: lidarrArtist.added || new Date().toISOString(),
       monitored: lidarrArtist.monitored || false,
-      monitorOption:
-        lidarrArtist.monitor || lidarrArtist.addOptions?.monitor || "none",
+      monitorOption: normalizedMonitorOption,
       monitorNewItems: lidarrArtist.monitorNewItems || "none",
       addOptions: {
-        monitor:
-          lidarrArtist.monitor || lidarrArtist.addOptions?.monitor || "none",
+        monitor: normalizedMonitorOption,
       },
       quality: lidarrArtist.qualityProfile?.name || "standard",
       albumFolders: true,
@@ -261,19 +263,26 @@ export class LibraryManager {
       ) {
         const monitorOption =
           updates.monitorOption || lidarrArtist.monitor || "none";
+        const normalizedMonitorOption =
+          monitorOption === "existing" ? "all" : monitorOption;
         await lidarr.updateArtistMonitoring(lidarrArtist.id, monitorOption);
         console.log(
-          `[LibraryManager] Updated Lidarr monitoring for "${lidarrArtist.artistName}" to "${monitorOption}"`
+          `[LibraryManager] Updated Lidarr monitoring for "${lidarrArtist.artistName}" to "${monitorOption}"`,
         );
         const updated = await lidarr.getArtist(lidarrArtist.id);
         const mapped = this.mapLidarrArtist(updated);
+        mapped.monitorOption = normalizedMonitorOption;
+        mapped.addOptions = {
+          ...(mapped.addOptions || {}),
+          monitor: normalizedMonitorOption,
+        };
         if (mapped.monitored && mapped.monitorOption !== "none") {
           import("./monitoringService.js")
             .then(({ monitoringService }) => {
               monitoringService.processArtistMonitoring(mapped).catch((err) => {
                 console.error(
                   `[LibraryManager] Error triggering monitoring for ${mapped.artistName}:`,
-                  err.message
+                  err.message,
                 );
               });
             })
@@ -284,7 +293,7 @@ export class LibraryManager {
       return this.mapLidarrArtist(lidarrArtist);
     } catch (error) {
       console.error(
-        `[LibraryManager] Failed to update artist in Lidarr: ${error.message}`
+        `[LibraryManager] Failed to update artist in Lidarr: ${error.message}`,
       );
       return { error: error.message };
     }
@@ -301,12 +310,12 @@ export class LibraryManager {
         return { success: false, error: "Artist not found in Lidarr" };
       await lidarr.deleteArtist(lidarrArtist.id, deleteFiles);
       console.log(
-        `[LibraryManager] Deleted artist "${lidarrArtist.artistName}" from Lidarr`
+        `[LibraryManager] Deleted artist "${lidarrArtist.artistName}" from Lidarr`,
       );
       return { success: true };
     } catch (error) {
       console.error(
-        `[LibraryManager] Failed to delete artist from Lidarr: ${error.message}`
+        `[LibraryManager] Failed to delete artist from Lidarr: ${error.message}`,
       );
       return { success: false, error: error.message };
     }
@@ -339,7 +348,7 @@ export class LibraryManager {
           triggerSearch:
             options.triggerSearch === true ||
             (options.triggerSearch === undefined && searchOnAdd),
-        }
+        },
       );
       const allAlbums = await lidarr.request("/album");
       const artistAlbumIds = Array.isArray(allAlbums)
@@ -347,7 +356,7 @@ export class LibraryManager {
             .filter(
               (a) =>
                 a.artistId === parseInt(artistId) &&
-                a.foreignAlbumId !== releaseGroupMbid
+                a.foreignAlbumId !== releaseGroupMbid,
             )
             .map((a) => a.id)
         : [];
@@ -357,7 +366,7 @@ export class LibraryManager {
         } catch (err) {
           console.error(
             `[LibraryManager] Failed to unmonitor album ${albumId}:`,
-            err.message
+            err.message,
           );
         }
       }
@@ -365,7 +374,7 @@ export class LibraryManager {
       return this.mapLidarrAlbum(lidarrAlbum, updatedArtist);
     } catch (error) {
       console.error(
-        `[LibraryManager] Failed to add album to Lidarr: ${error.message}`
+        `[LibraryManager] Failed to add album to Lidarr: ${error.message}`,
       );
       return { error: error.message };
     }
@@ -388,7 +397,7 @@ export class LibraryManager {
       return artistAlbums.map((a) => this.mapLidarrAlbum(a, lidarrArtist));
     } catch (error) {
       console.error(
-        `[LibraryManager] Failed to fetch albums from Lidarr: ${error.message}`
+        `[LibraryManager] Failed to fetch albums from Lidarr: ${error.message}`,
       );
       return [];
     }
@@ -493,7 +502,7 @@ export class LibraryManager {
           continue;
         }
         console.error(
-          `[LibraryManager] Failed to update album in Lidarr: ${error.message}`
+          `[LibraryManager] Failed to update album in Lidarr: ${error.message}`,
         );
         return { error: error.message };
       }
@@ -511,7 +520,7 @@ export class LibraryManager {
       return { success: true };
     } catch (error) {
       console.error(
-        `[LibraryManager] Failed to delete album from Lidarr: ${error.message}`
+        `[LibraryManager] Failed to delete album from Lidarr: ${error.message}`,
       );
       return { success: false, error: error.message };
     }
@@ -587,7 +596,7 @@ export class LibraryManager {
         lidarrAlbum.tracks.length > 0
       ) {
         result = lidarrAlbum.tracks.map((t, index) =>
-          this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete)
+          this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete),
         );
       } else if (
         lidarrAlbum.albumReleases &&
@@ -600,7 +609,7 @@ export class LibraryManager {
             release.tracks.length > 0
           ) {
             result = release.tracks.map((t, index) =>
-              this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete)
+              this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete),
             );
             break;
           }
@@ -618,7 +627,7 @@ export class LibraryManager {
         }
         if (allTracks.length > 0) {
           result = allTracks.map((t, index) =>
-            this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete)
+            this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete),
           );
         }
       }
@@ -627,7 +636,7 @@ export class LibraryManager {
         const lidarrTracks = await lidarr.getTracksByAlbumId(albumId);
         if (lidarrTracks && lidarrTracks.length > 0) {
           result = lidarrTracks.map((t, index) =>
-            this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete)
+            this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete),
           );
         }
       }
@@ -646,7 +655,7 @@ export class LibraryManager {
         return [];
       }
       console.error(
-        `[LibraryManager] Failed to fetch tracks from Lidarr: ${error.message}`
+        `[LibraryManager] Failed to fetch tracks from Lidarr: ${error.message}`,
       );
       return [];
     }
@@ -656,7 +665,7 @@ export class LibraryManager {
     lidarrTrack,
     lidarrAlbum,
     trackNumber = 0,
-    albumIsComplete = false
+    albumIsComplete = false,
   ) {
     const path = lidarrTrack.path || null;
     const size = lidarrTrack.sizeOnDisk || lidarrTrack.size || 0;
