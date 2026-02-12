@@ -5,6 +5,7 @@ import {
   resolveRequestUser,
   getAuthUser,
   getAuthPassword,
+  isProxyAuthEnabled,
 } from "../middleware/auth.js";
 import { getDiscoveryCache } from "../services/discoveryService.js";
 import { getCachedArtistCount } from "../services/libraryManager.js";
@@ -37,7 +38,8 @@ router.get("/", noCache, async (req, res) => {
     const users = userOps.getAllUsers();
     const legacyPasswords = getAuthPassword();
     const authRequired =
-      onboardingDone && (users.length > 0 || legacyPasswords.length > 0);
+      onboardingDone &&
+      (isProxyAuthEnabled() || users.length > 0 || legacyPasswords.length > 0);
     const authUser = getAuthUser();
     const lidarrConfigured = lidarrClient.isConfigured();
     const discoveryCache = getDiscoveryCache();
