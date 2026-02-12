@@ -88,7 +88,7 @@ export class LidarrClient {
     endpoint,
     method = "GET",
     data = null,
-    skipConfigUpdate = false
+    skipConfigUpdate = false,
   ) {
     if (!skipConfigUpdate) {
       this.updateConfig();
@@ -102,7 +102,7 @@ export class LidarrClient {
     if (this._circuitOpen) {
       if (now - this._circuitOpenedAt < CIRCUIT_COOLDOWN_MS) {
         throw new Error(
-          "Lidarr unavailable (circuit open). Will retry after cooldown."
+          "Lidarr unavailable (circuit open). Will retry after cooldown.",
         );
       }
       this._circuitOpen = false;
@@ -242,12 +242,12 @@ export class LidarrClient {
           throw new Error(
             `Lidarr API returned 400 Bad Request: ${errorMsg}${
               errorDetails ? `\n\nFull Response: ${errorDetails}` : ""
-            }`
+            }`,
           );
         }
         if (status === 401) {
           throw new Error(
-            `Lidarr API authentication failed. Check your API key.`
+            `Lidarr API authentication failed. Check your API key.`,
           );
         }
         if (status === 404) {
@@ -256,7 +256,7 @@ export class LidarrClient {
             return null;
           }
           throw new Error(
-            `Lidarr endpoint not found: ${endpoint}. Check if Lidarr is running and the API version is correct.`
+            `Lidarr endpoint not found: ${endpoint}. Check if Lidarr is running and the API version is correct.`,
           );
         }
         throw new Error(
@@ -265,13 +265,13 @@ export class LidarrClient {
             responseData?.error ||
             statusText ||
             "Unknown error"
-          }`
+          }`,
         );
       } else if (error.request) {
         const msg = error.message != null ? String(error.message) : String(raw);
         console.error("Lidarr API request failed - no response:", msg);
         throw new Error(
-          `Cannot connect to Lidarr at ${this.config.url}. Check if Lidarr is running and the URL is correct.`
+          `Cannot connect to Lidarr at ${this.config.url}. Check if Lidarr is running and the URL is correct.`,
         );
       } else {
         const msg = error.message != null ? String(error.message) : String(raw);
@@ -301,7 +301,7 @@ export class LidarrClient {
             "/rootFolder",
             "GET",
             null,
-            skipConfigUpdate
+            skipConfigUpdate,
           );
           return {
             connected: true,
@@ -322,7 +322,7 @@ export class LidarrClient {
                 "/system/status",
                 "GET",
                 null,
-                skipConfigUpdate
+                skipConfigUpdate,
               );
               return {
                 connected: true,
@@ -390,8 +390,10 @@ export class LidarrClient {
 
     const albumOnly = options.albumOnly === true;
     const monitorOption = options.monitorOption || options.monitor || "none";
+    const lidarrMonitorOption =
+      monitorOption === "all" ? "existing" : monitorOption;
     const artistMonitored = albumOnly || monitorOption !== "none";
-    const effectiveMonitor = albumOnly ? "missing" : monitorOption;
+    const effectiveMonitor = albumOnly ? "missing" : lidarrMonitorOption;
 
     const defaultQualityProfileId =
       settings.integrations?.lidarr?.qualityProfileId;
@@ -453,14 +455,16 @@ export class LidarrClient {
 
   async updateArtistMonitoring(artistId, monitorOption) {
     const artist = await this.getArtist(artistId);
+    const lidarrMonitorOption =
+      monitorOption === "all" ? "existing" : monitorOption;
 
     const updated = {
       ...artist,
       monitored: monitorOption !== "none",
-      monitor: monitorOption,
+      monitor: lidarrMonitorOption,
       addOptions: {
         ...(artist.addOptions || {}),
-        monitor: monitorOption,
+        monitor: lidarrMonitorOption,
       },
     };
 
@@ -558,7 +562,7 @@ export class LidarrClient {
     page = 1,
     pageSize = 20,
     sortKey = "date",
-    sortDirection = "descending"
+    sortDirection = "descending",
   ) {
     const params = new URLSearchParams({
       page: page.toString(),
@@ -610,7 +614,7 @@ export class LidarrClient {
       `/qualityprofile/${profileId}`,
       "GET",
       null,
-      skipConfigUpdate
+      skipConfigUpdate,
     );
   }
 
@@ -619,7 +623,7 @@ export class LidarrClient {
       "/qualityprofile",
       "POST",
       profileData,
-      skipConfigUpdate
+      skipConfigUpdate,
     );
   }
 
@@ -648,7 +652,7 @@ export class LidarrClient {
       `/qualitydefinition/${id}`,
       "PUT",
       data,
-      skipConfigUpdate
+      skipConfigUpdate,
     );
   }
 }

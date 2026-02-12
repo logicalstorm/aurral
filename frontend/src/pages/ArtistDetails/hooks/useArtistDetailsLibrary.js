@@ -212,6 +212,20 @@ export function useArtistDetailsLibrary({
     setRequestingAlbum(albumId);
     let addedOptimistic = false;
     try {
+      const resolveLibraryArtist = async () => {
+        if (!artist) return null;
+        const lookup = await lookupArtistInLibrary(artist.id);
+        if (lookup.exists && lookup.artist) {
+          const fullArtist = await getLibraryArtist(
+            lookup.artist.mbid || lookup.artist.foreignArtistId,
+          );
+          setLibraryArtist(fullArtist);
+          setExistsInLibrary(true);
+          return fullArtist;
+        }
+        return libraryArtist;
+      };
+
       if (!existsInLibrary || !libraryArtist?.id) {
         if (!artist) {
           showError("Artist information not available");
@@ -238,13 +252,7 @@ export function useArtistDetailsLibrary({
         }
       }
 
-      const currentLibraryArtist =
-        libraryArtist ||
-        (await lookupArtistInLibrary(artist.id).then((l) =>
-          l.artist
-            ? getLibraryArtist(l.artist.mbid || l.artist.foreignArtistId)
-            : null,
-        ));
+      const currentLibraryArtist = await resolveLibraryArtist();
       if (!currentLibraryArtist?.id) {
         throw new Error("Failed to get library artist");
       }
