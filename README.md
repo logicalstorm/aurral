@@ -37,6 +37,8 @@ services:
       - "3001:3001"
     environment:
       - DOWNLOAD_FOLDER=/your/downloads/folder
+      - PUID=1000
+      - PGID=1000
     volumes:
       - /your/downloads/folder:/app/downloads
       - ./data:/app/backend/data
@@ -49,6 +51,12 @@ docker compose up -d
 ```
 
 3. Open **http://localhost:3001**, create your admin account, and complete **Onboarding**.
+
+---
+
+## File permissions (PUID/PGID)
+
+Set `PUID` and `PGID` to match the owner of your host folders if you use bind mounts. The container will chown `/app/backend/data` and then run Aurral as that UID/GID.
 
 ---
 

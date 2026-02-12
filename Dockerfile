@@ -19,7 +19,8 @@ ENV APP_VERSION=$APP_VERSION
 
 WORKDIR /app
 
-RUN addgroup -g 1001 -S nodejs && \
+RUN apk add --no-cache su-exec && \
+    addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001 && \
     mkdir -p /app/backend/data && \
     chown -R nodejs:nodejs /app
@@ -34,11 +35,12 @@ RUN cd backend && npm rebuild --build-from-source
 COPY backend/ ./backend/
 COPY server.js loadEnv.js ./
 COPY --from=builder /app/frontend/dist ./frontend/dist
+COPY backend/docker-entrypoint.sh /usr/local/bin/
 
-RUN chown -R nodejs:nodejs /app
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh && \
+    chown -R nodejs:nodejs /app
 
 EXPOSE 3001
 
-USER nodejs
-
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "server.js"]
