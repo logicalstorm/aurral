@@ -2,6 +2,8 @@ import basicAuth from "express-basic-auth";
 import bcrypt from "bcrypt";
 import { dbOps, userOps } from "../config/db-helpers.js";
 
+const DEFAULT_PROXY_HEADER = "x-forwarded-user";
+
 export const getAuthUser = () => {
   const settings = dbOps.getSettings();
   return (
@@ -17,6 +19,99 @@ export const getAuthPassword = () => {
     ? process.env.AUTH_PASSWORD.split(",").map((p) => p.trim())
     : [];
 };
+
+export const isProxyAuthEnabled = () => {
+  if (process.env.AUTH_PROXY_ENABLED === "true") return true;
+  return !!process.env.AUTH_PROXY_HEADER;
+};
+
+function parseCsv(value) {
+  if (!value) return [];
+  return String(value)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function getProxyHeaderName() {
+  const header = process.env.AUTH_PROXY_HEADER || DEFAULT_PROXY_HEADER;
+  return String(header).trim().toLowerCase();
+}
+
+function getHeaderValue(req, headerName) {
+  const value = req.headers[headerName];
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
+
+function isTrustedProxy(req) {
+  const allowed = parseCsv(process.env.AUTH_PROXY_TRUSTED_IPS);
+  if (allowed.length === 0) return true;
+  const ips = Array.isArray(req.ips) && req.ips.length > 0 ? req.ips : [req.ip];
+  return ips.some((ip) => allowed.includes(ip));
+}
+
+function buildPermissions(role, permissions) {
+  if (role === "admin") {
+    return {
+      accessSettings: true,
+      accessFlow: true,
+      addArtist: true,
+      addAlbum: true,
+      changeMonitoring: true,
+      deleteArtist: true,
+      deleteAlbum: true,
+    };
+  }
+  return {
+    ...userOps.getDefaultPermissions(),
+    ...(permissions || {}),
+    accessSettings: true,
+    accessFlow: false,
+  };
+}
+
+function resolveProxyUser(req) {
+  if (!isProxyAuthEnabled()) return null;
+  if (!isTrustedProxy(req)) return null;
+  const headerName = getProxyHeaderName();
+  const rawUsername = getHeaderValue(req, headerName);
+  const username = String(rawUsername || "").trim();
+  if (!username) return null;
+  const existing = userOps.getUserByUsername(username);
+  if (existing) {
+    return {
+      id: existing.id,
+      username: existing.username,
+      role: existing.role,
+      permissions: buildPermissions(existing.role, existing.permissions),
+    };
+  }
+  const adminUsers = parseCsv(process.env.AUTH_PROXY_ADMIN_USERS).map((u) =>
+    u.toLowerCase()
+  );
+  const headerRoleName = process.env.AUTH_PROXY_ROLE_HEADER
+    ? String(process.env.AUTH_PROXY_ROLE_HEADER).trim().toLowerCase()
+    : "";
+  const headerRole = headerRoleName
+    ? String(getHeaderValue(req, headerRoleName) || "").trim().toLowerCase()
+    : "";
+  const defaultRole =
+    (process.env.AUTH_PROXY_DEFAULT_ROLE || "user").trim().toLowerCase() ===
+    "admin"
+      ? "admin"
+      : "user";
+  const role =
+    headerRole === "admin" || adminUsers.includes(username.toLowerCase())
+      ? "admin"
+      : defaultRole;
+  return {
+    id: -1,
+    username,
+    role,
+    permissions: buildPermissions(role),
+  };
+}
 
 function migrateLegacyAdmin() {
   const users = userOps.getAllUsers();
@@ -44,23 +139,7 @@ function resolveUser(username, password) {
   if (!u || !password) return null;
   const ok = bcrypt.compareSync(password, u.passwordHash);
   if (!ok) return null;
-  const perms =
-    u.role === "admin"
-      ? {
-          addArtist: true,
-          addAlbum: true,
-          changeMonitoring: true,
-          deleteArtist: true,
-          deleteAlbum: true,
-        }
-      : { ...userOps.getDefaultPermissions(), ...(u.permissions || {}) };
-  if (u.role === "admin") {
-    perms.accessSettings = true;
-    perms.accessFlow = true;
-  } else {
-    perms.accessSettings = true;
-    perms.accessFlow = false;
-  }
+  const perms = buildPermissions(u.role, u.permissions);
   return {
     id: u.id,
     username: u.username,
@@ -95,6 +174,8 @@ function legacyAuth(username, password) {
 }
 
 export function resolveRequestUser(req) {
+  const proxyUser = resolveProxyUser(req);
+  if (proxyUser) return proxyUser;
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Basic ")) return null;
   try {
@@ -124,7 +205,8 @@ export const createAuthMiddleware = () => {
     const users = userOps.getAllUsers();
     const legacyPasswords = getAuthPassword();
     const authRequired =
-      onboardingDone && (users.length > 0 || legacyPasswords.length > 0);
+      onboardingDone &&
+      (isProxyAuthEnabled() || users.length > 0 || legacyPasswords.length > 0);
 
     if (!authRequired) return next();
 
@@ -187,6 +269,7 @@ export const verifyTokenAuth = (req) => {
       return true;
     }
   }
+  if (isProxyAuthEnabled()) return false;
   const passwords = getAuthPassword();
   if (passwords.length === 0) return true;
   return false;

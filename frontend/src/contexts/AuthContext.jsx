@@ -31,6 +31,13 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem("auth_user", authUser);
       }
 
+      if (isRequired && healthData.user) {
+        setUser(healthData.user);
+        setIsAuthenticated(true);
+        setIsLoading(false);
+        return;
+      }
+
       if (!isRequired) {
         setUser(
           healthData.user || {

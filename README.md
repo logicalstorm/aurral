@@ -138,6 +138,27 @@ TRUST_PROXY=true
 
 in your container environment.
 
+### OAuth2 / OIDC via external identity provider
+
+The simplest way to add OAuth2/OIDC is to put Aurral behind an auth-aware reverse proxy (oauth2-proxy, Traefik ForwardAuth, or NGINX auth_request) and forward the authenticated user in a header.
+
+Set these environment variables on the Aurral container:
+
+```
+AUTH_PROXY_ENABLED=true
+AUTH_PROXY_HEADER=X-Forwarded-User
+AUTH_PROXY_TRUSTED_IPS=10.0.0.1,10.0.0.2
+AUTH_PROXY_ADMIN_USERS=alice,bob
+AUTH_PROXY_ROLE_HEADER=X-Forwarded-Role
+AUTH_PROXY_DEFAULT_ROLE=user
+```
+
+Notes:
+- `AUTH_PROXY_HEADER` defaults to `X-Forwarded-User` if omitted.
+- If `AUTH_PROXY_TRUSTED_IPS` is unset, any source can supply the header. Set it for safety.
+- If a proxied username matches a local user, the local role/permissions are used.
+- If no local user exists, role is `user` unless promoted by `AUTH_PROXY_ADMIN_USERS` or `AUTH_PROXY_ROLE_HEADER=admin`.
+
 ### Subpath hosting
 
 To host Aurral under a subpath like `https://example.com/aurral`, set `VITE_BASE_PATH` to the subpath and make sure your reverse proxy forwards that path to the container.
