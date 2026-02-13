@@ -273,7 +273,7 @@ If you are coming from the original Aurral (separate frontend/backend containers
 
 ## Support
 
-- Community + questions: https://discord.gg/muWFBBMn
+- Community + questions: https://discord.gg/cpPYfgVURJ
 - Troubleshooting + help: https://github.com/lklynet/aurral/discussions
 - Bugs + feature requests: https://github.com/lklynet/aurral/issues
 
