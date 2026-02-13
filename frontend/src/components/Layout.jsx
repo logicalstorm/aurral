@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import PropTypes from "prop-types";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Search, Menu, Info } from "lucide-react";
+import { Search, Menu, Info, Github, Heart, Loader2 } from "lucide-react";
 import Sidebar from "./Sidebar";
 import { searchArtists, getTagSuggestions } from "../utils/api";
 
