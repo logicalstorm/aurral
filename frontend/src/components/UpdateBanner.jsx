@@ -27,16 +27,34 @@ const UpdateBanner = ({ currentVersion }) => {
     let active = true;
     const checkForUpdate = async () => {
       try {
-        const endpoint = `https://api.github.com/repos/${repo}/releases/latest`;
+        const isTestChannel = repo === "lklynet/aurral";
+        const endpoint = isTestChannel
+          ? `https://api.github.com/repos/${repo}/releases?per_page=20`
+          : `https://api.github.com/repos/${repo}/releases/latest`;
         const res = await fetch(endpoint);
         if (!res.ok) {
           return;
         }
         const data = await res.json();
-        const latestSha = (data.target_commitish || "").trim();
-        const latestLabel = normalizeVersion(data.tag_name || "");
-        const releaseUrl =
-          data.html_url || `https://github.com/${repo}/releases/latest`;
+        let latestSha = "";
+        let latestLabel = "";
+        let releaseUrl = `https://github.com/${repo}/releases/latest`;
+        if (isTestChannel) {
+          const releases = Array.isArray(data) ? data : [];
+          const testRelease = releases.find((release) =>
+            /-test\.\d+$/.test((release.tag_name || "").replace(/^v/, "")),
+          );
+          if (!testRelease) {
+            return;
+          }
+          latestSha = (testRelease.target_commitish || "").trim();
+          latestLabel = normalizeVersion(testRelease.tag_name || "");
+          releaseUrl = testRelease.html_url || releaseUrl;
+        } else {
+          latestSha = (data.target_commitish || "").trim();
+          latestLabel = normalizeVersion(data.tag_name || "");
+          releaseUrl = data.html_url || releaseUrl;
+        }
         const latestKey = currentIsSha ? latestSha : latestLabel;
         if (!latestKey) {
           return;

@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "test"]
 
 jobs:
   release:
@@ -39,6 +39,7 @@ jobs:
         with:
           script: |
             const tag = "${{ steps.release_info.outputs.release_tag }}";
+            const prerelease = "${{ github.ref_name }}" !== "main";
             try {
               await github.rest.repos.getReleaseByTag({
                 owner: context.repo.owner,
@@ -53,7 +54,7 @@ jobs:
                 repo: context.repo.repo,
                 tag_name: tag,
                 name: tag,
-                prerelease: false,
+                prerelease,
                 generate_release_notes: true
               });
               core.info(`Created release for ${tag}`);
@@ -75,12 +76,21 @@ jobs:
         id: tags
         if: steps.release_info.outputs.release_version != ''
         run: |
-          {
-            echo "tags<<EOF"
-            echo "ghcr.io/${{ github.repository }}:${{ steps.release_info.outputs.release_version }}"
-            echo "ghcr.io/${{ github.repository }}:latest"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            {
+              echo "tags<<EOF"
+              echo "ghcr.io/${{ github.repository }}:${{ steps.release_info.outputs.release_version }}"
+              echo "ghcr.io/${{ github.repository }}:latest"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "tags<<EOF"
+              echo "ghcr.io/${{ github.repository }}:${{ steps.release_info.outputs.release_version }}"
+              echo "ghcr.io/${{ github.repository }}:test"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          fi
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         if: steps.release_info.outputs.release_version != ''
