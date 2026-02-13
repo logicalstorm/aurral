@@ -18,8 +18,8 @@ Self-hosted music discovery and request management for Lidarr — with library-a
 </p>
 
 <p align="center">
-  <img src="frontend/images/recommended.webp" width="445" alt="Recommendations" />
-  <img src="frontend/images/artist.webp" width="445" alt="Artist details" />
+  <img src="frontend/images/recommended.webp" width="440" alt="Recommendations" />
+  <img src="frontend/images/artist.webp" width="440" alt="Artist details" />
 </p>
 
 ---
