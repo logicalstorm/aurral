@@ -4,30 +4,61 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense, lazy } from "react";
+import PropTypes from "prop-types";
 import Layout from "./components/Layout";
-import SearchResultsPage from "./pages/SearchResultsPage";
-import DiscoverPage from "./pages/DiscoverPage";
-import LibraryPage from "./pages/LibraryPage";
-import SettingsPage from "./pages/SettingsPage";
-import ArtistDetailsPage from "./pages/ArtistDetailsPage";
-import RequestsPage from "./pages/RequestsPage";
 import Login from "./pages/Login";
+import Onboarding from "./pages/Onboarding";
 import { checkHealth } from "./utils/api";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ToastProvider } from "./contexts/ToastContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import ReloadPrompt from "./components/ReloadPrompt";
+import UpdateBanner from "./components/UpdateBanner";
+
+const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
+const DiscoverPage = lazy(() => import("./pages/DiscoverPage"));
+const LibraryPage = lazy(() => import("./pages/LibraryPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const ArtistDetailsPage = lazy(() => import("./pages/ArtistDetailsPage"));
+const RequestsPage = lazy(() => import("./pages/RequestsPage"));
+const FlowPage = lazy(() => import("./pages/FlowPage"));
+
+const normalizeBasePath = (baseUrl) => {
+  const raw = (baseUrl || "/").trim();
+  const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
+  if (withLeadingSlash === "/") return "/";
+  return withLeadingSlash.endsWith("/")
+    ? withLeadingSlash.slice(0, -1)
+    : withLeadingSlash;
+};
+
+const PageLoader = () => (
+  <div className="flex items-center justify-center min-h-[200px]">
+    <div
+      className="animate-spin h-8 w-8"
+      style={{ borderBottom: "2px solid #707e61" }}
+    ></div>
+  </div>
+);
 
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, isLoading, authRequired } = useAuth();
+  const { isAuthenticated, isLoading, authRequired, onboardingRequired } =
+    useAuth();
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div
+          className="animate-spin h-12 w-12"
+          style={{ borderBottom: "2px solid #707e61" }}
+        ></div>
       </div>
     );
+  }
+
+  if (onboardingRequired) {
+    return <Onboarding />;
   }
 
   if (authRequired && !isAuthenticated) {
@@ -37,23 +68,42 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
+const PermissionRoute = ({ children, permission }) => {
+  const { hasPermission } = useAuth();
+  if (permission && !hasPermission(permission)) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+};
+
+PermissionRoute.propTypes = {
+  children: PropTypes.node.isRequired,
+  permission: PropTypes.string,
+};
+
+ProtectedRoute.propTypes = {
+  children: PropTypes.node.isRequired,
+};
+
 function AppContent() {
+  const basePath = normalizeBasePath(
+    import.meta.env.VITE_BASE_PATH || import.meta.env.BASE_URL
+  );
   const [isHealthy, setIsHealthy] = useState(null);
-  const [lidarrConfigured, setLidarrConfigured] = useState(false);
-  const [lidarrStatus, setLidarrStatus] = useState("unknown");
-  const { isAuthenticated, authRequired } = useAuth();
+  const [rootFolderConfigured, setRootFolderConfigured] = useState(false);
+  const [appVersion, setAppVersion] = useState(null);
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
     const checkApiHealth = async () => {
       try {
         const health = await checkHealth();
         setIsHealthy(health.status === "ok");
-        setLidarrConfigured(health.lidarrConfigured);
-        setLidarrStatus(health.lidarrStatus || "unknown");
-      } catch (error) {
-        console.error("Health check failed:", error);
+        setRootFolderConfigured(health.rootFolderConfigured || false);
+        setAppVersion(health.appVersion || null);
+      } catch {
         setIsHealthy(false);
-        setLidarrStatus("unknown");
+        setAppVersion(null);
       }
     };
 
@@ -63,14 +113,19 @@ function AppContent() {
   }, [isAuthenticated]);
 
   return (
-        <Router>
+    <Router basename={basePath}>
       <ProtectedRoute>
-        <Layout isHealthy={isHealthy} lidarrConfigured={lidarrConfigured} lidarrStatus={lidarrStatus}>
+        <Layout
+          isHealthy={isHealthy}
+          rootFolderConfigured={rootFolderConfigured}
+          appVersion={appVersion}
+        >
+          <UpdateBanner currentVersion={appVersion} />
           {isHealthy === false && (
-            <div className="mb-6 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-500/20 rounded-xl p-4">
+            <div className="mb-6 bg-red-500/20 border border-red-500/30 p-4">
               <div className="flex items-center">
                 <svg
-                  className="w-5 h-5 text-red-500 mr-3"
+                  className="w-5 h-5 text-red-400 mr-3"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -80,7 +135,7 @@ function AppContent() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <p className="text-red-800 dark:text-red-400 font-medium">
+                <p className="text-red-400 font-medium">
                   Unable to connect to the backend API. Please check your
                   configuration.
                 </p>
@@ -88,11 +143,11 @@ function AppContent() {
             </div>
           )}
 
-          {isHealthy && !lidarrConfigured && (
-            <div className="mb-6 bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-500/20 rounded-xl p-4">
+          {isHealthy && !rootFolderConfigured && (
+            <div className="mb-6 bg-yellow-500/20 p-4">
               <div className="flex items-center">
                 <svg
-                  className="w-5 h-5 text-yellow-500 mr-3"
+                  className="w-5 h-5 text-yellow-400 mr-3"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -102,23 +157,33 @@ function AppContent() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <p className="text-yellow-800 dark:text-yellow-400 font-medium">
-                  Lidarr is not configured. Please add your Lidarr API key in
-                  the backend settings.
+                <p className="text-yellow-400 font-medium">
+                  Root folder is not configured. Please configure your music
+                  library root folder in settings.
                 </p>
               </div>
             </div>
           )}
 
-          <Routes>
-            <Route path="/" element={<DiscoverPage />} />
-            <Route path="/search" element={<SearchResultsPage />} />
-            <Route path="/discover" element={<Navigate to="/" replace />} />
-            <Route path="/library" element={<LibraryPage />} />
-            <Route path="/requests" element={<RequestsPage />} />
-            <Route path="/artist/:mbid" element={<ArtistDetailsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Routes>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/" element={<DiscoverPage />} />
+              <Route path="/search" element={<SearchResultsPage />} />
+              <Route path="/discover" element={<Navigate to="/" replace />} />
+              <Route path="/library" element={<LibraryPage />} />
+              <Route
+                path="/flow"
+                element={
+                  <PermissionRoute permission="accessFlow">
+                    <FlowPage />
+                  </PermissionRoute>
+                }
+              />
+              <Route path="/requests" element={<RequestsPage />} />
+              <Route path="/artist/:mbid" element={<ArtistDetailsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Routes>
+          </Suspense>
         </Layout>
       </ProtectedRoute>
     </Router>

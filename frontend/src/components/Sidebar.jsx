@@ -1,41 +1,123 @@
 import { Link, useLocation } from "react-router-dom";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import PropTypes from "prop-types";
 import {
   Library,
   Settings,
   Sparkles,
-  Moon,
-  Sun,
-  Music,
-  Menu,
-  X,
   History,
-  LogOut,
+  AudioWaveform,
 } from "lucide-react";
-import { useTheme } from "../contexts/ThemeContext";
 import { useAuth } from "../contexts/AuthContext";
+import LogoutButton from "./LogoutButton";
 
-function Sidebar({
-  isHealthy,
-  lidarrConfigured,
-  lidarrStatus,
-  isOpen,
-  onClose,
-}) {
+function Sidebar({ isOpen, onClose, appVersion }) {
   const location = useLocation();
-  const { theme, toggleTheme } = useTheme();
-  const { authRequired, logout } = useAuth();
+  const { authRequired, logout, user } = useAuth();
+  const resolvedVersion =
+    appVersion || import.meta.env.VITE_APP_VERSION || "unknown";
+  const navRef = useRef(null);
+  const activeBubbleRef = useRef(null);
+  const hoverBubbleRef = useRef(null);
+  const [hoveredIndex, setHoveredIndex] = useState(null);
+  const linkRefs = useRef({});
 
-  const isActive = (path) => {
-    if (path === "/discover" && location.pathname === "/") return true;
-    return location.pathname === path;
-  };
+  const isActive = useCallback(
+    (path) => {
+      if (path === "/discover" && location.pathname === "/") return true;
+      return location.pathname === path;
+    },
+    [location.pathname]
+  );
 
-  const navItems = [
-    { path: "/discover", label: "Discover", icon: Sparkles },
-    { path: "/library", label: "Library", icon: Library },
-    { path: "/requests", label: "Requests", icon: History },
-    { path: "/settings", label: "Settings", icon: Settings },
-  ];
+  const navItems = useMemo(() => {
+    const items = [
+      { path: "/discover", label: "Discover", icon: Sparkles },
+      { path: "/library", label: "Library", icon: Library },
+      {
+        path: "/flow",
+        label: "Flow",
+        icon: AudioWaveform,
+        permission: "accessFlow",
+      },
+      { path: "/requests", label: "Requests", icon: History },
+      {
+        path: "/settings",
+        label: "Settings",
+        icon: Settings,
+        permission: "accessSettings",
+      },
+    ];
+    return items.filter(
+      (item) =>
+        !item.permission ||
+        user?.role === "admin" ||
+        !!user?.permissions?.[item.permission]
+    );
+  }, [user]);
+
+  useEffect(() => {
+    const updateBubblePosition = () => {
+      if (!navRef.current || !activeBubbleRef.current) return;
+
+      const activeIndex = navItems.findIndex((item) => isActive(item.path));
+      if (activeIndex === -1) {
+        activeBubbleRef.current.style.opacity = "0";
+        return;
+      }
+
+      const activeLink = linkRefs.current[activeIndex];
+      if (!activeLink) {
+        setTimeout(updateBubblePosition, 50);
+        return;
+      }
+
+      const navRect = navRef.current.getBoundingClientRect();
+      const linkRect = activeLink.getBoundingClientRect();
+
+      activeBubbleRef.current.style.left = `${linkRect.left - navRect.left}px`;
+      activeBubbleRef.current.style.top = `${linkRect.top - navRect.top}px`;
+      activeBubbleRef.current.style.width = `${linkRect.width}px`;
+      activeBubbleRef.current.style.height = `${linkRect.height}px`;
+      activeBubbleRef.current.style.opacity = "1";
+    };
+
+    const timeoutId = setTimeout(updateBubblePosition, 10);
+    window.addEventListener("resize", updateBubblePosition);
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener("resize", updateBubblePosition);
+    };
+  }, [location.pathname, navItems, isOpen, isActive]);
+
+  useEffect(() => {
+    const updateHoverBubble = () => {
+      if (!navRef.current || !hoverBubbleRef.current) return;
+
+      if (hoveredIndex === null) {
+        hoverBubbleRef.current.style.left = "0px";
+        hoverBubbleRef.current.style.top = "0px";
+        hoverBubbleRef.current.style.width = "100%";
+        hoverBubbleRef.current.style.height = "100%";
+        hoverBubbleRef.current.style.opacity = "0.6";
+        return;
+      }
+
+      const hoveredLink = linkRefs.current[hoveredIndex];
+      if (!hoveredLink) return;
+
+      const navRect = navRef.current.getBoundingClientRect();
+      const linkRect = hoveredLink.getBoundingClientRect();
+
+      hoverBubbleRef.current.style.left = `${linkRect.left - navRect.left}px`;
+      hoverBubbleRef.current.style.top = `${linkRect.top - navRect.top}px`;
+      hoverBubbleRef.current.style.width = `${linkRect.width}px`;
+      hoverBubbleRef.current.style.height = `${linkRect.height}px`;
+      hoverBubbleRef.current.style.opacity = "1";
+    };
+
+    updateHoverBubble();
+  }, [hoveredIndex]);
 
   return (
     <>
@@ -47,123 +129,100 @@ function Sidebar({
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col border-r border-gray-200 dark:border-gray-800 transition-transform duration-300 ease-in-out pl-safe pt-safe pb-safe ${
+        className={`fixed inset-y-0 left-0 z-50 w-52 flex flex-col transition-transform duration-300 ease-in-out pl-safe pt-safe pb-safe ${
           isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
+        style={{ backgroundColor: "#18181c" }}
       >
-        <div className="h-16 flex items-center justify-between px-6 border-b border-gray-200 dark:border-b-gray-800">
-          <Link to="/" className="flex items-center space-x-3 group">
+        <div className="h-16 flex items-center justify-center px-4">
+          <Link to="/" className="flex items-center space-x-2 group">
             <img
               src="/arralogo.svg"
               alt="Aurral Logo"
-              className="w-8 h-8 transition-transform group-hover:scale-110"
+              className="w-7 h-7 transition-transform group-hover:scale-110"
+              style={{
+                filter:
+                  "brightness(0) saturate(100%) invert(45%) sepia(8%) saturate(800%) hue-rotate(60deg) brightness(95%) contrast(85%)",
+              }}
             />
-            <span className="text-xl font-bold tracking-tight text-gray-900 dark:text-gray-100 group-hover:text-primary-500 transition-colors">
+            <span
+              className="text-lg font-bold tracking-tight transition-colors"
+              style={{ color: "#fff" }}
+            >
               Aurral
             </span>
           </Link>
-          <button
-            onClick={onClose}
-            className="md:hidden p-2 -mr-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
-            aria-label="Close navigation"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item.path);
+        <div className="flex-1 px-3 py-6 overflow-y-auto flex items-start justify-center">
+          <div
+            ref={navRef}
+            className="relative p-3"
+            style={{ backgroundColor: "#0f0f12" }}
+          >
+            <div
+              ref={activeBubbleRef}
+              className="absolute transition-all duration-300 ease-out z-10 opacity-0"
+              style={{ backgroundColor: "#707e61", opacity: "0.2" }}
+            />
 
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`flex items-center space-x-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 group ${
-                  active
-                    ? "bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-500/20"
-                    : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 border border-transparent"
-                }`}
-              >
-                <Icon
-                  className={`w-5 h-5 transition-transform group-hover:scale-110 ${
-                    active
-                      ? "text-primary-600 dark:text-primary-400"
-                      : "text-gray-500 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-gray-100"
-                  }`}
-                />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
+            <div
+              ref={hoverBubbleRef}
+              className="absolute transition-all duration-200 ease-out z-0"
+              style={{ backgroundColor: "#1a1a1e" }}
+            />
 
-        <div className="p-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
-          <div className="flex flex-col space-y-4">
-            <div className="flex items-center justify-between px-2">
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                System Status
-              </span>
-              <div className="flex items-center space-x-2">
-                <div
-                  className={`w-2 h-2 rounded-full ${
-                    isHealthy === null
-                      ? "bg-gray-400 dark:bg-gray-500"
-                      : isHealthy && lidarrConfigured && lidarrStatus === "connected"
-                        ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"
-                        : isHealthy && lidarrConfigured && lidarrStatus !== "connected"
-                           ? "bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]"
-                        : isHealthy
-                          ? "bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)]"
-                          : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]"
-                  }`}
-                />
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  {isHealthy === null
-                    ? "Checking..."
-                    : isHealthy && lidarrConfigured && lidarrStatus === "connected"
-                      ? "Online"
-                       : isHealthy && lidarrConfigured && lidarrStatus !== "connected"
-                        ? "Lidarr Down"
-                      : isHealthy
-                        ? "Config"
-                        : "Offline"}
-                </span>
-              </div>
-            </div>
-
-            <button
-              onClick={toggleTheme}
-              className="flex items-center justify-center w-full px-4 py-2 space-x-2 text-sm font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors shadow-sm"
+            <nav
+              className="relative flex flex-col space-y-2"
+              onMouseLeave={() => setHoveredIndex(null)}
             >
-              {theme === "dark" ? (
-                <>
-                  <Sun className="w-4 h-4" />
-                  <span>Light Mode</span>
-                </>
-              ) : (
-                <>
-                  <Moon className="w-4 h-4" />
-                  <span>Dark Mode</span>
-                </>
-              )}
-            </button>
-            
-            {authRequired && (
-              <button
-                onClick={logout}
-                className="flex items-center justify-center w-full px-4 py-2 space-x-2 text-sm font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors shadow-sm"
-              >
-                <LogOut className="w-4 h-4" />
-                <span>Logout</span>
-              </button>
-            )}
+              {navItems.map((item, index) => {
+                const Icon = item.icon;
+                const active = isActive(item.path);
+                const highlighted = active || hoveredIndex === index;
+                const linkColor = highlighted ? "#fff" : "#c1c1c3";
+
+                return (
+                  <Link
+                    key={item.path}
+                    ref={(el) => {
+                      if (el) linkRefs.current[index] = el;
+                    }}
+                    to={item.path}
+                    onMouseEnter={() => setHoveredIndex(index)}
+                    className="relative z-20 flex items-center space-x-3 px-4 py-3.5 font-medium transition-all duration-200 text-base"
+                    style={{ color: linkColor }}
+                  >
+                    <Icon
+                      className="w-5 h-5 transition-transform group-hover:scale-110 flex-shrink-0"
+                      style={{ color: linkColor }}
+                    />
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+        </div>
+
+        <div className="flex flex-col items-center gap-2 p-3 mt-auto border-t" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+          {authRequired && (
+            <LogoutButton onClick={logout} />
+          )}
+          
+          <div className="text-[10px] font-mono opacity-30 select-none" style={{ color: "#c1c1c3" }}>
+            v{resolvedVersion}
           </div>
         </div>
       </aside>
     </>
   );
 }
+
+Sidebar.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  appVersion: PropTypes.string,
+};
 
 export default Sidebar;

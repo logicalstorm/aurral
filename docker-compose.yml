@@ -1,51 +1,12 @@
 services:
-  backend:
-    image: ghcr.io/lklynet/aurral-backend:latest
-    container_name: aurral-backend
+  aurral:
+    build: .
     restart: unless-stopped
+    user: "0:0"
     ports:
       - "3001:3001"
     environment:
-      - PORT=3001
-      - LIDARR_URL=${LIDARR_URL:-http://lidarr:8686}
-      - LIDARR_API_KEY=${LIDARR_API_KEY}
-      - LASTFM_API_KEY=${LASTFM_API_KEY}
-      - CONTACT_EMAIL=${CONTACT_EMAIL:-user@example.com}
-      - DEBUG=${DEBUG:-false}
-      - AUTH_PASSWORD=${AUTH_PASSWORD}
+      - DOWNLOAD_FOLDER=/data/downloads/tmp
     volumes:
-      - ./backend/data:/app/data
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - SETUID
-      - SETGID
-      - CHOWN
-    networks:
-      - aurral-network
-
-  frontend:
-    image: ghcr.io/lklynet/aurral-frontend:latest
-    container_name: aurral-frontend
-    restart: unless-stopped
-    ports:
-      - "3000:80"
-    depends_on:
-      - backend
-    networks:
-      - aurral-network
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - CHOWN
-      - SETUID
-      - SETGID
-      - NET_BIND_SERVICE
-
-networks:
-  aurral-network:
-    driver: bridge
+      - /data/downloads/tmp:/app/downloads
+      - ./data:/app/backend/data

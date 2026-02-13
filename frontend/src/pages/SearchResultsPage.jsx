@@ -1,71 +1,118 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Loader, Music, ExternalLink, CheckCircle, Plus } from "lucide-react";
-import {
-  searchArtists,
-  lookupArtistsInLidarrBatch,
-  getArtistCover,
-  searchArtistsByTag,
-} from "../utils/api";
-import AddArtistModal from "../components/AddArtistModal";
+import { Loader, Music, ArrowLeft } from "lucide-react";
+import { searchArtists, searchArtistsByTag, getDiscovery } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
-import { useToast } from "../contexts/ToastContext";
+
+const PAGE_SIZE = 24;
 
 function SearchResultsPage() {
   const [searchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
   const type = searchParams.get("type");
   const [results, setResults] = useState([]);
+  const [fullList, setFullList] = useState(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
-  const [existingArtists, setExistingArtists] = useState({});
-  const [artistToAdd, setArtistToAdd] = useState(null);
   const [artistImages, setArtistImages] = useState({});
+  const [hasMore, setHasMore] = useState(false);
+  const [searchTotalCount, setSearchTotalCount] = useState(0);
   const navigate = useNavigate();
-  const { showSuccess } = useToast();
+
+  const trimmedQuery = useMemo(() => query.trim(), [query]);
+  const isTagSearch = useMemo(
+    () => type === "tag" || trimmedQuery.startsWith("#"),
+    [type, trimmedQuery],
+  );
+
+  const dedupe = useCallback((artists) => {
+    const seen = new Set();
+    return artists.filter((artist) => {
+      if (!artist.id) return false;
+      if (seen.has(artist.id)) return false;
+      seen.add(artist.id);
+      return true;
+    });
+  }, []);
 
   useEffect(() => {
     const performSearch = async () => {
-      if (!query.trim()) {
+      if (type === "recommended" || type === "trending") {
+        setLoading(true);
+        setError(null);
+        try {
+          const data = await getDiscovery();
+          const list =
+            type === "recommended"
+              ? data.recommendations || []
+              : data.globalTop || [];
+          setFullList(list);
+          setResults(list);
+          setVisibleCount(PAGE_SIZE);
+          setHasMore(list.length > PAGE_SIZE);
+          if (list.length > 0) {
+            const imagesMap = {};
+            list.forEach((artist) => {
+              if (artist.image && artist.id)
+                imagesMap[artist.id] = artist.image;
+            });
+            setArtistImages(imagesMap);
+          }
+        } catch (err) {
+          setError(
+            err.response?.data?.message || "Failed to load. Please try again.",
+          );
+          setFullList(null);
+          setResults([]);
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (!query.trim() && type !== "recommended" && type !== "trending") {
         setResults([]);
+        setFullList(null);
+        setHasMore(false);
         return;
       }
 
       setLoading(true);
       setError(null);
+      setVisibleCount(PAGE_SIZE);
 
       try {
         let artists = [];
-
-        if (type === "tag") {
-          const data = await searchArtistsByTag(query.trim());
+        let totalCount = 0;
+        if (isTagSearch) {
+          const tag = trimmedQuery.startsWith("#")
+            ? trimmedQuery.substring(1)
+            : trimmedQuery;
+          const data = await searchArtistsByTag(tag, PAGE_SIZE, 0);
           artists = data.recommendations || [];
         } else {
-          const data = await searchArtists(query.trim());
+          const data = await searchArtists(trimmedQuery, PAGE_SIZE, 0);
           artists = data.artists || [];
+          totalCount = data?.count ?? 0;
         }
-
-        setResults(artists);
-
-        if (artists.length > 0) {
+        const uniqueArtists = dedupe(artists);
+        setResults(uniqueArtists);
+        setFullList(null);
+        if (!isTagSearch) {
+          setSearchTotalCount(totalCount);
+        }
+        setHasMore(
+          (isTagSearch && uniqueArtists.length >= PAGE_SIZE) ||
+            (!isTagSearch && totalCount > uniqueArtists.length),
+        );
+        if (uniqueArtists.length > 0) {
           const imagesMap = {};
-
-          artists.forEach((artist) => {
-            if (artist.image) {
-              imagesMap[artist.id] = artist.image;
-            }
+          uniqueArtists.forEach((artist) => {
+            if (artist.image && artist.id) imagesMap[artist.id] = artist.image;
           });
           setArtistImages(imagesMap);
-
-          try {
-            const mbids = artists.map((a) => a.id).filter(Boolean);
-            if (mbids.length > 0) {
-              const existingMap = await lookupArtistsInLidarrBatch(mbids);
-              setExistingArtists(existingMap);
-            }
-          } catch (err) {
-            console.error("Failed to batch lookup artists:", err);
-          }
         }
       } catch (err) {
         setError(
@@ -73,36 +120,78 @@ function SearchResultsPage() {
             "Failed to search artists. Please try again.",
         );
         setResults([]);
+        setHasMore(false);
       } finally {
         setLoading(false);
       }
     };
 
     performSearch();
-  }, [query, type]);
+  }, [query, type, dedupe, trimmedQuery, isTagSearch]);
 
-  const handleAddArtistClick = (artist) => {
-    setArtistToAdd(artist);
-  };
+  const loadMore = useCallback(async () => {
+    if (type === "recommended" || type === "trending") {
+      const next = visibleCount + PAGE_SIZE;
+      setVisibleCount((c) =>
+        Math.min(c + PAGE_SIZE, fullList?.length ?? c + PAGE_SIZE),
+      );
+      setHasMore((fullList?.length ?? 0) > next);
+      return;
+    }
+    if (isTagSearch) {
+      setLoadingMore(true);
+      try {
+        const tag = trimmedQuery.startsWith("#")
+          ? trimmedQuery.substring(1)
+          : trimmedQuery;
+        const data = await searchArtistsByTag(tag, PAGE_SIZE, results.length);
+        const newArtists = data.recommendations || [];
+        const combined = dedupe([...results, ...newArtists]);
+        setResults(combined);
+        setHasMore(newArtists.length >= PAGE_SIZE);
+        newArtists.forEach((artist) => {
+          if (artist.image && artist.id) {
+            setArtistImages((prev) => ({ ...prev, [artist.id]: artist.image }));
+          }
+        });
+      } finally {
+        setLoadingMore(false);
+      }
+      return;
+    }
+    setLoadingMore(true);
+    try {
+      const offset = results.length;
+      const data = await searchArtists(query.trim(), PAGE_SIZE, offset);
+      const newArtists = data.artists || [];
+      const total = data.count ?? 0;
+      if (newArtists.length === 0) {
+        setHasMore(false);
+      } else {
+        setResults((prev) => dedupe([...prev, ...newArtists]));
+        setSearchTotalCount(total);
+        setHasMore(total > offset + newArtists.length);
+        newArtists.forEach((artist) => {
+          if (artist.image && artist.id) {
+            setArtistImages((prev) => ({ ...prev, [artist.id]: artist.image }));
+          }
+        });
+      }
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [
+    type,
+    fullList,
+    visibleCount,
+    query,
+    results,
+    dedupe,
+    trimmedQuery,
+    isTagSearch,
+  ]);
 
-  const handleAddSuccess = (artist) => {
-    setExistingArtists((prev) => ({
-      ...prev,
-
-      [artist.id]: true,
-    }));
-
-    setArtistToAdd(null);
-
-
-    showSuccess(`Successfully added ${artist.name} to Lidarr!`);
-  };
-
-  const handleModalClose = () => {
-    setArtistToAdd(null);
-  };
-
-  const getArtistType = (type) => {
+  const getArtistType = (artistType) => {
     const types = {
       Person: "Solo Artist",
       Group: "Band",
@@ -111,157 +200,198 @@ function SearchResultsPage() {
       Character: "Character",
       Other: "Other",
     };
-    return types[type] || type;
+    return types[artistType] || artistType;
   };
 
-  const formatLifeSpan = (lifeSpan) => {
-    if (!lifeSpan) return null;
-    const { begin, end, ended } = lifeSpan;
-    if (!begin) return null;
+  const displayedArtists =
+    type === "recommended" || type === "trending"
+      ? results.slice(0, visibleCount)
+      : results;
 
-    const beginYear = begin.split("-")[0];
-    if (ended && end) {
-      const endYear = end.split("-")[0];
-      return `${beginYear} - ${endYear}`;
-    }
-    return `${beginYear} - Present`;
-  };
+  const showContent =
+    !loading && (query || type === "recommended" || type === "trending");
+  const isEmpty = displayedArtists.length === 0;
+  const showBackButton =
+    type === "recommended" ||
+    type === "trending" ||
+    isTagSearch ||
+    !!trimmedQuery;
+  const showLoadMore =
+    hasMore &&
+    (type === "recommended" || type === "trending"
+      ? results.length > PAGE_SIZE
+      : isTagSearch
+        ? results.length >= PAGE_SIZE
+        : results.length >= PAGE_SIZE && searchTotalCount > PAGE_SIZE);
 
   return (
     <div className="animate-fade-in">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-          {type === "tag" ? "Genre Results" : "Search Results"}
+        {showBackButton && (
+          <button
+            onClick={() => navigate(-1)}
+            className="btn btn-secondary mb-6 inline-flex items-center"
+          >
+            <ArrowLeft className="w-5 h-5 mr-2" />
+            Back
+          </button>
+        )}
+        <h1 className="text-2xl font-bold" style={{ color: "#fff" }}>
+          {type === "recommended"
+            ? "Recommended for You"
+            : type === "trending"
+              ? "Global Trending"
+              : isTagSearch
+                ? "Tag Results"
+                : trimmedQuery
+                  ? loading
+                    ? `Showing results for "${trimmedQuery}"`
+                    : `Showing ${results.length} results for "${trimmedQuery}"`
+                  : "Search Results"}
         </h1>
-        {query && (
-          <p className="text-gray-600 dark:text-gray-400">
-            {type === "tag"
-              ? `Top artists for tag "${query}"`
-              : `Showing results for "${query}"`}
+        {type === "recommended" && (
+          <p style={{ color: "#c1c1c3" }}>
+            {results.length} artist{results.length !== 1 ? "s" : ""} we think
+            you&apos;ll like
           </p>
+        )}
+        {type === "trending" && (
+          <p style={{ color: "#c1c1c3" }}>Trending artists right now</p>
+        )}
+        {isTagSearch && trimmedQuery && (
+          <p
+            style={{ color: "#c1c1c3" }}
+          >{`Top artists for tag "${trimmedQuery.startsWith("#") ? trimmedQuery.substring(1) : trimmedQuery}"`}</p>
         )}
       </div>
 
       {error && (
-        <div className="mb-6 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-500/20 rounded-lg p-4">
-          <p className="text-red-800 dark:text-red-400">{error}</p>
+        <div className="mb-6 bg-red-500/20 ">
+          <p className="text-red-400">{error}</p>
         </div>
       )}
 
       {loading && (
         <div className="flex justify-center items-center py-20">
-          <Loader className="w-12 h-12 text-primary-600 animate-spin" />
+          <Loader
+            className="w-12 h-12 animate-spin"
+            style={{ color: "#c1c1c3" }}
+          />
         </div>
       )}
 
-      {!loading && query && (
+      {showContent && (
         <div className="animate-slide-up">
-          {results.length === 0 ? (
+          {isEmpty ? (
             <div className="card text-center py-12">
-              <Music className="w-16 h-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">
+              <Music
+                className="w-16 h-16 mx-auto mb-4"
+                style={{ color: "#c1c1c3" }}
+              />
+              <h3
+                className="text-xl font-semibold mb-2"
+                style={{ color: "#fff" }}
+              >
                 No Results Found
               </h3>
-              <p className="text-gray-500 dark:text-gray-400">
-                {type === "tag"
-                  ? `We couldn't find any top artists for tag "${query}"`
-                  : `We couldn't find any artists matching "${query}"`}
+              <p style={{ color: "#c1c1c3" }}>
+                {type === "recommended" || type === "trending"
+                  ? "Nothing to show here yet."
+                  : isTagSearch
+                    ? `We couldn't find any top artists for tag "${trimmedQuery.startsWith("#") ? trimmedQuery.substring(1) : trimmedQuery}"`
+                    : `We couldn't find any artists matching "${trimmedQuery}"`}
               </p>
             </div>
           ) : (
             <>
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                  Found {results.length} result{results.length !== 1 ? "s" : ""}
-                </h2>
-              </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-                {results.map((artist) => (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+                {displayedArtists.map((artist, index) => (
                   <div
-                    key={artist.id}
+                    key={artist.id || `artist-${index}`}
                     className="group relative flex flex-col w-full min-w-0"
                   >
                     <div
-                      onClick={() => navigate(`/artist/${artist.id}`)}
-                      className="relative aspect-square mb-3 overflow-hidden rounded-xl bg-gray-200 dark:bg-gray-800 cursor-pointer shadow-sm group-hover:shadow-md transition-all"
+                      onClick={() =>
+                        navigate(`/artist/${artist.id}`, {
+                          state: { artistName: artist.name },
+                        })
+                      }
+                      className="relative aspect-square mb-3 overflow-hidden cursor-pointer shadow-sm group-hover:shadow-md transition-all"
+                      style={{ backgroundColor: "#211f27" }}
                     >
-                      {/* Artist Image */}
-                        <ArtistImage
-                          src={artistImages[artist.id]}
-                          mbid={artist.id}
-                          alt={artist.name}
-                          className="h-full w-full group-hover:scale-105 transition-transform duration-300"
-                        />
-
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                          {!existingArtists[artist.id] && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAddArtistClick(artist);
-                              }}
-                              className="p-2 bg-primary-500 text-white rounded-full hover:bg-primary-600 hover:scale-110 transition-all shadow-lg"
-                              title="Add to Lidarr"
-                            >
-                              <Plus className="w-5 h-5" />
-                            </button>
-                          )}
-                          <a
-                            href={`https://musicbrainz.org/artist/${artist.id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="p-2 bg-white/20 backdrop-blur-sm text-white rounded-full hover:bg-white/30 hover:scale-110 transition-all"
-                            title="View on MusicBrainz"
-                          >
-                            <ExternalLink className="w-5 h-5" />
-                          </a>
-                        </div>
-                        
-                        {existingArtists[artist.id] && (
-                          <div className="absolute top-2 right-2 bg-green-500 text-white p-1 rounded-full shadow-md">
-                            <CheckCircle className="w-3 h-3" />
-                          </div>
-                        )}
+                      <ArtistImage
+                        src={
+                          artistImages[artist.id] ||
+                          artist.image ||
+                          artist.imageUrl
+                        }
+                        mbid={artist.id}
+                        artistName={artist.name}
+                        alt={artist.name}
+                        className="h-full w-full group-hover:scale-105 transition-transform duration-300"
+                        showLoading={false}
+                      />
                     </div>
 
                     <div className="flex flex-col min-w-0">
-                        <h3 
-                          onClick={() => navigate(`/artist/${artist.id}`)}
-                          className="font-semibold text-gray-900 dark:text-gray-100 truncate hover:text-primary-500 cursor-pointer"
-                        >
-                          {artist.name}
-                        </h3>
-                        
-                        <div className="flex flex-col min-w-0 text-sm text-gray-500 dark:text-gray-400">
-                          {artist.type && (
-                             <p className="truncate">
-                              {getArtistType(artist.type)}
-                            </p>
-                          )}
-                          
-                          {artist.country && (
-                            <p className="truncate text-xs opacity-80">
-                              {artist.country}
-                            </p>
-                          )}
-                        </div>
+                      <h3
+                        onClick={() =>
+                          navigate(`/artist/${artist.id}`, {
+                            state: { artistName: artist.name },
+                          })
+                        }
+                        className="font-semibold truncate hover:underline cursor-pointer"
+                        style={{ color: "#fff" }}
+                      >
+                        {artist.name}
+                      </h3>
+
+                      <div
+                        className="flex flex-col min-w-0 text-sm"
+                        style={{ color: "#c1c1c3" }}
+                      >
+                        {artist.type && (
+                          <p className="truncate">
+                            {getArtistType(artist.type)}
+                          </p>
+                        )}
+
+                        {artist.country && (
+                          <p className="truncate text-xs opacity-80">
+                            {artist.country}
+                          </p>
+                        )}
                       </div>
+                    </div>
                   </div>
                 ))}
               </div>
+
+              {showLoadMore && (
+                <div className="mt-8 flex justify-center">
+                  <button
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    className="px-6 py-3 font-medium rounded-lg transition-colors disabled:opacity-50"
+                    style={{
+                      backgroundColor: "#43454f",
+                      color: "#fff",
+                    }}
+                  >
+                    {loadingMore ? (
+                      <span className="flex items-center gap-2">
+                        <Loader className="w-5 h-5 animate-spin" />
+                        Loading...
+                      </span>
+                    ) : (
+                      "Load more"
+                    )}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
-      )}
-
-      {artistToAdd && (
-        <AddArtistModal
-          artist={artistToAdd}
-          onClose={handleModalClose}
-          onSuccess={handleAddSuccess}
-        />
       )}
     </div>
   );
