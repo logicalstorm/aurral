@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import PropTypes from "prop-types";
 import { CheckCircle, AlertCircle, X, Info } from "lucide-react";
 
 export function Toast({ toast, onDismiss }) {
@@ -13,29 +14,31 @@ export function Toast({ toast, onDismiss }) {
   }, [id, duration, onDismiss]);
 
   const icons = {
-    success: <CheckCircle className="w-5 h-5 text-green-500" />,
-    error: <AlertCircle className="w-5 h-5 text-red-500" />,
-    info: <Info className="w-5 h-5 text-blue-500" />,
+    success: <CheckCircle className="w-5 h-5 text-green-400" />,
+    error: <AlertCircle className="w-5 h-5 text-red-400" />,
+    info: <Info className="w-5 h-5" style={{ color: "#c1c1c3" }} />,
   };
 
   const styles = {
-    success: "border-green-200 bg-green-50 dark:bg-green-900/80 dark:border-green-900/50",
-    error: "border-red-200 bg-red-50 dark:bg-red-900/80 dark:border-red-900/50",
-    info: "border-blue-200 bg-blue-50 dark:bg-blue-900/80 dark:border-blue-900/50",
+    success: "bg-green-500/20",
+    error: "bg-red-500/20",
+    info: "",
   };
 
   return (
     <div
-      className={`flex items-center w-full max-w-sm p-4 mb-4 text-gray-900 bg-white rounded-lg shadow-lg dark:bg-gray-800 dark:text-gray-300 border ${
+      className={`flex items-center w-full max-w-sm p-4 mb-4 backdrop-blur-sm shadow-lg ${
         styles[type] || styles.info
       } animate-slide-in-right transition-all duration-300`}
+      style={{ backgroundColor: "#211f27", color: "#fff" }}
       role="alert"
     >
       <div className="flex-shrink-0">{icons[type] || icons.info}</div>
       <div className="ml-3 text-sm font-normal">{message}</div>
       <button
         type="button"
-        className="ml-auto -mx-1.5 -my-1.5 bg-transparent text-gray-400 hover:text-gray-900 rounded-lg focus:ring-2 focus:ring-gray-300 p-1.5 hover:bg-gray-100 inline-flex h-8 w-8 dark:text-gray-500 dark:hover:text-white dark:hover:bg-gray-700"
+        className="ml-auto -mx-1.5 -my-1.5 bg-transparent focus:ring-2 focus:ring-gray-600 p-1.5 inline-flex h-8 w-8"
+        style={{ color: "#c1c1c3" }}
         onClick={() => onDismiss(id)}
         aria-label="Close"
       >
@@ -45,6 +48,16 @@ export function Toast({ toast, onDismiss }) {
     </div>
   );
 }
+
+Toast.propTypes = {
+  toast: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    type: PropTypes.oneOf(["success", "error", "info"]).isRequired,
+    message: PropTypes.string.isRequired,
+    duration: PropTypes.number,
+  }).isRequired,
+  onDismiss: PropTypes.func.isRequired,
+};
 
 export function ToastContainer({ toasts, onDismiss }) {
   return (
@@ -57,3 +70,15 @@ export function ToastContainer({ toasts, onDismiss }) {
     </div>
   );
 }
+
+ToastContainer.propTypes = {
+  toasts: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.string.isRequired,
+      type: PropTypes.oneOf(["success", "error", "info"]).isRequired,
+      message: PropTypes.string.isRequired,
+      duration: PropTypes.number,
+    }),
+  ).isRequired,
+  onDismiss: PropTypes.func.isRequired,
+};

@@ -5,13 +5,10 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
-  Trash2,
+  X,
   Music,
-  ExternalLink,
-  ArrowLeft,
-  RefreshCw,
 } from "lucide-react";
-import { getRequests, deleteRequest } from "../utils/api";
+import { getRequests, deleteRequest, getAllDownloadStatus } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
 import { useToast } from "../contexts/ToastContext";
 
@@ -19,77 +16,103 @@ function RequestsPage() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const [downloadStatuses, setDownloadStatuses] = useState({});
   const navigate = useNavigate();
   const { showError } = useToast();
 
-  const fetchRequests = async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
+  const fetchRequests = async () => {
+    setLoading(true);
 
     try {
       const data = await getRequests();
       setRequests(data);
       setError(null);
-    } catch (err) {
+    } catch {
       setError("Failed to load requests history.");
-      console.error(err);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
   useEffect(() => {
     fetchRequests();
+
+    const pollDownloadStatus = async () => {
+      try {
+        const statuses = await getAllDownloadStatus();
+        setDownloadStatuses(statuses);
+      } catch {}
+    };
+
+    pollDownloadStatus();
+    const interval = setInterval(pollDownloadStatus, 15000);
+
+    return () => clearInterval(interval);
   }, []);
 
-  const handleDelete = async (mbid, name) => {
-    if (
-      window.confirm(
-        `Are you sure you want to remove the request for "${name}" from your history?`,
-      )
-    ) {
-      try {
-        await deleteRequest(mbid);
-        setRequests((prev) => prev.filter((r) => r.mbid !== mbid));
-      } catch (err) {
-        showError("Failed to delete request");
-      }
+  const handleStopDownload = async (request) => {
+    if (!request.inQueue || !request.albumId) return;
+    try {
+      await deleteRequest(request.albumId);
+      setRequests((prev) =>
+        prev.filter((r) => String(r.albumId) !== String(request.albumId))
+      );
+    } catch {
+      showError("Failed to stop download");
     }
   };
 
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case "available":
+  const getStatusBadge = (request) => {
+    const artistDownloadStatuses = Object.values(downloadStatuses).filter(
+      (status) => {
         return (
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            Available
-          </span>
+          status &&
+          (status.status === "adding" ||
+            status.status === "searching" ||
+            status.status === "downloading" ||
+            status.status === "moving")
         );
-      case "processing":
-        return (
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-            <Loader className="w-3.5 h-3.5 animate-spin" />
-            Processing
-          </span>
-        );
-      default:
-        return (
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
-            <Clock className="w-3.5 h-3.5" />
-            Requested
-          </span>
-        );
+      }
+    );
+
+    const hasActiveDownloads = artistDownloadStatuses.length > 0;
+
+    if (request.status === "available") {
+      return (
+        <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold uppercase bg-green-500/20 text-green-400 rounded">
+          <CheckCircle2 className="w-3 h-3" />
+          Available
+        </span>
+      );
     }
+
+    if (request.status === "processing" || hasActiveDownloads) {
+      return (
+        <span
+          className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold uppercase rounded"
+          style={{ backgroundColor: "#211f27", color: "#c1c1c3" }}
+        >
+          <Loader className="w-3 h-3 animate-spin" />
+          {hasActiveDownloads ? "Downloading..." : "Processing"}
+        </span>
+      );
+    }
+
+    return (
+      <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold uppercase bg-yellow-500/20 text-yellow-400 rounded">
+        Requested
+      </span>
+    );
   };
 
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-32">
-        <Loader className="w-12 h-12 text-primary-500 animate-spin mb-4" />
-        <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-300">
+        <Loader
+          className="w-12 h-12 animate-spin mb-4"
+          style={{ color: "#c1c1c3" }}
+        />
+        <h2 className="text-xl font-semibold" style={{ color: "#fff" }}>
           Loading your requests...
         </h2>
       </div>
@@ -98,149 +121,194 @@ function RequestsPage() {
 
   return (
     <div className="animate-fade-in pb-12">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate(-1)}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
-          >
-            <ArrowLeft className="w-6 h-6" />
-          </button>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+            <h1
+              className="text-2xl font-bold flex items-center"
+              style={{ color: "#fff" }}
+            >
               Requests
             </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Track your artist requests and their availability
+            <p className="text-sm" style={{ color: "#c1c1c3" }}>
+              Track your album requests and their availability
             </p>
           </div>
         </div>
-
-        <button
-          onClick={() => fetchRequests(true)}
-          disabled={refreshing}
-          className="btn btn-secondary flex items-center gap-2 self-start md:self-auto"
-        >
-          <RefreshCw
-            className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
-          />
-          Refresh Status
-        </button>
       </div>
 
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-500/20 rounded-xl p-4 flex items-center gap-3 mb-8">
-          <AlertCircle className="w-5 h-5 text-red-500" />
-          <p className="text-red-800 dark:text-red-400">{error}</p>
+        <div className="bg-red-500/20 ">
+          <AlertCircle className="w-5 h-5 text-red-400" />
+          <p className="text-red-400">{error}</p>
         </div>
       )}
 
       {requests.length === 0 ? (
         <div className="card text-center py-20">
-          <Music className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">
+          <Music
+            className="w-16 h-16 mx-auto mb-4"
+            style={{ color: "#c1c1c3" }}
+          />
+          <h3 className="text-xl font-semibold mb-2" style={{ color: "#fff" }}>
             No Requests Found
           </h3>
-          <p className="text-gray-500 dark:text-gray-400 mb-6">
-            You haven't requested any artists yet.
+          <p className="mb-6" style={{ color: "#c1c1c3" }}>
+            You haven&apos;t requested any albums yet.
           </p>
           <button onClick={() => navigate("/")} className="btn btn-primary">
             Start Discovering
           </button>
         </div>
       ) : (
-        <div className="grid gap-4">
-          {requests.map((request) => (
-            <div
-              key={request.mbid}
-              className="card group hover:shadow-md transition-all border border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row items-center gap-4 sm:gap-6 min-w-0"
-            >
-              <div
-                className="w-24 h-24 flex-shrink-0 bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden cursor-pointer"
-                onClick={() => navigate(`/artist/${request.mbid}`)}
-              >
-                <ArtistImage
-                  src={request.image}
-                  mbid={request.mbid}
-                  alt={request.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                />
-              </div>
+        <div className="grid gap-2">
+          {requests.map((request) => {
+            const isAlbum = request.type === "album";
+            const displayName = isAlbum ? request.albumName : request.name;
+            const artistName = isAlbum ? request.artistName : null;
+            const artistMbid = isAlbum ? request.artistMbid : request.mbid;
+            const hasValidMbid =
+              artistMbid && artistMbid !== "null" && artistMbid !== "undefined";
 
-              <div className="flex-1 text-center sm:text-left min-w-0">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-1 min-w-0">
-                  <h3
-                    className="text-xl font-bold text-gray-900 dark:text-gray-100 hover:text-primary-500 cursor-pointer truncate"
-                    onClick={() => navigate(`/artist/${request.mbid}`)}
+            return (
+              <div
+                key={request.id || request.mbid}
+                className="card group hover:shadow-md transition-all relative p-3 overflow-hidden"
+              >
+                {request.inQueue && request.albumId && (
+                  <button
+                    onClick={() => handleStopDownload(request)}
+                    className="absolute top-1.5 right-1.5 p-1.5 hover:text-red-400 hover:bg-red-500/20 transition-all z-10 rounded"
+                    style={{ color: "#fff" }}
+                    title="Stop download"
                   >
-                    {request.name}
-                  </h3>
-                  <div className="flex justify-center sm:justify-start">
-                    {getStatusBadge(request.status)}
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center min-w-0">
+                  <div
+                    className={`w-16 h-16 flex-shrink-0 overflow-hidden rounded ${
+                      hasValidMbid
+                        ? "cursor-pointer"
+                        : "cursor-not-allowed opacity-50"
+                    }`}
+                    style={{ backgroundColor: "#211f27" }}
+                    onClick={() => {
+                      if (hasValidMbid) {
+                        navigate(
+                          isAlbum
+                            ? `/artist/${artistMbid}`
+                            : `/artist/${request.mbid}`,
+                          {
+                            state: {
+                              artistName: isAlbum ? artistName : displayName,
+                            },
+                          }
+                        );
+                      }
+                    }}
+                  >
+                    <ArtistImage
+                      src={request.image}
+                      mbid={artistMbid}
+                      artistName={isAlbum ? artistName : displayName}
+                      alt={displayName}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                    />
+                  </div>
+
+                  <div className="flex-1 text-left min-w-0 w-full">
+                    <div className="flex items-center gap-2 mb-0.5 min-w-0">
+                      <h3
+                        className={`text-base font-semibold truncate w-full max-w-full ${
+                          hasValidMbid
+                            ? "hover:underline cursor-pointer"
+                            : "cursor-not-allowed opacity-75"
+                        }`}
+                        style={{ color: "#fff" }}
+                        onClick={() => {
+                          if (hasValidMbid) {
+                            navigate(
+                              isAlbum
+                                ? `/artist/${artistMbid}`
+                                : `/artist/${request.mbid}`,
+                              {
+                                state: {
+                                  artistName: isAlbum
+                                    ? artistName
+                                    : displayName,
+                                },
+                              }
+                            );
+                          }
+                        }}
+                      >
+                        {displayName}
+                      </h3>
+                    </div>
+
+                    <div
+                      className="text-xs flex flex-wrap items-center gap-3 min-w-0"
+                      style={{ color: "#c1c1c3" }}
+                    >
+                      {isAlbum && artistName && (
+                        <span className="flex items-center gap-1 truncate max-w-full">
+                          <Music className="w-3 h-3" />
+                          {artistName}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1 truncate max-w-full">
+                        <Clock className="w-3 h-3" />
+                        {new Date(request.requestedAt).toLocaleDateString(
+                          undefined,
+                          {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          }
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex-shrink-0 sm:ml-auto">
+                    {getStatusBadge(request)}
                   </div>
                 </div>
-
-                <div className="text-sm text-gray-500 dark:text-gray-400 flex flex-col sm:flex-row sm:items-center gap-x-4 gap-y-1 min-w-0">
-                  <span className="flex items-center justify-center sm:justify-start gap-1 truncate">
-                    <Clock className="w-3.5 h-3.5" />
-                    Requested on{" "}
-                    {new Date(request.requestedAt).toLocaleDateString(
-                      undefined,
-                      {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      },
-                    )}
-                  </span>
-                </div>
               </div>
-
-              <div className="flex items-center gap-2 mt-2 sm:mt-0">
-                <button
-                  onClick={() => navigate(`/artist/${request.mbid}`)}
-                  className="p-2.5 text-gray-500 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-all"
-                  title="View Artist"
-                >
-                  <ExternalLink className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={() => handleDelete(request.mbid, request.name)}
-                  className="p-2.5 text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
-                  title="Remove from history"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      <div className="mt-12 p-6 bg-primary-50 dark:bg-primary-900/10 rounded-2xl border border-primary-100 dark:border-primary-500/10">
-        <h4 className="font-bold text-primary-900 dark:text-primary-400 mb-2">
+      <div className="mt-8 p-4" style={{ backgroundColor: "#211f27" }}>
+        <h4
+          className="font-bold mb-2 text-sm flex items-center"
+          style={{ color: "#fff" }}
+        >
           Request Status Guide
         </h4>
-        <div className="grid sm:grid-cols-3 gap-4 text-sm">
-          <div className="flex gap-2 text-gray-600 dark:text-gray-400">
-            <div className="w-2 h-2 rounded-full bg-yellow-500 mt-1.5 shrink-0"></div>
+        <div className="grid sm:grid-cols-3 gap-3 text-xs">
+          <div className="flex gap-2" style={{ color: "#c1c1c3" }}>
+            <div className="w-2 h-2 bg-yellow-500 mt-1.5 shrink-0"></div>
             <p>
-              <strong>Requested:</strong> Artist has been added to Lidarr and is
-              awaiting monitoring/search.
+              <strong>Requested:</strong> Album is in queue or has been
+              requested but not yet imported.
             </p>
           </div>
-          <div className="flex gap-2 text-gray-600 dark:text-gray-400">
-            <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0"></div>
+          <div className="flex gap-2" style={{ color: "#c1c1c3" }}>
+            <div className="w-2 h-2 bg-gray-600 mt-1.5 shrink-0"></div>
             <p>
-              <strong>Processing:</strong> Lidarr has found the artist but
-              content is still being downloaded.
+              <strong>Processing:</strong> Album is downloading, importing, or
+              import failed. Check Lidarr for details.
             </p>
           </div>
-          <div className="flex gap-2 text-gray-600 dark:text-gray-400">
-            <div className="w-2 h-2 rounded-full bg-green-500 mt-1.5 shrink-0"></div>
+          <div className="flex gap-2" style={{ color: "#c1c1c3" }}>
+            <div className="w-2 h-2 bg-green-500 mt-1.5 shrink-0"></div>
             <p>
-              <strong>Available:</strong> Content is available on disk and ready
-              to play.
+              <strong>Available:</strong> Album has been successfully imported
+              and is available on disk.
             </p>
           </div>
         </div>

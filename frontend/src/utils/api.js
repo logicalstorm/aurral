@@ -1,6 +1,24 @@
 import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
+const normalizeBasePath = (baseUrl) => {
+  const raw = (baseUrl || "/").trim();
+  const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
+  if (withLeadingSlash === "/") return "/";
+  return withLeadingSlash.endsWith("/")
+    ? withLeadingSlash.slice(0, -1)
+    : withLeadingSlash;
+};
+
+const getDefaultApiBaseUrl = () => {
+  if (import.meta.env.DEV) return "/api";
+  const basePath = normalizeBasePath(
+    import.meta.env.VITE_BASE_PATH || import.meta.env.BASE_URL,
+  );
+  if (basePath === "/") return "/api";
+  return `${basePath}/api`;
+};
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -30,9 +48,6 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    const message =
-      error.response?.data?.message || error.message || "An error occurred";
-    console.error("API Error:", message);
     return Promise.reject(error);
   },
 );
@@ -42,25 +57,75 @@ export const checkHealth = async () => {
   return response.data;
 };
 
+export const completeOnboarding = async (payload) => {
+  const response = await api.post("/onboarding/complete", payload);
+  return response.data;
+};
+
+export const testLidarrOnboarding = async (url, apiKey) => {
+  const params = new URLSearchParams();
+  if (url) params.append("url", url.replace(/\/+$/, ""));
+  if (apiKey) params.append("apiKey", apiKey);
+  const response = await api.get(
+    `/onboarding/lidarr/test${params.toString() ? `?${params.toString()}` : ""}`,
+  );
+  return response.data;
+};
+
+export const testNavidromeOnboarding = async (url, username, password) => {
+  const response = await api.post("/onboarding/navidrome/test", {
+    url: url?.replace(/\/+$/, ""),
+    username,
+    password,
+  });
+  return response.data;
+};
+
 export const getAuthConfig = async () => {
   const response = await api.get("/auth/config");
   return response.data;
 };
 
-export const searchArtists = async (query, limit = 20, offset = 0) => {
+export const searchArtists = async (query, limit = 24, offset = 0) => {
   const response = await api.get("/search/artists", {
     params: { query, limit, offset },
   });
   return response.data;
 };
 
-export const getArtistDetails = async (mbid) => {
-  const response = await api.get(`/artists/${mbid}`);
+export const getArtistDetails = async (mbid, artistName) => {
+  const response = await api.get(`/artists/${mbid}`, {
+    params: artistName ? { artistName } : {},
+  });
   return response.data;
 };
 
-export const getArtistCover = async (mbid) => {
-  const response = await api.get(`/artists/${mbid}/cover`);
+export const getReleaseGroupTracks = async (mbid, deezerAlbumId = null) => {
+  const params = {};
+  if (deezerAlbumId) params.deezerAlbumId = deezerAlbumId;
+  const response = await api.get(`/artists/release-group/${mbid}/tracks`, {
+    params,
+  });
+  return response.data;
+};
+
+export const getArtistCover = async (mbid, artistName, refresh = false) => {
+  const params = {};
+  if (artistName && typeof artistName === "string" && artistName.trim()) {
+    params.artistName = artistName.trim();
+  }
+  if (refresh) {
+    params.refresh = true;
+  }
+  const response = await api.get(`/artists/${mbid}/cover`, {
+    params,
+    timeout: 4000,
+  });
+  return response.data;
+};
+
+export const getReleaseGroupCover = async (mbid) => {
+  const response = await api.get(`/artists/release-group/${mbid}/cover`);
   return response.data;
 };
 
@@ -71,67 +136,174 @@ export const getSimilarArtistsForArtist = async (mbid, limit = 20) => {
   return response.data;
 };
 
-export const getLidarrArtists = async () => {
-  const response = await api.get("/lidarr/artists");
+export const getArtistPreview = async (mbid, artistName) => {
+  const response = await api.get(`/artists/${mbid}/preview`, {
+    params: artistName ? { artistName } : {},
+  });
   return response.data;
 };
 
-export const getLidarrArtist = async (id) => {
-  const response = await api.get(`/lidarr/artists/${id}`);
+export const getArtistOverrides = async (mbid) => {
+  const response = await api.get(`/artists/${mbid}/overrides`);
   return response.data;
 };
 
-export const lookupArtistInLidarr = async (mbid) => {
-  const response = await api.get(`/lidarr/lookup/${mbid}`);
+export const updateArtistOverrides = async (
+  mbid,
+  { musicbrainzId = null, deezerArtistId = null } = {},
+) => {
+  const response = await api.put(`/artists/${mbid}/overrides`, {
+    musicbrainzId,
+    deezerArtistId,
+  });
   return response.data;
 };
 
-export const lookupArtistsInLidarrBatch = async (mbids) => {
-  const response = await api.post("/lidarr/lookup/batch", { mbids });
+export const getStreamUrl = (songId) => {
+  const base = import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
+  const password = localStorage.getItem("auth_password");
+  const username = localStorage.getItem("auth_user") || "admin";
+  let url = `${base}/library/stream/${encodeURIComponent(songId)}`;
+  if (password) {
+    const token = btoa(`${username}:${password}`);
+    url += `?token=${encodeURIComponent(token)}`;
+  }
+  return url;
+};
+
+export const getLibraryArtists = async () => {
+  const response = await api.get("/library/artists");
   return response.data;
 };
 
-export const addArtistToLidarr = async (artistData) => {
-  const response = await api.post("/lidarr/artists", artistData);
-  return response.data;
-};
-
-export const deleteArtistFromLidarr = async (id, deleteFiles = false) => {
-  const response = await api.delete(`/lidarr/artists/${id}`, {
+export const clearLibrary = async (deleteFiles = false) => {
+  const response = await api.delete("/library/clear", {
     params: { deleteFiles },
   });
   return response.data;
 };
 
-export const getLidarrRootFolders = async () => {
-  const response = await api.get("/lidarr/rootfolder");
+export const getLibraryArtist = async (mbid) => {
+  const response = await api.get(`/library/artists/${mbid}`);
+  const artist = response.data;
+  if (artist && !artist.foreignArtistId) {
+    artist.foreignArtistId = artist.mbid;
+  }
+  return artist;
+};
+
+export const lookupArtistInLibrary = async (mbid) => {
+  const response = await api.get(`/library/lookup/${mbid}`);
   return response.data;
 };
 
-export const getLidarrQualityProfiles = async () => {
-  const response = await api.get("/lidarr/qualityprofile");
+export const lookupArtistsInLibraryBatch = async (mbids) => {
+  const response = await api.post("/library/lookup/batch", { mbids });
   return response.data;
 };
 
-export const getLidarrMetadataProfiles = async () => {
-  const response = await api.get("/lidarr/metadataprofile");
+export const addArtistToLibrary = async (artistData) => {
+  const response = await api.post("/library/artists", artistData);
   return response.data;
 };
 
-export const getLidarrAlbums = async (artistId) => {
-  const response = await api.get("/lidarr/albums", {
-    params: { artistId },
+export const deleteArtistFromLibrary = async (mbid, deleteFiles = false) => {
+  const response = await api.delete(`/library/artists/${mbid}`, {
+    params: { deleteFiles },
   });
   return response.data;
 };
 
-export const updateLidarrAlbum = async (id, data) => {
-  const response = await api.put(`/lidarr/albums/${id}`, data);
+export const deleteAlbumFromLibrary = async (id, deleteFiles = false) => {
+  const response = await api.delete(`/library/albums/${id}`, {
+    params: { deleteFiles },
+  });
   return response.data;
 };
 
-export const searchLidarrAlbum = async (albumIds) => {
-  const response = await api.post("/lidarr/command/albumsearch", { albumIds });
+export const getLibraryRootFolders = async () => {
+  const response = await api.get("/library/rootfolder");
+  return response.data;
+};
+
+export const getLibraryQualityProfiles = async () => {
+  const response = await api.get("/library/qualityprofile");
+  return response.data;
+};
+
+export const getLibraryAlbums = async (artistId) => {
+  const response = await api.get("/library/albums", {
+    params: { artistId },
+  });
+  return response.data.map((album) => ({
+    ...album,
+    foreignAlbumId: album.foreignAlbumId || album.mbid,
+  }));
+};
+
+export const addLibraryAlbum = async (
+  artistId,
+  releaseGroupMbid,
+  albumName,
+) => {
+  const response = await api.post("/library/albums", {
+    artistId,
+    releaseGroupMbid,
+    albumName,
+  });
+  return response.data;
+};
+
+export const getLibraryTracks = async (albumId, releaseGroupMbid = null) => {
+  const params = { albumId };
+  if (releaseGroupMbid) {
+    params.releaseGroupMbid = releaseGroupMbid;
+  }
+  const response = await api.get("/library/tracks", { params });
+  return response.data;
+};
+
+export const updateLibraryAlbum = async (id, data) => {
+  const response = await api.put(`/library/albums/${id}`, data);
+  return response.data;
+};
+
+export const updateLibraryArtist = async (mbid, data) => {
+  const response = await api.put(`/library/artists/${mbid}`, data);
+  return response.data;
+};
+
+export const downloadAlbum = async (artistId, albumId, options = {}) => {
+  const response = await api.post("/library/downloads/album", {
+    artistId,
+    albumId,
+    artistMbid: options.artistMbid,
+    artistName: options.artistName,
+  });
+  return response.data;
+};
+
+export const downloadTrack = async (artistId, trackId) => {
+  const response = await api.post("/library/downloads/track", {
+    artistId,
+    trackId,
+  });
+  return response.data;
+};
+
+export const getDownloadStatus = async (albumIds) => {
+  const ids = Array.isArray(albumIds) ? albumIds.join(",") : albumIds;
+  const response = await api.get(`/library/downloads/status?albumIds=${ids}`);
+  return response.data;
+};
+
+export const getAllDownloadStatus = async () => {
+  const response = await api.get("/library/downloads/status/all");
+  return response.data;
+};
+
+export const refreshLibraryArtist = async (mbid) => {
+  const response = await api.post(`/library/artists/${mbid}/refresh`);
   return response.data;
 };
 
@@ -140,18 +312,32 @@ export const getRequests = async () => {
   return response.data;
 };
 
-export const deleteRequest = async (mbid) => {
-  const response = await api.delete(`/requests/${mbid}`);
-  return response.data;
+export const deleteRequest = async (id) => {
+  const uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  if (uuidRegex.test(id)) {
+    const response = await api.delete(`/requests/${id}`);
+    return response.data;
+  } else {
+    const response = await api.delete(`/requests/album/${id}`);
+    return response.data;
+  }
 };
 
 export const getRecentlyAdded = async () => {
-  const response = await api.get("/lidarr/recent");
+  const response = await api.get("/library/recent");
   return response.data;
 };
 
-export const getDiscovery = async () => {
-  const response = await api.get("/discover");
+export const getRecentReleases = async () => {
+  const response = await api.get("/library/recent-releases");
+  return response.data;
+};
+
+export const getDiscovery = async (cacheBust = false) => {
+  const params = cacheBust ? { _: Date.now() } : {};
+  const response = await api.get("/discover", { params });
   return response.data;
 };
 
@@ -169,9 +355,16 @@ export const getSimilarArtists = async (limit = 20) => {
   return response.data;
 };
 
-export const searchArtistsByTag = async (tag, limit = 20) => {
+export const getTagSuggestions = async (q, limit = 10) => {
+  const response = await api.get("/discover/tags", {
+    params: { q: q.trim(), limit },
+  });
+  return response.data;
+};
+
+export const searchArtistsByTag = async (tag, limit = 24, offset = 0) => {
   const response = await api.get("/discover/by-tag", {
-    params: { tag, limit },
+    params: { tag, limit, offset },
   });
   return response.data;
 };
@@ -179,18 +372,47 @@ export const searchArtistsByTag = async (tag, limit = 20) => {
 export const verifyCredentials = async (password, username = "admin") => {
   const token = btoa(`${username}:${password}`);
   try {
-    await api.get("/settings", {
-      headers: {
-        Authorization: `Basic ${token}`,
-      },
+    const res = await api.get("/health", {
+      headers: { Authorization: `Basic ${token}` },
     });
-    return true;
+    return !!res.data?.user;
   } catch (error) {
-    if (error.response && error.response.status === 401) {
+    if (
+      error.response &&
+      (error.response.status === 401 || error.response.status === 403)
+    ) {
       return false;
     }
     throw error;
   }
+};
+
+export const getUsers = async () => {
+  const response = await api.get("/users");
+  return response.data;
+};
+
+export const createUser = async (username, password, role, permissions) => {
+  const response = await api.post("/users", {
+    username,
+    password,
+    role,
+    permissions,
+  });
+  return response.data;
+};
+
+export const updateUser = async (id, data) => {
+  const response = await api.patch(`/users/${id}`, data);
+  return response.data;
+};
+
+export const deleteUser = async (id) => {
+  await api.delete(`/users/${id}`);
+};
+
+export const changeMyPassword = async (currentPassword, newPassword) => {
+  await api.post("/users/me/password", { currentPassword, newPassword });
 };
 
 export const getAppSettings = async () => {
@@ -203,5 +425,106 @@ export const updateAppSettings = async (settings) => {
   return response.data;
 };
 
-export default api;
+export const getLidarrProfiles = async (url, apiKey) => {
+  const params = new URLSearchParams();
+  if (url) params.append("url", url);
+  if (apiKey) params.append("apiKey", apiKey);
+  const queryString = params.toString();
+  const endpoint = `/settings/lidarr/profiles${
+    queryString ? `?${queryString}` : ""
+  }`;
+  const response = await api.get(endpoint);
+  return response.data;
+};
 
+export const getLidarrMetadataProfiles = async (url, apiKey) => {
+  const params = new URLSearchParams();
+  if (url) params.append("url", url);
+  if (apiKey) params.append("apiKey", apiKey);
+  const queryString = params.toString();
+  const endpoint = `/settings/lidarr/metadata-profiles${
+    queryString ? `?${queryString}` : ""
+  }`;
+  const response = await api.get(endpoint);
+  return response.data;
+};
+
+export const testLidarrConnection = async (url, apiKey) => {
+  const params = new URLSearchParams();
+  if (url) params.append("url", url);
+  if (apiKey) params.append("apiKey", apiKey);
+  const queryString = params.toString();
+  const endpoint = `/settings/lidarr/test${
+    queryString ? `?${queryString}` : ""
+  }`;
+  const response = await api.get(endpoint);
+  return response.data;
+};
+
+export const testGotifyConnection = async (url, token) => {
+  const response = await api.post("/settings/gotify/test", { url, token });
+  return response.data;
+};
+
+export const applyLidarrCommunityGuide = async () => {
+  const response = await api.post("/settings/lidarr/apply-community-guide");
+  return response.data;
+};
+
+export const getFlowStatus = async () => {
+  const response = await api.get("/weekly-flow/status");
+  return response.data;
+};
+
+export const getFlowJobs = async (flowId) => {
+  const response = await api.get(`/weekly-flow/jobs/${flowId}`);
+  return response.data;
+};
+
+export const createFlow = async (payload) => {
+  const response = await api.post("/weekly-flow/flows", payload);
+  return response.data;
+};
+
+export const updateFlow = async (flowId, payload) => {
+  const response = await api.put(`/weekly-flow/flows/${flowId}`, payload);
+  return response.data;
+};
+
+export const deleteFlow = async (flowId) => {
+  const response = await api.delete(`/weekly-flow/flows/${flowId}`);
+  return response.data;
+};
+
+export const setFlowEnabled = async (flowId, enabled) => {
+  const response = await api.put(`/weekly-flow/flows/${flowId}/enabled`, {
+    enabled,
+  });
+  return response.data;
+};
+
+export const startFlowPlaylist = async (flowId, limit = 30) => {
+  const response = await api.post(`/weekly-flow/start/${flowId}`, {
+    limit,
+  });
+  return response.data;
+};
+
+export const resetFlowPlaylists = async (flowIds) => {
+  const response = await api.post("/weekly-flow/reset", {
+    flowIds,
+  });
+  return response.data;
+};
+
+export const startFlowWorker = async () => {
+  const response = await api.post("/weekly-flow/worker/start");
+  return response.data;
+};
+
+export const stopFlowWorker = async () => {
+  const response = await api.post("/weekly-flow/worker/stop");
+  return response.data;
+};
+
+export default api;
