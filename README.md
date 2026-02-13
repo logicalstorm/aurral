@@ -24,9 +24,17 @@ Self-hosted music discovery and request management for Lidarr — with library-a
 
 ---
 
-## What Is Aurral?
+## Notice: Test branch transition
 
-Aurral sits in front of your Lidarr instance and makes it easy for you (and optionally other users) to:
+We’re actively developing a new test branch with a rebuilt app and a single combined container image. It will merge into `main` in the coming weeks.
+
+Please start transitioning to the test-branch `docker-compose` or pin your current deployment to a specific image tag instead of `latest` to avoid breaking changes during the merge.
+
+Test branch details: https://github.com/lklynet/aurral/tree/test
+
+---
+
+## What is Aurral?
 
 - Search for artists via MusicBrainz and add them to Lidarr with the monitoring behavior you want
 - Browse your existing library in a clean UI

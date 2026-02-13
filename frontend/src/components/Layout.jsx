@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import PropTypes from "prop-types";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Search, Menu, Loader2, Github, Heart } from "lucide-react";
+import { Search, Menu, Info } from "lucide-react";
 import Sidebar from "./Sidebar";
 import { searchArtists, getTagSuggestions } from "../utils/api";
 
@@ -293,6 +293,25 @@ function Layout({ children, appVersion }) {
             </a>
           </div>
         </header>
+
+        <div className="px-4 md:px-6 pt-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/20 dark:bg-amber-900/20 dark:text-amber-200 px-4 py-3">
+            <div className="flex items-start gap-3">
+              <Info className="w-5 h-5 mt-0.5 text-amber-700 dark:text-amber-300" />
+              <div className="text-sm">
+                <span className="font-semibold">Upcoming transition:</span> The new test branch will merge into main in the coming weeks. Please migrate to its docker-compose or pin your current deployment to a specific image tag instead of latest.
+              </div>
+            </div>
+            <a
+              href="https://github.com/lklynet/aurral/tree/test"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-amber-800 hover:text-amber-900 dark:text-amber-200 dark:hover:text-amber-100 whitespace-nowrap"
+            >
+              View test branch
+            </a>
+          </div>
+        </div>
 
         <main className="flex-1 w-full max-w-[1600px] mx-auto p-4 md:p-8 lg:p-10">
           <div className="animate-fade-in">{children}</div>
