@@ -4,10 +4,10 @@
 
 # Aurral
 
-[![Docker](https://img.shields.io/badge/docker-ghcr.io%2Flklynet%2Faurral-blue?logo=docker&logoColor=white)](https://ghcr.io/lklynet/aurral) ![GitHub Release](https://img.shields.io/github/v/release/lklynet/aurral) [![License](https://img.shields.io/github/license/lklynet/aurral)](LICENSE)
+[![Docker](https://img.shields.io/badge/docker-ghcr.io%2Flklynet%2Faurral-blue?logo=docker&logoColor=white)](https://ghcr.io/lklynet/aurral) ![GitHub Release](https://img.shields.io/github/v/release/lklynet/aurral) ![GitHub License](https://img.shields.io/github/license/lklynet/aurral)
 [![Build](https://img.shields.io/github/actions/workflow/status/lklynet/aurral/docker-publish.yml?branch=main)](https://github.com/lklynet/aurral/actions/workflows/docker-publish.yml) ![Discord](https://img.shields.io/discord/1457052417580339285?style=flat) [![Discussions](https://img.shields.io/github/discussions/lklynet/aurral)](https://github.com/lklynet/aurral/discussions) ![GitHub Sponsors](https://img.shields.io/github/sponsors/lklynet)
 
-Self-hosted music discovery and request management for Lidarr — with library-aware recommendations, granular monitoring controls, and optional Weekly Flow playlists powered by Soulseek + Navidrome.
+Self-hosted music discovery and request management for Lidarr with library-aware recommendations, granular monitoring controls, and optional Weekly Flow playlists powered by Soulseek + Navidrome.
 
 ---
 
