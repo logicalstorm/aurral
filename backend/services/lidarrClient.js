@@ -3,8 +3,11 @@ import https from "https";
 import { dbOps } from "../config/db-helpers.js";
 
 const CIRCUIT_COOLDOWN_MS = 60000;
+const CIRCUIT_FAILURE_THRESHOLD = 3;
 const LIDARR_MAX_CONCURRENT = 12;
 const LIDARR_LIST_CACHE_MS = 30000;
+const LIDARR_RETRY_ATTEMPTS = 2;
+const LIDARR_RETRY_DELAY_MS = 800;
 
 export class LidarrClient {
   constructor() {
@@ -12,6 +15,8 @@ export class LidarrClient {
     this.apiPath = "/api/v1";
     this._circuitOpen = false;
     this._circuitOpenedAt = 0;
+    this._circuitFailures = 0;
+    this._lastCircuitFailureAt = 0;
     this._concurrent = 0;
     this._waitQueue = [];
     this._artistListCache = null;
@@ -36,6 +41,29 @@ export class LidarrClient {
       const next = this._waitQueue.shift();
       if (next) next();
     }
+  }
+
+  _registerCircuitFailure() {
+    const now = Date.now();
+    if (
+      this._lastCircuitFailureAt &&
+      now - this._lastCircuitFailureAt > CIRCUIT_COOLDOWN_MS
+    ) {
+      this._circuitFailures = 0;
+    }
+    this._lastCircuitFailureAt = now;
+    this._circuitFailures += 1;
+    if (this._circuitFailures >= CIRCUIT_FAILURE_THRESHOLD) {
+      this._circuitOpen = true;
+      this._circuitOpenedAt = now;
+    }
+  }
+
+  _resetCircuitState() {
+    this._circuitFailures = 0;
+    this._lastCircuitFailureAt = 0;
+    this._circuitOpen = false;
+    this._circuitOpenedAt = 0;
   }
 
   updateConfig() {
@@ -89,6 +117,7 @@ export class LidarrClient {
     method = "GET",
     data = null,
     skipConfigUpdate = false,
+    options = {},
   ) {
     if (!skipConfigUpdate) {
       this.updateConfig();
@@ -99,13 +128,14 @@ export class LidarrClient {
     }
 
     const now = Date.now();
-    if (this._circuitOpen) {
+    const bypassCircuit = options?.bypassCircuit === true;
+    if (this._circuitOpen && !bypassCircuit) {
       if (now - this._circuitOpenedAt < CIRCUIT_COOLDOWN_MS) {
         throw new Error(
           "Lidarr unavailable (circuit open). Will retry after cooldown.",
         );
       }
-      this._circuitOpen = false;
+      this._resetCircuitState();
     }
 
     const authHeaders = this.getAuthHeaders();
@@ -140,143 +170,159 @@ export class LidarrClient {
       this._albumListCache = null;
     }
 
-    try {
-      await this._acquireSlot();
+    for (let attempt = 1; attempt <= LIDARR_RETRY_ATTEMPTS; attempt++) {
       try {
-        const fullUrl = `${this.config.url}${this.apiPath}${endpoint}`;
+        await this._acquireSlot();
+        try {
+          const fullUrl = `${this.config.url}${this.apiPath}${endpoint}`;
 
-        const requestConfig = {
-          method,
-          url: fullUrl,
-          headers: {
-            ...authHeaders,
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          timeout: this.config.timeoutMs,
-          validateStatus: function (status) {
-            return status < 500;
-          },
-        };
-
-        if (
-          this.config.insecure &&
-          (fullUrl.startsWith("https:") || fullUrl.startsWith("HTTPS:"))
-        ) {
-          requestConfig.httpsAgent = new https.Agent({
-            rejectUnauthorized: false,
-          });
-        }
-
-        if (data) {
-          requestConfig.data = data;
-        }
-
-        const response = await axios(requestConfig);
-
-        if (response.status >= 400) {
-          throw {
-            response: {
-              status: response.status,
-              statusText: response.statusText,
-              data: response.data,
-              headers: response.headers,
+          const requestConfig = {
+            method,
+            url: fullUrl,
+            headers: {
+              ...authHeaders,
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            timeout: this.config.timeoutMs,
+            validateStatus: function (status) {
+              return status < 500;
             },
           };
+
+          if (
+            this.config.insecure &&
+            (fullUrl.startsWith("https:") || fullUrl.startsWith("HTTPS:"))
+          ) {
+            requestConfig.httpsAgent = new https.Agent({
+              rejectUnauthorized: false,
+            });
+          }
+
+          if (data) {
+            requestConfig.data = data;
+          }
+
+          const response = await axios(requestConfig);
+
+          if (response.status >= 400) {
+            throw {
+              response: {
+                status: response.status,
+                statusText: response.statusText,
+                data: response.data,
+                headers: response.headers,
+              },
+            };
+          }
+
+          if (method === "GET" && endpoint === "/artist") {
+            this._artistListCache = { data: response.data, at: Date.now() };
+          }
+          if (method === "GET" && endpoint === "/album") {
+            this._albumListCache = { data: response.data, at: Date.now() };
+          }
+
+          this._resetCircuitState();
+          return response.data;
+        } finally {
+          this._releaseSlot();
+        }
+      } catch (raw) {
+        const error = raw && typeof raw === "object" ? raw : {};
+        const status = error.response?.status;
+        const msg =
+          error.message != null ? String(error.message) : String(raw);
+        const isTimeout =
+          error.code === "ECONNABORTED" || msg.toLowerCase().includes("timeout");
+        const isNoResponse = !error.response && (error.request || isTimeout);
+        const isTransientStatus =
+          typeof status === "number" && status >= 500;
+
+        if (isNoResponse || isTransientStatus) {
+          this._registerCircuitFailure();
         }
 
-        if (method === "GET" && endpoint === "/artist") {
-          this._artistListCache = { data: response.data, at: Date.now() };
-        }
-        if (method === "GET" && endpoint === "/album") {
-          this._albumListCache = { data: response.data, at: Date.now() };
-        }
-
-        return response.data;
-      } finally {
-        this._releaseSlot();
-      }
-    } catch (raw) {
-      const error = raw && typeof raw === "object" ? raw : {};
-      if (!error.response && (error.request || error.code === "ECONNABORTED")) {
-        this._circuitOpen = true;
-        this._circuitOpenedAt = Date.now();
-      }
-
-      if (error.response) {
-        const status = error.response.status;
-        const statusText = error.response.statusText;
-        const responseData = error.response.data;
-
-        const isAlbum404 = status === 404 && endpoint.includes("/album/");
-        if (!isAlbum404) {
-          console.error(`Lidarr API error (${status}):`, {
-            url: `${this.config.url}${this.apiPath}${endpoint}`,
-            method: method,
-            status: status,
-            statusText: statusText,
-            responseData: responseData,
-            responseHeaders: error.response.headers,
-          });
+        if (
+          attempt < LIDARR_RETRY_ATTEMPTS &&
+          (isNoResponse || isTransientStatus)
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, LIDARR_RETRY_DELAY_MS));
+          continue;
         }
 
-        let errorMsg = statusText || "Unknown error";
-        let errorDetails = "";
+        if (error.response) {
+          const statusText = error.response.statusText;
+          const responseData = error.response.data;
 
-        if (typeof responseData === "string") {
-          errorMsg = responseData;
-          errorDetails = responseData;
-        } else if (responseData) {
-          errorMsg =
-            responseData.message ||
-            responseData.error ||
-            responseData.title ||
-            responseData.detail ||
-            (typeof responseData === "object"
-              ? JSON.stringify(responseData)
-              : String(responseData));
-          errorDetails = JSON.stringify(responseData, null, 2);
-        }
+          const isAlbum404 = status === 404 && endpoint.includes("/album/");
+          if (!isAlbum404) {
+            console.error(`Lidarr API error (${status}):`, {
+              url: `${this.config.url}${this.apiPath}${endpoint}`,
+              method: method,
+              status: status,
+              statusText: statusText,
+              responseData: responseData,
+              responseHeaders: error.response.headers,
+            });
+          }
 
-        if (status === 400) {
-          throw new Error(
-            `Lidarr API returned 400 Bad Request: ${errorMsg}${
-              errorDetails ? `\n\nFull Response: ${errorDetails}` : ""
-            }`,
-          );
-        }
-        if (status === 401) {
-          throw new Error(
-            `Lidarr API authentication failed. Check your API key.`,
-          );
-        }
-        if (status === 404) {
-          const isAlbumEndpoint = endpoint.includes("/album/");
-          if (isAlbumEndpoint) {
-            return null;
+          let errorMsg = statusText || "Unknown error";
+          let errorDetails = "";
+
+          if (typeof responseData === "string") {
+            errorMsg = responseData;
+            errorDetails = responseData;
+          } else if (responseData) {
+            errorMsg =
+              responseData.message ||
+              responseData.error ||
+              responseData.title ||
+              responseData.detail ||
+              (typeof responseData === "object"
+                ? JSON.stringify(responseData)
+                : String(responseData));
+            errorDetails = JSON.stringify(responseData, null, 2);
+          }
+
+          if (status === 400) {
+            throw new Error(
+              `Lidarr API returned 400 Bad Request: ${errorMsg}${
+                errorDetails ? `\n\nFull Response: ${errorDetails}` : ""
+              }`,
+            );
+          }
+          if (status === 401) {
+            throw new Error(
+              `Lidarr API authentication failed. Check your API key.`,
+            );
+          }
+          if (status === 404) {
+            const isAlbumEndpoint = endpoint.includes("/album/");
+            if (isAlbumEndpoint) {
+              return null;
+            }
+            throw new Error(
+              `Lidarr endpoint not found: ${endpoint}. Check if Lidarr is running and the API version is correct.`,
+            );
           }
           throw new Error(
-            `Lidarr endpoint not found: ${endpoint}. Check if Lidarr is running and the API version is correct.`,
+            `Lidarr API error: ${status} - ${
+              responseData?.message ||
+              responseData?.error ||
+              statusText ||
+              "Unknown error"
+            }`,
           );
+        } else if (error.request) {
+          console.error("Lidarr API request failed - no response:", msg);
+          throw new Error(
+            `Cannot connect to Lidarr at ${this.config.url}. Check if Lidarr is running and the URL is correct.`,
+          );
+        } else {
+          console.error("Lidarr API error:", msg);
+          throw raw instanceof Error ? raw : new Error(msg);
         }
-        throw new Error(
-          `Lidarr API error: ${status} - ${
-            responseData?.message ||
-            responseData?.error ||
-            statusText ||
-            "Unknown error"
-          }`,
-        );
-      } else if (error.request) {
-        const msg = error.message != null ? String(error.message) : String(raw);
-        console.error("Lidarr API request failed - no response:", msg);
-        throw new Error(
-          `Cannot connect to Lidarr at ${this.config.url}. Check if Lidarr is running and the URL is correct.`,
-        );
-      } else {
-        const msg = error.message != null ? String(error.message) : String(raw);
-        console.error("Lidarr API error:", msg);
-        throw raw instanceof Error ? raw : new Error(msg);
       }
     }
   }
@@ -302,6 +348,7 @@ export class LidarrClient {
             "GET",
             null,
             skipConfigUpdate,
+            { bypassCircuit: true },
           );
           return {
             connected: true,
@@ -323,6 +370,7 @@ export class LidarrClient {
                 "GET",
                 null,
                 skipConfigUpdate,
+                { bypassCircuit: true },
               );
               return {
                 connected: true,
