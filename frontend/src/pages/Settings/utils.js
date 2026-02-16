@@ -11,6 +11,7 @@ export const normalizeSettings = (savedSettings) => {
         url: "",
         apiKey: "",
         searchOnAdd: false,
+        defaultMonitorOption: "none",
         ...lidarr,
         qualityProfileId:
           lidarr.qualityProfileId != null

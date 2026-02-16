@@ -181,11 +181,14 @@ export function useArtistDetailsLibrary({
       return;
     }
     try {
+      const defaultMonitorOption =
+        appSettings?.integrations?.lidarr?.defaultMonitorOption || "none";
       await addArtistToLibrary({
         foreignArtistId: artist.id,
         artistName: artist.name,
         quality: appSettings?.quality || "standard",
         rootFolderPath: appSettings?.rootFolderPath,
+        monitorOption: defaultMonitorOption,
       });
       const lookup = await lookupArtistInLibrary(artist.id);
       if (lookup.exists && lookup.artist) {
@@ -235,11 +238,14 @@ export function useArtistDetailsLibrary({
           showError("Artist information not available");
           return;
         }
+        const defaultMonitorOption =
+          appSettings?.integrations?.lidarr?.defaultMonitorOption || "none";
         await addArtistToLibrary({
           foreignArtistId: artist.id,
           artistName: artist.name,
           quality: appSettings?.quality || "standard",
           rootFolderPath: appSettings?.rootFolderPath,
+          monitorOption: defaultMonitorOption,
         });
         const lookup = await lookupArtistInLibrary(artist.id);
         if (lookup.exists && lookup.artist) {
