@@ -400,6 +400,42 @@ export function SettingsIntegrationsTab({
               </p>
             </div>
             <div>
+              <label
+                className="block text-sm font-medium mb-1"
+                style={{ color: "#fff" }}
+              >
+                Default Monitoring Option
+              </label>
+              <select
+                className="input"
+                value={
+                  settings.integrations?.lidarr?.defaultMonitorOption || "none"
+                }
+                onChange={(e) =>
+                  updateSettings({
+                    ...settings,
+                    integrations: {
+                      ...settings.integrations,
+                      lidarr: {
+                        ...(settings.integrations?.lidarr || {}),
+                        defaultMonitorOption: e.target.value,
+                      },
+                    },
+                  })
+                }
+              >
+                <option value="none">None (Artist Only)</option>
+                <option value="all">All Albums</option>
+                <option value="future">Future Albums</option>
+                <option value="missing">Missing Albums</option>
+                <option value="latest">Latest Album</option>
+                <option value="first">First Album</option>
+              </select>
+              <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
+                Default monitoring used when adding new artists.
+              </p>
+            </div>
+            <div>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
