@@ -25,6 +25,7 @@ const defaultSettings = {
       apiKey: "",
       qualityProfileId: null,
       metadataProfileId: null,
+      defaultMonitorOption: "none",
       searchOnAdd: false,
     },
     musicbrainz: { email: "" },
