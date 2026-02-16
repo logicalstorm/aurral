@@ -81,11 +81,20 @@ router.get("/status", (req, res) => {
 
 router.post("/flows", async (req, res) => {
   try {
-    const { name, mix, size, deepDive } = req.body || {};
+    const { name, mix, size, deepDive, recipe, tags, relatedArtists } =
+      req.body || {};
     if (!name || !String(name).trim()) {
       return res.status(400).json({ error: "name is required" });
     }
-    const flow = flowPlaylistConfig.createFlow({ name, mix, size, deepDive });
+    const flow = flowPlaylistConfig.createFlow({
+      name,
+      mix,
+      size,
+      deepDive,
+      recipe,
+      tags,
+      relatedArtists,
+    });
     await playlistManager.ensureSmartPlaylists();
     res.json({ success: true, flow });
   } catch (error) {
@@ -99,12 +108,16 @@ router.post("/flows", async (req, res) => {
 router.put("/flows/:flowId", async (req, res) => {
   try {
     const { flowId } = req.params;
-    const { name, mix, size, deepDive } = req.body || {};
+    const { name, mix, size, deepDive, recipe, tags, relatedArtists } =
+      req.body || {};
     const updated = flowPlaylistConfig.updateFlow(flowId, {
       name,
       mix,
       size,
       deepDive,
+      recipe,
+      tags,
+      relatedArtists,
     });
     if (!updated) {
       return res.status(404).json({ error: "Flow not found" });
@@ -272,7 +285,8 @@ router.delete("/jobs/all", (req, res) => {
 router.post("/reset", async (req, res) => {
   try {
     const { flowIds } = req.body;
-    const types = flowIds || flowPlaylistConfig.getFlows().map((flow) => flow.id);
+    const types =
+      flowIds || flowPlaylistConfig.getFlows().map((flow) => flow.id);
 
     weeklyFlowWorker.stop();
     playlistManager.updateConfig();
@@ -368,7 +382,7 @@ router.post("/test/download", async (req, res) => {
       Promise.race([
         soulseekClient.search(artistName, trackName),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Search timed out")), ms)
+          setTimeout(() => reject(new Error("Search timed out")), ms),
         ),
       ]);
 
