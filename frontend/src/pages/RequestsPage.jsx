@@ -63,6 +63,9 @@ function RequestsPage() {
   };
 
   const getStatusBadge = (request) => {
+    const albumStatus = request.albumId
+      ? downloadStatuses[String(request.albumId)]
+      : null;
     const artistDownloadStatuses = Object.values(downloadStatuses).filter(
       (status) => {
         return (
@@ -77,11 +80,56 @@ function RequestsPage() {
 
     const hasActiveDownloads = artistDownloadStatuses.length > 0;
 
+    if (albumStatus?.status === "downloading") {
+      return (
+        <span
+          className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold uppercase rounded"
+          style={{ backgroundColor: "#211f27", color: "#c1c1c3" }}
+        >
+          <Loader className="w-3 h-3 animate-spin" />
+          Downloading...
+        </span>
+      );
+    }
+
+    if (albumStatus?.status === "searching") {
+      return (
+        <span
+          className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold uppercase rounded"
+          style={{ backgroundColor: "#211f27", color: "#c1c1c3" }}
+        >
+          <Loader className="w-3 h-3 animate-spin" />
+          Searching...
+        </span>
+      );
+    }
+
+    if (albumStatus?.status === "processing") {
+      return (
+        <span
+          className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold uppercase rounded"
+          style={{ backgroundColor: "#211f27", color: "#c1c1c3" }}
+        >
+          <Loader className="w-3 h-3 animate-spin" />
+          Processing
+        </span>
+      );
+    }
+
     if (request.status === "available") {
       return (
         <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold uppercase bg-green-500/20 text-green-400 rounded">
           <CheckCircle2 className="w-3 h-3" />
           Available
+        </span>
+      );
+    }
+
+    if (albumStatus?.status === "failed" || request.status === "failed") {
+      return (
+        <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold uppercase bg-red-500/20 text-red-400 rounded">
+          <AlertCircle className="w-3 h-3" />
+          Failed
         </span>
       );
     }
@@ -289,7 +337,7 @@ function RequestsPage() {
         >
           Request Status Guide
         </h4>
-        <div className="grid sm:grid-cols-3 gap-3 text-xs">
+        <div className="grid sm:grid-cols-4 gap-3 text-xs">
           <div className="flex gap-2" style={{ color: "#c1c1c3" }}>
             <div className="w-2 h-2 bg-yellow-500 mt-1.5 shrink-0"></div>
             <p>
@@ -301,7 +349,14 @@ function RequestsPage() {
             <div className="w-2 h-2 bg-gray-600 mt-1.5 shrink-0"></div>
             <p>
               <strong>Processing:</strong> Album is downloading, importing, or
-              import failed. Check Lidarr for details.
+              searching. Check Lidarr for details.
+            </p>
+          </div>
+          <div className="flex gap-2" style={{ color: "#c1c1c3" }}>
+            <div className="w-2 h-2 bg-red-500 mt-1.5 shrink-0"></div>
+            <p>
+              <strong>Failed:</strong> Album search or import failed. You can
+              re-search from the artist page.
             </p>
           </div>
           <div className="flex gap-2" style={{ color: "#c1c1c3" }}>

@@ -9,6 +9,7 @@ import {
   updateLibraryArtist,
   getLibraryArtist,
   downloadAlbum,
+  triggerAlbumSearch,
   refreshLibraryArtist,
   getDownloadStatus,
   addArtistToLibrary,
@@ -48,6 +49,9 @@ export function useArtistDetailsLibrary({
   const [updatingMonitor, setUpdatingMonitor] = useState(false);
   const [refreshingArtist, setRefreshingArtist] = useState(false);
   const [downloadStatuses, setDownloadStatuses] = useState({});
+  const [reSearchingAlbum, setReSearchingAlbum] = useState(null);
+  const [reSearchOverrides, setReSearchOverrides] = useState({});
+  const reSearchOverridesRef = useRef({});
   const unmonitoredAtRef = useRef({});
 
   const handleRefreshArtist = async () => {
@@ -360,6 +364,44 @@ export function useArtistDetailsLibrary({
     }
   };
 
+  const handleReSearchAlbum = async (libraryAlbumId, title) => {
+    if (!libraryAlbumId) return;
+    setReSearchingAlbum(libraryAlbumId);
+    try {
+      const overrideKey = String(libraryAlbumId);
+      const overrideNext = {
+        ...reSearchOverridesRef.current,
+        [overrideKey]: Date.now(),
+      };
+      reSearchOverridesRef.current = overrideNext;
+      setReSearchOverrides(overrideNext);
+      const album = libraryAlbums.find((a) => a.id === libraryAlbumId);
+      if (!album) throw new Error("Album not found in library");
+      if (!album.monitored) {
+        await updateLibraryAlbum(libraryAlbumId, { ...album, monitored: true });
+        setLibraryAlbums((prev) =>
+          prev.map((a) =>
+            a.id === libraryAlbumId ? { ...a, monitored: true } : a,
+          ),
+        );
+      }
+      setDownloadStatuses((prev) => ({
+        ...prev,
+        [overrideKey]: { status: "searching" },
+      }));
+      await triggerAlbumSearch(libraryAlbumId);
+      showSuccess(`Search triggered for ${title}`);
+    } catch (err) {
+      showError(
+        `Failed to re-search album: ${
+          err.response?.data?.message || err.message
+        }`,
+      );
+    } finally {
+      setReSearchingAlbum(null);
+    }
+  };
+
   const handleLibraryAlbumClick = async (releaseGroupId, libraryAlbumId) => {
     if (expandedLibraryAlbum === releaseGroupId) {
       setExpandedLibraryAlbum(null);
@@ -527,8 +569,24 @@ export function useArtistDetailsLibrary({
     const isComplete =
       album.statistics?.percentOfTracks >= 100 ||
       album.statistics?.sizeOnDisk > 0;
-    const downloadStatus = downloadStatuses[album.id];
-    if (downloadStatus && !isComplete) {
+    const statusKey = String(album.id);
+    if (isComplete) {
+      return {
+        status: "available",
+        label: "Complete",
+        libraryId: album.id,
+        albumInfo: album,
+      };
+    }
+    const downloadStatus = downloadStatuses[statusKey];
+    const overrideAt = reSearchOverrides[statusKey];
+    const isRetrying =
+      overrideAt != null && Date.now() - overrideAt < 5 * 60 * 1000;
+    const effectiveStatus =
+      isRetrying && downloadStatus?.status === "failed"
+        ? { ...downloadStatus, status: "searching" }
+        : downloadStatus;
+    if (effectiveStatus) {
       const statusLabels = {
         adding: "Adding...",
         searching: "Searching...",
@@ -536,21 +594,14 @@ export function useArtistDetailsLibrary({
         moving: "Moving files...",
         added: "Added",
         processing: "Searching...",
+        failed: "Failed",
       };
       return {
-        status: downloadStatus.status,
-        label: statusLabels[downloadStatus.status] || downloadStatus.status,
+        status: effectiveStatus.status,
+        label: statusLabels[effectiveStatus.status] || effectiveStatus.status,
         libraryId: album.id,
         albumInfo: album,
-        downloadStatus: downloadStatus,
-      };
-    }
-    if (isComplete) {
-      return {
-        status: "available",
-        label: "Complete",
-        libraryId: album.id,
-        albumInfo: album,
+        downloadStatus: effectiveStatus,
       };
     }
     if (album.monitored) {
@@ -586,13 +637,52 @@ export function useArtistDetailsLibrary({
               setRequestingAlbum(null);
             }
           }
+          const now = Date.now();
+          const currentOverrides = reSearchOverridesRef.current;
+          const nextOverrides = { ...currentOverrides };
+          for (const albumId of Object.keys(nextOverrides)) {
+            const overrideAt = nextOverrides[albumId];
+            if (overrideAt == null) continue;
+            const status = statuses[albumId]?.status;
+            const isExpired = now - overrideAt > 5 * 60 * 1000;
+            const isCleared = status && status !== "failed";
+            if (isExpired || isCleared) {
+              delete nextOverrides[albumId];
+            }
+          }
+          const overridesChanged =
+            Object.keys(nextOverrides).length !==
+              Object.keys(currentOverrides).length ||
+            Object.keys(nextOverrides).some(
+              (key) => nextOverrides[key] !== currentOverrides[key],
+            );
+          if (overridesChanged) {
+            reSearchOverridesRef.current = nextOverrides;
+            setReSearchOverrides(nextOverrides);
+          }
+
+          const nextStatuses = { ...statuses };
+          for (const albumId of Object.keys(nextStatuses)) {
+            const overrideAt = nextOverrides[albumId];
+            if (
+              overrideAt != null &&
+              nextStatuses[albumId]?.status === "failed" &&
+              now - overrideAt < 5 * 60 * 1000
+            ) {
+              nextStatuses[albumId] = {
+                ...nextStatuses[albumId],
+                status: "searching",
+              };
+            }
+          }
+
           setDownloadStatuses((prevStatuses) => {
-            const hasNewlyAdded = Object.keys(statuses).some((albumId) => {
-              const currentStatus = statuses[albumId]?.status;
+            const hasNewlyAdded = Object.keys(nextStatuses).some((albumId) => {
+              const currentStatus = nextStatuses[albumId]?.status;
               const previousStatus = prevStatuses[albumId]?.status;
               return currentStatus === "added" && previousStatus !== "added";
             });
-            const hasActiveDownloads = Object.values(statuses).some(
+            const hasActiveDownloads = Object.values(nextStatuses).some(
               (s) =>
                 s &&
                 (s.status === "downloading" ||
@@ -622,7 +712,7 @@ export function useArtistDetailsLibrary({
                 hasNewlyAdded ? 2000 : 5000,
               );
             }
-            return statuses;
+            return nextStatuses;
           });
         }
       } catch (error) {
@@ -681,6 +771,7 @@ export function useArtistDetailsLibrary({
     setShowMonitorOptionMenu,
     updatingMonitor,
     refreshingArtist,
+    reSearchingAlbum,
     downloadStatuses,
     handleRefreshArtist,
     handleDeleteClick,
@@ -690,6 +781,7 @@ export function useArtistDetailsLibrary({
     getCurrentMonitorOption,
     handleAddToLibrary,
     handleRequestAlbum,
+    handleReSearchAlbum,
     handleLibraryAlbumClick,
     handleReleaseGroupAlbumClick,
     handleDeleteAlbumClick,

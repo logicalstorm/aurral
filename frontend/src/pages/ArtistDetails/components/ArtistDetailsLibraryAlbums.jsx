@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Trash2,
   Star,
+  RefreshCw,
 } from "lucide-react";
 import { starsFromCount } from "../utils";
 
@@ -17,6 +18,7 @@ export function ArtistDetailsLibraryAlbums({
   libraryAlbums,
   downloadStatuses,
   requestingAlbum,
+  reSearchingAlbum,
   albumCovers,
   expandedLibraryAlbum,
   albumTracks,
@@ -25,6 +27,7 @@ export function ArtistDetailsLibraryAlbums({
   setAlbumDropdownOpen,
   handleLibraryAlbumClick,
   handleDeleteAlbumClick,
+  handleReSearchAlbum,
 }) {
   const downloadedAlbums = libraryAlbums.filter((album) => {
     if (String(album.id ?? "").startsWith("pending-")) return false;
@@ -71,6 +74,16 @@ export function ArtistDetailsLibraryAlbums({
             const downloadStatus = downloadStatuses[libraryAlbum.id];
             const isComplete =
               libraryAlbum.statistics?.percentOfTracks === 100;
+            const isActiveSearch =
+              downloadStatus &&
+              ["adding", "searching", "downloading", "moving", "processing"].includes(
+                downloadStatus.status,
+              );
+            const canReSearch =
+              !isComplete &&
+              !String(libraryAlbum.id ?? "").startsWith("pending-") &&
+              !isActiveSearch &&
+              (downloadStatus?.status === "failed" || libraryAlbum.monitored);
             const rowBg = isExpanded
               ? "#2a2830"
               : libraryAlbumIdx % 2 === 0
@@ -233,6 +246,10 @@ export function ArtistDetailsLibraryAlbums({
                           <CheckCircle className="w-3.5 h-3.5" />
                           Added
                         </span>
+                      ) : downloadStatus.status === "failed" ? (
+                        <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase bg-red-500/20 text-red-400 cursor-default">
+                          Failed
+                        </span>
                       ) : (
                         <span
                           className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase cursor-default"
@@ -332,6 +349,34 @@ export function ArtistDetailsLibraryAlbums({
                               <ExternalLink className="w-4 h-4 mr-2" />
                               View on Last.fm
                             </a>
+                            {canReSearch && (
+                              <>
+                                <div className="my-1 border-t border-white/10" />
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleReSearchAlbum(
+                                      libraryAlbum.id,
+                                      libraryAlbum.albumName,
+                                    );
+                                    setAlbumDropdownOpen(null);
+                                  }}
+                                  className="w-full text-left px-4 py-2 text-sm hover:bg-white/10 transition-colors flex items-center"
+                                  style={{ color: "#fff" }}
+                                  disabled={reSearchingAlbum === libraryAlbum.id}
+                                >
+                                  {reSearchingAlbum === libraryAlbum.id ? (
+                                    <Loader className="w-4 h-4 mr-2 animate-spin" />
+                                  ) : (
+                                    <RefreshCw className="w-4 h-4 mr-2" />
+                                  )}
+                                  {reSearchingAlbum === libraryAlbum.id
+                                    ? "Searching..."
+                                    : "Re-search"}
+                                </button>
+                              </>
+                            )}
                             <div className="my-1 border-t border-white/10" />
                             <button
                               type="button"
@@ -560,4 +605,6 @@ ArtistDetailsLibraryAlbums.propTypes = {
   setAlbumDropdownOpen: PropTypes.func,
   handleLibraryAlbumClick: PropTypes.func,
   handleDeleteAlbumClick: PropTypes.func,
+  handleReSearchAlbum: PropTypes.func,
+  reSearchingAlbum: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
 };
