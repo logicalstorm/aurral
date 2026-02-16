@@ -8,7 +8,10 @@ export class WeeklyFlowPlaylistSource {
       { key: "mix", value: Number(mix?.mix ?? 0) },
       { key: "trending", value: Number(mix?.trending ?? 0) },
     ];
-    const sum = weights.reduce((acc, w) => acc + (Number.isFinite(w.value) ? w.value : 0), 0);
+    const sum = weights.reduce(
+      (acc, w) => acc + (Number.isFinite(w.value) ? w.value : 0),
+      0,
+    );
     if (sum <= 0 || !Number.isFinite(sum)) {
       return { discover: 0, mix: 0, trending: 0 };
     }
@@ -34,6 +37,52 @@ export class WeeklyFlowPlaylistSource {
     return out;
   }
 
+  _sliceRange(trackList, start, end) {
+    if (!Array.isArray(trackList) || trackList.length === 0) return [];
+    if (start >= trackList.length) return [];
+    const safeStart = Math.max(0, start);
+    const safeEnd = Math.min(trackList.length - 1, end);
+    if (safeEnd < safeStart) return [];
+    return trackList.slice(safeStart, safeEnd + 1);
+  }
+
+  _pickRandomTrack(trackList) {
+    if (!Array.isArray(trackList) || trackList.length === 0) return null;
+    const index = Math.floor(Math.random() * trackList.length);
+    return trackList[index] || null;
+  }
+
+  _pickTrackFromRanges(trackList, ranges) {
+    for (const range of ranges) {
+      const candidates = this._sliceRange(
+        trackList,
+        range.start,
+        range.end,
+      ).filter((track) => String(track?.name || "").trim().length > 0);
+      const pick = this._pickRandomTrack(candidates);
+      if (pick) return pick;
+    }
+    return null;
+  }
+
+  _pickTrackFromRangesWithOwned(trackList, ownedTitles, ranges) {
+    for (const range of ranges) {
+      const candidates = this._sliceRange(
+        trackList,
+        range.start,
+        range.end,
+      ).filter((track) => {
+        const name = String(track?.name || "")
+          .trim()
+          .toLowerCase();
+        return name && !ownedTitles.has(name);
+      });
+      const pick = this._pickRandomTrack(candidates);
+      if (pick) return pick;
+    }
+    return null;
+  }
+
   _dedupeAndFill(size, sources, counts) {
     const seen = new Set();
     const picked = [];
@@ -49,7 +98,10 @@ export class WeeklyFlowPlaylistSource {
       while (indices[type] < list.length && added < count) {
         const track = list[indices[type]];
         indices[type] += 1;
-        const key = `${track.artistName}`.toLowerCase() + "::" + `${track.trackName}`.toLowerCase();
+        const key =
+          `${track.artistName}`.toLowerCase() +
+          "::" +
+          `${track.trackName}`.toLowerCase();
         if (seen.has(key)) continue;
         seen.add(key);
         picked.push(track);
@@ -100,8 +152,12 @@ export class WeeklyFlowPlaylistSource {
     const perTypeLimit = Math.max(limit, 50);
 
     const [discoverTracks, mixTracks, trendingTracks] = await Promise.all([
-      this.getRecommendedTracks(perTypeLimit).catch(() => []),
-      this.getMixTracks(perTypeLimit).catch(() => []),
+      this.getRecommendedTracks(perTypeLimit, {
+        deepDive: flow?.deepDive === true,
+      }).catch(() => []),
+      this.getMixTracks(perTypeLimit, {
+        deepDive: flow?.deepDive === true,
+      }).catch(() => []),
       this.getDiscoverTracks(perTypeLimit).catch(() => []),
     ]);
 
@@ -171,20 +227,20 @@ export class WeeklyFlowPlaylistSource {
     } catch (error) {
       console.error(
         "[WeeklyFlowPlaylistSource] Error fetching discover tracks:",
-        error.message
+        error.message,
       );
       throw error;
     }
   }
 
-  async getRecommendedTracks(limit) {
+  async getRecommendedTracks(limit, options = {}) {
     const discoveryCache = getDiscoveryCache();
     const recommendations = discoveryCache.recommendations || [];
     const globalTop = discoveryCache.globalTop || [];
 
     if (recommendations.length === 0 && globalTop.length === 0) {
       throw new Error(
-        "No discovery recommendations available. Update discovery cache first."
+        "No discovery recommendations available. Update discovery cache first.",
       );
     }
 
@@ -195,6 +251,17 @@ export class WeeklyFlowPlaylistSource {
     }
 
     const tracks = [];
+    const deepDive = options?.deepDive === true;
+    const ranges = deepDive
+      ? [
+          { start: 9, end: 24 },
+          { start: 0, end: 9 },
+          { start: 0, end: Number.MAX_SAFE_INTEGER },
+        ]
+      : [
+          { start: 0, end: 9 },
+          { start: 0, end: Number.MAX_SAFE_INTEGER },
+        ];
     for (const artist of artists) {
       if (tracks.length >= limit) break;
 
@@ -204,23 +271,21 @@ export class WeeklyFlowPlaylistSource {
       try {
         const topTracks = await lastfmRequest("artist.getTopTracks", {
           artist: artistName,
-          limit: 1,
+          limit: 25,
         });
 
         if (topTracks?.toptracks?.track) {
           const trackList = Array.isArray(topTracks.toptracks.track)
             ? topTracks.toptracks.track
             : [topTracks.toptracks.track];
-          const track = trackList[0];
-          const trackName = track?.name?.trim();
-          if (trackName) {
-            tracks.push({ artistName, trackName });
-          }
+          const pick = this._pickTrackFromRanges(trackList, ranges);
+          const trackName = pick?.name?.trim();
+          if (trackName) tracks.push({ artistName, trackName });
         }
       } catch (error) {
         console.warn(
           `[WeeklyFlowPlaylistSource] Failed to get tracks for ${artistName}:`,
-          error.message
+          error.message,
         );
       }
     }
@@ -242,7 +307,7 @@ export class WeeklyFlowPlaylistSource {
     return titles;
   }
 
-  async getMixTracks(limit) {
+  async getMixTracks(limit, options = {}) {
     const { libraryManager } = await import("./libraryManager.js");
     const artists = await libraryManager.getAllArtists();
     if (artists.length === 0) {
@@ -255,6 +320,17 @@ export class WeeklyFlowPlaylistSource {
 
     const shuffled = [...artists].sort(() => 0.5 - Math.random());
     const tracks = [];
+    const deepDive = options?.deepDive === true;
+    const ranges = deepDive
+      ? [
+          { start: 9, end: 24 },
+          { start: 0, end: 9 },
+          { start: 0, end: Number.MAX_SAFE_INTEGER },
+        ]
+      : [
+          { start: 0, end: 9 },
+          { start: 0, end: Number.MAX_SAFE_INTEGER },
+        ];
     const maxArtistsToTry = Math.min(45, Math.max(limit * 2, 30));
 
     for (
@@ -269,7 +345,7 @@ export class WeeklyFlowPlaylistSource {
       try {
         const ownedTitles = await this.getLibraryTrackTitles(
           libraryManager,
-          artist.id
+          artist.id,
         );
         const topTracks = await lastfmRequest("artist.getTopTracks", {
           artist: artistName,
@@ -282,19 +358,17 @@ export class WeeklyFlowPlaylistSource {
           ? topTracks.toptracks.track
           : [topTracks.toptracks.track];
 
-        const notOwned = trackList.find((t) => {
-          const name = (t?.name || "").trim().toLowerCase();
-          return name && !ownedTitles.has(name);
-        });
-
-        if (notOwned) {
-          const trackName = (notOwned.name || "").trim();
-          if (trackName) tracks.push({ artistName, trackName });
-        }
+        const pick = this._pickTrackFromRangesWithOwned(
+          trackList,
+          ownedTitles,
+          ranges,
+        );
+        const trackName = pick?.name?.trim();
+        if (trackName) tracks.push({ artistName, trackName });
       } catch (error) {
         console.warn(
           `[WeeklyFlowPlaylistSource] Failed to get Mix tracks for ${artistName}:`,
-          error.message
+          error.message,
         );
       }
     }

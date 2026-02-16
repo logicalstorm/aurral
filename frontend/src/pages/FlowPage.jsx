@@ -18,6 +18,7 @@ import {
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
 import PowerSwitch from "../components/PowerSwitch";
+import PillToggle from "../components/PillToggle";
 
 const DEFAULT_MIX = { discover: 34, mix: 33, trending: 33 };
 const DEFAULT_SIZE = 30;
@@ -57,10 +58,12 @@ function FlowPage() {
   const [newFlowName, setNewFlowName] = useState("");
   const [newFlowSize, setNewFlowSize] = useState(DEFAULT_SIZE);
   const [newFlowMix, setNewFlowMix] = useState(DEFAULT_MIX);
+  const [newFlowDeepDive, setNewFlowDeepDive] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState("");
   const [editSize, setEditSize] = useState(DEFAULT_SIZE);
   const [editMix, setEditMix] = useState(DEFAULT_MIX);
+  const [editDeepDive, setEditDeepDive] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [showNewFlow, setShowNewFlow] = useState(false);
   const { showSuccess, showError } = useToast();
@@ -161,10 +164,12 @@ function FlowPage() {
         name,
         size: newFlowSize,
         mix: newFlowMix,
+        deepDive: newFlowDeepDive,
       });
       setNewFlowName("");
       setNewFlowSize(DEFAULT_SIZE);
       setNewFlowMix(DEFAULT_MIX);
+      setNewFlowDeepDive(false);
       setShowNewFlow(false);
       showSuccess("Flow created");
       await fetchStatus();
@@ -182,6 +187,7 @@ function FlowPage() {
     setEditName(flow.name || "");
     setEditSize(flow.size || DEFAULT_SIZE);
     setEditMix(flow.mix || DEFAULT_MIX);
+    setEditDeepDive(flow.deepDive === true);
   };
 
   const cancelEdit = () => {
@@ -189,6 +195,7 @@ function FlowPage() {
     setEditName("");
     setEditSize(DEFAULT_SIZE);
     setEditMix(DEFAULT_MIX);
+    setEditDeepDive(false);
   };
 
   const saveEdit = async (flowId) => {
@@ -202,6 +209,7 @@ function FlowPage() {
         name,
         size: editSize,
         mix: editMix,
+        deepDive: editDeepDive,
       });
       showSuccess("Flow updated");
       setEditingId(null);
@@ -399,7 +407,8 @@ function FlowPage() {
             (editMix?.mix ?? DEFAULT_MIX.mix) !==
               (flow.mix?.mix ?? DEFAULT_MIX.mix) ||
             (editMix?.trending ?? DEFAULT_MIX.trending) !==
-              (flow.mix?.trending ?? DEFAULT_MIX.trending);
+              (flow.mix?.trending ?? DEFAULT_MIX.trending) ||
+            editDeepDive !== (flow.deepDive === true);
           const stateLabel =
             state === "running"
               ? "Running"
@@ -448,6 +457,8 @@ function FlowPage() {
                     <span>{flow.mix?.mix ?? 0}% Mix</span>
                     <span>·</span>
                     <span>{flow.mix?.trending ?? 0}% Trending</span>
+                    <span>·</span>
+                    <span>{flow.deepDive ? "Deep dive" : "Top picks"}</span>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#c1c1c3]">
                     {state === "running" && (
@@ -516,6 +527,18 @@ function FlowPage() {
                           className="flow-slider w-full mt-2"
                         />
                       </div>
+                      <div>
+                        <div className="flex items-center justify-between text-xs text-[#c1c1c3]">
+                          <span>B-sides / deep dive</span>
+                          <PillToggle
+                            checked={editDeepDive}
+                            onChange={(e) => setEditDeepDive(e.target.checked)}
+                          />
+                        </div>
+                        <div className="mt-2 text-xs text-[#8b8b90]">
+                          Pull tracks 10–25 per artist
+                        </div>
+                      </div>
                     </div>
                     <div className="grid gap-3">
                       <div className="flex items-center justify-between text-xs text-[#c1c1c3]">
@@ -527,6 +550,11 @@ function FlowPage() {
                         >
                           Total {editTotal}%
                         </span>
+                      </div>
+                      <div className="text-xs text-[#8b8b90]">
+                        Discover pulls from your recommended artists, Mix blends
+                        your library with fresh picks, Trending follows global
+                        charts.
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="flex-1">
@@ -773,6 +801,18 @@ function FlowPage() {
                   className="flow-slider w-full mt-2"
                 />
               </div>
+              <div>
+                <div className="flex items-center justify-between text-xs text-[#c1c1c3]">
+                  <span>B-sides / deep dive</span>
+                  <PillToggle
+                    checked={newFlowDeepDive}
+                    onChange={(e) => setNewFlowDeepDive(e.target.checked)}
+                  />
+                </div>
+                <div className="mt-2 text-xs text-[#8b8b90]">
+                  Pull tracks 10–25 per artist
+                </div>
+              </div>
               <div className="grid gap-3">
                 <div className="flex items-center justify-between text-xs text-[#c1c1c3]">
                   <span>Mix balance</span>
@@ -783,6 +823,10 @@ function FlowPage() {
                   >
                     Total {newTotal}%
                   </span>
+                </div>
+                <div className="text-xs text-[#8b8b90]">
+                  Discover pulls from your recommended artists, Mix blends your
+                  library with fresh picks, Trending follows global charts.
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="flex-1">
