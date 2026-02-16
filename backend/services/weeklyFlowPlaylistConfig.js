@@ -21,6 +21,80 @@ const clampSize = (value) => {
   return Math.min(MAX_SIZE, Math.max(MIN_SIZE, Math.round(n)));
 };
 
+const normalizeWeightMap = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out = {};
+  for (const [key, rawValue] of Object.entries(value)) {
+    const name = String(key || "").trim();
+    if (!name) continue;
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed)) continue;
+    const rounded = Math.round(parsed);
+    if (rounded <= 0) continue;
+    out[name] = rounded;
+  }
+  return out;
+};
+
+const sumWeightMap = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
+  return Object.values(value).reduce((acc, entry) => {
+    const parsed = Number(entry);
+    return acc + (Number.isFinite(parsed) ? parsed : 0);
+  }, 0);
+};
+
+const normalizeRecipeCounts = (value, fallback) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return fallback ?? { discover: 0, mix: 0, trending: 0 };
+  }
+  const parseField = (entry) => {
+    const parsed = Number(entry);
+    if (!Number.isFinite(parsed)) return 0;
+    return Math.max(Math.round(parsed), 0);
+  };
+  return {
+    discover: parseField(value?.discover ?? 0),
+    mix: parseField(value?.mix ?? 0),
+    trending: parseField(value?.trending ?? 0),
+  };
+};
+
+const buildCountsFromMix = (size, mix) => {
+  const weights = [
+    { key: "discover", value: Number(mix?.discover ?? 0) },
+    { key: "mix", value: Number(mix?.mix ?? 0) },
+    { key: "trending", value: Number(mix?.trending ?? 0) },
+  ];
+  const sum = weights.reduce(
+    (acc, w) => acc + (Number.isFinite(w.value) ? w.value : 0),
+    0,
+  );
+  if (sum <= 0 || !Number.isFinite(sum) || size <= 0) {
+    return { discover: 0, mix: 0, trending: 0 };
+  }
+  const scaled = weights.map((w) => ({
+    ...w,
+    raw: (w.value / sum) * size,
+  }));
+  const floored = scaled.map((w) => ({
+    ...w,
+    count: Math.floor(w.raw),
+    remainder: w.raw - Math.floor(w.raw),
+  }));
+  let remaining = size - floored.reduce((acc, w) => acc + w.count, 0);
+  const ordered = [...floored].sort((a, b) => b.remainder - a.remainder);
+  for (let i = 0; i < ordered.length && remaining > 0; i++) {
+    ordered[i].count += 1;
+    remaining -= 1;
+  }
+  const out = {};
+  for (const item of ordered) {
+    out[item.key] = item.count;
+  }
+  return out;
+};
+
 const normalizeMix = (mix) => {
   const raw = {
     discover: Number(mix?.discover ?? 0),
@@ -60,6 +134,15 @@ const normalizeMix = (mix) => {
 
 const normalizeFlow = (flow) => {
   const name = String(flow?.name || "").trim();
+  const size = clampSize(flow?.size);
+  const mix = normalizeMix(flow?.mix);
+  const tags = normalizeWeightMap(flow?.tags);
+  const relatedArtists = normalizeWeightMap(flow?.relatedArtists);
+  const recipeSize = Math.max(
+    size - sumWeightMap(tags) - sumWeightMap(relatedArtists),
+    0,
+  );
+  const recipeFallback = buildCountsFromMix(recipeSize, mix);
   return {
     id: flow?.id || randomUUID(),
     name: name || "Flow",
@@ -69,8 +152,11 @@ const normalizeFlow = (flow) => {
       flow?.nextRunAt != null && Number.isFinite(Number(flow.nextRunAt))
         ? Number(flow.nextRunAt)
         : null,
-    size: clampSize(flow?.size),
-    mix: normalizeMix(flow?.mix),
+    size,
+    mix,
+    recipe: normalizeRecipeCounts(flow?.recipe, recipeFallback),
+    tags,
+    relatedArtists,
     createdAt:
       flow?.createdAt != null && Number.isFinite(Number(flow.createdAt))
         ? Number(flow.createdAt)
@@ -134,7 +220,7 @@ export const flowPlaylistConfig = {
     return flow?.enabled === true;
   },
 
-  createFlow({ name, mix, size, deepDive }) {
+  createFlow({ name, mix, size, deepDive, recipe, tags, relatedArtists }) {
     const flows = getStoredFlows();
     const flow = normalizeFlow({
       id: randomUUID(),
@@ -142,6 +228,9 @@ export const flowPlaylistConfig = {
       mix,
       size,
       deepDive,
+      recipe,
+      tags,
+      relatedArtists,
       enabled: false,
       nextRunAt: null,
     });
@@ -160,6 +249,9 @@ export const flowPlaylistConfig = {
       name: updates?.name ?? current.name,
       size: updates?.size ?? current.size,
       mix: updates?.mix ?? current.mix,
+      recipe: updates?.recipe ?? current.recipe,
+      tags: updates?.tags ?? current.tags,
+      relatedArtists: updates?.relatedArtists ?? current.relatedArtists,
       deepDive:
         typeof updates?.deepDive === "boolean"
           ? updates.deepDive

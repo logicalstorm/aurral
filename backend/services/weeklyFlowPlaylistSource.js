@@ -37,6 +37,75 @@ export class WeeklyFlowPlaylistSource {
     return out;
   }
 
+  _normalizeWeightMap(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    const out = {};
+    for (const [key, rawValue] of Object.entries(value)) {
+      const name = String(key || "").trim();
+      if (!name) continue;
+      const parsed = Number(rawValue);
+      if (!Number.isFinite(parsed)) continue;
+      const rounded = Math.round(parsed);
+      if (rounded <= 0) continue;
+      out[name] = rounded;
+    }
+    return out;
+  }
+
+  _sumWeightMap(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
+    return Object.values(value).reduce((acc, entry) => {
+      const parsed = Number(entry);
+      return acc + (Number.isFinite(parsed) ? parsed : 0);
+    }, 0);
+  }
+
+  _normalizeRecipeCounts(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      return null;
+    const parseField = (entry) => {
+      const parsed = Number(entry);
+      if (!Number.isFinite(parsed)) return 0;
+      return Math.max(Math.round(parsed), 0);
+    };
+    return {
+      discover: parseField(value?.discover ?? 0),
+      mix: parseField(value?.mix ?? 0),
+      trending: parseField(value?.trending ?? 0),
+    };
+  }
+
+  _buildWeightedSourceCounts(total, sources) {
+    const items = sources.filter(
+      (source) => Number.isFinite(source.weight) && source.weight > 0,
+    );
+    if (total <= 0 || items.length === 0) return [];
+    const sum = items.reduce((acc, item) => acc + item.weight, 0);
+    if (!Number.isFinite(sum) || sum <= 0) return [];
+    const scaled = items.map((item) => ({
+      ...item,
+      raw: (item.weight / sum) * total,
+    }));
+    const floored = scaled.map((item) => ({
+      ...item,
+      count: Math.floor(item.raw),
+      remainder: item.raw - Math.floor(item.raw),
+    }));
+    let remaining = total - floored.reduce((acc, item) => acc + item.count, 0);
+    const ordered = [...floored].sort((a, b) => b.remainder - a.remainder);
+    for (let i = 0; i < ordered.length && remaining > 0; i++) {
+      ordered[i].count += 1;
+      remaining -= 1;
+    }
+    return ordered;
+  }
+
+  _isMbid(value) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      value,
+    );
+  }
+
   _sliceRange(trackList, start, end) {
     if (!Array.isArray(trackList) || trackList.length === 0) return [];
     if (start >= trackList.length) return [];
@@ -145,31 +214,181 @@ export class WeeklyFlowPlaylistSource {
     return picked.slice(0, size);
   }
 
+  _dedupeAndFillSources(size, sources) {
+    const seen = new Set();
+    const picked = [];
+    const indices = new Map();
+    for (const source of sources) {
+      indices.set(source.key, 0);
+    }
+
+    const takeFrom = (source) => {
+      const list = source.tracks || [];
+      let added = 0;
+      let index = indices.get(source.key) || 0;
+      while (index < list.length && added < source.count) {
+        const track = list[index];
+        index += 1;
+        const key =
+          `${track.artistName}`.toLowerCase() +
+          "::" +
+          `${track.trackName}`.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        picked.push(track);
+        added += 1;
+      }
+      indices.set(source.key, index);
+    };
+
+    for (const source of sources) {
+      takeFrom(source);
+    }
+
+    let looped = false;
+    while (picked.length < size) {
+      let progress = false;
+      for (const source of sources) {
+        const list = source.tracks || [];
+        let index = indices.get(source.key) || 0;
+        while (index < list.length) {
+          const track = list[index];
+          index += 1;
+          const key =
+            `${track.artistName}`.toLowerCase() +
+            "::" +
+            `${track.trackName}`.toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          picked.push(track);
+          progress = true;
+          break;
+        }
+        indices.set(source.key, index);
+        if (picked.length >= size) break;
+      }
+      if (!progress) {
+        if (looped) break;
+        looped = true;
+      } else {
+        looped = false;
+      }
+    }
+
+    return picked.slice(0, size);
+  }
+
+  async getCuratedDiscoverTracks(limit, options = {}) {
+    const tags = options?.tags || {};
+    const relatedArtists = options?.relatedArtists || {};
+    const deepDive = options?.deepDive === true;
+    const sources = [];
+
+    for (const [tag, weight] of Object.entries(tags)) {
+      sources.push({ type: "tag", key: tag, weight: Number(weight) });
+    }
+    for (const [artist, weight] of Object.entries(relatedArtists)) {
+      sources.push({ type: "related", key: artist, weight: Number(weight) });
+    }
+
+    if (sources.length === 0) {
+      return await this.getRecommendedTracks(limit, { deepDive });
+    }
+
+    if (!getLastfmApiKey()) {
+      throw new Error("Last.fm API key required for curated discovery");
+    }
+
+    const counts = this._buildWeightedSourceCounts(limit, sources);
+    const curated = [];
+    for (const source of counts) {
+      if (!source.count) continue;
+      try {
+        if (source.type === "tag") {
+          const tracks = await this.getTagTracks(source.key, source.count);
+          curated.push(...tracks);
+        } else {
+          const tracks = await this.getRelatedArtistTracks(
+            source.key,
+            source.count,
+            {
+              deepDive,
+            },
+          );
+          curated.push(...tracks);
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    if (curated.length >= limit) {
+      return curated.slice(0, limit);
+    }
+
+    const fallback = await this.getRecommendedTracks(limit - curated.length, {
+      deepDive,
+    }).catch(() => []);
+    return [...curated, ...fallback];
+  }
+
   async getTracksForFlow(flow) {
     const size = Number(flow?.size || 0);
     const limit = Number.isFinite(size) && size > 0 ? size : 30;
-    const counts = this._buildCounts(limit, flow?.mix);
-    const perTypeLimit = Math.max(limit, 50);
+    const tags = this._normalizeWeightMap(flow?.tags);
+    const relatedArtists = this._normalizeWeightMap(flow?.relatedArtists);
+    const tagsTotal = this._sumWeightMap(tags);
+    const relatedTotal = this._sumWeightMap(relatedArtists);
+    const recipeCounts = this._normalizeRecipeCounts(flow?.recipe);
+    const recipeTotal =
+      recipeCounts?.discover != null
+        ? this._sumWeightMap(recipeCounts)
+        : Math.max(limit - tagsTotal - relatedTotal, 0);
+    const totalTarget = recipeTotal + tagsTotal + relatedTotal;
+    if (totalTarget <= 0) return [];
+    const counts =
+      recipeCounts?.discover != null
+        ? recipeCounts
+        : this._buildCounts(recipeTotal, flow?.mix);
+    const perTypeLimit = recipeTotal > 0 ? Math.max(recipeTotal, 50) : 0;
 
-    const [discoverTracks, mixTracks, trendingTracks] = await Promise.all([
-      this.getRecommendedTracks(perTypeLimit, {
-        deepDive: flow?.deepDive === true,
-      }).catch(() => []),
-      this.getMixTracks(perTypeLimit, {
-        deepDive: flow?.deepDive === true,
-      }).catch(() => []),
-      this.getDiscoverTracks(perTypeLimit).catch(() => []),
-    ]);
+    const [discoverTracks, mixTracks, trendingTracks] =
+      perTypeLimit > 0
+        ? await Promise.all([
+            this.getRecommendedTracks(perTypeLimit, {
+              deepDive: flow?.deepDive === true,
+            }).catch(() => []),
+            this.getMixTracks(perTypeLimit, {
+              deepDive: flow?.deepDive === true,
+            }).catch(() => []),
+            this.getDiscoverTracks(perTypeLimit).catch(() => []),
+          ])
+        : [[], [], []];
 
-    return this._dedupeAndFill(
-      limit,
-      {
-        discover: discoverTracks,
-        mix: mixTracks,
-        trending: trendingTracks,
-      },
-      counts,
+    const tagSources = await Promise.all(
+      Object.entries(tags).map(async ([tag, count]) => ({
+        key: `tag:${tag}`,
+        count,
+        tracks: await this.getTagTracks(tag, count).catch(() => []),
+      })),
     );
+    const relatedSources = await Promise.all(
+      Object.entries(relatedArtists).map(async ([artist, count]) => ({
+        key: `related:${artist}`,
+        count,
+        tracks: await this.getRelatedArtistTracks(artist, count, {
+          deepDive: flow?.deepDive === true,
+        }).catch(() => []),
+      })),
+    );
+
+    return this._dedupeAndFillSources(totalTarget, [
+      { key: "discover", count: counts.discover || 0, tracks: discoverTracks },
+      { key: "mix", count: counts.mix || 0, tracks: mixTracks },
+      { key: "trending", count: counts.trending || 0, tracks: trendingTracks },
+      ...tagSources,
+      ...relatedSources,
+    ]);
   }
 
   async getTracksForPlaylist(playlistType, limit = 30) {
@@ -231,6 +450,95 @@ export class WeeklyFlowPlaylistSource {
       );
       throw error;
     }
+  }
+
+  async getTagTracks(tag, limit) {
+    if (!getLastfmApiKey()) {
+      throw new Error("Last.fm API key not configured");
+    }
+    if (!tag || limit <= 0) return [];
+    const requested = Math.max(limit * 3, 50);
+    const trackData = await lastfmRequest("tag.getTopTracks", {
+      tag,
+      limit: requested,
+    });
+    const tracks = trackData?.tracks?.track
+      ? Array.isArray(trackData.tracks.track)
+        ? trackData.tracks.track
+        : [trackData.tracks.track]
+      : [];
+    const result = [];
+    const seen = new Set();
+    for (const track of tracks) {
+      if (result.length >= limit) break;
+      const artistName = (
+        track.artist?.name ||
+        track.artist?.["#text"] ||
+        ""
+      ).trim();
+      const trackName = track?.name?.trim();
+      if (!artistName || !trackName) continue;
+      const key =
+        `${artistName}`.toLowerCase() + "::" + `${trackName}`.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push({ artistName, trackName });
+    }
+    return result;
+  }
+
+  async getRelatedArtistTracks(artistKey, limit, options = {}) {
+    if (!getLastfmApiKey()) {
+      throw new Error("Last.fm API key not configured");
+    }
+    if (!artistKey || limit <= 0) return [];
+    const deepDive = options?.deepDive === true;
+    const ranges = deepDive
+      ? [
+          { start: 9, end: 24 },
+          { start: 0, end: 9 },
+          { start: 0, end: Number.MAX_SAFE_INTEGER },
+        ]
+      : [
+          { start: 0, end: 9 },
+          { start: 0, end: Number.MAX_SAFE_INTEGER },
+        ];
+    const params = this._isMbid(artistKey)
+      ? { mbid: artistKey, limit: 25 }
+      : { artist: artistKey, limit: 25 };
+    const similar = await lastfmRequest("artist.getSimilar", params);
+    const list = similar?.similarartists?.artist
+      ? Array.isArray(similar.similarartists.artist)
+        ? similar.similarartists.artist
+        : [similar.similarartists.artist]
+      : [];
+    const tracks = [];
+    const seenArtists = new Set();
+    for (const candidate of list) {
+      if (tracks.length >= limit) break;
+      const artistName = String(candidate?.name || "").trim();
+      if (!artistName) continue;
+      const key = artistName.toLowerCase();
+      if (seenArtists.has(key)) continue;
+      seenArtists.add(key);
+      try {
+        const topTracks = await lastfmRequest("artist.getTopTracks", {
+          artist: artistName,
+          limit: 25,
+        });
+        const trackList = topTracks?.toptracks?.track
+          ? Array.isArray(topTracks.toptracks.track)
+            ? topTracks.toptracks.track
+            : [topTracks.toptracks.track]
+          : [];
+        const pick = this._pickTrackFromRanges(trackList, ranges);
+        const trackName = pick?.name?.trim();
+        if (trackName) tracks.push({ artistName, trackName });
+      } catch {
+        continue;
+      }
+    }
+    return tracks;
   }
 
   async getRecommendedTracks(limit, options = {}) {
