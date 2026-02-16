@@ -127,19 +127,6 @@ export class LidarrClient {
       throw new Error("Lidarr API key not configured");
     }
 
-    const now = Date.now();
-    const bypassCircuit = options?.bypassCircuit === true;
-    if (this._circuitOpen && !bypassCircuit) {
-      if (now - this._circuitOpenedAt < CIRCUIT_COOLDOWN_MS) {
-        throw new Error(
-          "Lidarr unavailable (circuit open). Will retry after cooldown.",
-        );
-      }
-      this._resetCircuitState();
-    }
-
-    const authHeaders = this.getAuthHeaders();
-
     if (method === "GET" && endpoint === "/artist") {
       const now = Date.now();
       if (
@@ -158,6 +145,19 @@ export class LidarrClient {
         return this._albumListCache.data;
       }
     }
+
+    const now = Date.now();
+    const bypassCircuit = options?.bypassCircuit === true;
+    if (this._circuitOpen && !bypassCircuit) {
+      if (now - this._circuitOpenedAt < CIRCUIT_COOLDOWN_MS) {
+        throw new Error(
+          "Lidarr unavailable (circuit open). Will retry after cooldown.",
+        );
+      }
+      this._resetCircuitState();
+    }
+
+    const authHeaders = this.getAuthHeaders();
 
     if (
       method !== "GET" &&
@@ -231,24 +231,25 @@ export class LidarrClient {
       } catch (raw) {
         const error = raw && typeof raw === "object" ? raw : {};
         const status = error.response?.status;
-        const msg =
-          error.message != null ? String(error.message) : String(raw);
+        const msg = error.message != null ? String(error.message) : String(raw);
         const isTimeout =
-          error.code === "ECONNABORTED" || msg.toLowerCase().includes("timeout");
+          error.code === "ECONNABORTED" ||
+          msg.toLowerCase().includes("timeout");
         const isNoResponse = !error.response && (error.request || isTimeout);
-        const isTransientStatus =
-          typeof status === "number" && status >= 500;
-
-        if (isNoResponse || isTransientStatus) {
-          this._registerCircuitFailure();
-        }
+        const isTransientStatus = typeof status === "number" && status >= 500;
 
         if (
           attempt < LIDARR_RETRY_ATTEMPTS &&
           (isNoResponse || isTransientStatus)
         ) {
-          await new Promise((resolve) => setTimeout(resolve, LIDARR_RETRY_DELAY_MS));
+          await new Promise((resolve) =>
+            setTimeout(resolve, LIDARR_RETRY_DELAY_MS),
+          );
           continue;
+        }
+
+        if (isNoResponse || isTransientStatus) {
+          this._registerCircuitFailure();
         }
 
         if (error.response) {
