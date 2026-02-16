@@ -32,6 +32,7 @@ export function SettingsIntegrationsTab({
 }) {
   const [lidarrEditing, setLidarrEditing] = useState(false);
   const [navidromeEditing, setNavidromeEditing] = useState(false);
+  const [lidarrTestLatencyMs, setLidarrTestLatencyMs] = useState(null);
 
   const handleTestLidarr = async () => {
     const url = settings.integrations?.lidarr?.url;
@@ -41,8 +42,11 @@ export function SettingsIntegrationsTab({
       return;
     }
     setTestingLidarr(true);
+    setLidarrTestLatencyMs(null);
+    const startTime = performance.now();
     try {
       const result = await testLidarrConnection(url, apiKey);
+      setLidarrTestLatencyMs(Math.round(performance.now() - startTime));
       if (result.success) {
         showSuccess(
           `Lidarr connection successful! (${result.instanceName || "Lidarr"})`
@@ -73,6 +77,7 @@ export function SettingsIntegrationsTab({
         );
       }
     } catch (err) {
+      setLidarrTestLatencyMs(Math.round(performance.now() - startTime));
       const errorMsg =
         err.response?.data?.message ||
         err.response?.data?.error ||
@@ -211,7 +216,8 @@ export function SettingsIntegrationsTab({
                 placeholder="http://lidarr:8686"
                 autoComplete="off"
                 value={settings.integrations?.lidarr?.url || ""}
-                onChange={(e) =>
+                onChange={(e) => {
+                  setLidarrTestLatencyMs(null);
                   updateSettings({
                     ...settings,
                     integrations: {
@@ -221,8 +227,8 @@ export function SettingsIntegrationsTab({
                         url: e.target.value,
                       },
                     },
-                  })
-                }
+                  });
+                }}
               />
             </div>
             <div>
@@ -239,7 +245,8 @@ export function SettingsIntegrationsTab({
                   placeholder="Enter Lidarr API Key"
                   autoComplete="off"
                   value={settings.integrations?.lidarr?.apiKey || ""}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    setLidarrTestLatencyMs(null);
                     updateSettings({
                       ...settings,
                       integrations: {
@@ -249,8 +256,8 @@ export function SettingsIntegrationsTab({
                           apiKey: e.target.value,
                         },
                       },
-                    })
-                  }
+                    });
+                  }}
                 />
                 <button
                   type="button"
@@ -268,6 +275,11 @@ export function SettingsIntegrationsTab({
               <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
                 Found in Settings &rarr; General &rarr; Security.
               </p>
+              {lidarrTestLatencyMs !== null && (
+                <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
+                  Last test response time: {lidarrTestLatencyMs} ms
+                </p>
+              )}
             </div>
             <div>
               <label
