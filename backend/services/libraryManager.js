@@ -350,7 +350,9 @@ export class LibraryManager {
             (options.triggerSearch === undefined && searchOnAdd),
         },
       );
-      const allAlbums = await lidarr.request("/album");
+      const allAlbums = await lidarr.request(
+        `/album?artistId=${encodeURIComponent(artistId)}`,
+      );
       const artistAlbumIds = Array.isArray(allAlbums)
         ? allAlbums
             .filter(
@@ -390,7 +392,9 @@ export class LibraryManager {
       if (!lidarrArtist) {
         return [];
       }
-      const allAlbums = await lidarr.request("/album");
+      const allAlbums = await lidarr.request(
+        `/album?artistId=${encodeURIComponent(artistId)}`,
+      );
       const artistAlbums = Array.isArray(allAlbums)
         ? allAlbums.filter((a) => a.artistId === parseInt(artistId))
         : [];
