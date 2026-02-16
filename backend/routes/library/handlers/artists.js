@@ -132,7 +132,12 @@ export default function registerArtists(router) {
     requirePermission("addArtist"),
     async (req, res) => {
       try {
-        const { foreignArtistId: mbid, artistName, quality } = req.body;
+        const {
+          foreignArtistId: mbid,
+          artistName,
+          quality,
+          monitorOption,
+        } = req.body;
 
         if (!mbid || !artistName) {
           return res.status(400).json({
@@ -145,8 +150,11 @@ export default function registerArtists(router) {
         }
 
         const settings = dbOps.getSettings();
+        const defaultMonitorOption =
+          settings.integrations?.lidarr?.defaultMonitorOption || "none";
         const artist = await libraryManager.addArtist(mbid, artistName, {
           quality: quality || settings.quality || "standard",
+          monitorOption: monitorOption ?? defaultMonitorOption,
         });
         if (artist?.error) {
           return res.status(503).json({ error: artist.error });
