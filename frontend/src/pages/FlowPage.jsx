@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Clock,
   Trash2,
+  Pencil,
   Copy,
   Save,
   RotateCcw,
@@ -23,8 +24,6 @@ import PowerSwitch from "../components/PowerSwitch";
 
 const DEFAULT_MIX = { discover: 34, mix: 33, trending: 33 };
 const DEFAULT_SIZE = 30;
-const MIN_SIZE = 10;
-const MAX_SIZE = 50;
 
 function formatNextRun(nextRunAt) {
   if (!nextRunAt) return null;
@@ -169,7 +168,7 @@ const recipeToMix = (recipe) => {
 };
 
 const recipeFromMix = (size, mix) => {
-  const safeSize = clamp(Math.round(Number(size) || DEFAULT_SIZE), MIN_SIZE, MAX_SIZE);
+  const safeSize = Math.max(Math.round(Number(size) || DEFAULT_SIZE), 1);
   const normalized = normalizeMixPercentages(mix);
   const raw = {
     discover: (safeSize * normalized.discover) / 100,
@@ -240,11 +239,6 @@ const parseFlowYaml = (yamlText, fallback) => {
     normalized.total + sumWeightMap(tags) + sumWeightMap(relatedArtists);
   if (total <= 0) {
     throw new Error("Flow must include at least one track");
-  }
-  if (total < MIN_SIZE || total > MAX_SIZE) {
-    throw new Error(
-      `Total tracks must be between ${MIN_SIZE} and ${MAX_SIZE}`
-    );
   }
   const deepDive =
     typeof parsed.deepDive === "boolean"
@@ -679,6 +673,15 @@ function FlowPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 md:justify-end">
+                  <button
+                    onClick={() =>
+                      setEditingId(isEditing ? null : flow.id)
+                    }
+                    className="btn btn-secondary btn-sm"
+                    aria-label={isEditing ? "Close YAML" : "Edit YAML"}
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
                   <div className="flex items-center gap-2">
                     <PowerSwitch
                       checked={enabled}
@@ -691,21 +694,6 @@ function FlowPage() {
                       <Loader2 className="w-4 h-4 animate-spin text-[#9aa886]" />
                     )}
                   </div>
-                  <button
-                    onClick={() =>
-                      setEditingId(isEditing ? null : flow.id)
-                    }
-                    className="btn btn-secondary btn-sm flex items-center gap-2"
-                  >
-                    {isEditing ? "Close" : "YAML"}
-                  </button>
-                  <button
-                    onClick={() => handleCopyYaml(flow)}
-                    className="btn btn-secondary btn-sm flex items-center gap-2"
-                  >
-                    <Copy className="w-4 h-4" />
-                    Copy YAML
-                  </button>
                 </div>
               </div>
 
@@ -751,6 +739,13 @@ function FlowPage() {
                         </span>
                       </button>
                       <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleCopyYaml(flow)}
+                          className="btn btn-secondary btn-sm flex items-center gap-2"
+                        >
+                          <Copy className="w-4 h-4" />
+                          Copy YAML
+                        </button>
                         <button
                           onClick={() => handleResetYaml(flow)}
                           className="btn btn-secondary btn-sm flex items-center gap-2"

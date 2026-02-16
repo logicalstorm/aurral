@@ -4,8 +4,6 @@ import { dbOps } from "../config/db-helpers.js";
 const LEGACY_TYPES = ["discover", "mix", "trending"];
 const DEFAULT_MIX = { discover: 34, mix: 33, trending: 33 };
 const DEFAULT_SIZE = 30;
-const MIN_SIZE = 10;
-const MAX_SIZE = 50;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 const titleCase = (value) =>
@@ -18,7 +16,7 @@ const titleCase = (value) =>
 const clampSize = (value) => {
   const n = Number(value);
   if (!Number.isFinite(n)) return DEFAULT_SIZE;
-  return Math.min(MAX_SIZE, Math.max(MIN_SIZE, Math.round(n)));
+  return Math.max(Math.round(n), 1);
 };
 
 const normalizeWeightMap = (value) => {
