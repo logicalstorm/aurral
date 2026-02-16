@@ -262,6 +262,7 @@ function ArtistDetailsPage() {
           libraryAlbums={libraryAlbums}
           downloadStatuses={library.downloadStatuses}
           requestingAlbum={library.requestingAlbum}
+          reSearchingAlbum={library.reSearchingAlbum}
           albumCovers={albumCovers}
           expandedLibraryAlbum={library.expandedLibraryAlbum}
           albumTracks={library.albumTracks}
@@ -270,6 +271,7 @@ function ArtistDetailsPage() {
           setAlbumDropdownOpen={library.setAlbumDropdownOpen}
           handleLibraryAlbumClick={library.handleLibraryAlbumClick}
           handleDeleteAlbumClick={library.handleDeleteAlbumClick}
+          handleReSearchAlbum={library.handleReSearchAlbum}
         />
       )}
 
@@ -296,6 +298,8 @@ function ArtistDetailsPage() {
           handleRequestAlbum={library.handleRequestAlbum}
           handleDeleteAlbumClick={library.handleDeleteAlbumClick}
           requestingAlbum={library.requestingAlbum}
+          reSearchingAlbum={library.reSearchingAlbum}
+          handleReSearchAlbum={library.handleReSearchAlbum}
           isReleaseGroupDownloadedInLibrary={
             library.isReleaseGroupDownloadedInLibrary
           }

@@ -102,7 +102,7 @@ router.get("/", noCache, async (req, res) => {
         statusMessages.includes("fail") ||
         statusMessages.includes("unmatched");
       
-      const status = isFailed ? "processing" : "processing";
+      const status = isFailed ? "failed" : "processing";
 
       requestsByAlbumId.set(String(albumId), {
         id: `lidarr-queue-${item.id ?? albumId}`,
@@ -188,7 +188,11 @@ router.get("/", noCache, async (req, res) => {
         dataString.includes("import fail");
       
       const isSuccessfulImport = eventType.includes("import") && !isFailedImport && eventType !== "albumimportincomplete";
-      const status = isSuccessfulImport ? "available" : "processing";
+      const status = isSuccessfulImport
+        ? "available"
+        : isFailedImport
+          ? "failed"
+          : "processing";
 
       requestsByAlbumId.set(String(albumId), {
         id: `lidarr-history-${record.id ?? albumId}`,
