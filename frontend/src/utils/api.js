@@ -283,6 +283,13 @@ export const downloadAlbum = async (artistId, albumId, options = {}) => {
   return response.data;
 };
 
+export const triggerAlbumSearch = async (albumId) => {
+  const response = await api.post("/library/downloads/album/search", {
+    albumId,
+  });
+  return response.data;
+};
+
 export const downloadTrack = async (artistId, trackId) => {
   const response = await api.post("/library/downloads/track", {
     artistId,

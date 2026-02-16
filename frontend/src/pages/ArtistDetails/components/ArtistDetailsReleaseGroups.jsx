@@ -14,6 +14,7 @@ import {
   Disc,
   Disc3,
   FileMusic,
+  RefreshCw,
 } from "lucide-react";
 import AddAlbumButton from "../../../components/AddAlbumButton";
 import { starsFromCount } from "../utils";
@@ -41,6 +42,8 @@ export function ArtistDetailsReleaseGroups({
   handleRequestAlbum,
   handleDeleteAlbumClick,
   requestingAlbum,
+  reSearchingAlbum,
+  handleReSearchAlbum,
   isReleaseGroupDownloadedInLibrary,
 }) {
   const releaseGroups = artist["release-groups"];
@@ -262,6 +265,18 @@ export function ArtistDetailsReleaseGroups({
             const trackKey = libraryAlbumId || releaseGroup.id;
             const tracks = albumTracks[trackKey] || null;
             const isLoadingTracks = loadingTracks[trackKey] || false;
+            const isActiveStatus =
+              status &&
+              ["processing", "adding", "searching", "downloading", "moving"].includes(
+                status.status,
+              );
+            const canReSearch =
+              status &&
+              status.libraryId &&
+              !String(status.libraryId).startsWith("pending-") &&
+              !isActiveStatus &&
+              status.status !== "available" &&
+              status.status !== "added";
             const rowBg = isExpanded
               ? "#2a2830"
               : releaseGroupIdx % 2 === 0
@@ -300,6 +315,34 @@ export function ArtistDetailsReleaseGroups({
                     <ExternalLink className="w-4 h-4 mr-2" />
                     View on Last.fm
                   </a>
+                  {canReSearch && (
+                    <>
+                      <div className="my-1 border-t border-white/10" />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleReSearchAlbum(
+                            status.libraryId,
+                            releaseGroup.title,
+                          );
+                          setAlbumDropdownOpen(null);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm hover:bg-white/10 transition-colors flex items-center"
+                        style={{ color: "#fff" }}
+                        disabled={reSearchingAlbum === status.libraryId}
+                      >
+                        {reSearchingAlbum === status.libraryId ? (
+                          <Loader className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                        )}
+                        {reSearchingAlbum === status.libraryId
+                          ? "Searching..."
+                          : "Re-search"}
+                      </button>
+                    </>
+                  )}
                   <div className="my-1 border-t border-white/10" />
                   <button
                     type="button"
@@ -489,11 +532,43 @@ export function ArtistDetailsReleaseGroups({
                             )}
                           </div>
                         </>
+                      ) : status.status === "failed" ? (
+                        <>
+                          <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase bg-red-500/20 text-red-400 cursor-default">
+                            Failed
+                          </span>
+                          <div className="relative overflow-visible">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAlbumDropdownOpen(
+                                  albumDropdownOpen === releaseGroup.id
+                                    ? null
+                                    : releaseGroup.id
+                                );
+                              }}
+                              className="btn btn-secondary btn-sm p-2"
+                              style={{
+                                backgroundColor: itemBg,
+                                borderColor: itemBg,
+                                color: "#c1c1c3",
+                              }}
+                              title="Options"
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
+                            {albumDropdownOpen === releaseGroup.id && (
+                              <AlbumDropdown />
+                            )}
+                          </div>
+                        </>
                       ) : status.status === "processing" ||
                         status.status === "adding" ||
                         status.status === "searching" ||
                         status.status === "downloading" ||
-                        status.status === "moving" ? (
+                        status.status === "moving" ||
+                        status.status === "monitored" ? (
                         <>
                           <span
                             className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold uppercase cursor-default"
@@ -688,5 +763,7 @@ ArtistDetailsReleaseGroups.propTypes = {
   handleRequestAlbum: PropTypes.func,
   handleDeleteAlbumClick: PropTypes.func,
   requestingAlbum: PropTypes.string,
+  reSearchingAlbum: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  handleReSearchAlbum: PropTypes.func,
   isReleaseGroupDownloadedInLibrary: PropTypes.func,
 };
