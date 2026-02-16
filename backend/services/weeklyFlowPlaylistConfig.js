@@ -64,6 +64,7 @@ const normalizeFlow = (flow) => {
     id: flow?.id || randomUUID(),
     name: name || "Flow",
     enabled: flow?.enabled === true,
+    deepDive: flow?.deepDive === true,
     nextRunAt:
       flow?.nextRunAt != null && Number.isFinite(Number(flow.nextRunAt))
         ? Number(flow.nextRunAt)
@@ -133,13 +134,14 @@ export const flowPlaylistConfig = {
     return flow?.enabled === true;
   },
 
-  createFlow({ name, mix, size }) {
+  createFlow({ name, mix, size, deepDive }) {
     const flows = getStoredFlows();
     const flow = normalizeFlow({
       id: randomUUID(),
       name,
       mix,
       size,
+      deepDive,
       enabled: false,
       nextRunAt: null,
     });
@@ -158,6 +160,10 @@ export const flowPlaylistConfig = {
       name: updates?.name ?? current.name,
       size: updates?.size ?? current.size,
       mix: updates?.mix ?? current.mix,
+      deepDive:
+        typeof updates?.deepDive === "boolean"
+          ? updates.deepDive
+          : current.deepDive,
       enabled: current.enabled,
       nextRunAt: current.nextRunAt,
       createdAt: current.createdAt,

@@ -82,11 +82,16 @@ export class LidarrClient {
     const timeoutMs =
       Number.isFinite(envTimeoutMs) && envTimeoutMs > 0 ? envTimeoutMs : 8000;
 
+    const circuitDisabled =
+      process.env.LIDARR_CIRCUIT_DISABLED === "true" ||
+      process.env.LIDARR_CIRCUIT_DISABLED === "1";
+
     const newConfig = {
       url: url,
       apiKey: (dbConfig.apiKey || process.env.LIDARR_API_KEY || "").trim(),
       insecure: !!insecure,
       timeoutMs,
+      circuitDisabled,
     };
 
     this.config = newConfig;
@@ -148,12 +153,15 @@ export class LidarrClient {
 
     const now = Date.now();
     const bypassCircuit = options?.bypassCircuit === true;
-    if (this._circuitOpen && !bypassCircuit) {
+    if (!this.config.circuitDisabled && this._circuitOpen && !bypassCircuit) {
       if (now - this._circuitOpenedAt < CIRCUIT_COOLDOWN_MS) {
         throw new Error(
           "Lidarr unavailable (circuit open). Will retry after cooldown.",
         );
       }
+      this._resetCircuitState();
+    }
+    if (this.config.circuitDisabled && this._circuitOpen) {
       this._resetCircuitState();
     }
 
@@ -248,7 +256,10 @@ export class LidarrClient {
           continue;
         }
 
-        if (isNoResponse || isTransientStatus) {
+        if (
+          !this.config.circuitDisabled &&
+          (isNoResponse || isTransientStatus)
+        ) {
           this._registerCircuitFailure();
         }
 
