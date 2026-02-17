@@ -4,6 +4,7 @@ import {
   lastfmGetArtistNameByMbid,
   deezerGetArtistTopTracks,
   deezerGetArtistTopTracksById,
+  musicbrainzGetArtistNameByMbid,
 } from "../../../services/apiClients.js";
 import { dbOps } from "../../../config/db-helpers.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
@@ -29,6 +30,7 @@ export default function registerPreview(router) {
         (getLastfmApiKey()
           ? await lastfmGetArtistNameByMbid(resolvedMbid)
           : null) ||
+        (await musicbrainzGetArtistNameByMbid(resolvedMbid)) ||
         null;
       if (!artistName) {
         return res.json({ tracks: [] });

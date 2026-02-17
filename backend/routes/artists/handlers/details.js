@@ -6,6 +6,7 @@ import {
   getArtistBio,
   musicbrainzGetArtistReleaseGroups,
   enrichReleaseGroupsWithDeezer,
+  musicbrainzGetArtistNameByMbid,
 } from "../../../services/apiClients.js";
 import { dbOps } from "../../../config/db-helpers.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
@@ -211,6 +212,7 @@ export default function registerDetails(router) {
           (getLastfmApiKey()
             ? await lastfmGetArtistNameByMbid(resolvedMbid)
             : null) ||
+          (await musicbrainzGetArtistNameByMbid(resolvedMbid)) ||
           "Unknown Artist";
         const tagsData = getLastfmApiKey()
           ? await lastfmRequest("artist.getTopTags", { mbid: resolvedMbid })
