@@ -3,6 +3,7 @@ import {
   lastfmGetArtistNameByMbid,
   deezerSearchArtist,
   getDeezerArtistById,
+  musicbrainzGetArtistNameByMbid,
 } from "../../services/apiClients.js";
 import { dbOps } from "../../config/db-helpers.js";
 
@@ -40,7 +41,8 @@ export const fetchCoverInBackground = async (mbid) => {
       const libraryArtist = libraryManager.getArtist(mbid);
       let artistName =
         libraryArtist?.artistName ||
-        (getLastfmApiKey() ? await lastfmGetArtistNameByMbid(resolvedMbid) : null);
+        (getLastfmApiKey() ? await lastfmGetArtistNameByMbid(resolvedMbid) : null) ||
+        (await musicbrainzGetArtistNameByMbid(resolvedMbid));
 
       if (artistName) {
         try {
