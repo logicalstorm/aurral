@@ -9,6 +9,7 @@ import {
   enrichReleaseGroupsWithDeezer,
   deezerSearchArtist,
   getDeezerArtistById,
+  musicbrainzGetArtistNameByMbid,
 } from "../../../services/apiClients.js";
 import { dbOps } from "../../../config/db-helpers.js";
 import { noCache } from "../../../middleware/cache.js";
@@ -214,6 +215,7 @@ export default function registerStream(router) {
                 (getLastfmApiKey()
                   ? await lastfmGetArtistNameByMbid(resolvedMbid)
                   : null) ||
+                (await musicbrainzGetArtistNameByMbid(resolvedMbid)) ||
                 "Unknown Artist";
               const tagsData = getLastfmApiKey()
                 ? await lastfmRequest("artist.getTopTags", {

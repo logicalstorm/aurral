@@ -167,8 +167,20 @@ export const lastfmRequest = lastfmLimiter.wrap(async (method, params = {}) => {
     lastfmCache.set(cacheKey, response.data);
     return response.data;
   } catch (error) {
-    if (error.code !== "ECONNABORTED") {
-      console.error(`Last.fm API error (${method}):`, error.message);
+    const status = error.response?.status || null;
+    const payloadError =
+      error.response?.data?.message || error.response?.data?.error || null;
+    const details = {
+      method,
+      status,
+      code: error.code || null,
+      message: error.message,
+      error: payloadError,
+    };
+    if (error.code === "ECONNABORTED") {
+      console.error(`Last.fm API timeout (${method})`, details);
+    } else {
+      console.error(`Last.fm API error (${method})`, details);
     }
     return null;
   }
@@ -648,6 +660,47 @@ export async function musicbrainzGetArtistNameByMbid(mbid) {
     const data = await musicbrainzRequest(`/artist/${mbid}`);
     const name = data?.name;
     return name && typeof name === "string" ? name.trim() : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function musicbrainzResolveArtistMbidByName(artistName) {
+  const rawName = String(artistName || "").trim();
+  if (!rawName) return null;
+  const normalized = rawName.toLowerCase();
+  const queryName = rawName.replace(/"/g, '\\"');
+  try {
+    const data = await musicbrainzRequest("/artist", {
+      query: `artist:"${queryName}"`,
+      limit: 5,
+    });
+    const artists = Array.isArray(data?.artists) ? data.artists : [];
+    const candidates = artists
+      .map((artist) => ({
+        id: artist.id,
+        name: artist.name || "",
+        type: artist.type || "",
+        disambiguation: artist.disambiguation || "",
+        score: parseInt(artist.score || 0),
+        normalized: String(artist.name || "").toLowerCase(),
+      }))
+      .filter((artist) => artist.id);
+    if (!candidates.length) return null;
+    candidates.sort((a, b) => {
+      const aExact = a.normalized === normalized ? 1 : 0;
+      const bExact = b.normalized === normalized ? 1 : 0;
+      if (aExact !== bExact) return bExact - aExact;
+      const aPerson = a.type.toLowerCase() === "person" ? 1 : 0;
+      const bPerson = b.type.toLowerCase() === "person" ? 1 : 0;
+      if (aPerson !== bPerson) return bPerson - aPerson;
+      const aDisambig = a.disambiguation ? 1 : 0;
+      const bDisambig = b.disambiguation ? 1 : 0;
+      if (aDisambig !== bDisambig) return bDisambig - aDisambig;
+      if (a.score !== b.score) return b.score - a.score;
+      return a.name.localeCompare(b.name);
+    });
+    return candidates[0]?.id || null;
   } catch (e) {
     return null;
   }
