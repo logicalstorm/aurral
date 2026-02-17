@@ -85,9 +85,9 @@ Weekly Flow generates playlists from your library and listening context, then do
 - Lidarr (reachable from Aurral)
 - A MusicBrainz contact email (used for the MusicBrainz User-Agent policy)
 
-### Recommended
+### Recommendations / Discovery / Flow / Tag Searching & More...
 
-- Last.fm API key (better discovery + imagery coverage)
+- Last.fm API key (Only technically optional but please just add the key even if you don't use last.fm for scrobbling)
 
 ### For Weekly Flow
 

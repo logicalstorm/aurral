@@ -1,13 +1,19 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Loader, Music, ArrowLeft } from "lucide-react";
-import { searchArtists, searchArtistsByTag, getDiscovery } from "../utils/api";
+import {
+  searchArtists,
+  searchArtistsByTag,
+  getDiscovery,
+  checkHealth,
+} from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
+import PillToggle from "../components/PillToggle";
 
 const PAGE_SIZE = 24;
 
 function SearchResultsPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
   const type = searchParams.get("type");
   const [results, setResults] = useState([]);
@@ -19,6 +25,7 @@ function SearchResultsPage() {
   const [artistImages, setArtistImages] = useState({});
   const [hasMore, setHasMore] = useState(false);
   const [searchTotalCount, setSearchTotalCount] = useState(0);
+  const [lastfmConfigured, setLastfmConfigured] = useState(null);
   const navigate = useNavigate();
 
   const trimmedQuery = useMemo(() => query.trim(), [query]);
@@ -26,6 +33,8 @@ function SearchResultsPage() {
     () => type === "tag" || trimmedQuery.startsWith("#"),
     [type, trimmedQuery],
   );
+  const tagScope = searchParams.get("scope") || "recommended";
+  const showAllTagResults = isTagSearch && tagScope === "all";
 
   const dedupe = useCallback((artists) => {
     const seen = new Set();
@@ -35,6 +44,30 @@ function SearchResultsPage() {
       seen.add(artist.id);
       return true;
     });
+  }, []);
+  const updateTagScope = useCallback(
+    (nextScope) => {
+      const params = new URLSearchParams(searchParams);
+      if (nextScope === "all") {
+        params.set("scope", "all");
+      } else {
+        params.delete("scope");
+      }
+      setSearchParams(params);
+    },
+    [searchParams, setSearchParams],
+  );
+
+  useEffect(() => {
+    const fetchHealth = async () => {
+      try {
+        const health = await checkHealth();
+        setLastfmConfigured(!!health.lastfmConfigured);
+      } catch {
+        setLastfmConfigured(null);
+      }
+    };
+    fetchHealth();
   }, []);
 
   useEffect(() => {
@@ -90,7 +123,7 @@ function SearchResultsPage() {
           const tag = trimmedQuery.startsWith("#")
             ? trimmedQuery.substring(1)
             : trimmedQuery;
-          const data = await searchArtistsByTag(tag, PAGE_SIZE, 0);
+          const data = await searchArtistsByTag(tag, PAGE_SIZE, 0, tagScope);
           artists = data.recommendations || [];
         } else {
           const data = await searchArtists(trimmedQuery, PAGE_SIZE, 0);
@@ -127,7 +160,7 @@ function SearchResultsPage() {
     };
 
     performSearch();
-  }, [query, type, dedupe, trimmedQuery, isTagSearch]);
+  }, [query, type, dedupe, trimmedQuery, isTagSearch, tagScope]);
 
   const loadMore = useCallback(async () => {
     if (type === "recommended" || type === "trending") {
@@ -144,7 +177,12 @@ function SearchResultsPage() {
         const tag = trimmedQuery.startsWith("#")
           ? trimmedQuery.substring(1)
           : trimmedQuery;
-        const data = await searchArtistsByTag(tag, PAGE_SIZE, results.length);
+        const data = await searchArtistsByTag(
+          tag,
+          PAGE_SIZE,
+          results.length,
+          tagScope,
+        );
         const newArtists = data.recommendations || [];
         const combined = dedupe([...results, ...newArtists]);
         setResults(combined);
@@ -189,6 +227,7 @@ function SearchResultsPage() {
     dedupe,
     trimmedQuery,
     isTagSearch,
+    tagScope,
   ]);
 
   const getArtistType = (artistType) => {
@@ -236,19 +275,60 @@ function SearchResultsPage() {
             Back
           </button>
         )}
-        <h1 className="text-2xl font-bold" style={{ color: "#fff" }}>
-          {type === "recommended"
-            ? "Recommended for You"
-            : type === "trending"
-              ? "Global Trending"
-              : isTagSearch
-                ? "Tag Results"
-                : trimmedQuery
-                  ? loading
-                    ? `Showing results for "${trimmedQuery}"`
-                    : `Showing ${results.length} results for "${trimmedQuery}"`
-                  : "Search Results"}
-        </h1>
+        <div className="flex flex-wrap items-center gap-4">
+          <h1 className="text-2xl font-bold" style={{ color: "#fff" }}>
+            {type === "recommended"
+              ? "Recommended for You"
+              : type === "trending"
+                ? "Global Trending"
+                : isTagSearch
+                  ? "Tag Results"
+                  : trimmedQuery
+                    ? loading
+                      ? `Showing results for "${trimmedQuery}"`
+                      : `Showing ${results.length} results for "${trimmedQuery}"`
+                    : "Search Results"}
+          </h1>
+          {isTagSearch && (
+            <div className="ml-auto inline-flex items-center gap-3">
+              <span
+                className="text-sm"
+                style={{ color: showAllTagResults ? "#8a8a8f" : "#fff" }}
+              >
+                Recommended
+              </span>
+              <PillToggle
+                checked={showAllTagResults}
+                onChange={(e) =>
+                  updateTagScope(e.target.checked ? "all" : "recommended")
+                }
+              />
+              <span
+                className="text-sm"
+                style={{ color: showAllTagResults ? "#fff" : "#8a8a8f" }}
+              >
+                All
+              </span>
+            </div>
+          )}
+        </div>
+        {isTagSearch && lastfmConfigured === false && (
+          <div className="mt-4 bg-yellow-500/20 p-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-yellow-300 text-sm">
+                Tag search and discovery recommendations use Last.fm. Add an
+                API key to enable full results.
+              </p>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => navigate("/settings")}
+              >
+                Open Settings
+              </button>
+            </div>
+          </div>
+        )}
         {type === "recommended" && (
           <p style={{ color: "#c1c1c3" }}>
             {results.length} artist{results.length !== 1 ? "s" : ""} we think
@@ -261,7 +341,9 @@ function SearchResultsPage() {
         {isTagSearch && trimmedQuery && (
           <p
             style={{ color: "#c1c1c3" }}
-          >{`Top artists for tag "${trimmedQuery.startsWith("#") ? trimmedQuery.substring(1) : trimmedQuery}"`}</p>
+          >{`${
+            showAllTagResults ? "Top artists" : "Recommended artists"
+          } for tag "${trimmedQuery.startsWith("#") ? trimmedQuery.substring(1) : trimmedQuery}"`}</p>
         )}
       </div>
 
@@ -298,9 +380,20 @@ function SearchResultsPage() {
                 {type === "recommended" || type === "trending"
                   ? "Nothing to show here yet."
                   : isTagSearch
-                    ? `We couldn't find any top artists for tag "${trimmedQuery.startsWith("#") ? trimmedQuery.substring(1) : trimmedQuery}"`
+                    ? `We couldn't find any ${
+                        showAllTagResults ? "artists" : "recommended artists"
+                      } for tag "${trimmedQuery.startsWith("#") ? trimmedQuery.substring(1) : trimmedQuery}"`
                     : `We couldn't find any artists matching "${trimmedQuery}"`}
               </p>
+              {isTagSearch && !showAllTagResults && (
+                <button
+                  type="button"
+                  className="btn btn-primary mt-6"
+                  onClick={() => updateTagScope("all")}
+                >
+                  Try searching all
+                </button>
+              )}
             </div>
           ) : (
             <>
