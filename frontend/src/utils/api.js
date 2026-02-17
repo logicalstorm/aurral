@@ -369,9 +369,18 @@ export const getTagSuggestions = async (q, limit = 10) => {
   return response.data;
 };
 
-export const searchArtistsByTag = async (tag, limit = 24, offset = 0) => {
+export const searchArtistsByTag = async (
+  tag,
+  limit = 24,
+  offset = 0,
+  scope = "recommended",
+) => {
+  const params = { tag, limit, offset };
+  if (scope === "all") {
+    params.scope = "all";
+  }
   const response = await api.get("/discover/by-tag", {
-    params: { tag, limit, offset },
+    params,
   });
   return response.data;
 };
