@@ -308,7 +308,7 @@ router.get("/tags", async (req, res) => {
 
 router.get("/by-tag", async (req, res) => {
   try {
-    const { tag, limit = 24, offset = 0 } = req.query;
+    const { tag, limit = 24, offset = 0, includeLibrary, scope } = req.query;
 
     if (!tag) {
       return res.status(400).json({ error: "Tag parameter is required" });
@@ -317,78 +317,90 @@ router.get("/by-tag", async (req, res) => {
     const limitInt = Math.min(parseInt(limit) || 24, 50);
     const offsetInt = parseInt(offset) || 0;
     const page = Math.floor(offsetInt / limitInt) + 1;
-    const cacheKey = `tag:${tag.toLowerCase()}:${limitInt}:${page}`;
+    const includeLibraryFlag =
+      includeLibrary === "true" || includeLibrary === "1";
+    const scopeValue =
+      scope === "all" || includeLibraryFlag ? "all" : "recommended";
+    const cacheKey = `tag:${tag.toLowerCase()}:${limitInt}:${page}:${scopeValue}`;
 
     let recommendations = [];
-
-    if (getLastfmApiKey()) {
-      try {
-        let data;
-        if (pendingTagRequests.has(cacheKey)) {
-          data = await pendingTagRequests.get(cacheKey);
-        } else {
-          const fetchPromise = lastfmRequest("tag.getTopArtists", {
-            tag,
-            limit: limitInt,
-            page,
-          });
-          pendingTagRequests.set(cacheKey, fetchPromise);
-          try {
-            data = await fetchPromise;
-          } finally {
-            pendingTagRequests.delete(cacheKey);
+    if (scopeValue === "all") {
+      if (getLastfmApiKey()) {
+        try {
+          let data;
+          if (pendingTagRequests.has(cacheKey)) {
+            data = await pendingTagRequests.get(cacheKey);
+          } else {
+            const fetchPromise = lastfmRequest("tag.getTopArtists", {
+              tag,
+              limit: limitInt,
+              page,
+            });
+            pendingTagRequests.set(cacheKey, fetchPromise);
+            try {
+              data = await fetchPromise;
+            } finally {
+              pendingTagRequests.delete(cacheKey);
+            }
           }
-        }
 
-        if (data?.topartists?.artist) {
-          const artists = Array.isArray(data.topartists.artist)
-            ? data.topartists.artist
-            : [data.topartists.artist];
+          if (data?.topartists?.artist) {
+            const artists = Array.isArray(data.topartists.artist)
+              ? data.topartists.artist
+              : [data.topartists.artist];
 
-          recommendations = artists
-            .map((artist) => {
-              let imageUrl = null;
-              if (artist.image && Array.isArray(artist.image)) {
-                const img =
-                  artist.image.find((i) => i.size === "extralarge") ||
-                  artist.image.find((i) => i.size === "large") ||
-                  artist.image.slice(-1)[0];
-                if (
-                  img &&
-                  img["#text"] &&
-                  !img["#text"].includes("2a96cbd8b46e442fc41c2b86b821562f")
-                ) {
-                  imageUrl = img["#text"];
+            recommendations = artists
+              .map((artist) => {
+                let imageUrl = null;
+                if (artist.image && Array.isArray(artist.image)) {
+                  const img =
+                    artist.image.find((i) => i.size === "extralarge") ||
+                    artist.image.find((i) => i.size === "large") ||
+                    artist.image.slice(-1)[0];
+                  if (
+                    img &&
+                    img["#text"] &&
+                    !img["#text"].includes("2a96cbd8b46e442fc41c2b86b821562f")
+                  ) {
+                    imageUrl = img["#text"];
+                  }
                 }
-              }
 
-              return {
-                id: artist.mbid,
-                name: artist.name,
-                sortName: artist.name,
-                type: "Artist",
-                tags: [tag],
-                image: imageUrl,
-              };
-            })
-            .filter((a) => a.id);
+                return {
+                  id: artist.mbid,
+                  name: artist.name,
+                  sortName: artist.name,
+                  type: "Artist",
+                  tags: [tag],
+                  image: imageUrl,
+                };
+              })
+              .filter((a) => a.id);
+          }
+        } catch (err) {
+          console.error("Last.fm tag search failed:", err.message);
         }
-      } catch (err) {
-        console.error("Last.fm tag search failed:", err.message);
       }
+    } else {
+      const discoveryCache = getDiscoveryCache();
+      const tagLower = String(tag).trim().toLowerCase();
+      const matches = (discoveryCache.recommendations || []).filter((artist) => {
+        const tags = Array.isArray(artist.tags) ? artist.tags : [];
+        return tags.some((t) => String(t).toLowerCase() === tagLower);
+      });
+      recommendations = matches.slice(offsetInt, offsetInt + limitInt);
+      return res.json({
+        recommendations,
+        tag,
+        total: matches.length,
+        offset: offsetInt,
+      });
     }
 
-    const libraryArtists = await libraryManager.getAllArtists();
-    const existingArtistIds = new Set(libraryArtists.map((a) => a.mbid));
-
-    const filtered = recommendations.filter(
-      (artist) => !existingArtistIds.has(artist.id)
-    );
-
     res.json({
-      recommendations: filtered,
+      recommendations,
       tag,
-      total: filtered.length,
+      total: recommendations.length,
       offset: offsetInt,
     });
   } catch (error) {
