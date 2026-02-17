@@ -4,6 +4,7 @@ import {
   lastfmRequest,
   getLastfmApiKey,
   deezerSearchArtist,
+  musicbrainzResolveArtistMbidByName,
 } from "./apiClients.js";
 import { websocketService } from "./websocketService.js";
 
@@ -364,6 +365,23 @@ export const updateDiscoveryCache = async () => {
             }
           }
         }
+
+        const maxGlobalResolve = 30;
+        for (
+          let index = 0;
+          index < globalTop.length && index < maxGlobalResolve;
+          index++
+        ) {
+          const item = globalTop[index];
+          if (!item?.name) continue;
+          const resolvedMbid = await musicbrainzResolveArtistMbidByName(
+            item.name,
+          );
+          if (resolvedMbid && resolvedMbid !== item.id) {
+            item.navigateTo = resolvedMbid;
+          }
+        }
+
         discoveryCache.globalTop = globalTop;
         console.log(
           `Found ${discoveryCache.globalTop.length} trending artists (from top tracks).`
@@ -460,6 +478,20 @@ export const updateDiscoveryCache = async () => {
     const recommendationsArray = Array.from(recommendations.values())
       .sort((a, b) => (b.score || 0) - (a.score || 0))
       .slice(0, 100);
+
+    const maxResolve = 30;
+    for (
+      let index = 0;
+      index < recommendationsArray.length && index < maxResolve;
+      index++
+    ) {
+      const item = recommendationsArray[index];
+      if (!item?.name) continue;
+      const resolvedMbid = await musicbrainzResolveArtistMbidByName(item.name);
+      if (resolvedMbid && resolvedMbid !== item.id) {
+        item.navigateTo = resolvedMbid;
+      }
+    }
 
     console.log(
       `Generated ${recommendationsArray.length} total recommendations.`
