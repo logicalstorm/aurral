@@ -20,8 +20,10 @@ function RequestsPage() {
   const navigate = useNavigate();
   const { showError } = useToast();
 
-  const fetchRequests = async () => {
-    setLoading(true);
+  const fetchRequests = async ({ silent = false } = {}) => {
+    if (!silent) {
+      setLoading(true);
+    }
 
     try {
       const data = await getRequests();
@@ -30,7 +32,9 @@ function RequestsPage() {
     } catch {
       setError("Failed to load requests history.");
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -47,8 +51,40 @@ function RequestsPage() {
     pollDownloadStatus();
     const interval = setInterval(pollDownloadStatus, 15000);
 
-    return () => clearInterval(interval);
+    const handleFocus = () => {
+      fetchRequests({ silent: true });
+      pollDownloadStatus();
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchRequests({ silent: true });
+        pollDownloadStatus();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, []);
+
+  useEffect(() => {
+    const hasActive = requests.some(
+      (request) =>
+        request.inQueue ||
+        (request.status && request.status !== "available" && request.status !== "failed"),
+    );
+    const intervalMs = hasActive ? 15000 : 60000;
+    const interval = setInterval(() => {
+      fetchRequests({ silent: true });
+    }, intervalMs);
+    return () => clearInterval(interval);
+  }, [requests]);
 
   const handleStopDownload = async (request) => {
     if (!request.inQueue || !request.albumId) return;
