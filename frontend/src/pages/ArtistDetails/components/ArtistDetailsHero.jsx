@@ -1,3 +1,4 @@
+import { useState } from "react";
 import PropTypes from "prop-types";
 import {
   Loader,
@@ -18,6 +19,8 @@ import AddToLibraryButton from "../../../components/AddToLibraryButton";
 
 export function ArtistDetailsHero({
   artist,
+  libraryArtist,
+  appSettings,
   coverImages,
   loadingCover,
   loadingLibrary,
@@ -45,6 +48,21 @@ export function ArtistDetailsHero({
 }) {
   const coverImage = getCoverImage(coverImages);
   const lifeSpan = formatLifeSpan(artist["life-span"]);
+  const [showViewMenu, setShowViewMenu] = useState(false);
+  const lidarrArtistId =
+    artist?.id ||
+    libraryArtist?.foreignArtistId ||
+    libraryArtist?.mbid ||
+    artist?._lidarrData?.foreignArtistId;
+  const lidarrUrl = appSettings?.integrations?.lidarr?.url;
+  const lidarrArtistLink =
+    lidarrUrl && lidarrArtistId
+      ? `${lidarrUrl.replace(/\/$/, "")}/${
+          existsInLibrary
+            ? `artist/${lidarrArtistId}`
+            : `add/search?term=lidarr:${encodeURIComponent(lidarrArtistId)}`
+        }`
+      : null;
 
   return (
     <div className="card mb-8 relative">
@@ -278,36 +296,84 @@ export function ArtistDetailsHero({
             <button
               type="button"
               onClick={onEditIds}
-              className="btn btn-secondary inline-flex items-center"
+              className="btn btn-secondary btn-sm p-2 inline-flex items-center"
+              aria-label="Edit IDs"
             >
-              <Pencil className="w-5 h-5 mr-2" />
-              Edit IDs
+              <Pencil className="w-5 h-5" />
             </button>
-            <a
-              href={`https://www.last.fm/music/${encodeURIComponent(
-                artist.name
-              )}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn btn-secondary inline-flex items-center"
-            >
-              <ExternalLink className="w-5 h-5 mr-2" />
-              View on Last.fm
-            </a>
-            {artist.id &&
-              /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-                artist.id
-              ) && (
-                <a
-                  href={`https://musicbrainz.org/artist/${artist.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn-secondary inline-flex items-center"
-                >
-                  <ExternalLink className="w-5 h-5 mr-2" />
-                  View on MusicBrainz
-                </a>
+            <div className="relative inline-flex">
+              <button
+                type="button"
+                onClick={() => setShowViewMenu(!showViewMenu)}
+                className="btn btn-secondary inline-flex items-center"
+              >
+                <ExternalLink className="w-5 h-5 mr-2" />
+                View on...
+                <ChevronDown
+                  className={`w-4 h-4 ml-2 transition-transform ${
+                    showViewMenu ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+              {showViewMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowViewMenu(false)}
+                  />
+                  <div
+                    className="absolute right-0 top-full mt-2 w-56 shadow-xl z-20 py-1 rounded-md border border-white/10"
+                    style={{
+                      backgroundColor: "#2d2b35",
+                      boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+                    }}
+                  >
+                    <a
+                      href={`https://www.last.fm/music/${encodeURIComponent(
+                        artist.name
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-white/10 transition-colors flex items-center"
+                      style={{ color: "#fff" }}
+                      onClick={() => setShowViewMenu(false)}
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      View on Last.fm
+                    </a>
+                    {artist.id &&
+                      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+                        artist.id
+                      ) && (
+                        <a
+                          href={`https://musicbrainz.org/artist/${artist.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-white/10 transition-colors flex items-center"
+                          style={{ color: "#fff" }}
+                          onClick={() => setShowViewMenu(false)}
+                        >
+                          <ExternalLink className="w-4 h-4 mr-2" />
+                          View on MusicBrainz
+                        </a>
+                      )}
+                    {lidarrArtistLink && (
+                      <a
+                        href={lidarrArtistLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full text-left px-4 py-2 text-sm hover:bg-white/10 transition-colors flex items-center"
+                        style={{ color: "#fff" }}
+                        onClick={() => setShowViewMenu(false)}
+                      >
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        View on Lidarr
+                      </a>
+                    )}
+                  </div>
+                </>
               )}
+            </div>
           </div>
         </div>
 
@@ -461,6 +527,8 @@ export function ArtistDetailsHero({
 
 ArtistDetailsHero.propTypes = {
   artist: PropTypes.object.isRequired,
+  libraryArtist: PropTypes.object,
+  appSettings: PropTypes.object,
   coverImages: PropTypes.arrayOf(
     PropTypes.shape({
       front: PropTypes.bool,
