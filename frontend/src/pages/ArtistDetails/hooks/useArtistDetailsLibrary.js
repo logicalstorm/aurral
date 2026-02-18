@@ -353,6 +353,14 @@ export function useArtistDetailsLibrary({
       await new Promise((resolve) => setTimeout(resolve, 500));
       const refreshedAlbums = await getLibraryAlbums(currentLibraryArtist.id);
       setLibraryAlbums(deduplicateAlbums(refreshedAlbums));
+      const artistMbid =
+        currentLibraryArtist.mbid || currentLibraryArtist.foreignArtistId;
+      if (artistMbid) {
+        const refreshedArtist = await getLibraryArtist(artistMbid);
+        if (refreshedArtist) {
+          setLibraryArtist(refreshedArtist);
+        }
+      }
       showSuccess(`Downloading album: ${title}`);
     } catch (err) {
       setRequestingAlbum(null);
