@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   AudioWaveform,
   Loader2,
@@ -106,6 +106,221 @@ const normalizeSource = (value) => {
   }
   return source;
 };
+
+const SOURCE_VALUES = ["discover", "recommended", "mix", "trending", "all"];
+const MATCH_VALUES = ["any", "all"];
+const BOOLEAN_VALUES = ["true", "false"];
+
+const getLineContext = (value, cursor) => {
+  const safeValue = value ?? "";
+  const safeCursor =
+    typeof cursor === "number" && cursor >= 0 ? cursor : safeValue.length;
+  const upToCursor = safeValue.slice(0, safeCursor);
+  const lines = upToCursor.split("\n");
+  const line = lines[lines.length - 1] ?? "";
+  const indent = line.match(/^\s*/)?.[0] ?? "";
+  return { line, indent };
+};
+
+const getNextBlockNumber = (value) => {
+  const matches = String(value || "").match(/block(\d+)/gi) || [];
+  const nums = matches
+    .map((entry) => Number(entry.replace(/^\D+/, "")))
+    .filter((n) => Number.isFinite(n));
+  if (!nums.length) return 1;
+  return Math.max(...nums) + 1;
+};
+
+const buildSuggestions = (value, line, indent, manual) => {
+  const trimmed = line.trim();
+  const suggestions = [];
+
+  if (/^source:\s*$/i.test(trimmed)) {
+    return SOURCE_VALUES.map((val) => ({
+      label: val,
+      insertText: val,
+    }));
+  }
+  if (/^match:\s*$/i.test(trimmed)) {
+    return MATCH_VALUES.map((val) => ({
+      label: val,
+      insertText: val,
+    }));
+  }
+  if (/^deepDive:\s*$/i.test(trimmed)) {
+    return BOOLEAN_VALUES.map((val) => ({
+      label: val,
+      insertText: val,
+    }));
+  }
+  if (/^include:\s*$/i.test(trimmed) || /^exclude:\s*$/i.test(trimmed)) {
+    return [
+      {
+        label: "tags",
+        insertText: `\n${indent}  tags: []`,
+      },
+      {
+        label: "artists",
+        insertText: `\n${indent}  artists: []`,
+      },
+      {
+        label: "relatedArtists",
+        insertText: `\n${indent}  relatedArtists: []`,
+      },
+      {
+        label: "match",
+        insertText: `\n${indent}  match: any`,
+      },
+    ];
+  }
+
+  if (!manual) return [];
+  const nextBlock = getNextBlockNumber(value);
+  suggestions.push(
+    { label: "name", insertText: "name: " },
+    {
+      label: `block${nextBlock}`,
+      insertText: `block${nextBlock}:\n  source: discover\n  count: 10`,
+    },
+    { label: "source", insertText: "source: " },
+    { label: "count", insertText: "count: " },
+    { label: "deepDive", insertText: "deepDive: false" },
+    { label: "include", insertText: "include:\n  tags: []" },
+    { label: "exclude", insertText: "exclude:\n  artists: []" },
+  );
+  return suggestions;
+};
+
+function YamlEditor({
+  value,
+  onChange,
+  error,
+  minHeight,
+}) {
+  const textareaRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const manualOpenRef = useRef(false);
+
+  const updateSuggestions = (manual) => {
+    const cursor = textareaRef.current?.selectionStart ?? 0;
+    const { line, indent } = getLineContext(value, cursor);
+    const next = buildSuggestions(value, line, indent, manual);
+    if (!next.length) {
+      setOpen(false);
+      setSuggestions([]);
+      setActiveIndex(0);
+      return;
+    }
+    setSuggestions(next);
+    setActiveIndex(0);
+    setOpen(true);
+  };
+
+  const applySuggestion = (suggestion) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart ?? 0;
+    const end = textarea.selectionEnd ?? 0;
+    const before = value.slice(0, start);
+    const after = value.slice(end);
+    const nextValue = `${before}${suggestion.insertText}${after}`;
+    onChange(nextValue);
+    const nextPos = start + suggestion.insertText.length;
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(nextPos, nextPos);
+    });
+    setOpen(false);
+    manualOpenRef.current = false;
+  };
+
+  const handleKeyDown = (event) => {
+    if (event.ctrlKey && event.code === "Space") {
+      event.preventDefault();
+      manualOpenRef.current = true;
+      updateSuggestions(true);
+      return;
+    }
+    if (!open) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIndex((prev) => (prev + 1) % suggestions.length);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIndex((prev) =>
+        prev === 0 ? suggestions.length - 1 : prev - 1,
+      );
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const suggestion = suggestions[activeIndex];
+      if (suggestion) applySuggestion(suggestion);
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setOpen(false);
+      manualOpenRef.current = false;
+    }
+  };
+
+  const handleChange = (event) => {
+    const nextValue = event.target.value;
+    onChange(nextValue);
+    if (manualOpenRef.current) {
+      updateSuggestions(true);
+    } else {
+      const cursor = event.target.selectionStart ?? 0;
+      const { line, indent } = getLineContext(nextValue, cursor);
+      const auto = buildSuggestions(nextValue, line, indent, false);
+      if (auto.length) {
+        setSuggestions(auto);
+        setActiveIndex(0);
+        setOpen(true);
+      } else {
+        setOpen(false);
+      }
+    }
+  };
+
+  return (
+    <div className="grid gap-2">
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        className={`w-full rounded bg-white/5 border border-white/10 px-3 py-2 text-xs text-white font-mono outline-none ${minHeight ?? "min-h-[220px]"}`}
+        spellCheck={false}
+      />
+      {open && suggestions.length > 0 && (
+        <div className="rounded border border-white/10 bg-black/60 text-xs text-white">
+          {suggestions.map((suggestion, index) => (
+            <button
+              key={`${suggestion.label}-${index}`}
+              type="button"
+              onMouseDown={(event) => {
+                event.preventDefault();
+                applySuggestion(suggestion);
+              }}
+              className={`w-full text-left px-3 py-2 transition-colors ${
+                index === activeIndex ? "bg-white/10" : "hover:bg-white/5"
+              }`}
+            >
+              {suggestion.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {error && <div className="text-xs text-red-400">{error}</div>}
+    </div>
+  );
+}
 
 const flowToYaml = (flow) => {
   const blocks = Array.isArray(flow?.blocks) ? flow.blocks : [];
@@ -689,13 +904,12 @@ function FlowPage() {
                       Edit name, block sources, counts, and include/exclude
                       filters. Total tracks are calculated from all blocks.
                     </div>
-                    <textarea
+                    <YamlEditor
                       value={yamlDraft}
-                      onChange={(e) => {
-                        const value = e.target.value;
+                      onChange={(nextValue) => {
                         setYamlDrafts((prev) => ({
                           ...prev,
-                          [flow.id]: value,
+                          [flow.id]: nextValue,
                         }));
                         if (yamlErrors[flow.id]) {
                           setYamlErrors((prev) => {
@@ -705,12 +919,8 @@ function FlowPage() {
                           });
                         }
                       }}
-                      className="w-full min-h-[220px] rounded bg-white/5 border border-white/10 px-3 py-2 text-xs text-white font-mono outline-none"
-                      spellCheck={false}
+                      error={yamlError}
                     />
-                    {yamlError && (
-                      <div className="text-xs text-red-400">{yamlError}</div>
-                    )}
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <button
                         onClick={() => handleDelete(flow)}
@@ -1021,21 +1231,17 @@ block2:
                 Paste a flow YAML or tweak the template below to share and
                 remix.
               </div>
-              <textarea
+              <YamlEditor
                 value={newFlowYaml}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setNewFlowYaml(value);
+                onChange={(nextValue) => {
+                  setNewFlowYaml(nextValue);
                   if (newFlowError) {
                     setNewFlowError("");
                   }
                 }}
-                className="w-full min-h-[240px] rounded bg-white/5 border border-white/10 px-3 py-2 text-xs text-white font-mono outline-none"
-                spellCheck={false}
+                error={newFlowError}
+                minHeight="min-h-[240px]"
               />
-              {newFlowError && (
-                <div className="text-xs text-red-400">{newFlowError}</div>
-              )}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <button
                   onClick={() => setNewFlowYaml(flowToYaml(NEW_FLOW_TEMPLATE))}
