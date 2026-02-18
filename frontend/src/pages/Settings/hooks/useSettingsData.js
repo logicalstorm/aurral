@@ -203,6 +203,33 @@ export function useSettingsData(showSuccess, showError, showInfo) {
           setLoadingLidarrProfiles(false);
         }
       }
+      if (result.results?.metadataProfile) {
+        const url = settings.integrations?.lidarr?.url;
+        const apiKey = settings.integrations?.lidarr?.apiKey;
+        setLoadingLidarrMetadataProfiles(true);
+        try {
+          const profiles = await getLidarrMetadataProfiles(url, apiKey);
+          setLidarrMetadataProfiles(profiles);
+          if (result.results.metadataProfile.id) {
+            updateSettings({
+              ...settings,
+              integrations: {
+                ...settings.integrations,
+                lidarr: {
+                  ...(settings.integrations?.lidarr || {}),
+                  metadataProfileId: result.results.metadataProfile.id,
+                },
+              },
+            });
+            showInfo(
+              `Default metadata profile set to '${result.results.metadataProfile.name}'`
+            );
+          }
+        } catch {
+        } finally {
+          setLoadingLidarrMetadataProfiles(false);
+        }
+      }
     } catch (err) {
       const errorMsg =
         err.response?.data?.message || err.response?.data?.error || err.message;
