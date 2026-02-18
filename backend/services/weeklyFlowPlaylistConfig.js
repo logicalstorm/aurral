@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { dbOps } from "../config/db-helpers.js";
+import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 
 const LEGACY_TYPES = ["discover", "mix", "trending"];
 const DEFAULT_MIX = { discover: 34, mix: 33, trending: 33 };
@@ -88,7 +89,7 @@ const buildLegacyFlows = (settings) => {
       trending: type === "trending" ? 100 : 0,
     };
     return normalizeFlow({
-      id: type,
+      id: randomUUID(),
       name: titleCase(type),
       enabled: legacy.enabled === true,
       nextRunAt: legacy.nextRunAt ?? null,
@@ -102,7 +103,24 @@ const getStoredFlows = () => {
   const settings = dbOps.getSettings();
   const stored = settings.weeklyFlows;
   if (Array.isArray(stored) && stored.length > 0) {
-    return stored.map((flow) => normalizeFlow(flow));
+    const idMap = new Map();
+    const nextFlows = stored.map((flow) => {
+      const currentId = flow?.id;
+      if (LEGACY_TYPES.includes(currentId)) {
+        const mapped = idMap.get(currentId) || randomUUID();
+        idMap.set(currentId, mapped);
+        return normalizeFlow({ ...flow, id: mapped });
+      }
+      return normalizeFlow(flow);
+    });
+    if (idMap.size > 0) {
+      dbOps.updateSettings({
+        ...settings,
+        weeklyFlows: nextFlows,
+      });
+      downloadTracker.migratePlaylistTypes(idMap);
+    }
+    return nextFlows;
   }
   const legacy = buildLegacyFlows(settings);
   dbOps.updateSettings({
