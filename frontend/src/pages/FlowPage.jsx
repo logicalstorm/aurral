@@ -4,6 +4,7 @@ import {
   Loader2,
   CheckCircle2,
   Clock,
+  HelpCircle,
   Trash2,
   Pencil,
   Copy,
@@ -22,9 +23,6 @@ import {
 import { useToast } from "../contexts/ToastContext";
 import PowerSwitch from "../components/PowerSwitch";
 
-const DEFAULT_MIX = { discover: 34, mix: 33, trending: 33 };
-const DEFAULT_SIZE = 30;
-
 function formatNextRun(nextRunAt) {
   if (!nextRunAt) return null;
   const ts =
@@ -37,176 +35,125 @@ function formatNextRun(nextRunAt) {
   return days === 1 ? "Resets tomorrow" : `Resets in ${days} days`;
 }
 
-const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-
-const distributeByRemainder = (values, targetTotal) => {
-  const keys = Object.keys(values);
-  const parts = keys.map((key) => {
-    const raw = Number(values[key]);
-    const safe = Number.isFinite(raw) ? raw : 0;
-    const floor = Math.floor(safe);
-    const remainder = safe - floor;
-    return { key, floor, remainder };
-  });
-  const sum = parts.reduce((acc, part) => acc + part.floor, 0);
-  let remaining = Math.max(targetTotal - sum, 0);
-  const ranked = [...parts].sort((a, b) => b.remainder - a.remainder);
-  let idx = 0;
-  while (remaining > 0 && ranked.length) {
-    ranked[idx % ranked.length].floor += 1;
-    remaining -= 1;
-    idx += 1;
-  }
-  return parts.reduce((acc, part) => {
-    acc[part.key] = part.floor;
-    return acc;
-  }, {});
-};
-
-const normalizeMixPercentages = (mix) => {
-  const src = mix ?? DEFAULT_MIX;
-  const parseField = (value) => {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) {
-      return 0;
-    }
-    return clamp(Math.round(parsed), 0, 100);
-  };
-  const cleaned = {
-    discover: parseField(src?.discover),
-    mix: parseField(src?.mix),
-    trending: parseField(src?.trending),
-  };
-  const total = cleaned.discover + cleaned.mix + cleaned.trending;
-  if (total <= 0) {
-    return { ...DEFAULT_MIX };
-  }
-  const scaled = {
-    discover: (cleaned.discover / total) * 100,
-    mix: (cleaned.mix / total) * 100,
-    trending: (cleaned.trending / total) * 100,
-  };
-  return distributeByRemainder(scaled, 100);
-};
-
-const normalizeRecipe = (recipe, fallback) => {
-  const src = recipe ?? fallback ?? {};
-  const parseField = (value) => {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) {
-      throw new Error("Recipe values must be numbers");
-    }
-    return Math.max(Math.round(parsed), 0);
-  };
-  const cleaned = {
-    discover: parseField(src?.discover ?? 0),
-    mix: parseField(src?.mix ?? 0),
-    trending: parseField(src?.trending ?? 0),
-  };
-  const total = cleaned.discover + cleaned.mix + cleaned.trending;
-  return { recipe: cleaned, total };
-};
-
-const normalizeWeightMap = (value, fallback, label) => {
-  if (value == null) return fallback ?? {};
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${label} must be a map of names to counts`);
-  }
-  const out = {};
-  for (const [key, rawValue] of Object.entries(value)) {
-    const name = String(key ?? "").trim();
-    if (!name) continue;
-    const parsed = Number(rawValue);
-    if (!Number.isFinite(parsed)) {
-      throw new Error(`${label} values must be numbers`);
-    }
-    const rounded = Math.round(parsed);
-    if (rounded < 0) {
-      throw new Error(`${label} values must be 0 or more`);
-    }
-    if (rounded === 0) continue;
-    out[name] = rounded;
-  }
-  return out;
-};
-
-const sanitizeWeightMap = (value) => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const out = {};
-  for (const [key, rawValue] of Object.entries(value)) {
-    const name = String(key ?? "").trim();
-    if (!name) continue;
-    const parsed = Number(rawValue);
-    if (!Number.isFinite(parsed)) continue;
-    const rounded = Math.round(parsed);
-    if (rounded <= 0) continue;
-    out[name] = rounded;
-  }
-  return out;
-};
-
-const sumWeightMap = (value) => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
-  return Object.values(value).reduce((acc, entry) => {
-    const parsed = Number(entry);
-    return acc + (Number.isFinite(parsed) ? parsed : 0);
-  }, 0);
-};
-
-const recipeToMix = (recipe) => {
-  const total =
-    (recipe?.discover ?? 0) + (recipe?.mix ?? 0) + (recipe?.trending ?? 0);
-  if (total <= 0) {
-    return { ...DEFAULT_MIX };
-  }
-  const raw = {
-    discover: (recipe.discover / total) * 100,
-    mix: (recipe.mix / total) * 100,
-    trending: (recipe.trending / total) * 100,
-  };
-  return distributeByRemainder(raw, 100);
-};
-
-const recipeFromMix = (size, mix) => {
-  const safeSize = Math.max(Math.round(Number(size) || DEFAULT_SIZE), 1);
-  const normalized = normalizeMixPercentages(mix);
-  const raw = {
-    discover: (safeSize * normalized.discover) / 100,
-    mix: (safeSize * normalized.mix) / 100,
-    trending: (safeSize * normalized.trending) / 100,
-  };
-  return distributeByRemainder(raw, safeSize);
-};
-
-const recipeFromFlow = (flow) => {
-  if (!flow) return recipeFromMix(DEFAULT_SIZE, DEFAULT_MIX);
-  if (flow.recipe) {
-    return normalizeRecipe(flow.recipe, DEFAULT_RECIPE).recipe;
-  }
-  return recipeFromMix(flow?.size, flow?.mix);
-};
-
-const DEFAULT_RECIPE = recipeFromMix(DEFAULT_SIZE, DEFAULT_MIX);
-
 const NEW_FLOW_TEMPLATE = {
-  name: "Mega Mix",
-  deepDive: false,
-  recipe: DEFAULT_RECIPE,
-  tags: {},
-  relatedArtists: {},
+  name: "Discover",
+  blocks: [
+    {
+      source: "discover",
+      count: 30,
+      deepDive: false,
+    },
+  ],
 };
 
-const flowToYaml = (flow) =>
-  dump(
-    {
-      name: flow?.name || "Flow",
-      deepDive: flow?.deepDive === true,
-      recipe: recipeFromFlow(flow),
-      tags: sanitizeWeightMap(flow?.tags),
-      relatedArtists: sanitizeWeightMap(flow?.relatedArtists),
-    },
-    { lineWidth: 80, noRefs: true }
-  );
+const normalizeList = (value, label) => {
+  if (value == null) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item ?? "").trim())
+      .filter(Boolean);
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? [trimmed] : [];
+  }
+  throw new Error(`${label} must be a string or list`);
+};
+
+const normalizeInclude = (value) => {
+  if (value == null) {
+    return { tags: [], artists: [], relatedArtists: [], match: "any" };
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("include must be a map");
+  }
+  return {
+    tags: normalizeList(value.tags ?? value.tag, "include.tags"),
+    artists: normalizeList(value.artists ?? value.artist, "include.artists"),
+    relatedArtists: normalizeList(
+      value.relatedArtists ?? value.relatedArtist,
+      "include.relatedArtists",
+    ),
+    match: value.match === "all" ? "all" : "any",
+  };
+};
+
+const normalizeExclude = (value) => {
+  if (value == null) {
+    return { tags: [], artists: [], relatedArtists: [] };
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("exclude must be a map");
+  }
+  return {
+    tags: normalizeList(value.tags ?? value.tag, "exclude.tags"),
+    artists: normalizeList(value.artists ?? value.artist, "exclude.artists"),
+    relatedArtists: normalizeList(
+      value.relatedArtists ?? value.relatedArtist,
+      "exclude.relatedArtists",
+    ),
+  };
+};
+
+const normalizeSource = (value) => {
+  const source = String(value ?? "").trim().toLowerCase();
+  const allowed = ["discover", "mix", "trending", "all", "recommended"];
+  if (!source) {
+    return "discover";
+  }
+  if (!allowed.includes(source)) {
+    throw new Error("source must be discover, mix, trending, recommended, or all");
+  }
+  return source;
+};
+
+const flowToYaml = (flow) => {
+  const blocks = Array.isArray(flow?.blocks) ? flow.blocks : [];
+  const payload = { name: flow?.name || "Flow" };
+  blocks.forEach((block, index) => {
+    const entry = {
+      source: block?.source || "discover",
+      count: Number(block?.count || 0),
+      deepDive: block?.deepDive === true,
+    };
+    const include = block?.include || {};
+    const exclude = block?.exclude || {};
+    const includeTags = normalizeList(include.tags ?? include.tag, "include.tags");
+    const includeArtists = normalizeList(
+      include.artists ?? include.artist,
+      "include.artists",
+    );
+    const includeRelated = normalizeList(
+      include.relatedArtists ?? include.relatedArtist,
+      "include.relatedArtists",
+    );
+    const includeMatch = include.match === "all" ? "all" : "any";
+    if (includeTags.length || includeArtists.length || includeRelated.length) {
+      entry.include = {};
+      if (includeTags.length) entry.include.tags = includeTags;
+      if (includeArtists.length) entry.include.artists = includeArtists;
+      if (includeRelated.length) entry.include.relatedArtists = includeRelated;
+      if (include.match) entry.include.match = includeMatch;
+    }
+    const excludeTags = normalizeList(exclude.tags ?? exclude.tag, "exclude.tags");
+    const excludeArtists = normalizeList(
+      exclude.artists ?? exclude.artist,
+      "exclude.artists",
+    );
+    const excludeRelated = normalizeList(
+      exclude.relatedArtists ?? exclude.relatedArtist,
+      "exclude.relatedArtists",
+    );
+    if (excludeTags.length || excludeArtists.length || excludeRelated.length) {
+      entry.exclude = {};
+      if (excludeTags.length) entry.exclude.tags = excludeTags;
+      if (excludeArtists.length) entry.exclude.artists = excludeArtists;
+      if (excludeRelated.length) entry.exclude.relatedArtists = excludeRelated;
+    }
+    payload[`block${index + 1}`] = entry;
+  });
+  return dump(payload, { lineWidth: 80, noRefs: true });
+};
 
 const parseFlowYaml = (yamlText, fallback) => {
   let parsed;
@@ -222,36 +169,48 @@ const parseFlowYaml = (yamlText, fallback) => {
   if (!name) {
     throw new Error("Flow name is required");
   }
-  const fallbackRecipe = fallback ? recipeFromFlow(fallback) : DEFAULT_RECIPE;
-  const normalized = normalizeRecipe(parsed.recipe, fallbackRecipe);
-  const mix = recipeToMix(normalized.recipe);
-  const tags = normalizeWeightMap(
-    parsed.tags,
-    fallback?.tags ?? {},
-    "Tags"
-  );
-  const relatedArtists = normalizeWeightMap(
-    parsed.relatedArtists ?? parsed.relartedArtists,
-    fallback?.relatedArtists ?? {},
-    "Related artists"
-  );
-  const total =
-    normalized.total + sumWeightMap(tags) + sumWeightMap(relatedArtists);
+  const entries = Object.entries(parsed)
+    .filter(([key]) => /^block\d+$/i.test(String(key)))
+    .map(([key, value]) => ({
+      key,
+      order: Number(String(key).replace(/^\D+/, "")) || 0,
+      value,
+    }))
+    .sort((a, b) => a.order - b.order);
+  if (entries.length === 0) {
+    throw new Error("Flow must include at least one block");
+  }
+  const blocks = entries.map((entry) => {
+    if (!entry.value || typeof entry.value !== "object" || Array.isArray(entry.value)) {
+      throw new Error(`${entry.key} must be a map of block settings`);
+    }
+    const count = Number(entry.value.count);
+    if (!Number.isFinite(count)) {
+      throw new Error(`${entry.key}.count must be a number`);
+    }
+    if (count < 1 || count > 100) {
+      throw new Error(`${entry.key}.count must be between 1 and 100`);
+    }
+    const include = normalizeInclude(entry.value.include);
+    if (entry.value.match && include.match === "any") {
+      include.match = entry.value.match === "all" ? "all" : "any";
+    }
+    return {
+      source: normalizeSource(entry.value.source),
+      count: Math.round(count),
+      deepDive: entry.value.deepDive === true,
+      include,
+      exclude: normalizeExclude(entry.value.exclude),
+    };
+  });
+  const total = blocks.reduce((acc, block) => acc + block.count, 0);
   if (total <= 0) {
     throw new Error("Flow must include at least one track");
   }
-  const deepDive =
-    typeof parsed.deepDive === "boolean"
-      ? parsed.deepDive
-      : fallback?.deepDive === true;
   return {
     name,
+    blocks,
     size: total,
-    mix,
-    recipe: normalized.recipe,
-    deepDive,
-    tags,
-    relatedArtists,
   };
 };
 
@@ -263,6 +222,7 @@ function FlowPage() {
   const [deletingId, setDeletingId] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
   const [showNewFlow, setShowNewFlow] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [yamlDrafts, setYamlDrafts] = useState({});
   const [yamlErrors, setYamlErrors] = useState({});
@@ -320,6 +280,21 @@ function FlowPage() {
     };
   };
 
+  const summarizeBlocks = (flow) => {
+    const blocks = Array.isArray(flow?.blocks) ? flow.blocks : [];
+    if (!blocks.length) return "";
+    const totals = blocks.reduce((acc, block) => {
+      const source = String(block?.source || "discover");
+      const count = Number(block?.count || 0);
+      if (!Number.isFinite(count) || count <= 0) return acc;
+      acc[source] = (acc[source] || 0) + count;
+      return acc;
+    }, {});
+    return Object.entries(totals)
+      .map(([source, count]) => `${count} ${source}`)
+      .join(" · ");
+  };
+
   const getPlaylistState = (flowId) => {
     const stats = getPlaylistStats(flowId);
     if (stats.total === 0) return "idle";
@@ -363,11 +338,7 @@ function FlowPage() {
       const response = await updateFlow(flow.id, {
         name: payload.name,
         size: payload.size,
-        mix: payload.mix,
-        recipe: payload.recipe,
-        deepDive: payload.deepDive,
-        tags: payload.tags,
-        relatedArtists: payload.relatedArtists,
+        blocks: payload.blocks,
       });
       const updatedFlow = response?.flow || {
         ...flow,
@@ -395,17 +366,12 @@ function FlowPage() {
     try {
       const payload = parseFlowYaml(newFlowYaml, {
         name: "",
-        recipe: DEFAULT_RECIPE,
-        deepDive: false,
+        blocks: [],
       });
       await createFlow({
         name: payload.name,
         size: payload.size,
-        mix: payload.mix,
-        recipe: payload.recipe,
-        deepDive: payload.deepDive,
-        tags: payload.tags,
-        relatedArtists: payload.relatedArtists,
+        blocks: payload.blocks,
       });
       setNewFlowYaml(flowToYaml(NEW_FLOW_TEMPLATE));
       setShowNewFlow(false);
@@ -492,6 +458,14 @@ function FlowPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setShowHelp(true)}
+            className="btn btn-secondary btn-sm flex items-center gap-2"
+            aria-label="Flow YAML help"
+          >
+            <HelpCircle className="w-4 h-4" />
+            Help
+          </button>
           <button
             onClick={() => setShowNewFlow(true)}
             className="btn btn-primary btn-sm flex items-center gap-2"
@@ -646,14 +620,24 @@ function FlowPage() {
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[#c1c1c3]">
                     <span>{flow.size} tracks</span>
-                    <span>·</span>
-                    <span>{flow.mix?.discover ?? 0}% Discover</span>
-                    <span>·</span>
-                    <span>{flow.mix?.mix ?? 0}% Mix</span>
-                    <span>·</span>
-                    <span>{flow.mix?.trending ?? 0}% Trending</span>
-                    <span>·</span>
-                    <span>{flow.deepDive ? "Deep dive" : "Top picks"}</span>
+                    {flow.blocks?.length ? (
+                      <>
+                        <span>·</span>
+                        <span>{flow.blocks.length} blocks</span>
+                      </>
+                    ) : null}
+                    {summarizeBlocks(flow) ? (
+                      <>
+                        <span>·</span>
+                        <span>{summarizeBlocks(flow)}</span>
+                      </>
+                    ) : null}
+                    {flow.blocks?.some((block) => block?.deepDive) ? (
+                      <>
+                        <span>·</span>
+                        <span>Deep dive enabled</span>
+                      </>
+                    ) : null}
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#c1c1c3]">
                     {state === "running" && (
@@ -702,8 +686,8 @@ function FlowPage() {
                   <div className="card-separator mb-4" />
                   <div className="grid gap-3">
                     <div className="text-xs text-[#8b8b90]">
-                      Edit name, deepDive, recipe counts, tags, and related
-                      artists. Total tracks are calculated from all entries.
+                      Edit name, block sources, counts, and include/exclude
+                      filters. Total tracks are calculated from all blocks.
                     </div>
                     <textarea
                       value={yamlDraft}
@@ -815,6 +799,210 @@ function FlowPage() {
           </div>
         </div>
       )}
+      {showHelp && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center px-4 py-10"
+          style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
+          onClick={() => setShowHelp(false)}
+        >
+          <div
+            className="bg-card rounded-lg border border-white/10 w-full max-w-3xl max-h-[85vh] overflow-hidden text-sm text-[#c1c1c3]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+              <h3 className="text-lg font-semibold text-white">Flow YAML guide</h3>
+              <button
+                onClick={() => setShowHelp(false)}
+                className="btn btn-secondary btn-sm"
+              >
+                Close
+              </button>
+            </div>
+            <div className="grid gap-5 px-5 py-4 overflow-y-auto max-h-[70vh] leading-relaxed">
+              <div>
+                <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] mb-2">
+                  Shape
+                </div>
+                <div className="text-sm text-[#c1c1c3]">
+                  Use a name plus one or more numbered blocks. Each block is a
+                  source slice with its own count and filters.
+                </div>
+                <pre className="mt-3 whitespace-pre-wrap rounded bg-black/50 border border-white/10 p-3 text-xs text-white font-mono overflow-x-auto">
+{`name: Mega Mix
+block1:
+  source: discover
+  count: 10
+block2:
+  source: mix
+  count: 10
+block3:
+  source: trending
+  count: 10`}
+                </pre>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] mb-2">
+                  Sources (detailed)
+                </div>
+                <div className="grid gap-2 text-sm text-[#c1c1c3]">
+                  <div>
+                    <span className="text-white">discover</span> uses your 100
+                    Recommended artists from discovery.
+                  </div>
+                  <div>
+                    <span className="text-white">recommended</span> is the same
+                    as discover, but kept explicit for YAML clarity.
+                  </div>
+                  <div>
+                    <span className="text-white">mix</span> uses artists from
+                    your library and picks tracks from them.
+                  </div>
+                  <div>
+                    <span className="text-white">trending</span> uses global
+                    discovery trending artists.
+                  </div>
+                  <div>
+                    <span className="text-white">all</span> allows global tag
+                    and related artist lookups beyond your recommended list.
+                  </div>
+                </div>
+                <pre className="mt-3 whitespace-pre-wrap rounded bg-black/50 border border-white/10 p-3 text-xs text-white font-mono overflow-x-auto">
+{`block1:
+  source: recommended
+  count: 30
+block2:
+  source: all
+  count: 20`}
+                </pre>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] mb-2">
+                  Block fields and modifiers
+                </div>
+                <div className="grid gap-2 text-sm text-[#c1c1c3]">
+                  <div>
+                    <span className="text-white">source</span> chooses where
+                    tracks come from.
+                  </div>
+                  <div>
+                    <span className="text-white">count</span> is how many tracks
+                    to pull for that block (1–100).
+                  </div>
+                  <div>
+                    <span className="text-white">deepDive</span> uses deeper
+                    cuts for that block only.
+                  </div>
+                  <div>
+                    <span className="text-white">include</span> narrows the
+                    block; <span className="text-white">exclude</span> removes
+                    matches after include is applied.
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] mb-2">
+                  Include filters
+                </div>
+                <div className="grid gap-2 text-sm text-[#c1c1c3]">
+                  <div>
+                    <span className="text-white">include.tags</span> (or{" "}
+                    <span className="text-white">include.tag</span>) filters by
+                    genre tags.
+                  </div>
+                  <div>
+                    <span className="text-white">include.artists</span> (or{" "}
+                    <span className="text-white">include.artist</span>) limits
+                    to specific artists.
+                  </div>
+                  <div>
+                    <span className="text-white">include.relatedArtists</span>{" "}
+                    (or <span className="text-white">include.relatedArtist</span>) builds from similar-artist
+                    seeds.
+                  </div>
+                  <div>
+                    <span className="text-white">include.match</span> sets tag
+                    matching: <span className="text-white">any</span> (default)
+                    or <span className="text-white">all</span>.
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] mb-2">
+                  Exclude filters
+                </div>
+                <div className="grid gap-2 text-sm text-[#c1c1c3]">
+                  <div>
+                    <span className="text-white">exclude.tags</span> (or{" "}
+                    <span className="text-white">exclude.tag</span>) removes
+                    artists that carry those tags in your recommended list.
+                  </div>
+                  <div>
+                    <span className="text-white">exclude.artists</span> (or{" "}
+                    <span className="text-white">exclude.artist</span>) removes
+                    exact artist matches.
+                  </div>
+                  <div>
+                    <span className="text-white">exclude.relatedArtists</span>{" "}
+                    (or <span className="text-white">exclude.relatedArtist</span>) removes matches by similar-artist name.
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] mb-2">
+                  Notes
+                </div>
+                <div className="grid gap-2 text-sm text-[#c1c1c3]">
+                  <div>
+                    For <span className="text-white">discover</span> or{" "}
+                    <span className="text-white">recommended</span>, tag filters
+                    use your discovery cache tags.
+                  </div>
+                  <div>
+                    For <span className="text-white">all</span>, tag filters use
+                    global tag lists to source artists.
+                  </div>
+                  <div>
+                    If multiple include filters are set, relatedArtists take
+                    priority, then tags, then artists.
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] mb-2">
+                  Example: granular mix
+                </div>
+                <pre className="mt-3 whitespace-pre-wrap rounded bg-black/50 border border-white/10 p-3 text-xs text-white font-mono overflow-x-auto">
+{`block1:
+  source: recommended
+  count: 30
+  include:
+    tags: [punk, emo]
+    match: all
+block2:
+  source: all
+  count: 20
+  include:
+    relatedArtists: The Used
+  exclude:
+    artists: [My Chemical Romance]`}
+                </pre>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] mb-2">
+                  Example: deep dive block
+                </div>
+                <pre className="mt-3 whitespace-pre-wrap rounded bg-black/50 border border-white/10 p-3 text-xs text-white font-mono overflow-x-auto">
+{`block1:
+  source: mix
+  count: 25
+  deepDive: true`}
+                </pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showNewFlow && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center"
