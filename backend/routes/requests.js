@@ -23,10 +23,11 @@ router.get("/", noCache, async (req, res) => {
       return res.json([]);
     }
 
-    const [queue, history, artists] = await Promise.all([
+    const [queue, history, artists, albums] = await Promise.all([
       lidarrClient.getQueue().catch(() => []),
       lidarrClient.getHistory(1, 200).catch(() => ({ records: [] })),
       lidarrClient.request("/artist").catch(() => []),
+      lidarrClient.request("/album").catch(() => []),
     ]);
 
     const artistById = new Map(
@@ -39,7 +40,29 @@ router.get("/", noCache, async (req, res) => {
         },
       ]),
     );
-    
+
+    const albumById = new Map(
+      (Array.isArray(albums) ? albums : []).map((album) => [album.id, album]),
+    );
+
+    const normalizePercent = (value) => {
+      if (value === undefined || value === null) return 0;
+      const raw = Number(value);
+      if (Number.isNaN(raw)) return 0;
+      if (raw > 1 && raw <= 100) return Math.round(raw);
+      if (raw >= 0 && raw <= 1) return Math.round(raw * 100);
+      if (raw > 100) return Math.min(100, Math.round(raw / 10));
+      return 0;
+    };
+
+    const isAlbumAvailable = (album) => {
+      if (!album) return false;
+      const stats = album.statistics || {};
+      const percent = normalizePercent(stats.percentOfTracks);
+      const size = Number(stats.sizeOnDisk || 0);
+      return percent >= 100 || size > 0;
+    };
+
     const requestsByAlbumId = new Map();
 
     const queueItems = Array.isArray(queue) ? queue : queue?.records || [];
@@ -87,7 +110,7 @@ router.get("/", noCache, async (req, res) => {
         ? item.statusMessages.map(m => String(m || "").toLowerCase()).join(" ")
         : "";
       
-      const isFailed = 
+      const isFailed =
         trackedDownloadState === "importfailed" ||
         trackedDownloadState === "importFailed" ||
         queueStatus.includes("fail") || 
@@ -175,7 +198,7 @@ router.get("/", noCache, async (req, res) => {
       const sourceTitle = String(record?.sourceTitle || "").toLowerCase();
       const dataString = JSON.stringify(data).toLowerCase();
       
-      const isFailedImport = 
+      const isFailedImport =
         eventType === "albumimportincomplete" ||
         eventType.includes("incomplete") ||
         statusMessages.includes("fail") || 
@@ -188,7 +211,11 @@ router.get("/", noCache, async (req, res) => {
         dataString.includes("import fail");
       
       const isSuccessfulImport = eventType.includes("import") && !isFailedImport && eventType !== "albumimportincomplete";
-      const status = isSuccessfulImport
+      const lidarrAlbum = albumById.get(albumId);
+      const isCompleteInLibrary = isAlbumAvailable(lidarrAlbum);
+      const status = isCompleteInLibrary
+        ? "available"
+        : isSuccessfulImport
         ? "available"
         : isFailedImport
           ? "failed"
@@ -210,6 +237,15 @@ router.get("/", noCache, async (req, res) => {
         image: null,
         inQueue: false,
       });
+    }
+
+    for (const request of requestsByAlbumId.values()) {
+      if (request.inQueue) continue;
+      if (request.status === "available") continue;
+      const lidarrAlbum = albumById.get(parseInt(request.albumId, 10));
+      if (isAlbumAvailable(lidarrAlbum)) {
+        request.status = "available";
+      }
     }
 
     let sorted = [...requestsByAlbumId.values()].sort(
