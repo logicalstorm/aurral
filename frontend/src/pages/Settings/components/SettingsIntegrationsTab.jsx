@@ -33,6 +33,12 @@ export function SettingsIntegrationsTab({
   const [lidarrEditing, setLidarrEditing] = useState(false);
   const [navidromeEditing, setNavidromeEditing] = useState(false);
   const [lidarrTestLatencyMs, setLidarrTestLatencyMs] = useState(null);
+  const safeLidarrProfiles = Array.isArray(lidarrProfiles)
+    ? lidarrProfiles
+    : [];
+  const safeLidarrMetadataProfiles = Array.isArray(lidarrMetadataProfiles)
+    ? lidarrMetadataProfiles
+    : [];
 
   const handleTestLidarr = async () => {
     const url = settings.integrations?.lidarr?.url;
@@ -58,13 +64,19 @@ export function SettingsIntegrationsTab({
             getLidarrProfiles(url, apiKey),
             getLidarrMetadataProfiles(url, apiKey),
           ]);
-          setLidarrProfiles(profiles);
-          setLidarrMetadataProfiles(metadataProfiles);
-          if (profiles.length > 0) {
-            showInfo(`Loaded ${profiles.length} quality profile(s)`);
+          const nextProfiles = Array.isArray(profiles) ? profiles : [];
+          const nextMetadataProfiles = Array.isArray(metadataProfiles)
+            ? metadataProfiles
+            : [];
+          setLidarrProfiles(nextProfiles);
+          setLidarrMetadataProfiles(nextMetadataProfiles);
+          if (nextProfiles.length > 0) {
+            showInfo(`Loaded ${nextProfiles.length} quality profile(s)`);
           }
-          if (metadataProfiles.length > 0) {
-            showInfo(`Loaded ${metadataProfiles.length} metadata profile(s)`);
+          if (nextMetadataProfiles.length > 0) {
+            showInfo(
+              `Loaded ${nextMetadataProfiles.length} metadata profile(s)`
+            );
           }
         } catch {
         } finally {
@@ -98,9 +110,10 @@ export function SettingsIntegrationsTab({
     setLoadingLidarrProfiles(true);
     try {
       const profiles = await getLidarrProfiles(url, apiKey);
-      setLidarrProfiles(profiles);
-      if (profiles.length > 0) {
-        showSuccess(`Loaded ${profiles.length} quality profile(s)`);
+      const nextProfiles = Array.isArray(profiles) ? profiles : [];
+      setLidarrProfiles(nextProfiles);
+      if (nextProfiles.length > 0) {
+        showSuccess(`Loaded ${nextProfiles.length} quality profile(s)`);
       } else {
         showInfo("No quality profiles found in Lidarr");
       }
@@ -125,9 +138,10 @@ export function SettingsIntegrationsTab({
     setLoadingLidarrMetadataProfiles(true);
     try {
       const profiles = await getLidarrMetadataProfiles(url, apiKey);
-      setLidarrMetadataProfiles(profiles);
-      if (profiles.length > 0) {
-        showSuccess(`Loaded ${profiles.length} metadata profile(s)`);
+      const nextProfiles = Array.isArray(profiles) ? profiles : [];
+      setLidarrMetadataProfiles(nextProfiles);
+      if (nextProfiles.length > 0) {
+        showSuccess(`Loaded ${nextProfiles.length} metadata profile(s)`);
       } else {
         showInfo("No metadata profiles found in Lidarr");
       }
@@ -315,11 +329,11 @@ export function SettingsIntegrationsTab({
                   <option value="">
                     {loadingLidarrProfiles
                       ? "Loading profiles..."
-                      : lidarrProfiles.length === 0
+                      : safeLidarrProfiles.length === 0
                       ? "No profiles available (test connection first)"
                       : "Select a profile"}
                   </option>
-                  {lidarrProfiles.map((profile) => (
+                  {safeLidarrProfiles.map((profile) => (
                     <option key={profile.id} value={profile.id}>
                       {profile.name}
                     </option>
@@ -380,11 +394,11 @@ export function SettingsIntegrationsTab({
                   <option value="">
                     {loadingLidarrMetadataProfiles
                       ? "Loading profiles..."
-                      : lidarrMetadataProfiles.length === 0
+                      : safeLidarrMetadataProfiles.length === 0
                       ? "No profiles available (test connection first)"
                       : "Select a profile"}
                   </option>
-                  {lidarrMetadataProfiles.map((profile) => (
+                  {safeLidarrMetadataProfiles.map((profile) => (
                     <option key={profile.id} value={profile.id}>
                       {profile.name}
                     </option>
