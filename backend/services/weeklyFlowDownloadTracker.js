@@ -29,6 +29,9 @@ const updateStmt = db.prepare(`
 const deleteStmt = db.prepare("DELETE FROM weekly_flow_jobs WHERE id = ?");
 const deleteAllStmt = db.prepare("DELETE FROM weekly_flow_jobs");
 const selectAllStmt = db.prepare("SELECT * FROM weekly_flow_jobs");
+const updatePlaylistTypeStmt = db.prepare(
+  "UPDATE weekly_flow_jobs SET playlist_type = ? WHERE playlist_type = ?",
+);
 
 export class WeeklyFlowDownloadTracker {
   constructor() {
@@ -51,10 +54,7 @@ export class WeeklyFlowDownloadTracker {
           job.completedAt,
           job.id,
         );
-        const updateTypeStmt = db.prepare(
-          "UPDATE weekly_flow_jobs SET playlist_type = ? WHERE id = ?",
-        );
-        updateTypeStmt.run("discover", job.id);
+        updatePlaylistTypeStmt.run("discover", "recommended");
       }
       if (job.status === "downloading") {
         job.status = "pending";
@@ -207,6 +207,21 @@ export class WeeklyFlowDownloadTracker {
       }
     }
     return jobs;
+  }
+
+  migratePlaylistTypes(idMap) {
+    if (!idMap || idMap.size === 0) return 0;
+    let count = 0;
+    for (const [fromId, toId] of idMap.entries()) {
+      updatePlaylistTypeStmt.run(toId, fromId);
+      for (const job of this.jobs.values()) {
+        if (job.playlistType === fromId) {
+          job.playlistType = toId;
+          count += 1;
+        }
+      }
+    }
+    return count;
   }
 
   resetDownloadingToPending() {
