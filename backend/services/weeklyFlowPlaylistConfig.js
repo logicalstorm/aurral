@@ -59,6 +59,135 @@ const normalizeRecipeCounts = (value, fallback) => {
   };
 };
 
+const clampCount = (value, min = 1, max = 100) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(Math.max(Math.round(n), min), max);
+};
+
+const normalizeStringList = (value) => {
+  if (value == null) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item || "").trim())
+      .filter(Boolean);
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? [trimmed] : [];
+  }
+  return [];
+};
+
+const normalizeMatch = (value) => (value === "all" ? "all" : "any");
+
+const normalizeInclude = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { tags: [], artists: [], relatedArtists: [], match: "any" };
+  }
+  return {
+    tags: normalizeStringList(value.tags ?? value.tag),
+    artists: normalizeStringList(value.artists ?? value.artist),
+    relatedArtists: normalizeStringList(
+      value.relatedArtists ?? value.relatedArtist,
+    ),
+    match: normalizeMatch(value.match ?? value.tagsMatch),
+  };
+};
+
+const normalizeExclude = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { tags: [], artists: [], relatedArtists: [] };
+  }
+  return {
+    tags: normalizeStringList(value.tags ?? value.tag),
+    artists: normalizeStringList(value.artists ?? value.artist),
+    relatedArtists: normalizeStringList(
+      value.relatedArtists ?? value.relatedArtist,
+    ),
+  };
+};
+
+const normalizeBlock = (block) => {
+  if (!block || typeof block !== "object" || Array.isArray(block)) return null;
+  const source = String(block.source || "")
+    .trim()
+    .toLowerCase() || "discover";
+  const count = clampCount(block.count);
+  if (count <= 0) return null;
+  return {
+    source: source === "recommended" ? "recommended" : source,
+    count,
+    deepDive: block.deepDive === true,
+    include: normalizeInclude(block.include),
+    exclude: normalizeExclude(block.exclude),
+  };
+};
+
+const buildLegacyBlocks = (flow, size, mix, tags, relatedArtists) => {
+  const blocks = [];
+  const recipeFallback = buildCountsFromMix(size, mix);
+  const recipe = normalizeRecipeCounts(flow?.recipe, recipeFallback);
+  for (const [key, count] of Object.entries(recipe)) {
+    if (count > 0) {
+      blocks.push({
+        source: key,
+        count,
+        deepDive: flow?.deepDive === true,
+        include: { tags: [], artists: [], relatedArtists: [], match: "any" },
+        exclude: { tags: [], artists: [], relatedArtists: [] },
+      });
+    }
+  }
+  for (const [tag, count] of Object.entries(tags)) {
+    if (count > 0) {
+      blocks.push({
+        source: "all",
+        count,
+        deepDive: flow?.deepDive === true,
+        include: { tags: [tag], artists: [], relatedArtists: [], match: "any" },
+        exclude: { tags: [], artists: [], relatedArtists: [] },
+      });
+    }
+  }
+  for (const [artist, count] of Object.entries(relatedArtists)) {
+    if (count > 0) {
+      blocks.push({
+        source: "all",
+        count,
+        deepDive: flow?.deepDive === true,
+        include: {
+          tags: [],
+          artists: [],
+          relatedArtists: [artist],
+          match: "any",
+        },
+        exclude: { tags: [], artists: [], relatedArtists: [] },
+      });
+    }
+  }
+  return blocks;
+};
+
+const normalizeBlocks = (value, flow, size, mix, tags, relatedArtists) => {
+  if (Array.isArray(value)) {
+    return value.map(normalizeBlock).filter(Boolean);
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value)
+      .filter(([key]) => /^block\d+$/i.test(String(key)))
+      .map(([key, val]) => ({
+        key,
+        order: Number(String(key).replace(/^\D+/, "")) || 0,
+        value: val,
+      }))
+      .sort((a, b) => a.order - b.order);
+    const normalized = entries.map((entry) => normalizeBlock(entry.value)).filter(Boolean);
+    if (normalized.length > 0) return normalized;
+  }
+  return buildLegacyBlocks(flow, size, mix, tags, relatedArtists);
+};
+
 const buildCountsFromMix = (size, mix) => {
   const weights = [
     { key: "discover", value: Number(mix?.discover ?? 0) },
@@ -137,8 +266,17 @@ const normalizeFlow = (flow) => {
   const mix = normalizeMix(flow?.mix);
   const tags = normalizeWeightMap(flow?.tags);
   const relatedArtists = normalizeWeightMap(flow?.relatedArtists);
+  const blocks = normalizeBlocks(
+    flow?.blocks,
+    flow,
+    size,
+    mix,
+    tags,
+    relatedArtists,
+  );
+  const computedSize = blocks.reduce((acc, block) => acc + block.count, 0);
   const recipeSize = Math.max(
-    size - sumWeightMap(tags) - sumWeightMap(relatedArtists),
+    (computedSize || size) - sumWeightMap(tags) - sumWeightMap(relatedArtists),
     0,
   );
   const recipeFallback = buildCountsFromMix(recipeSize, mix);
@@ -151,11 +289,12 @@ const normalizeFlow = (flow) => {
       flow?.nextRunAt != null && Number.isFinite(Number(flow.nextRunAt))
         ? Number(flow.nextRunAt)
         : null,
-    size,
+    size: computedSize > 0 ? computedSize : size,
     mix,
     recipe: normalizeRecipeCounts(flow?.recipe, recipeFallback),
     tags,
     relatedArtists,
+    blocks,
     createdAt:
       flow?.createdAt != null && Number.isFinite(Number(flow.createdAt))
         ? Number(flow.createdAt)
@@ -167,18 +306,21 @@ const buildLegacyFlows = (settings) => {
   const playlists = settings.weeklyFlowPlaylists || {};
   return LEGACY_TYPES.map((type) => {
     const legacy = playlists[type] || {};
-    const mix = {
-      discover: type === "discover" ? 100 : 0,
-      mix: type === "mix" ? 100 : 0,
-      trending: type === "trending" ? 100 : 0,
-    };
     return normalizeFlow({
       id: randomUUID(),
       name: titleCase(type),
       enabled: legacy.enabled === true,
       nextRunAt: legacy.nextRunAt ?? null,
-      mix,
       size: DEFAULT_SIZE,
+      blocks: [
+        {
+          source: type,
+          count: DEFAULT_SIZE,
+          deepDive: false,
+          include: { tags: [], artists: [], relatedArtists: [], match: "any" },
+          exclude: { tags: [], artists: [], relatedArtists: [] },
+        },
+      ],
     });
   });
 };
@@ -236,7 +378,16 @@ export const flowPlaylistConfig = {
     return flow?.enabled === true;
   },
 
-  createFlow({ name, mix, size, deepDive, recipe, tags, relatedArtists }) {
+  createFlow({
+    name,
+    mix,
+    size,
+    deepDive,
+    recipe,
+    tags,
+    relatedArtists,
+    blocks,
+  }) {
     const flows = getStoredFlows();
     const flow = normalizeFlow({
       id: randomUUID(),
@@ -247,6 +398,7 @@ export const flowPlaylistConfig = {
       recipe,
       tags,
       relatedArtists,
+      blocks,
       enabled: false,
       nextRunAt: null,
     });
@@ -268,6 +420,7 @@ export const flowPlaylistConfig = {
       recipe: updates?.recipe ?? current.recipe,
       tags: updates?.tags ?? current.tags,
       relatedArtists: updates?.relatedArtists ?? current.relatedArtists,
+      blocks: updates?.blocks ?? current.blocks,
       deepDive:
         typeof updates?.deepDive === "boolean"
           ? updates.deepDive
