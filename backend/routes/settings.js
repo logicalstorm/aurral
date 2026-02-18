@@ -228,7 +228,7 @@ router.get("/lidarr/metadata-profiles", async (req, res) => {
   } catch (error) {
     console.error(
       "[Settings] Failed to fetch Lidarr metadata profiles:",
-      error
+      error,
     );
     res.status(500).json({
       error: "Failed to fetch Lidarr metadata profiles",
@@ -318,9 +318,8 @@ router.get("/lidarr/test", async (req, res) => {
 
 router.post("/gotify/test", async (req, res) => {
   try {
-    const { sendGotifyTest } = await import(
-      "../services/notificationService.js"
-    );
+    const { sendGotifyTest } =
+      await import("../services/notificationService.js");
     const url = req.body?.url?.trim();
     const token = req.body?.token?.trim();
     if (!url || !token) {
@@ -366,18 +365,21 @@ router.post("/lidarr/apply-community-guide", async (req, res) => {
     const results = {
       qualityDefinitions: [],
       customFormats: [],
+      releaseProfile: null,
+      metadataProfile: null,
       namingConfig: null,
       qualityProfile: null,
+      errors: [],
     };
 
     try {
       const qualityDefs = await lidarrClient.getQualityDefinitions();
 
       const flacDef = qualityDefs.find(
-        (q) => q.quality?.name === "FLAC" || q.title === "FLAC"
+        (q) => q.quality?.name === "FLAC" || q.title === "FLAC",
       );
       const flac24Def = qualityDefs.find(
-        (q) => q.quality?.name === "FLAC 24bit" || q.title === "FLAC 24bit"
+        (q) => q.quality?.name === "FLAC 24bit" || q.title === "FLAC 24bit",
       );
 
       if (flacDef) {
@@ -401,7 +403,7 @@ router.post("/lidarr/apply-community-guide", async (req, res) => {
             minSize: 0,
             maxSize: 1495,
             preferredSize: 895,
-          }
+          },
         );
         results.qualityDefinitions.push({
           name: "FLAC 24bit",
@@ -468,7 +470,7 @@ router.post("/lidarr/apply-community-guide", async (req, res) => {
           includeCustomFormatWhenRenaming: false,
           specifications: [
             {
-              name: "Lossless",
+              name: "Flac",
               implementation: "ReleaseTitleSpecification",
               negate: false,
               required: false,
@@ -500,12 +502,156 @@ router.post("/lidarr/apply-community-guide", async (req, res) => {
             results.customFormats.push(created);
           } catch (err) {
             results.errors.push(
-              `Failed to create custom format "${format.name}": ${err.message}`
+              `Failed to create custom format "${format.name}": ${err.message}`,
             );
           }
         } else {
           results.customFormats.push(existing);
         }
+      }
+
+      const releaseProfilePayload = {
+        name: "Aurral - Single Track Rip Filter",
+        enabled: true,
+        required: [],
+        ignored: ["CUE", "FLAC/CUE"],
+        preferred: [],
+        tags: [],
+      };
+
+      const existingReleaseProfiles = await lidarrClient.getReleaseProfiles();
+      const normalizeReleaseName = (value) =>
+        String(value || "")
+          .trim()
+          .toLowerCase();
+      const hasIgnoredMatch = (profile, value) =>
+        Array.isArray(profile?.ignored) &&
+        profile.ignored
+          .map((item) => String(item || "").toLowerCase())
+          .includes(String(value || "").toLowerCase());
+      const existingReleaseProfile = existingReleaseProfiles.find((profile) => {
+        if (!profile) return false;
+        if (
+          normalizeReleaseName(profile.name) ===
+          normalizeReleaseName(releaseProfilePayload.name)
+        ) {
+          return true;
+        }
+        return (
+          hasIgnoredMatch(profile, "CUE") &&
+          hasIgnoredMatch(profile, "FLAC/CUE")
+        );
+      });
+
+      if (existingReleaseProfile) {
+        const updatedReleaseProfile = await lidarrClient.updateReleaseProfile(
+          existingReleaseProfile.id,
+          {
+            ...releaseProfilePayload,
+            id: existingReleaseProfile.id,
+          },
+        );
+        results.releaseProfile = {
+          id: updatedReleaseProfile.id,
+          name: updatedReleaseProfile.name,
+          updated: true,
+        };
+      } else {
+        const createdReleaseProfile = await lidarrClient.createReleaseProfile(
+          releaseProfilePayload,
+        );
+        results.releaseProfile = {
+          id: createdReleaseProfile.id,
+          name: createdReleaseProfile.name,
+        };
+      }
+
+      const metadataProfiles = await lidarrClient.getMetadataProfiles();
+      const aurralMetadataProfile = metadataProfiles.find(
+        (profile) => profile.name === "Aurral - Standard",
+      );
+      const standardProfile = metadataProfiles.find(
+        (profile) => profile.name === "Standard",
+      );
+      const baseMetadataProfile =
+        aurralMetadataProfile || standardProfile || metadataProfiles[0];
+
+      if (!baseMetadataProfile) {
+        throw new Error("No metadata profiles available in Lidarr");
+      }
+
+      const desiredPrimaryTypes = ["Album", "EP", "Single"];
+      const desiredSecondaryTypes = [
+        "Studio",
+        "Soundtrack",
+        "Remix",
+        "DJ-mix",
+        "Compilation",
+      ];
+
+      const normalizeTypeName = (value) =>
+        String(value || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "");
+
+      const getTypeName = (item) => {
+        if (!item) return "";
+        if (typeof item === "string") return item;
+        if (typeof item.name === "string") return item.name;
+        if (typeof item.value === "string") return item.value;
+        if (typeof item.albumType?.name === "string")
+          return item.albumType.name;
+        return "";
+      };
+
+      const applyTypeSelection = (available, desired) => {
+        if (!Array.isArray(available) || available.length === 0) {
+          return desired.map((name) => ({ name, allowed: true }));
+        }
+        const desiredSet = new Set(
+          desired.map((name) => normalizeTypeName(name)),
+        );
+        return available.map((item) => {
+          const itemName = getTypeName(item);
+          const allowed = desiredSet.has(normalizeTypeName(itemName));
+          if (typeof item === "string") {
+            return { name: item, allowed };
+          }
+          return { ...item, allowed };
+        });
+      };
+
+      const metadataProfilePayload = {
+        ...baseMetadataProfile,
+        name: "Aurral - Standard",
+        primaryAlbumTypes: applyTypeSelection(
+          baseMetadataProfile.primaryAlbumTypes,
+          desiredPrimaryTypes,
+        ),
+        secondaryAlbumTypes: applyTypeSelection(
+          baseMetadataProfile.secondaryAlbumTypes,
+          desiredSecondaryTypes,
+        ),
+      };
+
+      if (aurralMetadataProfile) {
+        const updatedMetadataProfile = await lidarrClient.updateMetadataProfile(
+          aurralMetadataProfile.id,
+          metadataProfilePayload,
+        );
+        results.metadataProfile = {
+          id: updatedMetadataProfile.id,
+          name: updatedMetadataProfile.name,
+          updated: true,
+        };
+      } else {
+        const { id, ...createPayload } = metadataProfilePayload;
+        const createdMetadataProfile =
+          await lidarrClient.createMetadataProfile(createPayload);
+        results.metadataProfile = {
+          id: createdMetadataProfile.id,
+          name: createdMetadataProfile.name,
+        };
       }
 
       const namingConfig = await lidarrClient.getNamingConfig();
@@ -525,138 +671,124 @@ router.post("/lidarr/apply-community-guide", async (req, res) => {
 
       const existingProfiles = await lidarrClient.getQualityProfiles();
       let aurralProfile = existingProfiles.find(
-        (p) => p.name === "Aurral - HQ"
+        (profile) => profile.name === "Aurral - HQ",
       );
+      const baseProfile = aurralProfile || existingProfiles[0];
+
+      if (!baseProfile) {
+        throw new Error("No quality profiles available in Lidarr");
+      }
+
+      const selectedQualityNames = ["MP3-320", "FLAC"];
+      const baseItems = JSON.parse(JSON.stringify(baseProfile.items || []));
+      const qualityItemMap = new Map();
+
+      const collectQualityItems = (items) => {
+        for (const item of items) {
+          if (item?.quality?.name) {
+            qualityItemMap.set(item.quality.name, item);
+          }
+          if (Array.isArray(item.items)) {
+            collectQualityItems(item.items);
+          }
+        }
+      };
+
+      collectQualityItems(baseItems);
+
+      const qualityDefItems = (qualityDefs || []).map((definition) => ({
+        id: definition.id,
+        name: definition.title || definition.quality?.name,
+        quality: {
+          id: definition.quality?.id,
+          name: definition.quality?.name || definition.title,
+        },
+        allowed: false,
+        items: [],
+      }));
+
+      for (const defItem of qualityDefItems) {
+        if (
+          defItem.quality?.name &&
+          !qualityItemMap.has(defItem.quality.name)
+        ) {
+          qualityItemMap.set(defItem.quality.name, defItem);
+        }
+      }
+
+      const normalizeQualityItem = (item, allowed) => ({
+        ...item,
+        allowed,
+        items: [],
+      });
+
+      const selectedItems = selectedQualityNames
+        .map((name) => qualityItemMap.get(name))
+        .filter(Boolean)
+        .map((item) => normalizeQualityItem(item, true));
+
+      const otherItems = Array.from(qualityItemMap.entries())
+        .filter(([name]) => !selectedQualityNames.includes(name))
+        .map(([, item]) => normalizeQualityItem(item, false));
+
+      const profileItems = [...otherItems, ...selectedItems];
+      const flacQualityId = qualityItemMap.get("FLAC")?.quality?.id;
+
+      const profileData = {
+        ...baseProfile,
+        name: "Aurral - HQ",
+        upgradeAllowed: true,
+        cutoff: flacQualityId ?? baseProfile.cutoff,
+        items: profileItems,
+        minFormatScore: 1,
+        cutoffFormatScore: 0,
+        formatItems: results.customFormats.map((cf) => {
+          const scores = {
+            "Preferred Groups": 10,
+            CD: 2,
+            WEB: 1,
+            Lossless: 1,
+            Vinyl: -5,
+          };
+          return {
+            format: cf.id,
+            name: cf.name,
+            score: scores[cf.name] || 0,
+          };
+        }),
+      };
 
       if (!aurralProfile) {
-        const profileData = {
-          name: "Aurral - HQ",
-          upgradeAllowed: true,
-          cutoff: 1005,
-          items: [
-            {
-              name: "High Quality Lossy",
-              items: [
-                { quality: { id: 2, name: "MP3-VBR-V0" }, allowed: false },
-                { quality: { id: 12, name: "AAC-VBR" }, allowed: false },
-                { quality: { id: 4, name: "MP3-320" }, allowed: true },
-                { quality: { id: 15, name: "OGG Vorbis Q9" }, allowed: false },
-                { quality: { id: 11, name: "AAC-320" }, allowed: false },
-                { quality: { id: 14, name: "OGG Vorbis Q10" }, allowed: false },
-              ],
-              allowed: true,
-              id: 1004,
-            },
-            {
-              name: "Lossless",
-              items: [
-                { quality: { id: 6, name: "FLAC" }, allowed: true },
-                { quality: { id: 7, name: "ALAC" }, allowed: false },
-                { quality: { id: 35, name: "APE" }, allowed: false },
-                { quality: { id: 36, name: "WavPack" }, allowed: false },
-                { quality: { id: 21, name: "FLAC 24bit" }, allowed: false },
-                { quality: { id: 37, name: "ALAC 24bit" }, allowed: false },
-              ],
-              allowed: true,
-              id: 1005,
-            },
-            { quality: { id: 0, name: "Unknown" }, allowed: false },
-            {
-              name: "Trash Quality Lossy",
-              items: [
-                { quality: { id: 32, name: "MP3-8" }, allowed: false },
-                { quality: { id: 31, name: "MP3-16" }, allowed: false },
-                { quality: { id: 30, name: "MP3-24" }, allowed: false },
-                { quality: { id: 29, name: "MP3-32" }, allowed: false },
-                { quality: { id: 28, name: "MP3-40" }, allowed: false },
-                { quality: { id: 27, name: "MP3-48" }, allowed: false },
-                { quality: { id: 26, name: "MP3-56" }, allowed: false },
-                { quality: { id: 25, name: "MP3-64" }, allowed: false },
-                { quality: { id: 24, name: "MP3-80" }, allowed: false },
-              ],
-              allowed: false,
-              id: 1000,
-            },
-            {
-              name: "Poor Quality Lossy",
-              items: [
-                { quality: { id: 23, name: "MP3-96" }, allowed: false },
-                { quality: { id: 33, name: "MP3-112" }, allowed: false },
-                { quality: { id: 22, name: "MP3-128" }, allowed: false },
-                { quality: { id: 19, name: "OGG Vorbis Q5" }, allowed: false },
-                { quality: { id: 5, name: "MP3-160" }, allowed: false },
-              ],
-              allowed: false,
-              id: 1001,
-            },
-            {
-              name: "Low Quality Lossy",
-              items: [
-                { quality: { id: 1, name: "MP3-192" }, allowed: false },
-                { quality: { id: 18, name: "OGG Vorbis Q6" }, allowed: false },
-                { quality: { id: 9, name: "AAC-192" }, allowed: false },
-                { quality: { id: 20, name: "WMA" }, allowed: false },
-                { quality: { id: 34, name: "MP3-224" }, allowed: false },
-              ],
-              allowed: false,
-              id: 1002,
-            },
-            {
-              name: "Mid Quality Lossy",
-              items: [
-                { quality: { id: 17, name: "OGG Vorbis Q7" }, allowed: false },
-                { quality: { id: 8, name: "MP3-VBR-V2" }, allowed: false },
-                { quality: { id: 3, name: "MP3-256" }, allowed: false },
-                { quality: { id: 16, name: "OGG Vorbis Q8" }, allowed: false },
-                { quality: { id: 10, name: "AAC-256" }, allowed: false },
-              ],
-              allowed: false,
-              id: 1003,
-            },
-            { quality: { id: 13, name: "WAV" }, allowed: false },
-          ],
-          minFormatScore: 1,
-          cutoffFormatScore: 0,
-          formatItems: results.customFormats.map((cf, index) => {
-            const scores = {
-              "Preferred Groups": 10,
-              CD: 10,
-              WEB: 5,
-              Lossless: 10,
-              Vinyl: -10,
-            };
-            return {
-              format: cf.id,
-              name: cf.name,
-              score: scores[cf.name] || 0,
-            };
-          }),
-        };
-
-        aurralProfile = await lidarrClient.createQualityProfile(profileData);
+        const { id, ...createPayload } = profileData;
+        aurralProfile = await lidarrClient.createQualityProfile(createPayload);
         results.qualityProfile = {
           id: aurralProfile.id,
           name: aurralProfile.name,
         };
-
-        const currentSettings = dbOps.getSettings();
-        dbOps.updateSettings({
-          ...currentSettings,
-          integrations: {
-            ...currentSettings.integrations,
-            lidarr: {
-              ...(currentSettings.integrations?.lidarr || {}),
-              qualityProfileId: aurralProfile.id,
-            },
-          },
-        });
       } else {
+        const updatedProfile = await lidarrClient.updateQualityProfile(
+          aurralProfile.id,
+          profileData,
+        );
         results.qualityProfile = {
-          id: aurralProfile.id,
-          name: aurralProfile.name,
-          alreadyExists: true,
+          id: updatedProfile.id,
+          name: updatedProfile.name,
+          updated: true,
         };
       }
+
+      const currentSettings = dbOps.getSettings();
+      dbOps.updateSettings({
+        ...currentSettings,
+        integrations: {
+          ...currentSettings.integrations,
+          lidarr: {
+            ...(currentSettings.integrations?.lidarr || {}),
+            qualityProfileId: aurralProfile.id,
+            metadataProfileId: results.metadataProfile?.id || null,
+          },
+        },
+      });
 
       res.json({
         success: true,
