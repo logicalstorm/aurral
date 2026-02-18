@@ -669,6 +669,28 @@ export class LidarrClient {
     return this.request("/metadataprofile", "GET", null, skipConfigUpdate);
   }
 
+  async createMetadataProfile(profileData, skipConfigUpdate = false) {
+    return this.request(
+      "/metadataprofile",
+      "POST",
+      profileData,
+      skipConfigUpdate,
+    );
+  }
+
+  async updateMetadataProfile(
+    profileId,
+    profileData,
+    skipConfigUpdate = false,
+  ) {
+    return this.request(
+      `/metadataprofile/${profileId}`,
+      "PUT",
+      profileData,
+      skipConfigUpdate,
+    );
+  }
+
   async getQualityProfile(profileId, skipConfigUpdate = false) {
     return this.request(
       `/qualityprofile/${profileId}`,
@@ -682,6 +704,15 @@ export class LidarrClient {
     return this.request(
       "/qualityprofile",
       "POST",
+      profileData,
+      skipConfigUpdate,
+    );
+  }
+
+  async updateQualityProfile(profileId, profileData, skipConfigUpdate = false) {
+    return this.request(
+      `/qualityprofile/${profileId}`,
+      "PUT",
       profileData,
       skipConfigUpdate,
     );
@@ -701,6 +732,28 @@ export class LidarrClient {
 
   async updateNamingConfig(configData, skipConfigUpdate = false) {
     return this.request("/config/naming", "PUT", configData, skipConfigUpdate);
+  }
+
+  async getReleaseProfiles(skipConfigUpdate = false) {
+    return this.request("/releaseprofile", "GET", null, skipConfigUpdate);
+  }
+
+  async createReleaseProfile(profileData, skipConfigUpdate = false) {
+    return this.request(
+      "/releaseprofile",
+      "POST",
+      profileData,
+      skipConfigUpdate,
+    );
+  }
+
+  async updateReleaseProfile(profileId, profileData, skipConfigUpdate = false) {
+    return this.request(
+      `/releaseprofile/${profileId}`,
+      "PUT",
+      profileData,
+      skipConfigUpdate,
+    );
   }
 
   async getQualityDefinitions(skipConfigUpdate = false) {
