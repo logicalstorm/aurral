@@ -230,6 +230,8 @@ function ArtistDetailsPage() {
 
       <ArtistDetailsHero
         artist={artist}
+        libraryArtist={libraryArtist}
+        appSettings={appSettings}
         coverImages={coverImages}
         loadingCover={loadingCover}
         loadingLibrary={loadingLibrary}
