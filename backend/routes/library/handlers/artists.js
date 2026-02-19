@@ -257,16 +257,6 @@ export default function registerArtists(router) {
 
       const { lidarrClient } =
         await import("../../../services/lidarrClient.js");
-      if (lidarrClient && lidarrClient.isConfigured()) {
-        const lidarrArtist = await lidarrClient.getArtist(artist.id);
-        if (
-          lidarrArtist &&
-          lidarrArtist.monitor !== "none" &&
-          lidarrArtist.monitored
-        ) {
-          await libraryManager.fetchArtistAlbums(artist.id, mbid);
-        }
-      }
 
       const albums = await libraryManager.getAlbums(artist.id);
 
@@ -283,7 +273,16 @@ export default function registerArtists(router) {
 
       await libraryManager.updateArtistStatistics(artist.id);
 
-      await monitorArtistAlbums(artist, albums, lidarrClient);
+      if (lidarrClient && lidarrClient.isConfigured()) {
+        const lidarrArtist = await lidarrClient.getArtist(artist.id);
+        if (
+          lidarrArtist &&
+          lidarrArtist.monitor !== "none" &&
+          lidarrArtist.monitored
+        ) {
+          await lidarrClient.triggerArtistSearch(artist.id);
+        }
+      }
 
       res.json({
         success: true,
