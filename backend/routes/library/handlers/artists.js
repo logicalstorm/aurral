@@ -157,7 +157,10 @@ export default function registerArtists(router) {
           monitorOption: monitorOption ?? defaultMonitorOption,
         });
         if (artist?.error) {
-          return res.status(503).json({ error: artist.error });
+          return res.status(503).json({
+            error: artist.error,
+            message: artist.error,
+          });
         }
         res.status(201).json(artist);
       } catch (error) {
@@ -182,7 +185,10 @@ export default function registerArtists(router) {
 
         const artist = await libraryManager.updateArtist(mbid, req.body);
         if (artist?.error) {
-          return res.status(503).json({ error: artist.error });
+          return res.status(503).json({
+            error: artist.error,
+            message: artist.error,
+          });
         }
         const { lidarrClient } =
           await import("../../../services/lidarrClient.js");
@@ -224,9 +230,8 @@ export default function registerArtists(router) {
           deleteFiles === "true",
         );
         if (!result?.success) {
-          return res
-            .status(503)
-            .json({ error: result?.error || "Failed to delete artist" });
+          const message = result?.error || "Failed to delete artist";
+          return res.status(503).json({ error: message, message });
         }
         res.json({ success: true, message: "Artist deleted successfully" });
       } catch (error) {

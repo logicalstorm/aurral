@@ -297,6 +297,21 @@ export class LidarrClient {
             errorDetails = JSON.stringify(responseData, null, 2);
           }
 
+          const responseText =
+            typeof responseData === "string" ? responseData : errorMsg;
+          const responseTextLower = responseText?.toLowerCase?.();
+          const isLidarrSkyhookRefused =
+            status >= 500 &&
+            responseTextLower &&
+            responseTextLower.includes("api.lidarr.audio") &&
+            (responseTextLower.includes("connection refused") ||
+              responseTextLower.includes("connect") ||
+              responseTextLower.includes("econnrefused"));
+          if (isLidarrSkyhookRefused) {
+            throw new Error(
+              "Lidarr cannot reach api.lidarr.audio from its container. Check Lidarr outbound internet/DNS or proxy settings.",
+            );
+          }
           if (status === 400) {
             throw new Error(
               `Lidarr API returned 400 Bad Request: ${errorMsg}${

@@ -149,7 +149,9 @@ export function useArtistDetailsLibrary({
       console.error("Update error:", err);
       showError(
         `Failed to update monitor option: ${
-          err.response?.data?.message || err.message
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          err.message
         }`,
       );
     } finally {
@@ -208,7 +210,9 @@ export function useArtistDetailsLibrary({
     } catch (err) {
       showError(
         `Failed to add artist to library: ${
-          err.response?.data?.message || err.message
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          err.message
         }`,
       );
       return false;
