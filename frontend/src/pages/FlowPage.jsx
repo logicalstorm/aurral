@@ -21,7 +21,7 @@ import {
   setFlowEnabled,
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
-import PowerSwitch from "../components/PowerSwitch";
+import PillToggle from "../components/PillToggle";
 
 function formatNextRun(nextRunAt) {
   if (!nextRunAt) return null;
@@ -433,6 +433,8 @@ function FlowPage() {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [confirmDisable, setConfirmDisable] = useState(null);
+  const [optimisticEnabled, setOptimisticEnabled] = useState({});
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
@@ -637,8 +639,32 @@ function FlowPage() {
         err.response?.data?.message || err.message || "Failed to update flow"
       );
     } finally {
+      setOptimisticEnabled((prev) => {
+        const next = { ...prev };
+        delete next[flow.id];
+        return next;
+      });
       setTogglingId(null);
     }
+  };
+
+  const handleToggleRequest = (flow, nextEnabled) => {
+    if (!nextEnabled) {
+      setConfirmDisable({ flowId: flow.id, title: flow.name });
+      return;
+    }
+    setOptimisticEnabled((prev) => ({ ...prev, [flow.id]: true }));
+    handleToggleEnabled(flow, true);
+  };
+
+  const handleConfirmDisable = async () => {
+    if (!confirmDisable) return;
+    const flow = flowList.find((entry) => entry.id === confirmDisable.flowId);
+    if (flow) {
+      setOptimisticEnabled((prev) => ({ ...prev, [flow.id]: false }));
+      await handleToggleEnabled(flow, false);
+    }
+    setConfirmDisable(null);
   };
 
   const flowList = status?.flows || [];
@@ -790,7 +816,11 @@ function FlowPage() {
         {flowList.map((flow) => {
           const stats = getPlaylistStats(flow.id);
           const state = getPlaylistState(flow.id);
-          const enabled = flow.enabled === true;
+          const optimisticValue = optimisticEnabled[flow.id];
+          const enabled =
+            typeof optimisticValue === "boolean"
+              ? optimisticValue
+              : flow.enabled === true;
           const nextRun = formatNextRun(flow.nextRunAt);
           const isEditing = editingId === flow.id;
           const yamlDraft = yamlDrafts[flow.id] ?? flowToYaml(flow);
@@ -830,7 +860,14 @@ function FlowPage() {
                         enabled ? "badge-success" : "badge-neutral"
                       }`}
                     >
-                      {enabled ? "On" : "Off"}
+                      <span className="inline-flex items-center gap-1.5">
+                        {enabled ? "On" : "Off"}
+                        <span className="inline-flex w-3.5 h-3.5">
+                          {togglingId === flow.id && (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#9aa886]" />
+                          )}
+                        </span>
+                      </span>
                     </span>
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[#c1c1c3]">
@@ -882,16 +919,13 @@ function FlowPage() {
                     <Pencil className="w-4 h-4" />
                   </button>
                   <div className="flex items-center gap-2">
-                    <PowerSwitch
+                    <PillToggle
                       checked={enabled}
                       onChange={(event) =>
-                        handleToggleEnabled(flow, event.target.checked)
+                        handleToggleRequest(flow, event.target.checked)
                       }
                       disabled={togglingId === flow.id}
                     />
-                    {togglingId === flow.id && (
-                      <Loader2 className="w-4 h-4 animate-spin text-[#9aa886]" />
-                    )}
                   </div>
                 </div>
               </div>
@@ -1004,6 +1038,41 @@ function FlowPage() {
                 disabled={deletingId === confirmDelete.flowId}
               >
                 {deletingId === confirmDelete.flowId ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmDisable && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
+          onClick={() => setConfirmDisable(null)}
+        >
+          <div
+            className="card max-w-md w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-xl font-bold mb-2 text-white">
+              Turn off {confirmDisable.title}?
+            </h3>
+            <p className="text-[#c1c1c3] mb-6">
+              This pauses future runs. You can turn it back on anytime.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmDisable(null)}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDisable}
+                className="btn btn-primary"
+                style={{ backgroundColor: "#ef4444" }}
+                disabled={togglingId === confirmDisable.flowId}
+              >
+                {togglingId === confirmDisable.flowId ? "Turning off..." : "Turn Off"}
               </button>
             </div>
           </div>
