@@ -143,12 +143,6 @@ export class WeeklyFlowPlaylistManager {
     return this.navidromeClient.scanLibrary();
   }
 
-  async createSymlink(sourcePath, playlistType) {
-    return null;
-  }
-
-  async removeDiscoverSymlinksForAlbum(artistName, albumName) {}
-
   async weeklyReset(playlistTypes = null) {
     const targets =
       playlistTypes && playlistTypes.length

@@ -89,7 +89,6 @@ router.post("/flows", async (req, res) => {
       recipe,
       tags,
       relatedArtists,
-      blocks,
     } = req.body || {};
     if (!name || !String(name).trim()) {
       return res.status(400).json({ error: "name is required" });
@@ -102,7 +101,6 @@ router.post("/flows", async (req, res) => {
       recipe,
       tags,
       relatedArtists,
-      blocks,
     });
     await playlistManager.ensureSmartPlaylists();
     res.json({ success: true, flow });
@@ -125,7 +123,6 @@ router.put("/flows/:flowId", async (req, res) => {
       recipe,
       tags,
       relatedArtists,
-      blocks,
     } = req.body || {};
     const updated = flowPlaylistConfig.updateFlow(flowId, {
       name,
@@ -135,7 +132,6 @@ router.put("/flows/:flowId", async (req, res) => {
       recipe,
       tags,
       relatedArtists,
-      blocks,
     });
     if (!updated) {
       return res.status(404).json({ error: "Flow not found" });

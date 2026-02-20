@@ -89,36 +89,6 @@ export class WeeklyFlowPlaylistSource {
     return [];
   }
 
-  _normalizeMatch(value) {
-    return value === "all" ? "all" : "any";
-  }
-
-  _normalizeBlockInclude(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      return { tags: [], artists: [], relatedArtists: [], match: "any" };
-    }
-    return {
-      tags: this._normalizeList(value.tags ?? value.tag),
-      artists: this._normalizeList(value.artists ?? value.artist),
-      relatedArtists: this._normalizeList(
-        value.relatedArtists ?? value.relatedArtist,
-      ),
-      match: this._normalizeMatch(value.match),
-    };
-  }
-
-  _normalizeBlockExclude(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      return { tags: [], artists: [], relatedArtists: [] };
-    }
-    return {
-      tags: this._normalizeList(value.tags ?? value.tag),
-      artists: this._normalizeList(value.artists ?? value.artist),
-      relatedArtists: this._normalizeList(
-        value.relatedArtists ?? value.relatedArtist,
-      ),
-    };
-  }
 
   _artistKey(value) {
     return String(value || "").trim().toLowerCase();
@@ -519,234 +489,137 @@ export class WeeklyFlowPlaylistSource {
     return [...curated, ...fallback];
   }
 
-  async _getTracksForBlock(block) {
-    const count = Number(block?.count || 0);
-    if (!Number.isFinite(count) || count <= 0) return [];
-    const source = String(block?.source || "discover").trim().toLowerCase();
-    const deepDive = block?.deepDive === true;
-    const include = this._normalizeBlockInclude(block?.include);
-    const exclude = this._normalizeBlockExclude(block?.exclude);
-    const match = include.match;
-    const includeTags = include.tags;
-    const includeArtists = include.artists;
-    const includeRelated = include.relatedArtists;
-    const excludeSet = new Set(
-      [...exclude.artists, ...exclude.relatedArtists].map((name) =>
-        this._artistKey(name),
-      ),
-    );
-    const includeSet =
-      includeArtists.length > 0
-        ? new Set(includeArtists.map((name) => this._artistKey(name)))
-        : null;
-    const recommendedSet =
-      source === "discover" || source === "recommended"
-        ? this._getRecommendedArtistSet()
-        : null;
-    const recommendedMap =
-      source === "discover" || source === "recommended"
-        ? this._getRecommendedArtistMap()
-        : null;
-    const excludeTags = exclude.tags
-      .map((tag) => String(tag || "").trim().toLowerCase())
-      .filter(Boolean);
-
-    const filterArtistList = (list) => {
-      const seen = new Set();
-      const out = [];
-      for (const name of list || []) {
-        const key = this._artistKey(name);
-        if (!key) continue;
-        if (recommendedSet && !recommendedSet.has(key)) continue;
-        if (excludeSet.has(key)) continue;
-        if (includeSet && includeSet.size > 0 && !includeSet.has(key)) continue;
-        if (excludeTags.length && recommendedMap) {
-          const artist = recommendedMap.get(key);
-          const artistTags = Array.isArray(artist?.tags)
-            ? artist.tags.map((tag) => String(tag).toLowerCase())
-            : [];
-          if (excludeTags.some((tag) => artistTags.includes(tag))) continue;
-        }
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push(name);
-      }
-      return out;
-    };
-
-    if (includeRelated.length > 0) {
-      const perSeed = Math.max(Math.ceil(count / includeRelated.length), 1);
-      const tracks = [];
-      for (const seed of includeRelated) {
-        try {
-          const relatedTracks = await this.getRelatedArtistTracks(seed, perSeed, {
-            deepDive,
-          });
-          tracks.push(...relatedTracks);
-        } catch {
-          continue;
-        }
-      }
-      const filtered = this._filterTracksByArtists(
-        tracks,
-        includeSet,
-        excludeSet,
-      );
-      return filtered.slice(0, count);
-    }
-
-    if (includeTags.length > 0) {
-      if (source === "discover" || source === "recommended") {
-        const artists = this._getRecommendedArtistsByTags(includeTags, match);
-        const artistNames = artists
-          .map((artist) => artist?.name || artist?.artistName || "")
-          .filter(Boolean);
-        const filteredArtists = filterArtistList(artistNames);
-        return await this._getTracksForArtists(filteredArtists, count, {
-          deepDive,
-        });
-      }
-      const perTagLimit = Math.max(count * 4, 50);
-      const tagLists = await Promise.all(
-        includeTags.map((tag) =>
-          this._getTagArtists(tag, perTagLimit).catch(() => []),
-        ),
-      );
-      let artistNames = [];
-      if (match === "all") {
-        const tagSets = tagLists.map(
-          (list) => new Set(list.map((name) => this._artistKey(name))),
-        );
-        const baseList = tagLists[0] || [];
-        artistNames = baseList.filter((name) =>
-          tagSets.every((set) => set.has(this._artistKey(name))),
-        );
-      } else {
-        const seen = new Map();
-        for (const list of tagLists) {
-          for (const name of list) {
-            const key = this._artistKey(name);
-            if (!key || seen.has(key)) continue;
-            seen.set(key, name);
-          }
-        }
-        artistNames = [...seen.values()];
-      }
-      const filteredArtists = filterArtistList(artistNames);
-      return await this._getTracksForArtists(filteredArtists, count, {
-        deepDive,
-      });
-    }
-
-    if (includeArtists.length > 0) {
-      const filteredArtists = filterArtistList(includeArtists);
-      return await this._getTracksForArtists(filteredArtists, count, {
-        deepDive,
-      });
-    }
-
-    if (source === "mix") {
-      return await this.getMixTracks(count, { deepDive });
-    }
-    if (source === "trending") {
-      return await this.getDiscoverTracks(count);
-    }
-    if (source === "all") {
-      return await this.getDiscoverTracks(count);
-    }
-    return await this.getRecommendedTracks(count, {
-      deepDive,
-      includeGlobalTop: false,
-    });
-  }
-
   async getTracksForFlow(flow) {
-    const blocks = Array.isArray(flow?.blocks) ? flow.blocks : [];
-    if (blocks.length === 0) {
-      const size = Number(flow?.size || 0);
-      const limit = Number.isFinite(size) && size > 0 ? size : 30;
-      const tags = this._normalizeWeightMap(flow?.tags);
-      const relatedArtists = this._normalizeWeightMap(flow?.relatedArtists);
-      const tagsTotal = this._sumWeightMap(tags);
-      const relatedTotal = this._sumWeightMap(relatedArtists);
-      const recipeCounts = this._normalizeRecipeCounts(flow?.recipe);
-      const recipeTotal =
-        recipeCounts?.discover != null
-          ? this._sumWeightMap(recipeCounts)
-          : Math.max(limit - tagsTotal - relatedTotal, 0);
-      const totalTarget = recipeTotal + tagsTotal + relatedTotal;
-      if (totalTarget <= 0) return [];
-      const counts =
-        recipeCounts?.discover != null
-          ? recipeCounts
-          : this._buildCounts(recipeTotal, flow?.mix);
-      const perTypeLimit = recipeTotal > 0 ? Math.max(recipeTotal, 50) : 0;
+    const size = Number(flow?.size || 0);
+    const limit = Number.isFinite(size) && size > 0 ? size : 30;
+    const tags = this._normalizeWeightMap(flow?.tags);
+    const relatedArtists = this._normalizeWeightMap(flow?.relatedArtists);
+    const tagsTotal = this._sumWeightMap(tags);
+    const relatedTotal = this._sumWeightMap(relatedArtists);
+    const recipeCounts = this._normalizeRecipeCounts(flow?.recipe);
+    const recipeTotal =
+      recipeCounts?.discover != null
+        ? this._sumWeightMap(recipeCounts)
+        : limit;
+    const totalTarget = recipeTotal > 0 ? recipeTotal : limit;
+    if (totalTarget <= 0) return [];
+    const counts =
+      recipeCounts?.discover != null
+        ? recipeCounts
+        : this._buildCounts(limit, flow?.mix);
+    const perTypeLimit = totalTarget > 0 ? Math.max(totalTarget, 50) : 0;
 
-      const [discoverTracks, mixTracks, trendingTracks] =
-        perTypeLimit > 0
-          ? await Promise.all([
-              this.getRecommendedTracks(perTypeLimit, {
-                deepDive: flow?.deepDive === true,
-              }).catch(() => []),
-              this.getMixTracks(perTypeLimit, {
-                deepDive: flow?.deepDive === true,
-              }).catch(() => []),
-              this.getDiscoverTracks(perTypeLimit).catch(() => []),
-            ])
-          : [[], [], []];
+    const [discoverTracks, mixTracks, trendingTracks] =
+      perTypeLimit > 0
+        ? await Promise.all([
+            this.getRecommendedTracks(perTypeLimit, {
+              deepDive: flow?.deepDive === true,
+            }).catch(() => []),
+            this.getMixTracks(perTypeLimit, {
+              deepDive: flow?.deepDive === true,
+            }).catch(() => []),
+            this.getDiscoverTracks(perTypeLimit).catch(() => []),
+          ])
+        : [[], [], []];
 
-      const tagSources = await Promise.all(
-        Object.entries(tags).map(async ([tag, count]) => ({
-          key: `tag:${tag}`,
-          count,
-          tracks: await this.getTagTracks(tag, count).catch(() => []),
-        })),
-      );
-      const relatedSources = await Promise.all(
-        Object.entries(relatedArtists).map(async ([artist, count]) => ({
-          key: `related:${artist}`,
-          count,
-          tracks: await this.getRelatedArtistTracks(artist, count, {
-            deepDive: flow?.deepDive === true,
-          }).catch(() => []),
-        })),
-      );
-
-      return this._dedupeAndFillSources(totalTarget, [
-        { key: "discover", count: counts.discover || 0, tracks: discoverTracks },
-        { key: "mix", count: counts.mix || 0, tracks: mixTracks },
-        { key: "trending", count: counts.trending || 0, tracks: trendingTracks },
-        ...tagSources,
-        ...relatedSources,
-      ]);
-    }
-
-    const sources = await Promise.all(
-      blocks.map(async (block, index) => ({
-        key: `block:${index + 1}`,
-        count: Number(block?.count || 0),
-        tracks: await this._getTracksForBlock(block).catch(() => []),
+    const tagSources = await Promise.all(
+      Object.entries(tags).map(async ([tag, count]) => ({
+        key: `tag:${tag}`,
+        count,
+        tracks: await this.getTagTracks(tag, count).catch(() => []),
       })),
     );
-    const totalTarget = sources.reduce(
-      (acc, source) => acc + (Number(source.count) || 0),
-      0,
+    const relatedSources = await Promise.all(
+      Object.entries(relatedArtists).map(async ([artist, count]) => ({
+        key: `related:${artist}`,
+        count,
+        tracks: await this.getRelatedArtistTracks(artist, count, {
+          deepDive: flow?.deepDive === true,
+        }).catch(() => []),
+      })),
     );
-    if (totalTarget <= 0) return [];
-    return this._dedupeAndFillSources(totalTarget, sources);
-  }
-
-  async getTracksForPlaylist(playlistType, limit = 30) {
-    switch (playlistType) {
-      case "discover":
-        return await this.getRecommendedTracks(limit);
-      case "mix":
-        return await this.getMixTracks(limit);
-      case "trending":
-        return await this.getDiscoverTracks(limit);
-      default:
-        throw new Error(`Unknown playlist type: ${playlistType}`);
+    const focusTotal = Math.min(tagsTotal + relatedTotal, totalTarget);
+    const focusTracks =
+      focusTotal > 0
+        ? this._dedupeAndFillSources(focusTotal, [
+            ...tagSources,
+            ...relatedSources,
+          ])
+        : [];
+    const focusCounts = this._buildWeightedSourceCounts(focusTotal, [
+      { key: "discover", weight: Number(counts.discover || 0) },
+      { key: "mix", weight: Number(counts.mix || 0) },
+      { key: "trending", weight: Number(counts.trending || 0) },
+    ]);
+    const orderedKeys = ["discover", "mix", "trending"];
+    const focusCountMap = focusCounts.reduce((acc, item) => {
+      acc[item.key] = item.count;
+      return acc;
+    }, {});
+    const sourceTracksMap = {
+      discover: discoverTracks,
+      mix: mixTracks,
+      trending: trendingTracks,
+    };
+    const trackKey = (track) =>
+      `${track?.artistName || ""}`.toLowerCase() +
+      "::" +
+      `${track?.trackName || ""}`.toLowerCase();
+    const focusKeySet = new Set(focusTracks.map((track) => trackKey(track)));
+    const focusBuckets = orderedKeys.reduce((acc, key) => {
+      const list = sourceTracksMap[key] || [];
+      acc[key] = list.filter((track) => focusKeySet.has(trackKey(track)));
+      return acc;
+    }, {});
+    const focusAssignments = {};
+    const focusShortfalls = {};
+    const usedFocusKeys = new Set();
+    for (const key of orderedKeys) {
+      const desired = Number(focusCountMap[key] || 0);
+      const candidates = focusBuckets[key] || [];
+      const picked = [];
+      for (const track of candidates) {
+        if (picked.length >= desired) break;
+        const keyValue = trackKey(track);
+        if (!keyValue || usedFocusKeys.has(keyValue)) continue;
+        usedFocusKeys.add(keyValue);
+        picked.push(track);
+      }
+      focusAssignments[key] = picked;
+      focusShortfalls[key] = Math.max(desired - picked.length, 0);
     }
+    const remainingFocusPool = focusTracks.filter(
+      (track) => !usedFocusKeys.has(trackKey(track)),
+    );
+    for (const key of orderedKeys) {
+      const shortfall = focusShortfalls[key] || 0;
+      if (shortfall <= 0) continue;
+      const picked = focusAssignments[key] || [];
+      while (picked.length < (focusCountMap[key] || 0) && remainingFocusPool.length > 0) {
+        const nextTrack = remainingFocusPool.shift();
+        const keyValue = trackKey(nextTrack);
+        if (!keyValue || usedFocusKeys.has(keyValue)) continue;
+        usedFocusKeys.add(keyValue);
+        picked.push(nextTrack);
+      }
+      focusAssignments[key] = picked;
+    }
+    const focusSlices = orderedKeys.map((key) => {
+      const tracks = focusAssignments[key] || [];
+      return { key: `focus:${key}`, count: tracks.length, tracks };
+    });
+    const baseSources = orderedKeys.map((key) => {
+      const focusCount = focusAssignments[key]?.length || 0;
+      const count = Math.max(Number(counts[key] || 0) - focusCount, 0);
+      const list = sourceTracksMap[key] || [];
+      const tracks = list.filter((track) => !usedFocusKeys.has(trackKey(track)));
+      return { key, count, tracks };
+    });
+
+    return this._dedupeAndFillSources(totalTarget, [
+      ...focusSlices,
+      ...baseSources,
+    ]);
   }
 
   async getDiscoverTracks(limit) {
