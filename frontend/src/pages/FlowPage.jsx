@@ -1,18 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import {
-  AudioWaveform,
-  Loader2,
-  CheckCircle2,
-  Clock,
-  HelpCircle,
-  Trash2,
-  Pencil,
-  Copy,
-  Save,
-  RotateCcw,
-  FilePlus2,
-} from "lucide-react";
-import { dump, load } from "js-yaml";
+import { useState, useEffect } from "react";
+import { Loader2 } from "lucide-react";
 import {
   getFlowStatus,
   createFlow,
@@ -21,7 +8,14 @@ import {
   setFlowEnabled,
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
-import PillToggle from "../components/PillToggle";
+import {
+  FlowCard,
+  FlowEmptyState,
+  FlowPageHeader,
+  FlowStatusCards,
+  ConfirmDeleteModal,
+  ConfirmDisableModal,
+} from "./FlowPageComponents";
 
 function formatNextRun(nextRunAt) {
   if (!nextRunAt) return null;
@@ -35,29 +29,57 @@ function formatNextRun(nextRunAt) {
   return days === 1 ? "Resets tomorrow" : `Resets in ${days} days`;
 }
 
-const NEW_FLOW_TEMPLATE = {
-  name: "Discover",
-  blocks: [
-    {
-      source: "discover",
-      count: 30,
-      deepDive: false,
-    },
-  ],
+const DEFAULT_MIX = { discover: 50, mix: 30, trending: 20 };
+const DEFAULT_SIZE = 30;
+
+const MIX_PRESETS = [
+  {
+    id: "balanced",
+    label: "Balanced",
+    mix: DEFAULT_MIX,
+  },
+  {
+    id: "discover",
+    label: "Discover Focus",
+    mix: { discover: 70, mix: 20, trending: 10 },
+  },
+  {
+    id: "library",
+    label: "Library Mix",
+    mix: { discover: 25, mix: 65, trending: 10 },
+  },
+  {
+    id: "trending",
+    label: "Trending Lift",
+    mix: { discover: 35, mix: 20, trending: 45 },
+  },
+  {
+    id: "custom",
+    label: "Custom",
+    mix: null,
+  },
+];
+
+const FOCUS_STRENGTHS = {
+  light: 20,
+  medium: 35,
+  heavy: 50,
 };
 
-const createDefaultBlock = () => ({
-  source: "discover",
-  count: 30,
+const FOCUS_OPTIONS = [
+  { id: "light", label: "Light" },
+  { id: "medium", label: "Medium" },
+  { id: "heavy", label: "Heavy" },
+];
+
+const NEW_FLOW_TEMPLATE = {
+  name: "Discover",
+  size: DEFAULT_SIZE,
+  mix: DEFAULT_MIX,
   deepDive: false,
-  includeTags: "",
-  includeArtists: "",
-  includeRelatedArtists: "",
-  includeMatch: "any",
-  excludeTags: "",
-  excludeArtists: "",
-  excludeRelatedArtists: "",
-});
+  tags: {},
+  relatedArtists: {},
+};
 
 const parseListInput = (value) =>
   String(value ?? "")
@@ -65,406 +87,234 @@ const parseListInput = (value) =>
     .map((entry) => entry.trim())
     .filter(Boolean);
 
-const normalizeList = (value, label) => {
-  if (value == null) return [];
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => String(item ?? "").trim())
-      .filter(Boolean);
-  }
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed ? [trimmed] : [];
-  }
-  throw new Error(`${label} must be a string or list`);
-};
-
-const normalizeInclude = (value) => {
-  if (value == null) {
-    return { tags: [], artists: [], relatedArtists: [], match: "any" };
-  }
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("include must be a map");
-  }
-  return {
-    tags: normalizeList(value.tags ?? value.tag, "include.tags"),
-    artists: normalizeList(value.artists ?? value.artist, "include.artists"),
-    relatedArtists: normalizeList(
-      value.relatedArtists ?? value.relatedArtist,
-      "include.relatedArtists",
-    ),
-    match: value.match === "all" ? "all" : "any",
+const normalizeMixPercent = (mix) => {
+  const raw = {
+    discover: Number(mix?.discover ?? 0),
+    mix: Number(mix?.mix ?? 0),
+    trending: Number(mix?.trending ?? 0),
   };
+  const sum = raw.discover + raw.mix + raw.trending;
+  if (!Number.isFinite(sum) || sum <= 0) {
+    return { ...DEFAULT_MIX };
+  }
+  const weights = [
+    { key: "discover", value: raw.discover },
+    { key: "mix", value: raw.mix },
+    { key: "trending", value: raw.trending },
+  ];
+  const scaled = weights.map((w) => ({
+    ...w,
+    raw: (w.value / sum) * 100,
+  }));
+  const floored = scaled.map((w) => ({
+    ...w,
+    count: Math.floor(w.raw),
+    remainder: w.raw - Math.floor(w.raw),
+  }));
+  let remaining = 100 - floored.reduce((acc, w) => acc + w.count, 0);
+  const ordered = [...floored].sort((a, b) => b.remainder - a.remainder);
+  for (let i = 0; i < ordered.length && remaining > 0; i++) {
+    ordered[i].count += 1;
+    remaining -= 1;
+  }
+  const out = {};
+  for (const item of ordered) {
+    out[item.key] = item.count;
+  }
+  return out;
 };
 
-const normalizeExclude = (value) => {
-  if (value == null) {
-    return { tags: [], artists: [], relatedArtists: [] };
-  }
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("exclude must be a map");
-  }
-  return {
-    tags: normalizeList(value.tags ?? value.tag, "exclude.tags"),
-    artists: normalizeList(value.artists ?? value.artist, "exclude.artists"),
-    relatedArtists: normalizeList(
-      value.relatedArtists ?? value.relatedArtist,
-      "exclude.relatedArtists",
-    ),
-  };
-};
-
-const normalizeSource = (value) => {
-  const source = String(value ?? "").trim().toLowerCase();
-  const allowed = ["discover", "mix", "trending", "all", "recommended"];
-  if (!source) {
-    return "discover";
-  }
-  if (!allowed.includes(source)) {
-    throw new Error("source must be discover, mix, trending, recommended, or all");
-  }
-  return source;
-};
-
-const SOURCE_VALUES = ["discover", "recommended", "mix", "trending", "all"];
-const MATCH_VALUES = ["any", "all"];
-const BOOLEAN_VALUES = ["true", "false"];
-
-const getLineContext = (value, cursor) => {
-  const safeValue = value ?? "";
-  const safeCursor =
-    typeof cursor === "number" && cursor >= 0 ? cursor : safeValue.length;
-  const upToCursor = safeValue.slice(0, safeCursor);
-  const lines = upToCursor.split("\n");
-  const line = lines[lines.length - 1] ?? "";
-  const indent = line.match(/^\s*/)?.[0] ?? "";
-  return { line, indent };
-};
-
-const getNextBlockNumber = (value) => {
-  const matches = String(value || "").match(/block(\d+)/gi) || [];
-  const nums = matches
-    .map((entry) => Number(entry.replace(/^\D+/, "")))
-    .filter((n) => Number.isFinite(n));
-  if (!nums.length) return 1;
-  return Math.max(...nums) + 1;
-};
-
-const buildSuggestions = (value, line, indent, manual) => {
-  const trimmed = line.trim();
-  const suggestions = [];
-
-  if (/^source:\s*$/i.test(trimmed)) {
-    return SOURCE_VALUES.map((val) => ({
-      label: val,
-      insertText: val,
-    }));
-  }
-  if (/^match:\s*$/i.test(trimmed)) {
-    return MATCH_VALUES.map((val) => ({
-      label: val,
-      insertText: val,
-    }));
-  }
-  if (/^deepDive:\s*$/i.test(trimmed)) {
-    return BOOLEAN_VALUES.map((val) => ({
-      label: val,
-      insertText: val,
-    }));
-  }
-  if (/^include:\s*$/i.test(trimmed) || /^exclude:\s*$/i.test(trimmed)) {
-    return [
-      {
-        label: "tags",
-        insertText: `\n${indent}  tags: []`,
-      },
-      {
-        label: "artists",
-        insertText: `\n${indent}  artists: []`,
-      },
-      {
-        label: "relatedArtists",
-        insertText: `\n${indent}  relatedArtists: []`,
-      },
-      {
-        label: "match",
-        insertText: `\n${indent}  match: any`,
-      },
-    ];
-  }
-
-  if (!manual) return [];
-  const nextBlock = getNextBlockNumber(value);
-  suggestions.push(
-    { label: "name", insertText: "name: " },
-    {
-      label: `block${nextBlock}`,
-      insertText: `block${nextBlock}:\n  source: discover\n  count: 10`,
-    },
-    { label: "source", insertText: "source: " },
-    { label: "count", insertText: "count: " },
-    { label: "deepDive", insertText: "deepDive: false" },
-    { label: "include", insertText: "include:\n  tags: []" },
-    { label: "exclude", insertText: "exclude:\n  artists: []" },
+const getPresetForMix = (mix) => {
+  const normalized = normalizeMixPercent(mix);
+  const preset = MIX_PRESETS.find(
+    (entry) =>
+      entry.mix &&
+      entry.mix.discover === normalized.discover &&
+      entry.mix.mix === normalized.mix &&
+      entry.mix.trending === normalized.trending
   );
-  return suggestions;
+  return preset?.id ?? "custom";
 };
 
-function YamlEditor({
-  value,
-  onChange,
-  error,
-  minHeight,
-}) {
-  const textareaRef = useRef(null);
-  const [open, setOpen] = useState(false);
-  const [suggestions, setSuggestions] = useState([]);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const manualOpenRef = useRef(false);
-
-  const updateSuggestions = (manual) => {
-    const cursor = textareaRef.current?.selectionStart ?? 0;
-    const { line, indent } = getLineContext(value, cursor);
-    const next = buildSuggestions(value, line, indent, manual);
-    if (!next.length) {
-      setOpen(false);
-      setSuggestions([]);
-      setActiveIndex(0);
-      return;
-    }
-    setSuggestions(next);
-    setActiveIndex(0);
-    setOpen(true);
-  };
-
-  const applySuggestion = (suggestion) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart ?? 0;
-    const end = textarea.selectionEnd ?? 0;
-    const before = value.slice(0, start);
-    const after = value.slice(end);
-    const nextValue = `${before}${suggestion.insertText}${after}`;
-    onChange(nextValue);
-    const nextPos = start + suggestion.insertText.length;
-    requestAnimationFrame(() => {
-      textarea.focus();
-      textarea.setSelectionRange(nextPos, nextPos);
-    });
-    setOpen(false);
-    manualOpenRef.current = false;
-  };
-
-  const handleKeyDown = (event) => {
-    if (event.ctrlKey && event.code === "Space") {
-      event.preventDefault();
-      manualOpenRef.current = true;
-      updateSuggestions(true);
-      return;
-    }
-    if (!open) return;
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setActiveIndex((prev) => (prev + 1) % suggestions.length);
-      return;
-    }
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setActiveIndex((prev) =>
-        prev === 0 ? suggestions.length - 1 : prev - 1,
-      );
-      return;
-    }
-    if (event.key === "Enter") {
-      event.preventDefault();
-      const suggestion = suggestions[activeIndex];
-      if (suggestion) applySuggestion(suggestion);
-      return;
-    }
-    if (event.key === "Escape") {
-      event.preventDefault();
-      setOpen(false);
-      manualOpenRef.current = false;
-    }
-  };
-
-  const handleChange = (event) => {
-    const nextValue = event.target.value;
-    onChange(nextValue);
-    if (manualOpenRef.current) {
-      updateSuggestions(true);
-    } else {
-      const cursor = event.target.selectionStart ?? 0;
-      const { line, indent } = getLineContext(nextValue, cursor);
-      const auto = buildSuggestions(nextValue, line, indent, false);
-      if (auto.length) {
-        setSuggestions(auto);
-        setActiveIndex(0);
-        setOpen(true);
-      } else {
-        setOpen(false);
-      }
-    }
-  };
-
-  return (
-    <div className="grid gap-2">
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        className={`w-full rounded bg-white/5 border border-white/10 px-3 py-2 text-xs text-white font-mono outline-none ${minHeight ?? "min-h-[220px]"}`}
-        spellCheck={false}
-      />
-      {open && suggestions.length > 0 && (
-        <div className="rounded border border-white/10 bg-black/60 text-xs text-white">
-          {suggestions.map((suggestion, index) => (
-            <button
-              key={`${suggestion.label}-${index}`}
-              type="button"
-              onMouseDown={(event) => {
-                event.preventDefault();
-                applySuggestion(suggestion);
-              }}
-              className={`w-full text-left px-3 py-2 transition-colors ${
-                index === activeIndex ? "bg-white/10" : "hover:bg-white/5"
-              }`}
-            >
-              {suggestion.label}
-            </button>
-          ))}
-        </div>
-      )}
-      {error && <div className="text-xs text-red-400">{error}</div>}
-    </div>
-  );
-}
-
-const flowToYaml = (flow) => {
-  const blocks = Array.isArray(flow?.blocks) ? flow.blocks : [];
-  const payload = { name: flow?.name || "Flow" };
-  blocks.forEach((block, index) => {
-    const entry = {
-      source: block?.source || "discover",
-      count: Number(block?.count || 0),
-      deepDive: block?.deepDive === true,
-    };
-    const include = block?.include || {};
-    const exclude = block?.exclude || {};
-    const includeTags = normalizeList(include.tags ?? include.tag, "include.tags");
-    const includeArtists = normalizeList(
-      include.artists ?? include.artist,
-      "include.artists",
-    );
-    const includeRelated = normalizeList(
-      include.relatedArtists ?? include.relatedArtist,
-      "include.relatedArtists",
-    );
-    const includeMatch = include.match === "all" ? "all" : "any";
-    if (includeTags.length || includeArtists.length || includeRelated.length) {
-      entry.include = {};
-      if (includeTags.length) entry.include.tags = includeTags;
-      if (includeArtists.length) entry.include.artists = includeArtists;
-      if (includeRelated.length) entry.include.relatedArtists = includeRelated;
-      if (include.match) entry.include.match = includeMatch;
-    }
-    const excludeTags = normalizeList(exclude.tags ?? exclude.tag, "exclude.tags");
-    const excludeArtists = normalizeList(
-      exclude.artists ?? exclude.artist,
-      "exclude.artists",
-    );
-    const excludeRelated = normalizeList(
-      exclude.relatedArtists ?? exclude.relatedArtist,
-      "exclude.relatedArtists",
-    );
-    if (excludeTags.length || excludeArtists.length || excludeRelated.length) {
-      entry.exclude = {};
-      if (excludeTags.length) entry.exclude.tags = excludeTags;
-      if (excludeArtists.length) entry.exclude.artists = excludeArtists;
-      if (excludeRelated.length) entry.exclude.relatedArtists = excludeRelated;
-    }
-    payload[`block${index + 1}`] = entry;
-  });
-  return dump(payload, { lineWidth: 80, noRefs: true });
+const buildCountsFromMixPercent = (size, mix) => {
+  const weights = normalizeMixPercent(mix);
+  const entries = [
+    { key: "discover", value: weights.discover },
+    { key: "mix", value: weights.mix },
+    { key: "trending", value: weights.trending },
+  ];
+  const scaled = entries.map((entry) => ({
+    ...entry,
+    raw: (entry.value / 100) * size,
+  }));
+  const floored = scaled.map((entry) => ({
+    ...entry,
+    count: Math.floor(entry.raw),
+    remainder: entry.raw - Math.floor(entry.raw),
+  }));
+  let remaining = size - floored.reduce((acc, entry) => acc + entry.count, 0);
+  const ordered = [...floored].sort((a, b) => b.remainder - a.remainder);
+  for (let i = 0; i < ordered.length && remaining > 0; i++) {
+    ordered[i].count += 1;
+    remaining -= 1;
+  }
+  const out = {};
+  for (const entry of ordered) {
+    out[entry.key] = entry.count;
+  }
+  return out;
 };
 
-const parseFlowYaml = (yamlText, fallback) => {
-  let parsed;
-  try {
-    parsed = load(yamlText);
-  } catch {
-    throw new Error("YAML is not valid");
+const getFocusPercentFromStrength = (strength) =>
+  FOCUS_STRENGTHS[strength] ?? FOCUS_STRENGTHS.medium;
+
+const getFocusStrengthFromPercent = (percent) => {
+  const numeric = Number(percent || 0);
+  if (!Number.isFinite(numeric) || numeric <= 0) return "medium";
+  const entries = Object.entries(FOCUS_STRENGTHS);
+  const closest = entries.reduce((best, [key, value]) => {
+    if (!best) return { key, distance: Math.abs(value - numeric) };
+    const distance = Math.abs(value - numeric);
+    return distance < best.distance ? { key, distance } : best;
+  }, null);
+  return closest?.key ?? "medium";
+};
+
+const buildCountsFromFocusPercent = (size, tagPercent, relatedPercent) => {
+  const safeSize = Number.isFinite(size) && size > 0 ? size : 0;
+  const tag = Math.max(0, Number(tagPercent || 0));
+  const related = Math.max(0, Number(relatedPercent || 0));
+  const totalPercent = tag + related;
+  if (safeSize <= 0 || totalPercent <= 0) {
+    return { tag: 0, related: 0, remaining: safeSize };
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("YAML must be a map of flow settings");
+  const targetTotal = Math.round((totalPercent / 100) * safeSize);
+  const entries = [
+    { key: "tag", raw: (tag / 100) * safeSize },
+    { key: "related", raw: (related / 100) * safeSize },
+  ];
+  const floored = entries.map((entry) => ({
+    ...entry,
+    count: Math.floor(entry.raw),
+    remainder: entry.raw - Math.floor(entry.raw),
+  }));
+  let remaining = targetTotal - floored.reduce((acc, entry) => acc + entry.count, 0);
+  const ordered = [...floored].sort((a, b) => b.remainder - a.remainder);
+  for (let i = 0; i < ordered.length && remaining > 0; i++) {
+    ordered[i].count += 1;
+    remaining -= 1;
   }
-  const name = String(parsed.name ?? fallback?.name ?? "").trim();
-  if (!name) {
-    throw new Error("Flow name is required");
-  }
-  const entries = Object.entries(parsed)
-    .filter(([key]) => /^block\d+$/i.test(String(key)))
-    .map(([key, value]) => ({
-      key,
-      order: Number(String(key).replace(/^\D+/, "")) || 0,
-      value,
-    }))
-    .sort((a, b) => a.order - b.order);
-  if (entries.length === 0) {
-    throw new Error("Flow must include at least one block");
-  }
-  const blocks = entries.map((entry) => {
-    if (!entry.value || typeof entry.value !== "object" || Array.isArray(entry.value)) {
-      throw new Error(`${entry.key} must be a map of block settings`);
-    }
-    const count = Number(entry.value.count);
-    if (!Number.isFinite(count)) {
-      throw new Error(`${entry.key}.count must be a number`);
-    }
-    if (count < 1 || count > 100) {
-      throw new Error(`${entry.key}.count must be between 1 and 100`);
-    }
-    const include = normalizeInclude(entry.value.include);
-    if (entry.value.match && include.match === "any") {
-      include.match = entry.value.match === "all" ? "all" : "any";
-    }
-    return {
-      source: normalizeSource(entry.value.source),
-      count: Math.round(count),
-      deepDive: entry.value.deepDive === true,
-      include,
-      exclude: normalizeExclude(entry.value.exclude),
-    };
-  });
-  const total = blocks.reduce((acc, block) => acc + block.count, 0);
-  if (total <= 0) {
-    throw new Error("Flow must include at least one track");
+  const out = {};
+  for (const entry of ordered) {
+    out[entry.key] = entry.count;
   }
   return {
-    name,
-    blocks,
-    size: total,
+    tag: out.tag ?? 0,
+    related: out.related ?? 0,
+    remaining: Math.max(0, safeSize - (out.tag ?? 0) - (out.related ?? 0)),
   };
+};
+
+const buildFocusStrengthFromCounts = (size, tagCount, relatedCount) => {
+  const safeSize = Number.isFinite(size) && size > 0 ? size : 0;
+  if (safeSize <= 0) {
+    return { tagStrength: "medium", relatedStrength: "medium" };
+  }
+  const tag = Math.max(0, Number(tagCount || 0));
+  const related = Math.max(0, Number(relatedCount || 0));
+  const totalPercent = Math.round(((tag + related) / safeSize) * 100);
+  if (totalPercent <= 0) {
+    return { tagStrength: "medium", relatedStrength: "medium" };
+  }
+  const entries = [
+    { key: "tag", raw: (tag / safeSize) * 100 },
+    { key: "related", raw: (related / safeSize) * 100 },
+  ];
+  const floored = entries.map((entry) => ({
+    ...entry,
+    count: Math.floor(entry.raw),
+    remainder: entry.raw - Math.floor(entry.raw),
+  }));
+  let remaining = totalPercent - floored.reduce((acc, entry) => acc + entry.count, 0);
+  const ordered = [...floored].sort((a, b) => b.remainder - a.remainder);
+  for (let i = 0; i < ordered.length && remaining > 0; i++) {
+    ordered[i].count += 1;
+    remaining -= 1;
+  }
+  const out = {};
+  for (const entry of ordered) {
+    out[entry.key] = entry.count;
+  }
+  return {
+    tagStrength: getFocusStrengthFromPercent(out.tag ?? 0),
+    relatedStrength: getFocusStrengthFromPercent(out.related ?? 0),
+  };
+};
+
+const distributeCount = (total, values) => {
+  const items = values.filter(Boolean);
+  if (!items.length || total <= 0) return new Map();
+  const per = Math.floor(total / items.length);
+  let remaining = total - per * items.length;
+  const result = new Map();
+  for (const item of items) {
+    const extra = remaining > 0 ? 1 : 0;
+    if (remaining > 0) remaining -= 1;
+    result.set(item, per + extra);
+  }
+  return result;
+};
+
+const sumWeightMap = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
+  return Object.values(value).reduce((acc, entry) => {
+    const parsed = Number(entry);
+    return acc + (Number.isFinite(parsed) ? parsed : 0);
+  }, 0);
 };
 
 const flowToForm = (flow) => {
-  const blocks = Array.isArray(flow?.blocks) ? flow.blocks : [];
-  const safeBlocks = blocks.length ? blocks : [createDefaultBlock()];
+  const tagsMap =
+    flow?.tags && typeof flow.tags === "object" && !Array.isArray(flow.tags)
+      ? flow.tags
+      : {};
+  const relatedMap =
+    flow?.relatedArtists &&
+    typeof flow.relatedArtists === "object" &&
+    !Array.isArray(flow.relatedArtists)
+      ? flow.relatedArtists
+      : {};
+  const tagCount = sumWeightMap(tagsMap);
+  const relatedCount = sumWeightMap(relatedMap);
+  const recipeCounts =
+    flow?.recipe && typeof flow.recipe === "object" && !Array.isArray(flow.recipe)
+      ? flow.recipe
+      : null;
+  const recipeTotal = sumWeightMap(recipeCounts);
+  const rawSize = Number(flow?.size || 0);
+  const size =
+    Number.isFinite(rawSize) && rawSize > 0
+      ? rawSize
+      : recipeTotal > 0
+        ? recipeTotal
+        : DEFAULT_SIZE;
+  const mix = normalizeMixPercent(flow?.mix || DEFAULT_MIX);
+  const preset = getPresetForMix(mix);
+  const focusStrengths = buildFocusStrengthFromCounts(
+    Number.isFinite(size) ? size : 0,
+    tagCount,
+    relatedCount
+  );
   return {
     name: flow?.name || "",
-    blocks: safeBlocks.map((block) => ({
-      source: block?.source || "discover",
-      count: Number(block?.count || 0),
-      deepDive: block?.deepDive === true,
-      includeTags: (block?.include?.tags || []).join(", "),
-      includeArtists: (block?.include?.artists || []).join(", "),
-      includeRelatedArtists: (block?.include?.relatedArtists || []).join(", "),
-      includeMatch: block?.include?.match === "all" ? "all" : "any",
-      excludeTags: (block?.exclude?.tags || []).join(", "),
-      excludeArtists: (block?.exclude?.artists || []).join(", "),
-      excludeRelatedArtists: (block?.exclude?.relatedArtists || []).join(", "),
-    })),
+    size: Number.isFinite(size) && size > 0 ? Math.round(size) : DEFAULT_SIZE,
+    mix,
+    mixPreset: preset,
+    deepDive: flow?.deepDive === true,
+    includeTags: Object.keys(tagsMap).join(", "),
+    includeRelatedArtists: Object.keys(relatedMap).join(", "),
+    tagStrength: focusStrengths.tagStrength,
+    relatedStrength: focusStrengths.relatedStrength,
   };
 };
 
@@ -473,43 +323,57 @@ const buildFlowFromForm = (draft) => {
   if (!name) {
     throw new Error("Flow name is required");
   }
-  const blocks = Array.isArray(draft?.blocks) ? draft.blocks : [];
-  if (!blocks.length) {
-    throw new Error("Flow must include at least one block");
+  const sizeValue = Number(draft?.size);
+  if (!Number.isFinite(sizeValue) || sizeValue <= 0) {
+    throw new Error("Total tracks must be a positive number");
   }
-  const normalizedBlocks = blocks.map((block, index) => {
-    const count = Number(block?.count);
-    if (!Number.isFinite(count)) {
-      throw new Error(`Block ${index + 1} count must be a number`);
+  const size = Math.round(sizeValue);
+  const includeTags = parseListInput(draft?.includeTags);
+  const includeRelatedArtists = parseListInput(draft?.includeRelatedArtists);
+  const tagFocusPercent =
+    includeTags.length > 0
+      ? getFocusPercentFromStrength(draft?.tagStrength)
+      : 0;
+  const relatedFocusPercent =
+    includeRelatedArtists.length > 0
+      ? getFocusPercentFromStrength(draft?.relatedStrength)
+      : 0;
+  if (tagFocusPercent + relatedFocusPercent > 100) {
+    throw new Error("Tag and related focus exceeds 100%");
+  }
+  const focusCounts = buildCountsFromFocusPercent(
+    size,
+    tagFocusPercent,
+    relatedFocusPercent
+  );
+  const tagFocus = focusCounts.tag;
+  const relatedFocus = focusCounts.related;
+  const mix = normalizeMixPercent(draft?.mix);
+  const recipe = buildCountsFromMixPercent(size, mix);
+  const tags = {};
+  if (tagFocus > 0 && includeTags.length > 0) {
+    const tagCounts = distributeCount(tagFocus, includeTags);
+    for (const [tag, count] of tagCounts.entries()) {
+      if (count <= 0) continue;
+      tags[tag] = count;
     }
-    if (count < 1 || count > 100) {
-      throw new Error(`Block ${index + 1} count must be between 1 and 100`);
+  }
+  const relatedArtists = {};
+  if (relatedFocus > 0 && includeRelatedArtists.length > 0) {
+    const relatedCounts = distributeCount(relatedFocus, includeRelatedArtists);
+    for (const [artist, count] of relatedCounts.entries()) {
+      if (count <= 0) continue;
+      relatedArtists[artist] = count;
     }
-    return {
-      source: normalizeSource(block?.source),
-      count: Math.round(count),
-      deepDive: block?.deepDive === true,
-      include: {
-        tags: parseListInput(block?.includeTags),
-        artists: parseListInput(block?.includeArtists),
-        relatedArtists: parseListInput(block?.includeRelatedArtists),
-        match: block?.includeMatch === "all" ? "all" : "any",
-      },
-      exclude: {
-        tags: parseListInput(block?.excludeTags),
-        artists: parseListInput(block?.excludeArtists),
-        relatedArtists: parseListInput(block?.excludeRelatedArtists),
-      },
-    };
-  });
-  const total = normalizedBlocks.reduce((acc, block) => acc + block.count, 0);
-  if (total <= 0) {
-    throw new Error("Flow must include at least one track");
   }
   return {
     name,
-    blocks: normalizedBlocks,
-    size: total,
+    size,
+    mix,
+    recipe,
+    tags,
+    relatedArtists,
+    deepDive: draft?.deepDive === true,
   };
 };
 
@@ -522,24 +386,10 @@ function FlowPage() {
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
-  const [showNewFlow, setShowNewFlow] = useState(false);
-  const [showHelp, setShowHelp] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [editMode, setEditMode] = useState("simple");
-  const [yamlDrafts, setYamlDrafts] = useState({});
-  const [yamlErrors, setYamlErrors] = useState({});
   const [simpleDrafts, setSimpleDrafts] = useState({});
   const [simpleErrors, setSimpleErrors] = useState({});
   const [applyingFlowId, setApplyingFlowId] = useState(null);
-  const [newFlowMode, setNewFlowMode] = useState("simple");
-  const [newFlowDraft, setNewFlowDraft] = useState(() =>
-    flowToForm(NEW_FLOW_TEMPLATE)
-  );
-  const [newFlowYaml, setNewFlowYaml] = useState(() =>
-    flowToYaml(NEW_FLOW_TEMPLATE)
-  );
-  const [newFlowError, setNewFlowError] = useState("");
-  const [newFlowSimpleError, setNewFlowSimpleError] = useState("");
   const { showSuccess, showError } = useToast();
 
   const fetchStatus = async () => {
@@ -565,21 +415,21 @@ function FlowPage() {
 
   useEffect(() => {
     if (!status?.flows?.length) return;
-    setYamlDrafts((prev) => {
-      const next = { ...prev };
-      for (const flow of status.flows) {
-        if (!next[flow.id]) {
-          next[flow.id] = flowToYaml(flow);
-        }
-      }
-      return next;
-    });
     setSimpleDrafts((prev) => {
       const next = { ...prev };
       for (const flow of status.flows) {
+        const normalized = flowToForm(flow);
         if (!next[flow.id]) {
-          next[flow.id] = flowToForm(flow);
+          next[flow.id] = normalized;
+          continue;
         }
+        const current = next[flow.id];
+        next[flow.id] = {
+          ...normalized,
+          ...current,
+          tagStrength: current.tagStrength ?? normalized.tagStrength,
+          relatedStrength: current.relatedStrength ?? normalized.relatedStrength,
+        };
       }
       return next;
     });
@@ -598,21 +448,6 @@ function FlowPage() {
     };
   };
 
-  const summarizeBlocks = (flow) => {
-    const blocks = Array.isArray(flow?.blocks) ? flow.blocks : [];
-    if (!blocks.length) return "";
-    const totals = blocks.reduce((acc, block) => {
-      const source = String(block?.source || "discover");
-      const count = Number(block?.count || 0);
-      if (!Number.isFinite(count) || count <= 0) return acc;
-      acc[source] = (acc[source] || 0) + count;
-      return acc;
-    }, {});
-    return Object.entries(totals)
-      .map(([source, count]) => `${count} ${source}`)
-      .join(" · ");
-  };
-
   const getPlaylistState = (flowId) => {
     const stats = getPlaylistStats(flowId);
     if (stats.total === 0) return "idle";
@@ -621,29 +456,7 @@ function FlowPage() {
     return "idle";
   };
 
-  const handleCopyYaml = async (flow) => {
-    const yaml = yamlDrafts[flow.id] || flowToYaml(flow);
-    try {
-      await navigator.clipboard.writeText(yaml);
-      showSuccess("YAML copied");
-    } catch {
-      showError("Failed to copy YAML");
-    }
-  };
-
-  const handleResetYaml = (flow) => {
-    setYamlDrafts((prev) => ({
-      ...prev,
-      [flow.id]: flowToYaml(flow),
-    }));
-    setYamlErrors((prev) => {
-      const next = { ...prev };
-      delete next[flow.id];
-      return next;
-    });
-  };
-
-  const handleResetSimple = (flow) => {
+  const handleCancelSimple = (flow) => {
     setSimpleDrafts((prev) => ({
       ...prev,
       [flow.id]: flowToForm(flow),
@@ -653,6 +466,7 @@ function FlowPage() {
       delete next[flow.id];
       return next;
     });
+    setEditingId((prev) => (prev === flow.id ? null : prev));
   };
 
   const handleApplySimple = async (flow) => {
@@ -665,19 +479,11 @@ function FlowPage() {
     try {
       const draft = simpleDrafts[flow.id] || flowToForm(flow);
       const payload = buildFlowFromForm(draft);
-      const response = await updateFlow(flow.id, {
-        name: payload.name,
-        size: payload.size,
-        blocks: payload.blocks,
-      });
+      const response = await updateFlow(flow.id, payload);
       const updatedFlow = response?.flow || {
         ...flow,
         ...payload,
       };
-      setYamlDrafts((prev) => ({
-        ...prev,
-        [flow.id]: flowToYaml(updatedFlow),
-      }));
       setSimpleDrafts((prev) => ({
         ...prev,
         [flow.id]: flowToForm(updatedFlow),
@@ -694,88 +500,26 @@ function FlowPage() {
     }
   };
 
-  const handleApplyYaml = async (flow) => {
-    const draft = yamlDrafts[flow.id] || "";
-    setApplyingFlowId(flow.id);
-    setYamlErrors((prev) => {
-      const next = { ...prev };
-      delete next[flow.id];
-      return next;
-    });
-    try {
-      const payload = parseFlowYaml(draft, flow);
-      const response = await updateFlow(flow.id, {
-        name: payload.name,
-        size: payload.size,
-        blocks: payload.blocks,
-      });
-      const updatedFlow = response?.flow || {
-        ...flow,
-        ...payload,
-      };
-      setYamlDrafts((prev) => ({
-        ...prev,
-        [flow.id]: flowToYaml(updatedFlow),
-      }));
-      showSuccess("Flow updated");
-      await fetchStatus();
-    } catch (err) {
-      const message =
-        err.response?.data?.message || err.message || "Failed to update flow";
-      setYamlErrors((prev) => ({ ...prev, [flow.id]: message }));
-      showError(message);
-    } finally {
-      setApplyingFlowId(null);
-    }
-  };
-
-  const handleCreateFromSimple = async () => {
+  const handleCreateInline = async () => {
+    if (creating) return;
     setCreating(true);
-    setNewFlowSimpleError("");
     try {
-      const payload = buildFlowFromForm(newFlowDraft);
-      await createFlow({
-        name: payload.name,
-        size: payload.size,
-        blocks: payload.blocks,
-      });
-      const resetDraft = flowToForm(NEW_FLOW_TEMPLATE);
-      setNewFlowDraft(resetDraft);
-      setNewFlowYaml(flowToYaml(NEW_FLOW_TEMPLATE));
-      setShowNewFlow(false);
+      const draft = flowToForm(NEW_FLOW_TEMPLATE);
+      const payload = buildFlowFromForm(draft);
+      const response = await createFlow(payload);
+      const createdFlow = response?.flow;
+      if (createdFlow?.id) {
+        setSimpleDrafts((prev) => ({
+          ...prev,
+          [createdFlow.id]: flowToForm(createdFlow),
+        }));
+        setEditingId(createdFlow.id);
+      }
       showSuccess("Flow created");
       await fetchStatus();
     } catch (err) {
       const message =
         err.response?.data?.message || err.message || "Failed to create flow";
-      setNewFlowSimpleError(message);
-      showError(message);
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const handleCreateFromYaml = async () => {
-    setCreating(true);
-    setNewFlowError("");
-    try {
-      const payload = parseFlowYaml(newFlowYaml, {
-        name: "",
-        blocks: [],
-      });
-      await createFlow({
-        name: payload.name,
-        size: payload.size,
-        blocks: payload.blocks,
-      });
-      setNewFlowYaml(flowToYaml(NEW_FLOW_TEMPLATE));
-      setShowNewFlow(false);
-      showSuccess("Flow created");
-      await fetchStatus();
-    } catch (err) {
-      const message =
-        err.response?.data?.message || err.message || "Failed to create flow";
-      setNewFlowError(message);
       showError(message);
     } finally {
       setCreating(false);
@@ -863,123 +607,17 @@ function FlowPage() {
 
   return (
     <div className="flow-page max-w-6xl mx-auto px-4 pb-10">
-      <div className="flex flex-col gap-4 mb-6 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="p-2 rounded-lg bg-white/5 border border-white/5">
-            <AudioWaveform className="w-5 h-5 text-[#9aa886]" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold text-white">Flow</h1>
-            <p className="text-sm text-[#c1c1c3]">
-              Create configurable weekly flows and blend Discover, Mix, and
-              Trending into playlists.
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => setShowHelp(true)}
-            className="btn btn-secondary btn-sm flex items-center gap-2"
-            aria-label="Flow YAML help"
-          >
-            <HelpCircle className="w-4 h-4" />
-            Help
-          </button>
-          <button
-            onClick={() => {
-              setNewFlowMode("simple");
-              setNewFlowError("");
-              setNewFlowSimpleError("");
-              setShowNewFlow(true);
-            }}
-            className="btn btn-primary btn-sm flex items-center gap-2"
-          >
-            <FilePlus2 className="w-4 h-4" />
-            New Flow
-          </button>
-        </div>
-      </div>
+      <FlowPageHeader
+        onNewFlow={handleCreateInline}
+      />
 
-      <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr] mb-6">
-        <div className="p-4 bg-card rounded-lg border border-white/5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs uppercase tracking-[0.3em] text-[#8b8b90]">
-              Worker
-            </span>
-            <span
-              className={`badge ${
-                status?.worker?.running ? "badge-success" : "badge-neutral"
-              }`}
-            >
-              {status?.worker?.running ? "Running" : "Stopped"}
-            </span>
-          </div>
-          <div className="mt-3 flex items-center gap-3">
-            {status?.worker?.running ? (
-              <Loader2 className="w-4 h-4 animate-spin text-[#9aa886]" />
-            ) : (
-              <Clock className="w-4 h-4 text-[#c1c1c3]" />
-            )}
-            <div className="text-sm text-white">
-              {status?.worker?.running
-                ? `Worker ${
-                    status?.worker?.processing ? "processing…" : "running"
-                  }`
-                : "Worker stopped"}
-            </div>
-          </div>
-          {status?.stats && (
-            <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-[#c1c1c3]">
-              <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-                <span>Done</span>
-                <span className="text-white">{status.stats.done}</span>
-              </div>
-              <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-                <span>Failed</span>
-                <span className="text-white">{status.stats.failed}</span>
-              </div>
-              <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-                <span>Pending</span>
-                <span className="text-white">{status.stats.pending}</span>
-              </div>
-              <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-                <span>Downloading</span>
-                <span className="text-white">{status.stats.downloading}</span>
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="p-4 bg-card rounded-lg border border-white/5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs uppercase tracking-[0.3em] text-[#8b8b90]">
-              Flows
-            </span>
-            <span className="text-xs text-[#c1c1c3]">
-              {enabledCount}/{flowList.length} on
-            </span>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[#c1c1c3]">
-            <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-              <span>Total</span>
-              <span className="text-white">{flowList.length}</span>
-            </div>
-            <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-              <span>Running</span>
-              <span className="text-white">{runningCount}</span>
-            </div>
-            <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-              <span>Completed</span>
-              <span className="text-white">{completedCount}</span>
-            </div>
-            <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-              <span>Idle</span>
-              <span className="text-white">
-                {Math.max(flowList.length - runningCount - completedCount, 0)}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <FlowStatusCards
+        status={status}
+        enabledCount={enabledCount}
+        flowCount={flowList.length}
+        runningCount={runningCount}
+        completedCount={completedCount}
+      />
 
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-xs uppercase tracking-[0.35em] text-[#8b8b90]">
@@ -992,9 +630,7 @@ function FlowPage() {
 
       <div className="space-y-3">
         {flowList.length === 0 && (
-          <div className="p-4 bg-card rounded-lg border border-white/5 text-sm text-[#c1c1c3]">
-            No flows yet. Create one to start building weekly playlists.
-          </div>
+          <FlowEmptyState onCreate={handleCreateInline} creating={creating} />
         )}
         {flowList.map((flow) => {
           const stats = getPlaylistStats(flow.id);
@@ -1006,1538 +642,78 @@ function FlowPage() {
               : flow.enabled === true;
           const nextRun = formatNextRun(flow.nextRunAt);
           const isEditing = editingId === flow.id;
-          const yamlDraft = yamlDrafts[flow.id] ?? flowToYaml(flow);
-          const yamlError = yamlErrors[flow.id];
           const simpleDraft = simpleDrafts[flow.id] ?? flowToForm(flow);
           const simpleError = simpleErrors[flow.id];
+          const simpleSize = Number(simpleDraft?.size ?? 0);
+          const simpleMixSize = Number.isFinite(simpleSize) ? simpleSize : 0;
           const isApplying = applyingFlowId === flow.id;
-          const stateLabel =
-            state === "running"
-              ? "Running"
-              : state === "completed"
-                ? "Completed"
-                : "Idle";
-          const stateBadge =
-            state === "running"
-              ? "badge-success"
-              : state === "completed"
-                ? "badge-primary"
-                : "badge-neutral";
-
           return (
-            <div
+            <FlowCard
               key={flow.id}
-              className="bg-card rounded-lg border border-white/5 overflow-hidden"
-            >
-              <div
-                className={`px-4 ${isEditing ? "py-3" : "py-2"} flex flex-col ${
-                  isEditing ? "gap-3" : "gap-2"
-                } md:flex-row md:items-center md:justify-between`}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-sm font-semibold text-white truncate">
-                      {flow.name}
-                    </h3>
-                    <span className={`badge ${stateBadge}`}>{stateLabel}</span>
-                    <span
-                      className={`badge ${
-                        enabled ? "badge-success" : "badge-neutral"
-                      }`}
-                    >
-                      <span className="inline-flex items-center gap-1.5">
-                        {enabled ? "On" : "Off"}
-                        <span className="inline-flex w-3.5 h-3.5">
-                          {togglingId === flow.id && (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#9aa886]" />
-                          )}
-                        </span>
-                      </span>
-                    </span>
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[#c1c1c3]">
-                    <span>{flow.size} tracks</span>
-                    {flow.blocks?.length ? (
-                      <>
-                        <span>·</span>
-                        <span>{flow.blocks.length} blocks</span>
-                      </>
-                    ) : null}
-                    {summarizeBlocks(flow) ? (
-                      <>
-                        <span>·</span>
-                        <span>{summarizeBlocks(flow)}</span>
-                      </>
-                    ) : null}
-                    {flow.blocks?.some((block) => block?.deepDive) ? (
-                      <>
-                        <span>·</span>
-                        <span>Deep dive enabled</span>
-                      </>
-                    ) : null}
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#c1c1c3]">
-                    {state === "running" && (
-                      <span className="inline-flex items-center gap-1.5 text-[#9aa886]">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        {stats.done + stats.failed}/{stats.total}
-                      </span>
-                    )}
-                    {state === "completed" && stats.total > 0 && (
-                      <span className="inline-flex items-center gap-1.5 text-[#9aa886]">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        {stats.done} done
-                        {stats.failed > 0 && ` · ${stats.failed} failed`}
-                      </span>
-                    )}
-                    {enabled && nextRun && <span>{nextRun}</span>}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 md:justify-end">
-                  <button
-                    onClick={() =>
-                      setEditingId((prev) => {
-                        const next = prev === flow.id ? null : flow.id;
-                        if (next) {
-                          setEditMode("simple");
-                          setSimpleErrors((prevErrors) => {
-                            const nextErrors = { ...prevErrors };
-                            delete nextErrors[flow.id];
-                            return nextErrors;
-                          });
-                        }
-                        return next;
-                      })
-                    }
-                    className="btn btn-secondary btn-sm"
-                    aria-label={isEditing ? "Close editor" : "Edit flow"}
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <div className="flex items-center gap-2">
-                    <PillToggle
-                      checked={enabled}
-                      onChange={(event) =>
-                        handleToggleRequest(flow, event.target.checked)
-                      }
-                      disabled={togglingId === flow.id}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {isEditing && (
-                <div className="px-4 pb-4">
-                  <div className="card-separator mb-4" />
-                  <div className="grid gap-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (editMode === "simple") return;
-                          try {
-                            const payload = parseFlowYaml(
-                              yamlDraft,
-                              flow
-                            );
-                            setSimpleDrafts((prev) => ({
-                              ...prev,
-                              [flow.id]: flowToForm(payload),
-                            }));
-                            setSimpleErrors((prev) => {
-                              const next = { ...prev };
-                              delete next[flow.id];
-                              return next;
-                            });
-                          } catch (err) {
-                            setSimpleErrors((prev) => ({
-                              ...prev,
-                              [flow.id]:
-                                err.message ||
-                                "Fix YAML before switching to simple mode",
-                            }));
-                          }
-                          setEditMode("simple");
-                        }}
-                        className={`btn btn-sm ${
-                          editMode === "simple" ? "btn-primary" : "btn-secondary"
-                        }`}
-                      >
-                        Simple
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (editMode === "yaml") return;
-                          try {
-                            const payload = buildFlowFromForm(simpleDraft);
-                            setYamlDrafts((prev) => ({
-                              ...prev,
-                              [flow.id]: flowToYaml(payload),
-                            }));
-                            setYamlErrors((prev) => {
-                              const next = { ...prev };
-                              delete next[flow.id];
-                              return next;
-                            });
-                          } catch (err) {
-                            setSimpleErrors((prev) => ({
-                              ...prev,
-                              [flow.id]:
-                                err.message ||
-                                "Fix the simple form before switching",
-                            }));
-                          }
-                          setEditMode("yaml");
-                        }}
-                        className={`btn btn-sm ${
-                          editMode === "yaml" ? "btn-primary" : "btn-secondary"
-                        }`}
-                      >
-                        YAML
-                      </button>
-                    </div>
-                    <div className="text-xs text-[#8b8b90]">
-                      Edit name, block sources, counts, and include/exclude
-                      filters. Total tracks are calculated from all blocks.
-                    </div>
-                    {editMode === "simple" ? (
-                      <div className="grid gap-4">
-                        <div className="grid gap-2">
-                          <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                            Flow name
-                          </label>
-                          <input
-                            type="text"
-                            className="input"
-                            value={simpleDraft.name}
-                            onChange={(event) => {
-                              const value = event.target.value;
-                              setSimpleDrafts((prev) => ({
-                                ...prev,
-                                [flow.id]: { ...simpleDraft, name: value },
-                              }));
-                              if (simpleErrors[flow.id]) {
-                                setSimpleErrors((prev) => {
-                                  const next = { ...prev };
-                                  delete next[flow.id];
-                                  return next;
-                                });
-                              }
-                            }}
-                          />
-                        </div>
-                        <div className="grid gap-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs uppercase tracking-[0.3em] text-[#8b8b90]">
-                              Blocks
-                            </span>
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => {
-                                setSimpleDrafts((prev) => {
-                                  const draft =
-                                    prev[flow.id] || flowToForm(flow);
-                                  const blocks = [
-                                    ...draft.blocks,
-                                    createDefaultBlock(),
-                                  ];
-                                  return {
-                                    ...prev,
-                                    [flow.id]: { ...draft, blocks },
-                                  };
-                                });
-                                if (simpleErrors[flow.id]) {
-                                  setSimpleErrors((prev) => {
-                                    const next = { ...prev };
-                                    delete next[flow.id];
-                                    return next;
-                                  });
-                                }
-                              }}
-                            >
-                              Add block
-                            </button>
-                          </div>
-                          {simpleDraft.blocks.map((block, index) => (
-                            <div
-                              key={`block-${flow.id}-${index}`}
-                              className="rounded-lg border border-white/10 bg-white/5 p-3 grid gap-3"
-                            >
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs uppercase tracking-[0.3em] text-[#8b8b90]">
-                                  Block {index + 1}
-                                </span>
-                                <button
-                                  type="button"
-                                  className="btn btn-secondary btn-sm flex items-center gap-2"
-                                  onClick={() => {
-                                    setSimpleDrafts((prev) => {
-                                      const draft =
-                                        prev[flow.id] || flowToForm(flow);
-                                      const blocks = draft.blocks.filter(
-                                        (_, blockIndex) =>
-                                          blockIndex !== index
-                                      );
-                                      return {
-                                        ...prev,
-                                        [flow.id]: { ...draft, blocks },
-                                      };
-                                    });
-                                    if (simpleErrors[flow.id]) {
-                                      setSimpleErrors((prev) => {
-                                        const next = { ...prev };
-                                        delete next[flow.id];
-                                        return next;
-                                      });
-                                    }
-                                  }}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                  Remove
-                                </button>
-                              </div>
-                              <div className="grid gap-3 sm:grid-cols-3">
-                                <div className="grid gap-1">
-                                  <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                                    Source
-                                  </label>
-                                  <select
-                                    className="input"
-                                    value={block.source}
-                                    onChange={(event) => {
-                                      const value = event.target.value;
-                                      setSimpleDrafts((prev) => {
-                                        const draft =
-                                          prev[flow.id] || flowToForm(flow);
-                                        const blocks = draft.blocks.map(
-                                          (entry, blockIndex) =>
-                                            blockIndex === index
-                                              ? { ...entry, source: value }
-                                              : entry
-                                        );
-                                        return {
-                                          ...prev,
-                                          [flow.id]: { ...draft, blocks },
-                                        };
-                                      });
-                                      if (simpleErrors[flow.id]) {
-                                        setSimpleErrors((prev) => {
-                                          const next = { ...prev };
-                                          delete next[flow.id];
-                                          return next;
-                                        });
-                                      }
-                                    }}
-                                  >
-                                    {SOURCE_VALUES.map((source) => (
-                                      <option key={source} value={source}>
-                                        {source}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                                <div className="grid gap-1">
-                                  <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                                    Count
-                                  </label>
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    max="100"
-                                    className="input"
-                                    value={block.count}
-                                    onChange={(event) => {
-                                      const value = event.target.value;
-                                      setSimpleDrafts((prev) => {
-                                        const draft =
-                                          prev[flow.id] || flowToForm(flow);
-                                        const blocks = draft.blocks.map(
-                                          (entry, blockIndex) =>
-                                            blockIndex === index
-                                              ? { ...entry, count: value }
-                                              : entry
-                                        );
-                                        return {
-                                          ...prev,
-                                          [flow.id]: { ...draft, blocks },
-                                        };
-                                      });
-                                      if (simpleErrors[flow.id]) {
-                                        setSimpleErrors((prev) => {
-                                          const next = { ...prev };
-                                          delete next[flow.id];
-                                          return next;
-                                        });
-                                      }
-                                    }}
-                                  />
-                                </div>
-                                <div className="grid gap-1">
-                                  <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                                    Deep dive
-                                  </label>
-                                  <div className="flex items-center gap-2">
-                                    <PillToggle
-                                      checked={block.deepDive === true}
-                                      onChange={(event) => {
-                                        const value = event.target.checked;
-                                        setSimpleDrafts((prev) => {
-                                          const draft =
-                                            prev[flow.id] || flowToForm(flow);
-                                          const blocks = draft.blocks.map(
-                                            (entry, blockIndex) =>
-                                              blockIndex === index
-                                                ? {
-                                                    ...entry,
-                                                    deepDive: value,
-                                                  }
-                                                : entry
-                                          );
-                                          return {
-                                            ...prev,
-                                            [flow.id]: { ...draft, blocks },
-                                          };
-                                        });
-                                        if (simpleErrors[flow.id]) {
-                                          setSimpleErrors((prev) => {
-                                            const next = { ...prev };
-                                            delete next[flow.id];
-                                            return next;
-                                          });
-                                        }
-                                      }}
-                                    />
-                                    <span className="text-xs text-[#c1c1c3]">
-                                      {block.deepDive ? "On" : "Off"}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="grid gap-3 sm:grid-cols-2">
-                                <div className="grid gap-1">
-                                  <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                                    Include tags
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="input"
-                                    placeholder="lofi, indie"
-                                    value={block.includeTags}
-                                    onChange={(event) => {
-                                      const value = event.target.value;
-                                      setSimpleDrafts((prev) => {
-                                        const draft =
-                                          prev[flow.id] || flowToForm(flow);
-                                        const blocks = draft.blocks.map(
-                                          (entry, blockIndex) =>
-                                            blockIndex === index
-                                              ? { ...entry, includeTags: value }
-                                              : entry
-                                        );
-                                        return {
-                                          ...prev,
-                                          [flow.id]: { ...draft, blocks },
-                                        };
-                                      });
-                                      if (simpleErrors[flow.id]) {
-                                        setSimpleErrors((prev) => {
-                                          const next = { ...prev };
-                                          delete next[flow.id];
-                                          return next;
-                                        });
-                                      }
-                                    }}
-                                  />
-                                </div>
-                                <div className="grid gap-1">
-                                  <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                                    Include artists
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="input"
-                                    placeholder="Artist A, Artist B"
-                                    value={block.includeArtists}
-                                    onChange={(event) => {
-                                      const value = event.target.value;
-                                      setSimpleDrafts((prev) => {
-                                        const draft =
-                                          prev[flow.id] || flowToForm(flow);
-                                        const blocks = draft.blocks.map(
-                                          (entry, blockIndex) =>
-                                            blockIndex === index
-                                              ? {
-                                                  ...entry,
-                                                  includeArtists: value,
-                                                }
-                                              : entry
-                                        );
-                                        return {
-                                          ...prev,
-                                          [flow.id]: { ...draft, blocks },
-                                        };
-                                      });
-                                      if (simpleErrors[flow.id]) {
-                                        setSimpleErrors((prev) => {
-                                          const next = { ...prev };
-                                          delete next[flow.id];
-                                          return next;
-                                        });
-                                      }
-                                    }}
-                                  />
-                                </div>
-                                <div className="grid gap-1">
-                                  <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                                    Include related artists
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="input"
-                                    placeholder="Related Artist"
-                                    value={block.includeRelatedArtists}
-                                    onChange={(event) => {
-                                      const value = event.target.value;
-                                      setSimpleDrafts((prev) => {
-                                        const draft =
-                                          prev[flow.id] || flowToForm(flow);
-                                        const blocks = draft.blocks.map(
-                                          (entry, blockIndex) =>
-                                            blockIndex === index
-                                              ? {
-                                                  ...entry,
-                                                  includeRelatedArtists: value,
-                                                }
-                                              : entry
-                                        );
-                                        return {
-                                          ...prev,
-                                          [flow.id]: { ...draft, blocks },
-                                        };
-                                      });
-                                      if (simpleErrors[flow.id]) {
-                                        setSimpleErrors((prev) => {
-                                          const next = { ...prev };
-                                          delete next[flow.id];
-                                          return next;
-                                        });
-                                      }
-                                    }}
-                                  />
-                                </div>
-                                <div className="grid gap-1">
-                                  <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                                    Include match
-                                  </label>
-                                  <select
-                                    className="input"
-                                    value={block.includeMatch}
-                                    onChange={(event) => {
-                                      const value = event.target.value;
-                                      setSimpleDrafts((prev) => {
-                                        const draft =
-                                          prev[flow.id] || flowToForm(flow);
-                                        const blocks = draft.blocks.map(
-                                          (entry, blockIndex) =>
-                                            blockIndex === index
-                                              ? { ...entry, includeMatch: value }
-                                              : entry
-                                        );
-                                        return {
-                                          ...prev,
-                                          [flow.id]: { ...draft, blocks },
-                                        };
-                                      });
-                                      if (simpleErrors[flow.id]) {
-                                        setSimpleErrors((prev) => {
-                                          const next = { ...prev };
-                                          delete next[flow.id];
-                                          return next;
-                                        });
-                                      }
-                                    }}
-                                  >
-                                    {MATCH_VALUES.map((match) => (
-                                      <option key={match} value={match}>
-                                        {match}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                                <div className="grid gap-1">
-                                  <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                                    Exclude tags
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="input"
-                                    placeholder="metal"
-                                    value={block.excludeTags}
-                                    onChange={(event) => {
-                                      const value = event.target.value;
-                                      setSimpleDrafts((prev) => {
-                                        const draft =
-                                          prev[flow.id] || flowToForm(flow);
-                                        const blocks = draft.blocks.map(
-                                          (entry, blockIndex) =>
-                                            blockIndex === index
-                                              ? { ...entry, excludeTags: value }
-                                              : entry
-                                        );
-                                        return {
-                                          ...prev,
-                                          [flow.id]: { ...draft, blocks },
-                                        };
-                                      });
-                                      if (simpleErrors[flow.id]) {
-                                        setSimpleErrors((prev) => {
-                                          const next = { ...prev };
-                                          delete next[flow.id];
-                                          return next;
-                                        });
-                                      }
-                                    }}
-                                  />
-                                </div>
-                                <div className="grid gap-1">
-                                  <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                                    Exclude artists
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="input"
-                                    placeholder="Artist X"
-                                    value={block.excludeArtists}
-                                    onChange={(event) => {
-                                      const value = event.target.value;
-                                      setSimpleDrafts((prev) => {
-                                        const draft =
-                                          prev[flow.id] || flowToForm(flow);
-                                        const blocks = draft.blocks.map(
-                                          (entry, blockIndex) =>
-                                            blockIndex === index
-                                              ? {
-                                                  ...entry,
-                                                  excludeArtists: value,
-                                                }
-                                              : entry
-                                        );
-                                        return {
-                                          ...prev,
-                                          [flow.id]: { ...draft, blocks },
-                                        };
-                                      });
-                                      if (simpleErrors[flow.id]) {
-                                        setSimpleErrors((prev) => {
-                                          const next = { ...prev };
-                                          delete next[flow.id];
-                                          return next;
-                                        });
-                                      }
-                                    }}
-                                  />
-                                </div>
-                                <div className="grid gap-1">
-                                  <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                                    Exclude related artists
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="input"
-                                    placeholder="Related Artist"
-                                    value={block.excludeRelatedArtists}
-                                    onChange={(event) => {
-                                      const value = event.target.value;
-                                      setSimpleDrafts((prev) => {
-                                        const draft =
-                                          prev[flow.id] || flowToForm(flow);
-                                        const blocks = draft.blocks.map(
-                                          (entry, blockIndex) =>
-                                            blockIndex === index
-                                              ? {
-                                                  ...entry,
-                                                  excludeRelatedArtists: value,
-                                                }
-                                              : entry
-                                        );
-                                        return {
-                                          ...prev,
-                                          [flow.id]: { ...draft, blocks },
-                                        };
-                                      });
-                                      if (simpleErrors[flow.id]) {
-                                        setSimpleErrors((prev) => {
-                                          const next = { ...prev };
-                                          delete next[flow.id];
-                                          return next;
-                                        });
-                                      }
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        {simpleError && (
-                          <div className="text-xs text-red-400">
-                            {simpleError}
-                          </div>
-                        )}
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <button
-                            onClick={() => handleDelete(flow)}
-                            className="btn btn-danger btn-sm flex items-center gap-2"
-                            disabled={deletingId === flow.id}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            <span>
-                              {deletingId === flow.id
-                                ? "Deleting..."
-                                : "Delete"}
-                            </span>
-                          </button>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleResetSimple(flow)}
-                              className="btn btn-secondary btn-sm flex items-center gap-2"
-                            >
-                              <RotateCcw className="w-4 h-4" />
-                              Reset
-                            </button>
-                            <button
-                              onClick={() => handleApplySimple(flow)}
-                              className="btn btn-primary btn-sm flex items-center gap-2"
-                              disabled={isApplying}
-                            >
-                              <Save className="w-4 h-4" />
-                              {isApplying ? "Applying..." : "Apply changes"}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <YamlEditor
-                          value={yamlDraft}
-                          onChange={(nextValue) => {
-                            setYamlDrafts((prev) => ({
-                              ...prev,
-                              [flow.id]: nextValue,
-                            }));
-                            if (yamlErrors[flow.id]) {
-                              setYamlErrors((prev) => {
-                                const next = { ...prev };
-                                delete next[flow.id];
-                                return next;
-                              });
-                            }
-                          }}
-                          error={yamlError}
-                        />
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <button
-                            onClick={() => handleDelete(flow)}
-                            className="btn btn-danger btn-sm flex items-center gap-2"
-                            disabled={deletingId === flow.id}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            <span>
-                              {deletingId === flow.id
-                                ? "Deleting..."
-                                : "Delete"}
-                            </span>
-                          </button>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleCopyYaml(flow)}
-                              className="btn btn-secondary btn-sm flex items-center gap-2"
-                            >
-                              <Copy className="w-4 h-4" />
-                              Copy YAML
-                            </button>
-                            <button
-                              onClick={() => handleResetYaml(flow)}
-                              className="btn btn-secondary btn-sm flex items-center gap-2"
-                            >
-                              <RotateCcw className="w-4 h-4" />
-                              Reset
-                            </button>
-                            <button
-                              onClick={() => handleApplyYaml(flow)}
-                              className="btn btn-primary btn-sm flex items-center gap-2"
-                              disabled={isApplying}
-                            >
-                              <Save className="w-4 h-4" />
-                              {isApplying ? "Applying..." : "Apply YAML"}
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+              flow={flow}
+              enabled={enabled}
+              state={state}
+              stats={stats}
+              nextRun={nextRun}
+              isEditing={isEditing}
+              simpleDraft={simpleDraft}
+              simpleRemaining={simpleMixSize}
+              simpleError={simpleError}
+              isApplying={isApplying}
+              togglingId={togglingId}
+              deletingId={deletingId}
+              onToggleEditing={() =>
+                setEditingId((prev) => {
+                  const next = prev === flow.id ? null : flow.id;
+                  if (next) {
+                    setSimpleErrors((prevErrors) => {
+                      const nextErrors = { ...prevErrors };
+                      delete nextErrors[flow.id];
+                      return nextErrors;
+                    });
+                  }
+                  return next;
+                })
+              }
+              onToggleEnabled={(checked) => handleToggleRequest(flow, checked)}
+              onDelete={() => handleDelete(flow)}
+              onCancel={() => handleCancelSimple(flow)}
+              onApply={() => handleApplySimple(flow)}
+              onDraftChange={(updater) =>
+                setSimpleDrafts((prev) => {
+                  const base = prev[flow.id] ?? simpleDraft;
+                  return { ...prev, [flow.id]: updater(base) };
+                })
+              }
+              onClearError={() => {
+                if (simpleErrors[flow.id]) {
+                  setSimpleErrors((prev) => {
+                    const next = { ...prev };
+                    delete next[flow.id];
+                    return next;
+                  });
+                }
+              }}
+              mixPresets={MIX_PRESETS}
+              focusOptions={FOCUS_OPTIONS}
+              normalizeMixPercent={normalizeMixPercent}
+            />
           );
         })}
       </div>
 
-      <div className="mt-8 p-4 bg-white/5 rounded-lg border border-white/5">
-        <p className="text-sm text-[#c1c1c3]">
-          <strong className="text-white">Coming later:</strong> Pin playlists
-          from Discover (“because you like X”) and tag searches to build custom
-          Flow playlists by genre and tags.
-        </p>
-      </div>
-
-      {confirmDelete && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
-          onClick={() => setConfirmDelete(null)}
-        >
-          <div
-            className="card max-w-md w-full mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-xl font-bold mb-2 text-white">
-              Delete {confirmDelete.title}?
-            </h3>
-            <p className="text-[#c1c1c3] mb-6">
-              This removes the flow and its playlist setup. You can recreate it
-              later.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setConfirmDelete(null)}
-                className="btn btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmDelete}
-                className="btn btn-primary"
-                style={{ backgroundColor: "#ef4444" }}
-                disabled={deletingId === confirmDelete.flowId}
-              >
-                {deletingId === confirmDelete.flowId ? "Deleting..." : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {confirmDisable && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
-          onClick={() => setConfirmDisable(null)}
-        >
-          <div
-            className="card max-w-md w-full mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-xl font-bold mb-2 text-white">
-              Turn off {confirmDisable.title}?
-            </h3>
-            <p className="text-[#c1c1c3] mb-6">
-              This pauses future runs. You can turn it back on anytime.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setConfirmDisable(null)}
-                className="btn btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmDisable}
-                className="btn btn-primary"
-                style={{ backgroundColor: "#ef4444" }}
-                disabled={togglingId === confirmDisable.flowId}
-              >
-                {togglingId === confirmDisable.flowId ? "Turning off..." : "Turn Off"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {showHelp && (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center px-4 py-10"
-          style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
-          onClick={() => setShowHelp(false)}
-        >
-          <div
-            className="bg-card rounded-lg border border-white/10 w-full max-w-3xl max-h-[85vh] overflow-hidden text-sm text-[#c1c1c3]"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
-              <h3 className="text-lg font-semibold text-white">Flow YAML guide</h3>
-              <button
-                onClick={() => setShowHelp(false)}
-                className="btn btn-secondary btn-sm"
-              >
-                Close
-              </button>
-            </div>
-            <div className="grid gap-5 px-5 py-4 overflow-y-auto max-h-[70vh] leading-relaxed">
-              <div>
-                <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] mb-2">
-                  Shape
-                </div>
-                <div className="text-sm text-[#c1c1c3]">
-                  Use a name plus one or more numbered blocks. Each block is a
-                  source slice with its own count and filters.
-                </div>
-                <pre className="mt-3 whitespace-pre-wrap rounded bg-black/50 border border-white/10 p-3 text-xs text-white font-mono overflow-x-auto">
-{`name: Mega Mix
-block1:
-  source: discover
-  count: 10
-block2:
-  source: mix
-  count: 10
-block3:
-  source: trending
-  count: 10`}
-                </pre>
-              </div>
-              <div>
-                <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] mb-2">
-                  Sources (detailed)
-                </div>
-                <div className="grid gap-2 text-sm text-[#c1c1c3]">
-                  <div>
-                    <span className="text-white">discover</span> uses your 100
-                    Recommended artists from discovery.
-                  </div>
-                  <div>
-                    <span className="text-white">recommended</span> is the same
-                    as discover, but kept explicit for YAML clarity.
-                  </div>
-                  <div>
-                    <span className="text-white">mix</span> uses artists from
-                    your library and picks tracks from them.
-                  </div>
-                  <div>
-                    <span className="text-white">trending</span> uses global
-                    discovery trending artists.
-                  </div>
-                  <div>
-                    <span className="text-white">all</span> allows global tag
-                    and related artist lookups beyond your recommended list.
-                  </div>
-                </div>
-                <pre className="mt-3 whitespace-pre-wrap rounded bg-black/50 border border-white/10 p-3 text-xs text-white font-mono overflow-x-auto">
-{`block1:
-  source: recommended
-  count: 30
-block2:
-  source: all
-  count: 20`}
-                </pre>
-              </div>
-              <div>
-                <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] mb-2">
-                  Block fields and modifiers
-                </div>
-                <div className="grid gap-2 text-sm text-[#c1c1c3]">
-                  <div>
-                    <span className="text-white">source</span> chooses where
-                    tracks come from.
-                  </div>
-                  <div>
-                    <span className="text-white">count</span> is how many tracks
-                    to pull for that block (1–100).
-                  </div>
-                  <div>
-                    <span className="text-white">deepDive</span> uses deeper
-                    cuts for that block only.
-                  </div>
-                  <div>
-                    <span className="text-white">include</span> narrows the
-                    block; <span className="text-white">exclude</span> removes
-                    matches after include is applied.
-                  </div>
-                </div>
-              </div>
-              <div>
-                <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] mb-2">
-                  Include filters
-                </div>
-                <div className="grid gap-2 text-sm text-[#c1c1c3]">
-                  <div>
-                    <span className="text-white">include.tags</span> (or{" "}
-                    <span className="text-white">include.tag</span>) filters by
-                    genre tags.
-                  </div>
-                  <div>
-                    <span className="text-white">include.artists</span> (or{" "}
-                    <span className="text-white">include.artist</span>) limits
-                    to specific artists.
-                  </div>
-                  <div>
-                    <span className="text-white">include.relatedArtists</span>{" "}
-                    (or <span className="text-white">include.relatedArtist</span>) builds from similar-artist
-                    seeds.
-                  </div>
-                  <div>
-                    <span className="text-white">include.match</span> sets tag
-                    matching: <span className="text-white">any</span> (default)
-                    or <span className="text-white">all</span>.
-                  </div>
-                </div>
-              </div>
-              <div>
-                <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] mb-2">
-                  Exclude filters
-                </div>
-                <div className="grid gap-2 text-sm text-[#c1c1c3]">
-                  <div>
-                    <span className="text-white">exclude.tags</span> (or{" "}
-                    <span className="text-white">exclude.tag</span>) removes
-                    artists that carry those tags in your recommended list.
-                  </div>
-                  <div>
-                    <span className="text-white">exclude.artists</span> (or{" "}
-                    <span className="text-white">exclude.artist</span>) removes
-                    exact artist matches.
-                  </div>
-                  <div>
-                    <span className="text-white">exclude.relatedArtists</span>{" "}
-                    (or <span className="text-white">exclude.relatedArtist</span>) removes matches by similar-artist name.
-                  </div>
-                </div>
-              </div>
-              <div>
-                <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] mb-2">
-                  Notes
-                </div>
-                <div className="grid gap-2 text-sm text-[#c1c1c3]">
-                  <div>
-                    For <span className="text-white">discover</span> or{" "}
-                    <span className="text-white">recommended</span>, tag filters
-                    use your discovery cache tags.
-                  </div>
-                  <div>
-                    For <span className="text-white">all</span>, tag filters use
-                    global tag lists to source artists.
-                  </div>
-                  <div>
-                    If multiple include filters are set, relatedArtists take
-                    priority, then tags, then artists.
-                  </div>
-                </div>
-              </div>
-              <div>
-                <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] mb-2">
-                  Example: granular mix
-                </div>
-                <pre className="mt-3 whitespace-pre-wrap rounded bg-black/50 border border-white/10 p-3 text-xs text-white font-mono overflow-x-auto">
-{`block1:
-  source: recommended
-  count: 30
-  include:
-    tags: [punk, emo]
-    match: all
-block2:
-  source: all
-  count: 20
-  include:
-    relatedArtists: The Used
-  exclude:
-    artists: [My Chemical Romance]`}
-                </pre>
-              </div>
-              <div>
-                <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] mb-2">
-                  Example: deep dive block
-                </div>
-                <pre className="mt-3 whitespace-pre-wrap rounded bg-black/50 border border-white/10 p-3 text-xs text-white font-mono overflow-x-auto">
-{`block1:
-  source: mix
-  count: 25
-  deepDive: true`}
-                </pre>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showNewFlow && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
-          onClick={() => setShowNewFlow(false)}
-        >
-          <div
-            className="card max-w-xl w-full mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-white">New Flow</h3>
-            </div>
-            <div className="grid gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (newFlowMode === "simple") return;
-                    try {
-                      const payload = parseFlowYaml(
-                        newFlowYaml,
-                        NEW_FLOW_TEMPLATE
-                      );
-                      setNewFlowDraft(flowToForm(payload));
-                      setNewFlowSimpleError("");
-                    } catch (err) {
-                      setNewFlowSimpleError(
-                        err.message ||
-                          "Fix YAML before switching to simple mode"
-                      );
-                    }
-                    setNewFlowMode("simple");
-                  }}
-                  className={`btn btn-sm ${
-                    newFlowMode === "simple" ? "btn-primary" : "btn-secondary"
-                  }`}
-                >
-                  Simple
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (newFlowMode === "yaml") return;
-                    try {
-                      const payload = buildFlowFromForm(newFlowDraft);
-                      setNewFlowYaml(flowToYaml(payload));
-                      setNewFlowError("");
-                    } catch (err) {
-                      setNewFlowSimpleError(
-                        err.message || "Fix the simple form before switching"
-                      );
-                    }
-                    setNewFlowMode("yaml");
-                  }}
-                  className={`btn btn-sm ${
-                    newFlowMode === "yaml" ? "btn-primary" : "btn-secondary"
-                  }`}
-                >
-                  YAML
-                </button>
-              </div>
-              <div className="text-xs text-[#8b8b90]">
-                Paste a flow YAML or tweak the template below to share and
-                remix.
-              </div>
-              {newFlowMode === "simple" ? (
-                <div className="grid gap-4">
-                  <div className="grid gap-2">
-                    <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                      Flow name
-                    </label>
-                    <input
-                      type="text"
-                      className="input"
-                      value={newFlowDraft.name}
-                      onChange={(event) => {
-                        setNewFlowDraft((prev) => ({
-                          ...prev,
-                          name: event.target.value,
-                        }));
-                        if (newFlowSimpleError) setNewFlowSimpleError("");
-                      }}
-                    />
-                  </div>
-                  <div className="grid gap-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs uppercase tracking-[0.3em] text-[#8b8b90]">
-                        Blocks
-                      </span>
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => {
-                          setNewFlowDraft((prev) => ({
-                            ...prev,
-                            blocks: [...prev.blocks, createDefaultBlock()],
-                          }));
-                          if (newFlowSimpleError) setNewFlowSimpleError("");
-                        }}
-                      >
-                        Add block
-                      </button>
-                    </div>
-                    {newFlowDraft.blocks.map((block, index) => (
-                      <div
-                        key={`new-block-${index}`}
-                        className="rounded-lg border border-white/10 bg-white/5 p-3 grid gap-3"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs uppercase tracking-[0.3em] text-[#8b8b90]">
-                            Block {index + 1}
-                          </span>
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm flex items-center gap-2"
-                            onClick={() => {
-                              setNewFlowDraft((prev) => ({
-                                ...prev,
-                                blocks: prev.blocks.filter(
-                                  (_, blockIndex) => blockIndex !== index
-                                ),
-                              }));
-                              if (newFlowSimpleError) {
-                                setNewFlowSimpleError("");
-                              }
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            Remove
-                          </button>
-                        </div>
-                        <div className="grid gap-3 sm:grid-cols-3">
-                          <div className="grid gap-1">
-                            <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                              Source
-                            </label>
-                            <select
-                              className="input"
-                              value={block.source}
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                setNewFlowDraft((prev) => ({
-                                  ...prev,
-                                  blocks: prev.blocks.map((entry, blockIndex) =>
-                                    blockIndex === index
-                                      ? { ...entry, source: value }
-                                      : entry
-                                  ),
-                                }));
-                                if (newFlowSimpleError) {
-                                  setNewFlowSimpleError("");
-                                }
-                              }}
-                            >
-                              {SOURCE_VALUES.map((source) => (
-                                <option key={source} value={source}>
-                                  {source}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="grid gap-1">
-                            <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                              Count
-                            </label>
-                            <input
-                              type="number"
-                              min="1"
-                              max="100"
-                              className="input"
-                              value={block.count}
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                setNewFlowDraft((prev) => ({
-                                  ...prev,
-                                  blocks: prev.blocks.map((entry, blockIndex) =>
-                                    blockIndex === index
-                                      ? { ...entry, count: value }
-                                      : entry
-                                  ),
-                                }));
-                                if (newFlowSimpleError) {
-                                  setNewFlowSimpleError("");
-                                }
-                              }}
-                            />
-                          </div>
-                          <div className="grid gap-1">
-                            <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                              Deep dive
-                            </label>
-                            <div className="flex items-center gap-2">
-                              <PillToggle
-                                checked={block.deepDive === true}
-                                onChange={(event) => {
-                                  const value = event.target.checked;
-                                  setNewFlowDraft((prev) => ({
-                                    ...prev,
-                                    blocks: prev.blocks.map((entry, blockIndex) =>
-                                      blockIndex === index
-                                        ? { ...entry, deepDive: value }
-                                        : entry
-                                    ),
-                                  }));
-                                  if (newFlowSimpleError) {
-                                    setNewFlowSimpleError("");
-                                  }
-                                }}
-                              />
-                              <span className="text-xs text-[#c1c1c3]">
-                                {block.deepDive ? "On" : "Off"}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="grid gap-1">
-                            <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                              Include tags
-                            </label>
-                            <input
-                              type="text"
-                              className="input"
-                              placeholder="lofi, indie"
-                              value={block.includeTags}
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                setNewFlowDraft((prev) => ({
-                                  ...prev,
-                                  blocks: prev.blocks.map((entry, blockIndex) =>
-                                    blockIndex === index
-                                      ? { ...entry, includeTags: value }
-                                      : entry
-                                  ),
-                                }));
-                                if (newFlowSimpleError) {
-                                  setNewFlowSimpleError("");
-                                }
-                              }}
-                            />
-                          </div>
-                          <div className="grid gap-1">
-                            <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                              Include artists
-                            </label>
-                            <input
-                              type="text"
-                              className="input"
-                              placeholder="Artist A, Artist B"
-                              value={block.includeArtists}
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                setNewFlowDraft((prev) => ({
-                                  ...prev,
-                                  blocks: prev.blocks.map((entry, blockIndex) =>
-                                    blockIndex === index
-                                      ? { ...entry, includeArtists: value }
-                                      : entry
-                                  ),
-                                }));
-                                if (newFlowSimpleError) {
-                                  setNewFlowSimpleError("");
-                                }
-                              }}
-                            />
-                          </div>
-                          <div className="grid gap-1">
-                            <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                              Include related artists
-                            </label>
-                            <input
-                              type="text"
-                              className="input"
-                              placeholder="Related Artist"
-                              value={block.includeRelatedArtists}
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                setNewFlowDraft((prev) => ({
-                                  ...prev,
-                                  blocks: prev.blocks.map((entry, blockIndex) =>
-                                    blockIndex === index
-                                      ? {
-                                          ...entry,
-                                          includeRelatedArtists: value,
-                                        }
-                                      : entry
-                                  ),
-                                }));
-                                if (newFlowSimpleError) {
-                                  setNewFlowSimpleError("");
-                                }
-                              }}
-                            />
-                          </div>
-                          <div className="grid gap-1">
-                            <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                              Include match
-                            </label>
-                            <select
-                              className="input"
-                              value={block.includeMatch}
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                setNewFlowDraft((prev) => ({
-                                  ...prev,
-                                  blocks: prev.blocks.map((entry, blockIndex) =>
-                                    blockIndex === index
-                                      ? { ...entry, includeMatch: value }
-                                      : entry
-                                  ),
-                                }));
-                                if (newFlowSimpleError) {
-                                  setNewFlowSimpleError("");
-                                }
-                              }}
-                            >
-                              {MATCH_VALUES.map((match) => (
-                                <option key={match} value={match}>
-                                  {match}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="grid gap-1">
-                            <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                              Exclude tags
-                            </label>
-                            <input
-                              type="text"
-                              className="input"
-                              placeholder="metal"
-                              value={block.excludeTags}
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                setNewFlowDraft((prev) => ({
-                                  ...prev,
-                                  blocks: prev.blocks.map((entry, blockIndex) =>
-                                    blockIndex === index
-                                      ? { ...entry, excludeTags: value }
-                                      : entry
-                                  ),
-                                }));
-                                if (newFlowSimpleError) {
-                                  setNewFlowSimpleError("");
-                                }
-                              }}
-                            />
-                          </div>
-                          <div className="grid gap-1">
-                            <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                              Exclude artists
-                            </label>
-                            <input
-                              type="text"
-                              className="input"
-                              placeholder="Artist X"
-                              value={block.excludeArtists}
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                setNewFlowDraft((prev) => ({
-                                  ...prev,
-                                  blocks: prev.blocks.map((entry, blockIndex) =>
-                                    blockIndex === index
-                                      ? { ...entry, excludeArtists: value }
-                                      : entry
-                                  ),
-                                }));
-                                if (newFlowSimpleError) {
-                                  setNewFlowSimpleError("");
-                                }
-                              }}
-                            />
-                          </div>
-                          <div className="grid gap-1">
-                            <label className="label text-sub font-normal text-xs uppercase tracking-wider">
-                              Exclude related artists
-                            </label>
-                            <input
-                              type="text"
-                              className="input"
-                              placeholder="Related Artist"
-                              value={block.excludeRelatedArtists}
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                setNewFlowDraft((prev) => ({
-                                  ...prev,
-                                  blocks: prev.blocks.map((entry, blockIndex) =>
-                                    blockIndex === index
-                                      ? {
-                                          ...entry,
-                                          excludeRelatedArtists: value,
-                                        }
-                                      : entry
-                                  ),
-                                }));
-                                if (newFlowSimpleError) {
-                                  setNewFlowSimpleError("");
-                                }
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {newFlowSimpleError && (
-                    <div className="text-xs text-red-400">
-                      {newFlowSimpleError}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <YamlEditor
-                  value={newFlowYaml}
-                  onChange={(nextValue) => {
-                    setNewFlowYaml(nextValue);
-                    if (newFlowError) {
-                      setNewFlowError("");
-                    }
-                  }}
-                  error={newFlowError}
-                  minHeight="min-h-[240px]"
-                />
-              )}
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <button
-                  onClick={() => {
-                    if (newFlowMode === "simple") {
-                      setNewFlowDraft(flowToForm(NEW_FLOW_TEMPLATE));
-                      setNewFlowSimpleError("");
-                    } else {
-                      setNewFlowYaml(flowToYaml(NEW_FLOW_TEMPLATE));
-                      setNewFlowError("");
-                    }
-                  }}
-                  className="btn btn-secondary btn-sm flex items-center gap-2"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  Reset
-                </button>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      setShowNewFlow(false);
-                      setNewFlowError("");
-                      setNewFlowSimpleError("");
-                    }}
-                    className="btn btn-secondary btn-sm"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={
-                      newFlowMode === "simple"
-                        ? handleCreateFromSimple
-                        : handleCreateFromYaml
-                    }
-                    className="btn btn-primary btn-sm flex items-center gap-2"
-                    disabled={creating}
-                  >
-                    <FilePlus2 className="w-4 h-4" />
-                    {creating ? "Saving..." : "Create Flow"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDeleteModal
+        confirmDelete={confirmDelete}
+        deletingId={deletingId}
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={handleConfirmDelete}
+      />
+      <ConfirmDisableModal
+        confirmDisable={confirmDisable}
+        togglingId={togglingId}
+        onCancel={() => setConfirmDisable(null)}
+        onConfirm={handleConfirmDisable}
+      />
     </div>
   );
 }
