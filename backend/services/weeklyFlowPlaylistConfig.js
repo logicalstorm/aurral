@@ -5,8 +5,6 @@ import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 const LEGACY_TYPES = ["discover", "mix", "trending"];
 const DEFAULT_MIX = { discover: 34, mix: 33, trending: 33 };
 const DEFAULT_SIZE = 30;
-const MIN_SIZE = 10;
-const MAX_SIZE = 50;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 const titleCase = (value) =>
@@ -19,7 +17,162 @@ const titleCase = (value) =>
 const clampSize = (value) => {
   const n = Number(value);
   if (!Number.isFinite(n)) return DEFAULT_SIZE;
-  return Math.min(MAX_SIZE, Math.max(MIN_SIZE, Math.round(n)));
+  return Math.max(Math.round(n), 1);
+};
+
+const normalizeWeightMap = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out = {};
+  for (const [key, rawValue] of Object.entries(value)) {
+    const name = String(key || "").trim();
+    if (!name) continue;
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed)) continue;
+    const rounded = Math.round(parsed);
+    if (rounded <= 0) continue;
+    out[name] = rounded;
+  }
+  return out;
+};
+
+const sumWeightMap = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
+  return Object.values(value).reduce((acc, entry) => {
+    const parsed = Number(entry);
+    return acc + (Number.isFinite(parsed) ? parsed : 0);
+  }, 0);
+};
+
+const normalizeRecipeCounts = (value, fallback) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return fallback ?? { discover: 0, mix: 0, trending: 0 };
+  }
+  const parseField = (entry) => {
+    const parsed = Number(entry);
+    if (!Number.isFinite(parsed)) return 0;
+    return Math.max(Math.round(parsed), 0);
+  };
+  return {
+    discover: parseField(value?.discover ?? 0),
+    mix: parseField(value?.mix ?? 0),
+    trending: parseField(value?.trending ?? 0),
+  };
+};
+
+const clampCount = (value, min = 1, max = 100) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(Math.max(Math.round(n), min), max);
+};
+
+const normalizeStringList = (value) => {
+  if (value == null) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item || "").trim())
+      .filter(Boolean);
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? [trimmed] : [];
+  }
+  return [];
+};
+
+const distributeCount = (total, values) => {
+  const items = values.filter(Boolean);
+  if (!items.length || total <= 0) return {};
+  const per = Math.floor(total / items.length);
+  let remaining = total - per * items.length;
+  const result = {};
+  for (const item of items) {
+    const extra = remaining > 0 ? 1 : 0;
+    if (remaining > 0) remaining -= 1;
+    result[item] = (result[item] || 0) + per + extra;
+  }
+  return result;
+};
+
+const extractFromBlocks = (value) => {
+  if (!Array.isArray(value)) return null;
+  const recipe = { discover: 0, mix: 0, trending: 0 };
+  const tags = {};
+  const relatedArtists = {};
+  let deepDive = false;
+  let total = 0;
+  for (const block of value) {
+    if (!block || typeof block !== "object" || Array.isArray(block)) continue;
+    const count = clampCount(block.count);
+    if (count <= 0) continue;
+    total += count;
+    if (block.deepDive === true) deepDive = true;
+    const include = block.include ?? {};
+    const includeTags = normalizeStringList(include.tags ?? include.tag);
+    const includeRelated = normalizeStringList(
+      include.relatedArtists ?? include.relatedArtist,
+    );
+    if (includeTags.length > 0) {
+      const distributed = distributeCount(count, includeTags);
+      for (const [tag, qty] of Object.entries(distributed)) {
+        tags[tag] = (tags[tag] || 0) + qty;
+      }
+      continue;
+    }
+    if (includeRelated.length > 0) {
+      const distributed = distributeCount(count, includeRelated);
+      for (const [artist, qty] of Object.entries(distributed)) {
+        relatedArtists[artist] = (relatedArtists[artist] || 0) + qty;
+      }
+      continue;
+    }
+    const source = String(block.source || "")
+      .trim()
+      .toLowerCase();
+    const key =
+      source === "mix"
+        ? "mix"
+        : source === "trending"
+          ? "trending"
+          : "discover";
+    recipe[key] += count;
+  }
+  if (total <= 0) return null;
+  return { recipe, tags, relatedArtists, deepDive, size: total };
+};
+
+const buildCountsFromMix = (size, mix) => {
+  const weights = [
+    { key: "discover", value: Number(mix?.discover ?? 0) },
+    { key: "mix", value: Number(mix?.mix ?? 0) },
+    { key: "trending", value: Number(mix?.trending ?? 0) },
+  ];
+  const sum = weights.reduce(
+    (acc, w) => acc + (Number.isFinite(w.value) ? w.value : 0),
+    0,
+  );
+  if (sum <= 0 || !Number.isFinite(sum) || size <= 0) {
+    return { discover: 0, mix: 0, trending: 0 };
+  }
+  const scaled = weights.map((w) => ({
+    ...w,
+    raw: (w.value / sum) * size,
+  }));
+  const floored = scaled.map((w) => ({
+    ...w,
+    count: Math.floor(w.raw),
+    remainder: w.raw - Math.floor(w.raw),
+  }));
+  let remaining = size - floored.reduce((acc, w) => acc + w.count, 0);
+  const ordered = [...floored].sort((a, b) => b.remainder - a.remainder);
+  for (let i = 0; i < ordered.length && remaining > 0; i++) {
+    ordered[i].count += 1;
+    remaining -= 1;
+  }
+  const out = {};
+  for (const item of ordered) {
+    out[item.key] = item.count;
+  }
+  return out;
 };
 
 const normalizeMix = (mix) => {
@@ -61,17 +214,39 @@ const normalizeMix = (mix) => {
 
 const normalizeFlow = (flow) => {
   const name = String(flow?.name || "").trim();
+  const blocksData = extractFromBlocks(flow?.blocks);
+  const size = clampSize(flow?.size);
+  const mix = normalizeMix(flow?.mix ?? blocksData?.recipe);
+  const tags =
+    Object.keys(normalizeWeightMap(flow?.tags)).length > 0
+      ? normalizeWeightMap(flow?.tags)
+      : normalizeWeightMap(blocksData?.tags);
+  const relatedArtists =
+    Object.keys(normalizeWeightMap(flow?.relatedArtists)).length > 0
+      ? normalizeWeightMap(flow?.relatedArtists)
+      : normalizeWeightMap(blocksData?.relatedArtists);
+  const tagsTotal = sumWeightMap(tags);
+  const relatedTotal = sumWeightMap(relatedArtists);
+  const baseSize = blocksData?.size > 0 ? blocksData.size : size;
+  const recipeSize = baseSize;
+  const recipeFallback = buildCountsFromMix(recipeSize, mix);
+  const recipe = normalizeRecipeCounts(flow?.recipe, blocksData?.recipe ?? recipeFallback);
+  const recipeTotal = sumWeightMap(recipe);
+  const computedSize = recipeTotal > 0 ? recipeTotal : baseSize;
   return {
     id: flow?.id || randomUUID(),
     name: name || "Flow",
     enabled: flow?.enabled === true,
-    deepDive: flow?.deepDive === true,
+    deepDive: flow?.deepDive === true || blocksData?.deepDive === true,
     nextRunAt:
       flow?.nextRunAt != null && Number.isFinite(Number(flow.nextRunAt))
         ? Number(flow.nextRunAt)
         : null,
-    size: clampSize(flow?.size),
-    mix: normalizeMix(flow?.mix),
+    size: computedSize > 0 ? computedSize : baseSize,
+    mix,
+    recipe,
+    tags,
+    relatedArtists,
     createdAt:
       flow?.createdAt != null && Number.isFinite(Number(flow.createdAt))
         ? Number(flow.createdAt)
@@ -83,18 +258,22 @@ const buildLegacyFlows = (settings) => {
   const playlists = settings.weeklyFlowPlaylists || {};
   return LEGACY_TYPES.map((type) => {
     const legacy = playlists[type] || {};
-    const mix = {
-      discover: type === "discover" ? 100 : 0,
-      mix: type === "mix" ? 100 : 0,
-      trending: type === "trending" ? 100 : 0,
-    };
+    const mix =
+      type === "mix"
+        ? { discover: 0, mix: 100, trending: 0 }
+        : type === "trending"
+          ? { discover: 0, mix: 0, trending: 100 }
+          : { discover: 100, mix: 0, trending: 0 };
     return normalizeFlow({
       id: randomUUID(),
       name: titleCase(type),
       enabled: legacy.enabled === true,
       nextRunAt: legacy.nextRunAt ?? null,
-      mix,
       size: DEFAULT_SIZE,
+      mix,
+      deepDive: false,
+      tags: {},
+      relatedArtists: {},
     });
   });
 };
@@ -104,16 +283,19 @@ const getStoredFlows = () => {
   const stored = settings.weeklyFlows;
   if (Array.isArray(stored) && stored.length > 0) {
     const idMap = new Map();
+    let needsSave = false;
     const nextFlows = stored.map((flow) => {
       const currentId = flow?.id;
       if (LEGACY_TYPES.includes(currentId)) {
         const mapped = idMap.get(currentId) || randomUUID();
         idMap.set(currentId, mapped);
+        needsSave = true;
         return normalizeFlow({ ...flow, id: mapped });
       }
+      if (flow?.blocks) needsSave = true;
       return normalizeFlow(flow);
     });
-    if (idMap.size > 0) {
+    if (idMap.size > 0 || needsSave) {
       dbOps.updateSettings({
         ...settings,
         weeklyFlows: nextFlows,
@@ -122,12 +304,14 @@ const getStoredFlows = () => {
     }
     return nextFlows;
   }
-  const legacy = buildLegacyFlows(settings);
+  if (Array.isArray(stored)) {
+    return [];
+  }
   dbOps.updateSettings({
     ...settings,
-    weeklyFlows: legacy,
+    weeklyFlows: [],
   });
-  return legacy;
+  return [];
 };
 
 const setFlows = (flows) => {
@@ -152,7 +336,15 @@ export const flowPlaylistConfig = {
     return flow?.enabled === true;
   },
 
-  createFlow({ name, mix, size, deepDive }) {
+  createFlow({
+    name,
+    mix,
+    size,
+    deepDive,
+    recipe,
+    tags,
+    relatedArtists,
+  }) {
     const flows = getStoredFlows();
     const flow = normalizeFlow({
       id: randomUUID(),
@@ -160,6 +352,9 @@ export const flowPlaylistConfig = {
       mix,
       size,
       deepDive,
+      recipe,
+      tags,
+      relatedArtists,
       enabled: false,
       nextRunAt: null,
     });
@@ -178,6 +373,9 @@ export const flowPlaylistConfig = {
       name: updates?.name ?? current.name,
       size: updates?.size ?? current.size,
       mix: updates?.mix ?? current.mix,
+      recipe: updates?.recipe ?? current.recipe,
+      tags: updates?.tags ?? current.tags,
+      relatedArtists: updates?.relatedArtists ?? current.relatedArtists,
       deepDive:
         typeof updates?.deepDive === "boolean"
           ? updates.deepDive

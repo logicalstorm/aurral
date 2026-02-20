@@ -1,14 +1,5 @@
 import { useState, useEffect } from "react";
-import {
-  AudioWaveform,
-  Sparkles,
-  Music2,
-  TrendingUp,
-  Loader2,
-  CheckCircle2,
-  Clock,
-  Trash2,
-} from "lucide-react";
+import { Loader2 } from "lucide-react";
 import {
   getFlowStatus,
   createFlow,
@@ -17,13 +8,14 @@ import {
   setFlowEnabled,
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
-import PowerSwitch from "../components/PowerSwitch";
-import PillToggle from "../components/PillToggle";
-
-const DEFAULT_MIX = { discover: 34, mix: 33, trending: 33 };
-const DEFAULT_SIZE = 30;
-const MIN_SIZE = 10;
-const MAX_SIZE = 50;
+import {
+  FlowCard,
+  FlowEmptyState,
+  FlowPageHeader,
+  FlowStatusCards,
+  ConfirmDeleteModal,
+  ConfirmDisableModal,
+} from "./FlowPageComponents";
 
 function formatNextRun(nextRunAt) {
   if (!nextRunAt) return null;
@@ -37,35 +29,391 @@ function formatNextRun(nextRunAt) {
   return days === 1 ? "Resets tomorrow" : `Resets in ${days} days`;
 }
 
-const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+const DEFAULT_MIX = { discover: 50, mix: 30, trending: 20 };
+const DEFAULT_SIZE = 30;
 
-const updateMixValue = (mix, key, value) => ({
-  ...mix,
-  [key]: clamp(Math.round(Number(value) || 0), 0, 100),
-});
+const MIX_PRESETS = [
+  {
+    id: "balanced",
+    label: "Balanced",
+    mix: DEFAULT_MIX,
+  },
+  {
+    id: "discover",
+    label: "Discover Focus",
+    mix: { discover: 70, mix: 20, trending: 10 },
+  },
+  {
+    id: "library",
+    label: "Library Mix",
+    mix: { discover: 25, mix: 65, trending: 10 },
+  },
+  {
+    id: "trending",
+    label: "Trending Lift",
+    mix: { discover: 35, mix: 20, trending: 45 },
+  },
+  {
+    id: "custom",
+    label: "Custom",
+    mix: null,
+  },
+];
 
-const getMixTotal = (mix) =>
-  (mix?.discover ?? 0) + (mix?.mix ?? 0) + (mix?.trending ?? 0);
+const FOCUS_STRENGTHS = {
+  light: 20,
+  medium: 35,
+  heavy: 50,
+};
+
+const FOCUS_OPTIONS = [
+  { id: "light", label: "Light" },
+  { id: "medium", label: "Medium" },
+  { id: "heavy", label: "Heavy" },
+];
+
+const NEW_FLOW_TEMPLATE = {
+  name: "Discover",
+  size: DEFAULT_SIZE,
+  mix: DEFAULT_MIX,
+  deepDive: false,
+  tags: {},
+  relatedArtists: {},
+};
+
+const parseListInput = (value) =>
+  String(value ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+const normalizeMixPercent = (mix) => {
+  const raw = {
+    discover: Number(mix?.discover ?? 0),
+    mix: Number(mix?.mix ?? 0),
+    trending: Number(mix?.trending ?? 0),
+  };
+  const sum = raw.discover + raw.mix + raw.trending;
+  if (!Number.isFinite(sum) || sum <= 0) {
+    return { ...DEFAULT_MIX };
+  }
+  const weights = [
+    { key: "discover", value: raw.discover },
+    { key: "mix", value: raw.mix },
+    { key: "trending", value: raw.trending },
+  ];
+  const scaled = weights.map((w) => ({
+    ...w,
+    raw: (w.value / sum) * 100,
+  }));
+  const floored = scaled.map((w) => ({
+    ...w,
+    count: Math.floor(w.raw),
+    remainder: w.raw - Math.floor(w.raw),
+  }));
+  let remaining = 100 - floored.reduce((acc, w) => acc + w.count, 0);
+  const ordered = [...floored].sort((a, b) => b.remainder - a.remainder);
+  for (let i = 0; i < ordered.length && remaining > 0; i++) {
+    ordered[i].count += 1;
+    remaining -= 1;
+  }
+  const out = {};
+  for (const item of ordered) {
+    out[item.key] = item.count;
+  }
+  return out;
+};
+
+const getPresetForMix = (mix) => {
+  const normalized = normalizeMixPercent(mix);
+  const preset = MIX_PRESETS.find(
+    (entry) =>
+      entry.mix &&
+      entry.mix.discover === normalized.discover &&
+      entry.mix.mix === normalized.mix &&
+      entry.mix.trending === normalized.trending
+  );
+  return preset?.id ?? "custom";
+};
+
+const buildCountsFromMixPercent = (size, mix) => {
+  const weights = normalizeMixPercent(mix);
+  const entries = [
+    { key: "discover", value: weights.discover },
+    { key: "mix", value: weights.mix },
+    { key: "trending", value: weights.trending },
+  ];
+  const scaled = entries.map((entry) => ({
+    ...entry,
+    raw: (entry.value / 100) * size,
+  }));
+  const floored = scaled.map((entry) => ({
+    ...entry,
+    count: Math.floor(entry.raw),
+    remainder: entry.raw - Math.floor(entry.raw),
+  }));
+  let remaining = size - floored.reduce((acc, entry) => acc + entry.count, 0);
+  const ordered = [...floored].sort((a, b) => b.remainder - a.remainder);
+  for (let i = 0; i < ordered.length && remaining > 0; i++) {
+    ordered[i].count += 1;
+    remaining -= 1;
+  }
+  const out = {};
+  for (const entry of ordered) {
+    out[entry.key] = entry.count;
+  }
+  return out;
+};
+
+const getFocusPercentFromStrength = (strength) =>
+  FOCUS_STRENGTHS[strength] ?? FOCUS_STRENGTHS.medium;
+
+const getFocusStrengthFromPercent = (percent) => {
+  const numeric = Number(percent || 0);
+  if (!Number.isFinite(numeric) || numeric <= 0) return "medium";
+  const entries = Object.entries(FOCUS_STRENGTHS);
+  const closest = entries.reduce((best, [key, value]) => {
+    if (!best) return { key, distance: Math.abs(value - numeric) };
+    const distance = Math.abs(value - numeric);
+    return distance < best.distance ? { key, distance } : best;
+  }, null);
+  return closest?.key ?? "medium";
+};
+
+const buildCountsFromFocusPercent = (size, tagPercent, relatedPercent) => {
+  const safeSize = Number.isFinite(size) && size > 0 ? size : 0;
+  const tag = Math.max(0, Number(tagPercent || 0));
+  const related = Math.max(0, Number(relatedPercent || 0));
+  const totalPercent = tag + related;
+  if (safeSize <= 0 || totalPercent <= 0) {
+    return { tag: 0, related: 0, remaining: safeSize };
+  }
+  const targetTotal = Math.round((totalPercent / 100) * safeSize);
+  const entries = [
+    { key: "tag", raw: (tag / 100) * safeSize },
+    { key: "related", raw: (related / 100) * safeSize },
+  ];
+  const floored = entries.map((entry) => ({
+    ...entry,
+    count: Math.floor(entry.raw),
+    remainder: entry.raw - Math.floor(entry.raw),
+  }));
+  let remaining = targetTotal - floored.reduce((acc, entry) => acc + entry.count, 0);
+  const ordered = [...floored].sort((a, b) => b.remainder - a.remainder);
+  for (let i = 0; i < ordered.length && remaining > 0; i++) {
+    ordered[i].count += 1;
+    remaining -= 1;
+  }
+  const out = {};
+  for (const entry of ordered) {
+    out[entry.key] = entry.count;
+  }
+  return {
+    tag: out.tag ?? 0,
+    related: out.related ?? 0,
+    remaining: Math.max(0, safeSize - (out.tag ?? 0) - (out.related ?? 0)),
+  };
+};
+
+const buildFocusStrengthFromCounts = (size, tagCount, relatedCount) => {
+  const safeSize = Number.isFinite(size) && size > 0 ? size : 0;
+  if (safeSize <= 0) {
+    return { tagStrength: "medium", relatedStrength: "medium" };
+  }
+  const tag = Math.max(0, Number(tagCount || 0));
+  const related = Math.max(0, Number(relatedCount || 0));
+  const totalPercent = Math.round(((tag + related) / safeSize) * 100);
+  if (totalPercent <= 0) {
+    return { tagStrength: "medium", relatedStrength: "medium" };
+  }
+  const entries = [
+    { key: "tag", raw: (tag / safeSize) * 100 },
+    { key: "related", raw: (related / safeSize) * 100 },
+  ];
+  const floored = entries.map((entry) => ({
+    ...entry,
+    count: Math.floor(entry.raw),
+    remainder: entry.raw - Math.floor(entry.raw),
+  }));
+  let remaining = totalPercent - floored.reduce((acc, entry) => acc + entry.count, 0);
+  const ordered = [...floored].sort((a, b) => b.remainder - a.remainder);
+  for (let i = 0; i < ordered.length && remaining > 0; i++) {
+    ordered[i].count += 1;
+    remaining -= 1;
+  }
+  const out = {};
+  for (const entry of ordered) {
+    out[entry.key] = entry.count;
+  }
+  return {
+    tagStrength: getFocusStrengthFromPercent(out.tag ?? 0),
+    relatedStrength: getFocusStrengthFromPercent(out.related ?? 0),
+  };
+};
+
+const distributeCount = (total, values) => {
+  const items = values.filter(Boolean);
+  if (!items.length || total <= 0) return new Map();
+  const per = Math.floor(total / items.length);
+  let remaining = total - per * items.length;
+  const result = new Map();
+  for (const item of items) {
+    const extra = remaining > 0 ? 1 : 0;
+    if (remaining > 0) remaining -= 1;
+    result.set(item, per + extra);
+  }
+  return result;
+};
+
+const sumWeightMap = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
+  return Object.values(value).reduce((acc, entry) => {
+    const parsed = Number(entry);
+    return acc + (Number.isFinite(parsed) ? parsed : 0);
+  }, 0);
+};
+
+const flowToForm = (flow) => {
+  const tagsMap =
+    flow?.tags && typeof flow.tags === "object" && !Array.isArray(flow.tags)
+      ? flow.tags
+      : {};
+  const relatedMap =
+    flow?.relatedArtists &&
+    typeof flow.relatedArtists === "object" &&
+    !Array.isArray(flow.relatedArtists)
+      ? flow.relatedArtists
+      : {};
+  const tagCount = sumWeightMap(tagsMap);
+  const relatedCount = sumWeightMap(relatedMap);
+  const recipeCounts =
+    flow?.recipe && typeof flow.recipe === "object" && !Array.isArray(flow.recipe)
+      ? flow.recipe
+      : null;
+  const recipeTotal = sumWeightMap(recipeCounts);
+  const rawSize = Number(flow?.size || 0);
+  const size =
+    Number.isFinite(rawSize) && rawSize > 0
+      ? rawSize
+      : recipeTotal > 0
+        ? recipeTotal
+        : DEFAULT_SIZE;
+  const mix = normalizeMixPercent(flow?.mix || DEFAULT_MIX);
+  const preset = getPresetForMix(mix);
+  const focusStrengths = buildFocusStrengthFromCounts(
+    Number.isFinite(size) ? size : 0,
+    tagCount,
+    relatedCount
+  );
+  return {
+    name: flow?.name || "",
+    size: Number.isFinite(size) && size > 0 ? Math.round(size) : DEFAULT_SIZE,
+    mix,
+    mixPreset: preset,
+    deepDive: flow?.deepDive === true,
+    includeTags: Object.keys(tagsMap).join(", "),
+    includeRelatedArtists: Object.keys(relatedMap).join(", "),
+    tagStrength: focusStrengths.tagStrength,
+    relatedStrength: focusStrengths.relatedStrength,
+  };
+};
+
+const buildFlowFromForm = (draft) => {
+  const name = String(draft?.name ?? "").trim();
+  if (!name) {
+    throw new Error("Flow name is required");
+  }
+  const sizeValue = Number(draft?.size);
+  if (!Number.isFinite(sizeValue) || sizeValue <= 0) {
+    throw new Error("Total tracks must be a positive number");
+  }
+  const size = Math.round(sizeValue);
+  const includeTags = parseListInput(draft?.includeTags);
+  const includeRelatedArtists = parseListInput(draft?.includeRelatedArtists);
+  const tagFocusPercent =
+    includeTags.length > 0
+      ? getFocusPercentFromStrength(draft?.tagStrength)
+      : 0;
+  const relatedFocusPercent =
+    includeRelatedArtists.length > 0
+      ? getFocusPercentFromStrength(draft?.relatedStrength)
+      : 0;
+  if (tagFocusPercent + relatedFocusPercent > 100) {
+    throw new Error("Tag and related focus exceeds 100%");
+  }
+  const focusCounts = buildCountsFromFocusPercent(
+    size,
+    tagFocusPercent,
+    relatedFocusPercent
+  );
+  const tagFocus = focusCounts.tag;
+  const relatedFocus = focusCounts.related;
+  const mix = normalizeMixPercent(draft?.mix);
+  const recipe = buildCountsFromMixPercent(size, mix);
+  const tags = {};
+  if (tagFocus > 0 && includeTags.length > 0) {
+    const tagCounts = distributeCount(tagFocus, includeTags);
+    for (const [tag, count] of tagCounts.entries()) {
+      if (count <= 0) continue;
+      tags[tag] = count;
+    }
+  }
+  const relatedArtists = {};
+  if (relatedFocus > 0 && includeRelatedArtists.length > 0) {
+    const relatedCounts = distributeCount(relatedFocus, includeRelatedArtists);
+    for (const [artist, count] of relatedCounts.entries()) {
+      if (count <= 0) continue;
+      relatedArtists[artist] = count;
+    }
+  }
+  return {
+    name,
+    size,
+    mix,
+    recipe,
+    tags,
+    relatedArtists,
+    deepDive: draft?.deepDive === true,
+  };
+};
+
+const normalizeDraftForCompare = (draft) => {
+  const normalizeList = (value) =>
+    parseListInput(value)
+      .map((entry) => entry.toLowerCase())
+      .sort((a, b) => a.localeCompare(b))
+      .join(", ");
+  return {
+    name: String(draft?.name ?? "").trim(),
+    size: Number(draft?.size ?? 0),
+    mix: normalizeMixPercent(draft?.mix),
+    includeTags: normalizeList(draft?.includeTags),
+    includeRelatedArtists: normalizeList(draft?.includeRelatedArtists),
+    tagStrength: draft?.tagStrength ?? "medium",
+    relatedStrength: draft?.relatedStrength ?? "medium",
+    deepDive: draft?.deepDive === true,
+  };
+};
+
+const isFlowDirty = (flow, draft) => {
+  const base = normalizeDraftForCompare(flowToForm(flow));
+  const next = normalizeDraftForCompare(draft);
+  return JSON.stringify(base) !== JSON.stringify(next);
+};
 
 function FlowPage() {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [toggling, setToggling] = useState(null);
-  const [optimisticEnabled, setOptimisticEnabled] = useState({});
-  const [confirmTurnOff, setConfirmTurnOff] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [confirmDisable, setConfirmDisable] = useState(null);
+  const [optimisticEnabled, setOptimisticEnabled] = useState({});
   const [creating, setCreating] = useState(false);
-  const [newFlowName, setNewFlowName] = useState("");
-  const [newFlowSize, setNewFlowSize] = useState(DEFAULT_SIZE);
-  const [newFlowMix, setNewFlowMix] = useState(DEFAULT_MIX);
-  const [newFlowDeepDive, setNewFlowDeepDive] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [editName, setEditName] = useState("");
-  const [editSize, setEditSize] = useState(DEFAULT_SIZE);
-  const [editMix, setEditMix] = useState(DEFAULT_MIX);
-  const [editDeepDive, setEditDeepDive] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
-  const [showNewFlow, setShowNewFlow] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [simpleDrafts, setSimpleDrafts] = useState({});
+  const [simpleErrors, setSimpleErrors] = useState({});
+  const [applyingFlowId, setApplyingFlowId] = useState(null);
   const { showSuccess, showError } = useToast();
 
   const fetchStatus = async () => {
@@ -89,6 +437,28 @@ function FlowPage() {
     return () => clearInterval(interval);
   }, [status?.worker?.running]);
 
+  useEffect(() => {
+    if (!status?.flows?.length) return;
+    setSimpleDrafts((prev) => {
+      const next = { ...prev };
+      for (const flow of status.flows) {
+        const normalized = flowToForm(flow);
+        if (!next[flow.id]) {
+          next[flow.id] = normalized;
+          continue;
+        }
+        const current = next[flow.id];
+        next[flow.id] = {
+          ...normalized,
+          ...current,
+          tagStrength: current.tagStrength ?? normalized.tagStrength,
+          relatedStrength: current.relatedStrength ?? normalized.relatedStrength,
+        };
+      }
+      return next;
+    });
+  }, [status?.flows]);
+
   const getPlaylistStats = (flowId) => {
     if (!status?.jobs)
       return { total: 0, done: 0, failed: 0, pending: 0, downloading: 0 };
@@ -110,114 +480,73 @@ function FlowPage() {
     return "idle";
   };
 
-  const isEnabled = (flowId) =>
-    status?.flows?.find((flow) => flow.id === flowId)?.enabled === true;
+  const handleCancelSimple = (flow) => {
+    setSimpleDrafts((prev) => ({
+      ...prev,
+      [flow.id]: flowToForm(flow),
+    }));
+    setSimpleErrors((prev) => {
+      const next = { ...prev };
+      delete next[flow.id];
+      return next;
+    });
+    setEditingId((prev) => (prev === flow.id ? null : prev));
+  };
 
-  const handleToggle = async (flowId, enabled) => {
-    setOptimisticEnabled((prev) => ({ ...prev, [flowId]: enabled }));
-    setToggling(flowId);
+  const handleApplySimple = async (flow) => {
+    setApplyingFlowId(flow.id);
+    setSimpleErrors((prev) => {
+      const next = { ...prev };
+      delete next[flow.id];
+      return next;
+    });
     try {
-      await setFlowEnabled(flowId, enabled);
-      showSuccess(
-        enabled ? "Flow on" : "Flow off"
-      );
+      const draft = simpleDrafts[flow.id] || flowToForm(flow);
+      const payload = buildFlowFromForm(draft);
+      const response = await updateFlow(flow.id, payload);
+      const updatedFlow = response?.flow || {
+        ...flow,
+        ...payload,
+      };
+      setSimpleDrafts((prev) => ({
+        ...prev,
+        [flow.id]: flowToForm(updatedFlow),
+      }));
+      showSuccess("Flow updated");
       await fetchStatus();
     } catch (err) {
-      setOptimisticEnabled((prev) => {
-        const next = { ...prev };
-        delete next[flowId];
-        return next;
-      });
-      showError(
-        err.response?.data?.message || err.message || "Failed to update"
-      );
+      const message =
+        err.response?.data?.message || err.message || "Failed to update flow";
+      setSimpleErrors((prev) => ({ ...prev, [flow.id]: message }));
+      showError(message);
     } finally {
-      setToggling(null);
+      setApplyingFlowId(null);
     }
   };
 
-  const handleSwitchChange = (flow, checked) => {
-    if (checked) {
-      handleToggle(flow.id, true);
-    } else {
-      setConfirmTurnOff({
-        flowId: flow.id,
-        title: flow.name,
-      });
-    }
-  };
-
-  const handleConfirmTurnOff = async () => {
-    if (!confirmTurnOff) return;
-    await handleToggle(confirmTurnOff.flowId, false);
-    setConfirmTurnOff(null);
-  };
-  const handleCreateFlow = async () => {
-    const name = newFlowName.trim();
-    if (!name) {
-      showError("Flow name required");
-      return;
-    }
+  const handleCreateInline = async () => {
+    if (creating) return;
     setCreating(true);
     try {
-      await createFlow({
-        name,
-        size: newFlowSize,
-        mix: newFlowMix,
-        deepDive: newFlowDeepDive,
-      });
-      setNewFlowName("");
-      setNewFlowSize(DEFAULT_SIZE);
-      setNewFlowMix(DEFAULT_MIX);
-      setNewFlowDeepDive(false);
-      setShowNewFlow(false);
+      const draft = flowToForm(NEW_FLOW_TEMPLATE);
+      const payload = buildFlowFromForm(draft);
+      const response = await createFlow(payload);
+      const createdFlow = response?.flow;
+      if (createdFlow?.id) {
+        setSimpleDrafts((prev) => ({
+          ...prev,
+          [createdFlow.id]: flowToForm(createdFlow),
+        }));
+        setEditingId(createdFlow.id);
+      }
       showSuccess("Flow created");
       await fetchStatus();
     } catch (err) {
-      showError(
-        err.response?.data?.message || err.message || "Failed to create flow"
-      );
+      const message =
+        err.response?.data?.message || err.message || "Failed to create flow";
+      showError(message);
     } finally {
       setCreating(false);
-    }
-  };
-
-  const startEdit = (flow) => {
-    setEditingId(flow.id);
-    setEditName(flow.name || "");
-    setEditSize(flow.size || DEFAULT_SIZE);
-    setEditMix(flow.mix || DEFAULT_MIX);
-    setEditDeepDive(flow.deepDive === true);
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditName("");
-    setEditSize(DEFAULT_SIZE);
-    setEditMix(DEFAULT_MIX);
-    setEditDeepDive(false);
-  };
-
-  const saveEdit = async (flowId) => {
-    const name = editName.trim();
-    if (!name) {
-      showError("Flow name required");
-      return;
-    }
-    try {
-      await updateFlow(flowId, {
-        name,
-        size: editSize,
-        mix: editMix,
-        deepDive: editDeepDive,
-      });
-      showSuccess("Flow updated");
-      setEditingId(null);
-      await fetchStatus();
-    } catch (err) {
-      showError(
-        err.response?.data?.message || err.message || "Failed to update flow"
-      );
     }
   };
 
@@ -245,24 +574,53 @@ function FlowPage() {
     setConfirmDelete(null);
   };
 
+  const handleToggleEnabled = async (flow, nextEnabled) => {
+    setTogglingId(flow.id);
+    try {
+      await setFlowEnabled(flow.id, nextEnabled);
+      showSuccess(nextEnabled ? "Flow enabled" : "Flow disabled");
+      await fetchStatus();
+    } catch (err) {
+      showError(
+        err.response?.data?.message || err.message || "Failed to update flow"
+      );
+    } finally {
+      setOptimisticEnabled((prev) => {
+        const next = { ...prev };
+        delete next[flow.id];
+        return next;
+      });
+      setTogglingId(null);
+    }
+  };
+
+  const handleToggleRequest = (flow, nextEnabled) => {
+    if (!nextEnabled) {
+      setConfirmDisable({ flowId: flow.id, title: flow.name });
+      return;
+    }
+    setOptimisticEnabled((prev) => ({ ...prev, [flow.id]: true }));
+    handleToggleEnabled(flow, true);
+  };
+
+  const handleConfirmDisable = async () => {
+    if (!confirmDisable) return;
+    const flow = flowList.find((entry) => entry.id === confirmDisable.flowId);
+    if (flow) {
+      setOptimisticEnabled((prev) => ({ ...prev, [flow.id]: false }));
+      await handleToggleEnabled(flow, false);
+    }
+    setConfirmDisable(null);
+  };
+
   const flowList = status?.flows || [];
-  const enabledCount = flowList.filter(
-    (flow) => (optimisticEnabled[flow.id] ?? flow.enabled) === true
-  ).length;
+  const enabledCount = flowList.filter((flow) => flow.enabled === true).length;
   const runningCount = flowList.filter(
     (flow) => getPlaylistState(flow.id) === "running"
   ).length;
   const completedCount = flowList.filter(
     (flow) => getPlaylistState(flow.id) === "completed"
   ).length;
-  const newTotal = getMixTotal(newFlowMix);
-  const editTotal = getMixTotal(editMix);
-  const newRemaining = 100 - newTotal;
-  const editRemaining = 100 - editTotal;
-  const newScale = newTotal > 100 ? 100 / newTotal : 1;
-  const editScale = editTotal > 100 ? 100 / editTotal : 1;
-
-
   if (loading && !status) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -273,109 +631,17 @@ function FlowPage() {
 
   return (
     <div className="flow-page max-w-6xl mx-auto px-4 pb-10">
-      <div className="flex flex-col gap-4 mb-6 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="p-2 rounded-lg bg-white/5 border border-white/5">
-            <AudioWaveform className="w-5 h-5 text-[#9aa886]" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold text-white">Flow</h1>
-            <p className="text-sm text-[#c1c1c3]">
-              Create configurable weekly flows and blend Discover, Mix, and
-              Trending into playlists.
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => setShowNewFlow(true)}
-            className="btn btn-primary btn-sm"
-          >
-            + New Flow
-          </button>
-        </div>
-      </div>
+      <FlowPageHeader
+        onNewFlow={handleCreateInline}
+      />
 
-      <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr] mb-6">
-        <div className="p-4 bg-card rounded-lg border border-white/5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs uppercase tracking-[0.3em] text-[#8b8b90]">
-              Worker
-            </span>
-            <span
-              className={`badge ${
-                status?.worker?.running ? "badge-success" : "badge-neutral"
-              }`}
-            >
-              {status?.worker?.running ? "Running" : "Stopped"}
-            </span>
-          </div>
-          <div className="mt-3 flex items-center gap-3">
-            {status?.worker?.running ? (
-              <Loader2 className="w-4 h-4 animate-spin text-[#9aa886]" />
-            ) : (
-              <Clock className="w-4 h-4 text-[#c1c1c3]" />
-            )}
-            <div className="text-sm text-white">
-              {status?.worker?.running
-                ? `Worker ${
-                    status?.worker?.processing ? "processing…" : "running"
-                  }`
-                : "Worker stopped"}
-            </div>
-          </div>
-          {status?.stats && (
-            <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-[#c1c1c3]">
-              <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-                <span>Done</span>
-                <span className="text-white">{status.stats.done}</span>
-              </div>
-              <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-                <span>Failed</span>
-                <span className="text-white">{status.stats.failed}</span>
-              </div>
-              <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-                <span>Pending</span>
-                <span className="text-white">{status.stats.pending}</span>
-              </div>
-              <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-                <span>Downloading</span>
-                <span className="text-white">{status.stats.downloading}</span>
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="p-4 bg-card rounded-lg border border-white/5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs uppercase tracking-[0.3em] text-[#8b8b90]">
-              Flows
-            </span>
-            <span className="text-xs text-[#c1c1c3]">
-              {enabledCount}/{flowList.length} on
-            </span>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[#c1c1c3]">
-            <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-              <span>Total</span>
-              <span className="text-white">{flowList.length}</span>
-            </div>
-            <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-              <span>Running</span>
-              <span className="text-white">{runningCount}</span>
-            </div>
-            <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-              <span>Completed</span>
-              <span className="text-white">{completedCount}</span>
-            </div>
-            <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-              <span>Idle</span>
-              <span className="text-white">
-                {Math.max(flowList.length - runningCount - completedCount, 0)}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <FlowStatusCards
+        status={status}
+        enabledCount={enabledCount}
+        flowCount={flowList.length}
+        runningCount={runningCount}
+        completedCount={completedCount}
+      />
 
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-xs uppercase tracking-[0.35em] text-[#8b8b90]">
@@ -388,560 +654,92 @@ function FlowPage() {
 
       <div className="space-y-3">
         {flowList.length === 0 && (
-          <div className="p-4 bg-card rounded-lg border border-white/5 text-sm text-[#c1c1c3]">
-            No flows yet. Create one to start building weekly playlists.
-          </div>
+          <FlowEmptyState onCreate={handleCreateInline} creating={creating} />
         )}
         {flowList.map((flow) => {
           const stats = getPlaylistStats(flow.id);
           const state = getPlaylistState(flow.id);
-          const enabled = optimisticEnabled[flow.id] ?? isEnabled(flow.id);
+          const optimisticValue = optimisticEnabled[flow.id];
+          const enabled =
+            typeof optimisticValue === "boolean"
+              ? optimisticValue
+              : flow.enabled === true;
           const nextRun = formatNextRun(flow.nextRunAt);
-          const isToggling = toggling === flow.id;
           const isEditing = editingId === flow.id;
-          const hasChanges =
-            String(editName || "").trim() !== String(flow.name || "").trim() ||
-            Number(editSize) !== Number(flow.size || DEFAULT_SIZE) ||
-            (editMix?.discover ?? DEFAULT_MIX.discover) !==
-              (flow.mix?.discover ?? DEFAULT_MIX.discover) ||
-            (editMix?.mix ?? DEFAULT_MIX.mix) !==
-              (flow.mix?.mix ?? DEFAULT_MIX.mix) ||
-            (editMix?.trending ?? DEFAULT_MIX.trending) !==
-              (flow.mix?.trending ?? DEFAULT_MIX.trending) ||
-            editDeepDive !== (flow.deepDive === true);
-          const stateLabel =
-            state === "running"
-              ? "Running"
-              : state === "completed"
-                ? "Completed"
-                : "Idle";
-          const stateBadge =
-            state === "running"
-              ? "badge-success"
-              : state === "completed"
-                ? "badge-primary"
-                : "badge-neutral";
-
+          const simpleDraft = simpleDrafts[flow.id] ?? flowToForm(flow);
+          const simpleError = simpleErrors[flow.id];
+          const simpleSize = Number(simpleDraft?.size ?? 0);
+          const simpleMixSize = Number.isFinite(simpleSize) ? simpleSize : 0;
+          const isApplying = applyingFlowId === flow.id;
+          const hasChanges = isFlowDirty(flow, simpleDraft);
           return (
-            <div
+            <FlowCard
               key={flow.id}
-              className="bg-card rounded-lg border border-white/5 overflow-hidden"
-            >
-              <div
-                className={`px-4 ${isEditing ? "py-3" : "py-2"} flex flex-col ${
-                  isEditing ? "gap-3" : "gap-2"
-                } md:flex-row md:items-center md:justify-between`}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-sm font-semibold text-white truncate">
-                      {flow.name}
-                    </h3>
-                    <span className={`badge ${stateBadge}`}>{stateLabel}</span>
-                    <span
-                      className={`badge ${
-                        enabled ? "badge-success" : "badge-neutral"
-                      }`}
-                    >
-                      {enabled ? "On" : "Off"}
-                    </span>
-                    {isToggling && (
-                      <Loader2 className="w-4 h-4 animate-spin text-[#707e61]" />
-                    )}
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[#c1c1c3]">
-                    <span>{flow.size} tracks</span>
-                    <span>·</span>
-                    <span>{flow.mix?.discover ?? 0}% Discover</span>
-                    <span>·</span>
-                    <span>{flow.mix?.mix ?? 0}% Mix</span>
-                    <span>·</span>
-                    <span>{flow.mix?.trending ?? 0}% Trending</span>
-                    <span>·</span>
-                    <span>{flow.deepDive ? "Deep dive" : "Top picks"}</span>
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#c1c1c3]">
-                    {state === "running" && (
-                      <span className="inline-flex items-center gap-1.5 text-[#9aa886]">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        {stats.done + stats.failed}/{stats.total}
-                      </span>
-                    )}
-                    {state === "completed" && stats.total > 0 && (
-                      <span className="inline-flex items-center gap-1.5 text-[#9aa886]">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        {stats.done} done
-                        {stats.failed > 0 && ` · ${stats.failed} failed`}
-                      </span>
-                    )}
-                    {enabled && nextRun && <span>{nextRun}</span>}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 md:justify-end">
-                  <button
-                    onClick={() => (isEditing ? cancelEdit() : startEdit(flow))}
-                    className="btn btn-secondary btn-sm"
-                  >
-                    {isEditing ? "Close" : "Edit"}
-                  </button>
-                  <PowerSwitch
-                    checked={enabled}
-                    onChange={(e) =>
-                      handleSwitchChange(flow, e.target.checked)
-                    }
-                  />
-                </div>
-              </div>
-
-              {isEditing && (
-                <div className="px-4 pb-4">
-                  <div className="card-separator mb-4" />
-                  <div className="grid gap-4 md:grid-cols-[1.1fr_1.2fr]">
-                    <div className="grid gap-3">
-                      <div>
-                        <label className="text-xs uppercase tracking-[0.3em] text-[#8b8b90]">
-                          Flow name
-                        </label>
-                        <div className="mt-2 flex items-center w-full rounded bg-white/5 border border-white/10 text-white overflow-hidden">
-                          <span className="px-3 text-[#c1c1c3] whitespace-nowrap">
-                            Aurral-
-                          </span>
-                          <input
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            className="flex-1 px-3 py-2 bg-transparent text-white outline-none text-sm"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between text-xs text-[#c1c1c3]">
-                          <span>Playlist size</span>
-                          <span className="text-white">{editSize} tracks</span>
-                        </div>
-                        <input
-                          type="range"
-                          min={MIN_SIZE}
-                          max={MAX_SIZE}
-                          value={editSize}
-                          onChange={(e) => setEditSize(Number(e.target.value))}
-                          className="flow-slider w-full mt-2"
-                        />
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between text-xs text-[#c1c1c3]">
-                          <span>B-sides / deep dive</span>
-                          <PillToggle
-                            checked={editDeepDive}
-                            onChange={(e) => setEditDeepDive(e.target.checked)}
-                          />
-                        </div>
-                        <div className="mt-2 text-xs text-[#8b8b90]">
-                          Pull tracks 10–25 per artist
-                        </div>
-                      </div>
-                    </div>
-                    <div className="grid gap-3">
-                      <div className="flex items-center justify-between text-xs text-[#c1c1c3]">
-                        <span>Mix balance</span>
-                        <span
-                          className={
-                            editTotal === 100 ? "text-[#c1c1c3]" : "text-red-400"
-                          }
-                        >
-                          Total {editTotal}%
-                        </span>
-                      </div>
-                      <div className="text-xs text-[#8b8b90]">
-                        Discover pulls from your recommended artists, Mix blends
-                        your library with fresh picks, Trending follows global
-                        charts.
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1">
-                          <label className="text-[11px] uppercase tracking-[0.2em] text-[#8b8b90]">
-                            Discover
-                          </label>
-                          <div className="mt-2 flex items-center gap-2">
-                            <Sparkles className="w-3.5 h-3.5 text-[#707e61]" />
-                            <input
-                              type="number"
-                              min={0}
-                              max={100}
-                              value={editMix.discover}
-                              onChange={(e) =>
-                                setEditMix(
-                                  updateMixValue(
-                                    editMix,
-                                    "discover",
-                                    e.target.value
-                                  )
-                                )
-                              }
-                              className="w-full h-8 rounded bg-white/5 border border-white/10 px-2 text-sm text-white outline-none"
-                            />
-                            <span className="text-xs text-[#c1c1c3]">%</span>
-                          </div>
-                        </div>
-                        <div className="flex-1">
-                          <label className="text-[11px] uppercase tracking-[0.2em] text-[#8b8b90]">
-                            Mix
-                          </label>
-                          <div className="mt-2 flex items-center gap-2">
-                            <Music2 className="w-3.5 h-3.5 text-[#707e61]" />
-                            <input
-                              type="number"
-                              min={0}
-                              max={100}
-                              value={editMix.mix}
-                              onChange={(e) =>
-                                setEditMix(
-                                  updateMixValue(editMix, "mix", e.target.value)
-                                )
-                              }
-                              className="w-full h-8 rounded bg-white/5 border border-white/10 px-2 text-sm text-white outline-none"
-                            />
-                            <span className="text-xs text-[#c1c1c3]">%</span>
-                          </div>
-                        </div>
-                        <div className="flex-1">
-                          <label className="text-[11px] uppercase tracking-[0.2em] text-[#8b8b90]">
-                            Trending
-                          </label>
-                          <div className="mt-2 flex items-center gap-2">
-                            <TrendingUp className="w-3.5 h-3.5 text-[#707e61]" />
-                            <input
-                              type="number"
-                              min={0}
-                              max={100}
-                              value={editMix.trending}
-                              onChange={(e) =>
-                                setEditMix(
-                                  updateMixValue(
-                                    editMix,
-                                    "trending",
-                                    e.target.value
-                                  )
-                                )
-                              }
-                              className="w-full h-8 rounded bg-white/5 border border-white/10 px-2 text-sm text-white outline-none"
-                            />
-                            <span className="text-xs text-[#c1c1c3]">%</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="h-2 w-full rounded-full bg-white/5 overflow-hidden flex">
-                        <div
-                          className="h-full bg-[#707e61]"
-                          style={{ width: `${(editMix.discover ?? 0) * editScale}%` }}
-                        />
-                        <div
-                          className="h-full bg-[#4a5162]"
-                          style={{ width: `${(editMix.mix ?? 0) * editScale}%` }}
-                        />
-                        <div
-                          className="h-full bg-[#7b7f8a]"
-                          style={{ width: `${(editMix.trending ?? 0) * editScale}%` }}
-                        />
-                      </div>
-                      <div className="text-xs text-[#c1c1c3]">
-                        {editRemaining === 0
-                          ? "Balanced at 100%"
-                          : editRemaining > 0
-                            ? `${editRemaining}% remaining`
-                            : `${Math.abs(editRemaining)}% over`}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex items-center justify-between gap-2">
-                    <button
-                      onClick={() => handleDelete(flow)}
-                      className="btn btn-danger btn-sm flex items-center gap-2"
-                      disabled={deletingId === flow.id}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      <span>
-                        {deletingId === flow.id ? "Deleting..." : "Delete"}
-                      </span>
-                    </button>
-                    <button
-                      onClick={() => saveEdit(flow.id)}
-                      className="btn btn-primary btn-sm"
-                      disabled={!hasChanges || editTotal !== 100}
-                    >
-                      Save changes
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+              flow={flow}
+              enabled={enabled}
+              state={state}
+              stats={stats}
+              nextRun={nextRun}
+              isEditing={isEditing}
+              simpleDraft={simpleDraft}
+              simpleRemaining={simpleMixSize}
+              simpleError={simpleError}
+              isApplying={isApplying}
+              hasChanges={hasChanges}
+              togglingId={togglingId}
+              deletingId={deletingId}
+              onToggleEditing={() =>
+                setEditingId((prev) => {
+                  const next = prev === flow.id ? null : flow.id;
+                  if (next) {
+                    setSimpleErrors((prevErrors) => {
+                      const nextErrors = { ...prevErrors };
+                      delete nextErrors[flow.id];
+                      return nextErrors;
+                    });
+                  }
+                  return next;
+                })
+              }
+              onToggleEnabled={(checked) => handleToggleRequest(flow, checked)}
+              onDelete={() => handleDelete(flow)}
+              onCancel={() => handleCancelSimple(flow)}
+              onApply={() => handleApplySimple(flow)}
+              onDraftChange={(updater) =>
+                setSimpleDrafts((prev) => {
+                  const base = prev[flow.id] ?? simpleDraft;
+                  return { ...prev, [flow.id]: updater(base) };
+                })
+              }
+              onClearError={() => {
+                if (simpleErrors[flow.id]) {
+                  setSimpleErrors((prev) => {
+                    const next = { ...prev };
+                    delete next[flow.id];
+                    return next;
+                  });
+                }
+              }}
+              mixPresets={MIX_PRESETS}
+              focusOptions={FOCUS_OPTIONS}
+              normalizeMixPercent={normalizeMixPercent}
+            />
           );
         })}
       </div>
 
-      <div className="mt-8 p-4 bg-white/5 rounded-lg border border-white/5">
-        <p className="text-sm text-[#c1c1c3]">
-          <strong className="text-white">Coming later:</strong> Pin playlists
-          from Discover (“because you like X”) and tag searches to build custom
-          Flow playlists by genre and tags.
-        </p>
-      </div>
-
-      {confirmTurnOff && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
-          onClick={() => setConfirmTurnOff(null)}
-        >
-          <div
-            className="card max-w-md w-full mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-xl font-bold mb-2 text-white">
-              Turn off {confirmTurnOff.title}?
-            </h3>
-            <p className="text-[#c1c1c3] mb-6">
-              This flow will stop running and won&apos;t refresh until you turn
-              it back on.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setConfirmTurnOff(null)}
-                className="btn btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmTurnOff}
-                className="btn btn-primary"
-                style={{ backgroundColor: "#ef4444" }}
-              >
-                Turn off
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {confirmDelete && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
-          onClick={() => setConfirmDelete(null)}
-        >
-          <div
-            className="card max-w-md w-full mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-xl font-bold mb-2 text-white">
-              Delete {confirmDelete.title}?
-            </h3>
-            <p className="text-[#c1c1c3] mb-6">
-              This removes the flow and its playlist setup. You can recreate it
-              later.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setConfirmDelete(null)}
-                className="btn btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmDelete}
-                className="btn btn-primary"
-                style={{ backgroundColor: "#ef4444" }}
-                disabled={deletingId === confirmDelete.flowId}
-              >
-                {deletingId === confirmDelete.flowId ? "Deleting..." : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {showNewFlow && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
-          onClick={() => setShowNewFlow(false)}
-        >
-          <div
-            className="card max-w-xl w-full mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-white">New Flow</h3>
-            </div>
-            <div className="grid gap-3">
-              <div>
-                <label className="text-xs uppercase tracking-[0.3em] text-[#8b8b90]">
-                  Flow name
-                </label>
-                <div className="mt-2 flex items-center w-full rounded bg-white/5 border border-white/10 text-white overflow-hidden">
-                  <span className="px-3 text-[#c1c1c3] whitespace-nowrap">
-                    Aurral-
-                  </span>
-                  <input
-                    value={newFlowName}
-                    onChange={(e) => setNewFlowName(e.target.value)}
-                    className="flex-1 px-3 py-2 bg-transparent text-white outline-none"
-                    placeholder="Mega Mix"
-                  />
-                </div>
-              </div>
-              <div>
-                <div className="flex items-center justify-between text-xs text-[#c1c1c3]">
-                  <span>Playlist size</span>
-                  <span className="text-white">{newFlowSize} tracks</span>
-                </div>
-                <input
-                  type="range"
-                  min={MIN_SIZE}
-                  max={MAX_SIZE}
-                  value={newFlowSize}
-                  onChange={(e) => setNewFlowSize(Number(e.target.value))}
-                  className="flow-slider w-full mt-2"
-                />
-              </div>
-              <div>
-                <div className="flex items-center justify-between text-xs text-[#c1c1c3]">
-                  <span>B-sides / deep dive</span>
-                  <PillToggle
-                    checked={newFlowDeepDive}
-                    onChange={(e) => setNewFlowDeepDive(e.target.checked)}
-                  />
-                </div>
-                <div className="mt-2 text-xs text-[#8b8b90]">
-                  Pull tracks 10–25 per artist
-                </div>
-              </div>
-              <div className="grid gap-3">
-                <div className="flex items-center justify-between text-xs text-[#c1c1c3]">
-                  <span>Mix balance</span>
-                  <span
-                    className={
-                      newTotal === 100 ? "text-[#c1c1c3]" : "text-red-400"
-                    }
-                  >
-                    Total {newTotal}%
-                  </span>
-                </div>
-                <div className="text-xs text-[#8b8b90]">
-                  Discover pulls from your recommended artists, Mix blends your
-                  library with fresh picks, Trending follows global charts.
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1">
-                    <label className="text-[11px] uppercase tracking-[0.2em] text-[#8b8b90]">
-                      Discover
-                    </label>
-                    <div className="mt-2 flex items-center gap-2">
-                      <Sparkles className="w-3.5 h-3.5 text-[#707e61]" />
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={newFlowMix.discover}
-                        onChange={(e) =>
-                          setNewFlowMix(
-                            updateMixValue(
-                              newFlowMix,
-                              "discover",
-                              e.target.value
-                            )
-                          )
-                        }
-                        className="w-full h-8 rounded bg-white/5 border border-white/10 px-2 text-sm text-white outline-none"
-                      />
-                      <span className="text-xs text-[#c1c1c3]">%</span>
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-[11px] uppercase tracking-[0.2em] text-[#8b8b90]">
-                      Mix
-                    </label>
-                    <div className="mt-2 flex items-center gap-2">
-                      <Music2 className="w-3.5 h-3.5 text-[#707e61]" />
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={newFlowMix.mix}
-                        onChange={(e) =>
-                          setNewFlowMix(
-                            updateMixValue(newFlowMix, "mix", e.target.value)
-                          )
-                        }
-                        className="w-full h-8 rounded bg-white/5 border border-white/10 px-2 text-sm text-white outline-none"
-                      />
-                      <span className="text-xs text-[#c1c1c3]">%</span>
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-[11px] uppercase tracking-[0.2em] text-[#8b8b90]">
-                      Trending
-                    </label>
-                    <div className="mt-2 flex items-center gap-2">
-                      <TrendingUp className="w-3.5 h-3.5 text-[#707e61]" />
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={newFlowMix.trending}
-                        onChange={(e) =>
-                          setNewFlowMix(
-                            updateMixValue(
-                              newFlowMix,
-                              "trending",
-                              e.target.value
-                            )
-                          )
-                        }
-                        className="w-full h-8 rounded bg-white/5 border border-white/10 px-2 text-sm text-white outline-none"
-                      />
-                      <span className="text-xs text-[#c1c1c3]">%</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="h-2 w-full rounded-full bg-white/5 overflow-hidden flex">
-                  <div
-                    className="h-full bg-[#707e61]"
-                    style={{ width: `${(newFlowMix.discover ?? 0) * newScale}%` }}
-                  />
-                  <div
-                    className="h-full bg-[#4a5162]"
-                    style={{ width: `${(newFlowMix.mix ?? 0) * newScale}%` }}
-                  />
-                  <div
-                    className="h-full bg-[#7b7f8a]"
-                    style={{ width: `${(newFlowMix.trending ?? 0) * newScale}%` }}
-                  />
-                </div>
-                <div className="text-xs text-[#c1c1c3]">
-                  {newRemaining === 0
-                    ? "Balanced at 100%"
-                    : newRemaining > 0
-                      ? `${newRemaining}% remaining`
-                      : `${Math.abs(newRemaining)}% over`}
-                </div>
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => setShowNewFlow(false)}
-                  className="btn btn-secondary btn-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleCreateFlow}
-                  className="btn btn-primary btn-sm"
-                  disabled={creating || newTotal !== 100 || !newFlowName.trim()}
-                >
-                  {creating ? "Saving..." : "Save Flow"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDeleteModal
+        confirmDelete={confirmDelete}
+        deletingId={deletingId}
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={handleConfirmDelete}
+      />
+      <ConfirmDisableModal
+        confirmDisable={confirmDisable}
+        togglingId={togglingId}
+        onCancel={() => setConfirmDisable(null)}
+        onConfirm={handleConfirmDisable}
+      />
     </div>
   );
 }

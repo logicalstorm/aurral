@@ -152,6 +152,10 @@ export default function registerArtists(router) {
         const settings = dbOps.getSettings();
         const defaultMonitorOption =
           settings.integrations?.lidarr?.defaultMonitorOption || "none";
+        const { lidarrClient } =
+          await import("../../../services/lidarrClient.js");
+        if (!lidarrClient || !lidarrClient.isConfigured()) {
+          return res.status(503).json({ error: "Lidarr is not configured" });
         const artist = await libraryManager.addArtist(mbid, artistName, {
           quality: quality || settings.quality || "standard",
           monitorOption: monitorOption ?? defaultMonitorOption,
@@ -162,7 +166,25 @@ export default function registerArtists(router) {
             message: artist.error,
           });
         }
-        res.status(201).json(artist);
+
+        res.status(202).json({
+          queued: true,
+          foreignArtistId: mbid,
+          artistName,
+        });
+
+        (async () => {
+          const artist = await libraryManager.addArtist(mbid, artistName, {
+            quality: quality || settings.quality || "standard",
+            monitorOption: monitorOption ?? defaultMonitorOption,
+          });
+          if (artist?.error) {
+            console.error(
+              `[Library] Failed to add artist ${artistName}:`,
+              artist.error,
+            );
+          }
+        })();
       } catch (error) {
         res.status(500).json({
           error: "Failed to add artist",

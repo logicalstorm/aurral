@@ -59,10 +59,12 @@ export class WeeklyFlowPlaylistManager {
   async ensureSmartPlaylists() {
     const flows = flowPlaylistConfig.getFlows();
     let libraryId = null;
-    try {
-      if (this.navidromeClient?.isConfigured()) {
+    let playlists = null;
+    if (this.navidromeClient?.isConfigured()) {
+      try {
         const hostPath = this._getWeeklyFlowLibraryHostPath();
-        const library = await this.navidromeClient.ensureWeeklyFlowLibrary(hostPath);
+        const library =
+          await this.navidromeClient.ensureWeeklyFlowLibrary(hostPath);
         if (library != null && (library.id !== undefined && library.id !== null)) {
           libraryId = library.id;
         } else if (library != null) {
@@ -70,20 +72,25 @@ export class WeeklyFlowPlaylistManager {
             "[WeeklyFlowPlaylistManager] Aurral library has no id; smart playlists will not be scoped by library."
           );
         }
+      } catch (err) {
+        console.warn(
+          "[WeeklyFlowPlaylistManager] ensureWeeklyFlowLibrary failed:",
+          err?.message
+        );
       }
+      try {
+        const raw = await this.navidromeClient.getPlaylists();
+        playlists = Array.isArray(raw) ? raw : raw ? [raw] : [];
+      } catch (err) {
+        console.warn(
+          "[WeeklyFlowPlaylistManager] getPlaylists failed:",
+          err?.message
+        );
+      }
+    }
+
+    try {
       await fs.mkdir(this.libraryRoot, { recursive: true });
-      let playlists = null;
-      if (this.navidromeClient?.isConfigured()) {
-        try {
-          const raw = await this.navidromeClient.getPlaylists();
-          playlists = Array.isArray(raw) ? raw : raw ? [raw] : [];
-        } catch (err) {
-          console.warn(
-            "[WeeklyFlowPlaylistManager] getPlaylists failed:",
-            err?.message
-          );
-        }
-      }
       const existingFiles = await fs.readdir(this.libraryRoot).catch(() => []);
       const expectedFiles = new Set();
       for (const flow of flows) {
@@ -142,12 +149,6 @@ export class WeeklyFlowPlaylistManager {
     if (!this.navidromeClient?.isConfigured()) return null;
     return this.navidromeClient.scanLibrary();
   }
-
-  async createSymlink(sourcePath, playlistType) {
-    return null;
-  }
-
-  async removeDiscoverSymlinksForAlbum(artistName, albumName) {}
 
   async weeklyReset(playlistTypes = null) {
     const targets =
