@@ -377,6 +377,30 @@ const buildFlowFromForm = (draft) => {
   };
 };
 
+const normalizeDraftForCompare = (draft) => {
+  const normalizeList = (value) =>
+    parseListInput(value)
+      .map((entry) => entry.toLowerCase())
+      .sort((a, b) => a.localeCompare(b))
+      .join(", ");
+  return {
+    name: String(draft?.name ?? "").trim(),
+    size: Number(draft?.size ?? 0),
+    mix: normalizeMixPercent(draft?.mix),
+    includeTags: normalizeList(draft?.includeTags),
+    includeRelatedArtists: normalizeList(draft?.includeRelatedArtists),
+    tagStrength: draft?.tagStrength ?? "medium",
+    relatedStrength: draft?.relatedStrength ?? "medium",
+    deepDive: draft?.deepDive === true,
+  };
+};
+
+const isFlowDirty = (flow, draft) => {
+  const base = normalizeDraftForCompare(flowToForm(flow));
+  const next = normalizeDraftForCompare(draft);
+  return JSON.stringify(base) !== JSON.stringify(next);
+};
+
 function FlowPage() {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -647,6 +671,7 @@ function FlowPage() {
           const simpleSize = Number(simpleDraft?.size ?? 0);
           const simpleMixSize = Number.isFinite(simpleSize) ? simpleSize : 0;
           const isApplying = applyingFlowId === flow.id;
+          const hasChanges = isFlowDirty(flow, simpleDraft);
           return (
             <FlowCard
               key={flow.id}
@@ -660,6 +685,7 @@ function FlowPage() {
               simpleRemaining={simpleMixSize}
               simpleError={simpleError}
               isApplying={isApplying}
+              hasChanges={hasChanges}
               togglingId={togglingId}
               deletingId={deletingId}
               onToggleEditing={() =>
