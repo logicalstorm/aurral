@@ -197,25 +197,6 @@ router.put("/flows/:flowId/enabled", async (req, res) => {
       await playlistManager.weeklyReset([flowId]);
       downloadTracker.clearByPlaylistType(flowId);
 
-      const tracks = await playlistSource.getTracksForFlow(flow);
-      if (tracks.length === 0) {
-        flowPlaylistConfig.setEnabled(flowId, true);
-        flowPlaylistConfig.scheduleNextRun(flowId);
-        await playlistManager.ensureSmartPlaylists();
-        return res.json({
-          success: true,
-          flowId,
-          enabled: true,
-          tracksQueued: 0,
-          message: "Flow enabled; no tracks available yet.",
-        });
-      }
-
-      downloadTracker.addJobs(tracks, flowId);
-      if (!weeklyFlowWorker.running) {
-        await weeklyFlowWorker.start();
-      }
-
       flowPlaylistConfig.setEnabled(flowId, true);
       flowPlaylistConfig.scheduleNextRun(flowId);
 
@@ -225,8 +206,25 @@ router.put("/flows/:flowId/enabled", async (req, res) => {
         success: true,
         flowId,
         enabled: true,
-        tracksQueued: tracks.length,
+        tracksQueued: 0,
+        message: "Flow enabled. Tracks will start queueing shortly.",
       });
+
+      (async () => {
+        try {
+          const tracks = await playlistSource.getTracksForFlow(flow);
+          if (tracks.length === 0) return;
+          downloadTracker.addJobs(tracks, flowId);
+          if (!weeklyFlowWorker.running) {
+            await weeklyFlowWorker.start();
+          }
+        } catch (error) {
+          console.error(
+            `[WeeklyFlow] Failed to generate tracks for ${flowId}:`,
+            error.message,
+          );
+        }
+      })();
     } else {
       weeklyFlowWorker.stop();
       playlistManager.updateConfig();
