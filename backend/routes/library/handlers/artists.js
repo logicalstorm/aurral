@@ -156,6 +156,15 @@ export default function registerArtists(router) {
           await import("../../../services/lidarrClient.js");
         if (!lidarrClient || !lidarrClient.isConfigured()) {
           return res.status(503).json({ error: "Lidarr is not configured" });
+        const artist = await libraryManager.addArtist(mbid, artistName, {
+          quality: quality || settings.quality || "standard",
+          monitorOption: monitorOption ?? defaultMonitorOption,
+        });
+        if (artist?.error) {
+          return res.status(503).json({
+            error: artist.error,
+            message: artist.error,
+          });
         }
 
         res.status(202).json({
@@ -198,7 +207,10 @@ export default function registerArtists(router) {
 
         const artist = await libraryManager.updateArtist(mbid, req.body);
         if (artist?.error) {
-          return res.status(503).json({ error: artist.error });
+          return res.status(503).json({
+            error: artist.error,
+            message: artist.error,
+          });
         }
         const { lidarrClient } =
           await import("../../../services/lidarrClient.js");
@@ -240,9 +252,8 @@ export default function registerArtists(router) {
           deleteFiles === "true",
         );
         if (!result?.success) {
-          return res
-            .status(503)
-            .json({ error: result?.error || "Failed to delete artist" });
+          const message = result?.error || "Failed to delete artist";
+          return res.status(503).json({ error: message, message });
         }
         res.json({ success: true, message: "Artist deleted successfully" });
       } catch (error) {
@@ -268,16 +279,6 @@ export default function registerArtists(router) {
 
       const { lidarrClient } =
         await import("../../../services/lidarrClient.js");
-      if (lidarrClient && lidarrClient.isConfigured()) {
-        const lidarrArtist = await lidarrClient.getArtist(artist.id);
-        if (
-          lidarrArtist &&
-          lidarrArtist.monitor !== "none" &&
-          lidarrArtist.monitored
-        ) {
-          await libraryManager.fetchArtistAlbums(artist.id, mbid);
-        }
-      }
 
       const albums = await libraryManager.getAlbums(artist.id);
 
@@ -294,7 +295,16 @@ export default function registerArtists(router) {
 
       await libraryManager.updateArtistStatistics(artist.id);
 
-      await monitorArtistAlbums(artist, albums, lidarrClient);
+      if (lidarrClient && lidarrClient.isConfigured()) {
+        const lidarrArtist = await lidarrClient.getArtist(artist.id);
+        if (
+          lidarrArtist &&
+          lidarrArtist.monitor !== "none" &&
+          lidarrArtist.monitored
+        ) {
+          await lidarrClient.triggerArtistSearch(artist.id);
+        }
+      }
 
       res.json({
         success: true,
