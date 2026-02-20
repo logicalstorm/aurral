@@ -5,10 +5,31 @@ import {
   Clock,
   Trash2,
   Pencil,
-  Save,
   FilePlus2,
 } from "lucide-react";
 import PillToggle from "../components/PillToggle";
+import FlipSaveButton from "../components/FlipSaveButton";
+import { TAG_COLORS } from "./ArtistDetails/constants";
+
+const SOURCE_MIX_COLORS = {
+  discover: TAG_COLORS[10],
+  mix: TAG_COLORS[4],
+  trending: TAG_COLORS[12],
+};
+
+const MIX_PRESET_COLORS = {
+  balanced: TAG_COLORS[1],
+  discover: TAG_COLORS[2],
+  library: TAG_COLORS[11],
+  trending: TAG_COLORS[7],
+  custom: TAG_COLORS[0],
+};
+
+const FOCUS_STRENGTH_COLORS = {
+  light: "#7e896fff",
+  medium: "#667059ff",
+  heavy: "#48513eff",
+};
 
 export function MixSlider({ mix, onChange, normalizeMixPercent }) {
   const normalized = normalizeMixPercent(mix);
@@ -69,6 +90,24 @@ export function MixSlider({ mix, onChange, normalizeMixPercent }) {
 
   const leftPosition = normalized.discover;
   const rightPosition = normalized.discover + normalized.mix;
+  const minHandleInset = 1.5;
+  const minHandleGap = 2.5;
+  const labelMinPercent = 6;
+  const showDiscoverLabel = normalized.discover >= labelMinPercent;
+  const showMixLabel = normalized.mix >= labelMinPercent;
+  const showTrendingLabel = normalized.trending >= labelMinPercent;
+  const clampToInset = (value) =>
+    Math.min(Math.max(value, minHandleInset), 100 - minHandleInset);
+  let displayLeft = clampToInset(leftPosition);
+  let displayRight = clampToInset(rightPosition);
+  if (displayRight - displayLeft < minHandleGap) {
+    const midpoint = (displayLeft + displayRight) / 2;
+    displayLeft = clampToInset(midpoint - minHandleGap / 2);
+    displayRight = clampToInset(displayLeft + minHandleGap);
+    if (displayRight - displayLeft < minHandleGap) {
+      displayLeft = clampToInset(displayRight - minHandleGap);
+    }
+  }
 
   return (
     <div className="grid gap-2">
@@ -79,26 +118,35 @@ export function MixSlider({ mix, onChange, normalizeMixPercent }) {
       </div>
       <div
         ref={barRef}
-        className="relative h-9 rounded-full border border-white/10 bg-white/5 overflow-hidden select-none"
+        className="relative h-9 rounded-full border border-white/10 bg-white/5 select-none"
       >
-        <div className="absolute inset-0 flex">
+        <div className="absolute inset-0 flex overflow-hidden rounded-full">
           <div
-            className="h-full bg-[#9aa886] text-[10px] font-semibold text-black/70 flex items-center justify-center"
-            style={{ width: `${normalized.discover}%` }}
+            className="h-full text-[10px] font-semibold text-black/70 flex items-center justify-center"
+            style={{
+              width: `${normalized.discover}%`,
+              backgroundColor: SOURCE_MIX_COLORS.discover,
+            }}
           >
-            Discover
+            {showDiscoverLabel ? "Discover" : ""}
           </div>
           <div
-            className="h-full bg-[#7f8c6f] text-[10px] font-semibold text-black/70 flex items-center justify-center"
-            style={{ width: `${normalized.mix}%` }}
+            className="h-full text-[10px] font-semibold text-black/70 flex items-center justify-center"
+            style={{
+              width: `${normalized.mix}%`,
+              backgroundColor: SOURCE_MIX_COLORS.mix,
+            }}
           >
-            Library
+            {showMixLabel ? "Library" : ""}
           </div>
           <div
-            className="h-full bg-[#6a775c] text-[10px] font-semibold text-black/70 flex items-center justify-center"
-            style={{ width: `${normalized.trending}%` }}
+            className="h-full text-[10px] font-semibold text-black/70 flex items-center justify-center"
+            style={{
+              width: `${normalized.trending}%`,
+              backgroundColor: SOURCE_MIX_COLORS.trending,
+            }}
           >
-            Trending
+            {showTrendingLabel ? "Trending" : ""}
           </div>
         </div>
         <button
@@ -107,11 +155,11 @@ export function MixSlider({ mix, onChange, normalizeMixPercent }) {
             dragRef.current = { handle: "left" };
             updateFromClientX(event.clientX, "left");
           }}
-          className="absolute top-0 h-full w-3 -ml-1.5 cursor-ew-resize"
-          style={{ left: `${leftPosition}%` }}
+          className="absolute top-0 h-full w-4 -ml-2 cursor-ew-resize z-10"
+          style={{ left: `${displayLeft}%` }}
           aria-label="Adjust discover and library mix"
         >
-          <span className="absolute left-1/2 top-1 bottom-1 w-1.5 -translate-x-1/2 rounded-full bg-white/80" />
+          <span className="absolute left-1/2 top-1 bottom-1 w-2 -translate-x-1/2 rounded-full bg-white/80" />
         </button>
         <button
           type="button"
@@ -119,11 +167,11 @@ export function MixSlider({ mix, onChange, normalizeMixPercent }) {
             dragRef.current = { handle: "right" };
             updateFromClientX(event.clientX, "right");
           }}
-          className="absolute top-0 h-full w-3 -ml-1.5 cursor-ew-resize"
-          style={{ left: `${rightPosition}%` }}
+          className="absolute top-0 h-full w-4 -ml-2 cursor-ew-resize z-10"
+          style={{ left: `${displayRight}%` }}
           aria-label="Adjust library and trending mix"
         >
-          <span className="absolute left-1/2 top-1 bottom-1 w-1.5 -translate-x-1/2 rounded-full bg-white/80" />
+          <span className="absolute left-1/2 top-1 bottom-1 w-2 -translate-x-1/2 rounded-full bg-white/80" />
         </button>
       </div>
     </div>
@@ -278,9 +326,14 @@ export function FlowFormFields({
                 }
                 className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
                   draft.mixPreset === preset.id
-                    ? "bg-[#9aa886] text-black"
+                    ? "text-[#f4f1eb]"
                     : "bg-white/10 text-[#c1c1c3] hover:bg-white/20"
                 }`}
+                style={
+                  draft.mixPreset === preset.id
+                    ? { backgroundColor: MIX_PRESET_COLORS[preset.id] }
+                    : undefined
+                }
               >
                 {preset.label}
               </button>
@@ -358,9 +411,14 @@ export function FlowFormFields({
                     }
                     className={`px-3 py-1 rounded text-xs transition-colors ${
                       (draft.tagStrength ?? "medium") === option.id
-                        ? "bg-[#9aa886] text-black font-medium"
+                        ? "text-white font-medium"
                         : "text-[#8b8b90] hover:text-white"
                     }`}
+                    style={
+                      (draft.tagStrength ?? "medium") === option.id
+                        ? { backgroundColor: FOCUS_STRENGTH_COLORS[option.id] }
+                        : undefined
+                    }
                   >
                     {option.label}
                   </button>
@@ -399,9 +457,14 @@ export function FlowFormFields({
                     }
                     className={`px-3 py-1 rounded text-xs transition-colors ${
                       (draft.relatedStrength ?? "medium") === option.id
-                        ? "bg-[#9aa886] text-black font-medium"
+                        ? "text-white font-medium"
                         : "text-[#8b8b90] hover:text-white"
                     }`}
+                    style={
+                      (draft.relatedStrength ?? "medium") === option.id
+                        ? { backgroundColor: FOCUS_STRENGTH_COLORS[option.id] }
+                        : undefined
+                    }
                   >
                     {option.label}
                   </button>
@@ -547,6 +610,7 @@ export function FlowCard({
   simpleRemaining,
   simpleError,
   isApplying,
+  hasChanges,
   togglingId,
   deletingId,
   onToggleEditing,
@@ -665,14 +729,13 @@ export function FlowCard({
               <button onClick={onCancel} className="btn btn-secondary btn-sm">
                 Cancel
               </button>
-              <button
+              <FlipSaveButton
+                disabled={!hasChanges}
+                saving={isApplying}
                 onClick={onApply}
-                className="btn btn-primary btn-sm flex items-center gap-2"
-                disabled={isApplying}
-              >
-                <Save className="w-4 h-4" />
-                {isApplying ? "Applying..." : "Apply changes"}
-              </button>
+                label="Save"
+                savedLabel="Saved"
+              />
             </div>
           </div>
         </div>
