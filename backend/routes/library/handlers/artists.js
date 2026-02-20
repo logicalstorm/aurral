@@ -156,15 +156,6 @@ export default function registerArtists(router) {
           await import("../../../services/lidarrClient.js");
         if (!lidarrClient || !lidarrClient.isConfigured()) {
           return res.status(503).json({ error: "Lidarr is not configured" });
-        const artist = await libraryManager.addArtist(mbid, artistName, {
-          quality: quality || settings.quality || "standard",
-          monitorOption: monitorOption ?? defaultMonitorOption,
-        });
-        if (artist?.error) {
-          return res.status(503).json({
-            error: artist.error,
-            message: artist.error,
-          });
         }
 
         res.status(202).json({
