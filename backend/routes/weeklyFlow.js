@@ -81,11 +81,27 @@ router.get("/status", (req, res) => {
 
 router.post("/flows", async (req, res) => {
   try {
-    const { name, mix, size, deepDive } = req.body || {};
+    const {
+      name,
+      mix,
+      size,
+      deepDive,
+      recipe,
+      tags,
+      relatedArtists,
+    } = req.body || {};
     if (!name || !String(name).trim()) {
       return res.status(400).json({ error: "name is required" });
     }
-    const flow = flowPlaylistConfig.createFlow({ name, mix, size, deepDive });
+    const flow = flowPlaylistConfig.createFlow({
+      name,
+      mix,
+      size,
+      deepDive,
+      recipe,
+      tags,
+      relatedArtists,
+    });
     await playlistManager.ensureSmartPlaylists();
     res.json({ success: true, flow });
   } catch (error) {
@@ -99,12 +115,23 @@ router.post("/flows", async (req, res) => {
 router.put("/flows/:flowId", async (req, res) => {
   try {
     const { flowId } = req.params;
-    const { name, mix, size, deepDive } = req.body || {};
+    const {
+      name,
+      mix,
+      size,
+      deepDive,
+      recipe,
+      tags,
+      relatedArtists,
+    } = req.body || {};
     const updated = flowPlaylistConfig.updateFlow(flowId, {
       name,
       mix,
       size,
       deepDive,
+      recipe,
+      tags,
+      relatedArtists,
     });
     if (!updated) {
       return res.status(404).json({ error: "Flow not found" });
@@ -170,25 +197,6 @@ router.put("/flows/:flowId/enabled", async (req, res) => {
       await playlistManager.weeklyReset([flowId]);
       downloadTracker.clearByPlaylistType(flowId);
 
-      const tracks = await playlistSource.getTracksForFlow(flow);
-      if (tracks.length === 0) {
-        flowPlaylistConfig.setEnabled(flowId, true);
-        flowPlaylistConfig.scheduleNextRun(flowId);
-        await playlistManager.ensureSmartPlaylists();
-        return res.json({
-          success: true,
-          flowId,
-          enabled: true,
-          tracksQueued: 0,
-          message: "Flow enabled; no tracks available yet.",
-        });
-      }
-
-      downloadTracker.addJobs(tracks, flowId);
-      if (!weeklyFlowWorker.running) {
-        await weeklyFlowWorker.start();
-      }
-
       flowPlaylistConfig.setEnabled(flowId, true);
       flowPlaylistConfig.scheduleNextRun(flowId);
 
@@ -198,8 +206,25 @@ router.put("/flows/:flowId/enabled", async (req, res) => {
         success: true,
         flowId,
         enabled: true,
-        tracksQueued: tracks.length,
+        tracksQueued: 0,
+        message: "Flow enabled. Tracks will start queueing shortly.",
       });
+
+      (async () => {
+        try {
+          const tracks = await playlistSource.getTracksForFlow(flow);
+          if (tracks.length === 0) return;
+          downloadTracker.addJobs(tracks, flowId);
+          if (!weeklyFlowWorker.running) {
+            await weeklyFlowWorker.start();
+          }
+        } catch (error) {
+          console.error(
+            `[WeeklyFlow] Failed to generate tracks for ${flowId}:`,
+            error.message,
+          );
+        }
+      })();
     } else {
       weeklyFlowWorker.stop();
       playlistManager.updateConfig();
@@ -272,7 +297,8 @@ router.delete("/jobs/all", (req, res) => {
 router.post("/reset", async (req, res) => {
   try {
     const { flowIds } = req.body;
-    const types = flowIds || flowPlaylistConfig.getFlows().map((flow) => flow.id);
+    const types =
+      flowIds || flowPlaylistConfig.getFlows().map((flow) => flow.id);
 
     weeklyFlowWorker.stop();
     playlistManager.updateConfig();
@@ -368,7 +394,7 @@ router.post("/test/download", async (req, res) => {
       Promise.race([
         soulseekClient.search(artistName, trackName),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Search timed out")), ms)
+          setTimeout(() => reject(new Error("Search timed out")), ms),
         ),
       ]);
 
