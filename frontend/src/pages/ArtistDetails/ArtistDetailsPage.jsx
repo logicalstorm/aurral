@@ -245,6 +245,7 @@ function ArtistDetailsPage() {
         handleUpdateMonitorOption={library.handleUpdateMonitorOption}
         handleDeleteClick={library.handleDeleteClick}
         handleAddToLibrary={library.handleAddToLibrary}
+        addingToLibrary={library.addingToLibrary}
         handleRefreshArtist={library.handleRefreshArtist}
         refreshingArtist={library.refreshingArtist}
         onNavigate={(path) => navigate(path)}

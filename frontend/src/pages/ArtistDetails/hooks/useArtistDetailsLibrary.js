@@ -45,6 +45,7 @@ export function useArtistDetailsLibrary({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteFiles, setDeleteFiles] = useState(false);
   const [deletingArtist, setDeletingArtist] = useState(false);
+  const [addingToLibrary, setAddingToLibrary] = useState(false);
   const [showMonitorOptionMenu, setShowMonitorOptionMenu] = useState(false);
   const [updatingMonitor, setUpdatingMonitor] = useState(false);
   const [refreshingArtist, setRefreshingArtist] = useState(false);
@@ -157,6 +158,32 @@ export function useArtistDetailsLibrary({
     }
   };
 
+  const hydrateLibraryArtist = async (lookupArtist) => {
+    const fullArtist = await getLibraryArtist(
+      lookupArtist.mbid || lookupArtist.foreignArtistId,
+    );
+    setLibraryArtist(fullArtist);
+    setExistsInLibrary(true);
+    await refreshLibraryArtist(
+      fullArtist.mbid || fullArtist.foreignArtistId,
+    );
+    const albums = await getLibraryAlbums(fullArtist.id);
+    setLibraryAlbums(deduplicateAlbums(albums));
+    return fullArtist;
+  };
+
+  const waitForLibraryArtist = async (mbid) => {
+    const attempts = 10;
+    for (let i = 0; i < attempts; i++) {
+      const lookup = await lookupArtistInLibrary(mbid);
+      if (lookup.exists && lookup.artist) {
+        return await hydrateLibraryArtist(lookup.artist);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+    return null;
+  };
+
   const getCurrentMonitorOption = () => {
     if (!libraryArtist) return "none";
     if (libraryArtist.monitored === false) return "none";
@@ -180,28 +207,29 @@ export function useArtistDetailsLibrary({
       showError("Artist information not available");
       return;
     }
+    setAddingToLibrary(true);
     try {
       const defaultMonitorOption =
         appSettings?.integrations?.lidarr?.defaultMonitorOption || "none";
-      await addArtistToLibrary({
+      const result = await addArtistToLibrary({
         foreignArtistId: artist.id,
         artistName: artist.name,
         quality: appSettings?.quality || "standard",
         rootFolderPath: appSettings?.rootFolderPath,
         monitorOption: defaultMonitorOption,
       });
-      const lookup = await lookupArtistInLibrary(artist.id);
-      if (lookup.exists && lookup.artist) {
-        const fullArtist = await getLibraryArtist(
-          lookup.artist.mbid || lookup.artist.foreignArtistId,
-        );
-        setLibraryArtist(fullArtist);
-        setExistsInLibrary(true);
-        await refreshLibraryArtist(
-          fullArtist.mbid || fullArtist.foreignArtistId,
-        );
-        const albums = await getLibraryAlbums(fullArtist.id);
-        setLibraryAlbums(deduplicateAlbums(albums));
+      let fullArtist = null;
+      if (result?.queued) {
+        showSuccess(`Adding ${artist.name}...`);
+        fullArtist = await waitForLibraryArtist(artist.id);
+      } else {
+        const lookup = await lookupArtistInLibrary(artist.id);
+        if (lookup.exists && lookup.artist) {
+          fullArtist = await hydrateLibraryArtist(lookup.artist);
+        }
+      }
+      if (!fullArtist) {
+        throw new Error("Artist is taking longer than expected to add");
       }
       showSuccess(`${artist.name} added to library successfully!`);
       return true;
@@ -212,6 +240,8 @@ export function useArtistDetailsLibrary({
         }`,
       );
       return false;
+    } finally {
+      setAddingToLibrary(false);
     }
   };
 
@@ -240,25 +270,25 @@ export function useArtistDetailsLibrary({
         }
         const defaultMonitorOption =
           appSettings?.integrations?.lidarr?.defaultMonitorOption || "none";
-        await addArtistToLibrary({
+        const result = await addArtistToLibrary({
           foreignArtistId: artist.id,
           artistName: artist.name,
           quality: appSettings?.quality || "standard",
           rootFolderPath: appSettings?.rootFolderPath,
           monitorOption: defaultMonitorOption,
         });
-        const lookup = await lookupArtistInLibrary(artist.id);
-        if (lookup.exists && lookup.artist) {
-          const fullArtist = await getLibraryArtist(
-            lookup.artist.mbid || lookup.artist.foreignArtistId,
-          );
-          setLibraryArtist(fullArtist);
-          setExistsInLibrary(true);
-          await refreshLibraryArtist(
-            fullArtist.mbid || fullArtist.foreignArtistId,
-          );
-          const albums = await getLibraryAlbums(fullArtist.id);
-          setLibraryAlbums(deduplicateAlbums(albums));
+        let fullArtist = null;
+        if (result?.queued) {
+          showSuccess(`Adding ${artist.name}...`);
+          fullArtist = await waitForLibraryArtist(artist.id);
+        } else {
+          const lookup = await lookupArtistInLibrary(artist.id);
+          if (lookup.exists && lookup.artist) {
+            fullArtist = await hydrateLibraryArtist(lookup.artist);
+          }
+        }
+        if (!fullArtist) {
+          throw new Error("Failed to get library artist");
         }
       }
 
@@ -781,6 +811,7 @@ export function useArtistDetailsLibrary({
     deleteFiles,
     setDeleteFiles,
     deletingArtist,
+    addingToLibrary,
     showMonitorOptionMenu,
     setShowMonitorOptionMenu,
     updatingMonitor,

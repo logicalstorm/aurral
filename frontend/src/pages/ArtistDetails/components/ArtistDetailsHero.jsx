@@ -34,6 +34,7 @@ export function ArtistDetailsHero({
   handleUpdateMonitorOption,
   handleDeleteClick,
   handleAddToLibrary,
+  addingToLibrary,
   handleRefreshArtist,
   refreshingArtist,
   onNavigate,
@@ -290,7 +291,10 @@ export function ArtistDetailsHero({
                 </div>
               </>
             ) : (
-              <AddToLibraryButton onClick={handleAddToLibrary} />
+              <AddToLibraryButton
+                onClick={handleAddToLibrary}
+                isLoading={addingToLibrary}
+              />
             )}
 
             <button
@@ -547,6 +551,7 @@ ArtistDetailsHero.propTypes = {
   handleUpdateMonitorOption: PropTypes.func,
   handleDeleteClick: PropTypes.func,
   handleAddToLibrary: PropTypes.func,
+  addingToLibrary: PropTypes.bool,
   handleRefreshArtist: PropTypes.func,
   refreshingArtist: PropTypes.bool,
   onNavigate: PropTypes.func,
