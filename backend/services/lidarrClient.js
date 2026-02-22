@@ -1,4 +1,5 @@
 import axios from "axios";
+import http from "http";
 import https from "https";
 import { dbOps } from "../config/db-helpers.js";
 
@@ -21,6 +22,18 @@ export class LidarrClient {
     this._waitQueue = [];
     this._artistListCache = null;
     this._albumListCache = null;
+    this._httpAgent = new http.Agent({
+      keepAlive: true,
+      maxSockets: LIDARR_MAX_CONCURRENT,
+      maxFreeSockets: 2,
+      timeout: 60000,
+    });
+    this._httpsAgent = new https.Agent({
+      keepAlive: true,
+      maxSockets: LIDARR_MAX_CONCURRENT,
+      maxFreeSockets: 2,
+      timeout: 60000,
+    });
     this.updateConfig();
   }
 
@@ -80,7 +93,7 @@ export class LidarrClient {
 
     const envTimeoutMs = Number(process.env.LIDARR_TIMEOUT_MS);
     const timeoutMs =
-      Number.isFinite(envTimeoutMs) && envTimeoutMs > 0 ? envTimeoutMs : 8000;
+      Number.isFinite(envTimeoutMs) && envTimeoutMs > 0 ? envTimeoutMs : 30000;
 
     const circuitDisabled =
       process.env.LIDARR_CIRCUIT_DISABLED === "true" ||
@@ -184,6 +197,9 @@ export class LidarrClient {
         try {
           const fullUrl = `${this.config.url}${this.apiPath}${endpoint}`;
 
+          const isHttps =
+            fullUrl.startsWith("https:") || fullUrl.startsWith("HTTPS:");
+
           const requestConfig = {
             method,
             url: fullUrl,
@@ -193,19 +209,20 @@ export class LidarrClient {
               Accept: "application/json",
             },
             timeout: this.config.timeoutMs,
+            httpAgent: this._httpAgent,
+            httpsAgent: isHttps && this.config.insecure
+              ? new https.Agent({
+                  rejectUnauthorized: false,
+                  keepAlive: true,
+                  maxSockets: LIDARR_MAX_CONCURRENT,
+                  maxFreeSockets: 2,
+                  timeout: 60000,
+                })
+              : this._httpsAgent,
             validateStatus: function (status) {
               return status < 500;
             },
           };
-
-          if (
-            this.config.insecure &&
-            (fullUrl.startsWith("https:") || fullUrl.startsWith("HTTPS:"))
-          ) {
-            requestConfig.httpsAgent = new https.Agent({
-              rejectUnauthorized: false,
-            });
-          }
 
           if (data) {
             requestConfig.data = data;

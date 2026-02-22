@@ -1,8 +1,10 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader, Music, AlertCircle } from "lucide-react";
 import { getLibraryArtists } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
+
+const PAGE_SIZE = 48;
 
 function LibraryPage() {
   const [artists, setArtists] = useState([]);
@@ -10,26 +12,56 @@ function LibraryPage() {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("name");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [retryKey, setRetryKey] = useState(0);
+  const sentinelRef = useRef(null);
   const navigate = useNavigate();
 
-  const fetchArtists = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getLibraryArtists();
-      setArtists(data);
-    } catch (err) {
-      setError(
-        err.response?.data?.message || "Failed to fetch artists from library"
-      );
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    const fetchArtists = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await getLibraryArtists();
+        if (!controller.signal.aborted) {
+          setArtists(data);
+        }
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          setError(
+            err.response?.data?.message || "Failed to fetch artists from library"
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    };
+    fetchArtists();
+    return () => controller.abort();
+  }, [retryKey]);
+
+  // Reset visible count when filters change
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [searchTerm, sortBy]);
+
+  // Infinite scroll observer
+  const onSentinel = useCallback((entries) => {
+    if (entries[0].isIntersecting) {
+      setVisibleCount((prev) => prev + PAGE_SIZE);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchArtists();
-  }, []);
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(onSentinel, { rootMargin: "200px" });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [onSentinel, loading, error]);
 
   const filteredArtists = useMemo(() => {
     let filtered = artists;
@@ -118,7 +150,7 @@ function LibraryPage() {
               <p className="text-red-300 mt-1">{error}</p>
             </div>
           </div>
-          <button onClick={fetchArtists} className="btn btn-primary mt-4">
+          <button onClick={() => setRetryKey((k) => k + 1)} className="btn btn-primary mt-4">
             Try Again
           </button>
         </div>
@@ -156,7 +188,7 @@ function LibraryPage() {
           )}
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
-            {filteredArtists.map((artist) => {
+            {filteredArtists.slice(0, visibleCount).map((artist) => {
               const monitorOption =
                 artist.addOptions?.monitor ||
                 artist.monitorNewItems ||
@@ -209,6 +241,11 @@ function LibraryPage() {
               );
             })}
           </div>
+          {visibleCount < filteredArtists.length && (
+            <div ref={sentinelRef} className="flex justify-center py-8">
+              <Loader className="w-6 h-6 animate-spin" style={{ color: "#c1c1c3" }} />
+            </div>
+          )}
         </div>
       )}
 
