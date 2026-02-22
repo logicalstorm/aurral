@@ -17,16 +17,28 @@ const processQueue = () => {
   });
 };
 
-const scheduleFetch = (fn) => {
+const scheduleFetch = (fn, signal) => {
   return new Promise((resolve, reject) => {
-    queue.push(async () => {
+    const entry = async () => {
       try {
         const res = await fn();
         resolve(res);
       } catch (err) {
         reject(err);
       }
-    });
+    };
+    queue.push(entry);
+
+    if (signal) {
+      signal.addEventListener("abort", () => {
+        const idx = queue.indexOf(entry);
+        if (idx !== -1) {
+          queue.splice(idx, 1);
+          reject(signal.reason || new DOMException("Aborted", "AbortError"));
+        }
+      });
+    }
+
     processQueue();
   });
 };
@@ -45,7 +57,9 @@ const ArtistImage = ({
   const fetchingRef = useRef(false);
   const triedBackendFallbackRef = useRef(false);
 
-  const fetchBackendCover = useCallback(async (mbidToFetch, nameForCover) => {
+  const abortRef = useRef(null);
+
+  const fetchBackendCover = useCallback(async (mbidToFetch, nameForCover, signal) => {
     if (!mbidToFetch || fetchingRef.current) {
       return;
     }
@@ -60,8 +74,10 @@ const ArtistImage = ({
           new Promise((_, reject) =>
             setTimeout(() => reject(new Error("Timeout")), 5000)
           ),
-        ])
+        ]),
+        signal
       );
+      if (signal?.aborted) return;
       if (data?.images && data.images.length > 0) {
         const front = data.images.find((img) => img.front) || data.images[0];
         const url = front.image;
@@ -76,7 +92,8 @@ const ArtistImage = ({
         setHasError(true);
         setIsLoading(false);
       }
-    } catch {
+    } catch (err) {
+      if (err?.name === "AbortError" || signal?.aborted) return;
       setHasError(true);
       setIsLoading(false);
     } finally {
@@ -88,6 +105,10 @@ const ArtistImage = ({
     fetchingRef.current = false;
     triedBackendFallbackRef.current = false;
 
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     if (src) {
       setCurrentSrc(src);
       setHasError(false);
@@ -96,12 +117,14 @@ const ArtistImage = ({
       setCurrentSrc(null);
       setHasError(false);
       setIsLoading(true);
-      fetchBackendCover(mbid, artistName);
+      fetchBackendCover(mbid, artistName, controller.signal);
     } else {
       setCurrentSrc(null);
       setIsLoading(false);
       setHasError(true);
     }
+
+    return () => controller.abort();
   }, [src, mbid, artistName, fetchBackendCover]);
 
   const handleLoad = () => {
@@ -113,7 +136,7 @@ const ArtistImage = ({
       triedBackendFallbackRef.current = true;
       setIsLoading(true);
       setHasError(false);
-      fetchBackendCover(mbid, artistName);
+      fetchBackendCover(mbid, artistName, abortRef.current?.signal);
       return;
     }
     setHasError(true);
