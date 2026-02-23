@@ -5,6 +5,17 @@ import { defaultData } from "../config/constants.js";
 
 const router = express.Router();
 
+router.use((req, res, next) => {
+  const settings = dbOps.getSettings();
+  if (settings.onboardingComplete) {
+    return res.status(403).json({
+      error: "Forbidden",
+      message: "Onboarding has already been completed",
+    });
+  }
+  next();
+});
+
 router.get("/lidarr/test", async (req, res) => {
   try {
     const { lidarrClient } = await import("../services/lidarrClient.js");

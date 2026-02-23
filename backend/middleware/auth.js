@@ -88,13 +88,15 @@ function resolveProxyUser(req) {
     };
   }
   const adminUsers = parseCsv(process.env.AUTH_PROXY_ADMIN_USERS).map((u) =>
-    u.toLowerCase()
+    u.toLowerCase(),
   );
   const headerRoleName = process.env.AUTH_PROXY_ROLE_HEADER
     ? String(process.env.AUTH_PROXY_ROLE_HEADER).trim().toLowerCase()
     : "";
   const headerRole = headerRoleName
-    ? String(getHeaderValue(req, headerRoleName) || "").trim().toLowerCase()
+    ? String(getHeaderValue(req, headerRoleName) || "")
+        .trim()
+        .toLowerCase()
     : "";
   const defaultRole =
     (process.env.AUTH_PROXY_DEFAULT_ROLE || "user").trim().toLowerCase() ===
@@ -154,7 +156,7 @@ function legacyAuth(username, password) {
   if (passwords.length === 0) return null;
   const userMatches = basicAuth.safeCompare(username, authUser);
   const passwordMatches = passwords.some((p) =>
-    basicAuth.safeCompare(password, p)
+    basicAuth.safeCompare(password, p),
   );
   if (!userMatches || !passwordMatches) return null;
   return {
@@ -196,12 +198,15 @@ export const createAuthMiddleware = () => {
   return (req, res, next) => {
     if (!req.path.startsWith("/api")) return next();
     if (req.path.startsWith("/api/health")) return next();
-    if (req.path.startsWith("/api/onboarding")) return next();
     if (req.path.endsWith("/stream") || req.path.includes("/stream/"))
       return next();
 
     const settings = dbOps.getSettings();
     const onboardingDone = settings.onboardingComplete;
+
+    if (req.path.startsWith("/api/onboarding") && !onboardingDone)
+      return next();
+
     const users = userOps.getAllUsers();
     const legacyPasswords = getAuthPassword();
     const authRequired =
@@ -241,7 +246,7 @@ function getCredentialsFromRequest(req) {
   if (token) {
     try {
       const decoded = Buffer.from(decodeURIComponent(token), "base64").toString(
-        "utf8"
+        "utf8",
       );
       const colon = decoded.indexOf(":");
       const username = colon >= 0 ? decoded.slice(0, colon) : decoded;
