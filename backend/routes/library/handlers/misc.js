@@ -76,10 +76,13 @@ export default function registerMisc(router) {
         return res.status(400).json({ error: "mbids must be an array" });
       }
 
+      const libraryArtists = await libraryManager.getAllArtists();
+      const existingArtistIds = new Set(
+        libraryArtists.map((artist) => artist.mbid).filter(Boolean),
+      );
       const results = {};
       for (const mbid of mbids) {
-        const artist = await libraryManager.getArtist(mbid);
-        results[mbid] = !!artist;
+        results[mbid] = existingArtistIds.has(mbid);
       }
 
       res.json(results);
