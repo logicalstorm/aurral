@@ -174,6 +174,15 @@ export default function registerArtists(router) {
               `[Library] Failed to add artist ${artistName}:`,
               artist.error,
             );
+            return;
+          }
+          if (artist.monitorOption && artist.monitorOption !== "none") {
+            let albums = await libraryManager.getAlbums(artist.id);
+            if (!albums.length) {
+              await libraryManager.fetchArtistAlbums(artist.id, mbid);
+              albums = await libraryManager.getAlbums(artist.id);
+            }
+            await monitorArtistAlbums(artist, albums, lidarrClient);
           }
         })();
       } catch (error) {
