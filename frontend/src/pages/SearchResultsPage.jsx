@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Loader, Music, ArrowLeft } from "lucide-react";
+import { Loader, Music, ArrowLeft, CheckCircle2 } from "lucide-react";
 import {
   searchArtists,
   searchArtistsByTag,
   getDiscovery,
   checkHealth,
+  lookupArtistsInLibraryBatch,
 } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
 import PillToggle from "../components/PillToggle";
@@ -26,6 +27,7 @@ function SearchResultsPage() {
   const [hasMore, setHasMore] = useState(false);
   const [searchTotalCount, setSearchTotalCount] = useState(0);
   const [lastfmConfigured, setLastfmConfigured] = useState(null);
+  const [libraryLookup, setLibraryLookup] = useState({});
   const navigate = useNavigate();
 
   const trimmedQuery = useMemo(() => query.trim(), [query]);
@@ -36,15 +38,21 @@ function SearchResultsPage() {
   const tagScope = searchParams.get("scope") || "recommended";
   const showAllTagResults = isTagSearch && tagScope === "all";
 
+  const getArtistId = useCallback(
+    (artist) => artist?.id || artist?.mbid || artist?.foreignArtistId,
+    [],
+  );
+
   const dedupe = useCallback((artists) => {
     const seen = new Set();
     return artists.filter((artist) => {
-      if (!artist.id) return false;
-      if (seen.has(artist.id)) return false;
-      seen.add(artist.id);
+      const artistId = getArtistId(artist);
+      if (!artistId) return false;
+      if (seen.has(artistId)) return false;
+      seen.add(artistId);
       return true;
     });
-  }, []);
+  }, [getArtistId]);
   const updateTagScope = useCallback(
     (nextScope) => {
       const params = new URLSearchParams(searchParams);
@@ -72,6 +80,7 @@ function SearchResultsPage() {
 
   useEffect(() => {
     const performSearch = async () => {
+      setLibraryLookup({});
       if (type === "recommended" || type === "trending") {
         setLoading(true);
         setError(null);
@@ -88,8 +97,8 @@ function SearchResultsPage() {
           if (list.length > 0) {
             const imagesMap = {};
             list.forEach((artist) => {
-              if (artist.image && artist.id)
-                imagesMap[artist.id] = artist.image;
+              const artistId = getArtistId(artist);
+              if (artist.image && artistId) imagesMap[artistId] = artist.image;
             });
             setArtistImages(imagesMap);
           }
@@ -143,7 +152,8 @@ function SearchResultsPage() {
         if (uniqueArtists.length > 0) {
           const imagesMap = {};
           uniqueArtists.forEach((artist) => {
-            if (artist.image && artist.id) imagesMap[artist.id] = artist.image;
+            const artistId = getArtistId(artist);
+            if (artist.image && artistId) imagesMap[artistId] = artist.image;
           });
           setArtistImages(imagesMap);
         }
@@ -160,7 +170,40 @@ function SearchResultsPage() {
     };
 
     performSearch();
-  }, [query, type, dedupe, trimmedQuery, isTagSearch, tagScope]);
+  }, [query, type, dedupe, trimmedQuery, isTagSearch, tagScope, getArtistId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const ids = results.map((artist) => getArtistId(artist)).filter(Boolean);
+    if (ids.length === 0) {
+      setLibraryLookup({});
+      return () => {
+        cancelled = true;
+      };
+    }
+    const missing = ids.filter((id) => libraryLookup[id] === undefined);
+    if (missing.length === 0) return () => {
+      cancelled = true;
+    };
+
+    const fetchLookup = async () => {
+      try {
+        const lookup = await lookupArtistsInLibraryBatch(missing);
+        if (!cancelled && lookup) {
+          setLibraryLookup((prev) => ({ ...prev, ...lookup }));
+        }
+      } catch {
+        if (!cancelled) {
+          setLibraryLookup((prev) => ({ ...prev }));
+        }
+      }
+    };
+
+    fetchLookup();
+    return () => {
+      cancelled = true;
+    };
+  }, [results, libraryLookup, getArtistId]);
 
   const loadMore = useCallback(async () => {
     if (type === "recommended" || type === "trending") {
@@ -188,8 +231,9 @@ function SearchResultsPage() {
         setResults(combined);
         setHasMore(newArtists.length >= PAGE_SIZE);
         newArtists.forEach((artist) => {
-          if (artist.image && artist.id) {
-            setArtistImages((prev) => ({ ...prev, [artist.id]: artist.image }));
+          const artistId = getArtistId(artist);
+          if (artist.image && artistId) {
+            setArtistImages((prev) => ({ ...prev, [artistId]: artist.image }));
           }
         });
       } finally {
@@ -210,8 +254,9 @@ function SearchResultsPage() {
         setSearchTotalCount(total);
         setHasMore(total > offset + newArtists.length);
         newArtists.forEach((artist) => {
-          if (artist.image && artist.id) {
-            setArtistImages((prev) => ({ ...prev, [artist.id]: artist.image }));
+          const artistId = getArtistId(artist);
+          if (artist.image && artistId) {
+            setArtistImages((prev) => ({ ...prev, [artistId]: artist.image }));
           }
         });
       }
@@ -228,6 +273,7 @@ function SearchResultsPage() {
     trimmedQuery,
     isTagSearch,
     tagScope,
+    getArtistId,
   ]);
 
   const getArtistType = (artistType) => {
@@ -398,14 +444,16 @@ function SearchResultsPage() {
           ) : (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-                {displayedArtists.map((artist, index) => (
+                {displayedArtists.map((artist, index) => {
+                  const artistId = getArtistId(artist);
+                  return (
                   <div
-                    key={artist.id || `artist-${index}`}
+                    key={artistId || `artist-${index}`}
                     className="group relative flex flex-col w-full min-w-0"
                   >
                     <div
                       onClick={() =>
-                        navigate(`/artist/${artist.id}`, {
+                        navigate(`/artist/${artistId}`, {
                           state: { artistName: artist.name },
                         })
                       }
@@ -414,11 +462,11 @@ function SearchResultsPage() {
                     >
                       <ArtistImage
                         src={
-                          artistImages[artist.id] ||
+                          artistImages[artistId] ||
                           artist.image ||
                           artist.imageUrl
                         }
-                        mbid={artist.id}
+                        mbid={artistId}
                         artistName={artist.name}
                         alt={artist.name}
                         className="h-full w-full group-hover:scale-105 transition-transform duration-300"
@@ -427,17 +475,22 @@ function SearchResultsPage() {
                     </div>
 
                     <div className="flex flex-col min-w-0">
-                      <h3
-                        onClick={() =>
-                          navigate(`/artist/${artist.id}`, {
-                            state: { artistName: artist.name },
-                          })
-                        }
-                        className="font-semibold truncate hover:underline cursor-pointer"
-                        style={{ color: "#fff" }}
-                      >
-                        {artist.name}
-                      </h3>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <h3
+                          onClick={() =>
+                            navigate(`/artist/${artistId}`, {
+                              state: { artistName: artist.name },
+                            })
+                          }
+                          className="font-semibold truncate hover:underline cursor-pointer"
+                          style={{ color: "#fff" }}
+                        >
+                          {artist.name}
+                        </h3>
+                        {libraryLookup[artistId] && (
+                          <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                        )}
+                      </div>
 
                       <div
                         className="flex flex-col min-w-0 text-sm"
@@ -457,7 +510,8 @@ function SearchResultsPage() {
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               {showLoadMore && (
