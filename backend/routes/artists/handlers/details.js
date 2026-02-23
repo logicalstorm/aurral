@@ -6,6 +6,7 @@ import {
   getArtistBio,
   musicbrainzGetArtistReleaseGroups,
   enrichReleaseGroupsWithDeezer,
+  enrichReleaseGroupsWithLastfm,
   musicbrainzGetArtistNameByMbid,
 } from "../../../services/apiClients.js";
 import { dbOps } from "../../../config/db-helpers.js";
@@ -230,6 +231,13 @@ export default function registerDetails(router) {
           name,
           deezerArtistId,
         );
+        if (getLastfmApiKey()) {
+          await enrichReleaseGroupsWithLastfm(
+            releaseGroups,
+            name,
+            resolvedMbid,
+          );
+        }
         const bio = await getArtistBio(name, resolvedMbid, deezerArtistId);
         return {
           id: resolvedMbid,

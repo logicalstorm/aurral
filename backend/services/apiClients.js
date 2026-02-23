@@ -563,6 +563,50 @@ export async function enrichReleaseGroupsWithDeezer(
   }
 }
 
+export async function enrichReleaseGroupsWithLastfm(
+  mbReleaseGroups,
+  artistName,
+  artistMbid = null,
+) {
+  if (!mbReleaseGroups?.length || !artistName || !getLastfmApiKey())
+    return mbReleaseGroups;
+  try {
+    const params = artistMbid
+      ? { mbid: artistMbid, limit: 200 }
+      : { artist: artistName, limit: 200 };
+    const data = await lastfmRequest("artist.getTopAlbums", params);
+    const raw = data?.topalbums?.album;
+    const albums = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    if (!albums.length) return mbReleaseGroups;
+
+    const byTitle = new Map();
+    for (const album of albums) {
+      const title = album?.name || album?.title || "";
+      if (!title) continue;
+      const listeners = parseInt(
+        album?.listeners || album?.playcount || 0,
+        10,
+      );
+      if (!listeners) continue;
+      const key = normalizeTitle(title);
+      const existing = byTitle.get(key) || 0;
+      if (listeners > existing) byTitle.set(key, listeners);
+    }
+
+    for (const rg of mbReleaseGroups) {
+      rg.fans = 0;
+      const key = normalizeTitle(rg.title);
+      const listeners = byTitle.get(key);
+      if (typeof listeners === "number") {
+        rg.fans = listeners;
+      }
+    }
+    return mbReleaseGroups;
+  } catch (e) {
+    return mbReleaseGroups;
+  }
+}
+
 export async function deezerGetArtistAlbums(artistName) {
   try {
     const artist = await getDeezerArtist(artistName);

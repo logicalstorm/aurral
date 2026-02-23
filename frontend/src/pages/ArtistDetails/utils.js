@@ -9,12 +9,32 @@ export const getTagColor = (name) => {
   return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
 };
 
-export const starsFromCount = (count) => {
-  if (count == null || count <= 0) return null;
-  return Math.min(
-    5,
-    Math.max(1, Math.round(1 + (4 * Math.log10(count + 1)) / 7))
-  );
+export const getPopularityScale = (releaseGroups) => {
+  if (!Array.isArray(releaseGroups) || releaseGroups.length === 0) {
+    return { pivot: 0 };
+  }
+  const counts = releaseGroups
+    .map((rg) => (typeof rg?.fans === "number" ? rg.fans : 0))
+    .filter((value) => value > 0)
+    .sort((a, b) => a - b);
+  if (counts.length === 0) return { pivot: 0 };
+  const mid = Math.floor(counts.length / 2);
+  const pivot =
+    counts.length % 2 === 0
+      ? (counts[mid - 1] + counts[mid]) / 2
+      : counts[mid];
+  return { pivot };
+};
+
+export const segmentsFromScale = (count, pivot, totalSegments = 10) => {
+  const safeCount = typeof count === "number" ? count : 0;
+  if (safeCount <= 0) return 0;
+  const safePivot = Number.isFinite(pivot) && pivot > 0 ? pivot : safeCount;
+  const logRatio = Math.log(safeCount / safePivot);
+  const slope = 0.6;
+  const scaled = 1 / (1 + Math.exp(-slope * logRatio));
+  const clamped = Math.min(1, Math.max(0, scaled));
+  return Math.round(clamped * totalSegments);
 };
 
 export const deduplicateAlbums = (albums) => {
