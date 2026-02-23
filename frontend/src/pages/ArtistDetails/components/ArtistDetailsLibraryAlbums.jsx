@@ -1,5 +1,9 @@
+import { useState } from "react";
 import PropTypes from "prop-types";
 import {
+  ArrowDownWideNarrow,
+  ArrowUpDown,
+  ArrowUpWideNarrow,
   Loader,
   Music,
   CheckCircle,
@@ -8,10 +12,9 @@ import {
   MoreVertical,
   ExternalLink,
   Trash2,
-  Star,
   RefreshCw,
 } from "lucide-react";
-import { starsFromCount } from "../utils";
+import { getPopularityScale, segmentsFromScale } from "../utils";
 
 export function ArtistDetailsLibraryAlbums({
   artist,
@@ -29,6 +32,7 @@ export function ArtistDetailsLibraryAlbums({
   handleDeleteAlbumClick,
   handleReSearchAlbum,
 }) {
+  const [sortMode, setSortMode] = useState("date");
   const downloadedAlbums = libraryAlbums.filter((album) => {
     if (String(album.id ?? "").startsWith("pending-")) return false;
     return (
@@ -43,23 +47,74 @@ export function ArtistDetailsLibraryAlbums({
   });
 
   if (downloadedAlbums.length === 0) return null;
+  const releaseGroups = artist?.["release-groups"] || [];
+  const { pivot: popularityPivot } = getPopularityScale(releaseGroups);
+  const popularityById = new Map(
+    releaseGroups.map((rg) => [
+      rg.id,
+      typeof rg?.fans === "number" ? rg.fans : 0,
+    ]),
+  );
+  const getAlbumFans = (album) => {
+    const rgId = album.mbid || album.foreignAlbumId;
+    return popularityById.get(rgId) || 0;
+  };
+  const sortedAlbums = [...downloadedAlbums].sort((a, b) => {
+    if (sortMode === "popularityAsc") {
+      const diff = getAlbumFans(a) - getAlbumFans(b);
+      if (diff !== 0) return diff;
+    } else if (sortMode === "popularityDesc") {
+      const diff = getAlbumFans(b) - getAlbumFans(a);
+      if (diff !== 0) return diff;
+    }
+    const dateA = a.releaseDate || "";
+    const dateB = b.releaseDate || "";
+    return dateB.localeCompare(dateA);
+  });
+  const sortTitle =
+    sortMode === "date"
+      ? "Sort: Default"
+      : sortMode === "popularityDesc"
+        ? "Sort: Most popular"
+        : "Sort: Least popular";
+  const SortIcon =
+    sortMode === "date"
+      ? ArrowUpDown
+      : sortMode === "popularityDesc"
+        ? ArrowDownWideNarrow
+        : ArrowUpWideNarrow;
 
   return (
     <div className="card mb-4 p-4">
-      <h2
-        className="text-lg font-semibold mb-2 flex items-center"
-        style={{ color: "#fff" }}
-      >
-        Albums in Your Library ({downloadedAlbums.length})
-      </h2>
+      <div className="flex items-center justify-between mb-2">
+        <h2
+          className="text-lg font-semibold flex items-center"
+          style={{ color: "#fff" }}
+        >
+          Albums in Your Library ({downloadedAlbums.length})
+        </h2>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() =>
+              setSortMode((prev) =>
+                prev === "date"
+                  ? "popularityDesc"
+                  : prev === "popularityDesc"
+                    ? "popularityAsc"
+                    : "date",
+              )
+            }
+            className="btn btn-secondary btn-sm p-2"
+            title={sortTitle}
+            aria-label={sortTitle}
+          >
+            <SortIcon className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
       <div className="space-y-1">
-        {downloadedAlbums
-          .sort((a, b) => {
-            const dateA = a.releaseDate || "";
-            const dateB = b.releaseDate || "";
-            return dateB.localeCompare(dateA);
-          })
-          .map((libraryAlbum, libraryAlbumIdx) => {
+        {sortedAlbums.map((libraryAlbum, libraryAlbumIdx) => {
             const rgId =
               libraryAlbum.mbid || libraryAlbum.foreignAlbumId;
             const rg = artist?.["release-groups"]?.find(
@@ -197,35 +252,31 @@ export function ArtistDetailsLibraryAlbums({
                           const rg = artist?.["release-groups"]?.find(
                             (r) => r.id === rgId
                           );
-                          const fans = rg?.fans;
-                          const stars =
-                            fans != null ? starsFromCount(fans) : null;
-                          if (stars == null) return null;
+                          const fans =
+                            typeof rg?.fans === "number" ? rg.fans : 0;
+                          const segments = segmentsFromScale(
+                            fans,
+                            popularityPivot,
+                            10,
+                          );
                           return (
                             <span
                               className="flex items-center gap-0.5 ml-1"
-                              title={
-                                fans != null
-                                  ? `${fans.toLocaleString()} fans on Deezer`
-                                  : undefined
-                              }
+                              title={`Popularity: ${segments}/10 · ${fans.toLocaleString()} listeners`}
                             >
-                              {[1, 2, 3, 4, 5].map((n) => (
-                                <Star
-                                  key={n}
-                                  className="w-3.5 h-3.5 flex-shrink-0"
-                                  style={{
-                                    color:
-                                      n <= stars
-                                        ? "#eab308"
-                                        : "#4b5563",
-                                    fill:
-                                      n <= stars
-                                        ? "#eab308"
-                                        : "transparent",
-                                  }}
-                                />
-                              ))}
+                              {Array.from({ length: 10 }, (_, i) => {
+                                const n = i + 1;
+                                return (
+                                  <span
+                                    key={n}
+                                    className="w-1 h-3 rounded-sm flex-shrink-0"
+                                    style={{
+                                      backgroundColor:
+                                        n <= segments ? "#eab308" : "#4b5563",
+                                    }}
+                                  />
+                                );
+                              })}
                             </span>
                           );
                         })()}

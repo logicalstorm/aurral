@@ -7,6 +7,7 @@ import {
   getArtistBio,
   musicbrainzGetArtistReleaseGroups,
   enrichReleaseGroupsWithDeezer,
+  enrichReleaseGroupsWithLastfm,
   deezerSearchArtist,
   getDeezerArtistById,
   musicbrainzGetArtistNameByMbid,
@@ -88,6 +89,13 @@ export default function registerStream(router) {
                   lidarrArtist.artistName,
                   deezerArtistId,
                 );
+                if (getLastfmApiKey()) {
+                  await enrichReleaseGroupsWithLastfm(
+                    releaseGroups,
+                    lidarrArtist.artistName,
+                    artistMbid,
+                  );
+                }
               } catch (e) {
                 releaseGroups = lidarrAlbums.map((album) => ({
                   id: album.mbid,
@@ -235,6 +243,13 @@ export default function registerStream(router) {
                 name,
                 deezerArtistId,
               );
+              if (getLastfmApiKey()) {
+                await enrichReleaseGroupsWithLastfm(
+                  releaseGroups,
+                  name,
+                  resolvedMbid,
+                );
+              }
               const bio = await getArtistBio(
                 name,
                 resolvedMbid,

@@ -1,5 +1,9 @@
+import { useState } from "react";
 import PropTypes from "prop-types";
 import {
+  ArrowDownWideNarrow,
+  ArrowUpDown,
+  ArrowUpWideNarrow,
   Loader,
   Music,
   CheckCircle,
@@ -8,7 +12,6 @@ import {
   MoreVertical,
   ExternalLink,
   Trash2,
-  Star,
   Plus,
   Tag,
   Disc,
@@ -17,7 +20,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import AddAlbumButton from "../../../components/AddAlbumButton";
-import { starsFromCount } from "../utils";
+import { getPopularityScale, segmentsFromScale } from "../utils";
 import { matchesReleaseTypeFilter, hasActiveFilters } from "../utils";
 
 export function ArtistDetailsReleaseGroups({
@@ -46,6 +49,7 @@ export function ArtistDetailsReleaseGroups({
   handleReSearchAlbum,
   isReleaseGroupDownloadedInLibrary,
 }) {
+  const [sortMode, setSortMode] = useState("date");
   const releaseGroups = artist["release-groups"];
   if (!releaseGroups || releaseGroups.length === 0) return null;
 
@@ -54,6 +58,33 @@ export function ArtistDetailsReleaseGroups({
     .filter((rg) => !isReleaseGroupDownloadedInLibrary(rg.id));
   const totalCount = releaseGroups.length;
   const filteredCount = filtered.length;
+  const { pivot: popularityPivot } = getPopularityScale(releaseGroups);
+  const sortedReleaseGroups = [...filtered].sort((a, b) => {
+    const fansA = typeof a?.fans === "number" ? a.fans : 0;
+    const fansB = typeof b?.fans === "number" ? b.fans : 0;
+    if (sortMode === "popularityAsc") {
+      const diff = fansA - fansB;
+      if (diff !== 0) return diff;
+    } else if (sortMode === "popularityDesc") {
+      const diff = fansB - fansA;
+      if (diff !== 0) return diff;
+    }
+    const dateA = a["first-release-date"] || "";
+    const dateB = b["first-release-date"] || "";
+    return dateB.localeCompare(dateA);
+  });
+  const sortTitle =
+    sortMode === "date"
+      ? "Sort: Default"
+      : sortMode === "popularityDesc"
+        ? "Sort: Most popular"
+        : "Sort: Least popular";
+  const SortIcon =
+    sortMode === "date"
+      ? ArrowUpDown
+      : sortMode === "popularityDesc"
+        ? ArrowDownWideNarrow
+        : ArrowUpWideNarrow;
 
   const getIcon = (type) => {
     if (type === "Album") return <Disc className="w-4 h-4" />;
@@ -67,12 +98,31 @@ export function ArtistDetailsReleaseGroups({
   return (
     <div className="card p-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
-        <h2
-          className="text-lg font-semibold flex items-center"
-          style={{ color: "#fff" }}
-        >
-          Albums & Releases ({filteredCount}/{totalCount})
-        </h2>
+        <div className="flex items-center gap-2">
+          <h2
+            className="text-lg font-semibold flex items-center"
+            style={{ color: "#fff" }}
+          >
+            Albums & Releases ({filteredCount}/{totalCount})
+          </h2>
+          <button
+            type="button"
+            onClick={() =>
+              setSortMode((prev) =>
+                prev === "date"
+                  ? "popularityDesc"
+                  : prev === "popularityDesc"
+                    ? "popularityAsc"
+                    : "date",
+              )
+            }
+            className="btn btn-secondary btn-sm p-2"
+            title={sortTitle}
+            aria-label={sortTitle}
+          >
+            <SortIcon className="w-4 h-4" />
+          </button>
+        </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-2">
             {primaryReleaseTypes.map((type) => {
@@ -252,13 +302,7 @@ export function ArtistDetailsReleaseGroups({
         </div>
       </div>
       <div className="space-y-1">
-        {filtered
-          .sort((a, b) => {
-            const dateA = a["first-release-date"] || "";
-            const dateB = b["first-release-date"] || "";
-            return dateB.localeCompare(dateA);
-          })
-          .map((releaseGroup, releaseGroupIdx) => {
+        {sortedReleaseGroups.map((releaseGroup, releaseGroupIdx) => {
             const status = getAlbumStatus(releaseGroup.id);
             const isExpanded = expandedReleaseGroup === releaseGroup.id;
             const libraryAlbumId = status?.libraryId;
@@ -463,33 +507,33 @@ export function ArtistDetailsReleaseGroups({
                             </span>
                           )}
                         {(() => {
-                          const fans = releaseGroup.fans;
-                          const stars =
-                            fans != null ? starsFromCount(fans) : null;
-                          if (stars == null) return null;
+                          const fans =
+                            typeof releaseGroup.fans === "number"
+                              ? releaseGroup.fans
+                              : 0;
+                          const segments = segmentsFromScale(
+                            fans,
+                            popularityPivot,
+                            10,
+                          );
                           return (
                             <span
                               className="flex items-center gap-0.5 ml-1"
-                              title={
-                                fans != null
-                                  ? `${fans.toLocaleString()} fans on Deezer`
-                                  : undefined
-                              }
+                              title={`Popularity: ${segments}/10 · ${fans.toLocaleString()} listeners`}
                             >
-                              {[1, 2, 3, 4, 5].map((n) => (
-                                <Star
-                                  key={n}
-                                  className="w-3.5 h-3.5 flex-shrink-0"
-                                  style={{
-                                    color:
-                                      n <= stars ? "#eab308" : "#4b5563",
-                                    fill:
-                                      n <= stars
-                                        ? "#eab308"
-                                        : "transparent",
-                                  }}
-                                />
-                              ))}
+                              {Array.from({ length: 10 }, (_, i) => {
+                                const n = i + 1;
+                                return (
+                                  <span
+                                    key={n}
+                                    className="w-1 h-3 rounded-sm flex-shrink-0"
+                                    style={{
+                                      backgroundColor:
+                                        n <= segments ? "#eab308" : "#4b5563",
+                                    }}
+                                  />
+                                );
+                              })}
                             </span>
                           );
                         })()}
