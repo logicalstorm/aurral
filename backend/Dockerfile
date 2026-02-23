@@ -2,7 +2,7 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-RUN apk add --no-cache su-exec
+RUN apk add --no-cache su-exec python3 make g++ && ln -sf /usr/bin/python3 /usr/bin/python
 
 COPY package*.json ./
 
