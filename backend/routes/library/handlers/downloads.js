@@ -7,6 +7,8 @@ import {
 } from "../../../middleware/requirePermission.js";
 import { hasPermission } from "../../../middleware/auth.js";
 
+const STALE_GRABBED_MS = 15 * 60 * 1000;
+
 export default function registerDownloads(router) {
   router.post(
     "/downloads/album",
@@ -260,6 +262,21 @@ export default function registerDownloads(router) {
             }
           }
 
+          const latestHistoryByAlbumId = new Map();
+          for (const h of historyItems) {
+            if (h?.albumId == null) continue;
+            const historyTime = new Date(
+              h?.date || h?.eventDate || 0,
+            ).getTime();
+            const existing = latestHistoryByAlbumId.get(h.albumId);
+            if (!existing || historyTime > existing.historyTime) {
+              latestHistoryByAlbumId.set(h.albumId, {
+                history: h,
+                historyTime,
+              });
+            }
+          }
+
           for (const albumId of albumIdArray) {
             if (!albumId || albumId === "undefined" || albumId === "null")
               continue;
@@ -346,9 +363,9 @@ export default function registerDownloads(router) {
               continue;
             }
 
-            const recentHistory = historyItems.find(
-              (h) => h.albumId === lidarrAlbumId,
-            );
+            const historyEntry = latestHistoryByAlbumId.get(lidarrAlbumId);
+            const recentHistory = historyEntry?.history;
+            const historyTime = historyEntry?.historyTime ?? 0;
 
             if (recentHistory) {
               const eventType = String(
@@ -363,6 +380,22 @@ export default function registerDownloads(router) {
               const errorMessage = String(
                 data?.errorMessage || "",
               ).toLowerCase();
+              const sourceTitle = String(
+                recentHistory?.sourceTitle || "",
+              ).toLowerCase();
+              const dataString = JSON.stringify(data).toLowerCase();
+              const isGrabbed =
+                eventType.includes("grabbed") ||
+                sourceTitle.includes("grabbed") ||
+                dataString.includes("grabbed");
+              const isFailedDownload =
+                eventType.includes("fail") ||
+                statusMessages.includes("fail") ||
+                statusMessages.includes("error") ||
+                errorMessage.includes("fail") ||
+                errorMessage.includes("error") ||
+                sourceTitle.includes("fail") ||
+                dataString.includes("fail");
               const isFailedImport =
                 eventType === "albumimportincomplete" ||
                 eventType.includes("incomplete") ||
@@ -375,10 +408,13 @@ export default function registerDownloads(router) {
                 eventType.includes("import") &&
                 !isFailedImport &&
                 eventType !== "albumimportincomplete";
+              const isStaleGrabbed =
+                isGrabbed &&
+                Date.now() - historyTime > STALE_GRABBED_MS;
               statuses[albumId] = {
                 status: isComplete
                   ? "added"
-                  : isFailedImport
+                  : isFailedImport || isFailedDownload || isStaleGrabbed
                     ? "failed"
                     : "processing",
                 updatedAt: new Date().toISOString(),
@@ -461,8 +497,15 @@ export default function registerDownloads(router) {
           const historyByAlbumId = new Map();
           for (const h of historyItems) {
             if (h?.albumId == null) continue;
-            if (!historyByAlbumId.has(h.albumId)) {
-              historyByAlbumId.set(h.albumId, h);
+            const historyTime = new Date(
+              h?.date || h?.eventDate || 0,
+            ).getTime();
+            const existing = historyByAlbumId.get(h.albumId);
+            if (!existing || historyTime > existing.historyTime) {
+              historyByAlbumId.set(h.albumId, {
+                history: h,
+                historyTime,
+              });
             }
           }
 
@@ -546,7 +589,9 @@ export default function registerDownloads(router) {
               continue;
             }
 
-            const recentHistory = historyByAlbumId.get(lidarrAlbumId);
+            const historyEntry = historyByAlbumId.get(lidarrAlbumId);
+            const recentHistory = historyEntry?.history;
+            const historyTime = historyEntry?.historyTime ?? 0;
 
             if (recentHistory) {
               const eventType = String(
@@ -561,6 +606,22 @@ export default function registerDownloads(router) {
               const errorMessage = String(
                 data?.errorMessage || "",
               ).toLowerCase();
+              const sourceTitle = String(
+                recentHistory?.sourceTitle || "",
+              ).toLowerCase();
+              const dataString = JSON.stringify(data).toLowerCase();
+              const isGrabbed =
+                eventType.includes("grabbed") ||
+                sourceTitle.includes("grabbed") ||
+                dataString.includes("grabbed");
+              const isFailedDownload =
+                eventType.includes("fail") ||
+                statusMessages.includes("fail") ||
+                statusMessages.includes("error") ||
+                errorMessage.includes("fail") ||
+                errorMessage.includes("error") ||
+                sourceTitle.includes("fail") ||
+                dataString.includes("fail");
               const isFailedImport =
                 eventType === "albumimportincomplete" ||
                 eventType.includes("incomplete") ||
@@ -573,6 +634,9 @@ export default function registerDownloads(router) {
                 eventType.includes("import") &&
                 !isFailedImport &&
                 eventType !== "albumimportincomplete";
+              const isStaleGrabbed =
+                isGrabbed &&
+                Date.now() - historyTime > STALE_GRABBED_MS;
               const historyDate = new Date(
                 recentHistory.date || recentHistory.eventDate || 0,
               );
@@ -582,7 +646,7 @@ export default function registerDownloads(router) {
                 allStatuses[String(lidarrAlbumId)] = {
                   status: isComplete
                     ? "added"
-                    : isFailedImport
+                    : isFailedImport || isFailedDownload || isStaleGrabbed
                       ? "failed"
                       : "processing",
                   updatedAt: new Date().toISOString(),
