@@ -11,13 +11,15 @@ on:
         type: string
   pull_request:
     branches: ["main"]
+  push:
+    branches: ["main"]
 
 env:
   REGISTRY: ghcr.io
 
 jobs:
   build-main:
-    if: (github.event_name == 'pull_request' && github.base_ref == 'main') || (github.event_name == 'workflow_call' && inputs.release_channel == 'main')
+    if: (github.event_name == 'pull_request' && github.base_ref == 'main') || (github.event_name == 'workflow_call' && inputs.release_channel == 'main') || (github.event_name == 'push' && github.ref_name == 'main')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -77,7 +79,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha
             type=raw,value=${{ steps.version.outputs.app_version }}
-            type=raw,value=latest,enable=${{ github.event_name == 'workflow_call' && inputs.release_channel == 'main' }}
+            type=raw,value=latest,enable=${{ (github.event_name == 'workflow_call' && inputs.release_channel == 'main') || (github.event_name == 'push' && github.ref_name == 'main') }}
 
       - name: Build and push Docker image
         id: build-and-push
