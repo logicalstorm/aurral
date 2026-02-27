@@ -56,7 +56,7 @@ const musicbrainzRequestWithRetry = async (
   const cached = mbCache.get(cacheKey);
   if (cached) return cached;
 
-  const MAX_RETRIES = 1;
+  const MAX_RETRIES = 3;
   const queryParams = new URLSearchParams({
     fmt: "json",
     ...params,
@@ -95,7 +95,7 @@ const musicbrainzRequestWithRetry = async (
       `${MUSICBRAINZ_API}${endpoint}?${queryParams}`,
       {
         headers: { "User-Agent": userAgent },
-        timeout: 3000,
+        timeout: 5000,
       },
     );
     mbCache.set(cacheKey, response.data);
@@ -103,12 +103,12 @@ const musicbrainzRequestWithRetry = async (
   } catch (error) {
     const shouldRetry =
       retryCount < MAX_RETRIES &&
-      !isServerUnavailable(error) &&
       (isConnectionError(error) ||
-        (error.response && [429, 500].includes(error.response.status)));
+        (error.response &&
+          [429, 500, 502, 503, 504].includes(error.response.status)));
 
     if (shouldRetry) {
-      const delay = 300;
+      const delay = 300 * Math.pow(2, retryCount);
       const errorType = error.response
         ? `HTTP ${error.response.status}`
         : error.code || error.message;
@@ -279,6 +279,18 @@ const deezerBioCache = new NodeCache({
   maxKeys: 500,
 });
 
+const wikiBioCache = new NodeCache({
+  stdTTL: 3600,
+  checkperiod: 120,
+  maxKeys: 1000,
+});
+
+const wikidataTitleCache = new NodeCache({
+  stdTTL: 3600,
+  checkperiod: 120,
+  maxKeys: 1000,
+});
+
 /**
  * Fetch artist biography from Deezer (GET /artist/{id}).
  * Returns bio string or null. Deezer's public API may not include bio for all artists.
@@ -331,6 +343,80 @@ export async function deezerGetArtistBioById(artistId) {
   }
 }
 
+async function wikidataGetWikipediaTitleByMbid(mbid) {
+  if (!mbid) return null;
+  const cacheKey = `wd:v2:${mbid}`;
+  const cached = wikidataTitleCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+  try {
+    const query = [
+      "PREFIX wdt: <http://www.wikidata.org/prop/direct/>",
+      "PREFIX schema: <http://schema.org/>",
+      `SELECT ?article WHERE { ?band wdt:P434 "${mbid}" . ?article schema:about ?band . ?article schema:isPartOf <https://en.wikipedia.org/> . } LIMIT 1`,
+    ].join(" ");
+    const contact =
+      (getMusicBrainzContact() || "").trim() || "https://github.com/aurral";
+    const userAgent = `${APP_NAME}/${APP_VERSION} ( ${contact} )`;
+    const res = await axios.get("https://query.wikidata.org/sparql", {
+      params: { query, format: "json" },
+      headers: {
+        "User-Agent": userAgent,
+        Accept: "application/sparql-results+json",
+      },
+      timeout: 5000,
+    });
+    const bindings = res.data?.results?.bindings || [];
+    const url = bindings[0]?.article?.value || null;
+    if (!url) {
+      wikidataTitleCache.set(cacheKey, null);
+      return null;
+    }
+    const slug = url.split("/").pop() || "";
+    const title = decodeURIComponent(slug).replace(/_/g, " ").trim();
+    const value = title || null;
+    wikidataTitleCache.set(cacheKey, value);
+    return value;
+  } catch (e) {
+    wikidataTitleCache.set(cacheKey, null);
+    return null;
+  }
+}
+
+async function wikipediaGetBioByTitle(title) {
+  if (!title) return null;
+  const cacheKey = `wp:v2:${title.toLowerCase()}`;
+  const cached = wikiBioCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+  try {
+    const urlTitle = encodeURIComponent(title.replace(/ /g, "_"));
+    const contact =
+      (getMusicBrainzContact() || "").trim() || "https://github.com/aurral";
+    const userAgent = `${APP_NAME}/${APP_VERSION} ( ${contact} )`;
+    const res = await axios.get(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${urlTitle}`,
+      { timeout: 5000, headers: { "User-Agent": userAgent } },
+    );
+    const extract = res.data?.extract || null;
+    const isDisambiguation =
+      res.data?.type === "disambiguation" || /may refer to/.test(extract || "");
+    const value =
+      typeof extract === "string" && extract.trim() && !isDisambiguation
+        ? extract.trim()
+        : null;
+    wikiBioCache.set(cacheKey, value);
+    return value;
+  } catch (e) {
+    wikiBioCache.set(cacheKey, null);
+    return null;
+  }
+}
+
+export async function wikipediaGetArtistBioByMbid(mbid) {
+  const title = await wikidataGetWikipediaTitleByMbid(mbid);
+  if (!title) return null;
+  return wikipediaGetBioByTitle(title);
+}
+
 /**
  * Strip basic HTML tags and decode entities from a string (e.g. Last.fm bio).
  */
@@ -375,6 +461,10 @@ export async function lastfmGetArtistBio(mbid) {
  * Get artist biography: try Deezer first, then Last.fm. Returns string or null.
  */
 export async function getArtistBio(artistName, mbid, deezerArtistId = null) {
+  if (mbid) {
+    const wikiBio = await wikipediaGetArtistBioByMbid(mbid);
+    if (wikiBio) return wikiBio;
+  }
   const deezerBio = deezerArtistId
     ? await deezerGetArtistBioById(deezerArtistId)
     : await deezerGetArtistBio(artistName);
@@ -583,10 +673,7 @@ export async function enrichReleaseGroupsWithLastfm(
     for (const album of albums) {
       const title = album?.name || album?.title || "";
       if (!title) continue;
-      const listeners = parseInt(
-        album?.listeners || album?.playcount || 0,
-        10,
-      );
+      const listeners = parseInt(album?.listeners || album?.playcount || 0, 10);
       if (!listeners) continue;
       const key = normalizeTitle(title);
       const existing = byTitle.get(key) || 0;
