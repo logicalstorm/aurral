@@ -8,6 +8,7 @@ import {
 } from "./apiClients.js";
 
 const LIDARR_RETRY_MS = 60000;
+const FULL_LIST_FALLBACK_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 const TRACKS_CACHE_TTL_MS = 120000;
 const TRACKS_CACHE_MAX = 300;
 
@@ -15,6 +16,7 @@ let lidarrClient = null;
 let _cachedArtists = [];
 let _lastLidarrFailureAt = 0;
 let _retryTimeoutId = null;
+let _lastFullArtistFetchAt = 0;
 const _tracksCache = new Map();
 
 async function getLidarrClient() {
@@ -90,8 +92,7 @@ export class LibraryManager {
             const profiles = await lidarr.getMetadataProfiles();
             const profile = Array.isArray(profiles)
               ? profiles.find(
-                  (item) =>
-                    String(item?.id) === String(metadataProfileId),
+                  (item) => String(item?.id) === String(metadataProfileId),
                 )
               : null;
             if (profile?.primaryAlbumTypes) {
@@ -275,6 +276,96 @@ export class LibraryManager {
       }
     } catch (_) {
       return _cachedArtists;
+    }
+  }
+
+  async getRecentArtists(limit = 25, poolSize = 100) {
+    try {
+      const lidarr = await getLidarrClient();
+      if (!lidarr || !lidarr.isConfigured()) {
+        return Array.isArray(_cachedArtists)
+          ? _cachedArtists.slice(0, limit)
+          : [];
+      }
+      if (
+        _lastLidarrFailureAt &&
+        Date.now() - _lastLidarrFailureAt < LIDARR_RETRY_MS
+      ) {
+        scheduleLidarrRetry(this);
+        return Array.isArray(_cachedArtists)
+          ? _cachedArtists.slice(0, limit)
+          : [];
+      }
+      const normalizedLimit = Math.max(0, limit);
+      const normalizedPool = Math.max(normalizedLimit, poolSize);
+      const pageSize = Math.max(normalizedPool * 2, normalizedPool);
+      const history = await lidarr.getHistory(
+        1,
+        pageSize,
+        "date",
+        "descending",
+      );
+      const records = Array.isArray(history) ? history : history?.records || [];
+      const artistIds = [];
+      const seen = new Set();
+      for (const record of records) {
+        const id = record?.artistId ?? record?.artist?.id;
+        if (id === undefined || id === null) continue;
+        const key = String(id);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        artistIds.push(key);
+        if (artistIds.length >= normalizedPool) break;
+      }
+      if (artistIds.length === 0) {
+        if (
+          (!Array.isArray(_cachedArtists) || _cachedArtists.length === 0) &&
+          Date.now() - _lastFullArtistFetchAt > FULL_LIST_FALLBACK_COOLDOWN_MS
+        ) {
+          try {
+            const lidarrArtists = await lidarr.request("/artist");
+            if (Array.isArray(lidarrArtists)) {
+              _cachedArtists = lidarrArtists.map((a) =>
+                this.mapLidarrArtist(a),
+              );
+              _lastFullArtistFetchAt = Date.now();
+            }
+          } catch {}
+        }
+        return Array.isArray(_cachedArtists)
+          ? _cachedArtists.slice(0, normalizedLimit)
+          : [];
+      }
+      const picked = artistIds
+        .sort(() => 0.5 - Math.random())
+        .slice(0, normalizedLimit);
+      const artists = await Promise.all(
+        picked.map((id) => lidarr.getArtist(id).catch(() => null)),
+      );
+      const mapped = artists
+        .filter(Boolean)
+        .map((artist) => this.mapLidarrArtist(artist));
+      if (mapped.length >= normalizedLimit) return mapped;
+      if (Array.isArray(_cachedArtists) && _cachedArtists.length > 0) {
+        const existing = new Set(
+          mapped.map(
+            (artist) => artist.mbid || artist.foreignArtistId || artist.id,
+          ),
+        );
+        const fallback = _cachedArtists.filter(
+          (artist) =>
+            !existing.has(artist.mbid || artist.foreignArtistId || artist.id),
+        );
+        const extra = fallback
+          .sort(() => 0.5 - Math.random())
+          .slice(0, Math.max(0, normalizedLimit - mapped.length));
+        return [...mapped, ...extra];
+      }
+      return mapped;
+    } catch (_) {
+      return Array.isArray(_cachedArtists)
+        ? _cachedArtists.slice(0, limit)
+        : [];
     }
   }
 
