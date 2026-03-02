@@ -675,7 +675,7 @@ function DiscoverPage() {
               className="text-2xl font-bold flex items-center"
               style={{ color: "#fff" }}
             >
-              Recent Releases
+              Recent & Upcoming Releases
             </h2>
           </div>
 
