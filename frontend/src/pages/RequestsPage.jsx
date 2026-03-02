@@ -400,8 +400,10 @@ function RequestsPage() {
             const albumStatus = request.albumId
               ? downloadStatuses[String(request.albumId)]
               : null;
+            const statusValue = albumStatus?.status;
             const isFailed =
-              albumStatus?.status === "failed" || request.status === "failed";
+              statusValue === "failed" ||
+              (!statusValue && request.status === "failed");
             const isReSearching =
               request.albumId &&
               String(request.albumId) === reSearchingAlbumId;
