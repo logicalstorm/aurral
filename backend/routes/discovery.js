@@ -80,7 +80,7 @@ router.get("/", async (req, res) => {
   const settings = dbOps.getSettings();
   const lastfmUsername = settings.integrations?.lastfm?.username || null;
   const hasLastfmUser = hasLastfmKey && lastfmUsername;
-  const libraryArtists = await libraryManager.getAllArtists();
+  const libraryArtists = await libraryManager.getRecentArtists(25);
   const hasArtists = libraryArtists.length > 0;
 
   if (!hasLastfmKey && !hasArtists) {
@@ -182,7 +182,7 @@ router.get("/", async (req, res) => {
   const existingArtistIds = new Set(libraryArtists.map((a) => a.mbid));
 
   recommendations = recommendations.filter(
-    (artist) => !existingArtistIds.has(artist.id)
+    (artist) => !existingArtistIds.has(artist.id),
   );
   globalTop = globalTop.filter((artist) => !existingArtistIds.has(artist.id));
 
@@ -384,10 +384,12 @@ router.get("/by-tag", async (req, res) => {
     } else {
       const discoveryCache = getDiscoveryCache();
       const tagLower = String(tag).trim().toLowerCase();
-      const matches = (discoveryCache.recommendations || []).filter((artist) => {
-        const tags = Array.isArray(artist.tags) ? artist.tags : [];
-        return tags.some((t) => String(t).toLowerCase() === tagLower);
-      });
+      const matches = (discoveryCache.recommendations || []).filter(
+        (artist) => {
+          const tags = Array.isArray(artist.tags) ? artist.tags : [];
+          return tags.some((t) => String(t).toLowerCase() === tagLower);
+        },
+      );
       recommendations = matches.slice(offsetInt, offsetInt + limitInt);
       return res.json({
         recommendations,
@@ -472,7 +474,7 @@ router.delete("/preferences/exclude-genre/:genre", (req, res) => {
     const { genre } = req.params;
     discoveryPreferences.excludedGenres =
       discoveryPreferences.excludedGenres.filter(
-        (g) => g !== genre.toLowerCase()
+        (g) => g !== genre.toLowerCase(),
       );
 
     res.json({
@@ -517,7 +519,7 @@ router.delete("/preferences/exclude-artist/:artistId", (req, res) => {
     const { artistId } = req.params;
     discoveryPreferences.excludedArtists =
       discoveryPreferences.excludedArtists.filter(
-        (a) => a.artistId !== artistId
+        (a) => a.artistId !== artistId,
       );
 
     res.json({
@@ -538,17 +540,17 @@ router.get("/filtered", async (req, res) => {
     let recommendations = discoveryCache.recommendations || [];
     let globalTop = discoveryCache.globalTop || [];
 
-    const libraryArtists = await libraryManager.getAllArtists();
+    const libraryArtists = await libraryManager.getRecentArtists(25);
     const existingArtistIds = new Set(libraryArtists.map((a) => a.mbid));
 
     recommendations = recommendations.filter(
-      (artist) => !existingArtistIds.has(artist.id)
+      (artist) => !existingArtistIds.has(artist.id),
     );
     globalTop = globalTop.filter((artist) => !existingArtistIds.has(artist.id));
 
     if (discoveryPreferences.excludedGenres.length > 0) {
       const excludedGenresLower = discoveryPreferences.excludedGenres.map((g) =>
-        g.toLowerCase()
+        g.toLowerCase(),
       );
 
       recommendations = recommendations.filter((artist) => {
@@ -564,10 +566,10 @@ router.get("/filtered", async (req, res) => {
 
     if (discoveryPreferences.excludedArtists.length > 0) {
       const excludedIds = new Set(
-        discoveryPreferences.excludedArtists.map((a) => a.artistId)
+        discoveryPreferences.excludedArtists.map((a) => a.artistId),
       );
       recommendations = recommendations.filter(
-        (artist) => !excludedIds.has(artist.id)
+        (artist) => !excludedIds.has(artist.id),
       );
       globalTop = globalTop.filter((artist) => !excludedIds.has(artist.id));
     }
@@ -575,7 +577,7 @@ router.get("/filtered", async (req, res) => {
     if (discoveryPreferences.maxRecommendations > 0) {
       recommendations = recommendations.slice(
         0,
-        discoveryPreferences.maxRecommendations
+        discoveryPreferences.maxRecommendations,
       );
     }
 
