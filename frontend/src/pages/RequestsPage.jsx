@@ -17,6 +17,7 @@ import {
 } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
 import { useToast } from "../contexts/ToastContext";
+import { useWebSocketChannel } from "../hooks/useWebSocket";
 
 function RequestsPage() {
   const [requests, setRequests] = useState([]);
@@ -27,6 +28,35 @@ function RequestsPage() {
   const navigate = useNavigate();
   const { showError, showSuccess } = useToast();
   const activeAlbumIdsRef = useRef([]);
+  const handleDownloadStatusMessage = useCallback((msg) => {
+    if (msg?.type !== "download_statuses") return;
+    const activeIds = activeAlbumIdsRef.current;
+    if (!activeIds.length) return;
+    const incoming = msg.statuses || {};
+    const next = {};
+    for (const id of activeIds) {
+      if (incoming[id]) next[id] = incoming[id];
+    }
+    setDownloadStatuses((prev) => {
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      if (prevKeys.length !== nextKeys.length) return next;
+      for (const key of nextKeys) {
+        const prevStatus = prev[key];
+        const nextStatus = next[key];
+        if (
+          prevStatus?.status !== nextStatus?.status ||
+          prevStatus?.progress !== nextStatus?.progress ||
+          prevStatus?.updatedAt !== nextStatus?.updatedAt
+        ) {
+          return next;
+        }
+      }
+      return prev;
+    });
+  }, []);
+
+  useWebSocketChannel("downloads", handleDownloadStatusMessage);
 
   const activeAlbumIds = useMemo(() => {
     return requests
@@ -197,6 +227,18 @@ function RequestsPage() {
 
     const hasActiveDownloads = artistDownloadStatuses.length > 0;
 
+    if (albumStatus?.status === "adding") {
+      return (
+        <span
+          className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold uppercase rounded"
+          style={{ backgroundColor: "#211f27", color: "#c1c1c3" }}
+        >
+          <Loader className="w-3 h-3 animate-spin" />
+          Adding...
+        </span>
+      );
+    }
+
     if (albumStatus?.status === "downloading") {
       return (
         <span
@@ -221,6 +263,18 @@ function RequestsPage() {
       );
     }
 
+    if (albumStatus?.status === "moving") {
+      return (
+        <span
+          className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold uppercase rounded"
+          style={{ backgroundColor: "#211f27", color: "#c1c1c3" }}
+        >
+          <Loader className="w-3 h-3 animate-spin" />
+          Moving files...
+        </span>
+      );
+    }
+
     if (albumStatus?.status === "processing") {
       return (
         <span
@@ -229,6 +283,15 @@ function RequestsPage() {
         >
           <Loader className="w-3 h-3 animate-spin" />
           Processing
+        </span>
+      );
+    }
+
+    if (albumStatus?.status === "added") {
+      return (
+        <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold uppercase bg-green-500/20 text-green-400 rounded">
+          <CheckCircle2 className="w-3 h-3" />
+          Completed
         </span>
       );
     }
