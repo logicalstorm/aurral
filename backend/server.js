@@ -35,6 +35,7 @@ import {
   getDiscoveryCache,
 } from "./services/discoveryService.js";
 import { websocketService } from "./services/websocketService.js";
+import { getAllDownloadStatuses } from "./routes/library/handlers/downloads.js";
 
 import settingsRouter from "./routes/settings.js";
 import onboardingRouter from "./routes/onboarding.js";
@@ -106,6 +107,27 @@ setTimeout(async () => {
 const httpServer = createServer(app);
 
 websocketService.initialize(httpServer);
+
+const DOWNLOAD_STATUS_INTERVAL_MS = 10000;
+let lastDownloadStatusesPayload = null;
+const broadcastDownloadStatuses = async () => {
+  try {
+    const statuses = await getAllDownloadStatuses();
+    const payload = JSON.stringify(statuses);
+    if (payload !== lastDownloadStatusesPayload) {
+      lastDownloadStatusesPayload = payload;
+      websocketService.broadcast("downloads", {
+        type: "download_statuses",
+        statuses,
+      });
+    }
+  } catch (error) {
+    console.warn("Failed to broadcast download statuses:", error.message);
+  }
+};
+
+broadcastDownloadStatuses();
+setInterval(broadcastDownloadStatuses, DOWNLOAD_STATUS_INTERVAL_MS);
 
 httpServer.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);

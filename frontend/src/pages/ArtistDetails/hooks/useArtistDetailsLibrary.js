@@ -17,6 +17,7 @@ import {
 } from "../../../utils/api";
 import { deduplicateAlbums } from "../utils";
 import { matchesReleaseTypeFilter } from "../utils";
+import { useWebSocketChannel } from "../../../hooks/useWebSocket";
 
 export function useArtistDetailsLibrary({
   artist,
@@ -54,6 +55,49 @@ export function useArtistDetailsLibrary({
   const [reSearchOverrides, setReSearchOverrides] = useState({});
   const reSearchOverridesRef = useRef({});
   const unmonitoredAtRef = useRef({});
+  const libraryAlbumIdsRef = useRef([]);
+
+  useEffect(() => {
+    libraryAlbumIdsRef.current = libraryAlbums
+      .map((album) => String(album.id))
+      .filter(Boolean);
+  }, [libraryAlbums]);
+
+  useWebSocketChannel("downloads", (msg) => {
+    if (msg?.type !== "download_statuses") return;
+    const albumIds = libraryAlbumIdsRef.current;
+    if (!albumIds.length) return;
+    const incoming = msg.statuses || {};
+    const next = {};
+    for (const id of albumIds) {
+      if (incoming[id]) next[id] = incoming[id];
+    }
+    if (requestingAlbum) {
+      const album = libraryAlbums.find(
+        (a) => a.mbid === requestingAlbum || a.foreignAlbumId === requestingAlbum,
+      );
+      if (album && incoming[String(album.id)]) {
+        setRequestingAlbum(null);
+      }
+    }
+    setDownloadStatuses((prev) => {
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      if (prevKeys.length !== nextKeys.length) return next;
+      for (const key of nextKeys) {
+        const prevStatus = prev[key];
+        const nextStatus = next[key];
+        if (
+          prevStatus?.status !== nextStatus?.status ||
+          prevStatus?.progress !== nextStatus?.progress ||
+          prevStatus?.updatedAt !== nextStatus?.updatedAt
+        ) {
+          return next;
+        }
+      }
+      return prev;
+    });
+  });
 
   const handleRefreshArtist = async () => {
     if (!libraryArtist?.mbid && !libraryArtist?.foreignArtistId) return;
