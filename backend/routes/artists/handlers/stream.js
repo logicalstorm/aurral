@@ -52,10 +52,34 @@ export default function registerStream(router) {
 
       sendSSE(res, "connected", { mbid });
 
-      let artistData = null;
       const override = dbOps.getArtistOverride(mbid);
       const resolvedMbid = override?.musicbrainzId || mbid;
       const deezerArtistId = override?.deezerArtistId || null;
+      const initialName = streamArtistName || "Unknown Artist";
+      const buildArtistBase = (name) => ({
+        id: resolvedMbid,
+        name,
+        "sort-name": name,
+        disambiguation: "",
+        "type-id": null,
+        type: null,
+        country: null,
+        "life-span": { begin: null, end: null, ended: false },
+        relations: [],
+      });
+      const sendArtist = (payload) => {
+        if (!isClientConnected()) return;
+        sendSSE(res, "artist", payload);
+      };
+
+      sendArtist({
+        ...buildArtistBase(initialName),
+        tags: [],
+        genres: [],
+        "release-groups": [],
+        "release-group-count": 0,
+        "release-count": 0,
+      });
 
       try {
         const { lidarrClient } =
@@ -77,82 +101,14 @@ export default function registerStream(router) {
               if (libraryArtist) {
                 lidarrAlbums = await libraryManager.getAlbums(libraryArtist.id);
               }
-
-              const artistMbid =
-                override?.musicbrainzId || lidarrArtist.foreignArtistId || mbid;
-              let releaseGroups = [];
-              try {
-                releaseGroups =
-                  await musicbrainzGetArtistReleaseGroups(artistMbid);
-                await enrichReleaseGroupsWithDeezer(
-                  releaseGroups,
-                  lidarrArtist.artistName,
-                  deezerArtistId,
-                );
-                if (getLastfmApiKey()) {
-                  await enrichReleaseGroupsWithLastfm(
-                    releaseGroups,
-                    lidarrArtist.artistName,
-                    artistMbid,
-                  );
-                }
-              } catch (e) {
-                releaseGroups = lidarrAlbums.map((album) => ({
-                  id: album.mbid,
-                  title: album.albumName,
-                  "first-release-date": album.releaseDate || null,
-                  "primary-type": "Album",
-                  "secondary-types": [],
-                }));
-              }
-              const mbidToType = new Map(
-                releaseGroups.map((rg) => [rg.id, rg["primary-type"]]),
-              );
-
-              const [bio, tagsData] = await Promise.all([
-                getArtistBio(
-                  lidarrArtist.artistName,
-                  artistMbid,
-                  deezerArtistId,
-                ),
-                getLastfmApiKey()
-                  ? lastfmRequest("artist.getTopTags", { mbid: artistMbid })
-                  : null,
-              ]);
-              const tags = tagsData?.toptags?.tag
-                ? (Array.isArray(tagsData.toptags.tag)
-                    ? tagsData.toptags.tag
-                    : [tagsData.toptags.tag]
-                  ).map((t) => ({ name: t.name, count: t.count || 0 }))
-                : [];
-              artistData = {
-                id: artistMbid,
-                name: lidarrArtist.artistName,
-                "sort-name": lidarrArtist.artistName,
-                disambiguation: "",
-                "type-id": null,
-                type: null,
-                country: null,
-                "life-span": {
-                  begin: null,
-                  end: null,
-                  ended: false,
-                },
-                tags,
-                genres: [],
-                "release-groups": releaseGroups,
-                relations: [],
-                "release-group-count": releaseGroups.length,
-                "release-count": releaseGroups.length,
+              sendArtist({
+                ...buildArtistBase(lidarrArtist.artistName),
                 _lidarrData: {
                   id: lidarrArtist.id,
                   monitored: lidarrArtist.monitored,
                   statistics: lidarrArtist.statistics,
                 },
-                ...(bio ? { bio } : {}),
-              };
-
-              sendSSE(res, "artist", artistData);
+              });
 
               const libArtist = libraryManager.mapLidarrArtist(lidarrArtist);
               sendSSE(res, "library", {
@@ -166,8 +122,7 @@ export default function registerStream(router) {
                   ...a,
                   foreignAlbumId: a.foreignAlbumId || a.mbid,
                   title: a.albumName,
-                  albumType:
-                    mbidToType.get(a.mbid || a.foreignAlbumId) || "Album",
+                  albumType: "Album",
                   statistics: a.statistics || {
                     trackCount: 0,
                     sizeOnDisk: 0,
@@ -183,61 +138,70 @@ export default function registerStream(router) {
           }
         }
 
-        if (!artistData) {
-          if (pendingArtistRequests.has(mbid)) {
-            if (streamArtistName) {
-              sendSSE(res, "artist", {
-                id: resolvedMbid,
-                name: streamArtistName,
-                "sort-name": streamArtistName,
-                disambiguation: "",
-                "type-id": null,
-                type: null,
-                country: null,
-                "life-span": { begin: null, end: null, ended: false },
-                tags: [],
-                genres: [],
-                "release-groups": [],
-                relations: [],
-                "release-group-count": 0,
-                "release-count": 0,
-              });
-            }
-            console.log(
-              `[Artists Stream] Request for ${mbid} already in progress, waiting...`,
-            );
-            try {
-              artistData = await pendingArtistRequests.get(mbid);
-              sendSSE(res, "artist", artistData);
-            } catch (error) {
-              sendSSE(res, "error", {
-                error: "Failed to fetch artist details",
-                message: error.response?.data?.error || error.message,
-              });
-              return;
-            }
-          } else {
-            const fetchPromise = (async () => {
+        const tasks = [];
+        let fullArtistPromise = null;
+        const pendingPromise = pendingArtistRequests.has(mbid)
+          ? pendingArtistRequests.get(mbid)
+          : null;
+        const namePromise = pendingPromise
+          ? streamArtistName
+            ? Promise.resolve(streamArtistName)
+            : pendingPromise
+                .then(
+                  (data) => data?.name || streamArtistName || "Unknown Artist",
+                )
+                .catch(() => streamArtistName || "Unknown Artist")
+          : (async () => {
+              if (streamArtistName) return streamArtistName;
               const name =
-                streamArtistName ||
                 (getLastfmApiKey()
                   ? await lastfmGetArtistNameByMbid(resolvedMbid)
                   : null) ||
                 (await musicbrainzGetArtistNameByMbid(resolvedMbid)) ||
                 "Unknown Artist";
-              const tagsData = getLastfmApiKey()
-                ? await lastfmRequest("artist.getTopTags", {
-                    mbid: resolvedMbid,
-                  })
-                : null;
-              const tags = tagsData?.toptags?.tag
-                ? (Array.isArray(tagsData.toptags.tag)
-                    ? tagsData.toptags.tag
-                    : [tagsData.toptags.tag]
-                  ).map((t) => ({ name: t.name, count: t.count || 0 }))
-                : [];
-              const releaseGroups =
-                await musicbrainzGetArtistReleaseGroups(resolvedMbid);
+              return name;
+            })();
+
+        if (pendingPromise) {
+          console.log(
+            `[Artists Stream] Request for ${mbid} already in progress, waiting...`,
+          );
+          pendingPromise
+            .then((data) => {
+              if (data) sendArtist(data);
+            })
+            .catch((error) => {
+              sendSSE(res, "error", {
+                error: "Failed to fetch artist details",
+                message: error.response?.data?.error || error.message,
+              });
+            });
+          tasks.push(pendingPromise.catch(() => null));
+        }
+
+        if (!pendingPromise) {
+          const releaseGroupsPromise = musicbrainzGetArtistReleaseGroups(
+            resolvedMbid,
+          ).catch(() => []);
+
+          tasks.push(
+            releaseGroupsPromise.then((releaseGroups) => {
+              if (!isClientConnected()) return;
+              sendArtist({
+                id: resolvedMbid,
+                "release-groups": releaseGroups,
+                "release-group-count": releaseGroups.length,
+                "release-count": releaseGroups.length,
+              });
+            }),
+          );
+
+          const enrichedReleaseGroupsPromise = Promise.all([
+            releaseGroupsPromise,
+            namePromise,
+          ])
+            .then(async ([releaseGroups, name]) => {
+              if (!releaseGroups.length) return { releaseGroups, name };
               await enrichReleaseGroupsWithDeezer(
                 releaseGroups,
                 name,
@@ -250,84 +214,211 @@ export default function registerStream(router) {
                   resolvedMbid,
                 );
               }
-              const bio = await getArtistBio(
-                name,
-                resolvedMbid,
-                deezerArtistId,
-              );
-              return {
+              return { releaseGroups, name };
+            })
+            .then(({ releaseGroups, name }) => {
+              if (!isClientConnected()) return;
+              sendArtist({
                 id: resolvedMbid,
                 name,
                 "sort-name": name,
-                disambiguation: "",
-                "type-id": null,
-                type: null,
-                country: null,
-                "life-span": { begin: null, end: null, ended: false },
-                tags,
-                genres: [],
                 "release-groups": releaseGroups,
-                relations: [],
                 "release-group-count": releaseGroups.length,
                 "release-count": releaseGroups.length,
-                bio: bio || undefined,
-              };
-            })();
-            pendingArtistRequests.set(mbid, fetchPromise);
-            if (streamArtistName) {
-              sendSSE(res, "artist", {
-                id: resolvedMbid,
-                name: streamArtistName,
-                "sort-name": streamArtistName,
-                disambiguation: "",
-                "type-id": null,
-                type: null,
-                country: null,
-                "life-span": { begin: null, end: null, ended: false },
-                tags: [],
-                genres: [],
-                "release-groups": [],
-                relations: [],
-                "release-group-count": 0,
-                "release-count": 0,
               });
-            }
-            try {
-              artistData = await fetchPromise;
-              sendSSE(res, "artist", artistData);
-            } catch (err) {
-              const fallback = {
-                id: resolvedMbid,
-                name: streamArtistName || "Unknown Artist",
-                "sort-name": streamArtistName || "Unknown Artist",
-                disambiguation: "",
-                "type-id": null,
-                type: null,
-                country: null,
-                "life-span": { begin: null, end: null, ended: false },
-                tags: [],
-                genres: [],
-                "release-groups": [],
-                relations: [],
-                "release-group-count": 0,
-                "release-count": 0,
-              };
-              artistData = fallback;
-              sendSSE(res, "artist", fallback);
-            } finally {
+              return releaseGroups;
+            });
+
+          const tagsPromise = getLastfmApiKey()
+            ? lastfmRequest("artist.getTopTags", { mbid: resolvedMbid })
+                .then((tagsData) => {
+                  const tags = tagsData?.toptags?.tag
+                    ? (Array.isArray(tagsData.toptags.tag)
+                        ? tagsData.toptags.tag
+                        : [tagsData.toptags.tag]
+                      ).map((t) => ({ name: t.name, count: t.count || 0 }))
+                    : [];
+                  if (!isClientConnected()) return tags;
+                  sendArtist({ id: resolvedMbid, tags });
+                  return tags;
+                })
+                .catch(() => [])
+            : Promise.resolve([]);
+
+          const bioPromise = namePromise
+            .then((name) =>
+              getArtistBio(name, resolvedMbid, deezerArtistId).catch(
+                () => null,
+              ),
+            )
+            .then((bio) => {
+              if (!bio || !isClientConnected()) return bio;
+              sendArtist({ id: resolvedMbid, bio });
+              return bio;
+            });
+
+          tasks.push(enrichedReleaseGroupsPromise, tagsPromise, bioPromise);
+
+          fullArtistPromise = Promise.all([
+            namePromise,
+            enrichedReleaseGroupsPromise,
+            tagsPromise,
+            bioPromise,
+          ])
+            .then(([name, releaseGroups, tags, bio]) => ({
+              ...buildArtistBase(name),
+              tags,
+              genres: [],
+              "release-groups": releaseGroups,
+              relations: [],
+              "release-group-count": releaseGroups.length,
+              "release-count": releaseGroups.length,
+              ...(bio ? { bio } : {}),
+            }))
+            .catch(() => null);
+
+          pendingArtistRequests.set(mbid, fullArtistPromise);
+          fullArtistPromise
+            .then((artistData) => {
+              if (artistData) sendArtist(artistData);
+            })
+            .finally(() => {
               pendingArtistRequests.delete(mbid);
-            }
-          }
+            });
+
+          const releaseGroupCoversTask = enrichedReleaseGroupsPromise.then(
+            (releaseGroups) => {
+              if (!isClientConnected()) return;
+              if (!releaseGroups?.length) return;
+              const groups = releaseGroups
+                .filter(
+                  (rg) =>
+                    rg["primary-type"] === "Album" ||
+                    rg["primary-type"] === "EP" ||
+                    rg["primary-type"] === "Single",
+                )
+                .slice(0, 20);
+
+              const cacheKeys = groups.map((rg) => `rg:${rg.id}`);
+              const cachedCovers = dbOps.getImages(cacheKeys);
+
+              for (const rg of groups) {
+                if (!isClientConnected()) return;
+                const cacheKey = `rg:${rg.id}`;
+                const cachedCover = cachedCovers[cacheKey];
+                if (rg._coverUrl) {
+                  dbOps.setImage(cacheKey, rg._coverUrl);
+                  sendSSE(res, "releaseGroupCover", {
+                    mbid: rg.id,
+                    images: [
+                      { image: rg._coverUrl, front: true, types: ["Front"] },
+                    ],
+                  });
+                  continue;
+                }
+                if (
+                  cachedCover &&
+                  cachedCover.imageUrl &&
+                  cachedCover.imageUrl !== "NOT_FOUND"
+                ) {
+                  sendSSE(res, "releaseGroupCover", {
+                    mbid: rg.id,
+                    images: [
+                      {
+                        image: cachedCover.imageUrl,
+                        front: true,
+                        types: ["Front"],
+                      },
+                    ],
+                  });
+                  continue;
+                }
+                if (cachedCover && cachedCover.imageUrl === "NOT_FOUND") {
+                  sendSSE(res, "releaseGroupCover", {
+                    mbid: rg.id,
+                    images: [],
+                  });
+                  continue;
+                }
+                if (String(rg.id).startsWith("dz-")) continue;
+              }
+
+              const uncachedGroups = groups.filter((rg) => {
+                if (rg._coverUrl || String(rg.id).startsWith("dz-"))
+                  return false;
+                const cachedCover = cachedCovers[`rg:${rg.id}`];
+                return !cachedCover;
+              });
+
+              const BATCH_SIZE = 4;
+              return (async () => {
+                for (let i = 0; i < uncachedGroups.length; i += BATCH_SIZE) {
+                  if (!isClientConnected()) return;
+                  const batch = uncachedGroups.slice(i, i + BATCH_SIZE);
+                  await Promise.allSettled(
+                    batch.map(async (rg) => {
+                      if (!isClientConnected()) return;
+                      const cacheKey = `rg:${rg.id}`;
+                      try {
+                        const coverArtResponse = await axios
+                          .get(
+                            `https://coverartarchive.org/release-group/${rg.id}`,
+                            {
+                              headers: { Accept: "application/json" },
+                              timeout: 3000,
+                            },
+                          )
+                          .catch(() => null);
+
+                        if (coverArtResponse?.data?.images?.length > 0) {
+                          const frontImage =
+                            coverArtResponse.data.images.find(
+                              (img) => img.front,
+                            ) || coverArtResponse.data.images[0];
+                          if (frontImage) {
+                            const imageUrl =
+                              frontImage.thumbnails?.["500"] ||
+                              frontImage.thumbnails?.["large"] ||
+                              frontImage.image;
+                            if (imageUrl) {
+                              dbOps.setImage(cacheKey, imageUrl);
+                              sendSSE(res, "releaseGroupCover", {
+                                mbid: rg.id,
+                                images: [
+                                  {
+                                    image: imageUrl,
+                                    front: true,
+                                    types: frontImage.types || ["Front"],
+                                  },
+                                ],
+                              });
+                              return;
+                            }
+                          }
+                        }
+                        dbOps.setImage(cacheKey, "NOT_FOUND");
+                        sendSSE(res, "releaseGroupCover", {
+                          mbid: rg.id,
+                          images: [],
+                        });
+                      } catch (e) {
+                        sendSSE(res, "releaseGroupCover", {
+                          mbid: rg.id,
+                          images: [],
+                        });
+                      }
+                    }),
+                  );
+                }
+              })();
+            },
+          );
+
+          tasks.push(releaseGroupCoversTask);
         }
-
-        const criticalTasks = [];
-        const nonCriticalTasks = [];
-
         const coverTask = (async () => {
           if (!isClientConnected()) return;
           try {
-            const artistName = artistData?.name || streamArtistName || null;
-
             const cachedImage = dbOps.getImage(mbid);
             if (
               cachedImage &&
@@ -346,6 +437,7 @@ export default function registerStream(router) {
               return;
             }
 
+            const artistName = await namePromise;
             if (artistName) {
               try {
                 const deezer = deezerArtistId
@@ -369,7 +461,7 @@ export default function registerStream(router) {
             sendSSE(res, "cover", { images: [] });
           }
         })();
-        criticalTasks.push(coverTask);
+        tasks.push(coverTask);
 
         const similarTask = (async () => {
           if (!isClientConnected()) return;
@@ -419,140 +511,16 @@ export default function registerStream(router) {
             sendSSE(res, "similar", { artists: [] });
           }
         })();
-        criticalTasks.push(similarTask);
+        tasks.push(similarTask);
 
-        const releaseGroupCoversTask = (async () => {
-          if (!isClientConnected()) return;
-          if (artistData?.["release-groups"]?.length === 0) return;
-          const releaseGroups = (artistData["release-groups"] || [])
-            .filter(
-              (rg) =>
-                rg["primary-type"] === "Album" ||
-                rg["primary-type"] === "EP" ||
-                rg["primary-type"] === "Single",
-            )
-            .slice(0, 20);
-
-          const cacheKeys = releaseGroups.map((rg) => `rg:${rg.id}`);
-          const cachedCovers = dbOps.getImages(cacheKeys);
-
-          for (const rg of releaseGroups) {
-            if (!isClientConnected()) return;
-            const cacheKey = `rg:${rg.id}`;
-            const cachedCover = cachedCovers[cacheKey];
-            if (rg._coverUrl) {
-              dbOps.setImage(cacheKey, rg._coverUrl);
-              sendSSE(res, "releaseGroupCover", {
-                mbid: rg.id,
-                images: [
-                  { image: rg._coverUrl, front: true, types: ["Front"] },
-                ],
-              });
-              continue;
-            }
-            if (
-              cachedCover &&
-              cachedCover.imageUrl &&
-              cachedCover.imageUrl !== "NOT_FOUND"
-            ) {
-              sendSSE(res, "releaseGroupCover", {
-                mbid: rg.id,
-                images: [
-                  {
-                    image: cachedCover.imageUrl,
-                    front: true,
-                    types: ["Front"],
-                  },
-                ],
-              });
-              continue;
-            }
-            if (cachedCover && cachedCover.imageUrl === "NOT_FOUND") {
-              sendSSE(res, "releaseGroupCover", { mbid: rg.id, images: [] });
-              continue;
-            }
-            if (String(rg.id).startsWith("dz-")) continue;
-          }
-
-          const uncachedGroups = releaseGroups.filter((rg) => {
-            if (rg._coverUrl || String(rg.id).startsWith("dz-")) return false;
-            const cachedCover = cachedCovers[`rg:${rg.id}`];
-            return !cachedCover;
-          });
-
-          const BATCH_SIZE = 4;
-          for (let i = 0; i < uncachedGroups.length; i += BATCH_SIZE) {
-            if (!isClientConnected()) return;
-            const batch = uncachedGroups.slice(i, i + BATCH_SIZE);
-            await Promise.allSettled(
-              batch.map(async (rg) => {
-                if (!isClientConnected()) return;
-                const cacheKey = `rg:${rg.id}`;
-                try {
-                  const coverArtResponse = await axios
-                    .get(`https://coverartarchive.org/release-group/${rg.id}`, {
-                      headers: { Accept: "application/json" },
-                      timeout: 3000,
-                    })
-                    .catch(() => null);
-
-                  if (coverArtResponse?.data?.images?.length > 0) {
-                    const frontImage =
-                      coverArtResponse.data.images.find((img) => img.front) ||
-                      coverArtResponse.data.images[0];
-                    if (frontImage) {
-                      const imageUrl =
-                        frontImage.thumbnails?.["500"] ||
-                        frontImage.thumbnails?.["large"] ||
-                        frontImage.image;
-                      if (imageUrl) {
-                        dbOps.setImage(cacheKey, imageUrl);
-                        sendSSE(res, "releaseGroupCover", {
-                          mbid: rg.id,
-                          images: [
-                            {
-                              image: imageUrl,
-                              front: true,
-                              types: frontImage.types || ["Front"],
-                            },
-                          ],
-                        });
-                        return;
-                      }
-                    }
-                  }
-                  dbOps.setImage(cacheKey, "NOT_FOUND");
-                  sendSSE(res, "releaseGroupCover", {
-                    mbid: rg.id,
-                    images: [],
-                  });
-                } catch (e) {
-                  sendSSE(res, "releaseGroupCover", {
-                    mbid: rg.id,
-                    images: [],
-                  });
-                }
-              }),
-            );
-          }
-        })();
-        nonCriticalTasks.push(releaseGroupCoversTask);
-
-        Promise.allSettled(criticalTasks)
+        Promise.allSettled(tasks)
           .then(() => {
             sendSSE(res, "complete", {});
           })
           .catch(() => {
             sendSSE(res, "complete", {});
-          });
-
-        Promise.allSettled([...criticalTasks, ...nonCriticalTasks])
-          .then(() => {
-            setTimeout(() => {
-              res.end();
-            }, 100);
           })
-          .catch(() => {
+          .finally(() => {
             setTimeout(() => {
               res.end();
             }, 100);
@@ -562,14 +530,10 @@ export default function registerStream(router) {
           `[Artists Stream] Error for artist ${mbid}:`,
           error.message,
         );
-        if (!artistData) {
-          sendSSE(res, "error", {
-            error: "Failed to fetch artist details",
-            message: error.response?.data?.error || error.message,
-          });
-        } else {
-          sendSSE(res, "complete", {});
-        }
+        sendSSE(res, "error", {
+          error: "Failed to fetch artist details",
+          message: error.response?.data?.error || error.message,
+        });
         res.end();
       }
     } catch (error) {
