@@ -524,13 +524,29 @@ export const applyLidarrCommunityGuide = async () => {
   return response.data;
 };
 
-export const getFlowStatus = async () => {
-  const response = await api.get("/weekly-flow/status");
+export const getFlowStatus = async ({
+  includeJobs = false,
+  flowId,
+  jobsLimit,
+} = {}) => {
+  const params = {};
+  if (includeJobs) {
+    params.includeJobs = "1";
+  }
+  if (flowId) {
+    params.flowId = flowId;
+  }
+  if (jobsLimit != null) {
+    params.jobsLimit = jobsLimit;
+  }
+  const response = await api.get("/weekly-flow/status", { params });
   return response.data;
 };
 
-export const getFlowJobs = async (flowId) => {
-  const response = await api.get(`/weekly-flow/jobs/${flowId}`);
+export const getFlowJobs = async (flowId, limit = 200) => {
+  const response = await api.get(`/weekly-flow/jobs/${flowId}`, {
+    params: { limit },
+  });
   return response.data;
 };
 
