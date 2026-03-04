@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import {
   getFlowStatus,
+  getFlowJobs,
   createFlow,
   updateFlow,
   deleteFlow,
@@ -401,6 +402,26 @@ const isFlowDirty = (flow, draft) => {
   return JSON.stringify(base) !== JSON.stringify(next);
 };
 
+const EMPTY_FLOW_STATS = {
+  total: 0,
+  done: 0,
+  failed: 0,
+  pending: 0,
+  downloading: 0,
+};
+
+const buildFlowStatsFromJobs = (jobs) => {
+  const stats = { ...EMPTY_FLOW_STATS };
+  if (!Array.isArray(jobs)) return stats;
+  stats.total = jobs.length;
+  for (const job of jobs) {
+    if (job?.status) {
+      stats[job.status] = (stats[job.status] || 0) + 1;
+    }
+  }
+  return stats;
+};
+
 function FlowPage() {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -414,6 +435,7 @@ function FlowPage() {
   const [simpleDrafts, setSimpleDrafts] = useState({});
   const [simpleErrors, setSimpleErrors] = useState({});
   const [applyingFlowId, setApplyingFlowId] = useState(null);
+  const [flowStatsById, setFlowStatsById] = useState({});
   const { showSuccess, showError } = useToast();
 
   const fetchStatus = async () => {
@@ -438,6 +460,63 @@ function FlowPage() {
   }, [status?.worker?.running]);
 
   useEffect(() => {
+    if (!status?.worker?.running || !status?.flows?.length) return;
+    const activeFlowIds = status.flows
+      .filter((flow) => {
+        const stats = status.flowStats?.[flow.id];
+        return (stats?.pending || 0) > 0 || (stats?.downloading || 0) > 0;
+      })
+      .map((flow) => flow.id);
+    if (!activeFlowIds.length) return;
+
+    let cancelled = false;
+    const fetchIncrementalJobs = async () => {
+      try {
+        const results = await Promise.all(
+          activeFlowIds.map((flowId) =>
+            getFlowJobs(flowId).then((jobs) => ({
+              flowId,
+              stats: buildFlowStatsFromJobs(jobs),
+            })),
+          ),
+        );
+        if (cancelled) return;
+        setFlowStatsById((prev) => {
+          const next = { ...prev };
+          for (const result of results) {
+            next[result.flowId] = result.stats;
+          }
+          return next;
+        });
+      } catch {}
+    };
+
+    fetchIncrementalJobs();
+    const interval = setInterval(fetchIncrementalJobs, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [status?.worker?.running, status?.flows, status?.flowStats]);
+
+  useEffect(() => {
+    if (!status?.flows?.length) {
+      setFlowStatsById({});
+      return;
+    }
+    const flowIds = new Set(status.flows.map((flow) => flow.id));
+    setFlowStatsById((prev) => {
+      const next = {};
+      for (const [flowId, stats] of Object.entries(prev)) {
+        if (flowIds.has(flowId)) {
+          next[flowId] = stats;
+        }
+      }
+      return next;
+    });
+  }, [status?.flows]);
+
+  useEffect(() => {
     if (!status?.flows?.length) return;
     setSimpleDrafts((prev) => {
       const next = { ...prev };
@@ -460,16 +539,11 @@ function FlowPage() {
   }, [status?.flows]);
 
   const getPlaylistStats = (flowId) => {
-    if (!status?.jobs)
-      return { total: 0, done: 0, failed: 0, pending: 0, downloading: 0 };
-    const jobs = status.jobs.filter((j) => j.playlistType === flowId);
-    return {
-      total: jobs.length,
-      done: jobs.filter((j) => j.status === "done").length,
-      failed: jobs.filter((j) => j.status === "failed").length,
-      pending: jobs.filter((j) => j.status === "pending").length,
-      downloading: jobs.filter((j) => j.status === "downloading").length,
-    };
+    return (
+      flowStatsById[flowId] ||
+      status?.flowStats?.[flowId] ||
+      EMPTY_FLOW_STATS
+    );
   };
 
   const getPlaylistState = (flowId) => {

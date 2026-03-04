@@ -68,28 +68,40 @@ router.post("/start/:flowId", async (req, res) => {
 router.get("/status", (req, res) => {
   const workerStatus = weeklyFlowWorker.getStatus();
   const stats = downloadTracker.getStats();
-  const allJobs = downloadTracker.getAll();
   const flows = flowPlaylistConfig.getFlows();
+  const flowIds = flows.map((flow) => flow.id);
+  const flowStats = downloadTracker.getStatsByPlaylistType(flowIds);
+
+  const includeJobs =
+    req.query.includeJobs === "1" || req.query.includeJobs === "true";
+  const flowId = req.query.flowId ? String(req.query.flowId) : null;
+  const parsedLimit = Number(req.query.jobsLimit);
+  const jobsLimit =
+    Number.isFinite(parsedLimit) && parsedLimit > 0
+      ? Math.min(Math.floor(parsedLimit), 500)
+      : null;
+
+  let jobs;
+  if (includeJobs) {
+    const sourceJobs = flowId
+      ? downloadTracker.getByPlaylistType(flowId)
+      : downloadTracker.getAll();
+    jobs = jobsLimit ? sourceJobs.slice(0, jobsLimit) : sourceJobs;
+  }
 
   res.json({
     worker: workerStatus,
     stats,
-    jobs: allJobs,
+    flowStats,
+    jobs,
     flows,
   });
 });
 
 router.post("/flows", async (req, res) => {
   try {
-    const {
-      name,
-      mix,
-      size,
-      deepDive,
-      recipe,
-      tags,
-      relatedArtists,
-    } = req.body || {};
+    const { name, mix, size, deepDive, recipe, tags, relatedArtists } =
+      req.body || {};
     if (!name || !String(name).trim()) {
       return res.status(400).json({ error: "name is required" });
     }
@@ -115,15 +127,8 @@ router.post("/flows", async (req, res) => {
 router.put("/flows/:flowId", async (req, res) => {
   try {
     const { flowId } = req.params;
-    const {
-      name,
-      mix,
-      size,
-      deepDive,
-      recipe,
-      tags,
-      relatedArtists,
-    } = req.body || {};
+    const { name, mix, size, deepDive, recipe, tags, relatedArtists } =
+      req.body || {};
     const updated = flowPlaylistConfig.updateFlow(flowId, {
       name,
       mix,
@@ -255,7 +260,12 @@ router.put("/flows/:flowId/enabled", async (req, res) => {
 
 router.get("/jobs/:flowId", (req, res) => {
   const { flowId } = req.params;
-  const jobs = downloadTracker.getByPlaylistType(flowId);
+  const parsedLimit = Number(req.query.limit);
+  const limit =
+    Number.isFinite(parsedLimit) && parsedLimit > 0
+      ? Math.min(Math.floor(parsedLimit), 500)
+      : 200;
+  const jobs = downloadTracker.getByPlaylistType(flowId).slice(0, limit);
   res.json(jobs);
 });
 
