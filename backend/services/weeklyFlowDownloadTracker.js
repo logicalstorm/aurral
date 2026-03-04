@@ -256,6 +256,36 @@ export class WeeklyFlowDownloadTracker {
     return stats;
   }
 
+  getStatsByPlaylistType(playlistTypes = []) {
+    const statsByType = {};
+    const ensure = (playlistType) => {
+      if (!playlistType) return null;
+      if (!statsByType[playlistType]) {
+        statsByType[playlistType] = {
+          total: 0,
+          pending: 0,
+          downloading: 0,
+          done: 0,
+          failed: 0,
+        };
+      }
+      return statsByType[playlistType];
+    };
+
+    for (const playlistType of playlistTypes) {
+      ensure(playlistType);
+    }
+
+    for (const job of this.jobs.values()) {
+      const stats = ensure(job.playlistType);
+      if (!stats) continue;
+      stats.total += 1;
+      stats[job.status] = (stats[job.status] || 0) + 1;
+    }
+
+    return statsByType;
+  }
+
   clearCompleted() {
     const toDelete = [];
     for (const [id, job] of this.jobs.entries()) {
