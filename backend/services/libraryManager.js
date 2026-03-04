@@ -51,6 +51,13 @@ export class LibraryManager {
     if (!lidarr || !lidarr.isConfigured()) {
       return { error: "Lidarr is not configured" };
     }
+    const isArtistAlreadyAddedError = (error) => {
+      const message = String(error?.message || "").toLowerCase();
+      return (
+        message.includes("artistexistsvalidator") ||
+        message.includes("already been added")
+      );
+    };
     try {
       const existing = await lidarr.getArtistByMbid(mbid);
       if (existing) {
@@ -67,6 +74,14 @@ export class LibraryManager {
       console.log(`[LibraryManager] Added artist "${artistName}" to Lidarr`);
       return this.mapLidarrArtist(lidarrArtist);
     } catch (error) {
+      if (isArtistAlreadyAddedError(error)) {
+        try {
+          const existing = await lidarr.getArtistByMbid(mbid);
+          if (existing) {
+            return this.mapLidarrArtist(existing);
+          }
+        } catch {}
+      }
       console.error(
         `[LibraryManager] Failed to add artist to Lidarr: ${error.message}`,
       );
