@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 function getWsUrl() {
   const apiUrl = import.meta.env.VITE_API_URL;
@@ -15,16 +15,19 @@ function getWsUrl() {
 export function useWebSocketChannel(channel, onMessage) {
   const wsRef = useRef(null);
   const onMessageRef = useRef(onMessage);
+  const [isConnected, setIsConnected] = useState(false);
   onMessageRef.current = onMessage;
 
   useEffect(() => {
     const url = getWsUrl();
-    const ws = new WebSocket(url);
-    wsRef.current = ws;
+    let ws = null;
+    let reconnectTimer = null;
+    let reconnectAttempts = 0;
+    let closed = false;
 
-    ws.onopen = () => {
+    const subscribe = () => {
       try {
-        if (ws.readyState === WebSocket.OPEN) {
+        if (ws?.readyState === WebSocket.OPEN) {
           ws.send(
             JSON.stringify({
               type: "subscribe",
@@ -35,28 +38,68 @@ export function useWebSocketChannel(channel, onMessage) {
       } catch {}
     };
 
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.channel === channel && msg.type && onMessageRef.current) {
-          onMessageRef.current(msg);
-        }
-      } catch {}
+    const scheduleReconnect = () => {
+      if (closed) return;
+      const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 15000);
+      reconnectAttempts += 1;
+      reconnectTimer = setTimeout(() => {
+        connect();
+      }, delay);
     };
 
+    const connect = () => {
+      ws = new WebSocket(url);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        reconnectAttempts = 0;
+        setIsConnected(true);
+        subscribe();
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.channel === channel && msg.type && onMessageRef.current) {
+            onMessageRef.current(msg);
+          }
+        } catch {}
+      };
+
+      ws.onclose = () => {
+        setIsConnected(false);
+        scheduleReconnect();
+      };
+
+      ws.onerror = () => {
+        setIsConnected(false);
+      };
+    };
+
+    connect();
+
     return () => {
+      closed = true;
+      setIsConnected(false);
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+      }
       try {
-        if (ws.readyState === WebSocket.OPEN) {
+        if (ws?.readyState === WebSocket.OPEN) {
           ws.send(
             JSON.stringify({
               type: "unsubscribe",
               channels: [channel],
             }),
           );
-          ws.close();
         }
+      } catch {}
+      try {
+        ws?.close();
       } catch {}
       wsRef.current = null;
     };
   }, [channel]);
+
+  return { isConnected };
 }
