@@ -802,6 +802,19 @@ function normalizeArtistNameKey(artistName) {
     .toLowerCase();
 }
 
+export function musicbrainzGetCachedArtistMbidByName(artistName) {
+  const normalized = normalizeArtistNameKey(artistName);
+  if (!normalized) return null;
+  const cached = dbOps.getMusicbrainzArtistMbidCache(normalized);
+  if (!cached?.updatedAt) return null;
+  const ageMs = Date.now() - cached.updatedAt;
+  const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+  const NEGATIVE_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+  const cacheTtl = cached.mbid ? CACHE_TTL_MS : NEGATIVE_CACHE_TTL_MS;
+  if (ageMs < 0 || ageMs >= cacheTtl) return null;
+  return cached.mbid || null;
+}
+
 export async function musicbrainzResolveArtistMbidByName(artistName) {
   const rawName = String(artistName || "").trim();
   if (!rawName) return null;

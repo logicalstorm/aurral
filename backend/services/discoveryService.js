@@ -4,7 +4,7 @@ import {
   lastfmRequest,
   getLastfmApiKey,
   deezerSearchArtist,
-  musicbrainzResolveArtistMbidByName,
+  musicbrainzGetCachedArtistMbidByName,
 } from "./apiClients.js";
 import { websocketService } from "./websocketService.js";
 
@@ -408,9 +408,7 @@ export const updateDiscoveryCache = async () => {
         ) {
           const item = globalTop[index];
           if (!item?.name || item.id) continue;
-          const resolvedMbid = await musicbrainzResolveArtistMbidByName(
-            item.name,
-          );
+          const resolvedMbid = musicbrainzGetCachedArtistMbidByName(item.name);
           if (resolvedMbid && resolvedMbid !== item.id) {
             item.navigateTo = resolvedMbid;
           }
@@ -536,7 +534,7 @@ export const updateDiscoveryCache = async () => {
     ) {
       const item = recommendationsArray[index];
       if (!item?.name || item.id) continue;
-      const resolvedMbid = await musicbrainzResolveArtistMbidByName(item.name);
+      const resolvedMbid = musicbrainzGetCachedArtistMbidByName(item.name);
       if (resolvedMbid && resolvedMbid !== item.id) {
         item.navigateTo = resolvedMbid;
       }
