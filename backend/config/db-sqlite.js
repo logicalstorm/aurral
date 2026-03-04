@@ -63,6 +63,12 @@ db.exec(`
     mbid TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS musicbrainz_artist_mbid_cache (
+    artist_name_key TEXT PRIMARY KEY,
+    mbid TEXT,
+    updated_at INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS artist_overrides (
     mbid TEXT PRIMARY KEY,
     musicbrainz_id TEXT,
@@ -73,6 +79,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_weekly_flow_jobs_status ON weekly_flow_jobs(status);
   CREATE INDEX IF NOT EXISTS idx_weekly_flow_jobs_playlist_type ON weekly_flow_jobs(playlist_type);
   CREATE INDEX IF NOT EXISTS idx_images_cache_cache_age ON images_cache(cache_age);
+  CREATE INDEX IF NOT EXISTS idx_musicbrainz_artist_mbid_cache_updated_at ON musicbrainz_artist_mbid_cache(updated_at);
 `);
 
 export const dbHelpers = {
