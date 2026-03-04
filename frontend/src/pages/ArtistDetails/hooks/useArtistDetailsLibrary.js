@@ -243,21 +243,23 @@ export function useArtistDetailsLibrary({
   const waitForLibraryArtist = async (
     mbid,
     {
-      attempts = 10,
+      attempts = 20,
       delayMs = 1500,
       refresh = true,
       hydrateAlbums = true,
     } = {},
   ) => {
     for (let i = 0; i < attempts; i++) {
-      const lookup = await lookupArtistInLibrary(mbid);
-      if (lookup.exists && lookup.artist) {
-        const resolved = await resolveLookupArtist(lookup.artist, {
-          refresh,
-          hydrateAlbums,
-        }).catch(() => null);
-        if (resolved?.id) return resolved;
-      }
+      try {
+        const lookup = await lookupArtistInLibrary(mbid);
+        if (lookup.exists && lookup.artist) {
+          const resolved = await resolveLookupArtist(lookup.artist, {
+            refresh,
+            hydrateAlbums,
+          }).catch(() => null);
+          if (resolved?.id) return resolved;
+        }
+      } catch {}
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
     return null;
@@ -396,8 +398,8 @@ export function useArtistDetailsLibrary({
         if (result?.queued) {
           showSuccess(`Adding ${artist.name}...`);
           fullArtist = await waitForLibraryArtist(artist.id, {
-            attempts: 15,
-            delayMs: 1000,
+            attempts: 40,
+            delayMs: 1500,
             refresh: false,
             hydrateAlbums: false,
           });
@@ -409,6 +411,17 @@ export function useArtistDetailsLibrary({
               hydrateAlbums: false,
             });
           }
+        }
+        if (!fullArtist) {
+          fullArtist = await resolveLibraryArtist();
+        }
+        if (!fullArtist) {
+          fullArtist = await waitForLibraryArtist(artist.id, {
+            attempts: 20,
+            delayMs: 1500,
+            refresh: false,
+            hydrateAlbums: false,
+          });
         }
         if (!fullArtist) {
           throw new Error("Failed to get library artist");
