@@ -74,7 +74,8 @@ export function useArtistDetailsLibrary({
     }
     if (requestingAlbum) {
       const album = libraryAlbums.find(
-        (a) => a.mbid === requestingAlbum || a.foreignAlbumId === requestingAlbum,
+        (a) =>
+          a.mbid === requestingAlbum || a.foreignAlbumId === requestingAlbum,
       );
       if (album && incoming[String(album.id)]) {
         setRequestingAlbum(null);
@@ -210,9 +211,7 @@ export function useArtistDetailsLibrary({
     );
     setLibraryArtist(fullArtist);
     setExistsInLibrary(true);
-    await refreshLibraryArtist(
-      fullArtist.mbid || fullArtist.foreignArtistId,
-    );
+    await refreshLibraryArtist(fullArtist.mbid || fullArtist.foreignArtistId);
     const albums = await getLibraryAlbums(fullArtist.id);
     setLibraryAlbums(deduplicateAlbums(albums));
     return fullArtist;
@@ -298,18 +297,31 @@ export function useArtistDetailsLibrary({
     let addedOptimistic = false;
     try {
       const resolveLibraryArtist = async () => {
-        if (!artist) return null;
+        if (!artist) return libraryArtist;
         const lookup = await lookupArtistInLibrary(artist.id);
         if (lookup.exists && lookup.artist) {
-          const fullArtist = await getLibraryArtist(
-            lookup.artist.mbid || lookup.artist.foreignArtistId,
-          );
-          setLibraryArtist(fullArtist);
-          setExistsInLibrary(true);
-          return fullArtist;
+          const artistMbid =
+            lookup.artist.mbid || lookup.artist.foreignArtistId;
+          try {
+            const fullArtist = await getLibraryArtist(artistMbid);
+            setLibraryArtist(fullArtist);
+            setExistsInLibrary(true);
+            return fullArtist;
+          } catch {
+            const fallbackArtist = {
+              ...lookup.artist,
+              foreignArtistId:
+                lookup.artist.foreignArtistId || lookup.artist.mbid,
+            };
+            setLibraryArtist(fallbackArtist);
+            setExistsInLibrary(true);
+            return fallbackArtist;
+          }
         }
         return libraryArtist;
       };
+
+      let currentLibraryArtist = libraryArtist;
 
       if (!existsInLibrary || !libraryArtist?.id) {
         if (!artist) {
@@ -338,9 +350,12 @@ export function useArtistDetailsLibrary({
         if (!fullArtist) {
           throw new Error("Failed to get library artist");
         }
+        currentLibraryArtist = fullArtist;
       }
 
-      const currentLibraryArtist = await resolveLibraryArtist();
+      if (!currentLibraryArtist?.id) {
+        currentLibraryArtist = await resolveLibraryArtist();
+      }
       if (!currentLibraryArtist?.id) {
         throw new Error("Failed to get library artist");
       }
