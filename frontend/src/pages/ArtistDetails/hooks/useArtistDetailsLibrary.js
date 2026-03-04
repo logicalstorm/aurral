@@ -205,43 +205,60 @@ export function useArtistDetailsLibrary({
     }
   };
 
-  const hydrateLibraryArtist = async (lookupArtist) => {
-    const fullArtist = await getLibraryArtist(
-      lookupArtist.mbid || lookupArtist.foreignArtistId,
-    );
+  const resolveLookupArtist = async (
+    lookupArtist,
+    { refresh = true, hydrateAlbums = true } = {},
+  ) => {
+    if (!lookupArtist) return null;
+    const lookupMbid = lookupArtist.mbid || lookupArtist.foreignArtistId;
+    let fullArtist = null;
+    try {
+      fullArtist = await getLibraryArtist(lookupMbid);
+    } catch {
+      fullArtist = {
+        ...lookupArtist,
+        foreignArtistId: lookupArtist.foreignArtistId || lookupArtist.mbid,
+      };
+    }
+    if (!fullArtist?.id) return null;
     setLibraryArtist(fullArtist);
     setExistsInLibrary(true);
-    await refreshLibraryArtist(fullArtist.mbid || fullArtist.foreignArtistId);
-    const albums = await getLibraryAlbums(fullArtist.id);
-    setLibraryAlbums(deduplicateAlbums(albums));
+    if (refresh) {
+      await refreshLibraryArtist(fullArtist.mbid || fullArtist.foreignArtistId);
+    }
+    if (hydrateAlbums) {
+      const albums = await getLibraryAlbums(fullArtist.id);
+      setLibraryAlbums(deduplicateAlbums(albums));
+    }
     return fullArtist;
   };
 
-  const waitForLibraryArtist = async (mbid) => {
-    const attempts = 25;
+  const hydrateLibraryArtist = async (lookupArtist) => {
+    return await resolveLookupArtist(lookupArtist, {
+      refresh: true,
+      hydrateAlbums: true,
+    });
+  };
+
+  const waitForLibraryArtist = async (
+    mbid,
+    {
+      attempts = 10,
+      delayMs = 1500,
+      refresh = true,
+      hydrateAlbums = true,
+    } = {},
+  ) => {
     for (let i = 0; i < attempts; i++) {
       const lookup = await lookupArtistInLibrary(mbid);
       if (lookup.exists && lookup.artist) {
-        try {
-          return await hydrateLibraryArtist(lookup.artist);
-        } catch {
-          const fallbackArtist = {
-            ...lookup.artist,
-            foreignArtistId:
-              lookup.artist.foreignArtistId || lookup.artist.mbid,
-          };
-          if (fallbackArtist.id) {
-            setLibraryArtist(fallbackArtist);
-            setExistsInLibrary(true);
-            try {
-              const albums = await getLibraryAlbums(fallbackArtist.id);
-              setLibraryAlbums(deduplicateAlbums(albums));
-            } catch {}
-            return fallbackArtist;
-          }
-        }
+        const resolved = await resolveLookupArtist(lookup.artist, {
+          refresh,
+          hydrateAlbums,
+        }).catch(() => null);
+        if (resolved?.id) return resolved;
       }
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
     return null;
   };
@@ -378,11 +395,19 @@ export function useArtistDetailsLibrary({
         let fullArtist = null;
         if (result?.queued) {
           showSuccess(`Adding ${artist.name}...`);
-          fullArtist = await waitForLibraryArtist(artist.id);
+          fullArtist = await waitForLibraryArtist(artist.id, {
+            attempts: 15,
+            delayMs: 1000,
+            refresh: false,
+            hydrateAlbums: false,
+          });
         } else {
           const lookup = await lookupArtistInLibrary(artist.id);
           if (lookup.exists && lookup.artist) {
-            fullArtist = await hydrateLibraryArtist(lookup.artist);
+            fullArtist = await resolveLookupArtist(lookup.artist, {
+              refresh: false,
+              hydrateAlbums: false,
+            });
           }
         }
         if (!fullArtist) {

@@ -483,8 +483,24 @@ export class LibraryManager {
         lidarrArtist = await lidarr.getArtist(artistId);
       }
       const existing = await lidarr.getAlbumByMbid(releaseGroupMbid);
-      if (existing) {
-        return this.mapLidarrAlbum(existing, lidarrArtist);
+      const artistNumericId = parseInt(artistId, 10);
+      const sameArtistExisting =
+        existing && existing.artistId === artistNumericId ? existing : null;
+      if (sameArtistExisting) {
+        if (!sameArtistExisting.monitored) {
+          await lidarr.monitorAlbum(sameArtistExisting.id, true);
+        }
+        const settings = getSettings();
+        const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
+        const shouldTriggerSearch =
+          options.triggerSearch === true ||
+          (options.triggerSearch === undefined && searchOnAdd);
+        if (shouldTriggerSearch) {
+          await lidarr.triggerAlbumSearch(sameArtistExisting.id);
+        }
+        const refreshedExisting = await lidarr.getAlbum(sameArtistExisting.id);
+        const refreshedArtist = await lidarr.getArtist(artistId);
+        return this.mapLidarrAlbum(refreshedExisting, refreshedArtist);
       }
       const settings = getSettings();
       const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
