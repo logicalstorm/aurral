@@ -9,6 +9,7 @@ const LIDARR_MAX_CONCURRENT = 12;
 const LIDARR_LIST_CACHE_MS = 30000;
 const LIDARR_RETRY_ATTEMPTS = 2;
 const LIDARR_RETRY_DELAY_MS = 800;
+const LIDARR_STATUS_CACHE_MS = 10000;
 
 export class LidarrClient {
   constructor() {
@@ -22,6 +23,7 @@ export class LidarrClient {
     this._waitQueue = [];
     this._artistListCache = null;
     this._albumListCache = null;
+    this._statusCache = new Map();
     this._httpAgent = new http.Agent({
       keepAlive: true,
       maxSockets: LIDARR_MAX_CONCURRENT,
@@ -110,6 +112,7 @@ export class LidarrClient {
     this.config = newConfig;
     this._artistListCache = null;
     this._albumListCache = null;
+    this._statusCache.clear();
   }
 
   getConfig() {
@@ -145,8 +148,8 @@ export class LidarrClient {
       throw new Error("Lidarr API key not configured");
     }
 
+    const now = Date.now();
     if (method === "GET" && endpoint === "/artist") {
-      const now = Date.now();
       if (
         this._artistListCache &&
         now - this._artistListCache.at < LIDARR_LIST_CACHE_MS
@@ -154,8 +157,10 @@ export class LidarrClient {
         return this._artistListCache.data;
       }
     }
-    if (method === "GET" && endpoint === "/album") {
-      const now = Date.now();
+    if (
+      method === "GET" &&
+      (endpoint === "/album" || endpoint.startsWith("/album?"))
+    ) {
       if (
         this._albumListCache &&
         now - this._albumListCache.at < LIDARR_LIST_CACHE_MS
@@ -164,7 +169,21 @@ export class LidarrClient {
       }
     }
 
-    const now = Date.now();
+    const isStatusRequest =
+      method === "GET" &&
+      (endpoint === "/queue" ||
+        endpoint === "/command" ||
+        endpoint.startsWith("/history"));
+    if (isStatusRequest) {
+      const cached = this._statusCache.get(endpoint);
+      if (cached && now - cached.at < LIDARR_STATUS_CACHE_MS) {
+        return cached.data;
+      }
+      if (cached) {
+        this._statusCache.delete(endpoint);
+      }
+    }
+
     const bypassCircuit = options?.bypassCircuit === true;
     if (!this.config.circuitDisabled && this._circuitOpen && !bypassCircuit) {
       if (now - this._circuitOpenedAt < CIRCUIT_COOLDOWN_MS) {
@@ -190,6 +209,9 @@ export class LidarrClient {
       this._artistListCache = null;
       this._albumListCache = null;
     }
+    if (method !== "GET" && endpoint.startsWith("/command")) {
+      this._statusCache.delete("/command");
+    }
 
     for (let attempt = 1; attempt <= LIDARR_RETRY_ATTEMPTS; attempt++) {
       try {
@@ -210,15 +232,16 @@ export class LidarrClient {
             },
             timeout: this.config.timeoutMs,
             httpAgent: this._httpAgent,
-            httpsAgent: isHttps && this.config.insecure
-              ? new https.Agent({
-                  rejectUnauthorized: false,
-                  keepAlive: true,
-                  maxSockets: LIDARR_MAX_CONCURRENT,
-                  maxFreeSockets: 2,
-                  timeout: 60000,
-                })
-              : this._httpsAgent,
+            httpsAgent:
+              isHttps && this.config.insecure
+                ? new https.Agent({
+                    rejectUnauthorized: false,
+                    keepAlive: true,
+                    maxSockets: LIDARR_MAX_CONCURRENT,
+                    maxFreeSockets: 2,
+                    timeout: 60000,
+                  })
+                : this._httpsAgent,
             validateStatus: function (status) {
               return status < 500;
             },
@@ -244,8 +267,17 @@ export class LidarrClient {
           if (method === "GET" && endpoint === "/artist") {
             this._artistListCache = { data: response.data, at: Date.now() };
           }
-          if (method === "GET" && endpoint === "/album") {
+          if (
+            method === "GET" &&
+            (endpoint === "/album" || endpoint.startsWith("/album?"))
+          ) {
             this._albumListCache = { data: response.data, at: Date.now() };
+          }
+          if (isStatusRequest) {
+            this._statusCache.set(endpoint, {
+              data: response.data,
+              at: Date.now(),
+            });
           }
 
           this._resetCircuitState();
