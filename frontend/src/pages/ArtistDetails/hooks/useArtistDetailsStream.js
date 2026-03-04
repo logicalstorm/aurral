@@ -38,6 +38,7 @@ export function useArtistDetailsStream(mbid, artistNameFromNav) {
   const [albumCovers, setAlbumCovers] = useState({});
   const requestedAlbumCoversRef = useRef(new Set());
   const artistMbidRef = useRef(mbid);
+  const artistNameRef = useRef(artistNameFromNav || "");
 
   if (artistMbidRef.current !== mbid) {
     artistMbidRef.current = mbid;
@@ -45,8 +46,16 @@ export function useArtistDetailsStream(mbid, artistNameFromNav) {
   }
 
   useEffect(() => {
+    if (artistNameFromNav) artistNameRef.current = artistNameFromNav;
+  }, [artistNameFromNav]);
+
+  useEffect(() => {
+    if (artist?.name) artistNameRef.current = artist.name;
+  }, [artist?.name]);
+
+  useEffect(() => {
     if (!mbid) return;
-    setLoading(true);
+    setLoading(!(mbid && artistNameFromNav));
     setError(null);
     setLoadingCover(true);
     setLoadingSimilar(true);
@@ -83,7 +92,7 @@ export function useArtistDetailsStream(mbid, artistNameFromNav) {
 
     const fallbackTimeout = setTimeout(() => {
       if (!coverReceived) {
-        const nameForCover = artistNameFromNav || artist?.name;
+        const nameForCover = artistNameRef.current || artistNameFromNav;
         getArtistCover(mbid, nameForCover)
           .then((coverData) => {
             if (coverData.images && coverData.images.length > 0) {
@@ -111,8 +120,24 @@ export function useArtistDetailsStream(mbid, artistNameFromNav) {
         if (!artistData || !artistData.id) {
           throw new Error("Invalid artist data received");
         }
-        setArtist(artistData);
-        setLoading(false);
+        setArtist((prev) => {
+          if (!prev) return artistData;
+          const next = { ...prev, ...artistData };
+          if (!("release-groups" in artistData)) {
+            next["release-groups"] = prev["release-groups"];
+          }
+          if (!("release-group-count" in artistData)) {
+            next["release-group-count"] = prev["release-group-count"];
+          }
+          if (!("release-count" in artistData)) {
+            next["release-count"] = prev["release-count"];
+          }
+          if (!("tags" in artistData)) next.tags = prev.tags;
+          if (!("genres" in artistData)) next.genres = prev.genres;
+          if (!("bio" in artistData)) next.bio = prev.bio;
+          return next;
+        });
+        if (!artistReceived) setLoading(false);
         artistReceived = true;
       } catch (err) {
         console.error("Error parsing artist data:", err);
@@ -164,7 +189,7 @@ export function useArtistDetailsStream(mbid, artistNameFromNav) {
         console.error(
           "Error parsing release group cover data:",
           err,
-          event.data
+          event.data,
         );
       }
     });
@@ -200,7 +225,7 @@ export function useArtistDetailsStream(mbid, artistNameFromNav) {
           if (lookup.exists && lookup.artist) {
             return Promise.all([
               getLibraryArtist(
-                lookup.artist.mbid || lookup.artist.foreignArtistId
+                lookup.artist.mbid || lookup.artist.foreignArtistId,
               ).catch((err) => {
                 console.error("Failed to fetch full artist details:", err);
                 return lookup.artist;
@@ -239,7 +264,7 @@ export function useArtistDetailsStream(mbid, artistNameFromNav) {
         setError(
           errorData.message ||
             errorData.error ||
-            "Failed to fetch artist details"
+            "Failed to fetch artist details",
         );
         setLoading(false);
         eventSource.close();
@@ -278,7 +303,7 @@ export function useArtistDetailsStream(mbid, artistNameFromNav) {
                 err.response?.data?.message ||
                   err.response?.data?.error ||
                   err.message ||
-                  "Failed to fetch artist details"
+                  "Failed to fetch artist details",
               );
               setLoading(false);
             });
@@ -320,7 +345,7 @@ export function useArtistDetailsStream(mbid, artistNameFromNav) {
               err.response?.data?.message ||
                 err.response?.data?.error ||
                 err.message ||
-                "Failed to fetch artist details"
+                "Failed to fetch artist details",
             );
             setLoading(false);
           });
@@ -331,7 +356,7 @@ export function useArtistDetailsStream(mbid, artistNameFromNav) {
       clearTimeout(fallbackTimeout);
       eventSource.close();
     };
-  }, [mbid, artistNameFromNav, artist?.name]);
+  }, [mbid, artistNameFromNav]);
 
   useEffect(() => {
     if (!mbid) return;
@@ -342,7 +367,7 @@ export function useArtistDetailsStream(mbid, artistNameFromNav) {
       .filter(Boolean);
     const needed = [...new Set([...releaseGroupIds, ...libraryMbids])];
     const missing = needed.filter(
-      (id) => !albumCovers[id] && !requestedAlbumCoversRef.current.has(id)
+      (id) => !albumCovers[id] && !requestedAlbumCoversRef.current.has(id),
     );
     missing.forEach((rgId) => {
       requestedAlbumCoversRef.current.add(rgId);
