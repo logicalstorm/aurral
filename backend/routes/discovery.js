@@ -17,6 +17,9 @@ const router = express.Router();
 
 const pendingTagRequests = new Map();
 const pendingTagSuggestRequest = { promise: null, expiry: 0 };
+const DISCOVERY_STALE_MS = 6 * 60 * 60 * 1000;
+const DISCOVERY_REVALIDATE_COOLDOWN_MS = 60 * 1000;
+let lastDiscoveryRevalidateAt = 0;
 
 let discoveryPreferences = { ...defaultDiscoveryPreferences };
 
@@ -139,6 +142,7 @@ router.get("/", async (req, res) => {
   let isUpdating = discoveryCache.isUpdating || false;
 
   if (!hasData && !isUpdating) {
+    lastDiscoveryRevalidateAt = Date.now();
     updateDiscoveryCache().catch((err) => {
       console.error("[Discover] Lazy discovery refresh failed:", err.message);
     });
@@ -202,6 +206,24 @@ router.get("/", async (req, res) => {
     });
   }
 
+  const parsedLastUpdated = lastUpdated ? new Date(lastUpdated).getTime() : 0;
+  const isStale =
+    Number.isFinite(parsedLastUpdated) &&
+    parsedLastUpdated > 0 &&
+    Date.now() - parsedLastUpdated > DISCOVERY_STALE_MS;
+
+  if (
+    isStale &&
+    !isUpdating &&
+    Date.now() - lastDiscoveryRevalidateAt > DISCOVERY_REVALIDATE_COOLDOWN_MS
+  ) {
+    lastDiscoveryRevalidateAt = Date.now();
+    updateDiscoveryCache().catch((err) => {
+      console.error("[Discover] SWR revalidation failed:", err.message);
+    });
+    isUpdating = true;
+  }
+
   if (recommendations.length > 0 || globalTop.length > 0) {
     imagePrefetchService
       .prefetchDiscoveryImages({
@@ -212,11 +234,11 @@ router.get("/", async (req, res) => {
   }
 
   if (recommendations.length > 0 || globalTop.length > 0) {
-    res.set("Cache-Control", "public, max-age=300");
+    res.set("Cache-Control", "public, max-age=120, stale-while-revalidate=300");
   } else if (isUpdating) {
     res.set("Cache-Control", "no-cache, no-store, must-revalidate");
   } else {
-    res.set("Cache-Control", "public, max-age=30");
+    res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
   }
 
   res.json({
@@ -227,6 +249,7 @@ router.get("/", async (req, res) => {
     topGenres,
     lastUpdated,
     isUpdating,
+    stale: isStale,
     configured: true,
   });
 });

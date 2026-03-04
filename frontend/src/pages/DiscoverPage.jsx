@@ -275,22 +275,78 @@ function DiscoverPage() {
   const [error, setError] = useState(null);
   const requestedReleaseCoversRef = useRef(new Set());
   const requestedArtistCoversRef = useRef(new Set());
+  const lastDiscoveryWsMessageAtRef = useRef(0);
   const navigate = useNavigate();
 
-  useWebSocketChannel("discovery", (msg) => {
-    if (msg.type === "discovery_update" && msg.recommendations) {
-      setData({
-        recommendations: msg.recommendations || [],
-        globalTop: msg.globalTop || [],
-        basedOn: msg.basedOn || [],
-        topTags: msg.topTags || [],
-        topGenres: msg.topGenres || [],
-        lastUpdated: msg.lastUpdated || null,
-        isUpdating: false,
-        configured: true,
-      });
+  const { isConnected: isDiscoverySocketConnected } = useWebSocketChannel(
+    "discovery",
+    (msg) => {
+      if (msg.type === "discovery_update" && msg.recommendations) {
+        lastDiscoveryWsMessageAtRef.current = Date.now();
+        setData({
+          recommendations: msg.recommendations || [],
+          globalTop: msg.globalTop || [],
+          basedOn: msg.basedOn || [],
+          topTags: msg.topTags || [],
+          topGenres: msg.topGenres || [],
+          lastUpdated: msg.lastUpdated || null,
+          isUpdating: false,
+          stale: false,
+          configured: true,
+        });
+      }
+    },
+  );
+
+  useEffect(() => {
+    if (!isDiscoverySocketConnected) return;
+    if (!data?.isUpdating && !data?.stale) return;
+    getDiscovery()
+      .then((discoveryData) => {
+        setData(discoveryData);
+        setError(null);
+      })
+      .catch(() => {});
+  }, [isDiscoverySocketConnected, data?.isUpdating, data?.stale]);
+
+  useEffect(() => {
+    if (!data?.isUpdating) return;
+    const hasRecentWsUpdate =
+      Date.now() - lastDiscoveryWsMessageAtRef.current < 20000;
+    if (isDiscoverySocketConnected && hasRecentWsUpdate) return;
+    const pollDiscovery = () => {
+      getDiscovery(true)
+        .then((next) => {
+          setData(next);
+          setError(null);
+        })
+        .catch(() => {});
+    };
+    pollDiscovery();
+    const id = setInterval(pollDiscovery, 10000);
+    return () => clearInterval(id);
+  }, [data?.isUpdating, isDiscoverySocketConnected]);
+
+  useEffect(() => {
+    if (!data?.stale || data?.isUpdating) return;
+    if (isDiscoverySocketConnected) return;
+    const id = setTimeout(() => {
+      getDiscovery(true)
+        .then((next) => {
+          setData(next);
+          setError(null);
+        })
+        .catch(() => {});
+    }, 15000);
+    return () => clearTimeout(id);
+  }, [data?.stale, data?.isUpdating, isDiscoverySocketConnected]);
+
+  useEffect(() => {
+    if (!data) return;
+    if (data.isUpdating && !data.stale) {
+      lastDiscoveryWsMessageAtRef.current = 0;
     }
-  });
+  }, [data, data?.isUpdating, data?.stale]);
 
   useEffect(() => {
     getDiscovery()
@@ -310,6 +366,7 @@ function DiscoverPage() {
           topGenres: [],
           lastUpdated: null,
           isUpdating: false,
+          stale: false,
           configured: false,
         });
       });
@@ -404,23 +461,6 @@ function DiscoverPage() {
         });
     });
   }, [recentReleases, releaseCovers, artistCovers]);
-
-  const hasDataForPoll =
-    data &&
-    ((data.recommendations && data.recommendations.length > 0) ||
-      (data.globalTop && data.globalTop.length > 0) ||
-      (data.topGenres && data.topGenres.length > 0));
-
-  useEffect(() => {
-    if (!data?.isUpdating || hasDataForPoll) return;
-    const pollDiscovery = () => {
-      getDiscovery(true)
-        .then(setData)
-        .catch(() => {});
-    };
-    const id = setInterval(pollDiscovery, 8000);
-    return () => clearInterval(id);
-  }, [data?.isUpdating, hasDataForPoll]);
 
   const getLibraryArtistImage = (artist) => {
     if (artist.images && artist.images.length > 0) {
