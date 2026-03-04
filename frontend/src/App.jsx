@@ -96,6 +96,9 @@ function AppContent() {
 
   useEffect(() => {
     const checkApiHealth = async () => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
       try {
         const health = await checkHealth();
         setIsHealthy(health.status === "ok");
@@ -109,7 +112,16 @@ function AppContent() {
 
     checkApiHealth();
     const interval = setInterval(checkApiHealth, 30000);
-    return () => clearInterval(interval);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        checkApiHealth();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [isAuthenticated]);
 
   return (

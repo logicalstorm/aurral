@@ -36,6 +36,13 @@ export class LidarrClient {
       maxFreeSockets: 2,
       timeout: 60000,
     });
+    this._httpsInsecureAgent = new https.Agent({
+      rejectUnauthorized: false,
+      keepAlive: true,
+      maxSockets: LIDARR_MAX_CONCURRENT,
+      maxFreeSockets: 2,
+      timeout: 60000,
+    });
     this.updateConfig();
   }
 
@@ -234,13 +241,7 @@ export class LidarrClient {
             httpAgent: this._httpAgent,
             httpsAgent:
               isHttps && this.config.insecure
-                ? new https.Agent({
-                    rejectUnauthorized: false,
-                    keepAlive: true,
-                    maxSockets: LIDARR_MAX_CONCURRENT,
-                    maxFreeSockets: 2,
-                    timeout: 60000,
-                  })
+                ? this._httpsInsecureAgent
                 : this._httpsAgent,
             validateStatus: function (status) {
               return status < 500;

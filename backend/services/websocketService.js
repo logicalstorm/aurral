@@ -5,9 +5,11 @@ class WebSocketService {
     this.wss = null;
     this.clients = new Set();
     this.subscriptions = new Map();
+    this.startTime = Date.now();
   }
 
   initialize(server) {
+    this.startTime = Date.now();
     this.wss = new WebSocketServer({ 
       server,
       path: '/ws',

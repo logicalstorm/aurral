@@ -65,9 +65,7 @@ router.get("/", noCache, async (req, res) => {
         isUpdating: !!discoveryCache?.isUpdating,
         recommendationsCount: discoveryCache?.recommendations?.length || 0,
         globalTopCount: discoveryCache?.globalTop?.length || 0,
-        cachedImagesCount: dbOps.getAllImages()
-          ? Object.keys(dbOps.getAllImages()).length
-          : 0,
+        cachedImagesCount: dbOps.countImages(),
       },
       websocket: {
         clients: wsStats.totalClients,
