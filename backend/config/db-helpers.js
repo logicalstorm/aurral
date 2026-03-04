@@ -35,6 +35,15 @@ const getDeezerMbidCacheStmt = db.prepare(
 const setDeezerMbidCacheStmt = db.prepare(
   "INSERT OR REPLACE INTO deezer_mbid_cache (cache_key, mbid) VALUES (?, ?)"
 );
+const getMusicbrainzArtistMbidCacheStmt = db.prepare(
+  "SELECT mbid, updated_at FROM musicbrainz_artist_mbid_cache WHERE artist_name_key = ?"
+);
+const setMusicbrainzArtistMbidCacheStmt = db.prepare(
+  "INSERT OR REPLACE INTO musicbrainz_artist_mbid_cache (artist_name_key, mbid, updated_at) VALUES (?, ?, ?)"
+);
+const cleanOldMusicbrainzArtistMbidCacheStmt = db.prepare(
+  "DELETE FROM musicbrainz_artist_mbid_cache WHERE updated_at < ?"
+);
 
 const getArtistOverrideStmt = db.prepare(
   "SELECT * FROM artist_overrides WHERE mbid = ?"
@@ -435,6 +444,32 @@ export const dbOps = {
 
   setDeezerMbidCache(cacheKey, mbid) {
     setDeezerMbidCacheStmt.run(cacheKey, mbid);
+  },
+
+  getMusicbrainzArtistMbidCache(artistNameKey) {
+    if (!artistNameKey) return null;
+    const row = getMusicbrainzArtistMbidCacheStmt.get(artistNameKey);
+    if (!row) return null;
+    return {
+      mbid: row.mbid || null,
+      updatedAt: Number(row.updated_at || 0),
+    };
+  },
+
+  setMusicbrainzArtistMbidCache(artistNameKey, mbid) {
+    if (!artistNameKey) return null;
+    const updatedAt = Date.now();
+    setMusicbrainzArtistMbidCacheStmt.run(artistNameKey, mbid || null, updatedAt);
+    return {
+      artistNameKey,
+      mbid: mbid || null,
+      updatedAt,
+    };
+  },
+
+  cleanOldMusicbrainzArtistMbidCache(maxAgeDays = 90) {
+    const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+    return cleanOldMusicbrainzArtistMbidCacheStmt.run(cutoff);
   },
 
   getArtistOverride(mbid) {
