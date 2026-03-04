@@ -1,13 +1,35 @@
 import express from "express";
 import { UUID_REGEX } from "../config/constants.js";
 import { noCache } from "../middleware/cache.js";
+import { invalidateAllDownloadStatusesCache } from "./library/handlers/downloads.js";
 
 const router = express.Router();
-const dismissedAlbumIds = new Set();
+const dismissedAlbumIds = new Map();
+const DISMISSED_ALBUM_TTL_MS = 24 * 60 * 60 * 1000;
+const MAX_DISMISSED_ALBUMS = 1000;
 const REQUESTS_CACHE_MS = 15000;
 const STALE_GRABBED_MS = 15 * 60 * 1000;
 let lastRequestsResponse = null;
 let lastRequestsAt = 0;
+
+const pruneDismissedAlbumIds = () => {
+  const now = Date.now();
+  for (const [albumId, dismissedAt] of dismissedAlbumIds.entries()) {
+    if (now - dismissedAt > DISMISSED_ALBUM_TTL_MS) {
+      dismissedAlbumIds.delete(albumId);
+    }
+  }
+  if (dismissedAlbumIds.size <= MAX_DISMISSED_ALBUMS) {
+    return;
+  }
+  const entries = Array.from(dismissedAlbumIds.entries()).sort(
+    (a, b) => a[1] - b[1],
+  );
+  const removeCount = dismissedAlbumIds.size - MAX_DISMISSED_ALBUMS;
+  for (let i = 0; i < removeCount; i++) {
+    dismissedAlbumIds.delete(entries[i][0]);
+  }
+};
 
 const toIso = (value) => {
   if (!value) return new Date().toISOString();
@@ -21,6 +43,7 @@ const toIso = (value) => {
 
 router.get("/", noCache, async (req, res) => {
   try {
+    pruneDismissedAlbumIds();
     const { lidarrClient } = await import("../services/lidarrClient.js");
 
     if (!lidarrClient?.isConfigured()) {
@@ -53,24 +76,30 @@ router.get("/", noCache, async (req, res) => {
 
       const albumName = item?.album?.title || item?.title || "Album";
       const artistName = item?.artist?.artistName || "Artist";
-      
+
       let artistMbid = null;
-      
+
       artistMbid = item?.artist?.foreignArtistId || null;
 
       const queueStatus = String(item.status || "").toLowerCase();
       const title = String(item.title || "").toLowerCase();
-      const trackedDownloadState = String(item.trackedDownloadState || "").toLowerCase();
-      const trackedDownloadStatus = String(item.trackedDownloadStatus || "").toLowerCase();
+      const trackedDownloadState = String(
+        item.trackedDownloadState || "",
+      ).toLowerCase();
+      const trackedDownloadStatus = String(
+        item.trackedDownloadStatus || "",
+      ).toLowerCase();
       const errorMessage = String(item.errorMessage || "").toLowerCase();
-      const statusMessages = Array.isArray(item.statusMessages) 
-        ? item.statusMessages.map(m => String(m || "").toLowerCase()).join(" ")
+      const statusMessages = Array.isArray(item.statusMessages)
+        ? item.statusMessages
+            .map((m) => String(m || "").toLowerCase())
+            .join(" ")
         : "";
-      
+
       const isFailed =
         trackedDownloadState === "importfailed" ||
         trackedDownloadState === "importFailed" ||
-        queueStatus.includes("fail") || 
+        queueStatus.includes("fail") ||
         queueStatus.includes("import fail") ||
         title.includes("import fail") ||
         title.includes("downloaded - import fail") ||
@@ -81,7 +110,7 @@ router.get("/", noCache, async (req, res) => {
         errorMessage.includes("retrying") ||
         statusMessages.includes("fail") ||
         statusMessages.includes("unmatched");
-      
+
       const status = isFailed ? "failed" : "processing";
 
       requestsByAlbumId.set(String(albumId), {
@@ -130,15 +159,17 @@ router.get("/", noCache, async (req, res) => {
 
       const albumName = record?.album?.title || record?.sourceTitle || "Album";
       const artistName = record?.artist?.artistName || "Artist";
-      
+
       let artistMbid = null;
-      
+
       artistMbid = record?.artist?.foreignArtistId || null;
 
       const eventType = String(record?.eventType || "").toLowerCase();
       const data = record?.data || {};
-      const statusMessages = Array.isArray(data?.statusMessages) 
-        ? data.statusMessages.map(m => String(m || "").toLowerCase()).join(" ")
+      const statusMessages = Array.isArray(data?.statusMessages)
+        ? data.statusMessages
+            .map((m) => String(m || "").toLowerCase())
+            .join(" ")
         : String(data?.statusMessages?.[0] || "").toLowerCase();
       const errorMessage = String(data?.errorMessage || "").toLowerCase();
       const sourceTitle = String(record?.sourceTitle || "").toLowerCase();
@@ -156,11 +187,11 @@ router.get("/", noCache, async (req, res) => {
         errorMessage.includes("error") ||
         sourceTitle.includes("fail") ||
         dataString.includes("fail");
-      
+
       const isFailedImport =
         eventType === "albumimportincomplete" ||
         eventType.includes("incomplete") ||
-        statusMessages.includes("fail") || 
+        statusMessages.includes("fail") ||
         statusMessages.includes("error") ||
         statusMessages.includes("import fail") ||
         statusMessages.includes("incomplete") ||
@@ -168,8 +199,11 @@ router.get("/", noCache, async (req, res) => {
         errorMessage.includes("error") ||
         sourceTitle.includes("import fail") ||
         dataString.includes("import fail");
-      
-      const isSuccessfulImport = eventType.includes("import") && !isFailedImport && eventType !== "albumimportincomplete";
+
+      const isSuccessfulImport =
+        eventType.includes("import") &&
+        !isFailedImport &&
+        eventType !== "albumimportincomplete";
       const isStaleGrabbed =
         isGrabbed && !hasQueue && Date.now() - recordTime > STALE_GRABBED_MS;
       const status = hasQueue
@@ -269,7 +303,10 @@ router.get("/", noCache, async (req, res) => {
     if (albumDetailsById.size > 0 || artistDetailsById.size > 0) {
       sorted = sorted.map((request) => {
         const enriched = { ...request };
-        if (enriched.albumId && albumDetailsById.has(String(enriched.albumId))) {
+        if (
+          enriched.albumId &&
+          albumDetailsById.has(String(enriched.albumId))
+        ) {
           const album = albumDetailsById.get(String(enriched.albumId));
           if (album) {
             if (!enriched.albumMbid && album.foreignAlbumId) {
@@ -284,10 +321,16 @@ router.get("/", noCache, async (req, res) => {
             }
           }
         }
-        if (enriched.artistId && artistDetailsById.has(String(enriched.artistId))) {
+        if (
+          enriched.artistId &&
+          artistDetailsById.has(String(enriched.artistId))
+        ) {
           const artist = artistDetailsById.get(String(enriched.artistId));
           if (artist) {
-            if (isPlaceholder(enriched.artistName, "Artist") && artist.artistName) {
+            if (
+              isPlaceholder(enriched.artistName, "Artist") &&
+              artist.artistName
+            ) {
               enriched.artistName = artist.artistName;
             }
             if (!enriched.artistMbid && artist.foreignArtistId) {
@@ -312,7 +355,8 @@ router.delete("/album/:albumId", async (req, res) => {
   const { albumId } = req.params;
   if (!albumId) return res.status(400).json({ error: "albumId is required" });
 
-  dismissedAlbumIds.add(String(albumId));
+  dismissedAlbumIds.set(String(albumId), Date.now());
+  pruneDismissedAlbumIds();
 
   try {
     const { lidarrClient } = await import("../services/lidarrClient.js");
@@ -332,6 +376,7 @@ router.delete("/album/:albumId", async (req, res) => {
         }
       }
     }
+    invalidateAllDownloadStatusesCache();
 
     res.json({ success: true });
   } catch {
@@ -367,6 +412,7 @@ router.delete("/:mbid", async (req, res) => {
           .catch(() => null);
       }
     }
+    invalidateAllDownloadStatusesCache();
 
     res.json({ success: true });
   } catch {

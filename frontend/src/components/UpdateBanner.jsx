@@ -12,6 +12,13 @@ const UpdateBanner = ({ currentVersion }) => {
       }`,
     [],
   );
+  const checkMetaKey = useMemo(
+    () =>
+      `aurral:updateCheckMeta:${
+        import.meta.env.VITE_GITHUB_REPO || "lklynet/aurral"
+      }`,
+    [],
+  );
 
   useEffect(() => {
     const currentVersion = resolvedVersion;
@@ -24,15 +31,35 @@ const UpdateBanner = ({ currentVersion }) => {
     }
     const currentIsSha = isSha(currentVersion);
     const currentLabel = normalizeVersion(currentVersion);
+    const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
     let active = true;
     const checkForUpdate = async () => {
       try {
+        const now = Date.now();
+        let checkMeta = null;
+        try {
+          checkMeta = JSON.parse(localStorage.getItem(checkMetaKey) || "null");
+        } catch {}
+        if (
+          checkMeta?.lastCheckedAt &&
+          now - Number(checkMeta.lastCheckedAt) < CHECK_INTERVAL_MS
+        ) {
+          return;
+        }
         const endpoint = `https://api.github.com/repos/${repo}/releases/latest`;
         const res = await fetch(endpoint);
         if (!res.ok) {
+          localStorage.setItem(
+            checkMetaKey,
+            JSON.stringify({ lastCheckedAt: Date.now() }),
+          );
           return;
         }
         const data = await res.json();
+        localStorage.setItem(
+          checkMetaKey,
+          JSON.stringify({ lastCheckedAt: Date.now() }),
+        );
         const latestSha = (data.target_commitish || "").trim();
         const latestLabel = normalizeVersion(data.tag_name || "");
         const releaseUrl =
@@ -71,12 +98,12 @@ const UpdateBanner = ({ currentVersion }) => {
       } catch {}
     };
     checkForUpdate();
-    const intervalId = setInterval(checkForUpdate, 60 * 60 * 1000);
+    const intervalId = setInterval(checkForUpdate, CHECK_INTERVAL_MS);
     return () => {
       active = false;
       clearInterval(intervalId);
     };
-  }, [dismissKey, resolvedVersion]);
+  }, [checkMetaKey, dismissKey, resolvedVersion]);
 
   const dismissUpdate = () => {
     if (!updateInfo?.latestKey) {

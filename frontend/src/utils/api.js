@@ -29,6 +29,21 @@ const api = axios.create({
 });
 
 const libraryLookupCache = new Map();
+const MAX_LIBRARY_LOOKUP_CACHE_SIZE = 1000;
+
+const setLibraryLookupCacheEntry = (id, value) => {
+  if (id == null) return;
+  if (libraryLookupCache.has(id)) {
+    libraryLookupCache.delete(id);
+  }
+  libraryLookupCache.set(id, value);
+  if (libraryLookupCache.size > MAX_LIBRARY_LOOKUP_CACHE_SIZE) {
+    const oldestKey = libraryLookupCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      libraryLookupCache.delete(oldestKey);
+    }
+  }
+};
 
 api.interceptors.request.use(
   (config) => {
@@ -213,7 +228,7 @@ export const readLibraryLookupCache = (mbids) => {
 export const writeLibraryLookupCache = (lookup) => {
   if (!lookup || typeof lookup !== "object") return;
   Object.entries(lookup).forEach(([id, value]) => {
-    libraryLookupCache.set(id, value);
+    setLibraryLookupCacheEntry(id, value);
   });
 };
 
