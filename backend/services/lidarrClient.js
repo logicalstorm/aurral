@@ -89,6 +89,7 @@ export class LidarrClient {
   }
 
   updateConfig() {
+    const previousConfig = this.config;
     const settings = dbOps.getSettings();
     const dbConfig = settings.integrations?.lidarr || {};
     let url = dbConfig.url || process.env.LIDARR_URL || "http://localhost:8686";
@@ -116,10 +117,20 @@ export class LidarrClient {
       circuitDisabled,
     };
 
+    const didConfigChange =
+      !previousConfig ||
+      previousConfig.url !== newConfig.url ||
+      previousConfig.apiKey !== newConfig.apiKey ||
+      previousConfig.insecure !== newConfig.insecure ||
+      previousConfig.timeoutMs !== newConfig.timeoutMs ||
+      previousConfig.circuitDisabled !== newConfig.circuitDisabled;
+
     this.config = newConfig;
-    this._artistListCache = null;
-    this._albumListCache = null;
-    this._statusCache.clear();
+    if (didConfigChange) {
+      this._artistListCache = null;
+      this._albumListCache = null;
+      this._statusCache.clear();
+    }
   }
 
   getConfig() {
