@@ -22,6 +22,7 @@ const upsertImageStmt = db.prepare(
   "INSERT OR REPLACE INTO images_cache (mbid, image_url, cache_age, created_at) VALUES (?, ?, ?, ?)"
 );
 const getAllImagesStmt = db.prepare("SELECT * FROM images_cache");
+const countImagesStmt = db.prepare("SELECT COUNT(*) as count FROM images_cache");
 const deleteImageStmt = db.prepare("DELETE FROM images_cache WHERE mbid = ?");
 const clearImagesStmt = db.prepare("DELETE FROM images_cache");
 const cleanOldImagesStmt = db.prepare(
@@ -407,6 +408,11 @@ export const dbOps = {
       images[row.mbid] = row.image_url;
     }
     return images;
+  },
+
+  countImages() {
+    const row = countImagesStmt.get();
+    return Number(row?.count || 0);
   },
 
   deleteImage(mbid) {

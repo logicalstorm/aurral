@@ -28,8 +28,10 @@ function RequestsPage() {
   const navigate = useNavigate();
   const { showError, showSuccess } = useToast();
   const activeAlbumIdsRef = useRef([]);
+  const lastDownloadWsAtRef = useRef(0);
   const handleDownloadStatusMessage = useCallback((msg) => {
     if (msg?.type !== "download_statuses") return;
+    lastDownloadWsAtRef.current = Date.now();
     const activeIds = activeAlbumIdsRef.current;
     if (!activeIds.length) return;
     const incoming = msg.statuses || {};
@@ -145,6 +147,9 @@ function RequestsPage() {
 
     let cancelled = false;
     const pollDownloadStatus = async () => {
+      if (Date.now() - lastDownloadWsAtRef.current < 20000) {
+        return;
+      }
       try {
         const statuses = await getDownloadStatus(albumIds);
         if (!cancelled) {
