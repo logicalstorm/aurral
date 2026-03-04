@@ -796,10 +796,40 @@ export async function musicbrainzGetArtistNameByMbid(mbid) {
   }
 }
 
+function normalizeArtistNameKey(artistName) {
+  return String(artistName || "")
+    .trim()
+    .toLowerCase();
+}
+
+export function musicbrainzGetCachedArtistMbidByName(artistName) {
+  const normalized = normalizeArtistNameKey(artistName);
+  if (!normalized) return null;
+  const cached = dbOps.getMusicbrainzArtistMbidCache(normalized);
+  if (!cached?.updatedAt) return null;
+  const ageMs = Date.now() - cached.updatedAt;
+  const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+  const NEGATIVE_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+  const cacheTtl = cached.mbid ? CACHE_TTL_MS : NEGATIVE_CACHE_TTL_MS;
+  if (ageMs < 0 || ageMs >= cacheTtl) return null;
+  return cached.mbid || null;
+}
+
 export async function musicbrainzResolveArtistMbidByName(artistName) {
   const rawName = String(artistName || "").trim();
   if (!rawName) return null;
-  const normalized = rawName.toLowerCase();
+  const normalized = normalizeArtistNameKey(rawName);
+  const cached = dbOps.getMusicbrainzArtistMbidCache(normalized);
+  const now = Date.now();
+  const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+  const NEGATIVE_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+  if (cached?.updatedAt) {
+    const ageMs = now - cached.updatedAt;
+    const cacheTtl = cached.mbid ? CACHE_TTL_MS : NEGATIVE_CACHE_TTL_MS;
+    if (ageMs >= 0 && ageMs < cacheTtl) {
+      return cached.mbid || null;
+    }
+  }
   const queryName = rawName.replace(/"/g, '\\"');
   try {
     const data = await musicbrainzRequest("/artist", {
@@ -831,8 +861,13 @@ export async function musicbrainzResolveArtistMbidByName(artistName) {
       if (a.score !== b.score) return b.score - a.score;
       return a.name.localeCompare(b.name);
     });
-    return candidates[0]?.id || null;
+    const resolved = candidates[0]?.id || null;
+    dbOps.setMusicbrainzArtistMbidCache(normalized, resolved);
+    return resolved;
   } catch (e) {
+    if (cached) {
+      return cached.mbid || null;
+    }
     return null;
   }
 }

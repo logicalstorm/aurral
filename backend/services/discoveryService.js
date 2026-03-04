@@ -4,7 +4,7 @@ import {
   lastfmRequest,
   getLastfmApiKey,
   deezerSearchArtist,
-  musicbrainzResolveArtistMbidByName,
+  musicbrainzGetCachedArtistMbidByName,
 } from "./apiClients.js";
 import { websocketService } from "./websocketService.js";
 
@@ -26,6 +26,25 @@ const getLastfmDiscoveryPeriod = () => {
   const settings = dbOps.getSettings();
   const p = settings.integrations?.lastfm?.discoveryPeriod;
   return p && LASTFM_PERIODS.includes(p) ? p : "1month";
+};
+
+const createLastfmHealth = () => ({
+  success: 0,
+  failure: 0,
+});
+
+const getLastfmFailureRatio = (health) => {
+  const total = health.success + health.failure;
+  if (total === 0) return 0;
+  return health.failure / total;
+};
+
+const recordLastfmResult = (health, payload) => {
+  if (payload && !payload.error) {
+    health.success += 1;
+  } else {
+    health.failure += 1;
+  }
 };
 
 let discoveryCache = {
@@ -95,6 +114,7 @@ export const updateDiscoveryCache = async () => {
     const existingArtistIds = new Set(libraryArtists.map((a) => a.mbid));
 
     const hasLastfmKey = !!getLastfmApiKey();
+    const lastfmHealth = createLastfmHealth();
     const lastfmUsername = getLastfmUsername();
     const hasLastfmUser = hasLastfmKey && lastfmUsername;
 
@@ -142,6 +162,7 @@ export const updateDiscoveryCache = async () => {
             limit: 50,
             period: discoveryPeriod,
           });
+          recordLastfmResult(lastfmHealth, userTopArtists);
 
           if (!userTopArtists) {
             console.warn(
@@ -221,9 +242,17 @@ export const updateDiscoveryCache = async () => {
 
     const tagCounts = new Map();
     const genreCounts = new Map();
+    const profileSampleBase = Math.min(25, uniqueArtists.length);
+    const profileFailureRatio = getLastfmFailureRatio(lastfmHealth);
+    const profileSampleLimit =
+      profileFailureRatio >= 0.5
+        ? Math.min(8, profileSampleBase)
+        : profileFailureRatio >= 0.3
+          ? Math.min(14, profileSampleBase)
+          : profileSampleBase;
     const profileSample = [...uniqueArtists]
       .sort(() => 0.5 - Math.random())
-      .slice(0, 25);
+      .slice(0, profileSampleLimit);
 
     console.log(
       `Sampling tags/genres from ${profileSample.length} artists (${libraryArtists.length} library, ${lastfmArtists.length} Last.fm)...`
@@ -238,6 +267,7 @@ export const updateDiscoveryCache = async () => {
             const data = await lastfmRequest("artist.getTopTags", {
               mbid: artist.mbid,
             });
+            recordLastfmResult(lastfmHealth, data);
             if (data?.toptags?.tag) {
               const tags = Array.isArray(data.toptags.tag)
                 ? data.toptags.tag
@@ -283,8 +313,9 @@ export const updateDiscoveryCache = async () => {
       console.log("Fetching Global Trending (real-time style) from Last.fm...");
       try {
         const trackData = await lastfmRequest("chart.getTopTracks", {
-          limit: 100,
+          limit: getLastfmFailureRatio(lastfmHealth) >= 0.3 ? 60 : 100,
         });
+        recordLastfmResult(lastfmHealth, trackData);
         const seenMbids = new Set();
         const seenNames = new Set();
         const artistsFromTracks = [];
@@ -330,8 +361,9 @@ export const updateDiscoveryCache = async () => {
           .slice(0, 32);
         if (globalTop.length < 12) {
           const topData = await lastfmRequest("chart.getTopArtists", {
-            limit: 100,
+            limit: getLastfmFailureRatio(lastfmHealth) >= 0.3 ? 60 : 100,
           });
+          recordLastfmResult(lastfmHealth, topData);
           if (topData?.artists?.artist) {
             const topArtists = Array.isArray(topData.artists.artist)
               ? topData.artists.artist
@@ -366,17 +398,17 @@ export const updateDiscoveryCache = async () => {
           }
         }
 
-        const maxGlobalResolve = 30;
+        const globalFailureRatio = getLastfmFailureRatio(lastfmHealth);
+        const maxGlobalResolve =
+          globalFailureRatio >= 0.5 ? 10 : globalFailureRatio >= 0.3 ? 18 : 30;
         for (
           let index = 0;
           index < globalTop.length && index < maxGlobalResolve;
           index++
         ) {
           const item = globalTop[index];
-          if (!item?.name) continue;
-          const resolvedMbid = await musicbrainzResolveArtistMbidByName(
-            item.name,
-          );
+          if (!item?.name || item.id) continue;
+          const resolvedMbid = musicbrainzGetCachedArtistMbidByName(item.name);
           if (resolvedMbid && resolvedMbid !== item.id) {
             item.navigateTo = resolvedMbid;
           }
@@ -391,7 +423,14 @@ export const updateDiscoveryCache = async () => {
       }
     }
 
-    const recSampleSize = Math.min(25, uniqueArtists.length);
+    const recFailureRatio = getLastfmFailureRatio(lastfmHealth);
+    const recSampleBase = Math.min(25, uniqueArtists.length);
+    const recSampleSize =
+      recFailureRatio >= 0.5
+        ? Math.min(8, recSampleBase)
+        : recFailureRatio >= 0.3
+          ? Math.min(14, recSampleBase)
+          : recSampleBase;
     const recSample = [...uniqueArtists]
       .sort(() => 0.5 - Math.random())
       .slice(0, recSampleSize);
@@ -411,6 +450,7 @@ export const updateDiscoveryCache = async () => {
             const tagData = await lastfmRequest("artist.getTopTags", {
               mbid: artist.mbid,
             });
+            recordLastfmResult(lastfmHealth, tagData);
             if (tagData?.toptags?.tag) {
               const allTags = Array.isArray(tagData.toptags.tag)
                 ? tagData.toptags.tag
@@ -420,8 +460,9 @@ export const updateDiscoveryCache = async () => {
 
             const similar = await lastfmRequest("artist.getSimilar", {
               mbid: artist.mbid,
-              limit: 25,
+              limit: getLastfmFailureRatio(lastfmHealth) >= 0.3 ? 12 : 25,
             });
+            recordLastfmResult(lastfmHealth, similar);
             if (similar?.similarartists?.artist) {
               const list = Array.isArray(similar.similarartists.artist)
                 ? similar.similarartists.artist
@@ -479,15 +520,21 @@ export const updateDiscoveryCache = async () => {
       .sort((a, b) => (b.score || 0) - (a.score || 0))
       .slice(0, 100);
 
-    const maxResolve = 30;
+    const recommendationFailureRatio = getLastfmFailureRatio(lastfmHealth);
+    const maxResolve =
+      recommendationFailureRatio >= 0.5
+        ? 10
+        : recommendationFailureRatio >= 0.3
+          ? 18
+          : 30;
     for (
       let index = 0;
       index < recommendationsArray.length && index < maxResolve;
       index++
     ) {
       const item = recommendationsArray[index];
-      if (!item?.name) continue;
-      const resolvedMbid = await musicbrainzResolveArtistMbidByName(item.name);
+      if (!item?.name || item.id) continue;
+      const resolvedMbid = musicbrainzGetCachedArtistMbidByName(item.name);
       if (resolvedMbid && resolvedMbid !== item.id) {
         item.navigateTo = resolvedMbid;
       }
@@ -575,6 +622,7 @@ export const updateDiscoveryCache = async () => {
           `[Discovery] Cleaned ${cleaned.changes} old image cache entries`
         );
       }
+      dbOps.cleanOldMusicbrainzArtistMbidCache(90);
     } catch (e) {
       console.warn("[Discovery] Failed to clean old image cache:", e.message);
     }
