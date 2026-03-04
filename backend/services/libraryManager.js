@@ -476,11 +476,39 @@ export class LibraryManager {
       return { error: "Lidarr is not configured" };
     }
     try {
-      let lidarrArtist = await lidarr.getArtist(artistId);
+      const isArtistNotReadyError = (error) => {
+        const msg = String(error?.message || "").toLowerCase();
+        return (
+          msg.includes("404") ||
+          msg.includes("not found") ||
+          msg.includes("artist with id")
+        );
+      };
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      let lidarrArtist = null;
+      const artistResolveAttempts = 8;
+      const artistResolveDelayMs = 1250;
+      for (let attempt = 1; attempt <= artistResolveAttempts; attempt++) {
+        try {
+          lidarrArtist = await lidarr.getArtist(artistId);
+        } catch (error) {
+          if (attempt < artistResolveAttempts && isArtistNotReadyError(error)) {
+            await sleep(artistResolveDelayMs);
+            continue;
+          }
+          throw error;
+        }
+        if (lidarrArtist) break;
+        if (attempt < artistResolveAttempts) {
+          await sleep(artistResolveDelayMs);
+        }
+      }
       if (!lidarrArtist) return { error: "Artist not found in Lidarr" };
       if (!lidarrArtist.monitored) {
         await lidarr.updateArtistMonitoring(artistId, "missing");
-        lidarrArtist = await lidarr.getArtist(artistId);
+        lidarrArtist = await lidarr
+          .getArtist(artistId)
+          .catch(() => lidarrArtist);
       }
       const existing = await lidarr.getAlbumByMbid(releaseGroupMbid);
       const artistNumericId = parseInt(artistId, 10);
@@ -504,17 +532,34 @@ export class LibraryManager {
       }
       const settings = getSettings();
       const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
-      const lidarrAlbum = await lidarr.addAlbum(
-        artistId,
-        releaseGroupMbid,
-        albumName,
-        {
-          monitored: true,
-          triggerSearch:
-            options.triggerSearch === true ||
-            (options.triggerSearch === undefined && searchOnAdd),
-        },
-      );
+      let lidarrAlbum = null;
+      const addAlbumAttempts = 4;
+      const addAlbumDelayMs = 1500;
+      for (let attempt = 1; attempt <= addAlbumAttempts; attempt++) {
+        try {
+          lidarrAlbum = await lidarr.addAlbum(
+            artistId,
+            releaseGroupMbid,
+            albumName,
+            {
+              monitored: true,
+              triggerSearch:
+                options.triggerSearch === true ||
+                (options.triggerSearch === undefined && searchOnAdd),
+            },
+          );
+          break;
+        } catch (error) {
+          if (attempt < addAlbumAttempts && isArtistNotReadyError(error)) {
+            await sleep(addAlbumDelayMs);
+            continue;
+          }
+          throw error;
+        }
+      }
+      if (!lidarrAlbum) {
+        return { error: "Failed to add album to Lidarr" };
+      }
       const allAlbums = await lidarr.request(
         `/album?artistId=${encodeURIComponent(artistId)}`,
       );
