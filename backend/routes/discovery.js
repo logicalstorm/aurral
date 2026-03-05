@@ -39,8 +39,12 @@ router.post("/refresh", (req, res) => {
 });
 
 router.post("/clear", async (req, res) => {
-  const { clearImages = true } = req.body;
+  dbOps.clearImages();
+  clearApiCaches();
+  res.json({ message: "Image cache cleared" });
+});
 
+router.post("/clear-discovery", async (req, res) => {
   dbOps.updateDiscoveryCache({
     recommendations: [],
     globalTop: [],
@@ -49,7 +53,6 @@ router.post("/clear", async (req, res) => {
     topGenres: [],
     lastUpdated: null,
   });
-
   const discoveryCache = getDiscoveryCache();
   Object.assign(discoveryCache, {
     recommendations: [],
@@ -60,22 +63,10 @@ router.post("/clear", async (req, res) => {
     lastUpdated: null,
     isUpdating: false,
   });
-
-  clearApiCaches();
-
-  if (clearImages) {
-    dbOps.clearImages();
-  }
-
   pendingTagRequests.clear();
   pendingTagSuggestRequest.promise = null;
   pendingTagSuggestRequest.expiry = 0;
-
-  res.json({
-    message: clearImages
-      ? "Discovery and image caches cleared"
-      : "Discovery cache cleared",
-  });
+  res.json({ message: "Discovery cache cleared" });
 });
 
 router.get("/", async (req, res) => {

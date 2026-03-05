@@ -9,8 +9,11 @@ import api, {
   testGotifyConnection,
   applyLidarrCommunityGuide,
 } from "../../../utils/api";
+import { useWebSocketChannel } from "../../../hooks/useWebSocket";
 import { allReleaseTypes } from "../constants";
 import { normalizeSettings, checkForChanges } from "../utils";
+
+const DISCOVERY_MANUAL_REFRESH_KEY = "aurral.discovery.manualRefreshPending";
 
 const defaultSettings = {
   rootFolderPath: "",
@@ -18,7 +21,13 @@ const defaultSettings = {
   releaseTypes: allReleaseTypes,
   integrations: {
     navidrome: { url: "", username: "", password: "" },
-    lastfm: { username: "" },
+    lastfm: {
+      apiKey: "",
+      username: "",
+      discoveryPeriod: "1month",
+      discoveryAutoRefreshHours: 168,
+      discoveryRecommendationsPerRefresh: 100,
+    },
     slskd: { url: "", apiKey: "" },
     lidarr: {
       url: "",
@@ -46,6 +55,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshingDiscovery, setRefreshingDiscovery] = useState(false);
+  const [discoveryProgressMessage, setDiscoveryProgressMessage] = useState("");
   const [clearingCache, setClearingCache] = useState(false);
   const [lidarrProfiles, setLidarrProfiles] = useState([]);
   const [loadingLidarrProfiles, setLoadingLidarrProfiles] = useState(false);
@@ -58,6 +68,51 @@ export function useSettingsData(showSuccess, showError, showInfo) {
   const [showCommunityGuideModal, setShowCommunityGuideModal] = useState(false);
   const comparisonEnabledRef = useRef(false);
 
+  const applyHealthUpdate = useCallback((healthData) => {
+    setHealth(healthData);
+    if (healthData?.discovery?.isUpdating) {
+      setRefreshingDiscovery(true);
+      setDiscoveryProgressMessage(
+        (current) => current || "Discovery refresh is running",
+      );
+    } else {
+      setRefreshingDiscovery(false);
+    }
+  }, []);
+
+  useWebSocketChannel("discovery", (msg) => {
+    if (msg.type !== "discovery_update") return;
+
+    if (msg.phase === "error") {
+      setRefreshingDiscovery(false);
+      setDiscoveryProgressMessage(
+        msg.progressMessage || "Discovery refresh failed",
+      );
+      return;
+    }
+
+    if (msg.isUpdating) {
+      setRefreshingDiscovery(true);
+      setDiscoveryProgressMessage(
+        msg.progressMessage || "Discovery refresh is running",
+      );
+      return;
+    }
+
+    if (msg.phase === "completed" || Array.isArray(msg.recommendations)) {
+      setRefreshingDiscovery(false);
+      setDiscoveryProgressMessage(
+        msg.progressMessage || "Discovery refresh completed",
+      );
+      checkHealth()
+        .then((healthData) => {
+          applyHealthUpdate(healthData);
+        })
+        .catch(() => {});
+      return;
+    }
+  });
+
   const fetchSettings = useCallback(async () => {
     comparisonEnabledRef.current = false;
     try {
@@ -65,7 +120,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
         checkHealth(),
         getAppSettings(),
       ]);
-      setHealth(healthData);
+      applyHealthUpdate(healthData);
       const updatedSettings = normalizeSettings(savedSettings);
       setSettingsState(updatedSettings);
       setOriginalSettings(JSON.parse(JSON.stringify(updatedSettings)));
@@ -92,11 +147,31 @@ export function useSettingsData(showSuccess, showError, showInfo) {
         }
       }
     } catch {}
-  }, []);
+  }, [applyHealthUpdate]);
 
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
+
+  useEffect(() => {
+    if (!refreshingDiscovery) return;
+
+    const pollHealth = async () => {
+      try {
+        const healthData = await checkHealth();
+        applyHealthUpdate(healthData);
+        if (!healthData?.discovery?.isUpdating) {
+          setDiscoveryProgressMessage(
+            (current) => current || "Discovery refresh completed",
+          );
+        }
+      } catch {}
+    };
+
+    pollHealth();
+    const intervalId = setInterval(pollHealth, 8000);
+    return () => clearInterval(intervalId);
+  }, [refreshingDiscovery, applyHealthUpdate]);
 
   const updateSettings = useCallback(
     (newSettings) => {
@@ -105,7 +180,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
         setHasUnsavedChanges(checkForChanges(newSettings, originalSettings));
       }
     },
-    [originalSettings]
+    [originalSettings],
   );
 
   const handleSaveSettings = useCallback(
@@ -123,51 +198,57 @@ export function useSettingsData(showSuccess, showError, showInfo) {
         setSaving(false);
       }
     },
-    [settings, showSuccess, showError]
+    [settings, showSuccess, showError],
   );
 
   const handleRefreshDiscovery = useCallback(async () => {
     if (refreshingDiscovery) return;
     setRefreshingDiscovery(true);
+    setDiscoveryProgressMessage("Submitting discovery refresh request");
     try {
       await api.post("/discover/refresh");
+      localStorage.setItem(DISCOVERY_MANUAL_REFRESH_KEY, "1");
       showInfo(
-        "Discovery refresh started in background. This may take a few minutes to fully hydrate images."
+        "Discovery refresh started in background. This may take a few minutes to fully hydrate images.",
       );
       const healthData = await checkHealth();
-      setHealth(healthData);
+      applyHealthUpdate(healthData);
     } catch (err) {
+      setRefreshingDiscovery(false);
+      setDiscoveryProgressMessage("");
       showError(
         "Failed to start refresh: " +
-          (err.response?.data?.message || err.response?.data?.error || err.message)
+          (err.response?.data?.message ||
+            err.response?.data?.error ||
+            err.message),
       );
-    } finally {
-      setRefreshingDiscovery(false);
     }
-  }, [refreshingDiscovery, showInfo, showError]);
+  }, [refreshingDiscovery, showInfo, showError, applyHealthUpdate]);
 
   const handleClearCache = useCallback(async () => {
     if (
       !window.confirm(
-        "Are you sure you want to clear the discovery and image cache? This will reset all recommendations until the next refresh."
+        "Are you sure you want to clear the image cache? Discovery recommendations will stay intact.",
       )
     )
       return;
     setClearingCache(true);
     try {
       await api.post("/discover/clear");
-      showSuccess("Cache cleared successfully.");
+      showSuccess("Image cache cleared successfully.");
       const healthData = await checkHealth();
-      setHealth(healthData);
+      applyHealthUpdate(healthData);
     } catch (err) {
       showError(
         "Failed to clear cache: " +
-          (err.response?.data?.message || err.response?.data?.error || err.message)
+          (err.response?.data?.message ||
+            err.response?.data?.error ||
+            err.message),
       );
     } finally {
       setClearingCache(false);
     }
-  }, [showSuccess, showError]);
+  }, [showSuccess, showError, applyHealthUpdate]);
 
   const handleApplyCommunityGuide = useCallback(async () => {
     setShowCommunityGuideModal(false);
@@ -195,7 +276,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
               },
             });
             showInfo(
-              `Default quality profile set to '${result.results.qualityProfile.name}'`
+              `Default quality profile set to '${result.results.qualityProfile.name}'`,
             );
           }
         } catch {
@@ -222,7 +303,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
               },
             });
             showInfo(
-              `Default metadata profile set to '${result.results.metadataProfile.name}'`
+              `Default metadata profile set to '${result.results.metadataProfile.name}'`,
             );
           }
         } catch {
@@ -242,9 +323,9 @@ export function useSettingsData(showSuccess, showError, showInfo) {
   const refreshHealth = useCallback(async () => {
     try {
       const healthData = await checkHealth();
-      setHealth(healthData);
+      applyHealthUpdate(healthData);
     } catch {}
-  }, []);
+  }, [applyHealthUpdate]);
 
   return {
     health,
@@ -258,6 +339,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     fetchSettings,
     refreshHealth,
     refreshingDiscovery,
+    discoveryProgressMessage,
     clearingCache,
     handleRefreshDiscovery,
     handleClearCache,
