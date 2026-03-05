@@ -10,6 +10,7 @@ import {
   LayoutTemplate,
   GripVertical,
   X,
+  CheckCircle2,
 } from "lucide-react";
 import {
   getDiscovery,
@@ -17,6 +18,8 @@ import {
   getRecentReleases,
   getReleaseGroupCover,
   getArtistCover,
+  lookupArtistsInLibraryBatch,
+  readLibraryLookupCache,
 } from "../utils/api";
 import { useWebSocketChannel } from "../hooks/useWebSocket";
 import ArtistImage from "../components/ArtistImage";
@@ -68,8 +71,11 @@ const DEFAULT_DISCOVER_SECTIONS = [
   { id: "topTags", label: "Explore by Tag", enabled: true },
 ];
 
+const getArtistId = (artist) =>
+  artist?.id || artist?.mbid || artist?.foreignArtistId;
+
 const ArtistCard = memo(
-  ({ artist, status, onNavigate }) => {
+  ({ artist, status, isInLibrary, onNavigate }) => {
     const navigateTo = artist.navigateTo || artist.id;
     const hasValidMbid =
       navigateTo && navigateTo !== "null" && navigateTo !== "undefined";
@@ -113,13 +119,18 @@ const ArtistCard = memo(
         </div>
 
         <div className="flex flex-col min-w-0">
-          <h3
-            onClick={handleClick}
-            className={`font-semibold truncate ${hasValidMbid ? "hover:underline cursor-pointer" : "cursor-not-allowed opacity-75"}`}
-            style={{ color: "#fff" }}
-          >
-            {artist.name}
-          </h3>
+          <div className="flex items-center gap-2 min-w-0">
+            <h3
+              onClick={handleClick}
+              className={`font-semibold truncate ${hasValidMbid ? "hover:underline cursor-pointer" : "cursor-not-allowed opacity-75"}`}
+              style={{ color: "#fff" }}
+            >
+              {artist.name}
+            </h3>
+            {isInLibrary && (
+              <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+            )}
+          </div>
           <div className="flex flex-col min-w-0">
             <p className="text-sm truncate" style={{ color: "#c1c1c3" }}>
               {artist.type === "Person" ? "Artist" : artist.type}
@@ -142,6 +153,7 @@ const ArtistCard = memo(
       prevProps.artist.imageUrl === nextProps.artist.imageUrl &&
       prevProps.artist.name === nextProps.artist.name &&
       prevProps.status === nextProps.status &&
+      prevProps.isInLibrary === nextProps.isInLibrary &&
       prevProps.onNavigate === nextProps.onNavigate
     );
   },
@@ -160,6 +172,7 @@ ArtistCard.propTypes = {
     navigateTo: PropTypes.string,
   }).isRequired,
   status: PropTypes.string,
+  isInLibrary: PropTypes.bool,
   onNavigate: PropTypes.func.isRequired,
 };
 
@@ -273,6 +286,7 @@ function DiscoverPage() {
   const [draggingId, setDraggingId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
   const [error, setError] = useState(null);
+  const [libraryLookup, setLibraryLookup] = useState({});
   const requestedReleaseCoversRef = useRef(new Set());
   const requestedArtistCoversRef = useRef(new Set());
   const lastDiscoveryWsMessageAtRef = useRef(0);
@@ -556,6 +570,53 @@ function DiscoverPage() {
     return names;
   }, [basedOn, recommendations]);
 
+  const discoverArtistIds = useMemo(() => {
+    const ids = new Set();
+    for (const artist of recommendations) {
+      const id = getArtistId(artist);
+      if (id) ids.add(id);
+    }
+    for (const artist of globalTop) {
+      const id = getArtistId(artist);
+      if (id) ids.add(id);
+    }
+    for (const section of genreSections) {
+      for (const artist of section.artists || []) {
+        const id = getArtistId(artist);
+        if (id) ids.add(id);
+      }
+    }
+    for (const artist of recentlyAdded) {
+      const id = artist?.foreignArtistId || artist?.mbid || artist?.id;
+      if (id) ids.add(id);
+    }
+    return [...ids];
+  }, [recommendations, globalTop, genreSections, recentlyAdded]);
+
+  useEffect(() => {
+    const cached = readLibraryLookupCache(discoverArtistIds);
+    setLibraryLookup(cached);
+    const missing = discoverArtistIds.filter((id) => cached[id] === undefined);
+    if (missing.length === 0) return;
+    let cancelled = false;
+    const fetchLookup = async () => {
+      try {
+        const lookup = await lookupArtistsInLibraryBatch(missing);
+        if (!cancelled && lookup) {
+          setLibraryLookup((prev) => ({ ...prev, ...lookup }));
+        }
+      } catch {
+        if (!cancelled) {
+          setLibraryLookup((prev) => ({ ...prev }));
+        }
+      }
+    };
+    fetchLookup();
+    return () => {
+      cancelled = true;
+    };
+  }, [discoverArtistIds]);
+
   const openDiscoverModal = () => {
     setDraftSections(discoverSections.map((item) => ({ ...item })));
     setShowDiscoverModal(true);
@@ -648,13 +709,15 @@ function DiscoverPage() {
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
             {recentlyAdded.slice(0, 6).map((artist) => {
+              const artistId = artist.foreignArtistId || artist.mbid || artist.id;
               return (
                 <ArtistCard
                   key={`artist-${artist.id}`}
                   status="available"
+                  isInLibrary={!!libraryLookup[artistId]}
                   onNavigate={navigate}
                   artist={{
-                    id: artist.foreignArtistId || artist.mbid,
+                    id: artistId,
                     name: artist.artistName,
                     image: getLibraryArtistImage(artist),
                     type: "Artist",
@@ -721,7 +784,12 @@ function DiscoverPage() {
           {recommendations.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
               {recommendations.slice(0, 12).map((artist) => (
-                <ArtistCard key={artist.id} artist={artist} onNavigate={navigate} />
+                <ArtistCard
+                  key={artist.id}
+                  artist={artist}
+                  isInLibrary={!!libraryLookup[getArtistId(artist)]}
+                  onNavigate={navigate}
+                />
               ))}
             </div>
           ) : (
@@ -768,7 +836,12 @@ function DiscoverPage() {
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
             {globalTop.slice(0, 12).map((artist) => (
-              <ArtistCard key={artist.id} artist={artist} onNavigate={navigate} />
+              <ArtistCard
+                key={artist.id}
+                artist={artist}
+                isInLibrary={!!libraryLookup[getArtistId(artist)]}
+                onNavigate={navigate}
+              />
             ))}
           </div>
         </section>
@@ -815,6 +888,7 @@ function DiscoverPage() {
                   <ArtistCard
                     key={`${section.genre}-${artist.id}`}
                     artist={artist}
+                    isInLibrary={!!libraryLookup[getArtistId(artist)]}
                     onNavigate={navigate}
                   />
                 ))}
