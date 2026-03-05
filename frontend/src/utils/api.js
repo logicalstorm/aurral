@@ -28,6 +28,13 @@ const api = axios.create({
   },
 });
 
+export const AUTH_INVALID_EVENT = "aurral:auth-invalid";
+
+export const clearAuthStorage = () => {
+  localStorage.removeItem("auth_password");
+  localStorage.removeItem("auth_user");
+};
+
 const libraryLookupCache = new Map();
 const MAX_LIBRARY_LOOKUP_CACHE_SIZE = 1000;
 
@@ -65,6 +72,14 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
+    const status = error?.response?.status;
+    const message = error?.response?.data?.message;
+    if (status === 401 && message === "Authentication required") {
+      clearAuthStorage();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event(AUTH_INVALID_EVENT));
+      }
+    }
     return Promise.reject(error);
   },
 );
@@ -466,6 +481,7 @@ export const deleteUser = async (id) => {
 
 export const changeMyPassword = async (currentPassword, newPassword) => {
   await api.post("/users/me/password", { currentPassword, newPassword });
+  localStorage.setItem("auth_password", newPassword);
 };
 
 export const getAppSettings = async () => {

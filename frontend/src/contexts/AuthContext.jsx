@@ -1,5 +1,10 @@
 import { createContext, useContext, useState, useEffect } from "react";
-import { checkHealth, verifyCredentials } from "../utils/api";
+import {
+  AUTH_INVALID_EVENT,
+  checkHealth,
+  clearAuthStorage,
+  verifyCredentials,
+} from "../utils/api";
 
 const AuthContext = createContext(null);
 
@@ -69,7 +74,7 @@ export const AuthProvider = ({ children }) => {
             setUser(healthWithAuth.user || null);
             setIsAuthenticated(!!healthWithAuth.user);
           } else {
-            localStorage.removeItem("auth_password");
+            clearAuthStorage();
             setUser(null);
             setIsAuthenticated(false);
           }
@@ -93,6 +98,18 @@ export const AuthProvider = ({ children }) => {
     checkAuthStatus();
   }, []);
 
+  useEffect(() => {
+    const handleInvalidAuth = () => {
+      setIsAuthenticated(false);
+      setUser(null);
+      setIsLoading(false);
+    };
+    window.addEventListener(AUTH_INVALID_EVENT, handleInvalidAuth);
+    return () => {
+      window.removeEventListener(AUTH_INVALID_EVENT, handleInvalidAuth);
+    };
+  }, []);
+
   const login = async (password, username = "admin") => {
     if (!password) return false;
 
@@ -114,8 +131,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem("auth_password");
-    localStorage.removeItem("auth_user");
+    clearAuthStorage();
     setIsAuthenticated(false);
     setUser(null);
   };
