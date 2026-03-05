@@ -13,9 +13,11 @@ import { createAuthMiddleware } from "./backend/middleware/auth.js";
 import {
   updateDiscoveryCache,
   getDiscoveryCache,
+  getDiscoveryAutoRefreshHours,
 } from "./backend/services/discoveryService.js";
 import { websocketService } from "./backend/services/websocketService.js";
 import { getAllDownloadStatuses } from "./backend/routes/library/handlers/downloads.js";
+import { dbOps } from "./backend/config/db-helpers.js";
 
 import settingsRouter from "./backend/routes/settings.js";
 import onboardingRouter from "./backend/routes/onboarding.js";
@@ -116,20 +118,28 @@ if (fs.existsSync(frontendDist)) {
   });
 }
 
-setInterval(
-  () => {
-    updateDiscoveryCache().catch((err) => {
-      console.error("Error in scheduled discovery update:", err.message);
-    });
-  },
-  24 * 60 * 60 * 1000,
-);
+setInterval(() => {
+  const discoveryCache = getDiscoveryCache();
+  const lastUpdated = discoveryCache?.lastUpdated;
+  const refreshHours = getDiscoveryAutoRefreshHours();
+  const refreshIntervalMs = refreshHours * 60 * 60 * 1000;
+  const parsedLastUpdated = lastUpdated ? new Date(lastUpdated).getTime() : 0;
+  const needsUpdate =
+    !Number.isFinite(parsedLastUpdated) ||
+    parsedLastUpdated <= 0 ||
+    Date.now() - parsedLastUpdated >= refreshIntervalMs;
+
+  if (!needsUpdate) return;
+
+  updateDiscoveryCache().catch((err) => {
+    console.error("Error in scheduled discovery update:", err.message);
+  });
+}, 15 * 60 * 1000);
 
 setTimeout(async () => {
   const { getLastfmApiKey } = await import("./backend/services/apiClients.js");
   const { libraryManager } =
     await import("./backend/services/libraryManager.js");
-  const { dbOps } = await import("./backend/config/db-helpers.js");
 
   const hasLastfm = !!getLastfmApiKey();
   const libraryArtists = await libraryManager.getAllArtists();
@@ -161,10 +171,11 @@ setTimeout(async () => {
   const hasGenres =
     discoveryCache.topGenres && discoveryCache.topGenres.length > 0;
 
-  const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
+  const refreshHours = getDiscoveryAutoRefreshHours();
+  const staleCutoff = Date.now() - refreshHours * 60 * 60 * 1000;
   const needsUpdate =
     !lastUpdated ||
-    new Date(lastUpdated).getTime() < twentyFourHoursAgo ||
+    new Date(lastUpdated).getTime() < staleCutoff ||
     !hasRecommendations ||
     !hasGenres;
 

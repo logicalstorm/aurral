@@ -2,6 +2,15 @@ import { allReleaseTypes } from "./constants";
 
 export const normalizeSettings = (savedSettings) => {
   const lidarr = savedSettings.integrations?.lidarr || {};
+  const lastfm = savedSettings.integrations?.lastfm || {};
+  const parsedAutoRefreshHours = parseInt(
+    lastfm.discoveryAutoRefreshHours,
+    10,
+  );
+  const parsedRecommendationLimit = parseInt(
+    lastfm.discoveryRecommendationsPerRefresh,
+    10,
+  );
   return {
     ...savedSettings,
     releaseTypes: savedSettings.releaseTypes || allReleaseTypes,
@@ -29,8 +38,19 @@ export const normalizeSettings = (savedSettings) => {
         ...(savedSettings.integrations?.navidrome || {}),
       },
       lastfm: {
+        apiKey: "",
         username: "",
-        ...(savedSettings.integrations?.lastfm || {}),
+        discoveryPeriod: "1month",
+        discoveryAutoRefreshHours:
+          Number.isFinite(parsedAutoRefreshHours) && parsedAutoRefreshHours > 0
+            ? parsedAutoRefreshHours
+            : 168,
+        discoveryRecommendationsPerRefresh:
+          Number.isFinite(parsedRecommendationLimit) &&
+          parsedRecommendationLimit > 0
+            ? parsedRecommendationLimit
+            : 100,
+        ...lastfm,
       },
       slskd: {
         url: "",
