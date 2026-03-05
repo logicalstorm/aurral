@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCircle, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { CheckCircle, Pencil } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
 
 export function SettingsMetadataTab({
@@ -9,10 +9,6 @@ export function SettingsMetadataTab({
   hasUnsavedChanges,
   saving,
   handleSaveSettings,
-  refreshingDiscovery,
-  clearingCache,
-  handleRefreshDiscovery,
-  handleClearCache,
 }) {
   const [musicbrainzEditing, setMusicbrainzEditing] = useState(false);
   const [lastfmEditing, setLastfmEditing] = useState(false);
@@ -250,93 +246,6 @@ export function SettingsMetadataTab({
               your Last.fm listening history.
             </p>
           </fieldset>
-        </div>
-        <div
-          className="p-6 rounded-lg space-y-4"
-          style={{
-            backgroundColor: "#1a1a1e",
-            border: "1px solid #2a2a2e",
-          }}
-        >
-          <h3
-            className="text-lg font-medium flex items-center"
-            style={{ color: "#fff" }}
-          >
-            Cache status
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-6 items-start">
-            <div className="space-y-3 min-w-0">
-              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                <div>
-                  <dt style={{ color: "#c1c1c3" }}>Last updated</dt>
-                  <dd style={{ color: "#fff" }}>
-                    {health?.discovery?.lastUpdated
-                      ? new Date(
-                          health.discovery.lastUpdated
-                        ).toLocaleString()
-                      : "—"}
-                  </dd>
-                </div>
-                <div>
-                  <dt style={{ color: "#c1c1c3" }}>Recommendations</dt>
-                  <dd style={{ color: "#fff" }}>
-                    {health?.discovery?.recommendationsCount ?? "—"}
-                  </dd>
-                </div>
-                <div>
-                  <dt style={{ color: "#c1c1c3" }}>Global trending</dt>
-                  <dd style={{ color: "#fff" }}>
-                    {health?.discovery?.globalTopCount ?? "—"}
-                  </dd>
-                </div>
-                <div>
-                  <dt style={{ color: "#c1c1c3" }}>Cached images</dt>
-                  <dd style={{ color: "#fff" }}>
-                    {health?.discovery?.cachedImagesCount ?? "—"}
-                  </dd>
-                </div>
-              </dl>
-              {health?.discovery?.isUpdating && (
-                <p
-                  className="text-sm flex items-center gap-2"
-                  style={{ color: "#c1c1c3" }}
-                >
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Updating…
-                </p>
-              )}
-            </div>
-            <div className="flex flex-col gap-2 w-full md:w-auto md:min-w-[180px]">
-              <button
-                type="button"
-                onClick={handleRefreshDiscovery}
-                disabled={refreshingDiscovery}
-                className="btn btn-primary flex items-center justify-center gap-2 py-2.5 px-4 font-medium shadow-md hover:opacity-90"
-              >
-                <RefreshCw
-                  className={`w-4 h-4 flex-shrink-0 ${
-                    refreshingDiscovery ? "animate-spin" : ""
-                  }`}
-                />
-                {refreshingDiscovery
-                  ? "Refreshing..."
-                  : "Refresh Discovery"}
-              </button>
-              <button
-                type="button"
-                onClick={handleClearCache}
-                disabled={clearingCache}
-                className="btn btn-secondary flex items-center justify-center gap-2 py-2.5 px-4 font-medium shadow-md"
-              >
-                <Trash2
-                  className={`w-4 h-4 flex-shrink-0 ${
-                    clearingCache ? "animate-spin" : ""
-                  }`}
-                />
-                {clearingCache ? "Clearing..." : "Clear Cache"}
-              </button>
-            </div>
-          </div>
         </div>
       </form>
     </div>

@@ -163,7 +163,13 @@ export const defaultData = {
     ],
     integrations: {
       navidrome: { url: "", username: "", password: "" },
-      lastfm: { username: "", discoveryPeriod: "1month" },
+      lastfm: {
+        apiKey: "",
+        username: "",
+        discoveryPeriod: "1month",
+        discoveryAutoRefreshHours: 168,
+        discoveryRecommendationsPerRefresh: 100,
+      },
       slskd: { url: "", apiKey: "" },
       soulseek: { username: "", password: "" },
       lidarr: {

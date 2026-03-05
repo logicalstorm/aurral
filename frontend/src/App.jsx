@@ -4,17 +4,18 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import { useState, useEffect, Suspense, lazy } from "react";
+import { useState, useEffect, Suspense, lazy, useRef } from "react";
 import PropTypes from "prop-types";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Onboarding from "./pages/Onboarding";
 import { checkHealth } from "./utils/api";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import { ToastProvider } from "./contexts/ToastContext";
+import { ToastProvider, useToast } from "./contexts/ToastContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import ReloadPrompt from "./components/ReloadPrompt";
 import UpdateBanner from "./components/UpdateBanner";
+import { useWebSocketChannel } from "./hooks/useWebSocket";
 
 const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
 const DiscoverPage = lazy(() => import("./pages/DiscoverPage"));
@@ -23,6 +24,7 @@ const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const ArtistDetailsPage = lazy(() => import("./pages/ArtistDetailsPage"));
 const RequestsPage = lazy(() => import("./pages/RequestsPage"));
 const FlowPage = lazy(() => import("./pages/FlowPage"));
+const DISCOVERY_MANUAL_REFRESH_KEY = "aurral.discovery.manualRefreshPending";
 
 const normalizeBasePath = (baseUrl) => {
   const raw = (baseUrl || "/").trim();
@@ -92,7 +94,38 @@ function AppContent() {
   const [isHealthy, setIsHealthy] = useState(null);
   const [rootFolderConfigured, setRootFolderConfigured] = useState(false);
   const [appVersion, setAppVersion] = useState(null);
+  const discoveryToastShownRef = useRef(false);
   const { isAuthenticated } = useAuth();
+  const { showSuccess, showError } = useToast();
+
+  useWebSocketChannel("discovery", (msg) => {
+    if (msg.type !== "discovery_update") return;
+
+    const hasPendingManualRefresh =
+      localStorage.getItem(DISCOVERY_MANUAL_REFRESH_KEY) === "1";
+    if (!hasPendingManualRefresh) return;
+
+    if (msg.phase === "error") {
+      localStorage.removeItem(DISCOVERY_MANUAL_REFRESH_KEY);
+      discoveryToastShownRef.current = false;
+      showError(
+        msg.error
+          ? `Discovery refresh failed: ${msg.error}`
+          : "Discovery refresh failed",
+      );
+      return;
+    }
+
+    if (msg.phase === "completed" || Array.isArray(msg.recommendations)) {
+      if (discoveryToastShownRef.current) return;
+      discoveryToastShownRef.current = true;
+      localStorage.removeItem(DISCOVERY_MANUAL_REFRESH_KEY);
+      showSuccess("Discovery refresh completed. Recommendations are now updated.");
+      setTimeout(() => {
+        discoveryToastShownRef.current = false;
+      }, 1000);
+    }
+  });
 
   useEffect(() => {
     const checkApiHealth = async () => {
