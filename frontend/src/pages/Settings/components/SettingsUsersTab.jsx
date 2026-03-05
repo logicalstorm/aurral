@@ -521,6 +521,7 @@ export function SettingsUsersTab({
                           currentPassword: editCurrentPassword,
                           password: editPassword,
                         });
+                        localStorage.setItem("auth_password", editPassword);
                         showSuccess("Password changed");
                         setEditUser(null);
                       } catch (err) {
