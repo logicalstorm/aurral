@@ -29,6 +29,9 @@ const cleanOldImagesStmt = db.prepare(
   "DELETE FROM images_cache WHERE cache_age < ?"
 );
 
+// NOT_FOUND entries expire after 7 days so covers added later get picked up
+const NOT_FOUND_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 const getDeezerMbidCacheStmt = db.prepare(
   "SELECT mbid FROM deezer_mbid_cache WHERE cache_key = ?"
 );
@@ -385,6 +388,13 @@ export const dbOps = {
   getImage(mbid) {
     const row = getImageStmt.get(mbid);
     if (!row) return null;
+    if (
+      row.image_url === "NOT_FOUND" &&
+      Date.now() - row.cache_age > NOT_FOUND_TTL_MS
+    ) {
+      deleteImageStmt.run(mbid);
+      return null;
+    }
     return {
       mbid: row.mbid,
       imageUrl: row.image_url,
@@ -399,8 +409,16 @@ export const dbOps = {
       `SELECT mbid, image_url, cache_age FROM images_cache WHERE mbid IN (${placeholders})`
     );
     const rows = stmt.all(...mbids);
+    const now = Date.now();
     const result = {};
     for (const row of rows) {
+      if (
+        row.image_url === "NOT_FOUND" &&
+        now - row.cache_age > NOT_FOUND_TTL_MS
+      ) {
+        deleteImageStmt.run(row.mbid);
+        continue;
+      }
       result[row.mbid] = { imageUrl: row.image_url, cacheAge: row.cache_age };
     }
     return result;
