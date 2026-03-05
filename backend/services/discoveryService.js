@@ -28,6 +28,32 @@ const getLastfmDiscoveryPeriod = () => {
   return p && LASTFM_PERIODS.includes(p) ? p : "1month";
 };
 
+const clampInt = (value, fallback, min, max) => {
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+};
+
+export const getDiscoveryAutoRefreshHours = () => {
+  const settings = dbOps.getSettings();
+  return clampInt(
+    settings.integrations?.lastfm?.discoveryAutoRefreshHours,
+    168,
+    1,
+    168,
+  );
+};
+
+export const getDiscoveryRecommendationsPerRefresh = () => {
+  const settings = dbOps.getSettings();
+  return clampInt(
+    settings.integrations?.lastfm?.discoveryRecommendationsPerRefresh,
+    100,
+    10,
+    500,
+  );
+};
+
 const createLastfmHealth = () => ({
   success: 0,
   failure: 0,
@@ -45,6 +71,22 @@ const recordLastfmResult = (health, payload) => {
   } else {
     health.failure += 1;
   }
+};
+
+const emitDiscoveryProgress = (
+  phase,
+  progressMessage,
+  progress,
+  extra = {},
+) => {
+  websocketService.emitDiscoveryUpdate({
+    phase,
+    progress,
+    progressMessage,
+    isUpdating: true,
+    configured: true,
+    ...extra,
+  });
 };
 
 let discoveryCache = {
@@ -105,9 +147,11 @@ export const updateDiscoveryCache = async () => {
   }
   discoveryCache.isUpdating = true;
   console.log("Starting background update of discovery recommendations...");
+  emitDiscoveryProgress("starting", "Preparing discovery refresh", 5);
 
   try {
     const { libraryManager } = await import("./libraryManager.js");
+    emitDiscoveryProgress("loading_sources", "Loading library artists", 12);
     const [recentLibraryArtists, allLibraryArtistsRaw] = await Promise.all([
       libraryManager.getRecentArtists(25),
       libraryManager.getAllArtists(),
@@ -134,13 +178,13 @@ export const updateDiscoveryCache = async () => {
 
     if (hasLastfmKey && !lastfmUsername) {
       console.log(
-        "Last.fm API key configured but username not set. User-specific recommendations will not be available."
+        "Last.fm API key configured but username not set. User-specific recommendations will not be available.",
       );
     }
 
     if (allLibraryArtists.length === 0 && !hasLastfmKey) {
       console.log(
-        "No artists in library and no Last.fm key. Skipping discovery and clearing cache."
+        "No artists in library and no Last.fm key. Skipping discovery and clearing cache.",
       );
       discoveryCache.recommendations = [];
       discoveryCache.globalTop = [];
@@ -158,17 +202,37 @@ export const updateDiscoveryCache = async () => {
         topGenres: [],
         lastUpdated: null,
       });
+      websocketService.emitDiscoveryUpdate({
+        recommendations: [],
+        globalTop: [],
+        basedOn: [],
+        topTags: [],
+        topGenres: [],
+        lastUpdated: null,
+        isUpdating: false,
+        configured: false,
+        phase: "completed",
+        progress: 100,
+        progressMessage: "Discovery refresh completed",
+      });
       return;
     }
 
     let lastfmArtists = [];
+    emitDiscoveryProgress(
+      "collecting_seeds",
+      "Collecting recommendation seed artists",
+      20,
+    );
     if (hasLastfmUser) {
       const discoveryPeriod = getLastfmDiscoveryPeriod();
       if (discoveryPeriod === "none") {
-        console.log("Last.fm discovery period set to 'none', skipping Last.fm user top artists.");
+        console.log(
+          "Last.fm discovery period set to 'none', skipping Last.fm user top artists.",
+        );
       } else {
         console.log(
-          `Fetching Last.fm user top artists for ${lastfmUsername} (period: ${discoveryPeriod})...`
+          `Fetching Last.fm user top artists for ${lastfmUsername} (period: ${discoveryPeriod})...`,
         );
         try {
           const userTopArtists = await lastfmRequest("user.getTopArtists", {
@@ -180,13 +244,13 @@ export const updateDiscoveryCache = async () => {
 
           if (!userTopArtists) {
             console.warn(
-              "Last.fm user.getTopArtists returned null - check API key and username"
+              "Last.fm user.getTopArtists returned null - check API key and username",
             );
           } else if (userTopArtists.error) {
             console.error(
               `Last.fm API error: ${
                 userTopArtists.message || userTopArtists.error
-              }`
+              }`,
             );
           } else if (userTopArtists?.topartists?.artist) {
             const artists = Array.isArray(userTopArtists.topartists.artist)
@@ -213,12 +277,12 @@ export const updateDiscoveryCache = async () => {
             }
 
             console.log(
-              `Found ${lastfmArtists.length} Last.fm artists with MBIDs.`
+              `Found ${lastfmArtists.length} Last.fm artists with MBIDs.`,
             );
           } else {
             console.warn(
               `Last.fm user.getTopArtists response missing expected data structure. Response:`,
-              JSON.stringify(userTopArtists).substring(0, 200)
+              JSON.stringify(userTopArtists).substring(0, 200),
             );
           }
         } catch (e) {
@@ -228,7 +292,7 @@ export const updateDiscoveryCache = async () => {
       }
     } else if (hasLastfmKey) {
       console.log(
-        "Last.fm API key is configured but username is missing. Set Last.fm username in Settings to enable user-specific recommendations."
+        "Last.fm API key is configured but username is missing. Set Last.fm username in Settings to enable user-specific recommendations.",
       );
     }
 
@@ -269,7 +333,12 @@ export const updateDiscoveryCache = async () => {
       .slice(0, profileSampleLimit);
 
     console.log(
-      `Sampling tags/genres from ${profileSample.length} artists (${libraryArtists.length} library, ${lastfmArtists.length} Last.fm)...`
+      `Sampling tags/genres from ${profileSample.length} artists (${libraryArtists.length} library, ${lastfmArtists.length} Last.fm)...`,
+    );
+    emitDiscoveryProgress(
+      "building_genres",
+      "Building genre and tag profile",
+      35,
     );
 
     let tagsFound = 0;
@@ -289,7 +358,7 @@ export const updateDiscoveryCache = async () => {
               tags.slice(0, 15).forEach((t) => {
                 tagCounts.set(
                   t.name,
-                  (tagCounts.get(t.name) || 0) + (parseInt(t.count) || 1)
+                  (tagCounts.get(t.name) || 0) + (parseInt(t.count) || 1),
                 );
                 const l = t.name.toLowerCase();
                 if (GENRE_KEYWORDS.some((g) => l.includes(g)))
@@ -300,14 +369,14 @@ export const updateDiscoveryCache = async () => {
             }
           } catch (e) {
             console.warn(
-              `Failed to get Last.fm tags for ${artist.artistName}: ${e.message}`
+              `Failed to get Last.fm tags for ${artist.artistName}: ${e.message}`,
             );
           }
         }
-      })
+      }),
     );
     console.log(
-      `Found tags for ${tagsFound} out of ${profileSample.length} artists`
+      `Found tags for ${tagsFound} out of ${profileSample.length} artists`,
     );
 
     discoveryCache.topTags = Array.from(tagCounts.entries())
@@ -320,11 +389,16 @@ export const updateDiscoveryCache = async () => {
       .map((t) => t[0]);
 
     console.log(
-      `Identified Top Genres: ${discoveryCache.topGenres.join(", ")}`
+      `Identified Top Genres: ${discoveryCache.topGenres.join(", ")}`,
     );
 
     if (getLastfmApiKey()) {
       console.log("Fetching Global Trending (real-time style) from Last.fm...");
+      emitDiscoveryProgress(
+        "fetching_trending",
+        "Fetching global trending artists",
+        50,
+      );
       try {
         const trackData = await lastfmRequest("chart.getTopTracks", {
           limit: getLastfmFailureRatio(lastfmHealth) >= 0.3 ? 60 : 100,
@@ -400,7 +474,7 @@ export const updateDiscoveryCache = async () => {
               })
               .filter((a) => a.id && !existingArtistIds.has(a.id));
             const fillMbids = new Set(
-              globalTop.map((a) => a.id).filter(Boolean)
+              globalTop.map((a) => a.id).filter(Boolean),
             );
             for (const a of fromArtists) {
               if (globalTop.length >= 32) break;
@@ -430,7 +504,7 @@ export const updateDiscoveryCache = async () => {
 
         discoveryCache.globalTop = globalTop;
         console.log(
-          `Found ${discoveryCache.globalTop.length} trending artists (from top tracks).`
+          `Found ${discoveryCache.globalTop.length} trending artists (from top tracks).`,
         );
       } catch (e) {
         console.error(`Failed to fetch Global Top: ${e.message}`);
@@ -451,7 +525,12 @@ export const updateDiscoveryCache = async () => {
     const recommendations = new Map();
 
     console.log(
-      `Generating recommendations based on ${recSample.length} artists (${libraryArtists.length} library, ${lastfmArtists.length} Last.fm)...`
+      `Generating recommendations based on ${recSample.length} artists (${libraryArtists.length} library, ${lastfmArtists.length} Last.fm)...`,
+    );
+    emitDiscoveryProgress(
+      "generating_recommendations",
+      "Generating personalized recommendations",
+      65,
     );
 
     if (getLastfmApiKey()) {
@@ -518,21 +597,22 @@ export const updateDiscoveryCache = async () => {
           } catch (e) {
             errorCount++;
             console.warn(
-              `Error getting similar artists for ${artist.artistName}: ${e.message}`
+              `Error getting similar artists for ${artist.artistName}: ${e.message}`,
             );
           }
-        })
+        }),
       );
       console.log(
-        `Recommendation generation: ${successCount} succeeded, ${errorCount} failed`
+        `Recommendation generation: ${successCount} succeeded, ${errorCount} failed`,
       );
     } else {
       console.warn("Last.fm API key required for similar artist discovery.");
     }
 
+    const recommendationsPerRefresh = getDiscoveryRecommendationsPerRefresh();
     const recommendationsArray = Array.from(recommendations.values())
       .sort((a, b) => (b.score || 0) - (a.score || 0))
-      .slice(0, 100);
+      .slice(0, recommendationsPerRefresh);
 
     const recommendationFailureRatio = getLastfmFailureRatio(lastfmHealth);
     const maxResolve =
@@ -555,7 +635,7 @@ export const updateDiscoveryCache = async () => {
     }
 
     console.log(
-      `Generated ${recommendationsArray.length} total recommendations.`
+      `Generated ${recommendationsArray.length} total recommendations.`,
     );
 
     const discoveryData = {
@@ -573,12 +653,17 @@ export const updateDiscoveryCache = async () => {
 
     Object.assign(discoveryCache, discoveryData);
     dbOps.updateDiscoveryCache(discoveryData);
+    emitDiscoveryProgress(
+      "saving_results",
+      "Saving refreshed discovery cache",
+      82,
+    );
     const { notifyDiscoveryUpdated } = await import("./notificationService.js");
     notifyDiscoveryUpdated().catch((err) =>
-      console.warn("[Discovery] Gotify notification failed:", err.message)
+      console.warn("[Discovery] Gotify notification failed:", err.message),
     );
     console.log(
-      `Discovery data written to database: ${discoveryData.recommendations.length} recommendations, ${discoveryData.topGenres.length} genres, ${discoveryData.globalTop.length} trending`
+      `Discovery data written to database: ${discoveryData.recommendations.length} recommendations, ${discoveryData.topGenres.length} genres, ${discoveryData.globalTop.length} trending`,
     );
 
     const allToHydrate = [
@@ -586,6 +671,7 @@ export const updateDiscoveryCache = async () => {
       ...recommendationsArray,
     ].filter((a) => !a.image);
     console.log(`Hydrating images for ${allToHydrate.length} artists...`);
+    emitDiscoveryProgress("hydrating_images", "Hydrating artist images", 90);
 
     const batchSize = 10;
     for (let i = 0; i < allToHydrate.length; i += batchSize) {
@@ -606,7 +692,7 @@ export const updateDiscoveryCache = async () => {
               }
             } catch (e) {}
           } catch (e) {}
-        })
+        }),
       );
 
       if (i + batchSize < allToHydrate.length) {
@@ -616,7 +702,7 @@ export const updateDiscoveryCache = async () => {
 
     console.log("Discovery cache updated successfully.");
     console.log(
-      `Summary: ${recommendationsArray.length} recommendations, ${discoveryCache.topGenres.length} genres, ${discoveryCache.globalTop.length} trending artists`
+      `Summary: ${recommendationsArray.length} recommendations, ${discoveryCache.topGenres.length} genres, ${discoveryCache.globalTop.length} trending artists`,
     );
     websocketService.emitDiscoveryUpdate({
       recommendations: discoveryData.recommendations,
@@ -627,13 +713,16 @@ export const updateDiscoveryCache = async () => {
       lastUpdated: discoveryData.lastUpdated,
       isUpdating: false,
       configured: true,
+      phase: "completed",
+      progress: 100,
+      progressMessage: "Discovery refresh completed",
     });
 
     try {
       const cleaned = dbOps.cleanOldImageCache(30);
       if (cleaned?.changes > 0) {
         console.log(
-          `[Discovery] Cleaned ${cleaned.changes} old image cache entries`
+          `[Discovery] Cleaned ${cleaned.changes} old image cache entries`,
         );
       }
       dbOps.cleanOldMusicbrainzArtistMbidCache(90);
@@ -643,6 +732,14 @@ export const updateDiscoveryCache = async () => {
   } catch (error) {
     console.error("Failed to update discovery cache:", error.message);
     console.error("Stack trace:", error.stack);
+    websocketService.emitDiscoveryUpdate({
+      isUpdating: false,
+      configured: true,
+      phase: "error",
+      progress: 100,
+      progressMessage: "Discovery refresh failed",
+      error: error.message,
+    });
   } finally {
     discoveryCache.isUpdating = false;
   }
