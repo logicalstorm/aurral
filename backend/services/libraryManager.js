@@ -59,10 +59,6 @@ export class LibraryManager {
       );
     };
     try {
-      const existing = await lidarr.getArtistByMbid(mbid);
-      if (existing) {
-        return this.mapLidarrArtist(existing);
-      }
       const lidarrSettings = getSettings();
       const lidarrArtist = await lidarr.addArtist(mbid, artistName, {
         albumOnly: options.albumOnly === true,

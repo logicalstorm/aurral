@@ -108,10 +108,24 @@ export const updateDiscoveryCache = async () => {
 
   try {
     const { libraryManager } = await import("./libraryManager.js");
-    const libraryArtists = await libraryManager.getRecentArtists(25);
-    console.log(`Found ${libraryArtists.length} artists in library.`);
+    const [recentLibraryArtists, allLibraryArtistsRaw] = await Promise.all([
+      libraryManager.getRecentArtists(25),
+      libraryManager.getAllArtists(),
+    ]);
+    const allLibraryArtists = Array.isArray(allLibraryArtistsRaw)
+      ? allLibraryArtistsRaw
+      : [];
+    const libraryArtists =
+      recentLibraryArtists.length > 0
+        ? recentLibraryArtists
+        : allLibraryArtists.slice(0, 25);
+    console.log(`Found ${allLibraryArtists.length} artists in library.`);
 
-    const existingArtistIds = new Set(libraryArtists.map((a) => a.mbid));
+    const existingArtistIds = new Set(
+      allLibraryArtists
+        .map((a) => a.mbid || a.foreignArtistId || a.id)
+        .filter(Boolean),
+    );
 
     const hasLastfmKey = !!getLastfmApiKey();
     const lastfmHealth = createLastfmHealth();
@@ -124,7 +138,7 @@ export const updateDiscoveryCache = async () => {
       );
     }
 
-    if (libraryArtists.length === 0 && !hasLastfmKey) {
+    if (allLibraryArtists.length === 0 && !hasLastfmKey) {
       console.log(
         "No artists in library and no Last.fm key. Skipping discovery and clearing cache."
       );
