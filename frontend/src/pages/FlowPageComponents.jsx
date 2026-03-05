@@ -31,6 +31,23 @@ const FOCUS_STRENGTH_COLORS = {
   heavy: "#48513eff",
 };
 
+const WEEKDAY_OPTIONS = [
+  { id: 0, short: "Su", full: "Sunday" },
+  { id: 1, short: "M", full: "Monday" },
+  { id: 2, short: "T", full: "Tuesday" },
+  { id: 3, short: "W", full: "Wednesday" },
+  { id: 4, short: "Th", full: "Thursday" },
+  { id: 5, short: "F", full: "Friday" },
+  { id: 6, short: "S", full: "Saturday" },
+];
+
+const SCHEDULE_COUNT_LABELS = {
+  3: "three times",
+  4: "four times",
+  5: "five times",
+  6: "six times",
+};
+
 export function MixSlider({ mix, onChange, normalizeMixPercent }) {
   const normalized = normalizeMixPercent(mix);
   const barRef = useRef(null);
@@ -234,15 +251,33 @@ export function FlowFormFields({
   const deepDivePhrase = draft?.deepDive
     ? "dig into deep cuts"
     : "stick with the most popular picks";
+  const normalizedMix = normalizeMixPercent(draft?.mix);
+  const totalSize = Number.isFinite(Number(remaining)) && Number(remaining) > 0 ? Math.round(Number(remaining)) : 0;
+  const scheduleDays = Array.isArray(draft?.scheduleDays)
+    ? [...new Set(draft.scheduleDays.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry >= 0 && entry <= 6))].sort(
+        (a, b) => a - b
+      )
+    : [];
+  const schedulePhrase =
+    scheduleDays.length === 7
+      ? "Update daily"
+      : scheduleDays.length === 1
+        ? `Update every ${WEEKDAY_OPTIONS.find((day) => day.id === scheduleDays[0])?.full.toLowerCase() || "week"}`
+        : scheduleDays.length === 2
+          ? `Update twice a week on ${WEEKDAY_OPTIONS.filter((day) => scheduleDays.includes(day.id))
+              .map((day) => day.full.toLowerCase())
+              .join(" and ")}`
+          : scheduleDays.length >= 3 && scheduleDays.length <= 6
+            ? `Update ${SCHEDULE_COUNT_LABELS[scheduleDays.length]} a week`
+            : "Update weekly";
   const clauses = [
+    schedulePhrase,
     mixPhrase,
     tagPhrase,
     relatedPhrase,
     deepDivePhrase,
   ].filter(Boolean);
   const madlibsText = `${clauses.join(", ")}. No more than ${trackCount} tracks.`;
-  const normalizedMix = normalizeMixPercent(draft?.mix);
-  const totalSize = Number.isFinite(Number(remaining)) && Number(remaining) > 0 ? Math.round(Number(remaining)) : 0;
   
   const mixScaled = (() => {
     const entries = [
@@ -303,6 +338,55 @@ export function FlowFormFields({
                 updateDraft((prev) => ({ ...prev, size: value }));
               }}
             />
+          </div>
+        </div>
+        <div className="grid gap-1.5">
+          <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
+            Update Days
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            {WEEKDAY_OPTIONS.map((day) => {
+              const checked = scheduleDays.includes(day.id);
+              return (
+                <label
+                  key={day.id}
+                  className={`inline-flex items-center rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                    checked
+                      ? "bg-[#718062] text-[#f4f1eb]"
+                      : "bg-[#15161a] text-[#a7aab5] hover:bg-[#202229] hover:text-[#dde1ea]"
+                  }`}
+                  title={day.full}
+                >
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={checked}
+                    disabled={checked && scheduleDays.length === 1}
+                    onChange={() =>
+                      updateDraft((prev) => {
+                        const current = Array.isArray(prev?.scheduleDays)
+                          ? prev.scheduleDays
+                          : [];
+                        const normalized = [...new Set(current
+                          .map((entry) => Number(entry))
+                          .filter((entry) => Number.isFinite(entry) && entry >= 0 && entry <= 6))];
+                        if (checked && normalized.length === 1) {
+                          return prev;
+                        }
+                        const next = checked
+                          ? normalized.filter((entry) => entry !== day.id)
+                          : [...normalized, day.id];
+                        return {
+                          ...prev,
+                          scheduleDays: next.sort((a, b) => a - b),
+                        };
+                      })
+                    }
+                  />
+                  <span>{day.short}</span>
+                </label>
+              );
+            })}
           </div>
         </div>
       </div>
