@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Loader, Music, ArrowLeft, CheckCircle2 } from "lucide-react";
 import {
@@ -28,6 +28,7 @@ function SearchResultsPage() {
   const [searchTotalCount, setSearchTotalCount] = useState(0);
   const [lastfmConfigured, setLastfmConfigured] = useState(null);
   const [libraryLookup, setLibraryLookup] = useState({});
+  const sentinelRef = useRef(null);
   const navigate = useNavigate();
 
   const trimmedQuery = useMemo(() => query.trim(), [query]);
@@ -206,6 +207,8 @@ function SearchResultsPage() {
   }, [results, libraryLookup, getArtistId]);
 
   const loadMore = useCallback(async () => {
+    if (loading || loadingMore || !hasMore) return;
+
     if (type === "recommended" || type === "trending") {
       const next = visibleCount + PAGE_SIZE;
       setVisibleCount((c) =>
@@ -274,7 +277,19 @@ function SearchResultsPage() {
     isTagSearch,
     tagScope,
     getArtistId,
+    loading,
+    loadingMore,
+    hasMore,
   ]);
+
+  const onSentinel = useCallback(
+    (entries) => {
+      if (entries[0]?.isIntersecting) {
+        loadMore();
+      }
+    },
+    [loadMore],
+  );
 
   const getArtistType = (artistType) => {
     const types = {
@@ -308,6 +323,16 @@ function SearchResultsPage() {
       : isTagSearch
         ? results.length >= PAGE_SIZE
         : results.length >= PAGE_SIZE && searchTotalCount > PAGE_SIZE);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !showContent || isEmpty || !showLoadMore) return;
+    const observer = new IntersectionObserver(onSentinel, {
+      rootMargin: "200px",
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [onSentinel, showContent, isEmpty, showLoadMore]);
 
   return (
     <div className="animate-fade-in">
@@ -515,25 +540,13 @@ function SearchResultsPage() {
               </div>
 
               {showLoadMore && (
-                <div className="mt-8 flex justify-center">
-                  <button
-                    onClick={loadMore}
-                    disabled={loadingMore}
-                    className="px-6 py-3 font-medium rounded-lg transition-colors disabled:opacity-50"
-                    style={{
-                      backgroundColor: "#43454f",
-                      color: "#fff",
-                    }}
-                  >
-                    {loadingMore ? (
-                      <span className="flex items-center gap-2">
-                        <Loader className="w-5 h-5 animate-spin" />
-                        Loading...
-                      </span>
-                    ) : (
-                      "Load more"
-                    )}
-                  </button>
+                <div ref={sentinelRef} className="mt-8 flex justify-center">
+                  <div className="px-6 py-3 font-medium rounded-lg" style={{ color: "#c1c1c3" }}>
+                    <span className="flex items-center gap-2">
+                      <Loader className="w-5 h-5 animate-spin" />
+                      Loading...
+                    </span>
+                  </div>
                 </div>
               )}
             </>
