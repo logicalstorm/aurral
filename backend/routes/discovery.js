@@ -83,7 +83,7 @@ router.get("/", async (req, res) => {
   const settings = dbOps.getSettings();
   const lastfmUsername = settings.integrations?.lastfm?.username || null;
   const hasLastfmUser = hasLastfmKey && lastfmUsername;
-  const libraryArtists = await libraryManager.getRecentArtists(25);
+  const libraryArtists = await libraryManager.getAllArtists();
   const hasArtists = libraryArtists.length > 0;
 
   if (!hasLastfmKey && !hasArtists) {
@@ -183,7 +183,11 @@ router.get("/", async (req, res) => {
     lastUpdated = null;
   }
 
-  const existingArtistIds = new Set(libraryArtists.map((a) => a.mbid));
+  const existingArtistIds = new Set(
+    libraryArtists
+      .map((a) => a.mbid || a.foreignArtistId || a.id)
+      .filter(Boolean),
+  );
 
   recommendations = recommendations.filter(
     (artist) => !existingArtistIds.has(artist.id),
@@ -563,8 +567,12 @@ router.get("/filtered", async (req, res) => {
     let recommendations = discoveryCache.recommendations || [];
     let globalTop = discoveryCache.globalTop || [];
 
-    const libraryArtists = await libraryManager.getRecentArtists(25);
-    const existingArtistIds = new Set(libraryArtists.map((a) => a.mbid));
+    const libraryArtists = await libraryManager.getAllArtists();
+    const existingArtistIds = new Set(
+      libraryArtists
+        .map((a) => a.mbid || a.foreignArtistId || a.id)
+        .filter(Boolean),
+    );
 
     recommendations = recommendations.filter(
       (artist) => !existingArtistIds.has(artist.id),
