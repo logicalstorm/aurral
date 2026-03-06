@@ -88,6 +88,19 @@ const parseListInput = (value) =>
     .map((entry) => entry.trim())
     .filter(Boolean);
 
+const normalizeScheduleDays = (value) => {
+  if (!Array.isArray(value)) return [];
+  const unique = new Set();
+  for (const entry of value) {
+    const day = Number(entry);
+    if (!Number.isFinite(day)) continue;
+    const normalized = Math.round(day);
+    if (normalized < 0 || normalized > 6) continue;
+    unique.add(normalized);
+  }
+  return [...unique].sort((a, b) => a - b);
+};
+
 const normalizeMixPercent = (mix) => {
   const raw = {
     discover: Number(mix?.discover ?? 0),
@@ -316,6 +329,10 @@ const flowToForm = (flow) => {
     includeRelatedArtists: Object.keys(relatedMap).join(", "),
     tagStrength: focusStrengths.tagStrength,
     relatedStrength: focusStrengths.relatedStrength,
+    scheduleDays:
+      normalizeScheduleDays(flow?.scheduleDays).length > 0
+        ? normalizeScheduleDays(flow?.scheduleDays)
+        : [new Date().getDay()],
   };
 };
 
@@ -341,6 +358,10 @@ const buildFlowFromForm = (draft) => {
       : 0;
   if (tagFocusPercent + relatedFocusPercent > 100) {
     throw new Error("Tag and related focus exceeds 100%");
+  }
+  const scheduleDays = normalizeScheduleDays(draft?.scheduleDays);
+  if (scheduleDays.length === 0) {
+    throw new Error("Select at least one day for this flow schedule");
   }
   const focusCounts = buildCountsFromFocusPercent(
     size,
@@ -375,6 +396,7 @@ const buildFlowFromForm = (draft) => {
     tags,
     relatedArtists,
     deepDive: draft?.deepDive === true,
+    scheduleDays,
   };
 };
 
@@ -393,6 +415,7 @@ const normalizeDraftForCompare = (draft) => {
     tagStrength: draft?.tagStrength ?? "medium",
     relatedStrength: draft?.relatedStrength ?? "medium",
     deepDive: draft?.deepDive === true,
+    scheduleDays: normalizeScheduleDays(draft?.scheduleDays),
   };
 };
 
