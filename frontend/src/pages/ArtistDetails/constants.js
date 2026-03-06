@@ -24,6 +24,7 @@ export const secondaryReleaseTypes = [
   "Broadcast",
   "Soundtrack",
   "Spokenword",
+  "Other",
 ];
 export const allReleaseTypes = [...primaryReleaseTypes, ...secondaryReleaseTypes];
 

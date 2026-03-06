@@ -1,4 +1,8 @@
-import { TAG_COLORS, allReleaseTypes } from "./constants";
+import {
+  TAG_COLORS,
+  allReleaseTypes,
+  secondaryReleaseTypes,
+} from "./constants";
 
 export const getTagColor = (name) => {
   if (!name) return "#211f27";
@@ -20,9 +24,7 @@ export const getPopularityScale = (releaseGroups) => {
   if (counts.length === 0) return { pivot: 0 };
   const mid = Math.floor(counts.length / 2);
   const pivot =
-    counts.length % 2 === 0
-      ? (counts[mid - 1] + counts[mid]) / 2
-      : counts[mid];
+    counts.length % 2 === 0 ? (counts[mid - 1] + counts[mid]) / 2 : counts[mid];
   return { pivot };
 };
 
@@ -71,14 +73,26 @@ export const getArtistType = (type) => {
   return types[type] || type;
 };
 
-export const matchesReleaseTypeFilter = (releaseGroup, selectedReleaseTypes) => {
+export const matchesReleaseTypeFilter = (
+  releaseGroup,
+  selectedReleaseTypes,
+) => {
   if (!selectedReleaseTypes || selectedReleaseTypes.length === 0) return true;
   const primaryType = releaseGroup["primary-type"];
   const secondaryTypes = releaseGroup["secondary-types"] || [];
   if (!selectedReleaseTypes.includes(primaryType)) return false;
   if (secondaryTypes.length > 0) {
-    return secondaryTypes.every((secondaryType) =>
-      selectedReleaseTypes.includes(secondaryType)
+    const normalizedSecondaryTypes = [
+      ...new Set(
+        secondaryTypes.map((secondaryType) =>
+          secondaryReleaseTypes.includes(secondaryType)
+            ? secondaryType
+            : "Other",
+        ),
+      ),
+    ];
+    return normalizedSecondaryTypes.every((secondaryType) =>
+      selectedReleaseTypes.includes(secondaryType),
     );
   }
   return true;
