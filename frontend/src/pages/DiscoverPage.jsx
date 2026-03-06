@@ -125,7 +125,7 @@ const ArtistCard = memo(
               className={`font-semibold truncate ${hasValidMbid ? "hover:underline cursor-pointer" : "cursor-not-allowed opacity-75"}`}
               style={{ color: "#fff" }}
             >
-              {artist.name}
+              <span title={artist.name}>{artist.name}</span>
             </h3>
             {isInLibrary && (
               <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
@@ -134,11 +134,13 @@ const ArtistCard = memo(
           <div className="flex flex-col min-w-0">
             <p className="text-sm truncate" style={{ color: "#c1c1c3" }}>
               {artist.type === "Person" ? "Artist" : artist.type}
-              {artist.sourceArtist && ` • Similar to ${artist.sourceArtist}`}
+              {artist.sourceArtist && (
+                <span title={`Similar to ${artist.sourceArtist}`}>{` • Similar to ${artist.sourceArtist}`}</span>
+              )}
             </p>
             {artist.subtitle && (
               <p className="text-xs truncate" style={{ color: "#c1c1c3" }}>
-                {artist.subtitle}
+                <span title={artist.subtitle}>{artist.subtitle}</span>
               </p>
             )}
           </div>
