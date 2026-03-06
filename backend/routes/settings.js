@@ -2,10 +2,11 @@ import express from "express";
 import { dbOps } from "../config/db-helpers.js";
 import { defaultData } from "../config/constants.js";
 import { noCache } from "../middleware/cache.js";
-import { requireAuth } from "../middleware/requirePermission.js";
+import { requireAuth, requireAdmin } from "../middleware/requirePermission.js";
 
 const router = express.Router();
 router.use(requireAuth);
+router.use(requireAdmin);
 
 router.get("/", noCache, (req, res) => {
   try {

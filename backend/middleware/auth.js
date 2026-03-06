@@ -1,8 +1,11 @@
 import basicAuth from "express-basic-auth";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import { dbOps, userOps } from "../config/db-helpers.js";
 
 const DEFAULT_PROXY_HEADER = "x-forwarded-user";
+const STREAM_TOKEN_TTL_MS = 2 * 60 * 1000;
+const streamTokenStore = new Map();
 
 export const getAuthUser = () => {
   const settings = dbOps.getSettings();
@@ -194,6 +197,45 @@ export function resolveRequestUser(req) {
   }
 }
 
+function pruneExpiredStreamTokens() {
+  const now = Date.now();
+  for (const [token, payload] of streamTokenStore.entries()) {
+    if (!payload || payload.expiresAt <= now) {
+      streamTokenStore.delete(token);
+    }
+  }
+}
+
+export function issueStreamToken(user, ttlMs = STREAM_TOKEN_TTL_MS) {
+  if (!user) return null;
+  pruneExpiredStreamTokens();
+  const token = crypto.randomBytes(24).toString("base64url");
+  streamTokenStore.set(token, {
+    user: {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      permissions: user.permissions || {},
+    },
+    expiresAt:
+      Date.now() + Math.max(1000, Number(ttlMs) || STREAM_TOKEN_TTL_MS),
+  });
+  return token;
+}
+
+function consumeStreamToken(rawToken) {
+  if (!rawToken) return null;
+  pruneExpiredStreamTokens();
+  const token = String(rawToken).trim();
+  if (!token) return null;
+  const payload = streamTokenStore.get(token);
+  if (!payload || payload.expiresAt <= Date.now()) {
+    streamTokenStore.delete(token);
+    return null;
+  }
+  return payload.user || null;
+}
+
 export const createAuthMiddleware = () => {
   return (req, res, next) => {
     if (!req.path.startsWith("/api")) return next();
@@ -273,6 +315,11 @@ export const verifyTokenAuth = (req) => {
       req.user = u;
       return true;
     }
+  }
+  const streamTokenUser = consumeStreamToken(req.query.st);
+  if (streamTokenUser) {
+    req.user = streamTokenUser;
+    return true;
   }
   if (isProxyAuthEnabled()) return false;
   const passwords = getAuthPassword();

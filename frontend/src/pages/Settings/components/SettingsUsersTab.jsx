@@ -1,5 +1,6 @@
 import { UserPlus, Lock, Pencil, Trash2, X } from "lucide-react";
 import { GRANULAR_PERMISSIONS, granularPerms } from "../constants";
+import { getStoredAuth, setStoredAuth } from "../../../utils/api";
 
 export function SettingsUsersTab({
   authUser,
@@ -521,7 +522,8 @@ export function SettingsUsersTab({
                           currentPassword: editCurrentPassword,
                           password: editPassword,
                         });
-                        localStorage.setItem("auth_password", editPassword);
+                        const { username } = getStoredAuth();
+                        setStoredAuth({ username, password: editPassword });
                         showSuccess("Password changed");
                         setEditUser(null);
                       } catch (err) {

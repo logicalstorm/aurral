@@ -43,6 +43,23 @@ process.on("unhandledRejection", (reason, promise) => {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+const allowedCorsOrigins = String(process.env.CORS_ORIGIN || "")
+  .split(",")
+  .map((v) => v.trim())
+  .filter(Boolean);
+
+const corsOptions =
+  allowedCorsOrigins.length > 0
+    ? {
+        origin(origin, callback) {
+          if (!origin || allowedCorsOrigins.includes(origin)) {
+            return callback(null, true);
+          }
+          return callback(null, false);
+        },
+      }
+    : { origin: false };
+
 const trustProxyValue =
   process.env.TRUST_PROXY === undefined
     ? 1
@@ -55,7 +72,7 @@ const trustProxyValue =
           : Number(process.env.TRUST_PROXY);
 app.set("trust proxy", trustProxyValue);
 
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(
   helmet({
     contentSecurityPolicy: false,
