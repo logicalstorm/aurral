@@ -3,6 +3,8 @@ import {
   AUTH_INVALID_EVENT,
   checkHealth,
   clearAuthStorage,
+  getStoredAuth,
+  setStoredAuth,
   verifyCredentials,
 } from "../utils/api";
 
@@ -33,7 +35,10 @@ export const AuthProvider = ({ children }) => {
       setAuthRequired(isRequired);
 
       if (isRequired) {
-        localStorage.setItem("auth_user", authUser);
+        const { password } = getStoredAuth();
+        if (password) {
+          setStoredAuth({ username: authUser, password });
+        }
       }
 
       if (isRequired && healthData.user) {
@@ -63,8 +68,7 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      const storedPassword = localStorage.getItem("auth_password");
-      const storedUser = localStorage.getItem("auth_user") || "admin";
+      const { username: storedUser, password: storedPassword } = getStoredAuth();
 
       if (storedPassword) {
         try {
@@ -116,8 +120,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const isValid = await verifyCredentials(password, username);
       if (isValid) {
-        localStorage.setItem("auth_password", password);
-        localStorage.setItem("auth_user", username);
+        setStoredAuth({ username, password });
         setIsAuthenticated(true);
         const healthWithAuth = await checkHealth();
         setUser(healthWithAuth.user || null);

@@ -30,9 +30,49 @@ const api = axios.create({
 
 export const AUTH_INVALID_EVENT = "aurral:auth-invalid";
 
+const AUTH_PASSWORD_KEY = "auth_password";
+const AUTH_USER_KEY = "auth_user";
+
+function readAuthFromStorage(storage) {
+  if (!storage) return { username: "admin", password: "" };
+  return {
+    username: storage.getItem(AUTH_USER_KEY) || "admin",
+    password: storage.getItem(AUTH_PASSWORD_KEY) || "",
+  };
+}
+
+export const getStoredAuth = () => {
+  const sessionAuth = readAuthFromStorage(globalThis?.sessionStorage);
+  if (sessionAuth.password) return sessionAuth;
+  const localAuth = readAuthFromStorage(globalThis?.localStorage);
+  if (localAuth.password && globalThis?.sessionStorage) {
+    globalThis.sessionStorage.setItem(AUTH_USER_KEY, localAuth.username);
+    globalThis.sessionStorage.setItem(AUTH_PASSWORD_KEY, localAuth.password);
+    globalThis.localStorage?.removeItem(AUTH_USER_KEY);
+    globalThis.localStorage?.removeItem(AUTH_PASSWORD_KEY);
+    return localAuth;
+  }
+  return sessionAuth;
+};
+
+export const setStoredAuth = ({ username = "admin", password = "" } = {}) => {
+  if (!globalThis?.sessionStorage) return;
+  if (!password) {
+    globalThis.sessionStorage.removeItem(AUTH_PASSWORD_KEY);
+    globalThis.sessionStorage.removeItem(AUTH_USER_KEY);
+    return;
+  }
+  globalThis.sessionStorage.setItem(AUTH_USER_KEY, username);
+  globalThis.sessionStorage.setItem(AUTH_PASSWORD_KEY, password);
+  globalThis.localStorage?.removeItem(AUTH_PASSWORD_KEY);
+  globalThis.localStorage?.removeItem(AUTH_USER_KEY);
+};
+
 export const clearAuthStorage = () => {
-  localStorage.removeItem("auth_password");
-  localStorage.removeItem("auth_user");
+  globalThis?.sessionStorage?.removeItem(AUTH_PASSWORD_KEY);
+  globalThis?.sessionStorage?.removeItem(AUTH_USER_KEY);
+  globalThis?.localStorage?.removeItem(AUTH_PASSWORD_KEY);
+  globalThis?.localStorage?.removeItem(AUTH_USER_KEY);
 };
 
 const libraryLookupCache = new Map();
@@ -54,8 +94,7 @@ const setLibraryLookupCacheEntry = (id, value) => {
 
 api.interceptors.request.use(
   (config) => {
-    const password = localStorage.getItem("auth_password");
-    const username = localStorage.getItem("auth_user") || "admin";
+    const { username, password } = getStoredAuth();
     if (password) {
       const token = btoa(`${username}:${password}`);
       config.headers["Authorization"] = `Basic ${token}`;
@@ -191,16 +230,26 @@ export const updateArtistOverrides = async (
   return response.data;
 };
 
-export const getStreamUrl = (songId) => {
+export const getStreamUrl = async (songId) => {
+  return buildStreamUrl(`/library/stream/${encodeURIComponent(songId)}`);
+};
+
+export const getStreamAccessToken = async () => {
+  const response = await api.post("/health/stream-token");
+  return response.data?.token || null;
+};
+
+export const buildStreamUrl = async (path) => {
   const base = import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
-  const password = localStorage.getItem("auth_password");
-  const username = localStorage.getItem("auth_user") || "admin";
-  let url = `${base}/library/stream/${encodeURIComponent(songId)}`;
-  if (password) {
-    const token = btoa(`${username}:${password}`);
-    url += `?token=${encodeURIComponent(token)}`;
+  let relativePath = String(path || "");
+  if (!relativePath.startsWith("/")) {
+    relativePath = `/${relativePath}`;
   }
-  return url;
+  const token = await getStreamAccessToken().catch(() => null);
+  const url = `${base}${relativePath}`;
+  if (!token) return url;
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}st=${encodeURIComponent(token)}`;
 };
 
 export const getLibraryArtists = async () => {
@@ -481,7 +530,8 @@ export const deleteUser = async (id) => {
 
 export const changeMyPassword = async (currentPassword, newPassword) => {
   await api.post("/users/me/password", { currentPassword, newPassword });
-  localStorage.setItem("auth_password", newPassword);
+  const { username } = getStoredAuth();
+  setStoredAuth({ username, password: newPassword });
 };
 
 export const getAppSettings = async () => {

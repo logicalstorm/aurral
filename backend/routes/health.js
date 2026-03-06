@@ -6,6 +6,7 @@ import {
   getAuthUser,
   getAuthPassword,
   isProxyAuthEnabled,
+  issueStreamToken,
 } from "../middleware/auth.js";
 import { getDiscoveryCache } from "../services/discoveryService.js";
 import { getCachedArtistCount } from "../services/libraryManager.js";
@@ -28,6 +29,17 @@ const router = express.Router();
 
 router.get("/live", noCache, (_req, res) => {
   res.json({ status: "ok" });
+});
+
+router.post("/stream-token", noCache, (req, res) => {
+  const user = resolveRequestUser(req);
+  if (!user) {
+    return res
+      .status(401)
+      .json({ error: "Unauthorized", message: "Authentication required" });
+  }
+  const token = issueStreamToken(user);
+  return res.json({ token, expiresIn: 120 });
 });
 
 router.get("/", noCache, async (req, res) => {

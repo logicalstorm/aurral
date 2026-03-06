@@ -12,6 +12,7 @@ import { libraryManager } from "../services/libraryManager.js";
 import { dbOps } from "../config/db-helpers.js";
 import { imagePrefetchService } from "../services/imagePrefetchService.js";
 import { defaultDiscoveryPreferences } from "../config/constants.js";
+import { requireAuth, requireAdmin } from "../middleware/requirePermission.js";
 
 const router = express.Router();
 
@@ -23,7 +24,7 @@ let lastDiscoveryRevalidateAt = 0;
 
 let discoveryPreferences = { ...defaultDiscoveryPreferences };
 
-router.post("/refresh", (req, res) => {
+router.post("/refresh", requireAuth, requireAdmin, (req, res) => {
   const discoveryCache = getDiscoveryCache();
   if (discoveryCache.isUpdating) {
     return res.status(409).json({
@@ -38,13 +39,13 @@ router.post("/refresh", (req, res) => {
   });
 });
 
-router.post("/clear", async (req, res) => {
+router.post("/clear", requireAuth, requireAdmin, async (req, res) => {
   dbOps.clearImages();
   clearApiCaches();
   res.json({ message: "Image cache cleared" });
 });
 
-router.post("/clear-discovery", async (req, res) => {
+router.post("/clear-discovery", requireAuth, requireAdmin, async (req, res) => {
   dbOps.updateDiscoveryCache({
     recommendations: [],
     globalTop: [],

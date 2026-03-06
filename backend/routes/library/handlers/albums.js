@@ -116,7 +116,11 @@ export default function registerAlbums(router) {
     }
   });
 
-  router.put("/albums/:id", async (req, res) => {
+  router.put(
+    "/albums/:id",
+    requireAuth,
+    requirePermission("changeMonitoring"),
+    async (req, res) => {
     try {
       const { id } = req.params;
       const album = await libraryManager.updateAlbum(id, req.body);
@@ -130,7 +134,8 @@ export default function registerAlbums(router) {
         message: error.message,
       });
     }
-  });
+    },
+  );
 
   router.delete(
     "/albums/:id",
