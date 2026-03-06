@@ -5,7 +5,7 @@ import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 const LEGACY_TYPES = ["discover", "mix", "trending"];
 const DEFAULT_MIX = { discover: 34, mix: 33, trending: 33 };
 const DEFAULT_SIZE = 30;
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const titleCase = (value) =>
   String(value || "")
@@ -68,15 +68,44 @@ const clampCount = (value, min = 1, max = 100) => {
 const normalizeStringList = (value) => {
   if (value == null) return [];
   if (Array.isArray(value)) {
-    return value
-      .map((item) => String(item || "").trim())
-      .filter(Boolean);
+    return value.map((item) => String(item || "").trim()).filter(Boolean);
   }
   if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed ? [trimmed] : [];
   }
   return [];
+};
+
+const normalizeScheduleDays = (value) => {
+  if (!Array.isArray(value)) return [];
+  const out = new Set();
+  for (const entry of value) {
+    const day = Number(entry);
+    if (!Number.isFinite(day)) continue;
+    const rounded = Math.round(day);
+    if (rounded < 0 || rounded > 6) continue;
+    out.add(rounded);
+  }
+  return [...out].sort((a, b) => a - b);
+};
+
+const getDefaultScheduleDay = (timeMs = Date.now()) =>
+  new Date(timeMs).getDay();
+
+const computeNextRunAt = (scheduleDays, fromTimeMs = Date.now()) => {
+  const normalized = normalizeScheduleDays(scheduleDays);
+  if (normalized.length === 0) {
+    return fromTimeMs + 7 * DAY_MS;
+  }
+  const currentDay = new Date(fromTimeMs).getDay();
+  for (let offset = 1; offset <= 7; offset += 1) {
+    const candidateDay = (currentDay + offset) % 7;
+    if (normalized.includes(candidateDay)) {
+      return fromTimeMs + offset * DAY_MS;
+    }
+  }
+  return fromTimeMs + 7 * DAY_MS;
 };
 
 const distributeCount = (total, values) => {
@@ -230,13 +259,17 @@ const normalizeFlow = (flow) => {
   const baseSize = blocksData?.size > 0 ? blocksData.size : size;
   const recipeSize = baseSize;
   const recipeFallback = buildCountsFromMix(recipeSize, mix);
-  const recipe = normalizeRecipeCounts(flow?.recipe, blocksData?.recipe ?? recipeFallback);
+  const recipe = normalizeRecipeCounts(
+    flow?.recipe,
+    blocksData?.recipe ?? recipeFallback,
+  );
   const recipeTotal = sumWeightMap(recipe);
   const computedSize = recipeTotal > 0 ? recipeTotal : baseSize;
   return {
     id: flow?.id || randomUUID(),
     name: name || "Flow",
     enabled: flow?.enabled === true,
+    scheduleDays: normalizeScheduleDays(flow?.scheduleDays),
     deepDive: flow?.deepDive === true || blocksData?.deepDive === true,
     nextRunAt:
       flow?.nextRunAt != null && Number.isFinite(Number(flow.nextRunAt))
@@ -293,6 +326,7 @@ const getStoredFlows = () => {
         return normalizeFlow({ ...flow, id: mapped });
       }
       if (flow?.blocks) needsSave = true;
+      if (!Array.isArray(flow?.scheduleDays)) needsSave = true;
       return normalizeFlow(flow);
     });
     if (idMap.size > 0 || needsSave) {
@@ -344,6 +378,7 @@ export const flowPlaylistConfig = {
     recipe,
     tags,
     relatedArtists,
+    scheduleDays,
   }) {
     const flows = getStoredFlows();
     const flow = normalizeFlow({
@@ -355,6 +390,7 @@ export const flowPlaylistConfig = {
       recipe,
       tags,
       relatedArtists,
+      scheduleDays,
       enabled: false,
       nextRunAt: null,
     });
@@ -368,6 +404,7 @@ export const flowPlaylistConfig = {
     const index = flows.findIndex((flow) => flow.id === flowId);
     if (index === -1) return null;
     const current = flows[index];
+    const currentSchedule = normalizeScheduleDays(current.scheduleDays);
     const next = normalizeFlow({
       ...current,
       name: updates?.name ?? current.name,
@@ -376,6 +413,7 @@ export const flowPlaylistConfig = {
       recipe: updates?.recipe ?? current.recipe,
       tags: updates?.tags ?? current.tags,
       relatedArtists: updates?.relatedArtists ?? current.relatedArtists,
+      scheduleDays: updates?.scheduleDays ?? current.scheduleDays,
       deepDive:
         typeof updates?.deepDive === "boolean"
           ? updates.deepDive
@@ -384,6 +422,17 @@ export const flowPlaylistConfig = {
       nextRunAt: current.nextRunAt,
       createdAt: current.createdAt,
     });
+    const nextSchedule = normalizeScheduleDays(next.scheduleDays);
+    const scheduleChanged =
+      currentSchedule.length !== nextSchedule.length ||
+      currentSchedule.some((day, idx) => day !== nextSchedule[idx]);
+    if (current.enabled && (scheduleChanged || next.nextRunAt == null)) {
+      const now = Date.now();
+      const effectiveSchedule =
+        nextSchedule.length > 0 ? nextSchedule : [getDefaultScheduleDay(now)];
+      next.scheduleDays = effectiveSchedule;
+      next.nextRunAt = computeNextRunAt(effectiveSchedule, now);
+    }
     flows[index] = next;
     setFlows(flows);
     return next;
@@ -425,7 +474,20 @@ export const flowPlaylistConfig = {
   },
 
   scheduleNextRun(flowId) {
-    return this.setNextRunAt(flowId, Date.now() + WEEK_MS);
+    const flows = getStoredFlows();
+    const index = flows.findIndex((flow) => flow.id === flowId);
+    if (index === -1) return null;
+    const now = Date.now();
+    const flow = { ...flows[index] };
+    const normalizedSchedule = normalizeScheduleDays(flow.scheduleDays);
+    flow.scheduleDays =
+      normalizedSchedule.length > 0
+        ? normalizedSchedule
+        : [getDefaultScheduleDay(now)];
+    flow.nextRunAt = computeNextRunAt(flow.scheduleDays, now);
+    flows[index] = flow;
+    setFlows(flows);
+    return flow;
   },
 
   getDueForRefresh() {
