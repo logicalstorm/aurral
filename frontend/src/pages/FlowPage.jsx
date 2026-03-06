@@ -708,6 +708,14 @@ function FlowPage() {
   };
 
   const flowList = status?.flows || [];
+  const effectiveFlowList = flowList.map((flow) => {
+    const optimisticValue = optimisticEnabled[flow.id];
+    if (typeof optimisticValue !== "boolean") return flow;
+    return {
+      ...flow,
+      enabled: optimisticValue,
+    };
+  });
 
   const handleConfirmDisable = async () => {
     if (!confirmDisable) return;
@@ -792,11 +800,11 @@ function FlowPage() {
       state: { artistName: track.artistName },
     });
   };
-  const enabledCount = flowList.filter((flow) => flow.enabled === true).length;
-  const runningCount = flowList.filter(
+  const enabledCount = effectiveFlowList.filter((flow) => flow.enabled === true).length;
+  const runningCount = effectiveFlowList.filter(
     (flow) => getPlaylistState(flow.id) === "running"
   ).length;
-  const completedCount = flowList.filter(
+  const completedCount = effectiveFlowList.filter(
     (flow) => getPlaylistState(flow.id) === "completed"
   ).length;
   if (loading && !status) {
@@ -816,7 +824,7 @@ function FlowPage() {
       <FlowStatusCards
         status={status}
         enabledCount={enabledCount}
-        flowCount={flowList.length}
+        flowCount={effectiveFlowList.length}
         runningCount={runningCount}
         completedCount={completedCount}
       />
@@ -826,22 +834,18 @@ function FlowPage() {
           Playlists
         </h2>
         <span className="text-xs text-[#c1c1c3]">
-          {flowList.length} flows
+          {effectiveFlowList.length} flows
         </span>
       </div>
 
       <div className="space-y-3">
-        {flowList.length === 0 && (
+        {effectiveFlowList.length === 0 && (
           <FlowEmptyState onCreate={handleCreateInline} creating={creating} />
         )}
-        {flowList.map((flow) => {
+        {effectiveFlowList.map((flow) => {
           const stats = getPlaylistStats(flow.id);
           const state = getPlaylistState(flow.id);
-          const optimisticValue = optimisticEnabled[flow.id];
-          const enabled =
-            typeof optimisticValue === "boolean"
-              ? optimisticValue
-              : flow.enabled === true;
+          const enabled = flow.enabled === true;
           const nextRun = formatNextRun(flow.nextRunAt);
           const isEditing = editingId === flow.id;
           const simpleDraft = simpleDrafts[flow.id] ?? flowToForm(flow);

@@ -731,10 +731,23 @@ export function FlowCard({
             <h3 className="text-base font-medium text-white truncate">
               {flow.name}
             </h3>
+            <span
+              className={`badge badge-sm ${
+                enabled ? "badge-success" : "badge-secondary"
+              }`}
+            >
+              {enabled ? "Enabled" : "Disabled"}
+            </span>
             {state === "running" && (
               <span className="badge badge-success badge-sm gap-1.5 pl-1.5 pr-2">
                 <Loader2 className="w-3 h-3 animate-spin" />
                 Running
+              </span>
+            )}
+            {togglingId === flow.id && (
+              <span className="badge badge-secondary badge-sm gap-1.5 pl-1.5 pr-2">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Updating
               </span>
             )}
           </div>
