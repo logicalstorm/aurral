@@ -14,12 +14,16 @@ on:
   push:
     branches: ["main"]
 
+concurrency:
+  group: docker-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
 
 jobs:
   build-main:
-    if: (github.event_name == 'pull_request' && github.base_ref == 'main') || (github.event_name == 'workflow_call' && inputs.release_channel == 'main') || (github.event_name == 'push' && github.ref_name == 'main')
+    if: ((github.event_name == 'pull_request' && github.base_ref == 'main') || (github.event_name == 'workflow_call' && inputs.release_channel == 'main') || (github.event_name == 'push' && github.ref_name == 'main')) && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(release):'))
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
