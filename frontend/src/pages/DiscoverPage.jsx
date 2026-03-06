@@ -79,6 +79,10 @@ const ArtistCard = memo(
     const navigateTo = artist.navigateTo || artist.id;
     const hasValidMbid =
       navigateTo && navigateTo !== "null" && navigateTo !== "undefined";
+    const artistTypeLabel = artist.type === "Person" ? "Artist" : artist.type;
+    const artistMetaText = [artistTypeLabel, artist.sourceArtist && `Similar to ${artist.sourceArtist}`]
+      .filter(Boolean)
+      .join(" • ");
     const handleClick = useCallback(() => {
       if (hasValidMbid) {
         onNavigate(`/artist/${navigateTo}`, {
@@ -124,23 +128,29 @@ const ArtistCard = memo(
               onClick={handleClick}
               className={`font-semibold truncate ${hasValidMbid ? "hover:underline cursor-pointer" : "cursor-not-allowed opacity-75"}`}
               style={{ color: "#fff" }}
+              title={artist.name}
             >
-              <span title={artist.name}>{artist.name}</span>
+              {artist.name}
             </h3>
             {isInLibrary && (
               <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
             )}
           </div>
           <div className="flex flex-col min-w-0">
-            <p className="text-sm truncate" style={{ color: "#c1c1c3" }}>
-              {artist.type === "Person" ? "Artist" : artist.type}
-              {artist.sourceArtist && (
-                <span title={`Similar to ${artist.sourceArtist}`}>{` • Similar to ${artist.sourceArtist}`}</span>
-              )}
+            <p
+              className="text-sm truncate"
+              style={{ color: "#c1c1c3" }}
+              title={artistMetaText || undefined}
+            >
+              {artistMetaText}
             </p>
             {artist.subtitle && (
-              <p className="text-xs truncate" style={{ color: "#c1c1c3" }}>
-                <span title={artist.subtitle}>{artist.subtitle}</span>
+              <p
+                className="text-xs truncate"
+                style={{ color: "#c1c1c3" }}
+                title={artist.subtitle}
+              >
+                {artist.subtitle}
               </p>
             )}
           </div>
@@ -188,6 +198,10 @@ const AlbumCard = memo(
     const navigateTo = album.artistMbid || album.foreignArtistId;
     const hasValidMbid =
       navigateTo && navigateTo !== "null" && navigateTo !== "undefined";
+    const albumArtistText = album.artistName || "Unknown Artist";
+    const albumReleaseText = album.releaseDate
+      ? `Released ${new Date(album.releaseDate).toLocaleDateString()}`
+      : null;
     const handleClick = useCallback(() => {
       if (hasValidMbid) {
         onNavigate(`/artist/${navigateTo}`, {
@@ -223,16 +237,25 @@ const AlbumCard = memo(
             onClick={handleClick}
             className={`font-semibold truncate ${hasValidMbid ? "hover:underline cursor-pointer" : "cursor-not-allowed opacity-75"}`}
             style={{ color: "#fff" }}
+            title={album.albumName}
           >
             {album.albumName}
           </h3>
           <div className="flex flex-col min-w-0">
-            <p className="text-sm truncate" style={{ color: "#c1c1c3" }}>
-              {album.artistName || "Unknown Artist"}
+            <p
+              className="text-sm truncate"
+              style={{ color: "#c1c1c3" }}
+              title={albumArtistText}
+            >
+              {albumArtistText}
             </p>
-            {album.releaseDate && (
-              <p className="text-xs truncate" style={{ color: "#c1c1c3" }}>
-                Released {new Date(album.releaseDate).toLocaleDateString()}
+            {albumReleaseText && (
+              <p
+                className="text-xs truncate"
+                style={{ color: "#c1c1c3" }}
+                title={albumReleaseText}
+              >
+                {albumReleaseText}
               </p>
             )}
           </div>
