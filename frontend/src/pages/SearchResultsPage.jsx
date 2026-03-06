@@ -471,6 +471,9 @@ function SearchResultsPage() {
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
                 {displayedArtists.map((artist, index) => {
                   const artistId = getArtistId(artist);
+                  const artistTypeText = artist.type
+                    ? getArtistType(artist.type)
+                    : null;
                   return (
                   <div
                     key={artistId || `artist-${index}`}
@@ -509,6 +512,7 @@ function SearchResultsPage() {
                           }
                           className="font-semibold truncate hover:underline cursor-pointer"
                           style={{ color: "#fff" }}
+                          title={artist.name}
                         >
                           {artist.name}
                         </h3>
@@ -521,14 +525,17 @@ function SearchResultsPage() {
                         className="flex flex-col min-w-0 text-sm"
                         style={{ color: "#c1c1c3" }}
                       >
-                        {artist.type && (
-                          <p className="truncate">
-                            {getArtistType(artist.type)}
+                        {artistTypeText && (
+                          <p className="truncate" title={artistTypeText}>
+                            {artistTypeText}
                           </p>
                         )}
 
                         {artist.country && (
-                          <p className="truncate text-xs opacity-80">
+                          <p
+                            className="truncate text-xs opacity-80"
+                            title={artist.country}
+                          >
                             {artist.country}
                           </p>
                         )}
