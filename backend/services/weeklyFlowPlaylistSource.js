@@ -111,6 +111,32 @@ export class WeeklyFlowPlaylistSource {
     return key || null;
   }
 
+  _normalizeTrackReason(value, fallback = "Flow selection") {
+    const text = String(value || "").trim();
+    return text || fallback;
+  }
+
+  _buildTrackEntry({
+    artistName,
+    trackName,
+    albumName,
+    artistMbid,
+    reason,
+  }) {
+    const safeArtist = String(artistName || "").trim();
+    const safeTrack = String(trackName || "").trim();
+    if (!safeArtist || !safeTrack) return null;
+    const safeAlbum = String(albumName || "").trim();
+    const safeMbid = String(artistMbid || "").trim();
+    return {
+      artistName: safeArtist,
+      trackName: safeTrack,
+      albumName: safeAlbum || null,
+      artistMbid: safeMbid || null,
+      reason: this._normalizeTrackReason(reason),
+    };
+  }
+
   _getRecommendedArtists() {
     const discoveryCache = getDiscoveryCache();
     return Array.isArray(discoveryCache.recommendations)
@@ -212,7 +238,12 @@ export class WeeklyFlowPlaylistSource {
     const pick = this._pickTrackFromRanges(trackList, ranges);
     const trackName = pick?.name?.trim();
     if (!trackName) return null;
-    return { artistName: name, trackName };
+    return this._buildTrackEntry({
+      artistName: name,
+      trackName,
+      albumName: pick?.album?.title || pick?.album?.["#text"] || null,
+      reason: options?.reason || "Flow selection",
+    });
   }
 
   async _getTracksForArtists(artistNames, limit, options = {}) {
@@ -370,7 +401,13 @@ export class WeeklyFlowPlaylistSource {
             .trim()
             .toLowerCase();
           if (!albumTitle) continue;
-          if (!ownedAlbums.has(albumTitle)) return candidate;
+          if (!ownedAlbums.has(albumTitle)) {
+            return {
+              pick: candidate,
+              albumName:
+                String(info?.track?.album?.title || "").trim() || null,
+            };
+          }
         } catch {
           continue;
         }
@@ -520,7 +557,9 @@ export class WeeklyFlowPlaylistSource {
       if (!source.count) continue;
       try {
         if (source.type === "tag") {
-          const tracks = await this.getTagTracks(source.key, source.count);
+          const tracks = await this.getTagTracks(source.key, source.count, {
+            reason: `From genre: ${source.key}`,
+          });
           curated.push(...tracks);
         } else {
           const tracks = await this.getRelatedArtistTracks(
@@ -528,6 +567,7 @@ export class WeeklyFlowPlaylistSource {
             source.count,
             {
               deepDive,
+              reason: `Similar to ${source.key}`,
             },
           );
           curated.push(...tracks);
@@ -572,12 +612,15 @@ export class WeeklyFlowPlaylistSource {
         ? await Promise.all([
             this.getDiscoverTracks(perTypeLimit, {
               deepDive: flow?.deepDive === true,
+              reason: "From discovery recommendations",
             }).catch(() => []),
             this.getMixTracks(perTypeLimit, {
               deepDive: flow?.deepDive === true,
+              reason: "From your library mix",
             }).catch(() => []),
             this.getTrendingTracks(perTypeLimit, {
               deepDive: flow?.deepDive === true,
+              reason: "From trending artists",
             }).catch(() => []),
           ])
         : [[], [], []];
@@ -586,7 +629,9 @@ export class WeeklyFlowPlaylistSource {
       Object.entries(tags).map(async ([tag, count]) => ({
         key: `tag:${tag}`,
         count,
-        tracks: await this.getTagTracks(tag, count).catch(() => []),
+        tracks: await this.getTagTracks(tag, count, {
+          reason: `From genre: ${tag}`,
+        }).catch(() => []),
       })),
     );
     const relatedSources = await Promise.all(
@@ -595,6 +640,7 @@ export class WeeklyFlowPlaylistSource {
         count,
         tracks: await this.getRelatedArtistTracks(artist, count, {
           deepDive: flow?.deepDive === true,
+          reason: `Similar to ${artist}`,
         }).catch(() => []),
       })),
     );
@@ -732,7 +778,14 @@ export class WeeklyFlowPlaylistSource {
         const trackName = pick?.name?.trim();
         if (!trackName) continue;
         seenArtists.add(artistKey);
-        tracks.push({ artistName, trackName });
+        const trackEntry = this._buildTrackEntry({
+          artistName,
+          trackName,
+          albumName: pick?.album?.title || pick?.album?.["#text"] || null,
+          artistMbid: artist?.id || artist?.mbid || artist?.foreignArtistId,
+          reason: options?.reason || "From discovery recommendations",
+        });
+        if (trackEntry) tracks.push(trackEntry);
       } catch {
         continue;
       }
@@ -785,7 +838,14 @@ export class WeeklyFlowPlaylistSource {
         const trackName = pick?.name?.trim();
         if (!trackName) continue;
         seenArtists.add(artistKey);
-        tracks.push({ artistName, trackName });
+        const trackEntry = this._buildTrackEntry({
+          artistName,
+          trackName,
+          albumName: pick?.album?.title || pick?.album?.["#text"] || null,
+          artistMbid: artist?.id || artist?.mbid || artist?.foreignArtistId,
+          reason: options?.reason || "From trending artists",
+        });
+        if (trackEntry) tracks.push(trackEntry);
       } catch {
         continue;
       }
@@ -794,7 +854,7 @@ export class WeeklyFlowPlaylistSource {
     return tracks;
   }
 
-  async getTagTracks(tag, limit) {
+  async getTagTracks(tag, limit, options = {}) {
     if (!getLastfmApiKey()) {
       throw new Error("Last.fm API key not configured");
     }
@@ -823,7 +883,14 @@ export class WeeklyFlowPlaylistSource {
       const key = artistName.toLowerCase();
       if (!key || seen.has(key)) continue;
       seen.add(key);
-      result.push({ artistName, trackName });
+      const trackEntry = this._buildTrackEntry({
+        artistName,
+        trackName,
+        albumName: track?.album?.title || track?.album?.["#text"] || null,
+        artistMbid: track?.artist?.mbid || null,
+        reason: options?.reason || `From genre: ${tag}`,
+      });
+      if (trackEntry) result.push(trackEntry);
     }
     return result;
   }
@@ -874,7 +941,14 @@ export class WeeklyFlowPlaylistSource {
           : [];
         const pick = this._pickTrackFromRanges(trackList, ranges);
         const trackName = pick?.name?.trim();
-        if (trackName) tracks.push({ artistName, trackName });
+        const trackEntry = this._buildTrackEntry({
+          artistName,
+          trackName,
+          albumName: pick?.album?.title || pick?.album?.["#text"] || null,
+          artistMbid: candidate?.mbid || null,
+          reason: options?.reason || `Similar to ${artistKey}`,
+        });
+        if (trackEntry) tracks.push(trackEntry);
       } catch {
         continue;
       }
@@ -944,7 +1018,14 @@ export class WeeklyFlowPlaylistSource {
           const trackName = pick?.name?.trim();
           if (trackName) {
             seenArtists.add(artistKey);
-            tracks.push({ artistName, trackName });
+            const trackEntry = this._buildTrackEntry({
+              artistName,
+              trackName,
+              albumName: pick?.album?.title || pick?.album?.["#text"] || null,
+              artistMbid: artist?.id || artist?.mbid || artist?.foreignArtistId,
+              reason: options?.reason || "From discovery recommendations",
+            });
+            if (trackEntry) tracks.push(trackEntry);
           }
         }
       } catch (error) {
@@ -1038,15 +1119,26 @@ export class WeeklyFlowPlaylistSource {
           ? topTracks.toptracks.track
           : [topTracks.toptracks.track];
 
-        const pick = await this._pickTrackFromRangesWithOwnedAlbums(
+        const picked = await this._pickTrackFromRangesWithOwnedAlbums(
           trackList,
           ownedTitles,
           ownedAlbums,
           artistName,
           ranges,
         );
-        const trackName = pick?.name?.trim();
-        if (trackName) tracks.push({ artistName, trackName });
+        const trackName = picked?.pick?.name?.trim();
+        const trackEntry = this._buildTrackEntry({
+          artistName,
+          trackName,
+          albumName:
+            picked?.albumName ||
+            picked?.pick?.album?.title ||
+            picked?.pick?.album?.["#text"] ||
+            null,
+          artistMbid: artist?.mbid || artist?.foreignArtistId || null,
+          reason: options?.reason || "From your library mix",
+        });
+        if (trackEntry) tracks.push(trackEntry);
       } catch (error) {
         console.warn(
           `[WeeklyFlowPlaylistSource] Failed to get Mix tracks for ${artistName}:`,

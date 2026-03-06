@@ -82,6 +82,21 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_musicbrainz_artist_mbid_cache_updated_at ON musicbrainz_artist_mbid_cache(updated_at);
 `);
 
+const tableColumns = db
+  .prepare("PRAGMA table_info(weekly_flow_jobs)")
+  .all()
+  .map((column) => column.name);
+
+if (!tableColumns.includes("album_name")) {
+  db.exec("ALTER TABLE weekly_flow_jobs ADD COLUMN album_name TEXT");
+}
+if (!tableColumns.includes("reason")) {
+  db.exec("ALTER TABLE weekly_flow_jobs ADD COLUMN reason TEXT");
+}
+if (!tableColumns.includes("artist_mbid")) {
+  db.exec("ALTER TABLE weekly_flow_jobs ADD COLUMN artist_mbid TEXT");
+}
+
 export const dbHelpers = {
   parseJSON: (text) => {
     if (!text) return null;
