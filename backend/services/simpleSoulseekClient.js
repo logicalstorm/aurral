@@ -143,6 +143,18 @@ export class SimpleSoulseekClient {
     return this.connected && this.client !== null;
   }
 
+  _getSearchTimeoutMs() {
+    const raw = Number(process.env.SOULSEEK_SEARCH_TIMEOUT_MS);
+    if (Number.isFinite(raw) && raw >= 1000) return raw;
+    return 10000;
+  }
+
+  _getDownloadTimeoutMs() {
+    const raw = Number(process.env.SOULSEEK_DOWNLOAD_TIMEOUT_MS);
+    if (Number.isFinite(raw) && raw >= 10000) return raw;
+    return 420000;
+  }
+
   async search(artistName, trackName) {
     if (!this.isConnected()) {
       await this.connect();
@@ -154,7 +166,7 @@ export class SimpleSoulseekClient {
       this.client.search(
         {
           req: query,
-          timeout: 5000,
+          timeout: this._getSearchTimeoutMs(),
         },
         (err, results) => {
           if (err) {
@@ -168,39 +180,42 @@ export class SimpleSoulseekClient {
   }
 
   pickBestMatch(results, trackName) {
-    if (!results || results.length === 0) {
-      return null;
+    const matches = this.pickBestMatches(results, trackName, 1);
+    return matches[0] || null;
+  }
+
+  pickBestMatches(results, trackName, limit = 5) {
+    if (!Array.isArray(results) || results.length === 0) {
+      return [];
     }
-
-    const trackNameLower = trackName.toLowerCase();
-    const filtered = results.filter((r) => {
-      const filename = (r.file || "").toLowerCase();
-      return filename.includes(trackNameLower);
-    });
-
-    if (filtered.length === 0) {
-      return results[0];
-    }
-
-    const sorted = filtered.sort((a, b) => {
-      const aExt = path.extname(a.file || "").toLowerCase();
-      const bExt = path.extname(b.file || "").toLowerCase();
-
-      const qualityOrder = { ".flac": 0, ".mp3": 1, ".m4a": 2, ".ogg": 3 };
-      const aQuality = qualityOrder[aExt] ?? 99;
-      const bQuality = qualityOrder[bExt] ?? 99;
-
-      if (aQuality !== bQuality) {
-        return aQuality - bQuality;
-      }
-
-      if (a.slots && !b.slots) return -1;
-      if (!a.slots && b.slots) return 1;
-
+    const trackNameLower = String(trackName || "").toLowerCase().trim();
+    const qualityOrder = { ".flac": 0, ".mp3": 1, ".m4a": 2, ".ogg": 3 };
+    const score = (item) => {
+      const file = String(item?.file || "").toLowerCase();
+      const ext = path.extname(file).toLowerCase();
+      const quality = qualityOrder[ext] ?? 99;
+      const hasTrack = trackNameLower ? file.includes(trackNameLower) : false;
+      const hasSlots = item?.slots ? 0 : 1;
+      const fileSize = Number(item?.size || 0);
+      const sizePenalty = fileSize > 0 ? Math.max(0, 500000 - fileSize) : 500000;
+      return {
+        hasTrack: hasTrack ? 0 : 1,
+        quality,
+        hasSlots,
+        sizePenalty,
+      };
+    };
+    const ranked = [...results].sort((a, b) => {
+      const sa = score(a);
+      const sb = score(b);
+      if (sa.hasTrack !== sb.hasTrack) return sa.hasTrack - sb.hasTrack;
+      if (sa.quality !== sb.quality) return sa.quality - sb.quality;
+      if (sa.hasSlots !== sb.hasSlots) return sa.hasSlots - sb.hasSlots;
+      if (sa.sizePenalty !== sb.sizePenalty) return sa.sizePenalty - sb.sizePenalty;
       return 0;
     });
-
-    return sorted[0];
+    const max = Number.isFinite(Number(limit)) ? Math.max(1, Number(limit)) : 5;
+    return ranked.slice(0, max);
   }
 
   async download(result, destinationPath) {
@@ -210,7 +225,7 @@ export class SimpleSoulseekClient {
     const dir = path.dirname(absPath);
     await fs.mkdir(dir, { recursive: true });
 
-    const DOWNLOAD_TIMEOUT_MS = 300000;
+    const DOWNLOAD_TIMEOUT_MS = this._getDownloadTimeoutMs();
 
     try {
       const filePath = await new Promise((resolve, reject) => {
@@ -256,10 +271,8 @@ export class SimpleSoulseekClient {
         });
       });
 
-      await this.disconnect();
       return filePath;
     } catch (err) {
-      await this.disconnect();
       throw err;
     }
   }
