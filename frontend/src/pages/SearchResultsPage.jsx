@@ -474,6 +474,14 @@ function SearchResultsPage() {
                   const artistTypeText = artist.type
                     ? getArtistType(artist.type)
                     : null;
+                  const artistMetaText = [
+                    artistTypeText,
+                    type === "recommended" &&
+                      artist.sourceArtist &&
+                      `Similar to ${artist.sourceArtist}`,
+                  ]
+                    .filter(Boolean)
+                    .join(" • ");
                   return (
                   <div
                     key={artistId || `artist-${index}`}
@@ -525,9 +533,9 @@ function SearchResultsPage() {
                         className="flex flex-col min-w-0 text-sm"
                         style={{ color: "#c1c1c3" }}
                       >
-                        {artistTypeText && (
-                          <p className="truncate" title={artistTypeText}>
-                            {artistTypeText}
+                        {artistMetaText && (
+                          <p className="truncate" title={artistMetaText}>
+                            {artistMetaText}
                           </p>
                         )}
 
