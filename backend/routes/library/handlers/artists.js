@@ -32,8 +32,7 @@ const monitorArtistAlbums = async (artist, albums, lidarrClient) => {
         : null;
       const metadataProfile = Array.isArray(profiles)
         ? profiles.find(
-            (profile) =>
-              String(profile?.id) === String(metadataProfileId),
+            (profile) => String(profile?.id) === String(metadataProfileId),
           )
         : null;
       const normalizeTypeName = (value) =>
@@ -227,6 +226,21 @@ export default function registerArtists(router) {
           await import("../../../services/lidarrClient.js");
         if (!lidarrClient || !lidarrClient.isConfigured()) {
           return res.status(503).json({ error: "Lidarr is not configured" });
+        }
+
+        const existingArtist = await libraryManager.getArtist(mbid);
+        if (existingArtist?.id) {
+          return res.status(200).json({
+            queued: false,
+            foreignArtistId: mbid,
+            artistName,
+            artist: {
+              ...existingArtist,
+              foreignArtistId:
+                existingArtist.foreignArtistId || existingArtist.mbid,
+              added: existingArtist.addedAt,
+            },
+          });
         }
 
         res.status(202).json({

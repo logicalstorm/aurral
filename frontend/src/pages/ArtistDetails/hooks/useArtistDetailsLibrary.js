@@ -240,6 +240,17 @@ export function useArtistDetailsLibrary({
     });
   };
 
+  const resolveArtistFromAddResponse = async (
+    result,
+    { refresh = true, hydrateAlbums = true } = {},
+  ) => {
+    if (!result?.artist) return null;
+    return await resolveLookupArtist(result.artist, {
+      refresh,
+      hydrateAlbums,
+    });
+  };
+
   const waitForLibraryArtist = async (
     mbid,
     {
@@ -319,11 +330,14 @@ export function useArtistDetailsLibrary({
         rootFolderPath: appSettings?.rootFolderPath,
         monitorOption: defaultMonitorOption,
       });
-      let fullArtist = null;
+      let fullArtist = await resolveArtistFromAddResponse(result, {
+        refresh: true,
+        hydrateAlbums: true,
+      });
       if (result?.queued) {
         showSuccess(`Adding ${artist.name}...`);
         fullArtist = await waitForLibraryArtist(artist.id);
-      } else {
+      } else if (!fullArtist) {
         const lookup = await lookupArtistInLibrary(artist.id);
         if (lookup.exists && lookup.artist) {
           fullArtist = await hydrateLibraryArtist(lookup.artist);
@@ -394,7 +408,10 @@ export function useArtistDetailsLibrary({
           rootFolderPath: appSettings?.rootFolderPath,
           monitorOption: defaultMonitorOption,
         });
-        let fullArtist = null;
+        let fullArtist = await resolveArtistFromAddResponse(result, {
+          refresh: false,
+          hydrateAlbums: false,
+        });
         if (result?.queued) {
           showSuccess(`Adding ${artist.name}...`);
           fullArtist = await waitForLibraryArtist(artist.id, {
@@ -403,7 +420,7 @@ export function useArtistDetailsLibrary({
             refresh: false,
             hydrateAlbums: false,
           });
-        } else {
+        } else if (!fullArtist) {
           const lookup = await lookupArtistInLibrary(artist.id);
           if (lookup.exists && lookup.artist) {
             fullArtist = await resolveLookupArtist(lookup.artist, {
