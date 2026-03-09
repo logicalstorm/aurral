@@ -203,6 +203,18 @@ export const getStreamUrl = (songId) => {
   return url;
 };
 
+export const getFlowTrackStreamUrl = (jobId) => {
+  const base = import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
+  const password = localStorage.getItem("auth_password");
+  const username = localStorage.getItem("auth_user") || "admin";
+  let url = `${base}/weekly-flow/stream/${encodeURIComponent(jobId)}`;
+  if (password) {
+    const token = btoa(`${username}:${password}`);
+    url += `?token=${encodeURIComponent(token)}`;
+  }
+  return url;
+};
+
 export const getLibraryArtists = async () => {
   const response = await api.get("/library/artists");
   return response.data;

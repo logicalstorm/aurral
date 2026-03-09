@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import {
   Loader2,
   CheckCircle2,
@@ -6,6 +6,15 @@ import {
   Trash2,
   Pencil,
   FilePlus2,
+  ListMusic,
+  Play,
+  Pause,
+  Shuffle,
+  SkipBack,
+  SkipForward,
+  ExternalLink,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import PillToggle from "../components/PillToggle";
 import FlipSaveButton from "../components/FlipSaveButton";
@@ -690,6 +699,10 @@ export function FlowCard({
   stats,
   nextRun,
   isEditing,
+  isTracksOpen,
+  tracks,
+  tracksLoading,
+  tracksError,
   simpleDraft,
   simpleRemaining,
   simpleError,
@@ -700,6 +713,8 @@ export function FlowCard({
   onToggleEditing,
   onToggleEnabled,
   onDelete,
+  onViewTracks,
+  onNavigateArtist,
   onCancel,
   onApply,
   onDraftChange,
@@ -716,10 +731,23 @@ export function FlowCard({
             <h3 className="text-base font-medium text-white truncate">
               {flow.name}
             </h3>
+            <span
+              className={`badge badge-sm ${
+                enabled ? "badge-success" : "badge-secondary"
+              }`}
+            >
+              {enabled ? "Enabled" : "Disabled"}
+            </span>
             {state === "running" && (
               <span className="badge badge-success badge-sm gap-1.5 pl-1.5 pr-2">
                 <Loader2 className="w-3 h-3 animate-spin" />
                 Running
+              </span>
+            )}
+            {togglingId === flow.id && (
+              <span className="badge badge-secondary badge-sm gap-1.5 pl-1.5 pr-2">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Updating
               </span>
             )}
           </div>
@@ -770,6 +798,13 @@ export function FlowCard({
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
+            <button
+              onClick={onViewTracks}
+              className="btn btn-secondary btn-sm px-2"
+              aria-label={isTracksOpen ? `Close ${flow.name} tracks` : `View ${flow.name} tracks`}
+            >
+              <ListMusic className="w-4 h-4" />
+            </button>
             <button
               onClick={onToggleEditing}
               className="btn btn-secondary btn-sm px-2"
@@ -824,6 +859,404 @@ export function FlowCard({
           </div>
         </div>
       )}
+
+      {isTracksOpen && (
+        <div className="px-4 pb-4">
+          <div className="card-separator mb-4" />
+          <FlowTracksPanel
+            tracks={tracks}
+            loading={tracksLoading}
+            error={tracksError}
+            onNavigateArtist={onNavigateArtist}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function FlowTracksPanel({
+  tracks,
+  loading,
+  error,
+  onNavigateArtist,
+}) {
+  const [queue, setQueue] = useState([]);
+  const [currentTrackId, setCurrentTrackId] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isShuffleEnabled, setIsShuffleEnabled] = useState(false);
+  const [volume, setVolume] = useState(80);
+  const [isMuted, setIsMuted] = useState(false);
+  const [playbackProgress, setPlaybackProgress] = useState(0);
+  const [progressSnappingBack, setProgressSnappingBack] = useState(false);
+  const lastVolumeRef = useRef(80);
+  const progressResetTimeoutRef = useRef(null);
+  const audioRef = useRef(null);
+
+  const playableTracks = useMemo(
+    () => tracks.filter((track) => track.status === "done" && track.streamUrl),
+    [tracks],
+  );
+
+  const currentTrack = useMemo(
+    () => playableTracks.find((track) => track.id === currentTrackId) || null,
+    [playableTracks, currentTrackId],
+  );
+
+  const startQueue = (trackIds) => {
+    if (!trackIds.length) return;
+    setQueue(trackIds);
+    setCurrentTrackId(trackIds[0]);
+  };
+
+  const getOrderedIds = () => playableTracks.map((track) => track.id);
+
+  const getShuffledIds = () => {
+    const ids = getOrderedIds();
+    const shuffled = [...ids];
+    for (let i = shuffled.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  };
+
+  const getPlaybackIds = () =>
+    isShuffleEnabled ? getShuffledIds() : getOrderedIds();
+
+  const resetProgress = (snap = false) => {
+    if (progressResetTimeoutRef.current) {
+      window.clearTimeout(progressResetTimeoutRef.current);
+      progressResetTimeoutRef.current = null;
+    }
+    if (snap) {
+      setProgressSnappingBack(true);
+      setPlaybackProgress(0);
+      progressResetTimeoutRef.current = window.setTimeout(() => {
+        setProgressSnappingBack(false);
+      }, 280);
+      return;
+    }
+    setProgressSnappingBack(false);
+    setPlaybackProgress(0);
+  };
+
+  const handlePrimaryPlay = () => {
+    if (playableTracks.length === 0) return;
+    const audio = audioRef.current;
+    const hasCurrentPlayable = playableTracks.some((track) => track.id === currentTrackId);
+    if (currentTrackId && hasCurrentPlayable) {
+      if (isPlaying) {
+        audio?.pause();
+        return;
+      }
+      audio
+        ?.play()
+        .then(() => setIsPlaying(true))
+        .catch(() => setIsPlaying(false));
+      return;
+    }
+    const ids = getPlaybackIds();
+    if (ids.length === 0) return;
+    resetProgress();
+    startQueue(ids);
+  };
+
+  const handlePrevious = () => {
+    if (playableTracks.length === 0) return;
+    if (!queue.length || !currentTrackId) {
+      const ids = getPlaybackIds();
+      if (ids.length === 0) return;
+      resetProgress();
+      startQueue(ids);
+      return;
+    }
+    const currentIndex = queue.findIndex((id) => id === currentTrackId);
+    if (currentIndex > 0) {
+      resetProgress(true);
+      setCurrentTrackId(queue[currentIndex - 1]);
+      return;
+    }
+    const audio = audioRef.current;
+    if (audio) {
+      audio.currentTime = 0;
+    }
+    resetProgress(true);
+  };
+
+  const handleNext = () => {
+    if (playableTracks.length === 0) return;
+    if (!queue.length || !currentTrackId) {
+      const ids = getPlaybackIds();
+      if (ids.length === 0) return;
+      resetProgress();
+      startQueue(ids);
+      return;
+    }
+    const currentIndex = queue.findIndex((id) => id === currentTrackId);
+    const nextId = currentIndex >= 0 ? queue[currentIndex + 1] : null;
+    if (nextId) {
+      resetProgress(true);
+      setCurrentTrackId(nextId);
+      return;
+    }
+    resetProgress(true);
+    setIsPlaying(false);
+    setCurrentTrackId(null);
+    setQueue([]);
+  };
+
+  const handlePlayTrack = (track) => {
+    if (!track?.streamUrl) return;
+    if (currentTrackId === track.id && isPlaying) {
+      audioRef.current?.pause();
+      return;
+    }
+    setQueue([track.id]);
+    resetProgress();
+    setCurrentTrackId(track.id);
+  };
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !currentTrack?.streamUrl) return;
+    audio.src = currentTrack.streamUrl;
+    audio
+      .play()
+      .then(() => setIsPlaying(true))
+      .catch(() => setIsPlaying(false));
+  }, [currentTrack?.id, currentTrack?.streamUrl]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.muted = isMuted || volume <= 0;
+    audio.volume = Math.min(Math.max(volume / 100, 0), 1);
+  }, [volume, isMuted]);
+
+  const handleVolumeChange = (nextValue) => {
+    const nextVolume = Math.min(Math.max(Number(nextValue) || 0, 0), 100);
+    setVolume(nextVolume);
+    if (nextVolume > 0) {
+      lastVolumeRef.current = nextVolume;
+      setIsMuted(false);
+      return;
+    }
+    setIsMuted(true);
+  };
+
+  const handleToggleMute = () => {
+    if (isMuted || volume <= 0) {
+      const restoredVolume = lastVolumeRef.current > 0 ? lastVolumeRef.current : 80;
+      setVolume(restoredVolume);
+      setIsMuted(false);
+      return;
+    }
+    if (volume > 0) {
+      lastVolumeRef.current = volume;
+    }
+    setIsMuted(true);
+  };
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
+    const handleTimeUpdate = () => {
+      const duration = Number(audio.duration);
+      if (!Number.isFinite(duration) || duration <= 0) {
+        setPlaybackProgress(0);
+        return;
+      }
+      setProgressSnappingBack(false);
+      setPlaybackProgress(Math.min(Math.max(audio.currentTime / duration, 0), 1));
+    };
+    const handleEnded = () => {
+      resetProgress(true);
+      const currentIndex = queue.findIndex((id) => id === currentTrackId);
+      const nextId = currentIndex >= 0 ? queue[currentIndex + 1] : null;
+      if (nextId) {
+        setCurrentTrackId(nextId);
+        return;
+      }
+      setIsPlaying(false);
+      setCurrentTrackId(null);
+      setQueue([]);
+    };
+    audio.addEventListener("play", handlePlay);
+    audio.addEventListener("pause", handlePause);
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("ended", handleEnded);
+    return () => {
+      audio.removeEventListener("play", handlePlay);
+      audio.removeEventListener("pause", handlePause);
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("ended", handleEnded);
+    };
+  }, [queue, currentTrackId]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    return () => {
+      if (progressResetTimeoutRef.current) {
+        window.clearTimeout(progressResetTimeoutRef.current);
+      }
+      if (audio) {
+        audio.pause();
+        audio.src = "";
+      }
+    };
+  }, []);
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#1f1f24] overflow-hidden">
+      <div className="relative px-3 py-2.5 border-b border-white/10 flex items-center">
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center gap-2">
+          <button
+            onClick={handlePrevious}
+            className="btn btn-secondary btn-sm px-2"
+            disabled={playableTracks.length === 0}
+            aria-label="Previous track"
+          >
+            <SkipBack className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handlePrimaryPlay}
+            className="btn btn-primary btn-sm px-2"
+            disabled={playableTracks.length === 0}
+            aria-label={isPlaying ? "Pause playback" : "Start playback"}
+          >
+            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+          </button>
+          <button
+            onClick={handleNext}
+            className="btn btn-secondary btn-sm px-2"
+            disabled={playableTracks.length === 0}
+            aria-label="Next track"
+          >
+            <SkipForward className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setIsShuffleEnabled((prev) => !prev)}
+            className="btn btn-secondary btn-sm px-2"
+            aria-label={isShuffleEnabled ? "Disable shuffle" : "Enable shuffle"}
+            style={
+              isShuffleEnabled
+                ? { backgroundColor: "rgba(154, 168, 134, 0.3)", borderColor: "rgba(154, 168, 134, 0.65)" }
+                : undefined
+            }
+          >
+            <Shuffle className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="ml-auto flex items-center gap-2 relative z-10">
+          <button
+            onClick={handleToggleMute}
+            className="btn btn-ghost btn-xs px-1.5"
+            aria-label={isMuted || volume <= 0 ? "Unmute" : "Mute"}
+          >
+            {isMuted || volume <= 0 ? (
+              <VolumeX className="w-4 h-4 text-[#8b8b90]" />
+            ) : (
+              <Volume2 className="w-4 h-4 text-[#8b8b90]" />
+            )}
+          </button>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={volume}
+            onChange={(event) => handleVolumeChange(event.target.value)}
+            className="w-24 accent-[#9aa886]"
+            aria-label="Track volume"
+          />
+        </div>
+      </div>
+
+      <div className="overflow-auto max-h-[55vh]">
+        {loading && (
+          <div className="p-6 flex items-center gap-2 text-[#c1c1c3]">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Loading tracks...
+          </div>
+        )}
+        {!loading && error && (
+          <div className="p-6 text-red-400 text-sm">{error}</div>
+        )}
+        {!loading && !error && tracks.length === 0 && (
+          <div className="p-6 text-[#c1c1c3] text-sm">
+            No tracks generated for this flow yet.
+          </div>
+        )}
+        {!loading && !error && tracks.length > 0 && (
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 z-20 bg-[#1c1b22]">
+              <tr className="text-left text-[#8b8b90] uppercase text-xs tracking-wider">
+                <th className="px-3 py-2">Song</th>
+                <th className="px-3 py-2">Artist</th>
+                <th className="px-3 py-2">Album</th>
+                <th className="px-3 py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tracks.map((track, index) => {
+                const canPlay = track.status === "done" && !!track.streamUrl;
+                const isCurrent = track.id === currentTrackId;
+                const progressWidth = `${Math.round(playbackProgress * 100)}%`;
+                return (
+                  <tr
+                    key={track.id}
+                    className={`border-t border-white/5 text-[#d6d6d8] relative overflow-hidden ${
+                      index % 2 === 0 ? "bg-[#202027]/35" : "bg-[#181820]/75"
+                    }`}
+                    style={
+                      isCurrent
+                        ? {
+                            backgroundImage: "linear-gradient(rgba(112, 126, 97, 0.55), rgba(112, 126, 97, 0.55))",
+                            backgroundSize: `${progressWidth} 100%`,
+                            backgroundRepeat: "no-repeat",
+                            transition: progressSnappingBack
+                              ? "background-size 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)"
+                              : "background-size 0.1s linear",
+                          }
+                        : undefined
+                    }
+                  >
+                    <td className="px-3 py-2">{track.trackName}</td>
+                    <td className="px-3 py-2">{track.artistName}</td>
+                    <td className="px-3 py-2">{track.albumName || "Unknown Album"}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handlePlayTrack(track)}
+                          className="btn btn-secondary btn-xs px-2"
+                          disabled={!canPlay}
+                        >
+                          {isCurrent && isPlaying ? (
+                            <Pause className="w-3.5 h-3.5" />
+                          ) : (
+                            <Play className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => onNavigateArtist(track)}
+                          className="btn btn-secondary btn-xs px-2"
+                          aria-label={`Open artist details for ${track.artistName}`}
+                          disabled={!track.artistMbid}
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+      <audio ref={audioRef} preload="metadata" />
     </div>
   );
 }
