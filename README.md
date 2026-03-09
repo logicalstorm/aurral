@@ -11,19 +11,6 @@ Self-hosted music discovery and request management for Lidarr with library-aware
 
 ---
 
-## Screenshots
-
-<p align="center">
-  <img src="frontend/images/discover.webp" width="900" alt="Aurral UI" />
-</p>
-
-<p align="center">
-  <img src="frontend/images/recommended.webp" width="440" alt="Recommendations" />
-  <img src="frontend/images/artist.webp" width="440" alt="Artist details" />
-</p>
-
----
-
 ## What is Aurral?
 
 - Search for artists via MusicBrainz and add them to Lidarr with the monitoring behavior you want
@@ -36,69 +23,7 @@ Aurral is designed to be safe for your collection: it does not write into your m
 
 ---
 
-## Features
-
-### Discovery & Search
-
-- Real-time artist search (MusicBrainz)
-- Daily Discover recommendations based on your library, tags, and trends
-- Deep artist pages (types, tags, release groups, tracklists)
-- Artist/album art enrichment (optional Last.fm, plus fallback sources)
-
-### Lidarr Management
-
-- Add artists with granular monitor options (None / All / Future / Missing / Latest / First)
-- Add specific albums from release groups
-- Optional “search on add” behavior for immediate Lidarr searches
-- Library view with quick navigation into artist details
-- Request tracking with queue/history awareness
-
-### Weekly Flow (Optional)
-
-Weekly Flow generates playlists from your library and listening context, then downloads tracks via a built-in Soulseek client into a dedicated folder.
-
-- Multiple flows with adjustable mix (Discover / Mix / Trending) and size
-- Automatic weekly refresh scheduling
-- Download state tracking (queued → downloading → processing → added/failed)
-- Optional Navidrome smart playlists and a dedicated “Aurral Weekly Flow” library
-
-### Users, Auth, and Permissions
-
-- First-run onboarding creates an admin account
-- Multiple local users with roles and granular permissions
-- Optional authentication via reverse-proxy headers (for OAuth2/OIDC setups)
-
-### Notifications
-
-- Gotify notifications for key events (e.g. Discover updates, Weekly Flow completion)
-
-### PWA Support
-
-- Installable web app (PWA) with auto-update support
-
----
-
-## Requirements
-
-### Required
-
-- Lidarr (reachable from Aurral)
-- A MusicBrainz contact email (used for the MusicBrainz User-Agent policy)
-
-### Recommendations / Discovery / Flow / Tag Searching & More...
-
-- Last.fm API key (Only technically optional but please just add the key even if you don't use last.fm for scrobbling)
-
-### For Weekly Flow
-
-- Navidrome (optional but recommended if you want playlist/library integration)
-- A downloads directory mounted into the container (for the Weekly Flow library)
-
----
-
 ## Quick Start (Docker Compose)
-
-This is the recommended deployment. It runs Aurral as a single container (frontend + backend).
 
 Create a `docker-compose.yml`:
 
@@ -126,28 +51,65 @@ Open: http://localhost:3001
 
 ---
 
-## First-Run Setup (Onboarding)
+## Requirements & Recommended Stack
 
-On first launch, Aurral guides you through:
+### Required
 
-1. Creating your admin account
-2. Connecting Lidarr
-3. Setting your MusicBrainz contact email
-4. (Optional) Connecting Last.fm, Navidrome, and Gotify
+- Lidarr (reachable from Aurral)
+- Last.fm API key (api key required, username needed for scrobbling)
+- A MusicBrainz contact email (used for the MusicBrainz User-Agent policy)
 
-Everything can be adjusted later in Settings.
+### Recommended stack for new users
+
+- Lidarr Nightly
+- Tubifarry
+- slskd
+- Navidrome
+
+### For Weekly Flow
+
+- Navidrome (optional but recommended if you want playlist/library integration)
+- A downloads directory mounted into the container (for the Weekly Flow library)
+
+---
+
+## Features
+
+### Discovery
+
+- Daily Discover recommendations based on your library, tags, and trends
+
+### Lidarr Management
+
+- Add artists with granular monitor options (None / All / Future / Missing / Latest / First)
+- Add specific albums from release groups
+- Library view with quick navigation into artist details
+- Request tracking with queue/history awareness
+
+### Weekly Flow (Optional)
+
+Weekly Flow generates playlists from your library and listening context, then downloads tracks via a built-in Soulseek client into a dedicated folder.
+
+- Multiple flows with adjustable mix (Discover / Mix / Trending) and size
+- Automatic weekly refresh scheduling
+- Optional Navidrome smart playlists and a dedicated “Aurral Weekly Flow” library
+
+---
+
+## Screenshots
+
+<p align="center">
+  <img src="frontend/images/discover.webp" width="900" alt="Aurral UI" />
+</p>
+
+<p align="center">
+  <img src="frontend/images/recommended.webp" width="440" alt="Recommendations" />
+  <img src="frontend/images/artist.webp" width="440" alt="Artist details" />
+</p>
 
 ---
 
 ## Data, Volumes, and Safety
-
-### Persistent data
-
-Mount this to persist users, settings, discovery cache, and job tracking:
-
-- Container path: `/app/backend/data`
-- Recommended bind mount: `./data:/app/backend/data`
-- Database file: `/app/backend/data/aurral.db`
 
 ### Downloads and Weekly Flow library
 
@@ -187,10 +149,6 @@ Navidrome should be configured to purge missing tracks so Weekly Flow rotations 
 ---
 
 ## Authentication & Reverse Proxy
-
-### Local users (default)
-
-Aurral uses local user accounts created in onboarding. Authentication is HTTP Basic Auth at the API layer. Use HTTPS when exposing it publicly.
 
 ### Reverse-proxy auth (OAuth2/OIDC)
 
@@ -234,33 +192,6 @@ Most configuration is done in the web UI, but some settings are controlled by en
 
 ---
 
-## Updating
-
-### Docker Compose update
-
-1. Back up your `./data` folder (contains `aurral.db`)
-2. Pull the new image and recreate the container:
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-If you pin versions, update the image tag instead of using `latest`.
-
----
-
-## Migration Notes (Legacy → Rewritten App)
-
-If you are coming from the original Aurral (separate frontend/backend containers and `.env`-driven setup):
-
-- Treat this as a fresh install; complete onboarding again
-- Keep the new `./data` volume separate from the legacy app’s data
-- Port is `3001` by default
-- Most config lives in Settings now (integrations, quality presets, release types, etc.)
-
----
-
 ## Troubleshooting
 
 - Lidarr connection fails: confirm Lidarr URL is reachable and API key is correct (Settings → Integrations → Lidarr)
@@ -278,31 +209,6 @@ If you are coming from the original Aurral (separate frontend/backend containers
 - Bugs + feature requests: https://github.com/lklynet/aurral/issues
 
 ---
-
-## Development
-
-### Local dev
-
-```bash
-npm run install:all
-npm run dev
-```
-
-- Backend: http://localhost:3001
-- Frontend dev server: http://localhost:3000 (proxies `/api` and `/ws` to the backend)
-
-### Build production frontend
-
-```bash
-npm run build
-npm start
-```
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE).
 
 ## Star History
 
