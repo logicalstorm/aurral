@@ -15,6 +15,7 @@ router.use(requireAuth);
 router.use(requirePermission("accessFlow"));
 const DEFAULT_LIMIT = 30;
 const QUEUE_LIMIT = 50;
+const flowEnableMutationVersion = new Map();
 
 router.post("/start/:flowId", async (req, res) => {
   try {
@@ -211,6 +212,8 @@ router.put("/flows/:flowId/enabled", async (req, res) => {
     }
 
     if (enabled) {
+      const mutationVersion = (flowEnableMutationVersion.get(flowId) || 0) + 1;
+      flowEnableMutationVersion.set(flowId, mutationVersion);
       if (!soulseekClient.isConfigured()) {
         return res.status(400).json({
           error: "Soulseek credentials not configured",
@@ -237,7 +240,21 @@ router.put("/flows/:flowId/enabled", async (req, res) => {
 
       (async () => {
         try {
-          const tracks = await playlistSource.getTracksForFlow(flow);
+          if (
+            flowEnableMutationVersion.get(flowId) !== mutationVersion ||
+            !flowPlaylistConfig.isEnabled(flowId)
+          ) {
+            return;
+          }
+          const latestFlow = flowPlaylistConfig.getFlow(flowId);
+          if (!latestFlow) return;
+          const tracks = await playlistSource.getTracksForFlow(latestFlow);
+          if (
+            flowEnableMutationVersion.get(flowId) !== mutationVersion ||
+            !flowPlaylistConfig.isEnabled(flowId)
+          ) {
+            return;
+          }
           if (tracks.length === 0) return;
           downloadTracker.addJobs(tracks, flowId);
           if (!weeklyFlowWorker.running) {
@@ -251,6 +268,8 @@ router.put("/flows/:flowId/enabled", async (req, res) => {
         }
       })();
     } else {
+      const mutationVersion = (flowEnableMutationVersion.get(flowId) || 0) + 1;
+      flowEnableMutationVersion.set(flowId, mutationVersion);
       weeklyFlowWorker.stop();
       playlistManager.updateConfig();
       await playlistManager.weeklyReset([flowId]);
