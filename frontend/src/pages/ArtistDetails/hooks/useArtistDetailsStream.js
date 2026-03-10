@@ -70,12 +70,11 @@ export function useArtistDetailsStream(mbid, artistNameFromNav) {
       .catch(() => {});
 
     const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
-    const { username, password } = getStoredAuth();
+    const { token } = getStoredAuth();
 
     let streamUrl = `${API_BASE_URL}/artists/${mbid}/stream`;
     const streamParams = [];
-    if (password) {
-      const token = btoa(`${username}:${password}`);
+    if (token) {
       streamParams.push(`token=${encodeURIComponent(token)}`);
     }
     if (artistNameFromNav) {

@@ -2,6 +2,7 @@ import basicAuth from "express-basic-auth";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { dbOps, userOps } from "../config/db-helpers.js";
+import { getSessionByToken } from "../config/session-helpers.js";
 
 const DEFAULT_PROXY_HEADER = "x-forwarded-user";
 const STREAM_TOKEN_TTL_MS = 2 * 60 * 1000;
@@ -49,7 +50,7 @@ function getHeaderValue(req, headerName) {
 
 function isTrustedProxy(req) {
   const allowed = parseCsv(process.env.AUTH_PROXY_TRUSTED_IPS);
-  if (allowed.length === 0) return true;
+  if (allowed.length === 0) return false;
   const ips = Array.isArray(req.ips) && req.ips.length > 0 ? req.ips : [req.ip];
   return ips.some((ip) => allowed.includes(ip));
 }
@@ -69,10 +70,42 @@ function buildPermissions(role, permissions) {
   return {
     ...userOps.getDefaultPermissions(),
     ...(permissions || {}),
-    accessSettings: true,
+    accessSettings: false,
     accessFlow: false,
   };
 }
+
+const toSessionUser = (session) => {
+  if (!session?.user) return null;
+  const baseUser = session.user;
+  return {
+    id: baseUser.id,
+    username: baseUser.username,
+    role: baseUser.role,
+    permissions: buildPermissions(baseUser.role, baseUser.permissions),
+  };
+};
+
+const getBearerToken = (req) => {
+  const authHeader = String(req.headers.authorization || "");
+  if (!authHeader.startsWith("Bearer ")) return null;
+  const token = authHeader.slice(7).trim();
+  return token || null;
+};
+
+const resolveSessionUserFromToken = (token) => {
+  if (!token) return null;
+  return toSessionUser(getSessionByToken(token));
+};
+
+export const isAuthRequiredByConfig = () => {
+  const settings = dbOps.getSettings();
+  const onboardingDone = settings.onboardingComplete;
+  if (!onboardingDone) return false;
+  const users = userOps.getAllUsers();
+  const legacyPasswords = getAuthPassword();
+  return isProxyAuthEnabled() || users.length > 0 || legacyPasswords.length > 0;
+};
 
 function resolveProxyUser(req) {
   if (!isProxyAuthEnabled()) return null;
@@ -179,6 +212,8 @@ function legacyAuth(username, password) {
 }
 
 export function resolveRequestUser(req) {
+  const sessionUser = resolveSessionUserFromToken(getBearerToken(req));
+  if (sessionUser) return sessionUser;
   const proxyUser = resolveProxyUser(req);
   if (proxyUser) return proxyUser;
   const authHeader = req.headers.authorization;
@@ -239,9 +274,16 @@ function consumeStreamToken(rawToken) {
 export const createAuthMiddleware = () => {
   return (req, res, next) => {
     if (!req.path.startsWith("/api")) return next();
-    if (req.path.startsWith("/api/health")) return next();
-    if (req.path.endsWith("/stream") || req.path.includes("/stream/"))
+    if (req.path === "/api/health" || req.path === "/api/health/live") {
       return next();
+    }
+    if (
+      /^\/api\/library\/stream\/[^/]+$/.test(req.path) ||
+      /^\/api\/artists\/[a-f0-9-]{36}\/stream$/i.test(req.path)
+    ) {
+      return next();
+    }
+    if (req.path === "/api/auth/login") return next();
 
     const settings = dbOps.getSettings();
     const onboardingDone = settings.onboardingComplete;
@@ -249,11 +291,7 @@ export const createAuthMiddleware = () => {
     if (req.path.startsWith("/api/onboarding") && !onboardingDone)
       return next();
 
-    const users = userOps.getAllUsers();
-    const legacyPasswords = getAuthPassword();
-    const authRequired =
-      onboardingDone &&
-      (isProxyAuthEnabled() || users.length > 0 || legacyPasswords.length > 0);
+    const authRequired = isAuthRequiredByConfig();
 
     if (!authRequired) return next();
 
@@ -271,6 +309,10 @@ export const createAuthMiddleware = () => {
 };
 
 function getCredentialsFromRequest(req) {
+  const sessionUser = resolveSessionUserFromToken(req.query.token);
+  if (sessionUser) {
+    return { type: "session", user: sessionUser };
+  }
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith("Basic ")) {
     try {
@@ -279,21 +321,7 @@ function getCredentialsFromRequest(req) {
       const colon = decoded.indexOf(":");
       const username = colon >= 0 ? decoded.slice(0, colon) : decoded;
       const password = colon >= 0 ? decoded.slice(colon + 1) : "";
-      return { username, password };
-    } catch (e) {
-      return null;
-    }
-  }
-  const token = req.query.token;
-  if (token) {
-    try {
-      const decoded = Buffer.from(decodeURIComponent(token), "base64").toString(
-        "utf8",
-      );
-      const colon = decoded.indexOf(":");
-      const username = colon >= 0 ? decoded.slice(0, colon) : decoded;
-      const password = colon >= 0 ? decoded.slice(colon + 1) : "";
-      return { username, password };
+      return { type: "basic", username, password };
     } catch (e) {
       return null;
     }
@@ -309,11 +337,17 @@ export const verifyTokenAuth = (req) => {
   }
   const creds = getCredentialsFromRequest(req);
   if (creds) {
-    let u = resolveUser(creds.username, creds.password);
-    if (!u) u = legacyAuth(creds.username, creds.password);
-    if (u) {
-      req.user = u;
+    if (creds.type === "session" && creds.user) {
+      req.user = creds.user;
       return true;
+    }
+    if (creds.type === "basic") {
+      let u = resolveUser(creds.username, creds.password);
+      if (!u) u = legacyAuth(creds.username, creds.password);
+      if (u) {
+        req.user = u;
+        return true;
+      }
     }
   }
   const streamTokenUser = consumeStreamToken(req.query.st);

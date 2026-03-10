@@ -2,6 +2,8 @@ import express from "express";
 import bcrypt from "bcrypt";
 import { dbOps, userOps } from "../config/db-helpers.js";
 import { defaultData } from "../config/constants.js";
+import { validateExternalUrl } from "../middleware/urlValidator.js";
+import { requirePasswordStrength } from "../middleware/validation.js";
 
 const router = express.Router();
 
@@ -19,11 +21,16 @@ router.use((req, res, next) => {
 router.get("/lidarr/test", async (req, res) => {
   try {
     const { lidarrClient } = await import("../services/lidarrClient.js");
-    const url = (req.query.url || "").trim().replace(/\/+$/, "");
+    let url = (req.query.url || "").trim().replace(/\/+$/, "");
     const apiKey = (req.query.apiKey || "").trim();
     if (!url || !apiKey) {
       return res.status(400).json({ error: "URL and API key are required" });
     }
+    const urlValidation = validateExternalUrl(url);
+    if (!urlValidation.valid) {
+      return res.status(400).json({ error: urlValidation.error });
+    }
+    url = urlValidation.url;
     const originalConfig = { ...lidarrClient.config };
     const originalApiPath = lidarrClient.apiPath;
     lidarrClient.config = { url, apiKey };
@@ -50,7 +57,7 @@ router.get("/lidarr/test", async (req, res) => {
 router.post("/navidrome/test", async (req, res) => {
   try {
     const { NavidromeClient } = await import("../services/navidrome.js");
-    const url = (req.body?.url || "").trim().replace(/\/+$/, "");
+    let url = (req.body?.url || "").trim().replace(/\/+$/, "");
     const username = (req.body?.username || "").trim();
     const password = req.body?.password ?? "";
     if (!url || !username || !password) {
@@ -58,6 +65,11 @@ router.post("/navidrome/test", async (req, res) => {
         error: "URL, username, and password are required",
       });
     }
+    const urlValidation = validateExternalUrl(url);
+    if (!urlValidation.valid) {
+      return res.status(400).json({ error: urlValidation.error });
+    }
+    url = urlValidation.url;
     const client = new NavidromeClient(url, username, password);
     await client.ping();
     res.json({ success: true, message: "Connection successful" });
@@ -73,6 +85,12 @@ router.post("/complete", async (req, res) => {
   try {
     const { authUser, authPassword, lidarr, musicbrainz, navidrome, lastfm } =
       req.body;
+    if (authPassword != null && String(authPassword).length > 0) {
+      const passwordValidation = requirePasswordStrength(authPassword);
+      if (!passwordValidation.valid) {
+        return res.status(400).json({ error: passwordValidation.error });
+      }
+    }
 
     const current = dbOps.getSettings();
     const integrations = {
