@@ -73,6 +73,12 @@ export const normalizeSettings = (savedSettings) => {
         notifyWeeklyFlowDone: false,
         ...(savedSettings.integrations?.gotify || {}),
       },
+      webhooks: savedSettings.integrations?.webhooks || [],
+      webhookEvents: {
+        notifyDiscoveryUpdated: false,
+        notifyWeeklyFlowDone: false,
+        ...(savedSettings.integrations?.webhookEvents || {}),
+      },
     },
   };
 };
