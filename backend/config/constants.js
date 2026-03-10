@@ -188,6 +188,11 @@ export const defaultData = {
         notifyDiscoveryUpdated: false,
         notifyWeeklyFlowDone: false,
       },
+      webhooks: [],
+      webhookEvents: {
+        notifyDiscoveryUpdated: false,
+        notifyWeeklyFlowDone: false,
+      },
     },
     queueCleaner: {
       enabled: true,
