@@ -70,7 +70,7 @@ router.post("/clear-discovery", requireAuth, requireAdmin, async (req, res) => {
   res.json({ message: "Discovery cache cleared" });
 });
 
-router.get("/", async (req, res) => {
+router.get("/", requireAuth, async (req, res) => {
   const hasLastfmKey = !!getLastfmApiKey();
   const settings = dbOps.getSettings();
   const lastfmUsername = settings.integrations?.lastfm?.username || null;
@@ -432,11 +432,11 @@ router.get("/by-tag", async (req, res) => {
   }
 });
 
-router.get("/preferences", (req, res) => {
+router.get("/preferences", requireAuth, (req, res) => {
   res.json(discoveryPreferences);
 });
 
-router.post("/preferences", (req, res) => {
+router.post("/preferences", requireAuth, (req, res) => {
   try {
     const updates = req.body;
 
@@ -457,7 +457,7 @@ router.post("/preferences", (req, res) => {
   }
 });
 
-router.post("/preferences/reset", (req, res) => {
+router.post("/preferences/reset", requireAuth, (req, res) => {
   discoveryPreferences = { ...defaultDiscoveryPreferences };
   res.json({
     success: true,
@@ -465,7 +465,7 @@ router.post("/preferences/reset", (req, res) => {
   });
 });
 
-router.post("/preferences/exclude-genre", (req, res) => {
+router.post("/preferences/exclude-genre", requireAuth, (req, res) => {
   try {
     const { genre } = req.body;
     if (!genre) {
@@ -488,7 +488,7 @@ router.post("/preferences/exclude-genre", (req, res) => {
   }
 });
 
-router.delete("/preferences/exclude-genre/:genre", (req, res) => {
+router.delete("/preferences/exclude-genre/:genre", requireAuth, (req, res) => {
   try {
     const { genre } = req.params;
     discoveryPreferences.excludedGenres =
@@ -508,7 +508,7 @@ router.delete("/preferences/exclude-genre/:genre", (req, res) => {
   }
 });
 
-router.post("/preferences/exclude-artist", (req, res) => {
+router.post("/preferences/exclude-artist", requireAuth, (req, res) => {
   try {
     const { artistId, artistName } = req.body;
     if (!artistId) {
@@ -533,7 +533,7 @@ router.post("/preferences/exclude-artist", (req, res) => {
   }
 });
 
-router.delete("/preferences/exclude-artist/:artistId", (req, res) => {
+router.delete("/preferences/exclude-artist/:artistId", requireAuth, (req, res) => {
   try {
     const { artistId } = req.params;
     discoveryPreferences.excludedArtists =

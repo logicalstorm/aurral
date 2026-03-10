@@ -1,15 +1,24 @@
 import { useEffect, useRef, useState } from "react";
+import { getStoredAuth } from "../utils/api";
 
 function getWsUrl() {
+  const { token } = getStoredAuth();
   const apiUrl = import.meta.env.VITE_API_URL;
   if (apiUrl && (apiUrl.startsWith("http://") || apiUrl.startsWith("https://"))) {
     const url = new URL(apiUrl);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     url.pathname = "/ws";
+    if (token) {
+      url.searchParams.set("token", token);
+    }
     return url.toString();
   }
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}/ws`;
+  const url = new URL(`${protocol}//${window.location.host}/ws`);
+  if (token) {
+    url.searchParams.set("token", token);
+  }
+  return url.toString();
 }
 
 export function useWebSocketChannel(channel, onMessage) {

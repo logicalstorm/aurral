@@ -1,4 +1,15 @@
 import { WebSocketServer } from 'ws';
+import { dbOps, userOps } from "../config/db-helpers.js";
+import { getAuthPassword, isProxyAuthEnabled } from "../middleware/auth.js";
+import { getSessionByToken } from "../config/session-helpers.js";
+
+const isAuthRequired = () => {
+  const settings = dbOps.getSettings();
+  if (!settings.onboardingComplete) return false;
+  const users = userOps.getAllUsers();
+  const legacyPasswords = getAuthPassword();
+  return isProxyAuthEnabled() || users.length > 0 || legacyPasswords.length > 0;
+};
 
 class WebSocketService {
   constructor() {
@@ -24,6 +35,16 @@ class WebSocketService {
   }
 
   handleConnection(ws, req) {
+    if (isAuthRequired()) {
+      const requestUrl = new URL(req.url || "", "http://localhost");
+      const token = requestUrl.searchParams.get("token");
+      const session = getSessionByToken(token);
+      if (!session?.user) {
+        ws.close(4401, "Unauthorized");
+        return;
+      }
+    }
+
     const clientId = this.generateClientId();
     
     const client = {

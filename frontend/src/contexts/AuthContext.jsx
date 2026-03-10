@@ -3,9 +3,11 @@ import {
   AUTH_INVALID_EVENT,
   checkHealth,
   clearAuthStorage,
+  getMe,
   getStoredAuth,
+  loginApi,
+  logoutApi,
   setStoredAuth,
-  verifyCredentials,
 } from "../utils/api";
 
 const AuthContext = createContext(null);
@@ -31,15 +33,7 @@ export const AuthProvider = ({ children }) => {
       }
 
       const isRequired = healthData.authRequired;
-      const authUser = healthData.authUser || "admin";
       setAuthRequired(isRequired);
-
-      if (isRequired) {
-        const { password } = getStoredAuth();
-        if (password) {
-          setStoredAuth({ username: authUser, password });
-        }
-      }
 
       if (isRequired && healthData.user) {
         setUser(healthData.user);
@@ -68,21 +62,14 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      const { username: storedUser, password: storedPassword } = getStoredAuth();
-
-      if (storedPassword) {
+      const { token } = getStoredAuth();
+      if (token) {
         try {
-          const isValid = await verifyCredentials(storedPassword, storedUser);
-          if (isValid) {
-            const healthWithAuth = await checkHealth();
-            setUser(healthWithAuth.user || null);
-            setIsAuthenticated(!!healthWithAuth.user);
-          } else {
-            clearAuthStorage();
-            setUser(null);
-            setIsAuthenticated(false);
-          }
+          const me = await getMe();
+          setUser(me.user || null);
+          setIsAuthenticated(!!me.user);
         } catch {
+          clearAuthStorage();
           setUser(null);
           setIsAuthenticated(false);
         }
@@ -118,22 +105,21 @@ export const AuthProvider = ({ children }) => {
     if (!password) return false;
 
     try {
-      const isValid = await verifyCredentials(password, username);
-      if (isValid) {
-        setStoredAuth({ username, password });
-        setIsAuthenticated(true);
-        const healthWithAuth = await checkHealth();
-        setUser(healthWithAuth.user || null);
-        window.location.reload();
-        return true;
-      }
-      return false;
+      const result = await loginApi(username, password);
+      if (!result?.token) return false;
+      setStoredAuth({ token: result.token });
+      setUser(result.user || null);
+      setIsAuthenticated(true);
+      return true;
     } catch {
       return false;
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await logoutApi();
+    } catch {}
     clearAuthStorage();
     setIsAuthenticated(false);
     setUser(null);
