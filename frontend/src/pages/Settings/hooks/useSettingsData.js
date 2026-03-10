@@ -45,6 +45,11 @@ const defaultSettings = {
       notifyDiscoveryUpdated: false,
       notifyWeeklyFlowDone: false,
     },
+    webhooks: [],
+    webhookEvents: {
+      notifyDiscoveryUpdated: false,
+      notifyWeeklyFlowDone: false,
+    },
   },
 };
 
