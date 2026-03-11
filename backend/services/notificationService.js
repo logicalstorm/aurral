@@ -106,11 +106,11 @@ export async function notifyDiscoveryUpdated() {
           5
         )
       : Promise.resolve(),
-    sendWebhooks("notifyDiscoveryUpdated"),
+    sendWebhooks("notifyDiscoveryUpdated", "", "Aurral – Discover"),
   ]);
 }
 
-export async function notifyWeeklyFlowDone(playlistType, stats = {}, flowPath = "") {
+export async function notifyWeeklyFlowDone(playlistType, stats = {}, flowPath = "", flowName = "") {
   const settings = dbOps.getSettings();
   const gotify = settings.integrations?.gotify || {};
   const completed = stats.completed ?? 0;
@@ -125,6 +125,6 @@ export async function notifyWeeklyFlowDone(playlistType, stats = {}, flowPath = 
           5,
         )
       : Promise.resolve(),
-    sendWebhooks("notifyWeeklyFlowDone", flowPath, playlistType),
+    sendWebhooks("notifyWeeklyFlowDone", flowPath, flowName),
   ]);
 }
