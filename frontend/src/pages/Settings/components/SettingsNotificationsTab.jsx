@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { CheckCircle, Pencil, Plus, Trash2 } from "lucide-react";
+import { useState, useRef } from "react";
+import { CheckCircle, Pencil, Plus, Trash2, GripVertical } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
 import PillToggle from "../../../components/PillToggle";
 import { testGotifyConnection } from "../../../utils/api";
@@ -51,6 +51,9 @@ export function SettingsNotificationsTab({
     });
   };
 
+  const [dragIdx, setDragIdx] = useState(null);
+  const allowDragRef = useRef(null);
+
   const addWebhook = () => {
     if (webhooks.length >= 5) return;
     updateWebhooks([...webhooks, { url: "", body: null, headers: [] }]);
@@ -58,6 +61,13 @@ export function SettingsNotificationsTab({
 
   const removeWebhook = (index) => {
     updateWebhooks(webhooks.filter((_, i) => i !== index));
+  };
+
+  const moveWebhook = (from, to) => {
+    const next = [...webhooks];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    updateWebhooks(next);
   };
 
   const updateWebhook = (index, patch) => {
@@ -335,16 +345,32 @@ export function SettingsNotificationsTab({
             {webhooks.map((wh, index) => (
               <div
                 key={index}
+                draggable
+                onDragStart={(e) => {
+                  if (allowDragRef.current !== index) { e.preventDefault(); return; }
+                  setDragIdx(index);
+                }}
+                onDragOver={(e) => { e.preventDefault(); if (dragIdx !== null && dragIdx !== index) { moveWebhook(dragIdx, index); setDragIdx(index); } }}
+                onDragEnd={() => { setDragIdx(null); allowDragRef.current = null; }}
                 className="p-4 rounded-lg space-y-3"
                 style={{
                   backgroundColor: "#111114",
-                  border: "1px solid #333",
+                  border: `1px solid ${dragIdx === index ? "#555" : "#333"}`,
+                  opacity: dragIdx === index ? 0.5 : 1,
                 }}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium" style={{ color: "#c1c1c3" }}>
-                    Webhook #{index + 1}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <GripVertical
+                      className="w-4 h-4 flex-shrink-0"
+                      style={{ color: "#555", cursor: "grab" }}
+                      onMouseDown={() => { allowDragRef.current = index; }}
+                      onMouseUp={() => { allowDragRef.current = null; }}
+                    />
+                    <span className="text-sm font-medium" style={{ color: "#c1c1c3" }}>
+                      Webhook #{index + 1}
+                    </span>
+                  </div>
                   <button
                     type="button"
                     className="btn btn-secondary px-2 py-1 text-red-400 hover:text-red-300"
