@@ -12,6 +12,8 @@ jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     permissions:
       contents: write
       packages: write
@@ -41,7 +43,7 @@ jobs:
           echo "release_tag=$tag" >> "$GITHUB_OUTPUT"
       - name: Ensure GitHub release exists
         if: steps.release_info.outputs.release_tag != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const tag = "${{ steps.release_info.outputs.release_tag }}";
@@ -66,13 +68,13 @@ jobs:
               core.info(`Created release for ${tag}`);
             }
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
         if: steps.release_info.outputs.release_version != ''
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
         if: steps.release_info.outputs.release_version != ''
       - name: Log into registry ghcr.io
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         if: steps.release_info.outputs.release_version != ''
         with:
           registry: ghcr.io
@@ -98,7 +100,7 @@ jobs:
             } >> "$GITHUB_OUTPUT"
           fi
       - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         if: steps.release_info.outputs.release_version != ''
         timeout-minutes: 20
         with:
