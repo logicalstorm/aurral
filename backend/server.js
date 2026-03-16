@@ -12,7 +12,7 @@ process.on("uncaughtException", (err) => {
   if (err.code === "ERR_STREAM_DESTROYED") {
     console.warn(
       "[Process] Caught stream destroyed error (safe to ignore):",
-      err.message
+      err.message,
     );
     return;
   }
@@ -22,7 +22,7 @@ process.on("uncaughtException", (err) => {
 process.on("unhandledRejection", (reason, promise) => {
   if (reason?.code === "ERR_STREAM_DESTROYED") {
     console.warn(
-      "[Process] Caught stream destroyed rejection (safe to ignore)"
+      "[Process] Caught stream destroyed rejection (safe to ignore)",
     );
     return;
   }
@@ -83,15 +83,7 @@ const trustProxyValue =
 app.set("trust proxy", trustProxyValue);
 
 app.use(cors(corsOptions));
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        upgradeInsecureRequests: null,
-      },
-    },
-  })
-);
+app.use(helmet());
 app.use(express.json());
 
 app.use(createAuthMiddleware());
@@ -124,7 +116,7 @@ setTimeout(async () => {
     updateDiscoveryCache();
   } else {
     console.log(
-      `Discovery cache is fresh (last updated ${lastUpdated}). Skipping initial update.`
+      `Discovery cache is fresh (last updated ${lastUpdated}). Skipping initial update.`,
     );
   }
 }, 5000);
