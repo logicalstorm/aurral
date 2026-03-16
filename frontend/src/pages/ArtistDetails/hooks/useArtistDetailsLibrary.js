@@ -847,7 +847,7 @@ export function useArtistDetailsLibrary({
     if (album.monitored) {
       return {
         status: "monitored",
-        label: "Searching...",
+        label: "Monitored",
         libraryId: album.id,
         albumInfo: album,
       };
