@@ -83,7 +83,15 @@ const trustProxyValue =
 app.set("trust proxy", trustProxyValue);
 
 app.use(cors(corsOptions));
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        upgradeInsecureRequests: null,
+      },
+    },
+  })
+);
 app.use(express.json());
 
 app.use(createAuthMiddleware());
