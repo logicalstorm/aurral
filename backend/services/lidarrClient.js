@@ -530,6 +530,8 @@ export class LidarrClient {
       monitorOption === "all" ? "existing" : monitorOption;
     const artistMonitored = albumOnly || monitorOption !== "none";
     const effectiveMonitor = albumOnly ? "missing" : lidarrMonitorOption;
+    const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
+    const monitorNewItems = monitorOption === "none" ? "none" : "all";
 
     const defaultQualityProfileId =
       settings.integrations?.lidarr?.qualityProfileId;
@@ -557,11 +559,11 @@ export class LidarrClient {
       metadataProfileId: metadataProfileId,
       monitored: artistMonitored,
       monitor: effectiveMonitor,
-      monitorNewItems: "none",
+      monitorNewItems: monitorNewItems,
       albumsToMonitor: [],
       addOptions: {
         monitor: effectiveMonitor,
-        searchForMissingAlbums: false,
+        searchForMissingAlbums: searchOnAdd,
       },
     };
 
@@ -593,11 +595,13 @@ export class LidarrClient {
     const artist = await this.getArtist(artistId);
     const lidarrMonitorOption =
       monitorOption === "all" ? "existing" : monitorOption;
+    const monitorNewItems = monitorOption === "none" ? "none" : "all";
 
     const updated = {
       ...artist,
       monitored: monitorOption !== "none",
       monitor: lidarrMonitorOption,
+      monitorNewItems: monitorNewItems,
       addOptions: {
         ...(artist.addOptions || {}),
         monitor: lidarrMonitorOption,
