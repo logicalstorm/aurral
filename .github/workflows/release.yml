@@ -11,6 +11,7 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       packages: write
@@ -99,13 +100,15 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         if: steps.release_info.outputs.release_version != ''
+        timeout-minutes: 20
         with:
           context: .
           push: true
+          provenance: false
           tags: ${{ steps.tags.outputs.tags }}
           platforms: linux/amd64,linux/arm64
           build-args: |
             APP_VERSION=${{ steps.release_info.outputs.release_version }}
             GITHUB_REPO=${{ github.repository }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=min,ignore-error=true
