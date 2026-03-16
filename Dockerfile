@@ -1,17 +1,16 @@
 FROM node:20-alpine AS builder
 
-WORKDIR /app
+WORKDIR /app/frontend
 
-COPY package*.json ./
-COPY frontend/package*.json ./frontend/
-RUN cd frontend && npm ci
+COPY frontend/package*.json ./
+RUN npm ci
 
-COPY frontend/ ./frontend/
+COPY frontend/ ./
 ARG APP_VERSION=unknown
 ARG GITHUB_REPO=lklynet/aurral
 ENV VITE_APP_VERSION=$APP_VERSION
 ENV VITE_GITHUB_REPO=$GITHUB_REPO
-RUN cd frontend && npm run build
+RUN npm run build
 
 FROM node:20-alpine
 ARG APP_VERSION=unknown
@@ -25,12 +24,11 @@ RUN apk add --no-cache su-exec && \
     mkdir -p /app/backend/data && \
     chown -R nodejs:nodejs /app
 
-COPY package*.json ./
-RUN apk add --no-cache python3 make g++ && npm ci --omit=dev --ignore-scripts
-
 COPY backend/package*.json ./backend/
-RUN cd backend && npm ci --omit=dev --ignore-scripts
-RUN cd backend && npm rebuild --build-from-source
+RUN apk add --no-cache python3 make g++ && cd backend && npm ci --omit=dev
+
+COPY package*.json ./
+RUN npm ci --omit=dev --ignore-scripts
 
 COPY backend/ ./backend/
 COPY server.js loadEnv.js ./
