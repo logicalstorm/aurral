@@ -81,11 +81,13 @@ app.use(
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
         imgSrc: [
           "'self'",
           "data:",
           "https://*.deezer.com",
+          "https://*.dzcdn.net",
           "https://coverartarchive.org",
           "https://*.last.fm",
           "https://lastfm.freetls.fastly.net",
@@ -172,23 +174,26 @@ app.use((err, req, res, next) => {
   return res.status(500).json({ error: "Internal server error" });
 });
 
-setInterval(() => {
-  const discoveryCache = getDiscoveryCache();
-  const lastUpdated = discoveryCache?.lastUpdated;
-  const refreshHours = getDiscoveryAutoRefreshHours();
-  const refreshIntervalMs = refreshHours * 60 * 60 * 1000;
-  const parsedLastUpdated = lastUpdated ? new Date(lastUpdated).getTime() : 0;
-  const needsUpdate =
-    !Number.isFinite(parsedLastUpdated) ||
-    parsedLastUpdated <= 0 ||
-    Date.now() - parsedLastUpdated >= refreshIntervalMs;
+setInterval(
+  () => {
+    const discoveryCache = getDiscoveryCache();
+    const lastUpdated = discoveryCache?.lastUpdated;
+    const refreshHours = getDiscoveryAutoRefreshHours();
+    const refreshIntervalMs = refreshHours * 60 * 60 * 1000;
+    const parsedLastUpdated = lastUpdated ? new Date(lastUpdated).getTime() : 0;
+    const needsUpdate =
+      !Number.isFinite(parsedLastUpdated) ||
+      parsedLastUpdated <= 0 ||
+      Date.now() - parsedLastUpdated >= refreshIntervalMs;
 
-  if (!needsUpdate) return;
+    if (!needsUpdate) return;
 
-  updateDiscoveryCache().catch((err) => {
-    console.error("Error in scheduled discovery update:", err.message);
-  });
-}, 15 * 60 * 1000);
+    updateDiscoveryCache().catch((err) => {
+      console.error("Error in scheduled discovery update:", err.message);
+    });
+  },
+  15 * 60 * 1000,
+);
 
 setTimeout(async () => {
   const { getLastfmApiKey } = await import("./backend/services/apiClients.js");
