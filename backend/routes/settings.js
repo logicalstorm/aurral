@@ -2,10 +2,12 @@ import express from "express";
 import { dbOps } from "../config/db-helpers.js";
 import { defaultData } from "../config/constants.js";
 import { noCache } from "../middleware/cache.js";
-import { requireAuth } from "../middleware/requirePermission.js";
+import { requireAuth, requireAdmin } from "../middleware/requirePermission.js";
+import { validateExternalUrl } from "../middleware/urlValidator.js";
 
 const router = express.Router();
 router.use(requireAuth);
+router.use(requireAdmin);
 
 router.get("/", noCache, (req, res) => {
   try {
@@ -155,6 +157,11 @@ router.get("/lidarr/profiles", async (req, res) => {
         message: "Please configure Lidarr URL and API key in settings first",
       });
     }
+    const urlValidation = validateExternalUrl(url);
+    if (!urlValidation.valid) {
+      return res.status(400).json({ error: urlValidation.error });
+    }
+    url = urlValidation.url;
 
     const originalConfig = { ...lidarrClient.config };
     const originalApiPath = lidarrClient.apiPath;
@@ -207,6 +214,11 @@ router.get("/lidarr/metadata-profiles", async (req, res) => {
         message: "Please configure Lidarr URL and API key in settings first",
       });
     }
+    const urlValidation = validateExternalUrl(url);
+    if (!urlValidation.valid) {
+      return res.status(400).json({ error: urlValidation.error });
+    }
+    url = urlValidation.url;
 
     const originalConfig = { ...lidarrClient.config };
     const originalApiPath = lidarrClient.apiPath;
@@ -268,6 +280,11 @@ router.get("/lidarr/test", async (req, res) => {
         .status(400)
         .json({ error: "Lidarr URL and API key are required" });
     }
+    const urlValidation = validateExternalUrl(url);
+    if (!urlValidation.valid) {
+      return res.status(400).json({ error: urlValidation.error });
+    }
+    url = urlValidation.url;
 
     const originalConfig = { ...lidarrClient.config };
     const originalApiPath = lidarrClient.apiPath;
@@ -328,7 +345,11 @@ router.post("/gotify/test", async (req, res) => {
         message: "Provide Gotify URL and application token in the request body",
       });
     }
-    await sendGotifyTest(url, token);
+    const urlValidation = validateExternalUrl(url);
+    if (!urlValidation.valid) {
+      return res.status(400).json({ error: urlValidation.error });
+    }
+    await sendGotifyTest(urlValidation.url, token);
     res.json({ success: true, message: "Test notification sent" });
   } catch (error) {
     if (error.code === "MISSING_CONFIG") {

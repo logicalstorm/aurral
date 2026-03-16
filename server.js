@@ -10,6 +10,7 @@ import { createServer } from "http";
 import { fileURLToPath } from "url";
 
 import { createAuthMiddleware } from "./backend/middleware/auth.js";
+import { cleanExpiredSessions } from "./backend/config/session-helpers.js";
 import {
   updateDiscoveryCache,
   getDiscoveryCache,
@@ -28,6 +29,7 @@ import discoveryRouter from "./backend/routes/discovery.js";
 import requestsRouter from "./backend/routes/requests.js";
 import healthRouter from "./backend/routes/health.js";
 import weeklyFlowRouter from "./backend/routes/weeklyFlow.js";
+import authRouter from "./backend/routes/auth.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,6 +45,23 @@ process.on("unhandledRejection", (reason, promise) => {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+const allowedCorsOrigins = String(process.env.CORS_ORIGIN || "")
+  .split(",")
+  .map((v) => v.trim())
+  .filter(Boolean);
+
+const corsOptions =
+  allowedCorsOrigins.length > 0
+    ? {
+        origin(origin, callback) {
+          if (!origin || allowedCorsOrigins.includes(origin)) {
+            return callback(null, true);
+          }
+          return callback(null, false);
+        },
+      }
+    : { origin: false };
+
 const trustProxyValue =
   process.env.TRUST_PROXY === undefined
     ? 1
@@ -55,16 +74,40 @@ const trustProxyValue =
           : Number(process.env.TRUST_PROXY);
 app.set("trust proxy", trustProxyValue);
 
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(
   helmet({
-    contentSecurityPolicy: false,
-    frameguard: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: [
+          "'self'",
+          "data:",
+          "https://*.deezer.com",
+          "https://coverartarchive.org",
+          "https://*.last.fm",
+          "https://lastfm.freetls.fastly.net",
+        ],
+        connectSrc: ["'self'", "ws:", "wss:"],
+        mediaSrc: ["'self'"],
+        frameSrc: ["'none'"],
+      },
+    },
+    frameguard: { action: "deny" },
   }),
 );
 app.use(express.json());
 
 app.use(createAuthMiddleware());
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+});
+app.use("/api/auth/login", authLimiter);
+app.use("/api/users/me/password", authLimiter);
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -82,12 +125,17 @@ app.use("/api/discover", discoveryRouter);
 app.use("/api/requests", requestsRouter);
 app.use("/api/health", healthRouter);
 app.use("/api/weekly-flow", weeklyFlowRouter);
+app.use("/api/auth", authRouter);
 
 const HOUR_MS = 60 * 60 * 1000;
 setInterval(() => {
   import("./backend/services/weeklyFlowScheduler.js")
     .then((m) => m.runScheduledRefresh())
     .catch((err) => console.error("Weekly flow scheduler error:", err.message));
+}, HOUR_MS);
+
+setInterval(() => {
+  cleanExpiredSessions();
 }, HOUR_MS);
 
 setTimeout(() => {
@@ -117,6 +165,12 @@ if (fs.existsSync(frontendDist)) {
     res.status(503).send("Frontend not built. Run 'npm run build' first.");
   });
 }
+
+app.use((err, req, res, next) => {
+  console.error(err);
+  if (res.headersSent) return next(err);
+  return res.status(500).json({ error: "Internal server error" });
+});
 
 setInterval(() => {
   const discoveryCache = getDiscoveryCache();
