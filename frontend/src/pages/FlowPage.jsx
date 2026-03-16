@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import {
   getFlowStatus,
   getFlowJobs,
@@ -7,6 +8,7 @@ import {
   updateFlow,
   deleteFlow,
   setFlowEnabled,
+  getFlowTrackStreamUrl,
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
 import {
@@ -446,6 +448,7 @@ const buildFlowStatsFromJobs = (jobs) => {
 };
 
 function FlowPage() {
+  const navigate = useNavigate();
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -459,6 +462,10 @@ function FlowPage() {
   const [simpleErrors, setSimpleErrors] = useState({});
   const [applyingFlowId, setApplyingFlowId] = useState(null);
   const [flowStatsById, setFlowStatsById] = useState({});
+  const [tracksExpandedId, setTracksExpandedId] = useState(null);
+  const [tracksLoadingByFlowId, setTracksLoadingByFlowId] = useState({});
+  const [tracksErrorByFlowId, setTracksErrorByFlowId] = useState({});
+  const [tracksByFlowId, setTracksByFlowId] = useState({});
   const { showSuccess, showError } = useToast();
 
   const fetchStatus = async () => {
@@ -700,6 +707,16 @@ function FlowPage() {
     handleToggleEnabled(flow, true);
   };
 
+  const flowList = status?.flows || [];
+  const effectiveFlowList = flowList.map((flow) => {
+    const optimisticValue = optimisticEnabled[flow.id];
+    if (typeof optimisticValue !== "boolean") return flow;
+    return {
+      ...flow,
+      enabled: optimisticValue,
+    };
+  });
+
   const handleConfirmDisable = async () => {
     if (!confirmDisable) return;
     const flow = flowList.find((entry) => entry.id === confirmDisable.flowId);
@@ -710,12 +727,84 @@ function FlowPage() {
     setConfirmDisable(null);
   };
 
-  const flowList = status?.flows || [];
-  const enabledCount = flowList.filter((flow) => flow.enabled === true).length;
-  const runningCount = flowList.filter(
+  const normalizeReason = (job) => {
+    if (job?.reason) return job.reason;
+    if (job?.playlistType) {
+      if (job.playlistType === "discover") return "From discovery recommendations";
+      if (job.playlistType === "mix") return "From your library mix";
+      if (job.playlistType === "trending") return "From trending artists";
+    }
+    return "Flow selection";
+  };
+
+  const fetchFlowTracks = async (flowId, { showSpinner = true } = {}) => {
+    if (!flowId) return;
+    if (showSpinner) {
+      setTracksLoadingByFlowId((prev) => ({ ...prev, [flowId]: true }));
+    }
+    setTracksErrorByFlowId((prev) => ({ ...prev, [flowId]: "" }));
+    try {
+      const jobs = await getFlowJobs(flowId, 500);
+      const normalized = (Array.isArray(jobs) ? jobs : []).map((job) => ({
+        ...job,
+        albumName: job?.albumName || null,
+        reason: normalizeReason(job),
+        streamUrl:
+          job?.status === "done" && job?.id ? getFlowTrackStreamUrl(job.id) : null,
+      }));
+      setTracksByFlowId((prev) => ({
+        ...prev,
+        [flowId]: normalized,
+      }));
+    } catch (err) {
+      const message =
+        err.response?.data?.message || err.message || "Failed to load tracks";
+      setTracksErrorByFlowId((prev) => ({ ...prev, [flowId]: message }));
+      showError(message);
+    } finally {
+      if (showSpinner) {
+        setTracksLoadingByFlowId((prev) => ({ ...prev, [flowId]: false }));
+      }
+    }
+  };
+
+  const handleToggleTracks = async (flowId) => {
+    if (!flowId) return;
+    if (tracksExpandedId === flowId) {
+      setTracksExpandedId(null);
+      return;
+    }
+    setEditingId(null);
+    setTracksExpandedId(flowId);
+    await fetchFlowTracks(flowId);
+  };
+
+  const handleToggleEditing = (flowId) => {
+    setEditingId((prev) => {
+      const next = prev === flowId ? null : flowId;
+      if (next) {
+        setSimpleErrors((prevErrors) => {
+          const nextErrors = { ...prevErrors };
+          delete nextErrors[flowId];
+          return nextErrors;
+        });
+        setTracksExpandedId(null);
+      }
+      return next;
+    });
+  };
+
+  const handleNavigateArtist = (track) => {
+    if (!track?.artistMbid) return;
+    navigate(`/artist/${track.artistMbid}`, {
+      state: { artistName: track.artistName },
+    });
+  };
+  const enabledCount = effectiveFlowList.filter((flow) => flow.enabled === true).length;
+  const runningCount = effectiveFlowList.filter(
     (flow) => getPlaylistState(flow.id) === "running"
   ).length;
-  const completedCount = flowList.filter(
+  const completedCount = effectiveFlowList.filter(
     (flow) => getPlaylistState(flow.id) === "completed"
   ).length;
   if (loading && !status) {
@@ -735,7 +824,7 @@ function FlowPage() {
       <FlowStatusCards
         status={status}
         enabledCount={enabledCount}
-        flowCount={flowList.length}
+        flowCount={effectiveFlowList.length}
         runningCount={runningCount}
         completedCount={completedCount}
       />
@@ -745,22 +834,18 @@ function FlowPage() {
           Playlists
         </h2>
         <span className="text-xs text-[#c1c1c3]">
-          {flowList.length} flows
+          {effectiveFlowList.length} flows
         </span>
       </div>
 
       <div className="space-y-3">
-        {flowList.length === 0 && (
+        {effectiveFlowList.length === 0 && (
           <FlowEmptyState onCreate={handleCreateInline} creating={creating} />
         )}
-        {flowList.map((flow) => {
+        {effectiveFlowList.map((flow) => {
           const stats = getPlaylistStats(flow.id);
           const state = getPlaylistState(flow.id);
-          const optimisticValue = optimisticEnabled[flow.id];
-          const enabled =
-            typeof optimisticValue === "boolean"
-              ? optimisticValue
-              : flow.enabled === true;
+          const enabled = flow.enabled === true;
           const nextRun = formatNextRun(flow.nextRunAt);
           const isEditing = editingId === flow.id;
           const simpleDraft = simpleDrafts[flow.id] ?? flowToForm(flow);
@@ -778,6 +863,10 @@ function FlowPage() {
               stats={stats}
               nextRun={nextRun}
               isEditing={isEditing}
+              isTracksOpen={tracksExpandedId === flow.id}
+              tracks={tracksByFlowId[flow.id] || []}
+              tracksLoading={tracksLoadingByFlowId[flow.id] === true}
+              tracksError={tracksErrorByFlowId[flow.id] || ""}
               simpleDraft={simpleDraft}
               simpleRemaining={simpleMixSize}
               simpleError={simpleError}
@@ -785,21 +874,11 @@ function FlowPage() {
               hasChanges={hasChanges}
               togglingId={togglingId}
               deletingId={deletingId}
-              onToggleEditing={() =>
-                setEditingId((prev) => {
-                  const next = prev === flow.id ? null : flow.id;
-                  if (next) {
-                    setSimpleErrors((prevErrors) => {
-                      const nextErrors = { ...prevErrors };
-                      delete nextErrors[flow.id];
-                      return nextErrors;
-                    });
-                  }
-                  return next;
-                })
-              }
+              onToggleEditing={() => handleToggleEditing(flow.id)}
               onToggleEnabled={(checked) => handleToggleRequest(flow, checked)}
               onDelete={() => handleDelete(flow)}
+              onViewTracks={() => handleToggleTracks(flow.id)}
+              onNavigateArtist={handleNavigateArtist}
               onCancel={() => handleCancelSimple(flow)}
               onApply={() => handleApplySimple(flow)}
               onDraftChange={(updater) =>

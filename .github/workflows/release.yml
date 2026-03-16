@@ -4,6 +4,10 @@ on:
   push:
     branches: ["main", "test"]
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -95,9 +99,12 @@ jobs:
         uses: docker/build-push-action@v5
         if: steps.release_info.outputs.release_version != ''
         with:
+          context: .
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           platforms: linux/amd64,linux/arm64
           build-args: |
             APP_VERSION=${{ steps.release_info.outputs.release_version }}
             GITHUB_REPO=${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
