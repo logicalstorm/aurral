@@ -1,20 +1,101 @@
 import express from "express";
+import fs from "fs";
+import fsp from "fs/promises";
+import path from "path";
 import { downloadTracker } from "../services/weeklyFlowDownloadTracker.js";
 import { weeklyFlowWorker } from "../services/weeklyFlowWorker.js";
 import { playlistSource } from "../services/weeklyFlowPlaylistSource.js";
 import { soulseekClient } from "../services/simpleSoulseekClient.js";
 import { playlistManager } from "../services/weeklyFlowPlaylistManager.js";
 import { flowPlaylistConfig } from "../services/weeklyFlowPlaylistConfig.js";
+import { noCache } from "../middleware/cache.js";
+import { hasPermission, verifyTokenAuth } from "../middleware/auth.js";
 import {
   requireAuth,
   requirePermission,
 } from "../middleware/requirePermission.js";
 
 const router = express.Router();
+const AUDIO_CONTENT_TYPES = {
+  ".mp3": "audio/mpeg",
+  ".m4a": "audio/mp4",
+  ".aac": "audio/aac",
+  ".flac": "audio/flac",
+  ".ogg": "audio/ogg",
+  ".wav": "audio/wav",
+};
+
+router.get("/stream/:jobId", noCache, async (req, res) => {
+  if (!verifyTokenAuth(req)) {
+    return res
+      .status(401)
+      .json({ error: "Unauthorized", message: "Authentication required" });
+  }
+  if (req.user && !hasPermission(req.user, "accessFlow")) {
+    return res
+      .status(403)
+      .json({ error: "Forbidden", message: "Permission required: accessFlow" });
+  }
+  const { jobId } = req.params;
+  const job = downloadTracker.getJob(jobId);
+  if (!job) {
+    return res.status(404).json({ error: "Track not found" });
+  }
+  if (job.status !== "done" || !job.finalPath) {
+    return res.status(400).json({ error: "Track is not ready to stream" });
+  }
+  const safeRoot = path.resolve(weeklyFlowWorker.weeklyFlowRoot);
+  const safePath = path.resolve(job.finalPath);
+  if (!safePath.startsWith(safeRoot)) {
+    return res.status(403).json({ error: "Invalid track path" });
+  }
+  let stat;
+  try {
+    stat = await fsp.stat(safePath);
+    if (!stat.isFile()) {
+      return res.status(404).json({ error: "Track not found" });
+    }
+  } catch {
+    return res.status(404).json({ error: "Track file missing" });
+  }
+  const ext = path.extname(safePath).toLowerCase();
+  res.setHeader(
+    "Content-Type",
+    AUDIO_CONTENT_TYPES[ext] || "application/octet-stream",
+  );
+  res.setHeader("Accept-Ranges", "bytes");
+
+  const range = req.headers.range;
+  if (!range) {
+    res.setHeader("Content-Length", stat.size);
+    fs.createReadStream(safePath).pipe(res);
+    return;
+  }
+
+  const match = /bytes=(\d*)-(\d*)/.exec(range);
+  if (!match) {
+    res.status(416).end();
+    return;
+  }
+  const rawStart = match[1] ? Number(match[1]) : 0;
+  const rawEnd = match[2] ? Number(match[2]) : stat.size - 1;
+  const start = Number.isFinite(rawStart) ? rawStart : 0;
+  const end = Number.isFinite(rawEnd) ? rawEnd : stat.size - 1;
+  if (start < 0 || end < start || end >= stat.size) {
+    res.status(416).end();
+    return;
+  }
+  res.status(206);
+  res.setHeader("Content-Range", `bytes ${start}-${end}/${stat.size}`);
+  res.setHeader("Content-Length", end - start + 1);
+  fs.createReadStream(safePath, { start, end }).pipe(res);
+});
+
 router.use(requireAuth);
 router.use(requirePermission("accessFlow"));
 const DEFAULT_LIMIT = 30;
 const QUEUE_LIMIT = 50;
+const flowEnableMutationVersion = new Map();
 
 router.post("/start/:flowId", async (req, res) => {
   try {
@@ -211,6 +292,8 @@ router.put("/flows/:flowId/enabled", async (req, res) => {
     }
 
     if (enabled) {
+      const mutationVersion = (flowEnableMutationVersion.get(flowId) || 0) + 1;
+      flowEnableMutationVersion.set(flowId, mutationVersion);
       if (!soulseekClient.isConfigured()) {
         return res.status(400).json({
           error: "Soulseek credentials not configured",
@@ -237,7 +320,21 @@ router.put("/flows/:flowId/enabled", async (req, res) => {
 
       (async () => {
         try {
-          const tracks = await playlistSource.getTracksForFlow(flow);
+          if (
+            flowEnableMutationVersion.get(flowId) !== mutationVersion ||
+            !flowPlaylistConfig.isEnabled(flowId)
+          ) {
+            return;
+          }
+          const latestFlow = flowPlaylistConfig.getFlow(flowId);
+          if (!latestFlow) return;
+          const tracks = await playlistSource.getTracksForFlow(latestFlow);
+          if (
+            flowEnableMutationVersion.get(flowId) !== mutationVersion ||
+            !flowPlaylistConfig.isEnabled(flowId)
+          ) {
+            return;
+          }
           if (tracks.length === 0) return;
           downloadTracker.addJobs(tracks, flowId);
           if (!weeklyFlowWorker.running) {
@@ -251,6 +348,8 @@ router.put("/flows/:flowId/enabled", async (req, res) => {
         }
       })();
     } else {
+      const mutationVersion = (flowEnableMutationVersion.get(flowId) || 0) + 1;
+      flowEnableMutationVersion.set(flowId, mutationVersion);
       weeklyFlowWorker.stop();
       playlistManager.updateConfig();
       await playlistManager.weeklyReset([flowId]);

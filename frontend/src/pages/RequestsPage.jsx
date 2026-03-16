@@ -24,7 +24,7 @@ function RequestsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [downloadStatuses, setDownloadStatuses] = useState({});
-  const [reSearchingAlbumId, setReSearchingAlbumId] = useState(null);
+  const [reSearchingAlbumIds, setReSearchingAlbumIds] = useState({});
   const navigate = useNavigate();
   const { showError, showSuccess } = useToast();
   const activeAlbumIdsRef = useRef([]);
@@ -97,6 +97,7 @@ function RequestsPage() {
   }, []);
 
   const fetchActiveDownloadStatus = useCallback(async (albumIds) => {
+    const hasExplicitAlbumIds = Array.isArray(albumIds);
     const ids = Array.isArray(albumIds)
       ? albumIds
       : activeAlbumIdsRef.current;
@@ -106,7 +107,15 @@ function RequestsPage() {
     }
     try {
       const statuses = await getDownloadStatus(ids);
-      setDownloadStatuses(statuses || {});
+      setDownloadStatuses((prev) => {
+        if (hasExplicitAlbumIds) {
+          return {
+            ...prev,
+            ...(statuses || {}),
+          };
+        }
+        return statuses || {};
+      });
     } catch {}
   }, []);
 
@@ -194,7 +203,10 @@ function RequestsPage() {
   const handleReSearchRequest = async (request) => {
     if (!request?.albumId) return;
     const albumId = String(request.albumId);
-    setReSearchingAlbumId(albumId);
+    setReSearchingAlbumIds((prev) => ({
+      ...prev,
+      [albumId]: true,
+    }));
     try {
       setDownloadStatuses((prev) => ({
         ...prev,
@@ -210,7 +222,11 @@ function RequestsPage() {
         }`,
       );
     } finally {
-      setReSearchingAlbumId(null);
+      setReSearchingAlbumIds((prev) => {
+        const next = { ...prev };
+        delete next[albumId];
+        return next;
+      });
     }
   };
 
@@ -411,7 +427,7 @@ function RequestsPage() {
               (!statusValue && request.status === "failed");
             const isReSearching =
               request.albumId &&
-              String(request.albumId) === reSearchingAlbumId;
+              !!reSearchingAlbumIds[String(request.albumId)];
 
             return (
               <div

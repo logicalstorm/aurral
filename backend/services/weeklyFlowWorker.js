@@ -5,8 +5,22 @@ import { soulseekClient } from "./simpleSoulseekClient.js";
 import { playlistManager } from "./weeklyFlowPlaylistManager.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 
-const CONCURRENCY = 1;
+const parsedConcurrency = Number(process.env.WEEKLY_FLOW_CONCURRENCY);
+const CONCURRENCY =
+  Number.isFinite(parsedConcurrency) && parsedConcurrency > 0
+    ? Math.min(Math.floor(parsedConcurrency), 4)
+    : 1;
 const JOB_COOLDOWN_MS = 2000;
+const parsedSearchRounds = Number(process.env.WEEKLY_FLOW_SEARCH_ROUNDS);
+const SEARCH_ROUNDS =
+  Number.isFinite(parsedSearchRounds) && parsedSearchRounds > 0
+    ? Math.min(Math.floor(parsedSearchRounds), 4)
+    : 2;
+const parsedCandidateCount = Number(process.env.WEEKLY_FLOW_MATCH_CANDIDATES);
+const MAX_MATCH_CANDIDATES =
+  Number.isFinite(parsedCandidateCount) && parsedCandidateCount > 0
+    ? Math.min(Math.floor(parsedCandidateCount), 8)
+    : 4;
 const FALLBACK_MP3_REGEX = /^[^/\\]+-[a-f0-9]{8}\.mp3$/i;
 
 export class WeeklyFlowWorker {
@@ -90,6 +104,162 @@ export class WeeklyFlowWorker {
     console.log("[WeeklyFlowWorker] Worker stopped");
   }
 
+  _normalizeAlbumName(value) {
+    const text = String(value || "").replace(/\u0000/g, "").trim();
+    return text || null;
+  }
+
+  _parseAlbumFromPath(filePath) {
+    if (!filePath || typeof filePath !== "string") return null;
+    const normalized = filePath.replace(/\\/g, "/").trim();
+    const parts = normalized.split("/").filter(Boolean);
+    if (parts.length < 2) return null;
+    return this._normalizeAlbumName(parts[parts.length - 2]);
+  }
+
+  _decodeSynchsafeInt(bytes) {
+    if (!bytes || bytes.length < 4) return 0;
+    return (
+      ((bytes[0] & 0x7f) << 21) |
+      ((bytes[1] & 0x7f) << 14) |
+      ((bytes[2] & 0x7f) << 7) |
+      (bytes[3] & 0x7f)
+    );
+  }
+
+  _decodeUtf16be(buffer) {
+    if (!buffer || buffer.length === 0) return "";
+    const evenLength = buffer.length - (buffer.length % 2);
+    if (evenLength <= 0) return "";
+    const source = buffer.subarray(0, evenLength);
+    const swapped = Buffer.allocUnsafe(evenLength);
+    for (let i = 0; i < evenLength; i += 2) {
+      swapped[i] = source[i + 1];
+      swapped[i + 1] = source[i];
+    }
+    return swapped.toString("utf16le");
+  }
+
+  _decodeId3TextFrame(framePayload) {
+    if (!Buffer.isBuffer(framePayload) || framePayload.length === 0) {
+      return null;
+    }
+    const encoding = framePayload[0];
+    const content = framePayload.subarray(1);
+    let text = "";
+    if (encoding === 0) {
+      text = content.toString("latin1");
+    } else if (encoding === 1) {
+      if (content.length >= 2 && content[0] === 0xfe && content[1] === 0xff) {
+        text = this._decodeUtf16be(content.subarray(2));
+      } else if (
+        content.length >= 2 &&
+        content[0] === 0xff &&
+        content[1] === 0xfe
+      ) {
+        text = content.subarray(2).toString("utf16le");
+      } else {
+        text = content.toString("utf16le");
+      }
+    } else if (encoding === 2) {
+      text = this._decodeUtf16be(content);
+    } else if (encoding === 3) {
+      text = content.toString("utf8");
+    } else {
+      text = content.toString("utf8");
+    }
+    return this._normalizeAlbumName(text);
+  }
+
+  _extractAlbumFromId3v2(buffer) {
+    if (!Buffer.isBuffer(buffer) || buffer.length < 10) return null;
+    if (buffer.subarray(0, 3).toString("ascii") !== "ID3") return null;
+    const major = buffer[3];
+    const tagSize = this._decodeSynchsafeInt(buffer.subarray(6, 10));
+    const end = Math.min(buffer.length, 10 + tagSize);
+    let offset = 10;
+    while (offset < end) {
+      if (major === 2) {
+        if (offset + 6 > end) break;
+        const id = buffer.subarray(offset, offset + 3).toString("ascii");
+        if (!id || id === "\u0000\u0000\u0000") break;
+        const size =
+          (buffer[offset + 3] << 16) |
+          (buffer[offset + 4] << 8) |
+          buffer[offset + 5];
+        if (size <= 0) break;
+        const payloadStart = offset + 6;
+        const payloadEnd = payloadStart + size;
+        if (payloadEnd > end) break;
+        if (id === "TAL") {
+          const album = this._decodeId3TextFrame(
+            buffer.subarray(payloadStart, payloadEnd),
+          );
+          if (album) return album;
+        }
+        offset = payloadEnd;
+        continue;
+      }
+      if (offset + 10 > end) break;
+      const id = buffer.subarray(offset, offset + 4).toString("ascii");
+      if (!id || id === "\u0000\u0000\u0000\u0000") break;
+      const sizeBytes = buffer.subarray(offset + 4, offset + 8);
+      const size =
+        major === 4
+          ? this._decodeSynchsafeInt(sizeBytes)
+          : sizeBytes.readUInt32BE(0);
+      if (size <= 0) break;
+      const payloadStart = offset + 10;
+      const payloadEnd = payloadStart + size;
+      if (payloadEnd > end) break;
+      if (id === "TALB") {
+        const album = this._decodeId3TextFrame(
+          buffer.subarray(payloadStart, payloadEnd),
+        );
+        if (album) return album;
+      }
+      offset = payloadEnd;
+    }
+    return null;
+  }
+
+  _extractAlbumFromId3v1(buffer) {
+    if (!Buffer.isBuffer(buffer) || buffer.length < 128) return null;
+    const tag = buffer.subarray(buffer.length - 128, buffer.length);
+    if (tag.subarray(0, 3).toString("ascii") !== "TAG") return null;
+    const album = tag.subarray(63, 93).toString("latin1");
+    return this._normalizeAlbumName(album);
+  }
+
+  async _readAlbumFromMetadata(filePath) {
+    if (!filePath) return null;
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext !== ".mp3") return null;
+    let handle;
+    try {
+      handle = await fs.open(filePath, "r");
+      const stat = await handle.stat();
+      if (!stat?.size) return null;
+      const headSize = Math.min(stat.size, 256 * 1024);
+      const headBuffer = Buffer.allocUnsafe(headSize);
+      await handle.read(headBuffer, 0, headSize, 0);
+      const id3v2Album = this._extractAlbumFromId3v2(headBuffer);
+      if (id3v2Album) return id3v2Album;
+      if (stat.size >= 128) {
+        const tailBuffer = Buffer.allocUnsafe(128);
+        await handle.read(tailBuffer, 0, 128, stat.size - 128);
+        return this._extractAlbumFromId3v1(tailBuffer);
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      if (handle) {
+        await handle.close().catch(() => {});
+      }
+    }
+  }
+
   async processJob(job) {
     console.log(
       `[WeeklyFlowWorker] Processing job ${job.id}: ${job.artistName} - ${job.trackName} (${job.playlistType})`,
@@ -104,57 +274,57 @@ export class WeeklyFlowWorker {
     downloadTracker.setDownloading(job.id, stagingPath);
 
     try {
-      const results = await soulseekClient.search(
+      const initialResults = await soulseekClient.search(
         job.artistName,
         job.trackName,
       );
-      if (!results || results.length === 0) {
+      if (!initialResults || initialResults.length === 0) {
         throw new Error("No search results found");
       }
 
-      const bestMatch = soulseekClient.pickBestMatch(results, job.trackName);
-      if (!bestMatch) {
-        throw new Error("No suitable match found");
-      }
-
-      const extFromSoulseek = path.extname(bestMatch.file || "");
-      const ext =
-        extFromSoulseek && /^\.(flac|mp3|m4a|ogg|wav)$/i.test(extFromSoulseek)
-          ? extFromSoulseek
-          : ".mp3";
+      let selectedMatch = null;
+      let selectedExt = ".mp3";
+      let lastError = null;
 
       await new Promise((r) => setImmediate(r));
       await fs.mkdir(stagingDir, { recursive: true });
-      const stagingFile = `${job.artistName} - ${job.trackName}${ext}`;
+      const stagingFile = `${job.artistName} - ${job.trackName}.download`;
       const stagingFilePath = path.join(stagingDir, stagingFile);
 
-      let lastError = null;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        let match = bestMatch;
-        if (attempt === 1) {
-          const retryResults = await soulseekClient.search(
-            job.artistName,
-            job.trackName,
-          );
-          if (retryResults?.length) {
-            const retryMatch = soulseekClient.pickBestMatch(
-              retryResults,
-              job.trackName,
-            );
-            if (retryMatch) match = retryMatch;
+      for (let searchRound = 0; searchRound < SEARCH_ROUNDS; searchRound += 1) {
+        const sourceResults =
+          searchRound === 0
+            ? initialResults
+            : await soulseekClient.search(job.artistName, job.trackName);
+        const candidates = soulseekClient.pickBestMatches(
+          sourceResults,
+          job.trackName,
+          MAX_MATCH_CANDIDATES,
+        );
+        for (const candidate of candidates) {
+          const extFromSoulseek = path.extname(candidate.file || "");
+          const ext =
+            extFromSoulseek &&
+            /^\.(flac|mp3|m4a|ogg|wav)$/i.test(extFromSoulseek)
+              ? extFromSoulseek
+              : ".mp3";
+          try {
+            await soulseekClient.download(candidate, stagingFilePath);
+            selectedMatch = candidate;
+            selectedExt = ext;
+            lastError = null;
+            break;
+          } catch (err) {
+            lastError = err;
           }
         }
-        try {
-          await soulseekClient.download(match, stagingFilePath);
-          lastError = null;
+        if (selectedMatch) {
           break;
-        } catch (err) {
-          lastError = err;
-          const isTimeout = err?.message === "Download timeout";
-          if (!isTimeout || attempt === 1) throw err;
         }
       }
-      if (lastError) throw lastError;
+      if (!selectedMatch) {
+        throw lastError || new Error("No suitable match found");
+      }
 
       const downloadedFiles = await fs.readdir(stagingDir);
       if (downloadedFiles.length === 0) {
@@ -163,27 +333,21 @@ export class WeeklyFlowWorker {
 
       const downloadedFile = downloadedFiles[0];
       const sourcePath = path.join(stagingDir, downloadedFile);
-      const finalExt = path.extname(downloadedFile) || ext;
+      const finalExt = path.extname(downloadedFile) || selectedExt;
 
       const sanitize = (str) => {
         return str.replace(/[<>:"/\\|?*]/g, "_").trim();
       };
 
-      const parseAlbumFromPath = (filePath) => {
-        if (!filePath || typeof filePath !== "string") return null;
-        const normalized = filePath.replace(/\\/g, "/").trim();
-        const parts = normalized.split("/").filter(Boolean);
-        if (parts.length >= 2) {
-          return parts[parts.length - 2];
-        }
-        return null;
-      };
-
       const artistDir = sanitize(job.artistName);
-      const albumFromPath = parseAlbumFromPath(bestMatch.file);
-      const albumDir = albumFromPath
-        ? sanitize(albumFromPath)
-        : "Unknown Album";
+      const albumFromApi = this._normalizeAlbumName(job.albumName);
+      const albumFromMetadata = albumFromApi
+        ? null
+        : await this._readAlbumFromMetadata(sourcePath);
+      const albumFromPath = this._parseAlbumFromPath(selectedMatch.file);
+      const resolvedAlbum =
+        albumFromApi || albumFromMetadata || albumFromPath || "Unknown Album";
+      const albumDir = sanitize(resolvedAlbum);
       const finalDir = path.join(
         this.weeklyFlowRoot,
         "aurral-weekly-flow",
@@ -201,7 +365,7 @@ export class WeeklyFlowWorker {
 
       playlistManager.updateConfig(false);
 
-      downloadTracker.setDone(job.id, finalPath);
+      downloadTracker.setDone(job.id, finalPath, resolvedAlbum);
       console.log(`[WeeklyFlowWorker] Job ${job.id} completed: ${finalPath}`);
 
       await this.checkPlaylistComplete(job.playlistType);

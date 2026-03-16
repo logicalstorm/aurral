@@ -6,6 +6,9 @@ function rowToJob(row) {
     id: row.id,
     artistName: row.artist_name,
     trackName: row.track_name,
+    albumName: row.album_name || null,
+    reason: row.reason || null,
+    artistMbid: row.artist_mbid || null,
     playlistType: row.playlist_type,
     status: row.status,
     startedAt: row.started_at,
@@ -13,16 +16,17 @@ function rowToJob(row) {
     stagingPath: row.staging_path,
     finalPath: row.final_path,
     error: row.error,
+    createdAt: row.created_at,
   };
 }
 
 const insertStmt = db.prepare(`
-  INSERT INTO weekly_flow_jobs (id, artist_name, track_name, playlist_type, status, staging_path, final_path, error, started_at, completed_at, created_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO weekly_flow_jobs (id, artist_name, track_name, album_name, reason, artist_mbid, playlist_type, status, staging_path, final_path, error, started_at, completed_at, created_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 const updateStmt = db.prepare(`
-  UPDATE weekly_flow_jobs SET status = ?, staging_path = ?, final_path = ?, error = ?, started_at = ?, completed_at = ?
+  UPDATE weekly_flow_jobs SET status = ?, staging_path = ?, final_path = ?, error = ?, started_at = ?, completed_at = ?, album_name = ?
   WHERE id = ?
 `);
 
@@ -32,6 +36,14 @@ const selectAllStmt = db.prepare("SELECT * FROM weekly_flow_jobs");
 const updatePlaylistTypeStmt = db.prepare(
   "UPDATE weekly_flow_jobs SET playlist_type = ? WHERE playlist_type = ?",
 );
+
+const sortByCreatedAt = (jobs) =>
+  jobs.sort((a, b) => {
+    const aCreated = Number(a?.createdAt ?? 0);
+    const bCreated = Number(b?.createdAt ?? 0);
+    if (aCreated !== bCreated) return aCreated - bCreated;
+    return String(a?.id || "").localeCompare(String(b?.id || ""));
+  });
 
 export class WeeklyFlowDownloadTracker {
   constructor() {
@@ -52,6 +64,7 @@ export class WeeklyFlowDownloadTracker {
           job.error,
           job.startedAt,
           job.completedAt,
+          job.albumName ?? null,
           job.id,
         );
         updatePlaylistTypeStmt.run("discover", "recommended");
@@ -67,6 +80,7 @@ export class WeeklyFlowDownloadTracker {
           job.error,
           job.startedAt,
           job.completedAt,
+          job.albumName ?? null,
           job.id,
         );
       }
@@ -81,6 +95,9 @@ export class WeeklyFlowDownloadTracker {
       job.id,
       job.artistName,
       job.trackName,
+      job.albumName ?? null,
+      job.reason ?? null,
+      job.artistMbid ?? null,
       job.playlistType,
       job.status,
       job.stagingPath ?? null,
@@ -100,16 +117,25 @@ export class WeeklyFlowDownloadTracker {
       job.error ?? null,
       job.startedAt ?? null,
       job.completedAt ?? null,
+      job.albumName ?? null,
       job.id,
     );
   }
 
-  addJob(artistName, trackName, playlistType) {
+  addJob(track, playlistType) {
     const id = randomUUID();
+    const artistName = String(track?.artistName || "").trim();
+    const trackName = String(track?.trackName || "").trim();
+    if (!artistName || !trackName) {
+      return null;
+    }
     const job = {
       id,
       artistName,
       trackName,
+      albumName: track?.albumName ? String(track.albumName).trim() : null,
+      reason: track?.reason ? String(track.reason).trim() : null,
+      artistMbid: track?.artistMbid ? String(track.artistMbid).trim() : null,
       playlistType,
       status: "pending",
       startedAt: null,
@@ -127,7 +153,8 @@ export class WeeklyFlowDownloadTracker {
   addJobs(tracks, playlistType) {
     const ids = [];
     for (const track of tracks) {
-      const id = this.addJob(track.artistName, track.trackName, playlistType);
+      const id = this.addJob(track, playlistType);
+      if (!id) continue;
       ids.push(id);
     }
     return ids;
@@ -168,12 +195,18 @@ export class WeeklyFlowDownloadTracker {
     return true;
   }
 
-  setDone(id, finalPath) {
+  setDone(id, finalPath, albumName = null) {
     const job = this.jobs.get(id);
     if (!job) return false;
     job.status = "done";
     job.completedAt = Date.now();
     job.finalPath = finalPath;
+    const safeAlbum = String(albumName || "").trim();
+    if (safeAlbum) {
+      job.albumName = safeAlbum;
+    } else if (!job.albumName) {
+      job.albumName = null;
+    }
     this._update(job);
     return true;
   }
@@ -196,7 +229,7 @@ export class WeeklyFlowDownloadTracker {
         jobs.push(job);
       }
     }
-    return jobs;
+    return sortByCreatedAt(jobs);
   }
 
   getByStatus(status) {
@@ -239,7 +272,7 @@ export class WeeklyFlowDownloadTracker {
   }
 
   getAll() {
-    return Array.from(this.jobs.values());
+    return sortByCreatedAt(Array.from(this.jobs.values()));
   }
 
   getStats() {
