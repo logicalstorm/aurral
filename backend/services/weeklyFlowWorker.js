@@ -288,7 +288,7 @@ export class WeeklyFlowWorker {
 
       await new Promise((r) => setImmediate(r));
       await fs.mkdir(stagingDir, { recursive: true });
-      const stagingFile = `${job.artistName} - ${job.trackName}.download`;
+      const stagingFile = `${job.artistName} - ${job.trackName}`;
       const stagingFilePath = path.join(stagingDir, stagingFile);
 
       for (let searchRound = 0; searchRound < SEARCH_ROUNDS; searchRound += 1) {
@@ -333,7 +333,11 @@ export class WeeklyFlowWorker {
 
       const downloadedFile = downloadedFiles[0];
       const sourcePath = path.join(stagingDir, downloadedFile);
-      const finalExt = path.extname(downloadedFile) || selectedExt;
+      const downloadedExt = path.extname(downloadedFile).toLowerCase();
+      const finalExt =
+        downloadedExt && /^\.(flac|mp3|m4a|ogg|wav)$/i.test(downloadedExt)
+          ? downloadedExt
+          : selectedExt;
 
       const sanitize = (str) => {
         return str.replace(/[<>:"/\\|?*]/g, "_").trim();
