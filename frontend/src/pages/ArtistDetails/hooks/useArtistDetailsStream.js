@@ -8,6 +8,7 @@ import {
   getSimilarArtistsForArtist,
   getAppSettings,
   getReleaseGroupCover,
+  getStoredAuth,
 } from "../../../utils/api";
 import { emptyArtistShape } from "../constants";
 
@@ -69,13 +70,11 @@ export function useArtistDetailsStream(mbid, artistNameFromNav) {
       .catch(() => {});
 
     const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
-    const password = localStorage.getItem("auth_password");
-    const username = localStorage.getItem("auth_user") || "admin";
+    const { token } = getStoredAuth();
 
     let streamUrl = `${API_BASE_URL}/artists/${mbid}/stream`;
     const streamParams = [];
-    if (password) {
-      const token = btoa(`${username}:${password}`);
+    if (token) {
       streamParams.push(`token=${encodeURIComponent(token)}`);
     }
     if (artistNameFromNav) {

@@ -350,8 +350,12 @@ export default function registerArtists(router) {
     },
   );
 
-  router.post("/artists/:mbid/refresh", async (req, res) => {
-    try {
+  router.post(
+    "/artists/:mbid/refresh",
+    requireAuth,
+    requirePermission("changeMonitoring"),
+    async (req, res) => {
+      try {
       const { mbid } = req.params;
       if (!UUID_REGEX.test(mbid)) {
         return res.status(400).json({ error: "Invalid MBID format" });
@@ -391,16 +395,17 @@ export default function registerArtists(router) {
         }
       }
 
-      res.json({
-        success: true,
-        message: "Artist refreshed successfully",
-        albums: albums.length,
-      });
-    } catch (error) {
-      res.status(500).json({
-        error: "Failed to refresh artist",
-        message: error.message,
-      });
-    }
-  });
+        res.json({
+          success: true,
+          message: "Artist refreshed successfully",
+          albums: albums.length,
+        });
+      } catch (error) {
+        res.status(500).json({
+          error: "Failed to refresh artist",
+          message: error.message,
+        });
+      }
+    },
+  );
 }

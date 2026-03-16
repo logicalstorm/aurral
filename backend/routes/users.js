@@ -2,6 +2,8 @@ import express from "express";
 import bcrypt from "bcrypt";
 import { userOps } from "../config/db-helpers.js";
 import { requireAuth, requireAdmin } from "../middleware/requirePermission.js";
+import { requirePasswordStrength } from "../middleware/validation.js";
+import { deleteSessionsByUserId } from "../config/session-helpers.js";
 
 const router = express.Router();
 
@@ -23,6 +25,10 @@ router.post("/", requireAuth, requireAdmin, (req, res) => {
     }
     if (userOps.getUserByUsername(un)) {
       return res.status(409).json({ error: "Username already exists" });
+    }
+    const passwordValidation = requirePasswordStrength(password);
+    if (!passwordValidation.valid) {
+      return res.status(400).json({ error: passwordValidation.error });
     }
     const hash = bcrypt.hashSync(password, 10);
     const perms = permissions
@@ -73,12 +79,23 @@ router.patch("/:id", requireAuth, (req, res) => {
       if (!bcrypt.compareSync(currentPassword, existing.passwordHash)) {
         return res.status(401).json({ error: "Current password is incorrect" });
       }
+      const passwordValidation = requirePasswordStrength(password);
+      if (!passwordValidation.valid) {
+        return res.status(400).json({ error: passwordValidation.error });
+      }
       const hash = bcrypt.hashSync(password, 10);
       userOps.updateUser(id, { passwordHash: hash });
+      deleteSessionsByUserId(id);
       return res.json({ id, username: existing.username, role: existing.role });
     }
     const updates = {};
-    if (password) updates.passwordHash = bcrypt.hashSync(password, 10);
+    if (password) {
+      const passwordValidation = requirePasswordStrength(password);
+      if (!passwordValidation.valid) {
+        return res.status(400).json({ error: passwordValidation.error });
+      }
+      updates.passwordHash = bcrypt.hashSync(password, 10);
+    }
     if (permissions !== undefined) updates.permissions = permissions;
     if (role !== undefined) updates.role = role;
     if (Object.keys(updates).length === 0) {
@@ -104,12 +121,17 @@ router.post("/me/password", requireAuth, (req, res) => {
     if (!newPassword) {
       return res.status(400).json({ error: "New password required" });
     }
+    const passwordValidation = requirePasswordStrength(newPassword);
+    if (!passwordValidation.valid) {
+      return res.status(400).json({ error: passwordValidation.error });
+    }
     const u = userOps.getUserById(req.user.id);
     if (!u || !bcrypt.compareSync(currentPassword || "", u.passwordHash)) {
       return res.status(401).json({ error: "Current password is incorrect" });
     }
     const hash = bcrypt.hashSync(newPassword, 10);
     userOps.updateUser(req.user.id, { passwordHash: hash });
+    deleteSessionsByUserId(req.user.id);
     res.json({ success: true });
   } catch (e) {
     res
@@ -128,6 +150,7 @@ router.delete("/:id", requireAuth, requireAdmin, (req, res) => {
     if (!existing) {
       return res.status(404).json({ error: "User not found" });
     }
+    deleteSessionsByUserId(id);
     userOps.deleteUser(id);
     res.json({ success: true });
   } catch (e) {

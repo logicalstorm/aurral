@@ -12,6 +12,7 @@ import { libraryManager } from "../services/libraryManager.js";
 import { dbOps } from "../config/db-helpers.js";
 import { imagePrefetchService } from "../services/imagePrefetchService.js";
 import { defaultDiscoveryPreferences } from "../config/constants.js";
+import { requireAuth, requireAdmin } from "../middleware/requirePermission.js";
 
 const router = express.Router();
 
@@ -23,7 +24,7 @@ let lastDiscoveryRevalidateAt = 0;
 
 let discoveryPreferences = { ...defaultDiscoveryPreferences };
 
-router.post("/refresh", (req, res) => {
+router.post("/refresh", requireAuth, requireAdmin, (req, res) => {
   const discoveryCache = getDiscoveryCache();
   if (discoveryCache.isUpdating) {
     return res.status(409).json({
@@ -38,13 +39,13 @@ router.post("/refresh", (req, res) => {
   });
 });
 
-router.post("/clear", async (req, res) => {
+router.post("/clear", requireAuth, requireAdmin, async (req, res) => {
   dbOps.clearImages();
   clearApiCaches();
   res.json({ message: "Image cache cleared" });
 });
 
-router.post("/clear-discovery", async (req, res) => {
+router.post("/clear-discovery", requireAuth, requireAdmin, async (req, res) => {
   dbOps.updateDiscoveryCache({
     recommendations: [],
     globalTop: [],
@@ -69,7 +70,7 @@ router.post("/clear-discovery", async (req, res) => {
   res.json({ message: "Discovery cache cleared" });
 });
 
-router.get("/", async (req, res) => {
+router.get("/", requireAuth, async (req, res) => {
   const hasLastfmKey = !!getLastfmApiKey();
   const settings = dbOps.getSettings();
   const lastfmUsername = settings.integrations?.lastfm?.username || null;
@@ -431,11 +432,11 @@ router.get("/by-tag", async (req, res) => {
   }
 });
 
-router.get("/preferences", (req, res) => {
+router.get("/preferences", requireAuth, (req, res) => {
   res.json(discoveryPreferences);
 });
 
-router.post("/preferences", (req, res) => {
+router.post("/preferences", requireAuth, (req, res) => {
   try {
     const updates = req.body;
 
@@ -456,7 +457,7 @@ router.post("/preferences", (req, res) => {
   }
 });
 
-router.post("/preferences/reset", (req, res) => {
+router.post("/preferences/reset", requireAuth, (req, res) => {
   discoveryPreferences = { ...defaultDiscoveryPreferences };
   res.json({
     success: true,
@@ -464,7 +465,7 @@ router.post("/preferences/reset", (req, res) => {
   });
 });
 
-router.post("/preferences/exclude-genre", (req, res) => {
+router.post("/preferences/exclude-genre", requireAuth, (req, res) => {
   try {
     const { genre } = req.body;
     if (!genre) {
@@ -487,7 +488,7 @@ router.post("/preferences/exclude-genre", (req, res) => {
   }
 });
 
-router.delete("/preferences/exclude-genre/:genre", (req, res) => {
+router.delete("/preferences/exclude-genre/:genre", requireAuth, (req, res) => {
   try {
     const { genre } = req.params;
     discoveryPreferences.excludedGenres =
@@ -507,7 +508,7 @@ router.delete("/preferences/exclude-genre/:genre", (req, res) => {
   }
 });
 
-router.post("/preferences/exclude-artist", (req, res) => {
+router.post("/preferences/exclude-artist", requireAuth, (req, res) => {
   try {
     const { artistId, artistName } = req.body;
     if (!artistId) {
@@ -532,7 +533,7 @@ router.post("/preferences/exclude-artist", (req, res) => {
   }
 });
 
-router.delete("/preferences/exclude-artist/:artistId", (req, res) => {
+router.delete("/preferences/exclude-artist/:artistId", requireAuth, (req, res) => {
   try {
     const { artistId } = req.params;
     discoveryPreferences.excludedArtists =

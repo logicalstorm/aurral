@@ -30,9 +30,50 @@ const api = axios.create({
 
 export const AUTH_INVALID_EVENT = "aurral:auth-invalid";
 
+const AUTH_TOKEN_KEY = "auth_token";
+const AUTH_PASSWORD_KEY = "auth_password";
+const AUTH_USER_KEY = "auth_user";
+
+function readAuthFromStorage(storage) {
+  if (!storage) return { token: "" };
+  return {
+    token: storage.getItem(AUTH_TOKEN_KEY) || "",
+  };
+}
+
+export const getStoredAuth = () => {
+  const sessionAuth = readAuthFromStorage(globalThis?.sessionStorage);
+  if (sessionAuth.token) return sessionAuth;
+  const localAuth = readAuthFromStorage(globalThis?.localStorage);
+  if (localAuth.token && globalThis?.sessionStorage) {
+    globalThis.sessionStorage.setItem(AUTH_TOKEN_KEY, localAuth.token);
+    globalThis.localStorage?.removeItem(AUTH_TOKEN_KEY);
+    globalThis.localStorage?.removeItem(AUTH_USER_KEY);
+    globalThis.localStorage?.removeItem(AUTH_PASSWORD_KEY);
+    return localAuth;
+  }
+  return sessionAuth;
+};
+
+export const setStoredAuth = ({ token = "" } = {}) => {
+  if (!globalThis?.sessionStorage) return;
+  if (!token) {
+    globalThis.sessionStorage.removeItem(AUTH_TOKEN_KEY);
+    return;
+  }
+  globalThis.sessionStorage.setItem(AUTH_TOKEN_KEY, token);
+  globalThis.localStorage?.removeItem(AUTH_TOKEN_KEY);
+  globalThis.localStorage?.removeItem(AUTH_PASSWORD_KEY);
+  globalThis.localStorage?.removeItem(AUTH_USER_KEY);
+};
+
 export const clearAuthStorage = () => {
-  localStorage.removeItem("auth_password");
-  localStorage.removeItem("auth_user");
+  globalThis?.sessionStorage?.removeItem(AUTH_TOKEN_KEY);
+  globalThis?.localStorage?.removeItem(AUTH_TOKEN_KEY);
+  globalThis?.sessionStorage?.removeItem(AUTH_PASSWORD_KEY);
+  globalThis?.sessionStorage?.removeItem(AUTH_USER_KEY);
+  globalThis?.localStorage?.removeItem(AUTH_PASSWORD_KEY);
+  globalThis?.localStorage?.removeItem(AUTH_USER_KEY);
 };
 
 const libraryLookupCache = new Map();
@@ -54,11 +95,9 @@ const setLibraryLookupCacheEntry = (id, value) => {
 
 api.interceptors.request.use(
   (config) => {
-    const password = localStorage.getItem("auth_password");
-    const username = localStorage.getItem("auth_user") || "admin";
-    if (password) {
-      const token = btoa(`${username}:${password}`);
-      config.headers["Authorization"] = `Basic ${token}`;
+    const { token } = getStoredAuth();
+    if (token) {
+      config.headers["Authorization"] = `Bearer ${token}`;
     }
     return config;
   },
@@ -86,6 +125,21 @@ api.interceptors.response.use(
 
 export const checkHealth = async () => {
   const response = await api.get("/health");
+  return response.data;
+};
+
+export const loginApi = async (username, password) => {
+  const response = await api.post("/auth/login", { username, password });
+  return response.data;
+};
+
+export const logoutApi = async () => {
+  const response = await api.post("/auth/logout");
+  return response.data;
+};
+
+export const getMe = async () => {
+  const response = await api.get("/auth/me");
   return response.data;
 };
 
@@ -191,16 +245,26 @@ export const updateArtistOverrides = async (
   return response.data;
 };
 
-export const getStreamUrl = (songId) => {
+export const getStreamUrl = async (songId) => {
+  return buildStreamUrl(`/library/stream/${encodeURIComponent(songId)}`);
+};
+
+export const getStreamAccessToken = async () => {
+  const response = await api.post("/health/stream-token");
+  return response.data?.token || null;
+};
+
+export const buildStreamUrl = async (path) => {
   const base = import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
-  const password = localStorage.getItem("auth_password");
-  const username = localStorage.getItem("auth_user") || "admin";
-  let url = `${base}/library/stream/${encodeURIComponent(songId)}`;
-  if (password) {
-    const token = btoa(`${username}:${password}`);
-    url += `?token=${encodeURIComponent(token)}`;
+  let relativePath = String(path || "");
+  if (!relativePath.startsWith("/")) {
+    relativePath = `/${relativePath}`;
   }
-  return url;
+  const { token } = getStoredAuth();
+  const url = `${base}${relativePath}`;
+  if (!token) return url;
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}token=${encodeURIComponent(token)}`;
 };
 
 export const getFlowTrackStreamUrl = (jobId) => {
@@ -450,12 +514,9 @@ export const searchArtistsByTag = async (
 };
 
 export const verifyCredentials = async (password, username = "admin") => {
-  const token = btoa(`${username}:${password}`);
   try {
-    const res = await api.get("/health", {
-      headers: { Authorization: `Basic ${token}` },
-    });
-    return !!res.data?.user;
+    const result = await loginApi(username, password);
+    return !!result?.token;
   } catch (error) {
     if (
       error.response &&
@@ -493,7 +554,6 @@ export const deleteUser = async (id) => {
 
 export const changeMyPassword = async (currentPassword, newPassword) => {
   await api.post("/users/me/password", { currentPassword, newPassword });
-  localStorage.setItem("auth_password", newPassword);
 };
 
 export const getAppSettings = async () => {

@@ -1,6 +1,10 @@
 import express from "express";
 import { UUID_REGEX } from "../config/constants.js";
 import { noCache } from "../middleware/cache.js";
+import {
+  requireAuth,
+  requirePermission,
+} from "../middleware/requirePermission.js";
 import { invalidateAllDownloadStatusesCache } from "./library/handlers/downloads.js";
 
 const router = express.Router();
@@ -41,7 +45,7 @@ const toIso = (value) => {
   }
 };
 
-router.get("/", noCache, async (req, res) => {
+router.get("/", requireAuth, noCache, async (req, res) => {
   try {
     pruneDismissedAlbumIds();
     const { lidarrClient } = await import("../services/lidarrClient.js");
@@ -351,7 +355,11 @@ router.get("/", noCache, async (req, res) => {
   }
 });
 
-router.delete("/album/:albumId", async (req, res) => {
+router.delete(
+  "/album/:albumId",
+  requireAuth,
+  requirePermission("deleteAlbum"),
+  async (req, res) => {
   const { albumId } = req.params;
   if (!albumId) return res.status(400).json({ error: "albumId is required" });
 
@@ -382,9 +390,14 @@ router.delete("/album/:albumId", async (req, res) => {
   } catch {
     res.status(500).json({ error: "Failed to remove request" });
   }
-});
+  },
+);
 
-router.delete("/:mbid", async (req, res) => {
+router.delete(
+  "/:mbid",
+  requireAuth,
+  requirePermission("deleteArtist"),
+  async (req, res) => {
   const { mbid } = req.params;
   if (!UUID_REGEX.test(mbid)) {
     return res.status(400).json({ error: "Invalid MBID format" });
@@ -418,6 +431,7 @@ router.delete("/:mbid", async (req, res) => {
   } catch {
     res.status(500).json({ error: "Failed to remove request" });
   }
-});
+  },
+);
 
 export default router;

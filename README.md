@@ -150,6 +150,26 @@ Navidrome should be configured to purge missing tracks so Weekly Flow rotations 
 
 ## Authentication & Reverse Proxy
 
+### Local users (default)
+
+Aurral uses local user accounts created in onboarding. Authentication is HTTP Basic Auth at the API layer. Use HTTPS when exposing it publicly.
+
+### Reset forgotten admin password (terminal)
+
+If you forget your admin password, you can reset it from the terminal:
+
+```bash
+npm run auth:reset-admin-password -- --password "new-password"
+```
+
+Or generate a random password:
+
+```bash
+npm run auth:reset-admin-password -- --generate
+```
+
+The `--` after `npm run auth:reset-admin-password` tells npm to pass the remaining flags to the reset script.
+
 ### Reverse-proxy auth (OAuth2/OIDC)
 
 If you want SSO, place Aurral behind an auth-aware reverse proxy and forward the authenticated username in a header.
