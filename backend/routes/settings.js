@@ -514,12 +514,91 @@ router.post("/lidarr/apply-community-guide", async (req, res) => {
         },
       ];
 
+      const toFieldArray = (fields) => {
+        if (!fields || typeof fields !== "object" || Array.isArray(fields)) {
+          return fields;
+        }
+        return Object.entries(fields)
+          .filter(([, value]) => value !== undefined && value !== null)
+          .map(([name, value]) => ({ name, value }));
+      };
+
+      const flattenFields = (fields) => {
+        if (!fields || typeof fields !== "object" || Array.isArray(fields)) {
+          return {};
+        }
+        return Object.fromEntries(
+          Object.entries(fields).filter(
+            ([, value]) => value !== undefined && value !== null,
+          ),
+        );
+      };
+
+      const buildCustomFormatPayloadVariants = (format) => {
+        const base = JSON.parse(JSON.stringify(format));
+        const variants = [base];
+
+        const withFieldArray = {
+          ...base,
+          specifications: Array.isArray(base.specifications)
+            ? base.specifications.map((spec) => ({
+                ...spec,
+                fields: toFieldArray(spec?.fields),
+              }))
+            : base.specifications,
+        };
+        variants.push(withFieldArray);
+
+        const withFlattenedFields = {
+          ...base,
+          specifications: Array.isArray(base.specifications)
+            ? base.specifications.map((spec) => {
+                const fields = flattenFields(spec?.fields);
+                const normalizedSpec = { ...spec, ...fields };
+                delete normalizedSpec.fields;
+                return normalizedSpec;
+              })
+            : base.specifications,
+        };
+        variants.push(withFlattenedFields);
+
+        const seen = new Set();
+        return variants.filter((variant) => {
+          const key = JSON.stringify(variant);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      };
+
+      const createCustomFormatWithFallback = async (format) => {
+        const payloads = buildCustomFormatPayloadVariants(format);
+        let lastError = null;
+
+        for (const payload of payloads) {
+          try {
+            return await lidarrClient.createCustomFormat(payload);
+          } catch (err) {
+            lastError = err;
+            const message = String(err?.message || "");
+            const isBadRequest =
+              message.includes("400 Bad Request") ||
+              message.includes("Lidarr API error: 400");
+            if (!isBadRequest) {
+              throw err;
+            }
+          }
+        }
+
+        throw lastError || new Error("Failed to create custom format");
+      };
+
       const existingFormats = await lidarrClient.getCustomFormats();
       for (const format of customFormats) {
         const existing = existingFormats.find((f) => f.name === format.name);
         if (!existing) {
           try {
-            const created = await lidarrClient.createCustomFormat(format);
+            const created = await createCustomFormatWithFallback(format);
             results.customFormats.push(created);
           } catch (err) {
             results.errors.push(
@@ -755,28 +834,36 @@ router.post("/lidarr/apply-community-guide", async (req, res) => {
       const profileItems = [...otherItems, ...selectedItems];
       const flacQualityId = qualityItemMap.get("FLAC")?.quality?.id;
 
+      const formatItems = results.customFormats.map((cf) => {
+        const scores = {
+          "Preferred Groups": 10,
+          CD: 2,
+          WEB: 1,
+          Lossless: 1,
+          Vinyl: -5,
+        };
+        return {
+          format: cf.id,
+          name: cf.name,
+          score: scores[cf.name] || 0,
+        };
+      });
+
+      if (formatItems.length === 0) {
+        results.errors.push(
+          "No custom formats were created; quality profile minFormatScore set to 0.",
+        );
+      }
+
       const profileData = {
         ...baseProfile,
         name: "Aurral - HQ",
         upgradeAllowed: true,
         cutoff: flacQualityId ?? baseProfile.cutoff,
         items: profileItems,
-        minFormatScore: 1,
+        minFormatScore: formatItems.length > 0 ? 1 : 0,
         cutoffFormatScore: 0,
-        formatItems: results.customFormats.map((cf) => {
-          const scores = {
-            "Preferred Groups": 10,
-            CD: 2,
-            WEB: 1,
-            Lossless: 1,
-            Vinyl: -5,
-          };
-          return {
-            format: cf.id,
-            name: cf.name,
-            score: scores[cf.name] || 0,
-          };
-        }),
+        formatItems,
       };
 
       if (!aurralProfile) {
