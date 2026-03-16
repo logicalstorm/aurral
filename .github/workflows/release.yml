@@ -21,6 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.14.0
+          cache: npm
       - run: npm ci
       - name: Release
         env:
@@ -96,7 +97,7 @@ jobs:
             } >> "$GITHUB_OUTPUT"
           fi
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         if: steps.release_info.outputs.release_version != ''
         with:
           context: .
