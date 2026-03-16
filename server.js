@@ -95,6 +95,7 @@ app.use(
         connectSrc: ["'self'", "ws:", "wss:"],
         mediaSrc: ["'self'"],
         frameSrc: ["'none'"],
+        upgradeInsecureRequests: null,
       },
     },
     frameguard: { action: "deny" },
