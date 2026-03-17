@@ -156,6 +156,19 @@ const monitorArtistAlbums = async (artist, albums, lidarrClient) => {
   }
 };
 
+const waitForLidarrAlbums = async (artistId) => {
+  const attempts = 20;
+  const delayMs = 1500;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const albums = await libraryManager.getAlbums(artistId);
+    if (albums.length > 0) return albums;
+    if (attempt < attempts) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  return [];
+};
+
 export default function registerArtists(router) {
   router.get("/artists", cacheMiddleware(120), async (req, res) => {
     try {
@@ -267,11 +280,7 @@ export default function registerArtists(router) {
             return;
           }
           if (requestedMonitorOption && requestedMonitorOption !== "none") {
-            let albums = await libraryManager.getAlbums(artist.id);
-            if (!albums.length) {
-              await libraryManager.fetchArtistAlbums(artist.id, mbid);
-              albums = await libraryManager.getAlbums(artist.id);
-            }
+            const albums = await waitForLidarrAlbums(artist.id);
             await monitorArtistAlbums(artist, albums, lidarrClient);
           }
         })();
@@ -305,12 +314,8 @@ export default function registerArtists(router) {
         const { lidarrClient } =
           await import("../../../services/lidarrClient.js");
         if (lidarrClient && lidarrClient.isConfigured()) {
-          let albums = await libraryManager.getAlbums(artist.id);
           if (artist.monitorOption && artist.monitorOption !== "none") {
-            if (!albums.length) {
-              await libraryManager.fetchArtistAlbums(artist.id, mbid);
-              albums = await libraryManager.getAlbums(artist.id);
-            }
+            const albums = await waitForLidarrAlbums(artist.id);
             await monitorArtistAlbums(artist, albums, lidarrClient);
           }
         }
