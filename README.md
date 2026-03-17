@@ -35,11 +35,13 @@ services:
     ports:
       - "3001:3001"
     environment:
-      - DOWNLOAD_FOLDER=/data/downloads/tmp
+      - DOWNLOAD_FOLDER=${DL_FOLDER:-./data/downloads}
     volumes:
-      - /data/downloads/tmp:/app/downloads
-      - ./data:/app/backend/data
+      - ${DL_FOLDER:-./data/downloads}:/app/downloads
+      - ${STORAGE:-./data}:/app/backend/data
 ```
+
+You can optionally set `DL_FOLDER` and `STORAGE` in a `.env` file next to your compose file. If you leave them unset, Aurral uses `./data/downloads` and `./data`.
 
 Start it:
 
@@ -130,12 +132,13 @@ If you want Weekly Flow to appear as a separate library inside Navidrome:
 
 1. In Aurral: Settings → Integrations → Navidrome (URL, username, password)
 2. Ensure your compose config maps a host folder into `/app/downloads`
-3. Set `DOWNLOAD_FOLDER` to the same host path you mapped in the volume
+3. Set `DL_FOLDER` once and use it for both `DOWNLOAD_FOLDER` and the `/app/downloads` volume
 
 Example:
 
-- Volume: `/data/downloads/tmp:/app/downloads`
-- Env: `DOWNLOAD_FOLDER=/data/downloads/tmp`
+- `DL_FOLDER=/data/downloads/tmp`
+- Volume: `${DL_FOLDER}:/app/downloads`
+- Env: `DOWNLOAD_FOLDER=${DL_FOLDER}`
 
 Aurral will:
 
@@ -203,7 +206,7 @@ Most configuration is done in the web UI, but some settings are controlled by en
 |---|---|---|
 | `PORT` | HTTP port | `3001` |
 | `TRUST_PROXY` | Express trust proxy setting (`true`/`false`/number) | `1` |
-| `DOWNLOAD_FOLDER` | Host path used for Navidrome Weekly Flow library | `/data/downloads/tmp` |
+| `DOWNLOAD_FOLDER` | Weekly Flow root folder path used for Navidrome library creation | `${DL_FOLDER:-./data/downloads}` (in compose example) |
 | `PUID` / `PGID` | Run container as this UID/GID (when starting as root) | `1001/1001` |
 | `LIDARR_INSECURE` | Allow invalid TLS certificates (`true`/`1`) | unset |
 | `LIDARR_TIMEOUT_MS` | Lidarr request timeout | `8000` |
