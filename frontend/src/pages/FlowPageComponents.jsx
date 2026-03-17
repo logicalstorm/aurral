@@ -609,83 +609,87 @@ export function FlowStatusCards({
   flowCount,
   runningCount,
   completedCount,
+  isSocketConnected,
 }) {
+  const queuePending = Number(status?.operationQueue?.pending || 0);
+  const queueProcessing = status?.operationQueue?.processing === true;
+  const idleCount = Math.max(flowCount - runningCount - completedCount, 0);
+  const workerRunning = status?.worker?.running === true;
+
   return (
-    <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr] mb-6">
-      <div className="p-4 bg-card rounded-lg border border-white/5">
-        <div className="flex items-center justify-between">
-          <span className="text-xs uppercase tracking-[0.3em] text-[#8b8b90]">
-            Worker
+    <div className="mb-6 rounded-lg border border-white/5 bg-card p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs uppercase tracking-[0.3em] text-[#8b8b90]">
+          Worker Overview
+        </span>
+        <div className="flex items-center gap-2">
+          <span className={`badge ${workerRunning ? "badge-success" : "badge-neutral"}`}>
+            {workerRunning ? "Running" : "Stopped"}
           </span>
           <span
-            className={`badge ${
-              status?.worker?.running ? "badge-success" : "badge-neutral"
+            className={`text-xs ${
+              isSocketConnected ? "text-[#9aa886]" : "text-[#c1c1c3]"
             }`}
           >
-            {status?.worker?.running ? "Running" : "Stopped"}
+            {isSocketConnected ? "Live updates on" : "Reconnecting live updates..."}
           </span>
         </div>
-        <div className="mt-3 flex items-center gap-3">
-          {status?.worker?.running ? (
-            <Loader2 className="w-4 h-4 animate-spin text-[#9aa886]" />
-          ) : (
-            <Clock className="w-4 h-4 text-[#c1c1c3]" />
-          )}
-          <div className="text-sm text-white">
-            {status?.worker?.running
-              ? `Worker ${status?.worker?.processing ? "processing…" : "running"}`
-              : "Worker stopped"}
-          </div>
-        </div>
-        {status?.stats && (
-          <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-[#c1c1c3]">
-            <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-              <span>Done</span>
-              <span className="text-white">{status.stats.done}</span>
-            </div>
-            <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-              <span>Failed</span>
-              <span className="text-white">{status.stats.failed}</span>
-            </div>
-            <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-              <span>Pending</span>
-              <span className="text-white">{status.stats.pending}</span>
-            </div>
-            <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-              <span>Downloading</span>
-              <span className="text-white">{status.stats.downloading}</span>
-            </div>
-          </div>
-        )}
       </div>
-      <div className="p-4 bg-card rounded-lg border border-white/5">
-        <div className="flex items-center justify-between">
-          <span className="text-xs uppercase tracking-[0.3em] text-[#8b8b90]">
-            Flows
-          </span>
-          <span className="text-xs text-[#c1c1c3]">
-            {enabledCount}/{flowCount} on
-          </span>
+      <div className="mt-3 flex items-center gap-2 text-sm text-white">
+        {workerRunning ? (
+          <Loader2 className="w-4 h-4 animate-spin text-[#9aa886]" />
+        ) : (
+          <Clock className="w-4 h-4 text-[#c1c1c3]" />
+        )}
+        <span>
+          {workerRunning
+            ? status?.worker?.processing
+              ? "Processing tracks now"
+              : "Worker is online and waiting for jobs"
+            : "Worker is idle"}
+        </span>
+      </div>
+      <div className="mt-2 text-xs text-[#c1c1c3]">
+        {queuePending > 0
+          ? `${queuePending} flow operations queued`
+          : queueProcessing
+            ? "Applying queued flow operation"
+            : "No queued flow operations"}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4 text-xs text-[#c1c1c3]">
+        <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
+          <span>Flows On</span>
+          <span className="text-white">{enabledCount}/{flowCount}</span>
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[#c1c1c3]">
-          <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-            <span>Total</span>
-            <span className="text-white">{flowCount}</span>
-          </div>
-          <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-            <span>Running</span>
-            <span className="text-white">{runningCount}</span>
-          </div>
-          <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-            <span>Completed</span>
-            <span className="text-white">{completedCount}</span>
-          </div>
-          <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-            <span>Idle</span>
-            <span className="text-white">
-              {Math.max(flowCount - runningCount - completedCount, 0)}
-            </span>
-          </div>
+        <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
+          <span>Running</span>
+          <span className="text-white">{runningCount}</span>
+        </div>
+        <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
+          <span>Completed</span>
+          <span className="text-white">{completedCount}</span>
+        </div>
+        <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
+          <span>Idle</span>
+          <span className="text-white">{idleCount}</span>
+        </div>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4 text-xs text-[#c1c1c3]">
+        <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
+          <span>Pending</span>
+          <span className="text-white">{status?.stats?.pending ?? 0}</span>
+        </div>
+        <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
+          <span>Downloading</span>
+          <span className="text-white">{status?.stats?.downloading ?? 0}</span>
+        </div>
+        <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
+          <span>Done</span>
+          <span className="text-white">{status?.stats?.done ?? 0}</span>
+        </div>
+        <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
+          <span>Failed</span>
+          <span className="text-white">{status?.stats?.failed ?? 0}</span>
         </div>
       </div>
     </div>

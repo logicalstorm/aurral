@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -11,6 +11,7 @@ import {
   getFlowTrackStreamUrl,
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
+import { useWebSocketChannel } from "../hooks/useWebSocket";
 import {
   FlowCard,
   FlowEmptyState,
@@ -466,9 +467,11 @@ function FlowPage() {
   const [tracksLoadingByFlowId, setTracksLoadingByFlowId] = useState({});
   const [tracksErrorByFlowId, setTracksErrorByFlowId] = useState({});
   const [tracksByFlowId, setTracksByFlowId] = useState({});
+  const [bulkActionRunning, setBulkActionRunning] = useState(false);
+  const lastFlowWsMessageAtRef = useRef(0);
   const { showSuccess, showError } = useToast();
 
-  const fetchStatus = async () => {
+  const fetchStatus = useCallback(async () => {
     try {
       const data = await getFlowStatus();
       setStatus(data);
@@ -477,17 +480,33 @@ function FlowPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const handleFlowStatusMessage = useCallback((msg) => {
+    if (msg?.type !== "weekly_flow_status") return;
+    if (!msg?.status || typeof msg.status !== "object") return;
+    lastFlowWsMessageAtRef.current = Date.now();
+    setStatus(msg.status);
+    setLoading(false);
+  }, []);
+
+  const { isConnected: isFlowSocketConnected } = useWebSocketChannel(
+    "weekly-flow",
+    handleFlowStatusMessage,
+  );
 
   useEffect(() => {
     fetchStatus();
-  }, []);
+  }, [fetchStatus]);
 
   useEffect(() => {
     if (!status?.worker?.running) return;
+    const hasRecentWsUpdate =
+      Date.now() - lastFlowWsMessageAtRef.current < 20000;
+    if (isFlowSocketConnected && hasRecentWsUpdate) return;
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
-  }, [status?.worker?.running]);
+  }, [status?.worker?.running, isFlowSocketConnected, fetchStatus]);
 
   useEffect(() => {
     if (!status?.worker?.running || !status?.flows?.length) return;
@@ -570,8 +589,8 @@ function FlowPage() {
 
   const getPlaylistStats = (flowId) => {
     return (
-      flowStatsById[flowId] ||
       status?.flowStats?.[flowId] ||
+      flowStatsById[flowId] ||
       EMPTY_FLOW_STATS
     );
   };
@@ -716,6 +735,10 @@ function FlowPage() {
       enabled: optimisticValue,
     };
   });
+  const disabledFlowCount = effectiveFlowList.filter(
+    (flow) => flow.enabled !== true,
+  ).length;
+  const enabledFlowCount = effectiveFlowList.length - disabledFlowCount;
 
   const handleConfirmDisable = async () => {
     if (!confirmDisable) return;
@@ -725,6 +748,72 @@ function FlowPage() {
       await handleToggleEnabled(flow, false);
     }
     setConfirmDisable(null);
+  };
+
+  const handleStartOrStopAll = async () => {
+    if (bulkActionRunning) return;
+    const shouldStartAll = disabledFlowCount > 0;
+    const targetFlows = flowList.filter((flow) => {
+      const optimisticValue = optimisticEnabled[flow.id];
+      const isEnabled =
+        typeof optimisticValue === "boolean"
+          ? optimisticValue
+          : flow.enabled === true;
+      return shouldStartAll ? !isEnabled : isEnabled;
+    });
+    if (targetFlows.length === 0) return;
+
+    setBulkActionRunning(true);
+    setOptimisticEnabled((prev) => {
+      const next = { ...prev };
+      for (const flow of targetFlows) {
+        next[flow.id] = shouldStartAll;
+      }
+      return next;
+    });
+
+    let successCount = 0;
+    const failed = [];
+    for (const flow of targetFlows) {
+      try {
+        await setFlowEnabled(flow.id, shouldStartAll);
+        successCount += 1;
+      } catch (err) {
+        failed.push({
+          name: flow.name || "Flow",
+          message:
+            err.response?.data?.message ||
+            err.message ||
+            `Failed to ${shouldStartAll ? "start" : "stop"} flow`,
+        });
+      }
+    }
+
+    if (successCount > 0) {
+      showSuccess(
+        successCount === targetFlows.length
+          ? `${shouldStartAll ? "Started" : "Stopped"} ${successCount} flows`
+          : `${shouldStartAll ? "Started" : "Stopped"} ${successCount} flows with ${failed.length} failures`,
+      );
+    }
+    if (failed.length > 0) {
+      const first = failed[0];
+      showError(
+        failed.length === 1
+          ? `${first.name}: ${first.message}`
+          : `Failed to ${shouldStartAll ? "start" : "stop"} ${failed.length} flows. First issue: ${first.name} - ${first.message}`,
+      );
+    }
+
+    await fetchStatus();
+    setOptimisticEnabled((prev) => {
+      const next = { ...prev };
+      for (const flow of targetFlows) {
+        delete next[flow.id];
+      }
+      return next;
+    });
+    setBulkActionRunning(false);
   };
 
   const normalizeReason = (job) => {
@@ -827,15 +916,35 @@ function FlowPage() {
         flowCount={effectiveFlowList.length}
         runningCount={runningCount}
         completedCount={completedCount}
+        isSocketConnected={isFlowSocketConnected}
       />
 
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-xs uppercase tracking-[0.35em] text-[#8b8b90]">
           Playlists
         </h2>
-        <span className="text-xs text-[#c1c1c3]">
-          {effectiveFlowList.length} flows
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-[#c1c1c3]">
+            {effectiveFlowList.length} flows
+          </span>
+          <button
+            type="button"
+            onClick={handleStartOrStopAll}
+            className="btn btn-secondary btn-sm"
+            disabled={bulkActionRunning || effectiveFlowList.length === 0}
+          >
+            {bulkActionRunning ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Working...
+              </span>
+            ) : (
+              enabledFlowCount > 0 && disabledFlowCount === 0
+                ? "Stop All"
+                : "Start All"
+            )}
+          </button>
+        </div>
       </div>
 
       <div className="space-y-3">
