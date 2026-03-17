@@ -754,6 +754,7 @@ export function useArtistDetailsLibrary({
     );
     if (!album || String(album.id ?? "").startsWith("pending-")) return false;
     return (
+      album.monitored ||
       (album.statistics?.percentOfTracks ?? 0) > 0 ||
       (album.statistics?.sizeOnDisk ?? 0) > 0 ||
       !!downloadStatuses[album.id] ||
