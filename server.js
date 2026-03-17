@@ -18,6 +18,7 @@ import {
 } from "./backend/services/discoveryService.js";
 import { websocketService } from "./backend/services/websocketService.js";
 import { getAllDownloadStatuses } from "./backend/routes/library/handlers/downloads.js";
+import { getWeeklyFlowStatusSnapshot } from "./backend/services/weeklyFlowStatusSnapshot.js";
 import { dbOps } from "./backend/config/db-helpers.js";
 
 import settingsRouter from "./backend/routes/settings.js";
@@ -273,8 +274,28 @@ const broadcastDownloadStatuses = async () => {
   }
 };
 
+const WEEKLY_FLOW_STATUS_INTERVAL_MS = 4000;
+let lastWeeklyFlowStatusPayload = null;
+const broadcastWeeklyFlowStatus = async () => {
+  try {
+    const status = getWeeklyFlowStatusSnapshot();
+    const payload = JSON.stringify(status);
+    if (payload !== lastWeeklyFlowStatusPayload) {
+      lastWeeklyFlowStatusPayload = payload;
+      websocketService.broadcast("weekly-flow", {
+        type: "weekly_flow_status",
+        status,
+      });
+    }
+  } catch (error) {
+    console.warn("Failed to broadcast weekly flow status:", error.message);
+  }
+};
+
 broadcastDownloadStatuses();
 setInterval(broadcastDownloadStatuses, DOWNLOAD_STATUS_INTERVAL_MS);
+broadcastWeeklyFlowStatus();
+setInterval(broadcastWeeklyFlowStatus, WEEKLY_FLOW_STATUS_INTERVAL_MS);
 
 httpServer.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server running on port ${PORT}`);

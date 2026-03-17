@@ -4,6 +4,7 @@ import { playlistSource } from "./weeklyFlowPlaylistSource.js";
 import { playlistManager } from "./weeklyFlowPlaylistManager.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { soulseekClient } from "./simpleSoulseekClient.js";
+import { weeklyFlowOperationQueue } from "./weeklyFlowOperationQueue.js";
 
 const QUEUE_LIMIT = 50;
 
@@ -15,27 +16,35 @@ export async function runScheduledRefresh() {
 
   for (const flow of due) {
     try {
-      weeklyFlowWorker.stop();
-      playlistManager.updateConfig();
-      await playlistManager.weeklyReset([flow.id]);
-      downloadTracker.clearByPlaylistType(flow.id);
+      await weeklyFlowOperationQueue.enqueue(
+        `scheduled:${flow.id}`,
+        async () => {
+          if (!flowPlaylistConfig.isEnabled(flow.id)) return;
+          weeklyFlowWorker.stop();
+          playlistManager.updateConfig();
+          await playlistManager.weeklyReset([flow.id]);
+          downloadTracker.clearByPlaylistType(flow.id);
 
-      const tracks = await playlistSource.getTracksForFlow(
-        flow,
-        Math.max(flow.size || QUEUE_LIMIT, QUEUE_LIMIT),
-      );
-      if (tracks.length === 0) {
-        flowPlaylistConfig.scheduleNextRun(flow.id);
-        continue;
-      }
+          const latestFlow = flowPlaylistConfig.getFlow(flow.id);
+          if (!latestFlow || !latestFlow.enabled) return;
+          const tracks = await playlistSource.getTracksForFlow(
+            latestFlow,
+            Math.max(latestFlow.size || QUEUE_LIMIT, QUEUE_LIMIT),
+          );
+          if (tracks.length === 0) {
+            flowPlaylistConfig.scheduleNextRun(flow.id);
+            return;
+          }
 
-      downloadTracker.addJobs(tracks, flow.id);
-      if (!weeklyFlowWorker.running) {
-        await weeklyFlowWorker.start();
-      }
-      flowPlaylistConfig.scheduleNextRun(flow.id);
-      console.log(
-        `[WeeklyFlowScheduler] Refreshed ${flow.id} (${tracks.length} tracks)`,
+          downloadTracker.addJobs(tracks, flow.id);
+          if (!weeklyFlowWorker.running) {
+            await weeklyFlowWorker.start();
+          }
+          flowPlaylistConfig.scheduleNextRun(flow.id);
+          console.log(
+            `[WeeklyFlowScheduler] Refreshed ${flow.id} (${tracks.length} tracks)`,
+          );
+        },
       );
     } catch (error) {
       console.error(
