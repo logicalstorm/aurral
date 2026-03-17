@@ -56,11 +56,17 @@ router.post("/logout", requireAuth, (req, res) => {
 router.get("/me", requireAuth, (req, res) => {
   const token = getBearerToken(req);
   if (!token) {
-    return res.status(401).json({ error: "Unauthorized" });
+    return res.json({
+      user: req.user,
+      expiresAt: null,
+    });
   }
   const session = getSessionByToken(token);
   if (!session?.user) {
-    return res.status(401).json({ error: "Unauthorized" });
+    return res.json({
+      user: req.user,
+      expiresAt: null,
+    });
   }
   res.json({
     user: session.user,
