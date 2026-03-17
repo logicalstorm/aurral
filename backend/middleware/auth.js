@@ -48,11 +48,37 @@ function getHeaderValue(req, headerName) {
   return value;
 }
 
+function normalizeIp(value) {
+  const raw = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (!raw) return "";
+  const withoutBrackets =
+    raw.startsWith("[") && raw.endsWith("]") ? raw.slice(1, -1) : raw;
+  return withoutBrackets.startsWith("::ffff:")
+    ? withoutBrackets.slice(7)
+    : withoutBrackets;
+}
+
+function getRequestIps(req) {
+  const ips = [
+    req?.socket?.remoteAddress,
+    req?.connection?.remoteAddress,
+    req?.ip,
+    ...(Array.isArray(req?.ips) ? req.ips : []),
+  ]
+    .map((ip) => normalizeIp(ip))
+    .filter(Boolean);
+  return Array.from(new Set(ips));
+}
+
 function isTrustedProxy(req) {
-  const allowed = parseCsv(process.env.AUTH_PROXY_TRUSTED_IPS);
-  if (allowed.length === 0) return false;
-  const ips = Array.isArray(req.ips) && req.ips.length > 0 ? req.ips : [req.ip];
-  return ips.some((ip) => allowed.includes(ip));
+  const allowed = parseCsv(process.env.AUTH_PROXY_TRUSTED_IPS).map((ip) =>
+    normalizeIp(ip),
+  );
+  if (allowed.length === 0) return true;
+  const requestIps = getRequestIps(req);
+  return requestIps.some((ip) => allowed.includes(ip));
 }
 
 function buildPermissions(role, permissions) {
