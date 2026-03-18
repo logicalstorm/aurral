@@ -16,9 +16,15 @@ export function getWeeklyFlowStatusSnapshot({
   let message = "Idle";
   if (operationQueue?.processing) {
     phase = "preparing";
-    if (queueLabel.startsWith("enable:") || queueLabel.startsWith("scheduled:")) {
+    if (
+      queueLabel.startsWith("enable:") ||
+      queueLabel.startsWith("scheduled:")
+    ) {
       message = "Generating track list";
-    } else if (queueLabel.startsWith("disable:") || queueLabel.startsWith("delete:")) {
+    } else if (
+      queueLabel.startsWith("disable:") ||
+      queueLabel.startsWith("delete:")
+    ) {
       message = "Cleaning existing flow files";
     } else if (queueLabel.startsWith("reset:")) {
       message = "Resetting flow files";

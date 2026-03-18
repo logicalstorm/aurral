@@ -81,6 +81,7 @@ export class WeeklyFlowWorker {
           playlistType: job.playlistType,
           artistName: job.artistName,
           trackName: job.trackName,
+          progressPct: 0,
           startedAt: Date.now(),
         };
         this.processJob(job)
@@ -347,6 +348,10 @@ export class WeeklyFlowWorker {
             downloadedSourcePath = await soulseekClient.download(
               candidate,
               stagingFilePath,
+              (progressPct) => {
+                if (!this.currentJob || this.currentJob.id !== job.id) return;
+                this.currentJob.progressPct = progressPct;
+              },
             );
             selectedMatch = candidate;
             selectedExt = ext;

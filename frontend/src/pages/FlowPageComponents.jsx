@@ -643,13 +643,16 @@ export function FlowStatusCards({
       {status?.worker?.currentJob?.artistName && status?.worker?.currentJob?.trackName ? (
         <div className="mt-1 text-xs text-[#9aa886]">
           {status.worker.currentJob.artistName} - {status.worker.currentJob.trackName}
+          {Number.isFinite(Number(status?.worker?.currentJob?.progressPct))
+            ? ` (${Math.max(0, Math.min(100, Math.floor(Number(status.worker.currentJob.progressPct))))}%)`
+            : ""}
         </div>
       ) : null}
       {queuePending > 0 || queueProcessing ? (
         <div className="mt-2 text-xs text-[#c1c1c3]">
           {queuePending > 0
             ? `${queuePending} flow operations queued`
-            : "Applying queued flow operation"}
+            : "Getting your flow ready"}
         </div>
       ) : null}
       <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4 text-xs text-[#c1c1c3]">
