@@ -48,7 +48,6 @@ export class SimpleSoulseekClient {
   }
 
   isConfigured() {
-    this.ensureCredentials();
     this.updateConfig();
     return !!(this.config.username && this.config.password);
   }
@@ -188,7 +187,10 @@ export class SimpleSoulseekClient {
     if (!Array.isArray(results) || results.length === 0) {
       return [];
     }
-    const trackNameLower = String(trackName || "").toLowerCase().trim();
+    const max = Number.isFinite(Number(limit)) ? Math.max(1, Number(limit)) : 5;
+    const trackNameLower = String(trackName || "")
+      .toLowerCase()
+      .trim();
     const qualityOrder = { ".flac": 0, ".mp3": 1, ".m4a": 2, ".ogg": 3 };
     const score = (item) => {
       const file = String(item?.file || "").toLowerCase();
@@ -197,7 +199,8 @@ export class SimpleSoulseekClient {
       const hasTrack = trackNameLower ? file.includes(trackNameLower) : false;
       const hasSlots = item?.slots ? 0 : 1;
       const fileSize = Number(item?.size || 0);
-      const sizePenalty = fileSize > 0 ? Math.max(0, 500000 - fileSize) : 500000;
+      const sizePenalty =
+        fileSize > 0 ? Math.max(0, 500000 - fileSize) : 500000;
       return {
         hasTrack: hasTrack ? 0 : 1,
         quality,
@@ -205,17 +208,34 @@ export class SimpleSoulseekClient {
         sizePenalty,
       };
     };
-    const ranked = [...results].sort((a, b) => {
-      const sa = score(a);
-      const sb = score(b);
+    const compareScore = (sa, sb) => {
       if (sa.hasTrack !== sb.hasTrack) return sa.hasTrack - sb.hasTrack;
       if (sa.quality !== sb.quality) return sa.quality - sb.quality;
       if (sa.hasSlots !== sb.hasSlots) return sa.hasSlots - sb.hasSlots;
-      if (sa.sizePenalty !== sb.sizePenalty) return sa.sizePenalty - sb.sizePenalty;
+      if (sa.sizePenalty !== sb.sizePenalty)
+        return sa.sizePenalty - sb.sizePenalty;
       return 0;
-    });
-    const max = Number.isFinite(Number(limit)) ? Math.max(1, Number(limit)) : 5;
-    return ranked.slice(0, max);
+    };
+    const top = [];
+    const topScores = [];
+    for (const item of results) {
+      const itemScore = score(item);
+      let insertAt = top.length;
+      for (let i = 0; i < top.length; i += 1) {
+        if (compareScore(itemScore, topScores[i]) < 0) {
+          insertAt = i;
+          break;
+        }
+      }
+      if (insertAt >= max && top.length >= max) continue;
+      top.splice(insertAt, 0, item);
+      topScores.splice(insertAt, 0, itemScore);
+      if (top.length > max) {
+        top.pop();
+        topScores.pop();
+      }
+    }
+    return top;
   }
 
   async download(result, destinationPath) {

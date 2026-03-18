@@ -22,17 +22,33 @@ const MAX_MATCH_CANDIDATES =
     ? Math.min(Math.floor(parsedCandidateCount), 8)
     : 4;
 const FALLBACK_MP3_REGEX = /^[^/\\]+-[a-f0-9]{8}\.mp3$/i;
+const parsedFallbackSweepInterval = Number(
+  process.env.WEEKLY_FLOW_FALLBACK_SWEEP_MS,
+);
+const FALLBACK_SWEEP_INTERVAL_MS =
+  Number.isFinite(parsedFallbackSweepInterval) &&
+  parsedFallbackSweepInterval >= 1000
+    ? parsedFallbackSweepInterval
+    : 60000;
 
 export class WeeklyFlowWorker {
-  constructor(weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER || "/app/downloads") {
+  constructor(
+    weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER || "/app/downloads",
+  ) {
     this.weeklyFlowRoot = path.isAbsolute(weeklyFlowRoot)
       ? weeklyFlowRoot
       : path.resolve(process.cwd(), weeklyFlowRoot);
     this.running = false;
     this.activeCount = 0;
+    this.lastFallbackSweepAt = 0;
   }
 
-  async moveFallbackMp3sToDir() {
+  async moveFallbackMp3sToDir(force = false) {
+    const now = Date.now();
+    if (!force && now - this.lastFallbackSweepAt < FALLBACK_SWEEP_INTERVAL_MS) {
+      return;
+    }
+    this.lastFallbackSweepAt = now;
     const cwd = process.cwd();
     if (path.resolve(cwd) === path.resolve(this.weeklyFlowRoot)) return;
     const fallbackDir = path.join(this.weeklyFlowRoot, "_fallback");
@@ -63,7 +79,7 @@ export class WeeklyFlowWorker {
 
     this.running = true;
     console.log("[WeeklyFlowWorker] Starting worker...");
-    await this.moveFallbackMp3sToDir();
+    await this.moveFallbackMp3sToDir(true);
 
     const processLoop = () => {
       if (!this.running) return;
@@ -84,7 +100,7 @@ export class WeeklyFlowWorker {
           })
           .finally(() => {
             this.activeCount--;
-            this.moveFallbackMp3sToDir().catch(() => {});
+            this.moveFallbackMp3sToDir(false).catch(() => {});
             if (this.running) setTimeout(processLoop, JOB_COOLDOWN_MS);
           });
       }
@@ -105,7 +121,9 @@ export class WeeklyFlowWorker {
   }
 
   _normalizeAlbumName(value) {
-    const text = String(value || "").replace(/\u0000/g, "").trim();
+    const text = String(value || "")
+      .replace(/\u0000/g, "")
+      .trim();
     return text || null;
   }
 
@@ -367,8 +385,6 @@ export class WeeklyFlowWorker {
 
       await fs.rm(stagingDir, { recursive: true, force: true });
 
-      playlistManager.updateConfig(false);
-
       downloadTracker.setDone(job.id, finalPath, resolvedAlbum);
       console.log(`[WeeklyFlowWorker] Job ${job.id} completed: ${finalPath}`);
 
@@ -386,11 +402,10 @@ export class WeeklyFlowWorker {
   }
 
   async checkPlaylistComplete(playlistType) {
-    const jobs = downloadTracker.getByPlaylistType(playlistType);
-    const allDone = jobs.every(
-      (j) => j.status === "done" || j.status === "failed",
-    );
-    const hasDone = jobs.some((j) => j.status === "done");
+    const stats = downloadTracker.getPlaylistTypeStats(playlistType);
+    const allDone =
+      stats.total > 0 && stats.pending === 0 && stats.downloading === 0;
+    const hasDone = stats.done > 0;
 
     if (allDone && hasDone) {
       console.log(
@@ -415,11 +430,9 @@ export class WeeklyFlowWorker {
           error.message,
         );
       }
-      const completed = jobs.filter((j) => j.status === "done").length;
-      const failed = jobs.filter((j) => j.status === "failed").length;
-      const { notifyWeeklyFlowDone } = await import(
-        "./notificationService.js"
-      );
+      const completed = stats.done;
+      const failed = stats.failed;
+      const { notifyWeeklyFlowDone } = await import("./notificationService.js");
       notifyWeeklyFlowDone(playlistType, { completed, failed }).catch((err) =>
         console.warn(
           "[WeeklyFlowWorker] Gotify notification failed:",
