@@ -3,7 +3,6 @@ import { randomBytes } from "crypto";
 import { dbOps } from "../config/db-helpers.js";
 import path from "path";
 import fs from "fs/promises";
-import { createWriteStream } from "fs";
 
 export class SimpleSoulseekClient {
   constructor() {
@@ -269,25 +268,16 @@ export class SimpleSoulseekClient {
           }
         }, DOWNLOAD_TIMEOUT_MS);
 
-        this.client.downloadStream({ file: result }, (err, readStream) => {
+        this.client.download({ file: result, path: absPath }, (err, down) => {
           if (err) {
             settle(reject)(err);
             return;
           }
-
-          const writeStream = createWriteStream(absPath);
-
-          writeStream.on("error", (e) => {
-            if (e.code === "ERR_STREAM_DESTROYED" || settled) return;
-            settle(reject)(e);
-          });
-          readStream.on("error", (e) => {
-            if (e.code === "ERR_STREAM_DESTROYED" || settled) return;
-            settle(reject)(e);
-          });
-          writeStream.on("finish", () => settle(resolve)(absPath));
-
-          readStream.pipe(writeStream);
+          const resolvedPath =
+            typeof down?.path === "string" && down.path.trim()
+              ? path.resolve(down.path)
+              : absPath;
+          settle(resolve)(resolvedPath);
         });
       });
 
