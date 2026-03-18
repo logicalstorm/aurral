@@ -500,13 +500,21 @@ function FlowPage() {
   }, [fetchStatus]);
 
   useEffect(() => {
-    if (!status?.worker?.running) return;
+    if (isFlowSocketConnected) {
+      fetchStatus();
+    }
+  }, [isFlowSocketConnected, fetchStatus]);
+
+  useEffect(() => {
+    const workerRunning = status?.worker?.running === true;
+    const preparing = status?.hint?.phase === "preparing";
+    if (!workerRunning && !preparing) return;
     const hasRecentWsUpdate =
       Date.now() - lastFlowWsMessageAtRef.current < 20000;
     if (isFlowSocketConnected && hasRecentWsUpdate) return;
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
-  }, [status?.worker?.running, isFlowSocketConnected, fetchStatus]);
+  }, [status?.worker?.running, status?.hint?.phase, isFlowSocketConnected, fetchStatus]);
 
   useEffect(() => {
     if (!status?.worker?.running || !status?.flows?.length) return;
