@@ -9,7 +9,7 @@ export function getWeeklyFlowStatusSnapshot({
   jobsLimit = null,
 } = {}) {
   const workerStatus = weeklyFlowWorker.getStatus();
-  const stats = downloadTracker.getStats();
+  const stats = workerStatus.stats || downloadTracker.getStats();
   const flows = flowPlaylistConfig.getFlows();
   const flowIds = flows.map((flow) => flow.id);
   const flowStats = downloadTracker.getStatsByPlaylistType(flowIds);
