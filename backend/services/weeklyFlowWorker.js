@@ -15,13 +15,16 @@ const parsedSearchRounds = Number(process.env.WEEKLY_FLOW_SEARCH_ROUNDS);
 const SEARCH_ROUNDS =
   Number.isFinite(parsedSearchRounds) && parsedSearchRounds > 0
     ? Math.min(Math.floor(parsedSearchRounds), 4)
-    : 2;
+    : 1;
 const parsedCandidateCount = Number(process.env.WEEKLY_FLOW_MATCH_CANDIDATES);
 const MAX_MATCH_CANDIDATES =
   Number.isFinite(parsedCandidateCount) && parsedCandidateCount > 0
     ? Math.min(Math.floor(parsedCandidateCount), 8)
-    : 4;
+    : 3;
 const FALLBACK_MP3_REGEX = /^[^/\\]+-[a-f0-9]{8}\.mp3$/i;
+const ENABLE_METADATA_ALBUM_PARSE =
+  process.env.WEEKLY_FLOW_ENABLE_METADATA_ALBUM_PARSE === "true" ||
+  process.env.WEEKLY_FLOW_ENABLE_METADATA_ALBUM_PARSE === "1";
 const parsedFallbackSweepInterval = Number(
   process.env.WEEKLY_FLOW_FALLBACK_SWEEP_MS,
 );
@@ -302,6 +305,7 @@ export class WeeklyFlowWorker {
 
       let selectedMatch = null;
       let selectedExt = ".mp3";
+      let downloadedSourcePath = null;
       let lastError = null;
 
       await new Promise((r) => setImmediate(r));
@@ -327,7 +331,10 @@ export class WeeklyFlowWorker {
               ? extFromSoulseek
               : ".mp3";
           try {
-            await soulseekClient.download(candidate, stagingFilePath);
+            downloadedSourcePath = await soulseekClient.download(
+              candidate,
+              stagingFilePath,
+            );
             selectedMatch = candidate;
             selectedExt = ext;
             lastError = null;
@@ -344,14 +351,14 @@ export class WeeklyFlowWorker {
         throw lastError || new Error("No suitable match found");
       }
 
-      const downloadedFiles = await fs.readdir(stagingDir);
-      if (downloadedFiles.length === 0) {
+      const sourcePath =
+        typeof downloadedSourcePath === "string" && downloadedSourcePath
+          ? downloadedSourcePath
+          : null;
+      if (!sourcePath) {
         throw new Error("Download completed but no file found");
       }
-
-      const downloadedFile = downloadedFiles[0];
-      const sourcePath = path.join(stagingDir, downloadedFile);
-      const downloadedExt = path.extname(downloadedFile).toLowerCase();
+      const downloadedExt = path.extname(sourcePath).toLowerCase();
       const finalExt =
         downloadedExt && /^\.(flac|mp3|m4a|ogg|wav)$/i.test(downloadedExt)
           ? downloadedExt
@@ -363,12 +370,13 @@ export class WeeklyFlowWorker {
 
       const artistDir = sanitize(job.artistName);
       const albumFromApi = this._normalizeAlbumName(job.albumName);
-      const albumFromMetadata = albumFromApi
-        ? null
-        : await this._readAlbumFromMetadata(sourcePath);
       const albumFromPath = this._parseAlbumFromPath(selectedMatch.file);
+      const albumFromMetadata =
+        !ENABLE_METADATA_ALBUM_PARSE || albumFromApi || albumFromPath
+          ? null
+          : await this._readAlbumFromMetadata(sourcePath);
       const resolvedAlbum =
-        albumFromApi || albumFromMetadata || albumFromPath || "Unknown Album";
+        albumFromApi || albumFromPath || albumFromMetadata || "Unknown Album";
       const albumDir = sanitize(resolvedAlbum);
       const finalDir = path.join(
         this.weeklyFlowRoot,
