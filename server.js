@@ -95,7 +95,7 @@ app.use(
           "https://lastfm.freetls.fastly.net",
         ],
         connectSrc: ["'self'", "ws:", "wss:", "https://api.github.com"],
-        mediaSrc: ["'self'"],
+        mediaSrc: ["'self'", "https://*.dzcdn.net", "https://*.deezer.com"],
         frameSrc: ["'none'"],
         upgradeInsecureRequests: null,
       },
