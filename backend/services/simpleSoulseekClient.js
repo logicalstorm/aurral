@@ -153,6 +153,14 @@ export class SimpleSoulseekClient {
     return 420000;
   }
 
+  _getMatchScanLimit() {
+    const raw = Number(process.env.SOULSEEK_MATCH_SCAN_LIMIT);
+    if (Number.isFinite(raw) && raw >= 50) {
+      return Math.min(Math.floor(raw), 1000);
+    }
+    return 150;
+  }
+
   async search(artistName, trackName) {
     if (!this.isConnected()) {
       await this.connect();
@@ -187,6 +195,9 @@ export class SimpleSoulseekClient {
       return [];
     }
     const max = Number.isFinite(Number(limit)) ? Math.max(1, Number(limit)) : 5;
+    const scanLimit = this._getMatchScanLimit();
+    const source =
+      results.length > scanLimit ? results.slice(0, scanLimit) : results;
     const trackNameLower = String(trackName || "")
       .toLowerCase()
       .trim();
@@ -217,7 +228,7 @@ export class SimpleSoulseekClient {
     };
     const top = [];
     const topScores = [];
-    for (const item of results) {
+    for (const item of source) {
       const itemScore = score(item);
       let insertAt = top.length;
       for (let i = 0; i < top.length; i += 1) {
