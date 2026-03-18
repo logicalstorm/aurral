@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import { dbOps } from "../config/db-helpers.js";
 import path from "path";
 import fs from "fs/promises";
+import { Readable } from "stream";
 
 export class SimpleSoulseekClient {
   constructor() {
@@ -248,7 +249,7 @@ export class SimpleSoulseekClient {
     return top;
   }
 
-  async download(result, destinationPath) {
+  async download(result, destinationPath, onProgress = null) {
     await this.connect();
 
     const absPath = path.resolve(destinationPath);
@@ -256,11 +257,48 @@ export class SimpleSoulseekClient {
     await fs.mkdir(dir, { recursive: true });
 
     const DOWNLOAD_TIMEOUT_MS = this._getDownloadTimeoutMs();
+    const expectedBytes = Number(result?.size || 0);
+    const progressEnabled =
+      typeof onProgress === "function" && expectedBytes > 0;
 
     try {
       const filePath = await new Promise((resolve, reject) => {
         let settled = false;
         let timeoutId = null;
+        let lastProgress = -1;
+        let downloadedBytes = 0;
+        let lastProgressEmitAt = 0;
+        const progressStream = progressEnabled
+          ? new Readable({
+              read() {},
+            })
+          : null;
+        const emitProgress = (value) => {
+          if (!progressEnabled) return;
+          const next = Math.max(
+            0,
+            Math.min(100, Math.floor(Number(value) || 0)),
+          );
+          if (next <= lastProgress) return;
+          lastProgress = next;
+          onProgress(next);
+        };
+        if (progressStream) {
+          progressStream.on("data", (chunk) => {
+            const size = Buffer.isBuffer(chunk)
+              ? chunk.length
+              : Number(chunk?.length || 0);
+            if (!Number.isFinite(size) || size <= 0) return;
+            downloadedBytes += size;
+            const now = Date.now();
+            const pct = Math.floor((downloadedBytes / expectedBytes) * 100);
+            const bounded = Math.max(0, Math.min(99, pct));
+            if (bounded > lastProgress && now - lastProgressEmitAt >= 750) {
+              lastProgressEmitAt = now;
+              emitProgress(bounded);
+            }
+          });
+        }
 
         const settle = (fn) => (val) => {
           if (settled) return;
@@ -279,17 +317,22 @@ export class SimpleSoulseekClient {
           }
         }, DOWNLOAD_TIMEOUT_MS);
 
-        this.client.download({ file: result, path: absPath }, (err, down) => {
-          if (err) {
-            settle(reject)(err);
-            return;
-          }
-          const resolvedPath =
-            typeof down?.path === "string" && down.path.trim()
-              ? path.resolve(down.path)
-              : absPath;
-          settle(resolve)(resolvedPath);
-        });
+        this.client.download(
+          { file: result, path: absPath },
+          (err, down) => {
+            if (err) {
+              settle(reject)(err);
+              return;
+            }
+            emitProgress(100);
+            const resolvedPath =
+              typeof down?.path === "string" && down.path.trim()
+                ? path.resolve(down.path)
+                : absPath;
+            settle(resolve)(resolvedPath);
+          },
+          progressStream || undefined,
+        );
       });
 
       return filePath;
