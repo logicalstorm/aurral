@@ -12,6 +12,7 @@ const MAX_MATCH_CANDIDATES = 3;
 const FALLBACK_MP3_REGEX = /^[^/\\]+-[a-f0-9]{8}\.mp3$/i;
 const ENABLE_METADATA_ALBUM_PARSE = false;
 const FALLBACK_SWEEP_INTERVAL_MS = 60000;
+const MAX_RETRIES_PER_JOB = 1;
 
 export class WeeklyFlowWorker {
   constructor(
@@ -25,6 +26,8 @@ export class WeeklyFlowWorker {
     this.lastFallbackSweepAt = 0;
     this.processLoop = null;
     this.processTimer = null;
+    this.retryAttempts = new Map();
+    this.currentJob = null;
   }
 
   async moveFallbackMp3sToDir(force = false) {
@@ -73,8 +76,22 @@ export class WeeklyFlowWorker {
         if (!job) break;
 
         this.activeCount++;
+        this.currentJob = {
+          id: job.id,
+          playlistType: job.playlistType,
+          artistName: job.artistName,
+          trackName: job.trackName,
+          startedAt: Date.now(),
+        };
         this.processJob(job)
           .catch(async (error) => {
+            const attempts = Number(this.retryAttempts.get(job.id) || 0);
+            if (attempts < MAX_RETRIES_PER_JOB) {
+              this.retryAttempts.set(job.id, attempts + 1);
+              downloadTracker.setPending(job.id, error.message);
+              return;
+            }
+            this.retryAttempts.delete(job.id);
             console.error(
               `[WeeklyFlowWorker] Error processing job ${job.id}:`,
               error.message,
@@ -84,6 +101,9 @@ export class WeeklyFlowWorker {
           })
           .finally(() => {
             this.activeCount--;
+            if (this.activeCount <= 0) {
+              this.currentJob = null;
+            }
             this.moveFallbackMp3sToDir(false).catch(() => {});
             if (this.running && !this.processTimer) {
               this.processTimer = setTimeout(() => {
@@ -109,6 +129,8 @@ export class WeeklyFlowWorker {
       this.processTimer = null;
     }
     this.processLoop = null;
+    this.retryAttempts.clear();
+    this.currentJob = null;
     downloadTracker.resetDownloadingToPending();
     soulseekClient.disconnect().catch(() => {});
     console.log("[WeeklyFlowWorker] Worker stopped");
@@ -385,6 +407,7 @@ export class WeeklyFlowWorker {
       await fs.rm(stagingDir, { recursive: true, force: true });
 
       downloadTracker.setDone(job.id, finalPath, resolvedAlbum);
+      this.retryAttempts.delete(job.id);
       console.log(`[WeeklyFlowWorker] Job ${job.id} completed: ${finalPath}`);
 
       await this.checkPlaylistComplete(job.playlistType);
@@ -450,6 +473,7 @@ export class WeeklyFlowWorker {
       processing: this.activeCount > 0,
       activeCount: this.activeCount,
       stats: downloadTracker.getStats(),
+      currentJob: this.currentJob,
     };
   }
 }
