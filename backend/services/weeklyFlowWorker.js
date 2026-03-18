@@ -5,34 +5,13 @@ import { soulseekClient } from "./simpleSoulseekClient.js";
 import { playlistManager } from "./weeklyFlowPlaylistManager.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 
-const parsedConcurrency = Number(process.env.WEEKLY_FLOW_CONCURRENCY);
-const CONCURRENCY =
-  Number.isFinite(parsedConcurrency) && parsedConcurrency > 0
-    ? Math.min(Math.floor(parsedConcurrency), 4)
-    : 1;
+const CONCURRENCY = 1;
 const JOB_COOLDOWN_MS = 2000;
-const parsedSearchRounds = Number(process.env.WEEKLY_FLOW_SEARCH_ROUNDS);
-const SEARCH_ROUNDS =
-  Number.isFinite(parsedSearchRounds) && parsedSearchRounds > 0
-    ? Math.min(Math.floor(parsedSearchRounds), 4)
-    : 1;
-const parsedCandidateCount = Number(process.env.WEEKLY_FLOW_MATCH_CANDIDATES);
-const MAX_MATCH_CANDIDATES =
-  Number.isFinite(parsedCandidateCount) && parsedCandidateCount > 0
-    ? Math.min(Math.floor(parsedCandidateCount), 8)
-    : 3;
+const SEARCH_ROUNDS = 1;
+const MAX_MATCH_CANDIDATES = 3;
 const FALLBACK_MP3_REGEX = /^[^/\\]+-[a-f0-9]{8}\.mp3$/i;
-const ENABLE_METADATA_ALBUM_PARSE =
-  process.env.WEEKLY_FLOW_ENABLE_METADATA_ALBUM_PARSE === "true" ||
-  process.env.WEEKLY_FLOW_ENABLE_METADATA_ALBUM_PARSE === "1";
-const parsedFallbackSweepInterval = Number(
-  process.env.WEEKLY_FLOW_FALLBACK_SWEEP_MS,
-);
-const FALLBACK_SWEEP_INTERVAL_MS =
-  Number.isFinite(parsedFallbackSweepInterval) &&
-  parsedFallbackSweepInterval >= 1000
-    ? parsedFallbackSweepInterval
-    : 60000;
+const ENABLE_METADATA_ALBUM_PARSE = false;
+const FALLBACK_SWEEP_INTERVAL_MS = 60000;
 
 export class WeeklyFlowWorker {
   constructor(
@@ -44,6 +23,8 @@ export class WeeklyFlowWorker {
     this.running = false;
     this.activeCount = 0;
     this.lastFallbackSweepAt = 0;
+    this.processLoop = null;
+    this.processTimer = null;
   }
 
   async moveFallbackMp3sToDir(force = false) {
@@ -84,7 +65,7 @@ export class WeeklyFlowWorker {
     console.log("[WeeklyFlowWorker] Starting worker...");
     await this.moveFallbackMp3sToDir(true);
 
-    const processLoop = () => {
+    this.processLoop = () => {
       if (!this.running) return;
 
       while (this.activeCount < CONCURRENCY) {
@@ -104,12 +85,17 @@ export class WeeklyFlowWorker {
           .finally(() => {
             this.activeCount--;
             this.moveFallbackMp3sToDir(false).catch(() => {});
-            if (this.running) setTimeout(processLoop, JOB_COOLDOWN_MS);
+            if (this.running && !this.processTimer) {
+              this.processTimer = setTimeout(() => {
+                this.processTimer = null;
+                if (this.processLoop) this.processLoop();
+              }, JOB_COOLDOWN_MS);
+            }
           });
       }
     };
 
-    processLoop();
+    this.processLoop();
   }
 
   stop() {
@@ -118,6 +104,11 @@ export class WeeklyFlowWorker {
     }
 
     this.running = false;
+    if (this.processTimer) {
+      clearTimeout(this.processTimer);
+      this.processTimer = null;
+    }
+    this.processLoop = null;
     downloadTracker.resetDownloadingToPending();
     soulseekClient.disconnect().catch(() => {});
     console.log("[WeeklyFlowWorker] Worker stopped");
