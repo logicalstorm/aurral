@@ -615,6 +615,13 @@ export function FlowStatusCards({
   const queueProcessing = status?.operationQueue?.processing === true;
   const idleCount = Math.max(flowCount - runningCount - completedCount, 0);
   const workerRunning = status?.worker?.running === true;
+  const hintMessage =
+    String(status?.hint?.message || "").trim() ||
+    (workerRunning
+      ? status?.worker?.processing
+        ? "Processing tracks now"
+        : "Worker is online and waiting for jobs"
+      : "Worker is idle");
 
   return (
     <div className="mb-6 rounded-lg border border-white/5 bg-card p-4">
@@ -641,14 +648,13 @@ export function FlowStatusCards({
         ) : (
           <Clock className="w-4 h-4 text-[#c1c1c3]" />
         )}
-        <span>
-          {workerRunning
-            ? status?.worker?.processing
-              ? "Processing tracks now"
-              : "Worker is online and waiting for jobs"
-            : "Worker is idle"}
-        </span>
+        <span>{hintMessage}</span>
       </div>
+      {status?.worker?.currentJob?.artistName && status?.worker?.currentJob?.trackName ? (
+        <div className="mt-1 text-xs text-[#9aa886]">
+          {status.worker.currentJob.artistName} - {status.worker.currentJob.trackName}
+        </div>
+      ) : null}
       <div className="mt-2 text-xs text-[#c1c1c3]">
         {queuePending > 0
           ? `${queuePending} flow operations queued`

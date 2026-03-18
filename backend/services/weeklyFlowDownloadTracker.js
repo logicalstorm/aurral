@@ -253,6 +253,21 @@ export class WeeklyFlowDownloadTracker {
     return true;
   }
 
+  setPending(id, error = null) {
+    const job = this.jobs.get(id);
+    if (!job) return false;
+    const previousStatus = job.status;
+    job.status = "pending";
+    job.startedAt = null;
+    job.completedAt = null;
+    job.stagingPath = null;
+    job.error =
+      typeof error === "string" ? error : (error && error.message) || null;
+    this._update(job);
+    this._applyStatusDelta(job.playlistType, previousStatus, job.status);
+    return true;
+  }
+
   setDone(id, finalPath, albumName = null) {
     const job = this.jobs.get(id);
     if (!job) return false;
