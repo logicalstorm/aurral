@@ -609,7 +609,6 @@ export function FlowStatusCards({
   flowCount,
   runningCount,
   completedCount,
-  isSocketConnected,
 }) {
   const queuePending = Number(status?.operationQueue?.pending || 0);
   const queueProcessing = status?.operationQueue?.processing === true;
@@ -629,18 +628,9 @@ export function FlowStatusCards({
         <span className="text-xs uppercase tracking-[0.3em] text-[#8b8b90]">
           Worker Overview
         </span>
-        <div className="flex items-center gap-2">
-          <span className={`badge ${workerRunning ? "badge-success" : "badge-neutral"}`}>
-            {workerRunning ? "Running" : "Stopped"}
-          </span>
-          <span
-            className={`text-xs ${
-              isSocketConnected ? "text-[#9aa886]" : "text-[#c1c1c3]"
-            }`}
-          >
-            {isSocketConnected ? "Live updates on" : "Reconnecting live updates..."}
-          </span>
-        </div>
+        <span className={`badge ${workerRunning ? "badge-success" : "badge-neutral"}`}>
+          {workerRunning ? "Running" : "Stopped"}
+        </span>
       </div>
       <div className="mt-3 flex items-center gap-2 text-sm text-white">
         {workerRunning ? (
@@ -655,13 +645,13 @@ export function FlowStatusCards({
           {status.worker.currentJob.artistName} - {status.worker.currentJob.trackName}
         </div>
       ) : null}
-      <div className="mt-2 text-xs text-[#c1c1c3]">
-        {queuePending > 0
-          ? `${queuePending} flow operations queued`
-          : queueProcessing
-            ? "Applying queued flow operation"
-            : "No queued flow operations"}
-      </div>
+      {queuePending > 0 || queueProcessing ? (
+        <div className="mt-2 text-xs text-[#c1c1c3]">
+          {queuePending > 0
+            ? `${queuePending} flow operations queued`
+            : "Applying queued flow operation"}
+        </div>
+      ) : null}
       <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4 text-xs text-[#c1c1c3]">
         <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
           <span>Flows On</span>
