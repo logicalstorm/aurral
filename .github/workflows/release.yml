@@ -3,8 +3,6 @@ name: Release
 on:
   push:
     branches: ["main", "test"]
-  release:
-    types: [published, prereleased]
 
 concurrency:
   group: release-${{ github.ref }}
@@ -12,82 +10,22 @@ concurrency:
 
 jobs:
   release:
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    timeout-minutes: 15
     permissions:
       contents: write
-      packages: write
+      issues: write
+      pull-requests: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v4
         with:
-          node-version: 22.14.0
+          node-version: 22
           cache: npm
       - run: npm ci
-      - name: Release
+      - name: Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx semantic-release
-
-  publish_image:
-    if: github.event_name == 'release'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: refs/tags/${{ github.event.release.tag_name }}
-      - name: Resolve release version
-        id: release_info
-        run: |
-          echo "release_version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-      - name: Log into registry ghcr.io
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Set image tags
-        id: tags
-        run: |
-          if [ "${{ github.event.release.prerelease }}" = "true" ]; then
-            {
-              echo "tags<<EOF"
-              echo "ghcr.io/${{ github.repository }}:${{ steps.release_info.outputs.release_version }}"
-              echo "ghcr.io/${{ github.repository }}:test"
-              echo "EOF"
-            } >> "$GITHUB_OUTPUT"
-          else
-            {
-              echo "tags<<EOF"
-              echo "ghcr.io/${{ github.repository }}:${{ steps.release_info.outputs.release_version }}"
-              echo "ghcr.io/${{ github.repository }}:latest"
-              echo "EOF"
-            } >> "$GITHUB_OUTPUT"
-          fi
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v7
-        timeout-minutes: 20
-        with:
-          context: .
-          push: true
-          provenance: false
-          tags: ${{ steps.tags.outputs.tags }}
-          platforms: linux/amd64,linux/arm64
-          build-args: |
-            APP_VERSION=${{ steps.release_info.outputs.release_version }}
-            GITHUB_REPO=${{ github.repository }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=min,ignore-error=true
