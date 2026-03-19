@@ -122,7 +122,7 @@ export const dbHelpers = {
   },
 
   stringifyJSON: (obj) => {
-    if (!obj) return null;
+    if (obj === undefined) return null;
     try {
       return JSON.stringify(obj);
     } catch {
