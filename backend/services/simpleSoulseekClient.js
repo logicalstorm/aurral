@@ -1,9 +1,147 @@
-import slsk from "slsk-client";
 import { randomBytes } from "crypto";
 import { dbOps } from "../config/db-helpers.js";
 import path from "path";
 import fs from "fs/promises";
 import { PassThrough } from "stream";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+
+const patchSlskDownloadPeerFile = () => {
+  if (globalThis.__aurralSlskDownloadPatchApplied) return;
+  const downloadPeerFileModulePath = require.resolve(
+    "slsk-client/lib/peer/download-peer-file.js",
+  );
+  const net = require("net");
+  const fsNode = require("fs");
+  const MessageFactory = require("slsk-client/lib/message-factory.js");
+  const stack = require("slsk-client/lib/stack");
+  const getFilePathName = (user, file) => {
+    const parts = String(file || "").split("\\");
+    return `/tmp/slsk/${user}_${parts[parts.length - 1]}`;
+  };
+  const patchedDownloadPeerFile = (host, port, token, user, noPierce) => {
+    const conn = net.createConnection(
+      {
+        host,
+        port,
+      },
+      () => {
+        if (noPierce) {
+          conn.write(
+            MessageFactory.to.peer
+              .peerInit(stack.currentLogin, "F", token)
+              .getBuff(),
+          );
+          setTimeout(() => {
+            if (conn.destroyed) return;
+            conn.write(Buffer.from("00000000" + "00000000", "hex"));
+          }, 1000);
+        } else {
+          conn.write(MessageFactory.to.peer.pierceFw(token).getBuff());
+        }
+      },
+    );
+
+    let receivedHandshake = false;
+    let requestToken = noPierce ? token : undefined;
+    let tok = null;
+    let down = null;
+    let filePath = null;
+    let writeStream = null;
+    let receivedBytes = 0;
+    let streamErrored = false;
+    const finishWithError = (error) => {
+      if (!down || typeof down.cb !== "function") return;
+      down.cb(error);
+      down.cb = null;
+    };
+    const ensureWriteStream = () => {
+      if (!tok || !down || writeStream || streamErrored) return;
+      filePath = down.path || getFilePathName(tok.user, tok.file);
+      const dir = path.dirname(filePath);
+      fsNode.mkdirSync(dir, { recursive: true });
+      writeStream = fsNode.createWriteStream(filePath);
+      writeStream.on("error", (error) => {
+        streamErrored = true;
+        conn.destroy();
+        finishWithError(error);
+      });
+    };
+
+    conn.on("data", (data) => {
+      if (!noPierce && !receivedHandshake) {
+        requestToken = data.toString("hex", 0, 4);
+        conn.write(Buffer.from("00000000" + "00000000", "hex"));
+        receivedHandshake = true;
+        return;
+      }
+      if (!tok) {
+        tok = stack.downloadTokens[requestToken];
+        down = tok ? stack.download[tok.user + "_" + tok.file] : null;
+      }
+      if (!tok || !down) return;
+
+      if (down.stream) {
+        down.stream.push(data);
+      }
+      ensureWriteStream();
+      if (!streamErrored && writeStream) {
+        const canContinue = writeStream.write(data);
+        if (!canContinue) {
+          conn.pause();
+          writeStream.once("drain", () => {
+            if (!conn.destroyed) conn.resume();
+          });
+        }
+      }
+      receivedBytes += data.length;
+      if (receivedBytes >= Number(tok.size || 0)) {
+        conn.end();
+      }
+    });
+
+    conn.on("close", () => {
+      if (!tok || !down) return;
+      if (down.stream) {
+        down.stream.push(null);
+      }
+      if (streamErrored) return;
+      const onComplete = () => {
+        down.path = filePath || down.path || getFilePathName(tok.user, tok.file);
+        down.bytesReceived = receivedBytes;
+        if (typeof down.cb === "function") {
+          down.cb(null, down);
+          down.cb = null;
+        }
+      };
+      if (writeStream) {
+        writeStream.end(onComplete);
+      } else {
+        onComplete();
+      }
+    });
+
+    conn.on("error", (error) => {
+      if (!conn.destroyed) conn.destroy();
+      if (down?.stream) {
+        down.stream.push(null);
+      }
+      finishWithError(error);
+    });
+  };
+
+  require.cache[downloadPeerFileModulePath] = {
+    id: downloadPeerFileModulePath,
+    filename: downloadPeerFileModulePath,
+    loaded: true,
+    exports: patchedDownloadPeerFile,
+  };
+  globalThis.__aurralSlskDownloadPatchApplied = true;
+};
+
+patchSlskDownloadPeerFile();
+const slsk = require("slsk-client");
 
 export class SimpleSoulseekClient {
   constructor() {

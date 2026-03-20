@@ -495,7 +495,6 @@ export class WeeklyFlowWorker {
       phaseStart = process.hrtime.bigint();
       await fs.mkdir(finalDir, { recursive: true });
       await fs.rename(sourcePath, finalPath);
-
       await fs.rm(stagingDir, { recursive: true, force: true });
 
       downloadTracker.setDone(job.id, finalPath, resolvedAlbum);
