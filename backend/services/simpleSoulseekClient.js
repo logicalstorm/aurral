@@ -6,16 +6,15 @@ import { PassThrough } from "stream";
 import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
+const slskStack = require("slsk-client/lib/stack");
 
 const patchSlskDownloadPeerFile = () => {
   if (globalThis.__aurralSlskDownloadPatchApplied) return;
-  const downloadPeerFileModulePath = require.resolve(
-    "slsk-client/lib/peer/download-peer-file.js",
-  );
+  const downloadPeerFileModulePath =
+    require.resolve("slsk-client/lib/peer/download-peer-file.js");
   const net = require("net");
   const fsNode = require("fs");
   const MessageFactory = require("slsk-client/lib/message-factory.js");
-  const stack = require("slsk-client/lib/stack");
   const getFilePathName = (user, file) => {
     const parts = String(file || "").split("\\");
     return `/tmp/slsk/${user}_${parts[parts.length - 1]}`;
@@ -30,7 +29,7 @@ const patchSlskDownloadPeerFile = () => {
         if (noPierce) {
           conn.write(
             MessageFactory.to.peer
-              .peerInit(stack.currentLogin, "F", token)
+              .peerInit(slskStack.currentLogin, "F", token)
               .getBuff(),
           );
           setTimeout(() => {
@@ -51,7 +50,28 @@ const patchSlskDownloadPeerFile = () => {
     let writeStream = null;
     let receivedBytes = 0;
     let streamErrored = false;
+    let settled = false;
+    const clearStackDownloadState = () => {
+      if (requestToken != null) {
+        delete slskStack.downloadTokens[requestToken];
+      }
+      if (tok?.user && tok?.file) {
+        delete slskStack.download[`${tok.user}_${tok.file}`];
+      }
+    };
+    const closeReadableStream = () => {
+      if (down?.stream) {
+        down.stream.push(null);
+      }
+    };
     const finishWithError = (error) => {
+      if (settled) return;
+      settled = true;
+      clearStackDownloadState();
+      closeReadableStream();
+      if (writeStream && !writeStream.destroyed) {
+        writeStream.destroy();
+      }
       if (!down || typeof down.cb !== "function") return;
       down.cb(error);
       down.cb = null;
@@ -77,8 +97,8 @@ const patchSlskDownloadPeerFile = () => {
         return;
       }
       if (!tok) {
-        tok = stack.downloadTokens[requestToken];
-        down = tok ? stack.download[tok.user + "_" + tok.file] : null;
+        tok = slskStack.downloadTokens[requestToken];
+        down = tok ? slskStack.download[tok.user + "_" + tok.file] : null;
       }
       if (!tok || !down) return;
 
@@ -102,13 +122,25 @@ const patchSlskDownloadPeerFile = () => {
     });
 
     conn.on("close", () => {
+      if (settled) return;
       if (!tok || !down) return;
-      if (down.stream) {
-        down.stream.push(null);
-      }
+      closeReadableStream();
       if (streamErrored) return;
+      const expectedBytes = Number(tok.size || 0);
+      if (expectedBytes > 0 && receivedBytes < expectedBytes) {
+        finishWithError(
+          new Error(
+            `Incomplete download (${receivedBytes}/${expectedBytes} bytes)`,
+          ),
+        );
+        return;
+      }
       const onComplete = () => {
-        down.path = filePath || down.path || getFilePathName(tok.user, tok.file);
+        if (settled) return;
+        settled = true;
+        clearStackDownloadState();
+        down.path =
+          filePath || down.path || getFilePathName(tok.user, tok.file);
         down.bytesReceived = receivedBytes;
         if (typeof down.cb === "function") {
           down.cb(null, down);
@@ -124,9 +156,6 @@ const patchSlskDownloadPeerFile = () => {
 
     conn.on("error", (error) => {
       if (!conn.destroyed) conn.destroy();
-      if (down?.stream) {
-        down.stream.push(null);
-      }
       finishWithError(error);
     });
   };
@@ -147,6 +176,7 @@ export class SimpleSoulseekClient {
   constructor() {
     this.client = null;
     this.connected = false;
+    this.connectPromise = null;
     this.config = null;
     this.metrics = {
       connectCalls: 0,
@@ -204,13 +234,16 @@ export class SimpleSoulseekClient {
     if (this.connected && this.client) {
       return true;
     }
+    if (this.connectPromise) {
+      return this.connectPromise;
+    }
     this.metrics.connectCalls += 1;
 
     if (!this.isConfigured()) {
       throw new Error("Soulseek credentials not configured");
     }
 
-    return new Promise((resolve, reject) => {
+    this.connectPromise = new Promise((resolve, reject) => {
       slsk.connect(
         {
           user: this.config.username,
@@ -227,6 +260,7 @@ export class SimpleSoulseekClient {
             ) {
               try {
                 await this.regenerateCredentials();
+                this.connectPromise = null;
                 const ok = await this.connect(false);
                 resolve(ok);
                 return;
@@ -246,6 +280,11 @@ export class SimpleSoulseekClient {
         },
       );
     });
+    try {
+      return await this.connectPromise;
+    } finally {
+      this.connectPromise = null;
+    }
   }
 
   isInvalidPass(error) {
@@ -267,6 +306,7 @@ export class SimpleSoulseekClient {
   }
 
   async disconnect() {
+    this.connectPromise = null;
     this.metrics.disconnectCalls += 1;
     this.metrics.lastDisconnectAt = Date.now();
     if (this.client && this.connected) {
@@ -305,6 +345,18 @@ export class SimpleSoulseekClient {
     const raw = Number(process.env.SOULSEEK_DOWNLOAD_TIMEOUT_MS);
     if (Number.isFinite(raw) && raw >= 15000) return raw;
     return 120000;
+  }
+
+  _getDownloadStartupTimeoutMs() {
+    const raw = Number(process.env.SOULSEEK_DOWNLOAD_START_TIMEOUT_MS);
+    if (Number.isFinite(raw) && raw >= 3000) return raw;
+    return 12000;
+  }
+
+  _getDownloadStallTimeoutMs() {
+    const raw = Number(process.env.SOULSEEK_DOWNLOAD_STALL_TIMEOUT_MS);
+    if (Number.isFinite(raw) && raw >= 5000) return raw;
+    return 15000;
   }
 
   _getMatchScanLimit() {
@@ -411,20 +463,26 @@ export class SimpleSoulseekClient {
     await fs.mkdir(dir, { recursive: true });
 
     const DOWNLOAD_TIMEOUT_MS = this._getDownloadTimeoutMs();
+    const DOWNLOAD_STARTUP_TIMEOUT_MS = this._getDownloadStartupTimeoutMs();
+    const DOWNLOAD_STALL_TIMEOUT_MS = this._getDownloadStallTimeoutMs();
     const expectedBytes = Number(result?.size || 0);
     const progressEnabled =
       typeof onProgress === "function" && expectedBytes > 0;
+    const streamMonitorEnabled = expectedBytes > 0;
 
     try {
       const filePath = await new Promise((resolve, reject) => {
         let settled = false;
         let timeoutId = null;
+        let startupTimeoutId = null;
+        let stallTimeoutId = null;
         let lastProgress = -1;
         let downloadedBytes = 0;
         let lastProgressEmitAt = 0;
-        const progressStream = progressEnabled ? new PassThrough() : null;
+        const progressStream = streamMonitorEnabled ? new PassThrough() : null;
         let onData = null;
         let cleanedUp = false;
+        let sawFirstByte = false;
         const emitProgress = (value) => {
           if (!progressEnabled) return;
           const next = Math.max(
@@ -436,11 +494,27 @@ export class SimpleSoulseekClient {
           onProgress(next);
         };
         if (progressStream) {
+          const armStallTimer = () => {
+            if (stallTimeoutId) clearTimeout(stallTimeoutId);
+            stallTimeoutId = setTimeout(() => {
+              if (settled) return;
+              this.disconnect().catch(() => {});
+              settle(reject)(new Error("Download stalled (no progress)"));
+            }, DOWNLOAD_STALL_TIMEOUT_MS);
+          };
           onData = (chunk) => {
             const size = Buffer.isBuffer(chunk)
               ? chunk.length
               : Number(chunk?.length || 0);
             if (!Number.isFinite(size) || size <= 0) return;
+            if (!sawFirstByte) {
+              sawFirstByte = true;
+              if (startupTimeoutId) {
+                clearTimeout(startupTimeoutId);
+                startupTimeoutId = null;
+              }
+            }
+            armStallTimer();
             downloadedBytes += size;
             const now = Date.now();
             const pct = Math.floor((downloadedBytes / expectedBytes) * 100);
@@ -468,6 +542,8 @@ export class SimpleSoulseekClient {
           if (settled) return;
           settled = true;
           if (timeoutId) clearTimeout(timeoutId);
+          if (startupTimeoutId) clearTimeout(startupTimeoutId);
+          if (stallTimeoutId) clearTimeout(stallTimeoutId);
           cleanup();
           fn(val);
         };
@@ -477,12 +553,32 @@ export class SimpleSoulseekClient {
           this.disconnect().catch(() => {});
           settle(reject)(new Error("Download timeout"));
         }, DOWNLOAD_TIMEOUT_MS);
+        if (progressStream) {
+          startupTimeoutId = setTimeout(() => {
+            if (settled) return;
+            this.disconnect().catch(() => {});
+            settle(reject)(new Error("Download stalled (no bytes received)"));
+          }, DOWNLOAD_STARTUP_TIMEOUT_MS);
+        }
 
         this.client.download(
           { file: result, path: absPath },
           (err, down) => {
             if (err) {
               settle(reject)(err);
+              return;
+            }
+            const bytesReceived = Number(down?.bytesReceived || 0);
+            if (
+              expectedBytes > 0 &&
+              bytesReceived > 0 &&
+              bytesReceived < expectedBytes
+            ) {
+              settle(reject)(
+                new Error(
+                  `Incomplete download (${bytesReceived}/${expectedBytes} bytes)`,
+                ),
+              );
               return;
             }
             emitProgress(100);
@@ -495,6 +591,12 @@ export class SimpleSoulseekClient {
           progressStream || undefined,
         );
       });
+      const stat = await fs.stat(filePath).catch(() => null);
+      const actualBytes = Number(stat?.size || 0);
+      if (actualBytes <= 0) {
+        await fs.rm(filePath, { force: true }).catch(() => {});
+        throw new Error("Downloaded file is empty");
+      }
       this.metrics.downloadSuccesses += 1;
       return filePath;
     } catch (err) {
