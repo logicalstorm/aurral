@@ -1,7 +1,6 @@
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import {
   Loader2,
-  CheckCircle2,
   Clock,
   Trash2,
   Pencil,
@@ -609,87 +608,98 @@ export function FlowStatusCards({
   flowCount,
   runningCount,
   completedCount,
-  isSocketConnected,
 }) {
   const queuePending = Number(status?.operationQueue?.pending || 0);
   const queueProcessing = status?.operationQueue?.processing === true;
   const idleCount = Math.max(flowCount - runningCount - completedCount, 0);
   const workerRunning = status?.worker?.running === true;
+  const pending = Number(status?.stats?.pending || 0);
+  const downloading = Number(status?.stats?.downloading || 0);
+  const done = Number(status?.stats?.done || 0);
+  const total = pending + downloading + done;
+  const processed = done;
+  const progressPct = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
+  const hintMessage = String(status?.hint?.message || "").trim();
+  const baseSummaryMessage =
+    runningCount > 0
+      ? `Processing ${runningCount} ${runningCount === 1 ? "playlist" : "playlists"} (${pending} pending, ${done} completed)`
+      : done > 0
+        ? `No active processing (${done} completed)`
+        : "No active processing";
+  const hasCurrentJob =
+    status?.worker?.currentJob?.artistName && status?.worker?.currentJob?.trackName;
+  const hintLower = hintMessage.toLowerCase();
+  const hintIsDownloadLike =
+    hintLower.includes("download") || hintLower.includes("downloading");
+  const shouldShowHint =
+    hintMessage.length > 0 && !(hasCurrentJob && hintIsDownloadLike);
+  const summaryMessage = hasCurrentJob
+    ? "Downloading tracks"
+    : shouldShowHint
+      ? hintMessage
+      : baseSummaryMessage;
+  const hasPreparationSignal = queuePending > 0 || queueProcessing || (shouldShowHint && !workerRunning);
+  const statusLabel = workerRunning
+    ? "Running"
+    : hasPreparationSignal
+        ? "Preparing"
+        : "Stopped";
+  const statusBadgeClass =
+    statusLabel === "Running"
+      ? "badge-success"
+      : statusLabel === "Preparing"
+        ? "badge-secondary"
+        : "badge-neutral";
 
   return (
     <div className="mb-6 rounded-lg border border-white/5 bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs uppercase tracking-[0.3em] text-[#8b8b90]">
-          Worker Overview
+        <h2 className="text-base font-semibold text-white">Worker Overview</h2>
+        <span className={`badge ${statusBadgeClass}`}>
+          {statusLabel}
         </span>
-        <div className="flex items-center gap-2">
-          <span className={`badge ${workerRunning ? "badge-success" : "badge-neutral"}`}>
-            {workerRunning ? "Running" : "Stopped"}
-          </span>
-          <span
-            className={`text-xs ${
-              isSocketConnected ? "text-[#9aa886]" : "text-[#c1c1c3]"
-            }`}
-          >
-            {isSocketConnected ? "Live updates on" : "Reconnecting live updates..."}
-          </span>
-        </div>
       </div>
-      <div className="mt-3 flex items-center gap-2 text-sm text-white">
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
         {workerRunning ? (
           <Loader2 className="w-4 h-4 animate-spin text-[#9aa886]" />
         ) : (
-          <Clock className="w-4 h-4 text-[#c1c1c3]" />
+          <Clock className="w-4 h-4 text-[#d0d0d4]" />
         )}
-        <span>
-          {workerRunning
-            ? status?.worker?.processing
-              ? "Processing tracks now"
-              : "Worker is online and waiting for jobs"
-            : "Worker is idle"}
-        </span>
+        <span className="text-[#e3e3e7]">{summaryMessage}</span>
       </div>
-      <div className="mt-2 text-xs text-[#c1c1c3]">
-        {queuePending > 0
-          ? `${queuePending} flow operations queued`
-          : queueProcessing
-            ? "Applying queued flow operation"
-            : "No queued flow operations"}
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4 text-xs text-[#c1c1c3]">
-        <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-          <span>Flows On</span>
-          <span className="text-white">{enabledCount}/{flowCount}</span>
+      {total > 0 ? (
+        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
+          <div
+            className="h-full rounded-full bg-[#9aa886] transition-all duration-300"
+            style={{ width: `${progressPct}%` }}
+          />
         </div>
-        <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-          <span>Running</span>
-          <span className="text-white">{runningCount}</span>
-        </div>
-        <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-          <span>Completed</span>
-          <span className="text-white">{completedCount}</span>
-        </div>
-        <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-          <span>Idle</span>
-          <span className="text-white">{idleCount}</span>
-        </div>
-      </div>
-      <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4 text-xs text-[#c1c1c3]">
-        <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-          <span>Pending</span>
-          <span className="text-white">{status?.stats?.pending ?? 0}</span>
-        </div>
-        <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-          <span>Downloading</span>
-          <span className="text-white">{status?.stats?.downloading ?? 0}</span>
-        </div>
-        <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-          <span>Done</span>
-          <span className="text-white">{status?.stats?.done ?? 0}</span>
-        </div>
-        <div className="rounded bg-white/5 px-2 py-1 flex items-center justify-between">
-          <span>Failed</span>
-          <span className="text-white">{status?.stats?.failed ?? 0}</span>
+      ) : null}
+      <div className="mt-3 overflow-x-auto rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs">
+        <div className="flex min-w-max items-center gap-3 text-[#c1c1c3]">
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <span className="rounded bg-black/30 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#d0d0d4]">
+              Flows
+            </span>
+            <span>On <span className="text-white">{enabledCount}/{flowCount}</span></span>
+            <span className="text-white/25">•</span>
+            <span>Running <span className="text-white">{runningCount}</span></span>
+            <span className="text-white/25">•</span>
+            <span>Completed <span className="text-white">{completedCount}</span></span>
+            <span className="text-white/25">•</span>
+            <span>Idle <span className="text-white">{idleCount}</span></span>
+          </div>
+          <div className="h-4 w-px shrink-0 bg-white/15" />
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <span className="rounded bg-black/30 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#d0d0d4]">
+              Tracks
+            </span>
+            <span>Pending <span className="text-white">{pending}</span></span>
+            <span className="text-white/25">•</span>
+            <span>Downloading <span className="text-white">{downloading}</span></span>
+            <span className="text-white/25">•</span>
+            <span>Done <span className="text-white">{done}</span></span>
+          </div>
         </div>
       </div>
     </div>
@@ -701,6 +711,9 @@ export function FlowCard({
   enabled,
   state,
   stats,
+  currentJob,
+  statusHint,
+  operationQueue,
   nextRun,
   isEditing,
   isTracksOpen,
@@ -727,21 +740,70 @@ export function FlowCard({
   focusOptions,
   normalizeMixPercent,
 }) {
+  const processed = Number(stats?.done || 0);
+  const total = Number(stats?.total || 0);
+  const processedDisplay = total > 0 ? Math.min(processed, total) : processed;
+  const progressPct = total > 0 ? Math.min(100, Math.round((processedDisplay / total) * 100)) : 0;
+  const isCurrentJobForFlow =
+    currentJob?.playlistType === flow.id &&
+    currentJob?.artistName &&
+    currentJob?.trackName;
+  const jobProgressPct = Math.max(
+    0,
+    Math.min(100, Math.round(Number(currentJob?.progressPct || 0))),
+  );
+  const hintPhase = String(statusHint?.phase || "").trim();
+  const hintMessage = String(statusHint?.message || "").trim();
+  const queueProcessing = operationQueue?.processing === true;
+  const queueLabel = String(operationQueue?.currentLabel || "").trim();
+  const queueFlowId = queueLabel.includes(":")
+    ? queueLabel.slice(queueLabel.indexOf(":") + 1)
+    : "";
+  const isGeneratingThisFlow =
+    enabled &&
+    queueProcessing &&
+    (queueLabel.startsWith("enable:") || queueLabel.startsWith("scheduled:")) &&
+    queueFlowId === flow.id;
+  const pendingCount = Number(stats?.pending || 0);
+  const isQueued =
+    enabled &&
+    pendingCount > 0 &&
+    !isCurrentJobForFlow &&
+    hintPhase === "downloading";
+  let flowWorkerMessage = "";
+  if (isCurrentJobForFlow) {
+    flowWorkerMessage = `Download: ${currentJob.trackName} (${jobProgressPct}%)`;
+  } else if (isGeneratingThisFlow) {
+    flowWorkerMessage = "Generating playlist";
+  } else if (isQueued) {
+    flowWorkerMessage = "Queued";
+  } else if (enabled && queueProcessing && pendingCount > 0) {
+    flowWorkerMessage = "Queued";
+  } else if (enabled && hintPhase === "queued" && pendingCount > 0) {
+    flowWorkerMessage = "Tracks queued and waiting";
+  } else if (enabled && hintMessage && hintPhase !== "downloading") {
+    flowWorkerMessage = hintMessage;
+  }
+  const metaItems = [];
+  if (enabled && nextRun && state !== "running" && !isGeneratingThisFlow) {
+    metaItems.push(`Next update: ${nextRun}`);
+  }
+
   return (
     <div className="bg-card rounded-lg border border-white/5 overflow-hidden">
-      <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="min-w-0 flex-1 grid gap-1">
+      <div
+        className={`p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-opacity ${
+          enabled ? "opacity-100" : "opacity-50"
+        }`}
+      >
+        <div className="min-w-0 flex-1 grid gap-2.5">
           <div className="flex items-center gap-3">
+            <span className="inline-flex h-5 min-w-[1.5rem] items-center justify-center rounded-full border border-white/10 bg-white/5 px-1.5 text-[11px] font-medium text-[#b5b5bc]">
+              {flow.size}
+            </span>
             <h3 className="text-base font-medium text-white truncate">
               {flow.name}
             </h3>
-            <span
-              className={`badge badge-sm ${
-                enabled ? "badge-success" : "badge-secondary"
-              }`}
-            >
-              {enabled ? "Enabled" : "Disabled"}
-            </span>
             {state === "running" && (
               <span className="badge badge-success badge-sm gap-1.5 pl-1.5 pr-2">
                 <Loader2 className="w-3 h-3 animate-spin" />
@@ -755,43 +817,36 @@ export function FlowCard({
               </span>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#8b8b90]">
-            <span>{flow.size} tracks</span>
-            {flow.deepDive && (
-              <>
-                <span className="text-white/10">•</span>
-                <span>Deep dive</span>
-              </>
-            )}
-            {state === "running" && (
-              <>
-                <span className="text-white/10">•</span>
-                <span className="text-[#9aa886]">
-                  {stats.done + stats.failed}/{stats.total} processed
-                </span>
-              </>
-            )}
-            {state === "completed" && stats.total > 0 && (
-              <>
-                <span className="text-white/10">•</span>
-                <span className="flex items-center gap-1.5 text-[#9aa886]">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  {stats.done} done
-                  {stats.failed > 0 && `(${stats.failed} failed)`}
-                </span>
-              </>
-            )}
-            {enabled && nextRun && state !== "running" && (
-              <>
-                <span className="text-white/10">•</span>
-                <span>Next: {nextRun}</span>
-              </>
-            )}
-          </div>
+          {metaItems.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#b5b5bc]">
+              <span>{metaItems.join(" • ")}</span>
+            </div>
+          ) : null}
+          {flowWorkerMessage ? (
+            <div className="truncate text-xs text-[#9aa886]">
+              {flowWorkerMessage}
+            </div>
+          ) : null}
+          {(state === "running" || state === "completed") && total > 0 ? (
+            <div className="grid gap-1.5">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    state === "completed" ? "bg-[#7aa2f7]" : "bg-[#9aa886]"
+                  }`}
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#d3d3d8]">
+                <span>{progressPct}% complete</span>
+                <span className="text-[#b5b5bc]">{processedDisplay}/{total} processed</span>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 rounded-md border border-white/10 bg-white/5 p-1">
             {isEditing && (
               <button
                 onClick={onDelete}
@@ -806,6 +861,7 @@ export function FlowCard({
               onClick={onViewTracks}
               className="btn btn-secondary btn-sm px-2"
               aria-label={isTracksOpen ? `Close ${flow.name} tracks` : `View ${flow.name} tracks`}
+              disabled={!enabled && !isTracksOpen}
             >
               <ListMusic className="w-4 h-4" />
             </button>
@@ -818,14 +874,13 @@ export function FlowCard({
             </button>
           </div>
           
-          <div className="w-px h-6 bg-white/10" />
-          
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
             {togglingId === flow.id && (
               <Loader2 className="w-3.5 h-3.5 animate-spin text-white/50" />
             )}
             <PillToggle
               checked={enabled}
+              className={enabled ? "" : "is-off"}
               onChange={(event) => onToggleEnabled(event.target.checked)}
               disabled={togglingId === flow.id}
             />
