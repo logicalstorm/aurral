@@ -450,7 +450,6 @@ const isFlowDirty = (flow, draft) => {
 const EMPTY_FLOW_STATS = {
   total: 0,
   done: 0,
-  failed: 0,
   pending: 0,
   downloading: 0,
 };
@@ -458,13 +457,24 @@ const EMPTY_FLOW_STATS = {
 const buildFlowStatsFromJobs = (jobs) => {
   const stats = { ...EMPTY_FLOW_STATS };
   if (!Array.isArray(jobs)) return stats;
-  stats.total = jobs.length;
   for (const job of jobs) {
-    if (job?.status) {
-      stats[job.status] = (stats[job.status] || 0) + 1;
-    }
+    if (!job?.status || job.status === "failed") continue;
+    stats[job.status] = (stats[job.status] || 0) + 1;
   }
+  stats.total = stats.pending + stats.downloading + stats.done;
   return stats;
+};
+
+const sanitizeFlowStats = (stats) => {
+  const pending = Number(stats?.pending || 0);
+  const downloading = Number(stats?.downloading || 0);
+  const done = Number(stats?.done || 0);
+  return {
+    total: pending + downloading + done,
+    pending,
+    downloading,
+    done,
+  };
 };
 
 function FlowPage() {
@@ -623,10 +633,10 @@ function FlowPage() {
   }, [status?.flows]);
 
   const getPlaylistStats = (flowId) => {
-    return (
+    return sanitizeFlowStats(
       status?.flowStats?.[flowId] ||
       flowStatsById[flowId] ||
-      EMPTY_FLOW_STATS
+      EMPTY_FLOW_STATS,
     );
   };
 
@@ -634,7 +644,7 @@ function FlowPage() {
     const stats = getPlaylistStats(flowId);
     if (stats.total === 0) return "idle";
     if (stats.downloading > 0 || stats.pending > 0) return "running";
-    if (stats.done > 0 || stats.failed > 0) return "completed";
+    if (stats.done > 0) return "completed";
     return "idle";
   };
 
@@ -872,13 +882,15 @@ function FlowPage() {
     setTracksErrorByFlowId((prev) => ({ ...prev, [flowId]: "" }));
     try {
       const jobs = await getFlowJobs(flowId, 500);
-      const normalized = (Array.isArray(jobs) ? jobs : []).map((job) => ({
-        ...job,
-        albumName: job?.albumName || null,
-        reason: normalizeReason(job),
-        streamUrl:
-          job?.status === "done" && job?.id ? getFlowTrackStreamUrl(job.id) : null,
-      }));
+      const normalized = (Array.isArray(jobs) ? jobs : [])
+        .filter((job) => job?.status !== "failed")
+        .map((job) => ({
+          ...job,
+          albumName: job?.albumName || null,
+          reason: normalizeReason(job),
+          streamUrl:
+            job?.status === "done" && job?.id ? getFlowTrackStreamUrl(job.id) : null,
+        }));
       setTracksByFlowId((prev) => ({
         ...prev,
         [flowId]: normalized,
@@ -990,6 +1002,15 @@ function FlowPage() {
         {effectiveFlowList.map((flow) => {
           const stats = getPlaylistStats(flow.id);
           const state = getPlaylistState(flow.id);
+          const flowSize = Number(flow?.size || 0);
+          const targetTotal =
+            Number.isFinite(flowSize) && flowSize > 0
+              ? Math.floor(flowSize)
+              : stats.total;
+          const displayStats = {
+            ...stats,
+            total: targetTotal,
+          };
           const enabled = flow.enabled === true;
           const nextRun = formatNextRun(flow.nextRunAt);
           const isEditing = editingId === flow.id;
@@ -1005,9 +1026,8 @@ function FlowPage() {
               flow={flow}
               enabled={enabled}
               state={state}
-              stats={stats}
+              stats={displayStats}
               currentJob={status?.worker?.currentJob}
-              workerRunning={status?.worker?.running === true}
               statusHint={status?.hint}
               operationQueue={status?.operationQueue}
               nextRun={nextRun}

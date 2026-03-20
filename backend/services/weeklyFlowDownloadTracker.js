@@ -243,6 +243,17 @@ export class WeeklyFlowDownloadTracker {
     return this.jobs.get(id) || null;
   }
 
+  removeJob(id) {
+    const job = this.jobs.get(id);
+    if (!job) return false;
+    this.jobs.delete(id);
+    this.pendingSet.delete(id);
+    this.pendingQueue = this.pendingQueue.filter((entryId) => entryId !== id);
+    this._applyStatusDelta(job.playlistType, job.status, null);
+    deleteStmt.run(id);
+    return true;
+  }
+
   getNextPending() {
     while (this.pendingQueue.length > 0) {
       const nextId = this.pendingQueue[0];
@@ -302,6 +313,18 @@ export class WeeklyFlowDownloadTracker {
       this.pendingSet.add(id);
       this.pendingQueue.push(id);
     }
+    return true;
+  }
+
+  deferPendingToBack(id, error = null) {
+    const job = this.jobs.get(id);
+    if (!job || job.status !== "pending") return false;
+    job.error =
+      typeof error === "string" ? error : (error && error.message) || null;
+    this._update(job);
+    this.pendingQueue = this.pendingQueue.filter((entryId) => entryId !== id);
+    this.pendingQueue.push(id);
+    this.pendingSet.add(id);
     return true;
   }
 

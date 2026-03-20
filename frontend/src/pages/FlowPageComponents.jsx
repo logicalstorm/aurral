@@ -616,32 +616,24 @@ export function FlowStatusCards({
   const pending = Number(status?.stats?.pending || 0);
   const downloading = Number(status?.stats?.downloading || 0);
   const done = Number(status?.stats?.done || 0);
-  const failed = Number(status?.stats?.failed || 0);
-  const total = Number(status?.stats?.total || pending + downloading + done + failed);
-  const processed = done + failed;
+  const total = pending + downloading + done;
+  const processed = done;
   const progressPct = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
-  const hintPhase = String(status?.hint?.phase || "").trim();
   const hintMessage = String(status?.hint?.message || "").trim();
   const baseSummaryMessage =
     runningCount > 0
       ? `Processing ${runningCount} ${runningCount === 1 ? "playlist" : "playlists"} (${pending} pending, ${done} completed)`
       : done > 0
-        ? `No active processing (${done} completed${failed > 0 ? `, ${failed} failed` : ""})`
+        ? `No active processing (${done} completed)`
         : "No active processing";
   const hasCurrentJob =
     status?.worker?.currentJob?.artistName && status?.worker?.currentJob?.trackName;
   const hintLower = hintMessage.toLowerCase();
   const hintIsDownloadLike =
     hintLower.includes("download") || hintLower.includes("downloading");
-  const isShuttingDown =
-    !workerRunning &&
-    !queueProcessing &&
-    (hintPhase === "downloading" || hintIsDownloadLike);
   const shouldShowHint =
-    hintMessage.length > 0 && !(hasCurrentJob && hintIsDownloadLike) && !isShuttingDown;
-  const summaryMessage = isShuttingDown
-    ? "Shutting down worker..."
-    : hasCurrentJob
+    hintMessage.length > 0 && !(hasCurrentJob && hintIsDownloadLike);
+  const summaryMessage = hasCurrentJob
     ? "Downloading tracks"
     : shouldShowHint
       ? hintMessage
@@ -649,16 +641,12 @@ export function FlowStatusCards({
   const hasPreparationSignal = queuePending > 0 || queueProcessing || (shouldShowHint && !workerRunning);
   const statusLabel = workerRunning
     ? "Running"
-    : isShuttingDown
-      ? "Shutting Down"
-      : hasPreparationSignal
+    : hasPreparationSignal
         ? "Preparing"
         : "Stopped";
   const statusBadgeClass =
     statusLabel === "Running"
       ? "badge-success"
-      : statusLabel === "Shutting Down"
-        ? "badge-secondary"
       : statusLabel === "Preparing"
         ? "badge-secondary"
         : "badge-neutral";
@@ -672,17 +660,12 @@ export function FlowStatusCards({
         </span>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
-        {workerRunning || isShuttingDown ? (
+        {workerRunning ? (
           <Loader2 className="w-4 h-4 animate-spin text-[#9aa886]" />
         ) : (
           <Clock className="w-4 h-4 text-[#d0d0d4]" />
         )}
         <span className="text-[#e3e3e7]">{summaryMessage}</span>
-        {failed > 0 ? (
-          <span className="rounded-full border border-red-400/40 bg-red-500/10 px-2 py-0.5 text-xs text-red-300">
-            {failed} failed
-          </span>
-        ) : null}
       </div>
       {total > 0 ? (
         <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
@@ -716,12 +699,6 @@ export function FlowStatusCards({
             <span>Downloading <span className="text-white">{downloading}</span></span>
             <span className="text-white/25">•</span>
             <span>Done <span className="text-white">{done}</span></span>
-            {failed > 0 ? (
-              <>
-                <span className="text-white/25">•</span>
-                <span className="text-red-300">Failed <span>{failed}</span></span>
-              </>
-            ) : null}
           </div>
         </div>
       </div>
@@ -735,7 +712,6 @@ export function FlowCard({
   state,
   stats,
   currentJob,
-  workerRunning,
   statusHint,
   operationQueue,
   nextRun,
@@ -764,9 +740,10 @@ export function FlowCard({
   focusOptions,
   normalizeMixPercent,
 }) {
-  const processed = Number(stats?.done || 0) + Number(stats?.failed || 0);
+  const processed = Number(stats?.done || 0);
   const total = Number(stats?.total || 0);
-  const progressPct = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
+  const processedDisplay = total > 0 ? Math.min(processed, total) : processed;
+  const progressPct = total > 0 ? Math.min(100, Math.round((processedDisplay / total) * 100)) : 0;
   const isCurrentJobForFlow =
     currentJob?.playlistType === flow.id &&
     currentJob?.artistName &&
@@ -779,8 +756,6 @@ export function FlowCard({
   const hintMessage = String(statusHint?.message || "").trim();
   const queueProcessing = operationQueue?.processing === true;
   const pendingCount = Number(stats?.pending || 0);
-  const isShuttingDown =
-    enabled && !workerRunning && !queueProcessing && hintPhase === "downloading";
   const isQueued =
     enabled &&
     pendingCount > 0 &&
@@ -791,10 +766,8 @@ export function FlowCard({
     flowWorkerMessage = `Downloading: ${currentJob.artistName} - ${currentJob.trackName} (${jobProgressPct}%)`;
   } else if (isQueued) {
     flowWorkerMessage = "Playlist queued";
-  } else if (isShuttingDown) {
-    flowWorkerMessage = "Shutting down worker...";
   } else if (enabled && queueProcessing) {
-    flowWorkerMessage = "Applying flow operation";
+    flowWorkerMessage = "Starting worker...";
   } else if (enabled && hintMessage && hintPhase !== "downloading") {
     flowWorkerMessage = hintMessage;
   }
@@ -834,7 +807,7 @@ export function FlowCard({
                 <span>Deep dive</span>
               </>
             )}
-            {enabled && nextRun && state === "idle" && (
+            {enabled && nextRun && state === "completed" && (
               <>
                 <span className="text-white/10">•</span>
                 <span>Next: {nextRun}</span>
@@ -858,10 +831,7 @@ export function FlowCard({
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#d3d3d8]">
                 <span>{progressPct}% complete</span>
-                <span className="text-[#b5b5bc]">{processed}/{total} processed</span>
-                {stats.failed > 0 ? (
-                  <span className="text-red-300">{stats.failed} failed</span>
-                ) : null}
+                <span className="text-[#b5b5bc]">{processedDisplay}/{total} processed</span>
               </div>
             </div>
           ) : null}
