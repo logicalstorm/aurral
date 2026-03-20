@@ -26,9 +26,9 @@ function formatNextRun(nextRunAt) {
   if (!Number.isFinite(ts)) return null;
   const now = Date.now();
   const diff = ts - now;
-  if (diff <= 0) return "Refreshing soon";
+  if (diff <= 0) return "soon";
   const days = Math.ceil(diff / (24 * 60 * 60 * 1000));
-  return days === 1 ? "Resets tomorrow" : `Resets in ${days} days`;
+  return days === 1 ? "1 day" : `${days} days`;
 }
 
 const DEFAULT_MIX = { discover: 50, mix: 30, trending: 20 };

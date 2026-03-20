@@ -12,9 +12,9 @@ function formatNextRunMessage(flows) {
     .sort((a, b) => a - b)[0];
   if (!nextRunAt) return null;
   const diff = nextRunAt - Date.now();
-  if (diff <= 0) return "Refreshing soon";
+  if (diff <= 0) return "Next update: soon";
   const days = Math.ceil(diff / (24 * 60 * 60 * 1000));
-  return days === 1 ? "Next run tomorrow" : `Next run in ${days} days`;
+  return days === 1 ? "Next update: 1 day" : `Next update: ${days} days`;
 }
 
 export function getWeeklyFlowStatusSnapshot({
@@ -36,7 +36,7 @@ export function getWeeklyFlowStatusSnapshot({
       queueLabel.startsWith("enable:") ||
       queueLabel.startsWith("scheduled:")
     ) {
-      message = "Generating track list";
+      message = "Generating playlist";
     } else if (
       queueLabel.startsWith("disable:") ||
       queueLabel.startsWith("delete:")
@@ -45,7 +45,7 @@ export function getWeeklyFlowStatusSnapshot({
     } else if (queueLabel.startsWith("reset:")) {
       message = "Resetting flow files";
     } else {
-      message = "Starting worker...";
+      message = "Generating playlist";
     }
   } else if (workerStatus?.processing) {
     phase = "downloading";

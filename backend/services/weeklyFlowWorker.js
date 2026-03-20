@@ -7,18 +7,18 @@ import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { playlistSource } from "./weeklyFlowPlaylistSource.js";
 
 const CONCURRENCY = 1;
-const JOB_COOLDOWN_MS = 5000;
-const RETRY_BASE_DELAY_MS = 10000;
+const JOB_COOLDOWN_MS = 2000;
+const RETRY_BASE_DELAY_MS = 5000;
 const RETRY_MAX_DELAY_MS = 120000;
 const AUTH_FAILURE_PAUSE_MS = 45000;
-const CONNECTIVITY_FAILURE_PAUSE_MS = 30000;
+const CONNECTIVITY_FAILURE_PAUSE_MS = 15000;
 const RETRYABLE_FAILURE_STREAK_THRESHOLD = 3;
 const RETRYABLE_FAILURE_STREAK_PAUSE_MS = 180000;
 const MAX_MATCH_CANDIDATES = 3;
 const FALLBACK_MP3_REGEX = /^[^/\\]+-[a-f0-9]{8}\.mp3$/i;
 const FALLBACK_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
-const MAX_RETRIES_PER_JOB = 0;
-const MAX_RETRIES_FOR_TIMEOUT_LOGIN = 0;
+const MAX_RETRIES_PER_JOB = 1;
+const MAX_RETRIES_FOR_TIMEOUT_LOGIN = 1;
 const MAX_BACKUP_REFILL_ROUNDS = 3;
 const NON_RETRYABLE_ERRORS = new Set([
   "No search results found",
@@ -69,6 +69,7 @@ export class WeeklyFlowWorker {
     const text = String(message || "").toLowerCase();
     return (
       text.includes("download timeout") ||
+      text.includes("download stalled") ||
       text.includes("econnreset") ||
       text.includes("etimedout") ||
       text.includes("socket hang up")
@@ -298,7 +299,7 @@ export class WeeklyFlowWorker {
               `[WeeklyFlowWorker] Error processing job ${job.id}:`,
               error.message,
             );
-            downloadTracker.removeJob(job.id);
+            downloadTracker.setFailed(job.id, error.message);
             await this.checkPlaylistComplete(job.playlistType);
           })
           .finally(() => {

@@ -755,6 +755,15 @@ export function FlowCard({
   const hintPhase = String(statusHint?.phase || "").trim();
   const hintMessage = String(statusHint?.message || "").trim();
   const queueProcessing = operationQueue?.processing === true;
+  const queueLabel = String(operationQueue?.currentLabel || "").trim();
+  const queueFlowId = queueLabel.includes(":")
+    ? queueLabel.slice(queueLabel.indexOf(":") + 1)
+    : "";
+  const isGeneratingThisFlow =
+    enabled &&
+    queueProcessing &&
+    (queueLabel.startsWith("enable:") || queueLabel.startsWith("scheduled:")) &&
+    queueFlowId === flow.id;
   const pendingCount = Number(stats?.pending || 0);
   const isQueued =
     enabled &&
@@ -763,11 +772,15 @@ export function FlowCard({
     hintPhase === "downloading";
   let flowWorkerMessage = "";
   if (isCurrentJobForFlow) {
-    flowWorkerMessage = `Downloading: ${currentJob.artistName} - ${currentJob.trackName} (${jobProgressPct}%)`;
+    flowWorkerMessage = `Download: ${currentJob.trackName} (${jobProgressPct}%)`;
+  } else if (isGeneratingThisFlow) {
+    flowWorkerMessage = "Generating playlist";
   } else if (isQueued) {
-    flowWorkerMessage = "Playlist queued";
-  } else if (enabled && queueProcessing) {
-    flowWorkerMessage = "Starting worker...";
+    flowWorkerMessage = "Queued";
+  } else if (enabled && queueProcessing && pendingCount > 0) {
+    flowWorkerMessage = "Queued";
+  } else if (enabled && hintPhase === "queued" && pendingCount > 0) {
+    flowWorkerMessage = "Tracks queued and waiting";
   } else if (enabled && hintMessage && hintPhase !== "downloading") {
     flowWorkerMessage = hintMessage;
   }
@@ -807,10 +820,10 @@ export function FlowCard({
                 <span>Deep dive</span>
               </>
             )}
-            {enabled && nextRun && state === "completed" && (
+            {enabled && nextRun && state !== "running" && (
               <>
                 <span className="text-white/10">•</span>
-                <span>Next: {nextRun}</span>
+                <span>Next update: {nextRun}</span>
               </>
             )}
           </div>
