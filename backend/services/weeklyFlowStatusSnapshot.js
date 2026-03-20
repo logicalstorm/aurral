@@ -4,6 +4,19 @@ import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { weeklyFlowOperationQueue } from "./weeklyFlowOperationQueue.js";
 import { soulseekClient } from "./simpleSoulseekClient.js";
 
+function formatNextRunMessage(flows) {
+  const nextRunAt = (Array.isArray(flows) ? flows : [])
+    .filter((flow) => flow?.enabled === true)
+    .map((flow) => Number(flow?.nextRunAt))
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .sort((a, b) => a - b)[0];
+  if (!nextRunAt) return null;
+  const diff = nextRunAt - Date.now();
+  if (diff <= 0) return "Refreshing soon";
+  const days = Math.ceil(diff / (24 * 60 * 60 * 1000));
+  return days === 1 ? "Next run tomorrow" : `Next run in ${days} days`;
+}
+
 export function getWeeklyFlowStatusSnapshot({
   includeJobs = false,
   flowId = null,
@@ -11,6 +24,8 @@ export function getWeeklyFlowStatusSnapshot({
 } = {}) {
   const workerStatus = weeklyFlowWorker.getStatus();
   const stats = workerStatus.stats || downloadTracker.getStats();
+  const flows = flowPlaylistConfig.getFlows();
+  const nextRunMessage = formatNextRunMessage(flows);
   const operationQueue = weeklyFlowOperationQueue.getStatus();
   const queueLabel = String(operationQueue?.currentLabel || "");
   let phase = "idle";
@@ -30,7 +45,7 @@ export function getWeeklyFlowStatusSnapshot({
     } else if (queueLabel.startsWith("reset:")) {
       message = "Resetting flow files";
     } else {
-      message = "Applying flow operation";
+      message = "Starting worker...";
     }
   } else if (workerStatus?.processing) {
     phase = "downloading";
@@ -44,9 +59,10 @@ export function getWeeklyFlowStatusSnapshot({
     Number(stats?.downloading || 0) === 0
   ) {
     phase = "completed";
-    message = "Flow run completed";
   }
-  const flows = flowPlaylistConfig.getFlows();
+  if (phase === "completed" && nextRunMessage) {
+    message = nextRunMessage;
+  }
   const flowIds = flows.map((flow) => flow.id);
   const flowStats = downloadTracker.getStatsByPlaylistType(flowIds);
   let jobs;

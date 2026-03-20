@@ -1,6 +1,8 @@
 import { lastfmRequest, getLastfmApiKey } from "./apiClients.js";
 import { getDiscoveryCache } from "./discoveryService.js";
 
+const FLOW_TRACK_FAILURE_BUFFER_RATIO = 0.2;
+
 export class WeeklyFlowPlaylistSource {
   _buildCounts(size, mix) {
     const weights = [
@@ -599,12 +601,26 @@ export class WeeklyFlowPlaylistSource {
       recipeCounts?.discover != null
         ? this._sumWeightMap(recipeCounts)
         : limit;
-    const totalTarget = recipeTotal > 0 ? recipeTotal : limit;
+    const baseTarget = recipeTotal > 0 ? recipeTotal : limit;
+    const totalTarget = Math.max(
+      1,
+      Math.ceil(baseTarget * (1 + FLOW_TRACK_FAILURE_BUFFER_RATIO)),
+    );
     if (totalTarget <= 0) return [];
-    const counts =
-      recipeCounts?.discover != null
-        ? recipeCounts
-        : this._buildCounts(limit, flow?.mix);
+    const counts = (() => {
+      if (recipeCounts?.discover == null) {
+        return this._buildCounts(totalTarget, flow?.mix);
+      }
+      const weighted = this._buildWeightedSourceCounts(totalTarget, [
+        { key: "discover", weight: Number(recipeCounts.discover || 0) },
+        { key: "mix", weight: Number(recipeCounts.mix || 0) },
+        { key: "trending", weight: Number(recipeCounts.trending || 0) },
+      ]);
+      return weighted.reduce((acc, item) => {
+        acc[item.key] = Number(item.count || 0);
+        return acc;
+      }, {});
+    })();
     const perTypeLimit = totalTarget > 0 ? Math.max(totalTarget, 30) : 0;
     const sourceNeed = {
       discover: Number(counts?.discover || 0) > 0,
