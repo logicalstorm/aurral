@@ -32,7 +32,9 @@ const updateStmt = db.prepare(`
 
 const deleteStmt = db.prepare("DELETE FROM weekly_flow_jobs WHERE id = ?");
 const deleteAllStmt = db.prepare("DELETE FROM weekly_flow_jobs");
-const selectAllStmt = db.prepare("SELECT * FROM weekly_flow_jobs");
+const selectAllStmt = db.prepare(
+  "SELECT * FROM weekly_flow_jobs ORDER BY created_at ASC, id ASC",
+);
 const updatePlaylistTypeStmt = db.prepare(
   "UPDATE weekly_flow_jobs SET playlist_type = ? WHERE playlist_type = ?",
 );
@@ -49,6 +51,9 @@ export class WeeklyFlowDownloadTracker {
   constructor() {
     this.jobs = new Map();
     this.statsByPlaylistType = new Map();
+    this.globalStats = this._emptyStats();
+    this.pendingQueue = [];
+    this.pendingSet = new Set();
     this._load();
   }
 
@@ -83,25 +88,41 @@ export class WeeklyFlowDownloadTracker {
   }
 
   _applyStatusDelta(playlistType, fromStatus, toStatus) {
-    if (!playlistType) return;
-    const stats = this._getOrCreatePlaylistStats(playlistType);
-    if (fromStatus && stats[fromStatus] > 0) {
-      stats[fromStatus] -= 1;
-      stats.total = Math.max(0, stats.total - 1);
+    if (playlistType) {
+      const stats = this._getOrCreatePlaylistStats(playlistType);
+      if (fromStatus && stats[fromStatus] > 0) {
+        stats[fromStatus] -= 1;
+        stats.total = Math.max(0, stats.total - 1);
+      }
+      if (toStatus) {
+        stats[toStatus] = (stats[toStatus] || 0) + 1;
+        stats.total += 1;
+      }
+      if (stats.total <= 0) {
+        this.statsByPlaylistType.delete(String(playlistType));
+      }
+    }
+    if (fromStatus && this.globalStats[fromStatus] > 0) {
+      this.globalStats[fromStatus] -= 1;
+      this.globalStats.total = Math.max(0, this.globalStats.total - 1);
     }
     if (toStatus) {
-      stats[toStatus] = (stats[toStatus] || 0) + 1;
-      stats.total += 1;
-    }
-    if (stats.total <= 0) {
-      this.statsByPlaylistType.delete(String(playlistType));
+      this.globalStats[toStatus] = (this.globalStats[toStatus] || 0) + 1;
+      this.globalStats.total += 1;
     }
   }
 
   _rebuildStatsByPlaylistType() {
     this.statsByPlaylistType.clear();
+    this.globalStats = this._emptyStats();
+    this.pendingQueue = [];
+    this.pendingSet = new Set();
     for (const job of this.jobs.values()) {
       this._applyStatusDelta(job.playlistType, null, job.status);
+      if (job.status === "pending") {
+        this.pendingQueue.push(job.id);
+        this.pendingSet.add(job.id);
+      }
     }
   }
 
@@ -203,6 +224,8 @@ export class WeeklyFlowDownloadTracker {
     this.jobs.set(id, job);
     this._insert(job);
     this._applyStatusDelta(playlistType, null, job.status);
+    this.pendingQueue.push(id);
+    this.pendingSet.add(id);
     return id;
   }
 
@@ -221,10 +244,19 @@ export class WeeklyFlowDownloadTracker {
   }
 
   getNextPending() {
-    for (const job of this.jobs.values()) {
-      if (job.status === "pending") {
-        return job;
+    while (this.pendingQueue.length > 0) {
+      const nextId = this.pendingQueue[0];
+      if (!this.pendingSet.has(nextId)) {
+        this.pendingQueue.shift();
+        continue;
       }
+      const job = this.jobs.get(nextId);
+      if (!job || job.status !== "pending") {
+        this.pendingSet.delete(nextId);
+        this.pendingQueue.shift();
+        continue;
+      }
+      return job;
     }
     return null;
   }
@@ -243,6 +275,7 @@ export class WeeklyFlowDownloadTracker {
     const job = this.jobs.get(id);
     if (!job) return false;
     const previousStatus = job.status;
+    this.pendingSet.delete(id);
     job.status = "downloading";
     job.startedAt = Date.now();
     if (stagingPath) {
@@ -265,6 +298,10 @@ export class WeeklyFlowDownloadTracker {
       typeof error === "string" ? error : (error && error.message) || null;
     this._update(job);
     this._applyStatusDelta(job.playlistType, previousStatus, job.status);
+    if (!this.pendingSet.has(id)) {
+      this.pendingSet.add(id);
+      this.pendingQueue.push(id);
+    }
     return true;
   }
 
@@ -272,6 +309,7 @@ export class WeeklyFlowDownloadTracker {
     const job = this.jobs.get(id);
     if (!job) return false;
     const previousStatus = job.status;
+    this.pendingSet.delete(id);
     job.status = "done";
     job.completedAt = Date.now();
     job.finalPath = finalPath;
@@ -290,6 +328,7 @@ export class WeeklyFlowDownloadTracker {
     const job = this.jobs.get(id);
     if (!job) return false;
     const previousStatus = job.status;
+    this.pendingSet.delete(id);
     job.status = "failed";
     job.completedAt = Date.now();
     job.error =
@@ -299,12 +338,22 @@ export class WeeklyFlowDownloadTracker {
     return true;
   }
 
-  getByPlaylistType(playlistType) {
+  getByPlaylistType(playlistType, limit = null) {
     const jobs = [];
+    const max =
+      Number.isFinite(Number(limit)) && Number(limit) > 0
+        ? Math.floor(Number(limit))
+        : null;
     for (const job of this.jobs.values()) {
       if (job.playlistType === playlistType) {
         jobs.push(job);
+        if (max != null && jobs.length >= max) {
+          break;
+        }
       }
+    }
+    if (max != null) {
+      return jobs;
     }
     return sortByCreatedAt(jobs);
   }
@@ -345,6 +394,10 @@ export class WeeklyFlowDownloadTracker {
         job.stagingPath = null;
         this._update(job);
         this._applyStatusDelta(job.playlistType, previousStatus, job.status);
+        if (!this.pendingSet.has(job.id)) {
+          this.pendingSet.add(job.id);
+          this.pendingQueue.push(job.id);
+        }
         count++;
       }
     }
@@ -356,17 +409,7 @@ export class WeeklyFlowDownloadTracker {
   }
 
   getStats() {
-    const stats = {
-      total: this.jobs.size,
-      pending: 0,
-      downloading: 0,
-      done: 0,
-      failed: 0,
-    };
-    for (const job of this.jobs.values()) {
-      stats[job.status] = (stats[job.status] || 0) + 1;
-    }
-    return stats;
+    return this._cloneStats(this.globalStats);
   }
 
   getStatsByPlaylistType(playlistTypes = []) {
@@ -374,7 +417,8 @@ export class WeeklyFlowDownloadTracker {
     if (Array.isArray(playlistTypes) && playlistTypes.length > 0) {
       for (const playlistType of playlistTypes) {
         statsByType[playlistType] = this._cloneStats(
-          this.statsByPlaylistType.get(String(playlistType)) || this._emptyStats(),
+          this.statsByPlaylistType.get(String(playlistType)) ||
+            this._emptyStats(),
         );
       }
       return statsByType;
@@ -429,6 +473,9 @@ export class WeeklyFlowDownloadTracker {
     const count = this.jobs.size;
     this.jobs.clear();
     this.statsByPlaylistType.clear();
+    this.globalStats = this._emptyStats();
+    this.pendingQueue = [];
+    this.pendingSet = new Set();
     deleteAllStmt.run();
     return count;
   }

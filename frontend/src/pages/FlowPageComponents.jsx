@@ -735,6 +735,9 @@ export function FlowCard({
   state,
   stats,
   currentJob,
+  workerRunning,
+  statusHint,
+  operationQueue,
   nextRun,
   isEditing,
   isTracksOpen,
@@ -768,16 +771,46 @@ export function FlowCard({
     currentJob?.playlistType === flow.id &&
     currentJob?.artistName &&
     currentJob?.trackName;
+  const jobProgressPct = Math.max(
+    0,
+    Math.min(100, Math.round(Number(currentJob?.progressPct || 0))),
+  );
+  const hintPhase = String(statusHint?.phase || "").trim();
+  const hintMessage = String(statusHint?.message || "").trim();
+  const queueProcessing = operationQueue?.processing === true;
+  const pendingCount = Number(stats?.pending || 0);
+  const isShuttingDown =
+    enabled && !workerRunning && !queueProcessing && hintPhase === "downloading";
+  const isQueued =
+    enabled &&
+    pendingCount > 0 &&
+    !isCurrentJobForFlow &&
+    hintPhase === "downloading";
+  let flowWorkerMessage = "";
+  if (isCurrentJobForFlow) {
+    flowWorkerMessage = `Downloading: ${currentJob.artistName} - ${currentJob.trackName} (${jobProgressPct}%)`;
+  } else if (isQueued) {
+    flowWorkerMessage = "Playlist queued";
+  } else if (isShuttingDown) {
+    flowWorkerMessage = "Shutting down worker...";
+  } else if (enabled && queueProcessing) {
+    flowWorkerMessage = "Applying flow operation";
+  } else if (enabled && hintMessage && hintPhase !== "downloading") {
+    flowWorkerMessage = hintMessage;
+  }
 
   return (
-    <div
-      className={`bg-card rounded-lg border border-white/5 overflow-hidden transition-opacity ${
-        enabled ? "opacity-100" : "opacity-50"
-      }`}
-    >
-      <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="bg-card rounded-lg border border-white/5 overflow-hidden">
+      <div
+        className={`p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-opacity ${
+          enabled ? "opacity-100" : "opacity-50"
+        }`}
+      >
         <div className="min-w-0 flex-1 grid gap-2.5">
           <div className="flex items-center gap-3">
+            <span className="inline-flex h-5 min-w-[1.5rem] items-center justify-center rounded-full border border-white/10 bg-white/5 px-1.5 text-[11px] font-medium text-[#b5b5bc]">
+              {flow.size}
+            </span>
             <h3 className="text-base font-medium text-white truncate">
               {flow.name}
             </h3>
@@ -795,7 +828,6 @@ export function FlowCard({
             )}
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#b5b5bc]">
-            <span>{flow.size} tracks</span>
             {flow.deepDive && (
               <>
                 <span className="text-white/10">•</span>
@@ -809,6 +841,11 @@ export function FlowCard({
               </>
             )}
           </div>
+          {flowWorkerMessage ? (
+            <div className="truncate text-xs text-[#9aa886]">
+              {flowWorkerMessage}
+            </div>
+          ) : null}
           {(state === "running" || state === "completed") && total > 0 ? (
             <div className="grid gap-1.5">
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
@@ -826,11 +863,6 @@ export function FlowCard({
                   <span className="text-red-300">{stats.failed} failed</span>
                 ) : null}
               </div>
-              {isCurrentJobForFlow ? (
-                <div className="truncate text-xs text-[#9aa886]">
-                  Downloading: {currentJob.artistName} - {currentJob.trackName}
-                </div>
-              ) : null}
             </div>
           ) : null}
         </div>
@@ -851,6 +883,7 @@ export function FlowCard({
               onClick={onViewTracks}
               className="btn btn-secondary btn-sm px-2"
               aria-label={isTracksOpen ? `Close ${flow.name} tracks` : `View ${flow.name} tracks`}
+              disabled={!enabled && !isTracksOpen}
             >
               <ListMusic className="w-4 h-4" />
             </button>
