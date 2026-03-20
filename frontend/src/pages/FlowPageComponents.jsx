@@ -784,6 +784,10 @@ export function FlowCard({
   } else if (enabled && hintMessage && hintPhase !== "downloading") {
     flowWorkerMessage = hintMessage;
   }
+  const metaItems = [];
+  if (enabled && nextRun && state !== "running" && !isGeneratingThisFlow) {
+    metaItems.push(`Next update: ${nextRun}`);
+  }
 
   return (
     <div className="bg-card rounded-lg border border-white/5 overflow-hidden">
@@ -813,20 +817,11 @@ export function FlowCard({
               </span>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#b5b5bc]">
-            {flow.deepDive && (
-              <>
-                <span className="text-white/10">•</span>
-                <span>Deep dive</span>
-              </>
-            )}
-            {enabled && nextRun && state !== "running" && (
-              <>
-                <span className="text-white/10">•</span>
-                <span>Next update: {nextRun}</span>
-              </>
-            )}
-          </div>
+          {metaItems.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#b5b5bc]">
+              <span>{metaItems.join(" • ")}</span>
+            </div>
+          ) : null}
           {flowWorkerMessage ? (
             <div className="truncate text-xs text-[#9aa886]">
               {flowWorkerMessage}
