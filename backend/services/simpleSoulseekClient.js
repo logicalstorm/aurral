@@ -3,13 +3,23 @@ import { randomBytes } from "crypto";
 import { dbOps } from "../config/db-helpers.js";
 import path from "path";
 import fs from "fs/promises";
-import { Readable } from "stream";
+import { PassThrough } from "stream";
 
 export class SimpleSoulseekClient {
   constructor() {
     this.client = null;
     this.connected = false;
     this.config = null;
+    this.metrics = {
+      connectCalls: 0,
+      connectSuccesses: 0,
+      disconnectCalls: 0,
+      downloadStarts: 0,
+      downloadSuccesses: 0,
+      downloadFailures: 0,
+      lastConnectAt: null,
+      lastDisconnectAt: null,
+    };
     this.updateConfig();
   }
 
@@ -56,6 +66,7 @@ export class SimpleSoulseekClient {
     if (this.connected && this.client) {
       return true;
     }
+    this.metrics.connectCalls += 1;
 
     if (!this.isConfigured()) {
       throw new Error("Soulseek credentials not configured");
@@ -91,6 +102,8 @@ export class SimpleSoulseekClient {
           }
           this.client = client;
           this.connected = true;
+          this.metrics.connectSuccesses += 1;
+          this.metrics.lastConnectAt = Date.now();
           resolve(true);
         },
       );
@@ -116,6 +129,8 @@ export class SimpleSoulseekClient {
   }
 
   async disconnect() {
+    this.metrics.disconnectCalls += 1;
+    this.metrics.lastDisconnectAt = Date.now();
     if (this.client && this.connected) {
       try {
         this.client.destroy();
@@ -150,16 +165,16 @@ export class SimpleSoulseekClient {
 
   _getDownloadTimeoutMs() {
     const raw = Number(process.env.SOULSEEK_DOWNLOAD_TIMEOUT_MS);
-    if (Number.isFinite(raw) && raw >= 10000) return raw;
-    return 420000;
+    if (Number.isFinite(raw) && raw >= 15000) return raw;
+    return 120000;
   }
 
   _getMatchScanLimit() {
     const raw = Number(process.env.SOULSEEK_MATCH_SCAN_LIMIT);
-    if (Number.isFinite(raw) && raw >= 50) {
+    if (Number.isFinite(raw) && raw >= 20) {
       return Math.min(Math.floor(raw), 1000);
     }
-    return 150;
+    return 40;
   }
 
   async search(artistName, trackName) {
@@ -250,6 +265,7 @@ export class SimpleSoulseekClient {
   }
 
   async download(result, destinationPath, onProgress = null) {
+    this.metrics.downloadStarts += 1;
     await this.connect();
 
     const absPath = path.resolve(destinationPath);
@@ -268,11 +284,9 @@ export class SimpleSoulseekClient {
         let lastProgress = -1;
         let downloadedBytes = 0;
         let lastProgressEmitAt = 0;
-        const progressStream = progressEnabled
-          ? new Readable({
-              read() {},
-            })
-          : null;
+        const progressStream = progressEnabled ? new PassThrough() : null;
+        let onData = null;
+        let cleanedUp = false;
         const emitProgress = (value) => {
           if (!progressEnabled) return;
           const next = Math.max(
@@ -284,7 +298,7 @@ export class SimpleSoulseekClient {
           onProgress(next);
         };
         if (progressStream) {
-          progressStream.on("data", (chunk) => {
+          onData = (chunk) => {
             const size = Buffer.isBuffer(chunk)
               ? chunk.length
               : Number(chunk?.length || 0);
@@ -297,24 +311,33 @@ export class SimpleSoulseekClient {
               lastProgressEmitAt = now;
               emitProgress(bounded);
             }
-          });
+          };
+          progressStream.on("data", onData);
         }
+
+        const cleanup = () => {
+          if (cleanedUp) return;
+          cleanedUp = true;
+          if (progressStream && onData) {
+            progressStream.off("data", onData);
+          }
+          if (progressStream) {
+            progressStream.destroy();
+          }
+        };
 
         const settle = (fn) => (val) => {
           if (settled) return;
           settled = true;
           if (timeoutId) clearTimeout(timeoutId);
+          cleanup();
           fn(val);
         };
 
         timeoutId = setTimeout(async () => {
           if (settled) return;
-          const stat = await fs.stat(absPath).catch(() => null);
-          if (stat && stat.size > 0) {
-            settle(resolve)(absPath);
-          } else {
-            settle(reject)(new Error("Download timeout"));
-          }
+          this.disconnect().catch(() => {});
+          settle(reject)(new Error("Download timeout"));
         }, DOWNLOAD_TIMEOUT_MS);
 
         this.client.download(
@@ -334,11 +357,28 @@ export class SimpleSoulseekClient {
           progressStream || undefined,
         );
       });
-
+      this.metrics.downloadSuccesses += 1;
       return filePath;
     } catch (err) {
+      this.metrics.downloadFailures += 1;
       throw err;
     }
+  }
+
+  getStatus() {
+    return {
+      connected: this.isConnected(),
+      metrics: {
+        connectCalls: this.metrics.connectCalls,
+        connectSuccesses: this.metrics.connectSuccesses,
+        disconnectCalls: this.metrics.disconnectCalls,
+        downloadStarts: this.metrics.downloadStarts,
+        downloadSuccesses: this.metrics.downloadSuccesses,
+        downloadFailures: this.metrics.downloadFailures,
+        lastConnectAt: this.metrics.lastConnectAt,
+        lastDisconnectAt: this.metrics.lastDisconnectAt,
+      },
+    };
   }
 }
 

@@ -295,6 +295,12 @@ router.post("/flows", async (req, res) => {
     await playlistManager.ensureSmartPlaylists();
     res.json({ success: true, flow });
   } catch (error) {
+    if (error?.code === "FLOW_NAME_CONFLICT") {
+      return res.status(400).json({
+        error: "Flow name already exists",
+        message: error.message,
+      });
+    }
     res.status(500).json({
       error: "Failed to create flow",
       message: error.message,
@@ -331,6 +337,12 @@ router.put("/flows/:flowId", async (req, res) => {
     await playlistManager.ensureSmartPlaylists();
     res.json({ success: true, flow: updated });
   } catch (error) {
+    if (error?.code === "FLOW_NAME_CONFLICT") {
+      return res.status(400).json({
+        error: "Flow name already exists",
+        message: error.message,
+      });
+    }
     res.status(500).json({
       error: "Failed to update flow",
       message: error.message,
@@ -440,7 +452,7 @@ router.get("/jobs/:flowId", (req, res) => {
     Number.isFinite(parsedLimit) && parsedLimit > 0
       ? Math.min(Math.floor(parsedLimit), 500)
       : 200;
-  const jobs = downloadTracker.getByPlaylistType(flowId).slice(0, limit);
+  const jobs = downloadTracker.getByPlaylistType(flowId, limit);
   res.json(jobs);
 });
 

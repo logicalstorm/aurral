@@ -2,6 +2,7 @@ import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { weeklyFlowWorker } from "./weeklyFlowWorker.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { weeklyFlowOperationQueue } from "./weeklyFlowOperationQueue.js";
+import { soulseekClient } from "./simpleSoulseekClient.js";
 
 export function getWeeklyFlowStatusSnapshot({
   includeJobs = false,
@@ -57,6 +58,7 @@ export function getWeeklyFlowStatusSnapshot({
   }
   return {
     worker: workerStatus,
+    soulseek: soulseekClient.getStatus(),
     stats,
     flowStats,
     jobs,

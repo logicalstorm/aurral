@@ -7,12 +7,14 @@ import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 
 const CONCURRENCY = 1;
 const JOB_COOLDOWN_MS = 2000;
-const SEARCH_ROUNDS = 1;
-const MAX_MATCH_CANDIDATES = 3;
+const MAX_MATCH_CANDIDATES = 1;
 const FALLBACK_MP3_REGEX = /^[^/\\]+-[a-f0-9]{8}\.mp3$/i;
-const ENABLE_METADATA_ALBUM_PARSE = false;
-const FALLBACK_SWEEP_INTERVAL_MS = 60000;
-const MAX_RETRIES_PER_JOB = 1;
+const FALLBACK_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
+const MAX_RETRIES_PER_JOB = 3;
+const NON_RETRYABLE_ERRORS = new Set([
+  "No search results found",
+  "No candidate files returned",
+]);
 
 export class WeeklyFlowWorker {
   constructor(
@@ -28,6 +30,9 @@ export class WeeklyFlowWorker {
     this.processTimer = null;
     this.retryAttempts = new Map();
     this.currentJob = null;
+    this.fallbackSweepInFlight = null;
+    this.fallbackSweepTimer = null;
+    this.lastJobMetrics = null;
   }
 
   async moveFallbackMp3sToDir(force = false) {
@@ -59,6 +64,15 @@ export class WeeklyFlowWorker {
     } catch {}
   }
 
+  scheduleFallbackSweep(force = false) {
+    if (this.fallbackSweepInFlight) return;
+    this.fallbackSweepInFlight = this.moveFallbackMp3sToDir(force)
+      .catch(() => {})
+      .finally(() => {
+        this.fallbackSweepInFlight = null;
+      });
+  }
+
   async start() {
     if (this.running) {
       return;
@@ -67,6 +81,10 @@ export class WeeklyFlowWorker {
     this.running = true;
     console.log("[WeeklyFlowWorker] Starting worker...");
     await this.moveFallbackMp3sToDir(true);
+    this.fallbackSweepTimer = setInterval(() => {
+      if (!this.running) return;
+      this.scheduleFallbackSweep(false);
+    }, FALLBACK_SWEEP_INTERVAL_MS);
 
     this.processLoop = () => {
       if (!this.running) return;
@@ -87,9 +105,14 @@ export class WeeklyFlowWorker {
         this.processJob(job)
           .catch(async (error) => {
             const attempts = Number(this.retryAttempts.get(job.id) || 0);
-            if (attempts < MAX_RETRIES_PER_JOB) {
+            const message = String(error?.message || "");
+            const retryable = !NON_RETRYABLE_ERRORS.has(message);
+            if (retryable && attempts < MAX_RETRIES_PER_JOB) {
               this.retryAttempts.set(job.id, attempts + 1);
-              downloadTracker.setPending(job.id, error.message);
+              downloadTracker.setPending(
+                job.id,
+                `${message} (retry ${attempts + 1}/${MAX_RETRIES_PER_JOB})`,
+              );
               return;
             }
             this.retryAttempts.delete(job.id);
@@ -105,7 +128,6 @@ export class WeeklyFlowWorker {
             if (this.activeCount <= 0) {
               this.currentJob = null;
             }
-            this.moveFallbackMp3sToDir(false).catch(() => {});
             if (this.running && !this.processTimer) {
               this.processTimer = setTimeout(() => {
                 this.processTimer = null;
@@ -128,6 +150,10 @@ export class WeeklyFlowWorker {
     if (this.processTimer) {
       clearTimeout(this.processTimer);
       this.processTimer = null;
+    }
+    if (this.fallbackSweepTimer) {
+      clearInterval(this.fallbackSweepTimer);
+      this.fallbackSweepTimer = null;
     }
     this.processLoop = null;
     this.retryAttempts.clear();
@@ -152,149 +178,6 @@ export class WeeklyFlowWorker {
     return this._normalizeAlbumName(parts[parts.length - 2]);
   }
 
-  _decodeSynchsafeInt(bytes) {
-    if (!bytes || bytes.length < 4) return 0;
-    return (
-      ((bytes[0] & 0x7f) << 21) |
-      ((bytes[1] & 0x7f) << 14) |
-      ((bytes[2] & 0x7f) << 7) |
-      (bytes[3] & 0x7f)
-    );
-  }
-
-  _decodeUtf16be(buffer) {
-    if (!buffer || buffer.length === 0) return "";
-    const evenLength = buffer.length - (buffer.length % 2);
-    if (evenLength <= 0) return "";
-    const source = buffer.subarray(0, evenLength);
-    const swapped = Buffer.allocUnsafe(evenLength);
-    for (let i = 0; i < evenLength; i += 2) {
-      swapped[i] = source[i + 1];
-      swapped[i + 1] = source[i];
-    }
-    return swapped.toString("utf16le");
-  }
-
-  _decodeId3TextFrame(framePayload) {
-    if (!Buffer.isBuffer(framePayload) || framePayload.length === 0) {
-      return null;
-    }
-    const encoding = framePayload[0];
-    const content = framePayload.subarray(1);
-    let text = "";
-    if (encoding === 0) {
-      text = content.toString("latin1");
-    } else if (encoding === 1) {
-      if (content.length >= 2 && content[0] === 0xfe && content[1] === 0xff) {
-        text = this._decodeUtf16be(content.subarray(2));
-      } else if (
-        content.length >= 2 &&
-        content[0] === 0xff &&
-        content[1] === 0xfe
-      ) {
-        text = content.subarray(2).toString("utf16le");
-      } else {
-        text = content.toString("utf16le");
-      }
-    } else if (encoding === 2) {
-      text = this._decodeUtf16be(content);
-    } else if (encoding === 3) {
-      text = content.toString("utf8");
-    } else {
-      text = content.toString("utf8");
-    }
-    return this._normalizeAlbumName(text);
-  }
-
-  _extractAlbumFromId3v2(buffer) {
-    if (!Buffer.isBuffer(buffer) || buffer.length < 10) return null;
-    if (buffer.subarray(0, 3).toString("ascii") !== "ID3") return null;
-    const major = buffer[3];
-    const tagSize = this._decodeSynchsafeInt(buffer.subarray(6, 10));
-    const end = Math.min(buffer.length, 10 + tagSize);
-    let offset = 10;
-    while (offset < end) {
-      if (major === 2) {
-        if (offset + 6 > end) break;
-        const id = buffer.subarray(offset, offset + 3).toString("ascii");
-        if (!id || id === "\u0000\u0000\u0000") break;
-        const size =
-          (buffer[offset + 3] << 16) |
-          (buffer[offset + 4] << 8) |
-          buffer[offset + 5];
-        if (size <= 0) break;
-        const payloadStart = offset + 6;
-        const payloadEnd = payloadStart + size;
-        if (payloadEnd > end) break;
-        if (id === "TAL") {
-          const album = this._decodeId3TextFrame(
-            buffer.subarray(payloadStart, payloadEnd),
-          );
-          if (album) return album;
-        }
-        offset = payloadEnd;
-        continue;
-      }
-      if (offset + 10 > end) break;
-      const id = buffer.subarray(offset, offset + 4).toString("ascii");
-      if (!id || id === "\u0000\u0000\u0000\u0000") break;
-      const sizeBytes = buffer.subarray(offset + 4, offset + 8);
-      const size =
-        major === 4
-          ? this._decodeSynchsafeInt(sizeBytes)
-          : sizeBytes.readUInt32BE(0);
-      if (size <= 0) break;
-      const payloadStart = offset + 10;
-      const payloadEnd = payloadStart + size;
-      if (payloadEnd > end) break;
-      if (id === "TALB") {
-        const album = this._decodeId3TextFrame(
-          buffer.subarray(payloadStart, payloadEnd),
-        );
-        if (album) return album;
-      }
-      offset = payloadEnd;
-    }
-    return null;
-  }
-
-  _extractAlbumFromId3v1(buffer) {
-    if (!Buffer.isBuffer(buffer) || buffer.length < 128) return null;
-    const tag = buffer.subarray(buffer.length - 128, buffer.length);
-    if (tag.subarray(0, 3).toString("ascii") !== "TAG") return null;
-    const album = tag.subarray(63, 93).toString("latin1");
-    return this._normalizeAlbumName(album);
-  }
-
-  async _readAlbumFromMetadata(filePath) {
-    if (!filePath) return null;
-    const ext = path.extname(filePath).toLowerCase();
-    if (ext !== ".mp3") return null;
-    let handle;
-    try {
-      handle = await fs.open(filePath, "r");
-      const stat = await handle.stat();
-      if (!stat?.size) return null;
-      const headSize = Math.min(stat.size, 256 * 1024);
-      const headBuffer = Buffer.allocUnsafe(headSize);
-      await handle.read(headBuffer, 0, headSize, 0);
-      const id3v2Album = this._extractAlbumFromId3v2(headBuffer);
-      if (id3v2Album) return id3v2Album;
-      if (stat.size >= 128) {
-        const tailBuffer = Buffer.allocUnsafe(128);
-        await handle.read(tailBuffer, 0, 128, stat.size - 128);
-        return this._extractAlbumFromId3v1(tailBuffer);
-      }
-      return null;
-    } catch {
-      return null;
-    } finally {
-      if (handle) {
-        await handle.close().catch(() => {});
-      }
-    }
-  }
-
   async processJob(job) {
     console.log(
       `[WeeklyFlowWorker] Processing job ${job.id}: ${job.artistName} - ${job.trackName} (${job.playlistType})`,
@@ -305,14 +188,25 @@ export class WeeklyFlowWorker {
       stagingDir,
       `${job.artistName} - ${job.trackName}.tmp`,
     );
+    const perfStartCpu = process.cpuUsage();
+    const perfStartHr = process.hrtime.bigint();
+    const timingsMs = {
+      search: 0,
+      download: 0,
+      finalize: 0,
+      completionCheck: 0,
+      cleanupOnError: 0,
+    };
 
     downloadTracker.setDownloading(job.id, stagingPath);
 
     try {
+      let phaseStart = process.hrtime.bigint();
       const initialResults = await soulseekClient.search(
         job.artistName,
         job.trackName,
       );
+      timingsMs.search += Number(process.hrtime.bigint() - phaseStart) / 1e6;
       if (!initialResults || initialResults.length === 0) {
         throw new Error("No search results found");
       }
@@ -327,16 +221,16 @@ export class WeeklyFlowWorker {
       const stagingFile = `${job.artistName} - ${job.trackName}`;
       const stagingFilePath = path.join(stagingDir, stagingFile);
 
-      for (let searchRound = 0; searchRound < SEARCH_ROUNDS; searchRound += 1) {
-        const sourceResults =
-          searchRound === 0
-            ? initialResults
-            : await soulseekClient.search(job.artistName, job.trackName);
-        const candidates = soulseekClient.pickBestMatches(
-          sourceResults,
-          job.trackName,
-          MAX_MATCH_CANDIDATES,
-        );
+      phaseStart = process.hrtime.bigint();
+      const candidates = (Array.isArray(initialResults) ? initialResults : [])
+        .filter((candidate) => {
+          return typeof candidate?.file === "string" && candidate.file.trim();
+        })
+        .slice(0, MAX_MATCH_CANDIDATES);
+      if (candidates.length === 0) {
+        lastError = new Error("No candidate files returned");
+        timingsMs.search += Number(process.hrtime.bigint() - phaseStart) / 1e6;
+      } else {
         for (const candidate of candidates) {
           const extFromSoulseek = path.extname(candidate.file || "");
           const ext =
@@ -345,14 +239,23 @@ export class WeeklyFlowWorker {
               ? extFromSoulseek
               : ".mp3";
           try {
+            const downloadStart = process.hrtime.bigint();
             downloadedSourcePath = await soulseekClient.download(
               candidate,
               stagingFilePath,
               (progressPct) => {
                 if (!this.currentJob || this.currentJob.id !== job.id) return;
-                this.currentJob.progressPct = progressPct;
+                this.currentJob.progressPct = Math.max(
+                  0,
+                  Math.min(100, Number(progressPct) || 0),
+                );
               },
             );
+            timingsMs.download +=
+              Number(process.hrtime.bigint() - downloadStart) / 1e6;
+            if (this.currentJob && this.currentJob.id === job.id) {
+              this.currentJob.progressPct = 100;
+            }
             selectedMatch = candidate;
             selectedExt = ext;
             lastError = null;
@@ -361,9 +264,7 @@ export class WeeklyFlowWorker {
             lastError = err;
           }
         }
-        if (selectedMatch) {
-          break;
-        }
+        timingsMs.search += Number(process.hrtime.bigint() - phaseStart) / 1e6;
       }
       if (!selectedMatch) {
         throw lastError || new Error("No suitable match found");
@@ -389,12 +290,7 @@ export class WeeklyFlowWorker {
       const artistDir = sanitize(job.artistName);
       const albumFromApi = this._normalizeAlbumName(job.albumName);
       const albumFromPath = this._parseAlbumFromPath(selectedMatch.file);
-      const albumFromMetadata =
-        !ENABLE_METADATA_ALBUM_PARSE || albumFromApi || albumFromPath
-          ? null
-          : await this._readAlbumFromMetadata(sourcePath);
-      const resolvedAlbum =
-        albumFromApi || albumFromPath || albumFromMetadata || "Unknown Album";
+      const resolvedAlbum = albumFromApi || albumFromPath || "Unknown Album";
       const albumDir = sanitize(resolvedAlbum);
       const finalDir = path.join(
         this.weeklyFlowRoot,
@@ -406,6 +302,7 @@ export class WeeklyFlowWorker {
       const finalFileName = `${sanitize(job.trackName)}${finalExt}`;
       const finalPath = path.join(finalDir, finalFileName);
 
+      phaseStart = process.hrtime.bigint();
       await fs.mkdir(finalDir, { recursive: true });
       await fs.rename(sourcePath, finalPath);
 
@@ -414,16 +311,65 @@ export class WeeklyFlowWorker {
       downloadTracker.setDone(job.id, finalPath, resolvedAlbum);
       this.retryAttempts.delete(job.id);
       console.log(`[WeeklyFlowWorker] Job ${job.id} completed: ${finalPath}`);
+      timingsMs.finalize += Number(process.hrtime.bigint() - phaseStart) / 1e6;
 
+      phaseStart = process.hrtime.bigint();
       await this.checkPlaylistComplete(job.playlistType);
+      timingsMs.completionCheck +=
+        Number(process.hrtime.bigint() - phaseStart) / 1e6;
+      const cpuDelta = process.cpuUsage(perfStartCpu);
+      const elapsedMs = Number(process.hrtime.bigint() - perfStartHr) / 1e6;
+      this.lastJobMetrics = {
+        jobId: job.id,
+        finishedAt: Date.now(),
+        elapsedMs: Math.round(elapsedMs),
+        cpuUserMs: Math.round(cpuDelta.user / 1000),
+        cpuSystemMs: Math.round(cpuDelta.system / 1000),
+        cpuTotalMs: Math.round((cpuDelta.user + cpuDelta.system) / 1000),
+        timingsMs: {
+          search: Math.round(timingsMs.search),
+          download: Math.round(timingsMs.download),
+          finalize: Math.round(timingsMs.finalize),
+          completionCheck: Math.round(timingsMs.completionCheck),
+          cleanupOnError: Math.round(timingsMs.cleanupOnError),
+        },
+      };
+      console.log(
+        `[WeeklyFlowWorker] Job metrics ${job.id}: ${JSON.stringify(this.lastJobMetrics)}`,
+      );
     } catch (error) {
       try {
+        const cleanupStart = process.hrtime.bigint();
         await fs.rm(stagingDir, { recursive: true, force: true });
+        timingsMs.cleanupOnError +=
+          Number(process.hrtime.bigint() - cleanupStart) / 1e6;
       } catch (cleanupError) {
         console.warn(
           `[WeeklyFlowWorker] Failed to cleanup staging dir: ${cleanupError.message}`,
         );
       }
+      const cpuDelta = process.cpuUsage(perfStartCpu);
+      const elapsedMs = Number(process.hrtime.bigint() - perfStartHr) / 1e6;
+      this.lastJobMetrics = {
+        jobId: job.id,
+        finishedAt: Date.now(),
+        failed: true,
+        error: error.message,
+        elapsedMs: Math.round(elapsedMs),
+        cpuUserMs: Math.round(cpuDelta.user / 1000),
+        cpuSystemMs: Math.round(cpuDelta.system / 1000),
+        cpuTotalMs: Math.round((cpuDelta.user + cpuDelta.system) / 1000),
+        timingsMs: {
+          search: Math.round(timingsMs.search),
+          download: Math.round(timingsMs.download),
+          finalize: Math.round(timingsMs.finalize),
+          completionCheck: Math.round(timingsMs.completionCheck),
+          cleanupOnError: Math.round(timingsMs.cleanupOnError),
+        },
+      };
+      console.log(
+        `[WeeklyFlowWorker] Job metrics ${job.id}: ${JSON.stringify(this.lastJobMetrics)}`,
+      );
       throw error;
     }
   }
@@ -479,6 +425,7 @@ export class WeeklyFlowWorker {
       activeCount: this.activeCount,
       stats: downloadTracker.getStats(),
       currentJob: this.currentJob,
+      lastJobMetrics: this.lastJobMetrics,
     };
   }
 }

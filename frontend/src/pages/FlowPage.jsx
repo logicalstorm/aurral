@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -15,8 +15,6 @@ import { useWebSocketChannel } from "../hooks/useWebSocket";
 import {
   FlowCard,
   FlowEmptyState,
-  FlowPageHeader,
-  FlowStatusCards,
   ConfirmDeleteModal,
   ConfirmDisableModal,
 } from "./FlowPageComponents";
@@ -83,6 +81,27 @@ const NEW_FLOW_TEMPLATE = {
   deepDive: false,
   tags: {},
   relatedArtists: {},
+};
+
+const getNextFlowName = (flows, baseName = "Discover") => {
+  const normalizedBase = String(baseName || "").trim() || "Discover";
+  const existingNames = new Set(
+    (Array.isArray(flows) ? flows : [])
+      .map((flow) => String(flow?.name || "").trim().toLowerCase())
+      .filter(Boolean),
+  );
+  if (!existingNames.has(normalizedBase.toLowerCase())) {
+    return normalizedBase;
+  }
+  let index = 2;
+  while (index < 10000) {
+    const candidate = `${normalizedBase} ${index}`;
+    if (!existingNames.has(candidate.toLowerCase())) {
+      return candidate;
+    }
+    index += 1;
+  }
+  return `${normalizedBase} ${Date.now()}`;
 };
 
 const parseListInput = (value) =>
@@ -517,14 +536,21 @@ function FlowPage() {
     return () => clearInterval(interval);
   }, [status?.worker?.running, status?.hint?.phase, isFlowSocketConnected, fetchStatus]);
 
-  useEffect(() => {
-    if (!status?.worker?.running || !status?.flows?.length) return;
-    const activeFlowIds = status.flows
+  const activeFlowIdsKey = useMemo(() => {
+    if (!status?.worker?.running || !status?.flows?.length) return "";
+    const activeIds = status.flows
       .filter((flow) => {
         const stats = status.flowStats?.[flow.id];
         return (stats?.pending || 0) > 0 || (stats?.downloading || 0) > 0;
       })
-      .map((flow) => flow.id);
+      .map((flow) => flow.id)
+      .sort();
+    return activeIds.join("|");
+  }, [status?.worker?.running, status?.flows, status?.flowStats]);
+
+  useEffect(() => {
+    if (!activeFlowIdsKey) return;
+    const activeFlowIds = activeFlowIdsKey.split("|").filter(Boolean);
     if (!activeFlowIds.length) return;
 
     let cancelled = false;
@@ -555,7 +581,7 @@ function FlowPage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [status?.worker?.running, status?.flows, status?.flowStats]);
+  }, [activeFlowIdsKey]);
 
   useEffect(() => {
     if (!status?.flows?.length) {
@@ -660,7 +686,11 @@ function FlowPage() {
     if (creating) return;
     setCreating(true);
     try {
-      const draft = flowToForm(NEW_FLOW_TEMPLATE);
+      const uniqueName = getNextFlowName(status?.flows, NEW_FLOW_TEMPLATE.name);
+      const draft = flowToForm({
+        ...NEW_FLOW_TEMPLATE,
+        name: uniqueName,
+      });
       const payload = buildFlowFromForm(draft);
       const response = await createFlow(payload);
       const createdFlow = response?.flow;
@@ -759,16 +789,15 @@ function FlowPage() {
     setConfirmDisable(null);
   };
 
-  const handleStartOrStopAll = async () => {
+  const handleSetAllEnabled = async (targetEnabled) => {
     if (bulkActionRunning) return;
-    const shouldStartAll = disabledFlowCount > 0;
     const targetFlows = flowList.filter((flow) => {
       const optimisticValue = optimisticEnabled[flow.id];
       const isEnabled =
         typeof optimisticValue === "boolean"
           ? optimisticValue
           : flow.enabled === true;
-      return shouldStartAll ? !isEnabled : isEnabled;
+      return targetEnabled ? !isEnabled : isEnabled;
     });
     if (targetFlows.length === 0) return;
 
@@ -776,7 +805,7 @@ function FlowPage() {
     setOptimisticEnabled((prev) => {
       const next = { ...prev };
       for (const flow of targetFlows) {
-        next[flow.id] = shouldStartAll;
+        next[flow.id] = targetEnabled;
       }
       return next;
     });
@@ -785,7 +814,7 @@ function FlowPage() {
     const failed = [];
     for (const flow of targetFlows) {
       try {
-        await setFlowEnabled(flow.id, shouldStartAll);
+        await setFlowEnabled(flow.id, targetEnabled);
         successCount += 1;
       } catch (err) {
         failed.push({
@@ -793,7 +822,7 @@ function FlowPage() {
           message:
             err.response?.data?.message ||
             err.message ||
-            `Failed to ${shouldStartAll ? "start" : "stop"} flow`,
+            `Failed to ${targetEnabled ? "start" : "stop"} flow`,
         });
       }
     }
@@ -801,8 +830,8 @@ function FlowPage() {
     if (successCount > 0) {
       showSuccess(
         successCount === targetFlows.length
-          ? `${shouldStartAll ? "Started" : "Stopped"} ${successCount} flows`
-          : `${shouldStartAll ? "Started" : "Stopped"} ${successCount} flows with ${failed.length} failures`,
+          ? `${targetEnabled ? "Started" : "Stopped"} ${successCount} flows`
+          : `${targetEnabled ? "Started" : "Stopped"} ${successCount} flows with ${failed.length} failures`,
       );
     }
     if (failed.length > 0) {
@@ -810,7 +839,7 @@ function FlowPage() {
       showError(
         failed.length === 1
           ? `${first.name}: ${first.message}`
-          : `Failed to ${shouldStartAll ? "start" : "stop"} ${failed.length} flows. First issue: ${first.name} - ${first.message}`,
+          : `Failed to ${targetEnabled ? "start" : "stop"} ${failed.length} flows. First issue: ${first.name} - ${first.message}`,
       );
     }
 
@@ -898,13 +927,6 @@ function FlowPage() {
       state: { artistName: track.artistName },
     });
   };
-  const enabledCount = effectiveFlowList.filter((flow) => flow.enabled === true).length;
-  const runningCount = effectiveFlowList.filter(
-    (flow) => getPlaylistState(flow.id) === "running"
-  ).length;
-  const completedCount = effectiveFlowList.filter(
-    (flow) => getPlaylistState(flow.id) === "completed"
-  ).length;
   if (loading && !status) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -915,32 +937,16 @@ function FlowPage() {
 
   return (
     <div className="flow-page max-w-6xl mx-auto px-4 pb-10">
-      <FlowPageHeader
-        onNewFlow={handleCreateInline}
-      />
-
-      <FlowStatusCards
-        status={status}
-        enabledCount={enabledCount}
-        flowCount={effectiveFlowList.length}
-        runningCount={runningCount}
-        completedCount={completedCount}
-        isSocketConnected={isFlowSocketConnected}
-      />
-
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-end gap-2">
           <h2 className="text-base font-semibold text-white">Playlists</h2>
-          <span className="text-xs text-[#c1c1c3]">
-            {effectiveFlowList.length} total
-          </span>
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={handleStartOrStopAll}
+            onClick={() => handleSetAllEnabled(true)}
             className="btn btn-secondary btn-sm"
-            disabled={bulkActionRunning || effectiveFlowList.length === 0}
+            disabled={bulkActionRunning || disabledFlowCount === 0}
           >
             {bulkActionRunning ? (
               <span className="inline-flex items-center gap-1.5">
@@ -948,10 +954,31 @@ function FlowPage() {
                 Working...
               </span>
             ) : (
-              enabledFlowCount > 0 && disabledFlowCount === 0
-                ? "Stop All"
-                : "Start All"
+              "Start All"
             )}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSetAllEnabled(false)}
+            className="btn btn-secondary btn-sm"
+            disabled={bulkActionRunning || enabledFlowCount === 0}
+          >
+            {bulkActionRunning ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Working...
+              </span>
+            ) : (
+              "Stop All"
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={handleCreateInline}
+            className="btn btn-primary btn-sm"
+            disabled={creating}
+          >
+            {creating ? "Creating..." : "New Playlist"}
           </button>
         </div>
       </div>
@@ -980,6 +1007,9 @@ function FlowPage() {
               state={state}
               stats={stats}
               currentJob={status?.worker?.currentJob}
+              workerRunning={status?.worker?.running === true}
+              statusHint={status?.hint}
+              operationQueue={status?.operationQueue}
               nextRun={nextRun}
               isEditing={isEditing}
               isTracksOpen={tracksExpandedId === flow.id}
