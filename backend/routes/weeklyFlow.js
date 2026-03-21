@@ -464,6 +464,35 @@ router.get("/jobs", (req, res) => {
   res.json(jobs);
 });
 
+router.get("/worker/settings", (req, res) => {
+  res.json(weeklyFlowWorker.getWorkerSettings());
+});
+
+router.put("/worker/settings", (req, res) => {
+  const { concurrency, preferredFormat } = req.body || {};
+  if (concurrency !== undefined) {
+    const parsed = Number(concurrency);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 5) {
+      return res.status(400).json({
+        error: "concurrency must be an integer between 1 and 5",
+      });
+    }
+  }
+  if (preferredFormat !== undefined) {
+    const normalized = String(preferredFormat || "").toLowerCase();
+    if (normalized !== "flac" && normalized !== "mp3") {
+      return res.status(400).json({
+        error: "preferredFormat must be either 'flac' or 'mp3'",
+      });
+    }
+  }
+  const settings = weeklyFlowWorker.updateWorkerSettings({
+    concurrency,
+    preferredFormat,
+  });
+  return res.json({ success: true, settings });
+});
+
 router.post("/worker/start", async (req, res) => {
   try {
     await weeklyFlowWorker.start();
