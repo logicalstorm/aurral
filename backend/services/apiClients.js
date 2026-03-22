@@ -46,6 +46,11 @@ const lastfmLimiter = new Bottleneck({
 });
 
 let musicbrainzLast503Log = 0;
+const lastfmInflightRequests = new Map();
+const lastfmErrorLogAt = new Map();
+
+const LASTFM_TIMEOUT_MS = 6000;
+const LASTFM_MAX_RETRIES = 2;
 
 const musicbrainzRequestWithRetry = async (
   endpoint,
@@ -153,36 +158,78 @@ export const lastfmRequest = lastfmLimiter.wrap(async (method, params = {}) => {
   const cacheKey = `lfm:${method}:${JSON.stringify(params)}`;
   const cached = lastfmCache.get(cacheKey);
   if (cached) return cached;
+  const inflight = lastfmInflightRequests.get(cacheKey);
+  if (inflight) return inflight;
 
-  try {
-    const response = await axios.get(LASTFM_API, {
-      params: {
-        method,
-        api_key: apiKey,
-        format: "json",
-        ...params,
-      },
-      timeout: 3000,
-    });
-    lastfmCache.set(cacheKey, response.data);
-    return response.data;
-  } catch (error) {
-    const status = error.response?.status || null;
+  const requestPromise = (async () => {
+    const isRetryable = (error) => {
+      const status = error.response?.status;
+      const code = error.code;
+      return (
+        code === "ECONNABORTED" ||
+        code === "ETIMEDOUT" ||
+        code === "ECONNRESET" ||
+        code === "ENOTFOUND" ||
+        code === "EAI_AGAIN" ||
+        [408, 425, 429, 500, 502, 503, 504].includes(status)
+      );
+    };
+    const getLogKey = (details) =>
+      `${details.method}:${details.status || "none"}:${details.code || "none"}`;
+    const logError = (message, details) => {
+      const key = getLogKey(details);
+      const now = Date.now();
+      const last = lastfmErrorLogAt.get(key) || 0;
+      if (now - last < 15000) return;
+      lastfmErrorLogAt.set(key, now);
+      console.error(message, details);
+    };
+    let lastError = null;
+    for (let retryCount = 0; retryCount <= LASTFM_MAX_RETRIES; retryCount++) {
+      try {
+        const response = await axios.get(LASTFM_API, {
+          params: {
+            method,
+            api_key: apiKey,
+            format: "json",
+            ...params,
+          },
+          timeout: LASTFM_TIMEOUT_MS,
+        });
+        lastfmCache.set(cacheKey, response.data);
+        return response.data;
+      } catch (error) {
+        lastError = error;
+        if (retryCount < LASTFM_MAX_RETRIES && isRetryable(error)) {
+          const backoffMs = 300 * Math.pow(2, retryCount) + retryCount * 200;
+          await new Promise((resolve) => setTimeout(resolve, backoffMs));
+          continue;
+        }
+        break;
+      }
+    }
+    const status = lastError?.response?.status || null;
     const payloadError =
-      error.response?.data?.message || error.response?.data?.error || null;
+      lastError?.response?.data?.message || lastError?.response?.data?.error || null;
     const details = {
       method,
       status,
-      code: error.code || null,
-      message: error.message,
+      code: lastError?.code || null,
+      message: lastError?.message || "Unknown Last.fm error",
       error: payloadError,
     };
-    if (error.code === "ECONNABORTED") {
-      console.error(`Last.fm API timeout (${method})`, details);
+    if (details.code === "ECONNABORTED") {
+      logError(`Last.fm API timeout (${method})`, details);
     } else {
-      console.error(`Last.fm API error (${method})`, details);
+      logError(`Last.fm API error (${method})`, details);
     }
     return null;
+  })();
+  lastfmInflightRequests.set(cacheKey, requestPromise);
+  try {
+    return await requestPromise;
+  } finally {
+    lastfmInflightRequests.delete(cacheKey);
   }
 });
 

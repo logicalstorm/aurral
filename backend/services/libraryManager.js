@@ -19,6 +19,32 @@ let _retryTimeoutId = null;
 let _lastFullArtistFetchAt = 0;
 const _tracksCache = new Map();
 
+function findCachedArtistByMbid(mbid) {
+  if (!mbid || !Array.isArray(_cachedArtists) || _cachedArtists.length === 0) {
+    return null;
+  }
+  return (
+    _cachedArtists.find(
+      (artist) =>
+        artist?.mbid === mbid || artist?.foreignArtistId === mbid,
+    ) || null
+  );
+}
+
+function upsertCachedArtist(mappedArtist) {
+  if (!mappedArtist) return;
+  const mbid = mappedArtist.mbid || mappedArtist.foreignArtistId;
+  if (!mbid) return;
+  const existingIndex = _cachedArtists.findIndex(
+    (artist) => artist?.mbid === mbid || artist?.foreignArtistId === mbid,
+  );
+  if (existingIndex >= 0) {
+    _cachedArtists[existingIndex] = mappedArtist;
+    return;
+  }
+  _cachedArtists.unshift(mappedArtist);
+}
+
 async function getLidarrClient() {
   if (!lidarrClient) {
     try {
@@ -68,13 +94,15 @@ export class LibraryManager {
           lidarrSettings.integrations?.lidarr?.metadataProfileId,
       });
       console.log(`[LibraryManager] Added artist "${artistName}" to Lidarr`);
-      return this.mapLidarrArtist(lidarrArtist);
+      const mappedArtist = this.mapLidarrArtist(lidarrArtist);
+      upsertCachedArtist(mappedArtist);
+      return mappedArtist;
     } catch (error) {
       if (isArtistAlreadyAddedError(error)) {
         try {
-          const existing = await lidarr.getArtistByMbid(mbid);
+          const existing = await this.getArtist(mbid);
           if (existing) {
-            return this.mapLidarrArtist(existing);
+            return existing;
           }
         } catch {}
       }
@@ -228,10 +256,16 @@ export class LibraryManager {
     if (!lidarr || !lidarr.isConfigured()) {
       return null;
     }
+    const cachedArtist = findCachedArtistByMbid(mbid);
+    if (cachedArtist) {
+      return cachedArtist;
+    }
     try {
       const lidarrArtist = await lidarr.getArtistByMbid(mbid);
       if (!lidarrArtist) return null;
-      return this.mapLidarrArtist(lidarrArtist);
+      const mappedArtist = this.mapLidarrArtist(lidarrArtist);
+      upsertCachedArtist(mappedArtist);
+      return mappedArtist;
     } catch {
       return null;
     }
@@ -504,6 +538,36 @@ export class LibraryManager {
         );
       };
       const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const artistIdString = String(artistId);
+      const artistNumericId = Number.parseInt(artistId, 10);
+      const isSameArtist = (album) => {
+        if (!album) return false;
+        if (String(album.artistId) === artistIdString) return true;
+        if (
+          Number.isFinite(artistNumericId) &&
+          Number.isFinite(Number(album.artistId))
+        ) {
+          return Number(album.artistId) === artistNumericId;
+        }
+        return false;
+      };
+      const findExistingAlbumForArtist = async ({
+        attempts = 1,
+        delayMs = 0,
+      } = {}) => {
+        for (let attempt = 1; attempt <= attempts; attempt++) {
+          const existingAlbum = await lidarr
+            .getAlbumByMbid(releaseGroupMbid)
+            .catch(() => null);
+          if (isSameArtist(existingAlbum)) {
+            return existingAlbum;
+          }
+          if (attempt < attempts && delayMs > 0) {
+            await sleep(delayMs);
+          }
+        }
+        return null;
+      };
       const settings = getSettings();
       const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
       const shouldTriggerSearch =
@@ -512,7 +576,23 @@ export class LibraryManager {
       const mapExistingAlbum = async (existingAlbum, fallbackArtist = null) => {
         if (!existingAlbum) return null;
         if (!existingAlbum.monitored) {
-          await lidarr.monitorAlbum(existingAlbum.id, true);
+          const monitorAttempts = 3;
+          const monitorDelayMs = 600;
+          for (let attempt = 1; attempt <= monitorAttempts; attempt++) {
+            try {
+              await lidarr.monitorAlbum(existingAlbum.id, true);
+              break;
+            } catch (monitorError) {
+              if (
+                attempt < monitorAttempts &&
+                isArtistNotReadyError(monitorError)
+              ) {
+                await sleep(monitorDelayMs);
+                continue;
+              }
+              throw monitorError;
+            }
+          }
         }
         if (shouldTriggerSearch) {
           await lidarr.triggerAlbumSearch(existingAlbum.id);
@@ -551,13 +631,10 @@ export class LibraryManager {
           .getArtist(artistId)
           .catch(() => lidarrArtist);
       }
-      const existing = await lidarr.getAlbumByMbid(releaseGroupMbid);
-      const artistNumericId = parseInt(artistId, 10);
-      const sameArtistExisting =
-        existing && existing.artistId === artistNumericId ? existing : null;
-      if (sameArtistExisting) {
+      const existing = await findExistingAlbumForArtist();
+      if (existing) {
         const mappedExisting = await mapExistingAlbum(
-          sameArtistExisting,
+          existing,
           lidarrArtist,
         );
         if (mappedExisting) return mappedExisting;
@@ -582,20 +659,20 @@ export class LibraryManager {
           break;
         } catch (error) {
           if (isAlbumAlreadyAddedError(error)) {
-            const existingAfterConflict = await lidarr
-              .getAlbumByMbid(releaseGroupMbid)
-              .catch(() => null);
-            const sameArtistAfterConflict =
-              existingAfterConflict &&
-              existingAfterConflict.artistId === artistNumericId
-                ? existingAfterConflict
-                : null;
-            if (sameArtistAfterConflict) {
+            const existingAfterConflict = await findExistingAlbumForArtist({
+              attempts: 8,
+              delayMs: 450,
+            });
+            if (existingAfterConflict) {
               const mappedConflictAlbum = await mapExistingAlbum(
-                sameArtistAfterConflict,
+                existingAfterConflict,
                 lidarrArtist,
               );
               if (mappedConflictAlbum) return mappedConflictAlbum;
+            }
+            if (attempt < addAlbumAttempts) {
+              await sleep(addAlbumDelayMs);
+              continue;
             }
           }
           if (attempt < addAlbumAttempts && isArtistNotReadyError(error)) {
@@ -616,7 +693,8 @@ export class LibraryManager {
             .filter(
               (a) =>
                 a.artistId === parseInt(artistId) &&
-                a.foreignAlbumId !== releaseGroupMbid,
+                a.foreignAlbumId !== releaseGroupMbid &&
+                a.monitored === true,
             )
             .map((a) => a.id)
         : [];
