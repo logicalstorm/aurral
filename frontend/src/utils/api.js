@@ -684,4 +684,9 @@ export const stopFlowWorker = async () => {
   return response.data;
 };
 
+export const updateFlowWorkerSettings = async (settings) => {
+  const response = await api.put("/weekly-flow/worker/settings", settings);
+  return response.data;
+};
+
 export default api;

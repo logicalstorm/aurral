@@ -199,6 +199,10 @@ export const defaultData = {
       retryDelayMinutes: 5,
       maxRetries: 3,
     },
+    weeklyFlowWorker: {
+      concurrency: 3,
+      preferredFormat: "flac",
+    },
   },
   blocklist: [],
   activityLog: [],

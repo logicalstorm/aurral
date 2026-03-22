@@ -55,6 +55,11 @@ const SCHEDULE_COUNT_LABELS = {
   5: "five times",
   6: "six times",
 };
+const FLOW_WORKER_CONCURRENCY_OPTIONS = [1, 2, 3, 4, 5];
+const FLOW_WORKER_FORMAT_OPTIONS = [
+  { id: "flac", label: "FLAC" },
+  { id: "mp3", label: "MP3" },
+];
 
 export function MixSlider({ mix, onChange, normalizeMixPercent }) {
   const normalized = normalizeMixPercent(mix);
@@ -781,7 +786,12 @@ export function FlowCard({
     flowWorkerMessage = "Queued";
   } else if (enabled && hintPhase === "queued" && pendingCount > 0) {
     flowWorkerMessage = "Tracks queued and waiting";
-  } else if (enabled && hintMessage && hintPhase !== "downloading") {
+  } else if (
+    enabled &&
+    hintMessage &&
+    hintPhase !== "downloading" &&
+    hintPhase !== "completed"
+  ) {
     flowWorkerMessage = hintMessage;
   }
   const metaItems = [];
@@ -859,16 +869,18 @@ export function FlowCard({
             )}
             <button
               onClick={onViewTracks}
-              className="btn btn-secondary btn-sm px-2"
+              className={`btn ${isTracksOpen ? "btn-primary" : "btn-secondary"} btn-sm px-2`}
               aria-label={isTracksOpen ? `Close ${flow.name} tracks` : `View ${flow.name} tracks`}
+              aria-pressed={isTracksOpen}
               disabled={!enabled && !isTracksOpen}
             >
               <ListMusic className="w-4 h-4" />
             </button>
             <button
               onClick={onToggleEditing}
-              className="btn btn-secondary btn-sm px-2"
+              className={`btn ${isEditing ? "btn-primary" : "btn-secondary"} btn-sm px-2`}
               aria-label={isEditing ? "Close editor" : "Edit flow"}
+              aria-pressed={isEditing}
             >
               <Pencil className="w-4 h-4" />
             </button>
@@ -1405,6 +1417,314 @@ export function ConfirmDisableModal({
           >
             {togglingId === confirmDisable.flowId ? "Turning off..." : "Turn Off"}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ConfirmStopAllModal({
+  confirmStopAll,
+  bulkActionRunning,
+  onCancel,
+  onConfirm,
+}) {
+  if (!confirmStopAll) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
+      onClick={onCancel}
+    >
+      <div className="card max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-xl font-bold mb-2 text-white">
+          Stop all playlists?
+        </h3>
+        <p className="text-[#c1c1c3] mb-6">
+          This pauses future runs. You can start them again anytime.
+        </p>
+        <div className="flex gap-3 justify-end">
+          <button onClick={onCancel} className="btn btn-secondary">
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="btn btn-primary"
+            style={{ backgroundColor: "#ef4444" }}
+            disabled={bulkActionRunning}
+          >
+            {bulkActionRunning ? "Stopping..." : "Stop All"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function FlowWorkerSettingsModal({
+  isOpen,
+  settings,
+  hasChanges,
+  saving,
+  onCancel,
+  onChange,
+  onSave,
+}) {
+  const [hoveredConcurrencyIndex, setHoveredConcurrencyIndex] = useState(null);
+  const [hoveredFormatIndex, setHoveredFormatIndex] = useState(null);
+  const concurrencyTabsRef = useRef(null);
+  const concurrencyActiveBubbleRef = useRef(null);
+  const concurrencyHoverBubbleRef = useRef(null);
+  const concurrencyOptionRefs = useRef({});
+  const formatTabsRef = useRef(null);
+  const formatActiveBubbleRef = useRef(null);
+  const formatHoverBubbleRef = useRef(null);
+  const formatOptionRefs = useRef({});
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const updateConcurrencyActiveBubble = () => {
+      if (!concurrencyTabsRef.current || !concurrencyActiveBubbleRef.current) {
+        return;
+      }
+      const activeIndex = FLOW_WORKER_CONCURRENCY_OPTIONS.findIndex(
+        (value) => value === settings.concurrency,
+      );
+      if (activeIndex === -1) {
+        concurrencyActiveBubbleRef.current.style.opacity = "0";
+        return;
+      }
+      const activeOptionEl = concurrencyOptionRefs.current[activeIndex];
+      if (!activeOptionEl) {
+        setTimeout(updateConcurrencyActiveBubble, 50);
+        return;
+      }
+      const tabsRect = concurrencyTabsRef.current.getBoundingClientRect();
+      const tabRect = activeOptionEl.getBoundingClientRect();
+      concurrencyActiveBubbleRef.current.style.left = `${tabRect.left - tabsRect.left}px`;
+      concurrencyActiveBubbleRef.current.style.top = `${tabRect.top - tabsRect.top}px`;
+      concurrencyActiveBubbleRef.current.style.width = `${tabRect.width}px`;
+      concurrencyActiveBubbleRef.current.style.height = `${tabRect.height}px`;
+      concurrencyActiveBubbleRef.current.style.opacity = "1";
+    };
+    const timeoutId = setTimeout(updateConcurrencyActiveBubble, 10);
+    window.addEventListener("resize", updateConcurrencyActiveBubble);
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener("resize", updateConcurrencyActiveBubble);
+    };
+  }, [isOpen, settings.concurrency]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const updateConcurrencyHoverBubble = () => {
+      if (!concurrencyTabsRef.current || !concurrencyHoverBubbleRef.current) {
+        return;
+      }
+      if (hoveredConcurrencyIndex === null) {
+        concurrencyHoverBubbleRef.current.style.left = "0px";
+        concurrencyHoverBubbleRef.current.style.top = "0px";
+        concurrencyHoverBubbleRef.current.style.width = "100%";
+        concurrencyHoverBubbleRef.current.style.height = "100%";
+        concurrencyHoverBubbleRef.current.style.opacity = "0.6";
+        return;
+      }
+      const hoveredOptionEl = concurrencyOptionRefs.current[hoveredConcurrencyIndex];
+      if (!hoveredOptionEl) return;
+      const tabsRect = concurrencyTabsRef.current.getBoundingClientRect();
+      const tabRect = hoveredOptionEl.getBoundingClientRect();
+      concurrencyHoverBubbleRef.current.style.left = `${tabRect.left - tabsRect.left}px`;
+      concurrencyHoverBubbleRef.current.style.top = `${tabRect.top - tabsRect.top}px`;
+      concurrencyHoverBubbleRef.current.style.width = `${tabRect.width}px`;
+      concurrencyHoverBubbleRef.current.style.height = `${tabRect.height}px`;
+      concurrencyHoverBubbleRef.current.style.opacity = "1";
+    };
+    updateConcurrencyHoverBubble();
+  }, [isOpen, hoveredConcurrencyIndex]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const updateFormatActiveBubble = () => {
+      if (!formatTabsRef.current || !formatActiveBubbleRef.current) {
+        return;
+      }
+      const activeIndex = FLOW_WORKER_FORMAT_OPTIONS.findIndex(
+        (option) => option.id === settings.preferredFormat,
+      );
+      if (activeIndex === -1) {
+        formatActiveBubbleRef.current.style.opacity = "0";
+        return;
+      }
+      const activeOptionEl = formatOptionRefs.current[activeIndex];
+      if (!activeOptionEl) {
+        setTimeout(updateFormatActiveBubble, 50);
+        return;
+      }
+      const tabsRect = formatTabsRef.current.getBoundingClientRect();
+      const tabRect = activeOptionEl.getBoundingClientRect();
+      formatActiveBubbleRef.current.style.left = `${tabRect.left - tabsRect.left}px`;
+      formatActiveBubbleRef.current.style.top = `${tabRect.top - tabsRect.top}px`;
+      formatActiveBubbleRef.current.style.width = `${tabRect.width}px`;
+      formatActiveBubbleRef.current.style.height = `${tabRect.height}px`;
+      formatActiveBubbleRef.current.style.opacity = "1";
+    };
+    const timeoutId = setTimeout(updateFormatActiveBubble, 10);
+    window.addEventListener("resize", updateFormatActiveBubble);
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener("resize", updateFormatActiveBubble);
+    };
+  }, [isOpen, settings.preferredFormat]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const updateFormatHoverBubble = () => {
+      if (!formatTabsRef.current || !formatHoverBubbleRef.current) {
+        return;
+      }
+      if (hoveredFormatIndex === null) {
+        formatHoverBubbleRef.current.style.left = "0px";
+        formatHoverBubbleRef.current.style.top = "0px";
+        formatHoverBubbleRef.current.style.width = "100%";
+        formatHoverBubbleRef.current.style.height = "100%";
+        formatHoverBubbleRef.current.style.opacity = "0.6";
+        return;
+      }
+      const hoveredOptionEl = formatOptionRefs.current[hoveredFormatIndex];
+      if (!hoveredOptionEl) return;
+      const tabsRect = formatTabsRef.current.getBoundingClientRect();
+      const tabRect = hoveredOptionEl.getBoundingClientRect();
+      formatHoverBubbleRef.current.style.left = `${tabRect.left - tabsRect.left}px`;
+      formatHoverBubbleRef.current.style.top = `${tabRect.top - tabsRect.top}px`;
+      formatHoverBubbleRef.current.style.width = `${tabRect.width}px`;
+      formatHoverBubbleRef.current.style.height = `${tabRect.height}px`;
+      formatHoverBubbleRef.current.style.opacity = "1";
+    };
+    updateFormatHoverBubble();
+  }, [isOpen, hoveredFormatIndex]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
+      onClick={onCancel}
+    >
+      <div className="card max-w-md w-full mx-4 grid gap-5" onClick={(e) => e.stopPropagation()}>
+        <div className="grid gap-1">
+          <h3 className="text-xl font-bold text-white">Flow Worker Settings</h3>
+          <p className="text-[#c1c1c3] text-sm">
+            Adjust download concurrency and preferred audio format.
+          </p>
+        </div>
+        <div className="grid gap-4">
+          <div className="grid gap-1.5">
+            <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
+              Download Concurrency
+            </label>
+            <div
+              ref={concurrencyTabsRef}
+              className="relative p-1.5 inline-flex"
+              style={{ backgroundColor: "#0f0f12" }}
+              role="radiogroup"
+              aria-label="Download concurrency"
+            >
+              <div
+                ref={concurrencyActiveBubbleRef}
+                className="absolute transition-all duration-300 ease-out z-10 opacity-0"
+                style={{ backgroundColor: "#211f27" }}
+              />
+              <div
+                ref={concurrencyHoverBubbleRef}
+                className="absolute transition-all duration-200 ease-out z-0"
+                style={{ backgroundColor: "#1a1a1e" }}
+              />
+              <div
+                className="relative flex gap-1"
+                onMouseLeave={() => setHoveredConcurrencyIndex(null)}
+              >
+                {FLOW_WORKER_CONCURRENCY_OPTIONS.map((value, index) => (
+                  <button
+                    key={value}
+                    ref={(el) => {
+                      if (el) concurrencyOptionRefs.current[index] = el;
+                    }}
+                    type="button"
+                    role="radio"
+                    aria-checked={settings.concurrency === value}
+                    onMouseEnter={() => setHoveredConcurrencyIndex(index)}
+                    onClick={() =>
+                      onChange((prev) => ({ ...prev, concurrency: value }))
+                    }
+                    className="relative z-20 flex items-center justify-center px-4 py-2.5 font-medium transition-all duration-200 text-sm"
+                    style={{ color: "#fff" }}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-1.5">
+            <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
+              Preferred Format
+            </label>
+            <div
+              ref={formatTabsRef}
+              className="relative p-1.5 inline-flex"
+              style={{ backgroundColor: "#0f0f12" }}
+            >
+              <div
+                ref={formatActiveBubbleRef}
+                className="absolute transition-all duration-300 ease-out z-10 opacity-0"
+                style={{ backgroundColor: "#211f27" }}
+              />
+              <div
+                ref={formatHoverBubbleRef}
+                className="absolute transition-all duration-200 ease-out z-0"
+                style={{ backgroundColor: "#1a1a1e" }}
+              />
+              <div
+                className="relative flex gap-1"
+                onMouseLeave={() => setHoveredFormatIndex(null)}
+              >
+                {FLOW_WORKER_FORMAT_OPTIONS.map((option, index) => (
+                  <button
+                    key={option.id}
+                    ref={(el) => {
+                      if (el) formatOptionRefs.current[index] = el;
+                    }}
+                    type="button"
+                    onMouseEnter={() => setHoveredFormatIndex(index)}
+                    onClick={() =>
+                      onChange((prev) => ({
+                        ...prev,
+                        preferredFormat: option.id,
+                      }))
+                    }
+                    className="relative z-20 flex items-center justify-center px-4 py-2.5 font-medium transition-all duration-200 text-sm"
+                    style={{ color: "#fff" }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-3 justify-end">
+          <button onClick={onCancel} className="btn btn-secondary" disabled={saving}>
+            Cancel
+          </button>
+          <FlipSaveButton
+            disabled={!hasChanges}
+            saving={saving}
+            onClick={onSave}
+            label="Save"
+            savedLabel="Saved"
+          />
         </div>
       </div>
     </div>

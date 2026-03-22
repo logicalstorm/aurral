@@ -272,6 +272,22 @@ export class WeeklyFlowDownloadTracker {
     return null;
   }
 
+  peekPending(limit = 10) {
+    const max =
+      Number.isFinite(Number(limit)) && Number(limit) > 0
+        ? Math.floor(Number(limit))
+        : 10;
+    const jobs = [];
+    for (const id of this.pendingQueue) {
+      if (jobs.length >= max) break;
+      if (!this.pendingSet.has(id)) continue;
+      const job = this.jobs.get(id);
+      if (!job || job.status !== "pending") continue;
+      jobs.push(job);
+    }
+    return jobs;
+  }
+
   getPending(limit = 10) {
     const pending = [];
     for (const job of this.jobs.values()) {
