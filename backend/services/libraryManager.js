@@ -19,6 +19,32 @@ let _retryTimeoutId = null;
 let _lastFullArtistFetchAt = 0;
 const _tracksCache = new Map();
 
+function findCachedArtistByMbid(mbid) {
+  if (!mbid || !Array.isArray(_cachedArtists) || _cachedArtists.length === 0) {
+    return null;
+  }
+  return (
+    _cachedArtists.find(
+      (artist) =>
+        artist?.mbid === mbid || artist?.foreignArtistId === mbid,
+    ) || null
+  );
+}
+
+function upsertCachedArtist(mappedArtist) {
+  if (!mappedArtist) return;
+  const mbid = mappedArtist.mbid || mappedArtist.foreignArtistId;
+  if (!mbid) return;
+  const existingIndex = _cachedArtists.findIndex(
+    (artist) => artist?.mbid === mbid || artist?.foreignArtistId === mbid,
+  );
+  if (existingIndex >= 0) {
+    _cachedArtists[existingIndex] = mappedArtist;
+    return;
+  }
+  _cachedArtists.unshift(mappedArtist);
+}
+
 async function getLidarrClient() {
   if (!lidarrClient) {
     try {
@@ -68,13 +94,15 @@ export class LibraryManager {
           lidarrSettings.integrations?.lidarr?.metadataProfileId,
       });
       console.log(`[LibraryManager] Added artist "${artistName}" to Lidarr`);
-      return this.mapLidarrArtist(lidarrArtist);
+      const mappedArtist = this.mapLidarrArtist(lidarrArtist);
+      upsertCachedArtist(mappedArtist);
+      return mappedArtist;
     } catch (error) {
       if (isArtistAlreadyAddedError(error)) {
         try {
-          const existing = await lidarr.getArtistByMbid(mbid);
+          const existing = await this.getArtist(mbid);
           if (existing) {
-            return this.mapLidarrArtist(existing);
+            return existing;
           }
         } catch {}
       }
@@ -228,10 +256,16 @@ export class LibraryManager {
     if (!lidarr || !lidarr.isConfigured()) {
       return null;
     }
+    const cachedArtist = findCachedArtistByMbid(mbid);
+    if (cachedArtist) {
+      return cachedArtist;
+    }
     try {
       const lidarrArtist = await lidarr.getArtistByMbid(mbid);
       if (!lidarrArtist) return null;
-      return this.mapLidarrArtist(lidarrArtist);
+      const mappedArtist = this.mapLidarrArtist(lidarrArtist);
+      upsertCachedArtist(mappedArtist);
+      return mappedArtist;
     } catch {
       return null;
     }
@@ -616,7 +650,8 @@ export class LibraryManager {
             .filter(
               (a) =>
                 a.artistId === parseInt(artistId) &&
-                a.foreignAlbumId !== releaseGroupMbid,
+                a.foreignAlbumId !== releaseGroupMbid &&
+                a.monitored === true,
             )
             .map((a) => a.id)
         : [];
