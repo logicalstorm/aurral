@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   getFlowStatus,
@@ -9,6 +9,7 @@ import {
   deleteFlow,
   setFlowEnabled,
   getFlowTrackStreamUrl,
+  updateFlowWorkerSettings,
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
 import { useWebSocketChannel } from "../hooks/useWebSocket";
@@ -17,6 +18,8 @@ import {
   FlowEmptyState,
   ConfirmDeleteModal,
   ConfirmDisableModal,
+  ConfirmStopAllModal,
+  FlowWorkerSettingsModal,
 } from "./FlowPageComponents";
 
 function formatNextRun(nextRunAt) {
@@ -454,6 +457,11 @@ const EMPTY_FLOW_STATS = {
   downloading: 0,
 };
 
+const DEFAULT_WORKER_SETTINGS = {
+  concurrency: 3,
+  preferredFormat: "flac",
+};
+
 const buildFlowStatsFromJobs = (jobs) => {
   const stats = { ...EMPTY_FLOW_STATS };
   if (!Array.isArray(jobs)) return stats;
@@ -483,6 +491,12 @@ function FlowPage() {
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [confirmDisable, setConfirmDisable] = useState(null);
+  const [confirmStopAll, setConfirmStopAll] = useState(false);
+  const [isWorkerSettingsOpen, setIsWorkerSettingsOpen] = useState(false);
+  const [workerSettingsDraft, setWorkerSettingsDraft] = useState(
+    DEFAULT_WORKER_SETTINGS,
+  );
+  const [savingWorkerSettings, setSavingWorkerSettings] = useState(false);
   const [optimisticEnabled, setOptimisticEnabled] = useState({});
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
@@ -864,6 +878,71 @@ function FlowPage() {
     setBulkActionRunning(false);
   };
 
+  const handleStopAllRequest = () => {
+    if (bulkActionRunning || enabledFlowCount === 0) return;
+    setConfirmStopAll(true);
+  };
+
+  const handleConfirmStopAll = async () => {
+    setConfirmStopAll(false);
+    await handleSetAllEnabled(false);
+  };
+
+  const getCurrentWorkerSettings = () => {
+    const raw = status?.worker?.settings || {};
+    const parsedConcurrency = Number(raw.concurrency);
+    const concurrency =
+      Number.isFinite(parsedConcurrency) && parsedConcurrency >= 1
+        ? Math.min(5, Math.floor(parsedConcurrency))
+        : DEFAULT_WORKER_SETTINGS.concurrency;
+    const preferredFormat =
+      String(raw.preferredFormat || "").toLowerCase() === "mp3"
+        ? "mp3"
+        : "flac";
+    return {
+      concurrency,
+      preferredFormat,
+    };
+  };
+
+  const handleOpenWorkerSettings = () => {
+    setWorkerSettingsDraft(getCurrentWorkerSettings());
+    setIsWorkerSettingsOpen(true);
+  };
+
+  const handleSaveWorkerSettings = async () => {
+    const safeConcurrency = Math.min(
+      5,
+      Math.max(1, Math.floor(Number(workerSettingsDraft.concurrency) || 3)),
+    );
+    const safePreferredFormat =
+      workerSettingsDraft.preferredFormat === "mp3" ? "mp3" : "flac";
+    const current = getCurrentWorkerSettings();
+    const hasChanges =
+      safeConcurrency !== current.concurrency ||
+      safePreferredFormat !== current.preferredFormat;
+    if (!hasChanges || savingWorkerSettings) return;
+    setSavingWorkerSettings(true);
+    try {
+      await updateFlowWorkerSettings({
+        concurrency: safeConcurrency,
+        preferredFormat: safePreferredFormat,
+      });
+      showSuccess("Flow worker settings updated");
+      setIsWorkerSettingsOpen(false);
+      await fetchStatus();
+    } catch (err) {
+      showError(
+        err.response?.data?.message ||
+          err.response?.data?.error ||
+          err.message ||
+          "Failed to update flow worker settings",
+      );
+    } finally {
+      setSavingWorkerSettings(false);
+    }
+  };
+
   const normalizeReason = (job) => {
     if (job?.reason) return job.reason;
     if (job?.playlistType) {
@@ -946,6 +1025,11 @@ function FlowPage() {
       </div>
     );
   }
+  const currentWorkerSettings = getCurrentWorkerSettings();
+  const hasWorkerSettingsChanges =
+    Number(workerSettingsDraft.concurrency) !== currentWorkerSettings.concurrency ||
+    (workerSettingsDraft.preferredFormat === "mp3" ? "mp3" : "flac") !==
+      currentWorkerSettings.preferredFormat;
 
   return (
     <div className="flow-page max-w-6xl mx-auto px-4 pb-10">
@@ -954,6 +1038,14 @@ function FlowPage() {
           <h2 className="text-base font-semibold text-white">Playlists</h2>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleOpenWorkerSettings}
+            className="btn btn-secondary btn-sm px-2 opacity-80 hover:opacity-100"
+            aria-label="Open flow worker settings"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
           <button
             type="button"
             onClick={() => handleSetAllEnabled(true)}
@@ -971,7 +1063,7 @@ function FlowPage() {
           </button>
           <button
             type="button"
-            onClick={() => handleSetAllEnabled(false)}
+            onClick={handleStopAllRequest}
             className="btn btn-secondary btn-sm"
             disabled={bulkActionRunning || enabledFlowCount === 0}
           >
@@ -1084,6 +1176,24 @@ function FlowPage() {
         togglingId={togglingId}
         onCancel={() => setConfirmDisable(null)}
         onConfirm={handleConfirmDisable}
+      />
+      <ConfirmStopAllModal
+        confirmStopAll={confirmStopAll}
+        bulkActionRunning={bulkActionRunning}
+        onCancel={() => setConfirmStopAll(false)}
+        onConfirm={handleConfirmStopAll}
+      />
+      <FlowWorkerSettingsModal
+        isOpen={isWorkerSettingsOpen}
+        settings={workerSettingsDraft}
+        hasChanges={hasWorkerSettingsChanges}
+        saving={savingWorkerSettings}
+        onCancel={() => {
+          if (savingWorkerSettings) return;
+          setIsWorkerSettingsOpen(false);
+        }}
+        onChange={setWorkerSettingsDraft}
+        onSave={handleSaveWorkerSettings}
       />
     </div>
   );
