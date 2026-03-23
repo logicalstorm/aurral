@@ -210,7 +210,9 @@ export const lastfmRequest = lastfmLimiter.wrap(async (method, params = {}) => {
     }
     const status = lastError?.response?.status || null;
     const payloadError =
-      lastError?.response?.data?.message || lastError?.response?.data?.error || null;
+      lastError?.response?.data?.message ||
+      lastError?.response?.data?.error ||
+      null;
     const details = {
       method,
       status,
@@ -820,6 +822,8 @@ export async function deezerGetAlbumTracks(deezerAlbumId) {
       trackNumber: t.track_position || i + 1,
       position: t.track_position || i + 1,
       length: t.duration ? t.duration * 1000 : null,
+      duration_ms: t.duration ? t.duration * 1000 : null,
+      preview_url: t.preview || null,
     }));
   } catch (e) {
     return [];
