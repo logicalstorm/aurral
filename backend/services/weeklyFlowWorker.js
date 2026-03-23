@@ -11,6 +11,7 @@ const DEFAULT_CONCURRENCY = 3;
 const MIN_CONCURRENCY = 1;
 const MAX_CONCURRENCY = 5;
 const DEFAULT_PREFERRED_FORMAT = "flac";
+const DEFAULT_PREFERRED_FORMAT_STRICT = false;
 const JOB_COOLDOWN_MS = 750;
 const RETRY_BASE_DELAY_MS = 5000;
 const RETRY_MAX_DELAY_MS = 120000;
@@ -19,6 +20,10 @@ const CONNECTIVITY_FAILURE_PAUSE_MS = 15000;
 const RETRYABLE_FAILURE_STREAK_THRESHOLD = 3;
 const RETRYABLE_FAILURE_STREAK_PAUSE_MS = 180000;
 const MAX_MATCH_CANDIDATES = 3;
+const RETRY_MATCH_CANDIDATES = 10;
+const MAX_RETRY_MATCH_CANDIDATES = 20;
+const STRICT_FORMAT_MATCH_CANDIDATES = 30;
+const STRICT_RETRY_MATCH_CANDIDATES = 20;
 const FALLBACK_MP3_REGEX = /^[^/\\]+-[a-f0-9]{8}\.mp3$/i;
 const FALLBACK_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
 const MAX_RETRIES_PER_JOB = 1;
@@ -130,15 +135,35 @@ export class WeeklyFlowWorker {
   _normalizeConcurrency(value) {
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) return DEFAULT_CONCURRENCY;
-    return Math.min(MAX_CONCURRENCY, Math.max(MIN_CONCURRENCY, Math.floor(parsed)));
+    return Math.min(
+      MAX_CONCURRENCY,
+      Math.max(MIN_CONCURRENCY, Math.floor(parsed)),
+    );
   }
 
   _normalizePreferredFormat(value) {
-    const normalized = String(value || "").trim().toLowerCase();
+    const normalized = String(value || "")
+      .trim()
+      .toLowerCase();
     if (SUPPORTED_PREFERRED_FORMATS.has(normalized)) {
       return normalized;
     }
     return DEFAULT_PREFERRED_FORMAT;
+  }
+
+  _normalizePreferredFormatStrict(value) {
+    return value === true ? true : DEFAULT_PREFERRED_FORMAT_STRICT;
+  }
+
+  _getAdaptiveMatchLimit(preferredFormatStrict, retryAttempt) {
+    if (preferredFormatStrict) {
+      if (retryAttempt >= 2) return STRICT_FORMAT_MATCH_CANDIDATES;
+      if (retryAttempt >= 1) return STRICT_RETRY_MATCH_CANDIDATES;
+      return RETRY_MATCH_CANDIDATES;
+    }
+    if (retryAttempt >= 2) return MAX_RETRY_MATCH_CANDIDATES;
+    if (retryAttempt >= 1) return RETRY_MATCH_CANDIDATES;
+    return MAX_MATCH_CANDIDATES;
   }
 
   getWorkerSettings() {
@@ -147,6 +172,9 @@ export class WeeklyFlowWorker {
     return {
       concurrency: this._normalizeConcurrency(raw.concurrency),
       preferredFormat: this._normalizePreferredFormat(raw.preferredFormat),
+      preferredFormatStrict: this._normalizePreferredFormatStrict(
+        raw.preferredFormatStrict,
+      ),
     };
   }
 
@@ -162,6 +190,12 @@ export class WeeklyFlowWorker {
         nextSettings.preferredFormat === undefined
           ? base.preferredFormat
           : this._normalizePreferredFormat(nextSettings.preferredFormat),
+      preferredFormatStrict:
+        nextSettings.preferredFormatStrict === undefined
+          ? base.preferredFormatStrict
+          : this._normalizePreferredFormatStrict(
+              nextSettings.preferredFormatStrict,
+            ),
     };
     dbOps.updateSettings({
       ...current,
@@ -503,44 +537,75 @@ export class WeeklyFlowWorker {
       const stagingFilePath = path.join(stagingDir, stagingFile);
 
       phaseStart = process.hrtime.bigint();
+      const { preferredFormat, preferredFormatStrict } =
+        this.getWorkerSettings();
+      const preferredExt = preferredFormat === "mp3" ? ".mp3" : ".flac";
+      const secondaryExt = preferredFormat === "mp3" ? ".flac" : ".mp3";
+      const strictSourcePool = preferredFormatStrict
+        ? initialResults.filter((candidate) => {
+            if (typeof candidate?.file !== "string" || !candidate.file.trim()) {
+              return false;
+            }
+            return path.extname(candidate.file).toLowerCase() === preferredExt;
+          })
+        : null;
+      const sourcePool = preferredFormatStrict
+        ? strictSourcePool
+        : initialResults;
+      const matchLimit = this._getAdaptiveMatchLimit(
+        preferredFormatStrict,
+        retryAttempt,
+      );
       const rankedCandidates = soulseekClient.pickBestMatches(
-        initialResults,
+        sourcePool,
         job.trackName,
-        MAX_MATCH_CANDIDATES,
+        matchLimit,
       );
       const candidatePool =
         Array.isArray(rankedCandidates) && rankedCandidates.length > 0
           ? rankedCandidates
-          : Array.isArray(initialResults)
-            ? initialResults
+          : Array.isArray(sourcePool)
+            ? sourcePool
             : [];
       const candidates = candidatePool
         .filter((candidate) => {
           return typeof candidate?.file === "string" && candidate.file.trim();
         })
-        .slice(0, MAX_MATCH_CANDIDATES);
+        .slice(0, matchLimit);
       if (candidates.length === 0) {
-        lastError = new Error("No candidate files returned");
+        if (preferredFormatStrict) {
+          lastError = new Error(
+            `No ${preferredFormat.toUpperCase()} candidate files returned`,
+          );
+        } else {
+          lastError = new Error("No candidate files returned");
+        }
         timingsMs.search += Number(process.hrtime.bigint() - phaseStart) / 1e6;
       } else {
-        const { preferredFormat } = this.getWorkerSettings();
-        const preferredExt = preferredFormat === "mp3" ? ".mp3" : ".flac";
-        const secondaryExt = preferredFormat === "mp3" ? ".flac" : ".mp3";
-        const orderedCandidates = candidates
-          .map((candidate, index) => ({ candidate, index }))
+        const rankedCandidates = candidates
+          .map((candidate, index) => ({
+            candidate,
+            index,
+            ext: path.extname(candidate?.file || "").toLowerCase(),
+          }))
           .sort((a, b) => {
-            const extA = path.extname(a.candidate?.file || "").toLowerCase();
-            const extB = path.extname(b.candidate?.file || "").toLowerCase();
             const rankA =
-              extA === preferredExt ? 0 : extA === secondaryExt ? 1 : 2;
+              a.ext === preferredExt ? 0 : a.ext === secondaryExt ? 1 : 2;
             const rankB =
-              extB === preferredExt ? 0 : extB === secondaryExt ? 1 : 2;
+              b.ext === preferredExt ? 0 : b.ext === secondaryExt ? 1 : 2;
             if (rankA !== rankB) return rankA - rankB;
             return a.index - b.index;
-          })
-          .map((entry) => entry.candidate);
+          });
+        const orderedCandidates = preferredFormatStrict
+          ? rankedCandidates.filter((entry) => entry.ext === preferredExt)
+          : rankedCandidates;
+        if (orderedCandidates.length === 0) {
+          lastError = new Error(
+            `No ${preferredFormat.toUpperCase()} candidate files returned`,
+          );
+        }
         for (const candidate of orderedCandidates) {
-          const extFromSoulseek = path.extname(candidate.file || "");
+          const extFromSoulseek = path.extname(candidate.candidate.file || "");
           const ext =
             extFromSoulseek &&
             /^\.(flac|mp3|m4a|ogg|wav)$/i.test(extFromSoulseek)
@@ -549,7 +614,7 @@ export class WeeklyFlowWorker {
           try {
             const downloadStart = process.hrtime.bigint();
             downloadedSourcePath = await soulseekClient.download(
-              candidate,
+              candidate.candidate,
               stagingFilePath,
               (progressPct) => {
                 if (!this.currentJob || this.currentJob.id !== job.id) return;
@@ -564,7 +629,7 @@ export class WeeklyFlowWorker {
             if (this.currentJob && this.currentJob.id === job.id) {
               this.currentJob.progressPct = 100;
             }
-            selectedMatch = candidate;
+            selectedMatch = candidate.candidate;
             selectedExt = ext;
             lastError = null;
             break;

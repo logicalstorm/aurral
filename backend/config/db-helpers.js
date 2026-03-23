@@ -239,6 +239,7 @@ export const dbOps = {
       String(weeklyFlowWorker?.preferredFormat || "").toLowerCase() === "mp3"
         ? "mp3"
         : "flac";
+    const preferredFormatStrict = weeklyFlowWorker?.preferredFormatStrict === true;
 
     const defaultFlowPlaylists = {
       discover: { enabled: false, nextRunAt: null },
@@ -268,6 +269,7 @@ export const dbOps = {
       weeklyFlowWorker: {
         concurrency,
         preferredFormat,
+        preferredFormatStrict,
       },
       onboardingComplete: !!onboardingComplete,
     };
