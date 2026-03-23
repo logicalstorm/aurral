@@ -324,7 +324,7 @@ export function FlowFormFields({
         <div className="flex gap-4">
           <div className="flex-1 grid gap-1.5">
             <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
-              Flow Name
+              Playlist Name
             </label>
             <input
               type="text"
@@ -761,25 +761,43 @@ export function FlowCard({
   const hintMessage = String(statusHint?.message || "").trim();
   const queueProcessing = operationQueue?.processing === true;
   const queueLabel = String(operationQueue?.currentLabel || "").trim();
+  const queueAction = queueLabel.includes(":")
+    ? queueLabel.slice(0, queueLabel.indexOf(":"))
+    : queueLabel;
   const queueFlowId = queueLabel.includes(":")
     ? queueLabel.slice(queueLabel.indexOf(":") + 1)
     : "";
+  const queueTargetsThisFlow = queueFlowId === flow.id;
   const isGeneratingThisFlow =
     enabled &&
     queueProcessing &&
-    (queueLabel.startsWith("enable:") || queueLabel.startsWith("scheduled:")) &&
-    queueFlowId === flow.id;
+    (queueAction === "enable" || queueAction === "scheduled") &&
+    queueTargetsThisFlow;
+  const isQueueCleanupThisFlow =
+    enabled &&
+    queueProcessing &&
+    (queueAction === "disable" || queueAction === "delete" || queueAction === "reset") &&
+    queueTargetsThisFlow;
   const pendingCount = Number(stats?.pending || 0);
+  const downloadingCount = Number(stats?.downloading || 0);
   const isQueued =
     enabled &&
     pendingCount > 0 &&
     !isCurrentJobForFlow &&
     hintPhase === "downloading";
+  const hasFlowWorkInProgress =
+    pendingCount > 0 ||
+    downloadingCount > 0 ||
+    isCurrentJobForFlow ||
+    isGeneratingThisFlow ||
+    isQueueCleanupThisFlow;
   let flowWorkerMessage = "";
   if (isCurrentJobForFlow) {
     flowWorkerMessage = `Download: ${currentJob.trackName} (${jobProgressPct}%)`;
   } else if (isGeneratingThisFlow) {
     flowWorkerMessage = "Generating playlist";
+  } else if (isQueueCleanupThisFlow) {
+    flowWorkerMessage = "Cleaning flow files";
   } else if (isQueued) {
     flowWorkerMessage = "Queued";
   } else if (enabled && queueProcessing && pendingCount > 0) {
@@ -789,6 +807,8 @@ export function FlowCard({
   } else if (
     enabled &&
     hintMessage &&
+    (!queueProcessing || queueTargetsThisFlow) &&
+    (hintPhase !== "queued" || hasFlowWorkInProgress) &&
     hintPhase !== "downloading" &&
     hintPhase !== "completed"
   ) {
@@ -796,7 +816,7 @@ export function FlowCard({
   }
   const metaItems = [];
   if (enabled && nextRun && state !== "running" && !isGeneratingThisFlow) {
-    metaItems.push(`Next update: ${nextRun}`);
+    metaItems.push(`Next update in ${nextRun}`);
   }
 
   return (
@@ -1614,10 +1634,7 @@ export function FlowWorkerSettingsModal({
     >
       <div className="card max-w-md w-full mx-4 grid gap-5" onClick={(e) => e.stopPropagation()}>
         <div className="grid gap-1">
-          <h3 className="text-xl font-bold text-white">Flow Worker Settings</h3>
-          <p className="text-[#c1c1c3] text-sm">
-            Adjust download concurrency and preferred audio format.
-          </p>
+          <h3 className="text-xl font-bold text-white">Worker Settings</h3>
         </div>
         <div className="grid gap-4">
           <div className="grid gap-1.5">
@@ -1671,45 +1688,61 @@ export function FlowWorkerSettingsModal({
             <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
               Preferred Format
             </label>
-            <div
-              ref={formatTabsRef}
-              className="relative p-1.5 inline-flex"
-              style={{ backgroundColor: "#0f0f12" }}
-            >
+            <div className="flex items-stretch gap-2">
               <div
-                ref={formatActiveBubbleRef}
-                className="absolute transition-all duration-300 ease-out z-10 opacity-0"
-                style={{ backgroundColor: "#211f27" }}
-              />
-              <div
-                ref={formatHoverBubbleRef}
-                className="absolute transition-all duration-200 ease-out z-0"
-                style={{ backgroundColor: "#1a1a1e" }}
-              />
-              <div
-                className="relative flex gap-1"
-                onMouseLeave={() => setHoveredFormatIndex(null)}
+                ref={formatTabsRef}
+                className="relative p-1.5 flex-1 min-w-0"
+                style={{ backgroundColor: "#0f0f12" }}
               >
-                {FLOW_WORKER_FORMAT_OPTIONS.map((option, index) => (
-                  <button
-                    key={option.id}
-                    ref={(el) => {
-                      if (el) formatOptionRefs.current[index] = el;
-                    }}
-                    type="button"
-                    onMouseEnter={() => setHoveredFormatIndex(index)}
-                    onClick={() =>
-                      onChange((prev) => ({
-                        ...prev,
-                        preferredFormat: option.id,
-                      }))
-                    }
-                    className="relative z-20 flex items-center justify-center px-4 py-2.5 font-medium transition-all duration-200 text-sm"
-                    style={{ color: "#fff" }}
-                  >
-                    {option.label}
-                  </button>
-                ))}
+                <div
+                  ref={formatActiveBubbleRef}
+                  className="absolute transition-all duration-300 ease-out z-10 opacity-0"
+                  style={{ backgroundColor: "#211f27" }}
+                />
+                <div
+                  ref={formatHoverBubbleRef}
+                  className="absolute transition-all duration-200 ease-out z-0"
+                  style={{ backgroundColor: "#1a1a1e" }}
+                />
+                <div
+                  className="relative flex gap-1"
+                  onMouseLeave={() => setHoveredFormatIndex(null)}
+                >
+                  {FLOW_WORKER_FORMAT_OPTIONS.map((option, index) => (
+                    <button
+                      key={option.id}
+                      ref={(el) => {
+                        if (el) formatOptionRefs.current[index] = el;
+                      }}
+                      type="button"
+                      onMouseEnter={() => setHoveredFormatIndex(index)}
+                      onClick={() =>
+                        onChange((prev) => ({
+                          ...prev,
+                          preferredFormat: option.id,
+                        }))
+                      }
+                      className="relative z-20 flex items-center justify-center px-4 py-2.5 font-medium transition-all duration-200 text-sm"
+                      style={{ color: "#fff" }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex min-w-[100px] items-center justify-end rounded-md border border-white/10 bg-black/20 px-3 py-2">
+                <div className="grid gap-0.5 pr-3">
+                  <span className="text-sm font-medium text-white">Strict</span>
+                </div>
+                <PillToggle
+                  checked={settings.preferredFormatStrict === true}
+                  onChange={(event) =>
+                    onChange((prev) => ({
+                      ...prev,
+                      preferredFormatStrict: event.target.checked,
+                    }))
+                  }
+                />
               </div>
             </div>
           </div>

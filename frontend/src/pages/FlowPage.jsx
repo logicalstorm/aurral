@@ -22,15 +22,25 @@ import {
   FlowWorkerSettingsModal,
 } from "./FlowPageComponents";
 
-function formatNextRun(nextRunAt) {
+function formatNextRun(nextRunAt, now = Date.now()) {
   if (!nextRunAt) return null;
   const ts =
     typeof nextRunAt === "number" ? nextRunAt : parseInt(nextRunAt, 10);
   if (!Number.isFinite(ts)) return null;
-  const now = Date.now();
   const diff = ts - now;
   if (diff <= 0) return "soon";
-  const days = Math.ceil(diff / (24 * 60 * 60 * 1000));
+  const minuteMs = 60 * 1000;
+  const hourMs = 60 * minuteMs;
+  const dayMs = 24 * hourMs;
+  if (diff < hourMs) {
+    const minutes = Math.ceil(diff / minuteMs);
+    return minutes === 1 ? "1 minute" : `${minutes} minutes`;
+  }
+  if (diff < dayMs) {
+    const hours = Math.ceil(diff / hourMs);
+    return hours === 1 ? "1 hour" : `${hours} hours`;
+  }
+  const days = Math.ceil(diff / dayMs);
   return days === 1 ? "1 day" : `${days} days`;
 }
 
@@ -460,6 +470,7 @@ const EMPTY_FLOW_STATS = {
 const DEFAULT_WORKER_SETTINGS = {
   concurrency: 3,
   preferredFormat: "flac",
+  preferredFormatStrict: false,
 };
 
 const buildFlowStatsFromJobs = (jobs) => {
@@ -511,6 +522,7 @@ function FlowPage() {
   const [tracksErrorByFlowId, setTracksErrorByFlowId] = useState({});
   const [tracksByFlowId, setTracksByFlowId] = useState({});
   const [bulkActionRunning, setBulkActionRunning] = useState(false);
+  const [countdownNow, setCountdownNow] = useState(() => Date.now());
   const lastFlowWsMessageAtRef = useRef(0);
   const { showSuccess, showError } = useToast();
 
@@ -559,6 +571,13 @@ function FlowPage() {
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
   }, [status?.worker?.running, status?.hint?.phase, isFlowSocketConnected, fetchStatus]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCountdownNow(Date.now());
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const activeFlowIdsKey = useMemo(() => {
     if (!status?.worker?.running || !status?.flows?.length) return "";
@@ -899,9 +918,11 @@ function FlowPage() {
       String(raw.preferredFormat || "").toLowerCase() === "mp3"
         ? "mp3"
         : "flac";
+    const preferredFormatStrict = raw.preferredFormatStrict === true;
     return {
       concurrency,
       preferredFormat,
+      preferredFormatStrict,
     };
   };
 
@@ -917,16 +938,20 @@ function FlowPage() {
     );
     const safePreferredFormat =
       workerSettingsDraft.preferredFormat === "mp3" ? "mp3" : "flac";
+    const safePreferredFormatStrict =
+      workerSettingsDraft.preferredFormatStrict === true;
     const current = getCurrentWorkerSettings();
     const hasChanges =
       safeConcurrency !== current.concurrency ||
-      safePreferredFormat !== current.preferredFormat;
+      safePreferredFormat !== current.preferredFormat ||
+      safePreferredFormatStrict !== current.preferredFormatStrict;
     if (!hasChanges || savingWorkerSettings) return;
     setSavingWorkerSettings(true);
     try {
       await updateFlowWorkerSettings({
         concurrency: safeConcurrency,
         preferredFormat: safePreferredFormat,
+        preferredFormatStrict: safePreferredFormatStrict,
       });
       showSuccess("Flow worker settings updated");
       setIsWorkerSettingsOpen(false);
@@ -1029,7 +1054,9 @@ function FlowPage() {
   const hasWorkerSettingsChanges =
     Number(workerSettingsDraft.concurrency) !== currentWorkerSettings.concurrency ||
     (workerSettingsDraft.preferredFormat === "mp3" ? "mp3" : "flac") !==
-      currentWorkerSettings.preferredFormat;
+      currentWorkerSettings.preferredFormat ||
+    (workerSettingsDraft.preferredFormatStrict === true) !==
+      currentWorkerSettings.preferredFormatStrict;
 
   return (
     <div className="flow-page max-w-6xl mx-auto px-4 pb-10">
@@ -1104,7 +1131,7 @@ function FlowPage() {
             total: targetTotal,
           };
           const enabled = flow.enabled === true;
-          const nextRun = formatNextRun(flow.nextRunAt);
+          const nextRun = formatNextRun(flow.nextRunAt, countdownNow);
           const isEditing = editingId === flow.id;
           const simpleDraft = simpleDrafts[flow.id] ?? flowToForm(flow);
           const simpleError = simpleErrors[flow.id];

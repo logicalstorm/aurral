@@ -202,6 +202,7 @@ export const defaultData = {
     weeklyFlowWorker: {
       concurrency: 3,
       preferredFormat: "flac",
+      preferredFormatStrict: false,
     },
   },
   blocklist: [],

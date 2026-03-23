@@ -12,9 +12,24 @@ function formatNextRunMessage(flows) {
     .sort((a, b) => a - b)[0];
   if (!nextRunAt) return null;
   const diff = nextRunAt - Date.now();
-  if (diff <= 0) return "Next update: soon";
-  const days = Math.ceil(diff / (24 * 60 * 60 * 1000));
-  return days === 1 ? "Next update: 1 day" : `Next update: ${days} days`;
+  if (diff <= 0) return "Next update soon";
+  const minuteMs = 60 * 1000;
+  const hourMs = 60 * minuteMs;
+  const dayMs = 24 * hourMs;
+  if (diff < hourMs) {
+    const minutes = Math.ceil(diff / minuteMs);
+    return minutes === 1
+      ? "Next update in 1 minute"
+      : `Next update in ${minutes} minutes`;
+  }
+  if (diff < dayMs) {
+    const hours = Math.ceil(diff / hourMs);
+    return hours === 1
+      ? "Next update in 1 hour"
+      : `Next update in ${hours} hours`;
+  }
+  const days = Math.ceil(diff / dayMs);
+  return days === 1 ? "Next update in 1 day" : `Next update in ${days} days`;
 }
 
 export function getWeeklyFlowStatusSnapshot({
