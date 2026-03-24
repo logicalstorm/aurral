@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Loader2 } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Loader2, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   getFlowStatus,
@@ -9,28 +9,39 @@ import {
   deleteFlow,
   setFlowEnabled,
   getFlowTrackStreamUrl,
+  updateFlowWorkerSettings,
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
 import { useWebSocketChannel } from "../hooks/useWebSocket";
 import {
   FlowCard,
   FlowEmptyState,
-  FlowPageHeader,
-  FlowStatusCards,
   ConfirmDeleteModal,
   ConfirmDisableModal,
+  ConfirmStopAllModal,
+  FlowWorkerSettingsModal,
 } from "./FlowPageComponents";
 
-function formatNextRun(nextRunAt) {
+function formatNextRun(nextRunAt, now = Date.now()) {
   if (!nextRunAt) return null;
   const ts =
     typeof nextRunAt === "number" ? nextRunAt : parseInt(nextRunAt, 10);
   if (!Number.isFinite(ts)) return null;
-  const now = Date.now();
   const diff = ts - now;
-  if (diff <= 0) return "Refreshing soon";
-  const days = Math.ceil(diff / (24 * 60 * 60 * 1000));
-  return days === 1 ? "Resets tomorrow" : `Resets in ${days} days`;
+  if (diff <= 0) return "soon";
+  const minuteMs = 60 * 1000;
+  const hourMs = 60 * minuteMs;
+  const dayMs = 24 * hourMs;
+  if (diff < hourMs) {
+    const minutes = Math.ceil(diff / minuteMs);
+    return minutes === 1 ? "1 minute" : `${minutes} minutes`;
+  }
+  if (diff < dayMs) {
+    const hours = Math.ceil(diff / hourMs);
+    return hours === 1 ? "1 hour" : `${hours} hours`;
+  }
+  const days = Math.ceil(diff / dayMs);
+  return days === 1 ? "1 day" : `${days} days`;
 }
 
 const DEFAULT_MIX = { discover: 50, mix: 30, trending: 20 };
@@ -83,6 +94,27 @@ const NEW_FLOW_TEMPLATE = {
   deepDive: false,
   tags: {},
   relatedArtists: {},
+};
+
+const getNextFlowName = (flows, baseName = "Discover") => {
+  const normalizedBase = String(baseName || "").trim() || "Discover";
+  const existingNames = new Set(
+    (Array.isArray(flows) ? flows : [])
+      .map((flow) => String(flow?.name || "").trim().toLowerCase())
+      .filter(Boolean),
+  );
+  if (!existingNames.has(normalizedBase.toLowerCase())) {
+    return normalizedBase;
+  }
+  let index = 2;
+  while (index < 10000) {
+    const candidate = `${normalizedBase} ${index}`;
+    if (!existingNames.has(candidate.toLowerCase())) {
+      return candidate;
+    }
+    index += 1;
+  }
+  return `${normalizedBase} ${Date.now()}`;
 };
 
 const parseListInput = (value) =>
@@ -431,21 +463,37 @@ const isFlowDirty = (flow, draft) => {
 const EMPTY_FLOW_STATS = {
   total: 0,
   done: 0,
-  failed: 0,
   pending: 0,
   downloading: 0,
+};
+
+const DEFAULT_WORKER_SETTINGS = {
+  concurrency: 3,
+  preferredFormat: "flac",
+  preferredFormatStrict: false,
 };
 
 const buildFlowStatsFromJobs = (jobs) => {
   const stats = { ...EMPTY_FLOW_STATS };
   if (!Array.isArray(jobs)) return stats;
-  stats.total = jobs.length;
   for (const job of jobs) {
-    if (job?.status) {
-      stats[job.status] = (stats[job.status] || 0) + 1;
-    }
+    if (!job?.status || job.status === "failed") continue;
+    stats[job.status] = (stats[job.status] || 0) + 1;
   }
+  stats.total = stats.pending + stats.downloading + stats.done;
   return stats;
+};
+
+const sanitizeFlowStats = (stats) => {
+  const pending = Number(stats?.pending || 0);
+  const downloading = Number(stats?.downloading || 0);
+  const done = Number(stats?.done || 0);
+  return {
+    total: pending + downloading + done,
+    pending,
+    downloading,
+    done,
+  };
 };
 
 function FlowPage() {
@@ -454,6 +502,12 @@ function FlowPage() {
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [confirmDisable, setConfirmDisable] = useState(null);
+  const [confirmStopAll, setConfirmStopAll] = useState(false);
+  const [isWorkerSettingsOpen, setIsWorkerSettingsOpen] = useState(false);
+  const [workerSettingsDraft, setWorkerSettingsDraft] = useState(
+    DEFAULT_WORKER_SETTINGS,
+  );
+  const [savingWorkerSettings, setSavingWorkerSettings] = useState(false);
   const [optimisticEnabled, setOptimisticEnabled] = useState({});
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
@@ -468,6 +522,7 @@ function FlowPage() {
   const [tracksErrorByFlowId, setTracksErrorByFlowId] = useState({});
   const [tracksByFlowId, setTracksByFlowId] = useState({});
   const [bulkActionRunning, setBulkActionRunning] = useState(false);
+  const [countdownNow, setCountdownNow] = useState(() => Date.now());
   const lastFlowWsMessageAtRef = useRef(0);
   const { showSuccess, showError } = useToast();
 
@@ -500,22 +555,45 @@ function FlowPage() {
   }, [fetchStatus]);
 
   useEffect(() => {
-    if (!status?.worker?.running) return;
+    if (isFlowSocketConnected) {
+      fetchStatus();
+    }
+  }, [isFlowSocketConnected, fetchStatus]);
+
+  useEffect(() => {
+    const workerRunning = status?.worker?.running === true;
+    const hintPhase = status?.hint?.phase;
+    const inTransition = hintPhase === "preparing" || hintPhase === "downloading";
+    if (!workerRunning && !inTransition) return;
     const hasRecentWsUpdate =
       Date.now() - lastFlowWsMessageAtRef.current < 20000;
     if (isFlowSocketConnected && hasRecentWsUpdate) return;
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
-  }, [status?.worker?.running, isFlowSocketConnected, fetchStatus]);
+  }, [status?.worker?.running, status?.hint?.phase, isFlowSocketConnected, fetchStatus]);
 
   useEffect(() => {
-    if (!status?.worker?.running || !status?.flows?.length) return;
-    const activeFlowIds = status.flows
+    const interval = setInterval(() => {
+      setCountdownNow(Date.now());
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const activeFlowIdsKey = useMemo(() => {
+    if (!status?.worker?.running || !status?.flows?.length) return "";
+    const activeIds = status.flows
       .filter((flow) => {
         const stats = status.flowStats?.[flow.id];
         return (stats?.pending || 0) > 0 || (stats?.downloading || 0) > 0;
       })
-      .map((flow) => flow.id);
+      .map((flow) => flow.id)
+      .sort();
+    return activeIds.join("|");
+  }, [status?.worker?.running, status?.flows, status?.flowStats]);
+
+  useEffect(() => {
+    if (!activeFlowIdsKey) return;
+    const activeFlowIds = activeFlowIdsKey.split("|").filter(Boolean);
     if (!activeFlowIds.length) return;
 
     let cancelled = false;
@@ -546,7 +624,7 @@ function FlowPage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [status?.worker?.running, status?.flows, status?.flowStats]);
+  }, [activeFlowIdsKey]);
 
   useEffect(() => {
     if (!status?.flows?.length) {
@@ -588,10 +666,10 @@ function FlowPage() {
   }, [status?.flows]);
 
   const getPlaylistStats = (flowId) => {
-    return (
+    return sanitizeFlowStats(
       status?.flowStats?.[flowId] ||
       flowStatsById[flowId] ||
-      EMPTY_FLOW_STATS
+      EMPTY_FLOW_STATS,
     );
   };
 
@@ -599,7 +677,7 @@ function FlowPage() {
     const stats = getPlaylistStats(flowId);
     if (stats.total === 0) return "idle";
     if (stats.downloading > 0 || stats.pending > 0) return "running";
-    if (stats.done > 0 || stats.failed > 0) return "completed";
+    if (stats.done > 0) return "completed";
     return "idle";
   };
 
@@ -651,7 +729,11 @@ function FlowPage() {
     if (creating) return;
     setCreating(true);
     try {
-      const draft = flowToForm(NEW_FLOW_TEMPLATE);
+      const uniqueName = getNextFlowName(status?.flows, NEW_FLOW_TEMPLATE.name);
+      const draft = flowToForm({
+        ...NEW_FLOW_TEMPLATE,
+        name: uniqueName,
+      });
       const payload = buildFlowFromForm(draft);
       const response = await createFlow(payload);
       const createdFlow = response?.flow;
@@ -750,16 +832,15 @@ function FlowPage() {
     setConfirmDisable(null);
   };
 
-  const handleStartOrStopAll = async () => {
+  const handleSetAllEnabled = async (targetEnabled) => {
     if (bulkActionRunning) return;
-    const shouldStartAll = disabledFlowCount > 0;
     const targetFlows = flowList.filter((flow) => {
       const optimisticValue = optimisticEnabled[flow.id];
       const isEnabled =
         typeof optimisticValue === "boolean"
           ? optimisticValue
           : flow.enabled === true;
-      return shouldStartAll ? !isEnabled : isEnabled;
+      return targetEnabled ? !isEnabled : isEnabled;
     });
     if (targetFlows.length === 0) return;
 
@@ -767,7 +848,7 @@ function FlowPage() {
     setOptimisticEnabled((prev) => {
       const next = { ...prev };
       for (const flow of targetFlows) {
-        next[flow.id] = shouldStartAll;
+        next[flow.id] = targetEnabled;
       }
       return next;
     });
@@ -776,7 +857,7 @@ function FlowPage() {
     const failed = [];
     for (const flow of targetFlows) {
       try {
-        await setFlowEnabled(flow.id, shouldStartAll);
+        await setFlowEnabled(flow.id, targetEnabled);
         successCount += 1;
       } catch (err) {
         failed.push({
@@ -784,7 +865,7 @@ function FlowPage() {
           message:
             err.response?.data?.message ||
             err.message ||
-            `Failed to ${shouldStartAll ? "start" : "stop"} flow`,
+            `Failed to ${targetEnabled ? "start" : "stop"} flow`,
         });
       }
     }
@@ -792,8 +873,8 @@ function FlowPage() {
     if (successCount > 0) {
       showSuccess(
         successCount === targetFlows.length
-          ? `${shouldStartAll ? "Started" : "Stopped"} ${successCount} flows`
-          : `${shouldStartAll ? "Started" : "Stopped"} ${successCount} flows with ${failed.length} failures`,
+          ? `${targetEnabled ? "Started" : "Stopped"} ${successCount} flows`
+          : `${targetEnabled ? "Started" : "Stopped"} ${successCount} flows with ${failed.length} failures`,
       );
     }
     if (failed.length > 0) {
@@ -801,7 +882,7 @@ function FlowPage() {
       showError(
         failed.length === 1
           ? `${first.name}: ${first.message}`
-          : `Failed to ${shouldStartAll ? "start" : "stop"} ${failed.length} flows. First issue: ${first.name} - ${first.message}`,
+          : `Failed to ${targetEnabled ? "start" : "stop"} ${failed.length} flows. First issue: ${first.name} - ${first.message}`,
       );
     }
 
@@ -814,6 +895,77 @@ function FlowPage() {
       return next;
     });
     setBulkActionRunning(false);
+  };
+
+  const handleStopAllRequest = () => {
+    if (bulkActionRunning || enabledFlowCount === 0) return;
+    setConfirmStopAll(true);
+  };
+
+  const handleConfirmStopAll = async () => {
+    setConfirmStopAll(false);
+    await handleSetAllEnabled(false);
+  };
+
+  const getCurrentWorkerSettings = () => {
+    const raw = status?.worker?.settings || {};
+    const parsedConcurrency = Number(raw.concurrency);
+    const concurrency =
+      Number.isFinite(parsedConcurrency) && parsedConcurrency >= 1
+        ? Math.min(5, Math.floor(parsedConcurrency))
+        : DEFAULT_WORKER_SETTINGS.concurrency;
+    const preferredFormat =
+      String(raw.preferredFormat || "").toLowerCase() === "mp3"
+        ? "mp3"
+        : "flac";
+    const preferredFormatStrict = raw.preferredFormatStrict === true;
+    return {
+      concurrency,
+      preferredFormat,
+      preferredFormatStrict,
+    };
+  };
+
+  const handleOpenWorkerSettings = () => {
+    setWorkerSettingsDraft(getCurrentWorkerSettings());
+    setIsWorkerSettingsOpen(true);
+  };
+
+  const handleSaveWorkerSettings = async () => {
+    const safeConcurrency = Math.min(
+      5,
+      Math.max(1, Math.floor(Number(workerSettingsDraft.concurrency) || 3)),
+    );
+    const safePreferredFormat =
+      workerSettingsDraft.preferredFormat === "mp3" ? "mp3" : "flac";
+    const safePreferredFormatStrict =
+      workerSettingsDraft.preferredFormatStrict === true;
+    const current = getCurrentWorkerSettings();
+    const hasChanges =
+      safeConcurrency !== current.concurrency ||
+      safePreferredFormat !== current.preferredFormat ||
+      safePreferredFormatStrict !== current.preferredFormatStrict;
+    if (!hasChanges || savingWorkerSettings) return;
+    setSavingWorkerSettings(true);
+    try {
+      await updateFlowWorkerSettings({
+        concurrency: safeConcurrency,
+        preferredFormat: safePreferredFormat,
+        preferredFormatStrict: safePreferredFormatStrict,
+      });
+      showSuccess("Flow worker settings updated");
+      setIsWorkerSettingsOpen(false);
+      await fetchStatus();
+    } catch (err) {
+      showError(
+        err.response?.data?.message ||
+          err.response?.data?.error ||
+          err.message ||
+          "Failed to update flow worker settings",
+      );
+    } finally {
+      setSavingWorkerSettings(false);
+    }
   };
 
   const normalizeReason = (job) => {
@@ -834,13 +986,15 @@ function FlowPage() {
     setTracksErrorByFlowId((prev) => ({ ...prev, [flowId]: "" }));
     try {
       const jobs = await getFlowJobs(flowId, 500);
-      const normalized = (Array.isArray(jobs) ? jobs : []).map((job) => ({
-        ...job,
-        albumName: job?.albumName || null,
-        reason: normalizeReason(job),
-        streamUrl:
-          job?.status === "done" && job?.id ? getFlowTrackStreamUrl(job.id) : null,
-      }));
+      const normalized = (Array.isArray(jobs) ? jobs : [])
+        .filter((job) => job?.status !== "failed")
+        .map((job) => ({
+          ...job,
+          albumName: job?.albumName || null,
+          reason: normalizeReason(job),
+          streamUrl:
+            job?.status === "done" && job?.id ? getFlowTrackStreamUrl(job.id) : null,
+        }));
       setTracksByFlowId((prev) => ({
         ...prev,
         [flowId]: normalized,
@@ -889,13 +1043,6 @@ function FlowPage() {
       state: { artistName: track.artistName },
     });
   };
-  const enabledCount = effectiveFlowList.filter((flow) => flow.enabled === true).length;
-  const runningCount = effectiveFlowList.filter(
-    (flow) => getPlaylistState(flow.id) === "running"
-  ).length;
-  const completedCount = effectiveFlowList.filter(
-    (flow) => getPlaylistState(flow.id) === "completed"
-  ).length;
   if (loading && !status) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -903,35 +1050,34 @@ function FlowPage() {
       </div>
     );
   }
+  const currentWorkerSettings = getCurrentWorkerSettings();
+  const hasWorkerSettingsChanges =
+    Number(workerSettingsDraft.concurrency) !== currentWorkerSettings.concurrency ||
+    (workerSettingsDraft.preferredFormat === "mp3" ? "mp3" : "flac") !==
+      currentWorkerSettings.preferredFormat ||
+    (workerSettingsDraft.preferredFormatStrict === true) !==
+      currentWorkerSettings.preferredFormatStrict;
 
   return (
     <div className="flow-page max-w-6xl mx-auto px-4 pb-10">
-      <FlowPageHeader
-        onNewFlow={handleCreateInline}
-      />
-
-      <FlowStatusCards
-        status={status}
-        enabledCount={enabledCount}
-        flowCount={effectiveFlowList.length}
-        runningCount={runningCount}
-        completedCount={completedCount}
-        isSocketConnected={isFlowSocketConnected}
-      />
-
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs uppercase tracking-[0.35em] text-[#8b8b90]">
-          Playlists
-        </h2>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-end gap-2">
+          <h2 className="text-base font-semibold text-white">Playlists</h2>
+        </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-[#c1c1c3]">
-            {effectiveFlowList.length} flows
-          </span>
           <button
             type="button"
-            onClick={handleStartOrStopAll}
+            onClick={handleOpenWorkerSettings}
+            className="btn btn-secondary btn-sm px-2 opacity-80 hover:opacity-100"
+            aria-label="Open flow worker settings"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSetAllEnabled(true)}
             className="btn btn-secondary btn-sm"
-            disabled={bulkActionRunning || effectiveFlowList.length === 0}
+            disabled={bulkActionRunning || disabledFlowCount === 0}
           >
             {bulkActionRunning ? (
               <span className="inline-flex items-center gap-1.5">
@@ -939,23 +1085,53 @@ function FlowPage() {
                 Working...
               </span>
             ) : (
-              enabledFlowCount > 0 && disabledFlowCount === 0
-                ? "Stop All"
-                : "Start All"
+              "Start All"
             )}
+          </button>
+          <button
+            type="button"
+            onClick={handleStopAllRequest}
+            className="btn btn-secondary btn-sm"
+            disabled={bulkActionRunning || enabledFlowCount === 0}
+          >
+            {bulkActionRunning ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Working...
+              </span>
+            ) : (
+              "Stop All"
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={handleCreateInline}
+            className="btn btn-primary btn-sm"
+            disabled={creating}
+          >
+            {creating ? "Creating..." : "New Playlist"}
           </button>
         </div>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-4">
         {effectiveFlowList.length === 0 && (
           <FlowEmptyState onCreate={handleCreateInline} creating={creating} />
         )}
         {effectiveFlowList.map((flow) => {
           const stats = getPlaylistStats(flow.id);
           const state = getPlaylistState(flow.id);
+          const flowSize = Number(flow?.size || 0);
+          const targetTotal =
+            Number.isFinite(flowSize) && flowSize > 0
+              ? Math.floor(flowSize)
+              : stats.total;
+          const displayStats = {
+            ...stats,
+            total: targetTotal,
+          };
           const enabled = flow.enabled === true;
-          const nextRun = formatNextRun(flow.nextRunAt);
+          const nextRun = formatNextRun(flow.nextRunAt, countdownNow);
           const isEditing = editingId === flow.id;
           const simpleDraft = simpleDrafts[flow.id] ?? flowToForm(flow);
           const simpleError = simpleErrors[flow.id];
@@ -969,7 +1145,10 @@ function FlowPage() {
               flow={flow}
               enabled={enabled}
               state={state}
-              stats={stats}
+              stats={displayStats}
+              currentJob={status?.worker?.currentJob}
+              statusHint={status?.hint}
+              operationQueue={status?.operationQueue}
               nextRun={nextRun}
               isEditing={isEditing}
               isTracksOpen={tracksExpandedId === flow.id}
@@ -1024,6 +1203,24 @@ function FlowPage() {
         togglingId={togglingId}
         onCancel={() => setConfirmDisable(null)}
         onConfirm={handleConfirmDisable}
+      />
+      <ConfirmStopAllModal
+        confirmStopAll={confirmStopAll}
+        bulkActionRunning={bulkActionRunning}
+        onCancel={() => setConfirmStopAll(false)}
+        onConfirm={handleConfirmStopAll}
+      />
+      <FlowWorkerSettingsModal
+        isOpen={isWorkerSettingsOpen}
+        settings={workerSettingsDraft}
+        hasChanges={hasWorkerSettingsChanges}
+        saving={savingWorkerSettings}
+        onCancel={() => {
+          if (savingWorkerSettings) return;
+          setIsWorkerSettingsOpen(false);
+        }}
+        onChange={setWorkerSettingsDraft}
+        onSave={handleSaveWorkerSettings}
       />
     </div>
   );

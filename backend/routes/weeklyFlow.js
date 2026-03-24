@@ -108,8 +108,14 @@ const queueFlowEnableRefresh = (flowId, mutationVersion) => {
         return;
       }
 
-      weeklyFlowWorker.stop();
-      playlistManager.updateConfig();
+      const flowStats = downloadTracker.getPlaylistTypeStats(flowId);
+      const shouldStopWorker =
+        weeklyFlowWorker.running &&
+        (flowStats.pending > 0 || flowStats.downloading > 0);
+      if (shouldStopWorker) {
+        weeklyFlowWorker.stop();
+      }
+      playlistManager.updateConfig(false);
       await playlistManager.weeklyReset([flowId]);
       downloadTracker.clearByPlaylistType(flowId);
 
@@ -117,6 +123,12 @@ const queueFlowEnableRefresh = (flowId, mutationVersion) => {
         flowEnableMutationVersion.get(flowId) !== mutationVersion ||
         !flowPlaylistConfig.isEnabled(flowId)
       ) {
+        if (shouldStopWorker) {
+          const stillPending = downloadTracker.getNextPending();
+          if (stillPending && !weeklyFlowWorker.running) {
+            await weeklyFlowWorker.start();
+          }
+        }
         return;
       }
 
@@ -131,7 +143,15 @@ const queueFlowEnableRefresh = (flowId, mutationVersion) => {
         return;
       }
 
-      if (tracks.length === 0) return;
+      if (tracks.length === 0) {
+        if (shouldStopWorker) {
+          const stillPending = downloadTracker.getNextPending();
+          if (stillPending && !weeklyFlowWorker.running) {
+            await weeklyFlowWorker.start();
+          }
+        }
+        return;
+      }
       downloadTracker.addJobs(tracks, flowId);
       if (!weeklyFlowWorker.running) {
         await weeklyFlowWorker.start();
@@ -152,8 +172,14 @@ const queueFlowDisableCleanup = (flowId, mutationVersion) => {
         return;
       }
 
-      weeklyFlowWorker.stop();
-      playlistManager.updateConfig();
+      const flowStats = downloadTracker.getPlaylistTypeStats(flowId);
+      const shouldStopWorker =
+        weeklyFlowWorker.running &&
+        (flowStats.pending > 0 || flowStats.downloading > 0);
+      if (shouldStopWorker) {
+        weeklyFlowWorker.stop();
+      }
+      playlistManager.updateConfig(false);
       await playlistManager.weeklyReset([flowId]);
       downloadTracker.clearByPlaylistType(flowId);
 
@@ -269,6 +295,12 @@ router.post("/flows", async (req, res) => {
     await playlistManager.ensureSmartPlaylists();
     res.json({ success: true, flow });
   } catch (error) {
+    if (error?.code === "FLOW_NAME_CONFLICT") {
+      return res.status(400).json({
+        error: "Flow name already exists",
+        message: error.message,
+      });
+    }
     res.status(500).json({
       error: "Failed to create flow",
       message: error.message,
@@ -305,6 +337,12 @@ router.put("/flows/:flowId", async (req, res) => {
     await playlistManager.ensureSmartPlaylists();
     res.json({ success: true, flow: updated });
   } catch (error) {
+    if (error?.code === "FLOW_NAME_CONFLICT") {
+      return res.status(400).json({
+        error: "Flow name already exists",
+        message: error.message,
+      });
+    }
     res.status(500).json({
       error: "Failed to update flow",
       message: error.message,
@@ -324,7 +362,7 @@ router.delete("/flows/:flowId", async (req, res) => {
           return false;
         }
         weeklyFlowWorker.stop();
-        playlistManager.updateConfig();
+        playlistManager.updateConfig(false);
         await playlistManager.weeklyReset([flowId]);
         downloadTracker.clearByPlaylistType(flowId);
         const didDelete = flowPlaylistConfig.deleteFlow(flowId);
@@ -414,7 +452,7 @@ router.get("/jobs/:flowId", (req, res) => {
     Number.isFinite(parsedLimit) && parsedLimit > 0
       ? Math.min(Math.floor(parsedLimit), 500)
       : 200;
-  const jobs = downloadTracker.getByPlaylistType(flowId).slice(0, limit);
+  const jobs = downloadTracker.getByPlaylistType(flowId, limit);
   res.json(jobs);
 });
 
@@ -424,6 +462,41 @@ router.get("/jobs", (req, res) => {
     ? downloadTracker.getByStatus(status)
     : downloadTracker.getAll();
   res.json(jobs);
+});
+
+router.get("/worker/settings", (req, res) => {
+  res.json(weeklyFlowWorker.getWorkerSettings());
+});
+
+router.put("/worker/settings", (req, res) => {
+  const { concurrency, preferredFormat, preferredFormatStrict } = req.body || {};
+  if (concurrency !== undefined) {
+    const parsed = Number(concurrency);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 5) {
+      return res.status(400).json({
+        error: "concurrency must be an integer between 1 and 5",
+      });
+    }
+  }
+  if (preferredFormat !== undefined) {
+    const normalized = String(preferredFormat || "").toLowerCase();
+    if (normalized !== "flac" && normalized !== "mp3") {
+      return res.status(400).json({
+        error: "preferredFormat must be either 'flac' or 'mp3'",
+      });
+    }
+  }
+  if (preferredFormatStrict !== undefined && typeof preferredFormatStrict !== "boolean") {
+    return res.status(400).json({
+      error: "preferredFormatStrict must be a boolean",
+    });
+  }
+  const settings = weeklyFlowWorker.updateWorkerSettings({
+    concurrency,
+    preferredFormat,
+    preferredFormatStrict,
+  });
+  return res.json({ success: true, settings });
 });
 
 router.post("/worker/start", async (req, res) => {
@@ -461,7 +534,7 @@ router.post("/reset", async (req, res) => {
 
     await weeklyFlowOperationQueue.enqueue("reset:manual", async () => {
       weeklyFlowWorker.stop();
-      playlistManager.updateConfig();
+      playlistManager.updateConfig(false);
       await playlistManager.weeklyReset(types);
     });
 
@@ -479,7 +552,7 @@ router.post("/reset", async (req, res) => {
 
 router.post("/playlist/:playlistType/create", async (req, res) => {
   try {
-    playlistManager.updateConfig();
+    playlistManager.updateConfig(false);
     await playlistManager.ensureSmartPlaylists();
     res.json({
       success: true,
