@@ -91,6 +91,7 @@ app.use(
           "https://*.dzcdn.net",
           "https://coverartarchive.org",
           "https://archive.org",
+          "https://*.archive.org",
           "https://*.last.fm",
           "https://lastfm.freetls.fastly.net",
         ],

@@ -74,6 +74,37 @@ const DEFAULT_DISCOVER_SECTIONS = [
 const getArtistId = (artist) =>
   artist?.id || artist?.mbid || artist?.foreignArtistId;
 
+const parseCalendarDate = (value) => {
+  if (!value) return null;
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    const [, year, month, day] = match;
+    return new Date(Number(year), Number(month) - 1, Number(day));
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+};
+
+const formatReleaseStatus = (releaseDate) => {
+  const date = parseCalendarDate(releaseDate);
+  if (!date) return null;
+  const today = new Date();
+  const todayStart = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+  );
+  const formattedDate = date.toLocaleDateString();
+  if (date.getTime() === todayStart.getTime()) {
+    return "Released today";
+  }
+  if (date < todayStart) {
+    return `Released ${formattedDate}`;
+  }
+  return `Releasing ${formattedDate}`;
+};
+
 const ArtistCard = memo(
   ({ artist, status, isInLibrary, onNavigate }) => {
     const navigateTo = artist.navigateTo || artist.id;
@@ -199,9 +230,7 @@ const AlbumCard = memo(
     const hasValidMbid =
       navigateTo && navigateTo !== "null" && navigateTo !== "undefined";
     const albumArtistText = album.artistName || "Unknown Artist";
-    const albumReleaseText = album.releaseDate
-      ? `Released ${new Date(album.releaseDate).toLocaleDateString()}`
-      : null;
+    const albumReleaseText = formatReleaseStatus(album.releaseDate);
     const handleClick = useCallback(() => {
       if (hasValidMbid) {
         onNavigate(`/artist/${navigateTo}`, {
