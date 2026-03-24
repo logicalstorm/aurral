@@ -37,11 +37,6 @@ jobs:
           fi
           echo "should_publish=true" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
-          if [[ "$TAG" == *-test.* ]]; then
-            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
-          fi
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         if: steps.release.outputs.should_publish == 'true'
@@ -63,8 +58,8 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=raw,value=${{ steps.release.outputs.version }}
-            type=raw,value=latest,enable=${{ steps.release.outputs.is_prerelease == 'false' }}
-            type=raw,value=test,enable=${{ steps.release.outputs.is_prerelease == 'true' }}
+            type=raw,value=latest,enable=${{ github.event.workflow_run.head_branch == 'main' }}
+            type=raw,value=test,enable=${{ github.event.workflow_run.head_branch == 'test' }}
       - name: Build and push
         uses: docker/build-push-action@v6
         if: steps.release.outputs.should_publish == 'true'
@@ -79,5 +74,6 @@ jobs:
           build-args: |
             APP_VERSION=${{ steps.release.outputs.version }}
             GITHUB_REPO=${{ github.repository }}
+            RELEASE_CHANNEL=${{ github.event.workflow_run.head_branch == 'test' && 'test' || 'stable' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -5,19 +5,24 @@ const UpdateBanner = ({ currentVersion }) => {
   const updateNotifiedRef = useRef(null);
   const dismissedUpdateRef = useRef(null);
   const resolvedVersion = currentVersion || import.meta.env.VITE_APP_VERSION;
+  const repo = import.meta.env.VITE_GITHUB_REPO || "lklynet/aurral";
+  const inferredChannel = resolvedVersion?.includes("-test.")
+    ? "test"
+    : "stable";
+  const releaseChannel =
+    (
+      import.meta.env.VITE_RELEASE_CHANNEL ||
+      inferredChannel
+    ).toLowerCase() === "test"
+      ? "test"
+      : "stable";
   const dismissKey = useMemo(
-    () =>
-      `aurral:updateDismissed:${
-        import.meta.env.VITE_GITHUB_REPO || "lklynet/aurral"
-      }`,
-    [],
+    () => `aurral:updateDismissed:${repo}:${releaseChannel}`,
+    [releaseChannel, repo],
   );
   const checkMetaKey = useMemo(
-    () =>
-      `aurral:updateCheckMeta:${
-        import.meta.env.VITE_GITHUB_REPO || "lklynet/aurral"
-      }`,
-    [],
+    () => `aurral:updateCheckMeta:${repo}:${releaseChannel}`,
+    [releaseChannel, repo],
   );
 
   useEffect(() => {
@@ -25,7 +30,6 @@ const UpdateBanner = ({ currentVersion }) => {
     const formatSha = (value) => (value ? value.slice(0, 7) : "");
     const isSha = (value) => /^[0-9a-f]{7,40}$/i.test(value || "");
     const normalizeVersion = (value) => (value || "").replace(/^v/, "");
-    const repo = import.meta.env.VITE_GITHUB_REPO || "lklynet/aurral";
     if (!currentVersion || currentVersion === "unknown" || !repo) {
       return;
     }
@@ -46,7 +50,10 @@ const UpdateBanner = ({ currentVersion }) => {
         ) {
           return;
         }
-        const endpoint = `https://api.github.com/repos/${repo}/releases/latest`;
+        const endpoint =
+          releaseChannel === "test"
+            ? `https://api.github.com/repos/${repo}/releases?per_page=10`
+            : `https://api.github.com/repos/${repo}/releases/latest`;
         const res = await fetch(endpoint);
         if (!res.ok) {
           localStorage.setItem(
@@ -55,11 +62,23 @@ const UpdateBanner = ({ currentVersion }) => {
           );
           return;
         }
-        const data = await res.json();
+        const payload = await res.json();
         localStorage.setItem(
           checkMetaKey,
           JSON.stringify({ lastCheckedAt: Date.now() }),
         );
+        const data = Array.isArray(payload)
+          ? (
+              currentVersion.includes("-test.")
+                ? payload.find((release) => !release?.draft && release.prerelease)
+                : null
+            ) ||
+            payload.find((release) => !release?.draft) ||
+            null
+          : payload;
+        if (!data) {
+          return;
+        }
         const latestSha = (data.target_commitish || "").trim();
         const latestLabel = normalizeVersion(data.tag_name || "");
         const releaseUrl =
@@ -103,7 +122,7 @@ const UpdateBanner = ({ currentVersion }) => {
       active = false;
       clearInterval(intervalId);
     };
-  }, [checkMetaKey, dismissKey, resolvedVersion]);
+  }, [checkMetaKey, dismissKey, releaseChannel, repo, resolvedVersion]);
 
   const dismissUpdate = () => {
     if (!updateInfo?.latestKey) {
