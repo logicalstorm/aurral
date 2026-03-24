@@ -225,8 +225,21 @@ export const dbOps = {
     const weeklyFlows = dbHelpers.parseJSON(
       getSettingStmt.get("weeklyFlows")?.value
     );
+    const weeklyFlowWorker = dbHelpers.parseJSON(
+      getSettingStmt.get("weeklyFlowWorker")?.value
+    );
     const onboardingComplete =
       getSettingStmt.get("onboardingComplete")?.value === "true";
+    const parsedConcurrency = Number(weeklyFlowWorker?.concurrency);
+    const concurrency =
+      Number.isFinite(parsedConcurrency) && parsedConcurrency >= 1
+        ? Math.min(5, Math.floor(parsedConcurrency))
+        : 3;
+    const preferredFormat =
+      String(weeklyFlowWorker?.preferredFormat || "").toLowerCase() === "mp3"
+        ? "mp3"
+        : "flac";
+    const preferredFormatStrict = weeklyFlowWorker?.preferredFormatStrict === true;
 
     const defaultFlowPlaylists = {
       discover: { enabled: false, nextRunAt: null },
@@ -253,6 +266,11 @@ export const dbOps = {
       releaseTypes: releaseTypes || [],
       weeklyFlowPlaylists: merged,
       weeklyFlows: weeklyFlows || null,
+      weeklyFlowWorker: {
+        concurrency,
+        preferredFormat,
+        preferredFormatStrict,
+      },
       onboardingComplete: !!onboardingComplete,
     };
     settingsCache = result;
@@ -303,6 +321,12 @@ export const dbOps = {
         upsertSettingStmt.run(
           "weeklyFlows",
           dbHelpers.stringifyJSON(settings.weeklyFlows)
+        );
+      }
+      if (settings.weeklyFlowWorker !== undefined) {
+        upsertSettingStmt.run(
+          "weeklyFlowWorker",
+          dbHelpers.stringifyJSON(settings.weeklyFlowWorker)
         );
       }
       if (settings.onboardingComplete !== undefined) {

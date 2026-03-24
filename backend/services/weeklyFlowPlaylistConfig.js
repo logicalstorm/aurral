@@ -356,6 +356,27 @@ const setFlows = (flows) => {
   });
 };
 
+const normalizeNameKey = (value) => String(value || "").trim().toLowerCase();
+
+const createNameConflictError = (name) => {
+  const error = new Error(`Flow name "${name}" already exists`);
+  error.code = "FLOW_NAME_CONFLICT";
+  return error;
+};
+
+const assertUniqueFlowName = (flows, nextName, exceptFlowId = null) => {
+  const key = normalizeNameKey(nextName);
+  if (!key) return;
+  const hasConflict = flows.some((flow) => {
+    if (!flow) return false;
+    if (exceptFlowId && flow.id === exceptFlowId) return false;
+    return normalizeNameKey(flow.name) === key;
+  });
+  if (hasConflict) {
+    throw createNameConflictError(String(nextName || "").trim());
+  }
+};
+
 export const flowPlaylistConfig = {
   getFlows() {
     return getStoredFlows();
@@ -381,6 +402,7 @@ export const flowPlaylistConfig = {
     scheduleDays,
   }) {
     const flows = getStoredFlows();
+    assertUniqueFlowName(flows, name);
     const flow = normalizeFlow({
       id: randomUUID(),
       name,
@@ -404,10 +426,12 @@ export const flowPlaylistConfig = {
     const index = flows.findIndex((flow) => flow.id === flowId);
     if (index === -1) return null;
     const current = flows[index];
+    const nextName = updates?.name ?? current.name;
+    assertUniqueFlowName(flows, nextName, flowId);
     const currentSchedule = normalizeScheduleDays(current.scheduleDays);
     const next = normalizeFlow({
       ...current,
-      name: updates?.name ?? current.name,
+      name: nextName,
       size: updates?.size ?? current.size,
       mix: updates?.mix ?? current.mix,
       recipe: updates?.recipe ?? current.recipe,
