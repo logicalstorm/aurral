@@ -29,6 +29,7 @@ const FALLBACK_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
 const MAX_RETRIES_PER_JOB = 1;
 const MAX_RETRIES_FOR_TIMEOUT_LOGIN = 1;
 const MAX_BACKUP_REFILL_ROUNDS = 3;
+const INCOMPLETE_PLAYLIST_RETRY_DELAY_MS = 15 * 60 * 1000;
 const NON_RETRYABLE_ERRORS = new Set([
   "No search results found",
   "No candidate files returned",
@@ -60,6 +61,7 @@ export class WeeklyFlowWorker {
     this.lastJobMetrics = null;
     this.prefetchedSearches = new Map();
     this.sanitizeCache = new Map();
+    this.incompleteRetryTimers = new Map();
   }
 
   _scheduleProcessIn(delayMs = JOB_COOLDOWN_MS) {
@@ -72,6 +74,23 @@ export class WeeklyFlowWorker {
       this.processTimer = null;
       if (this.processLoop) this.processLoop();
     }, waitMs);
+  }
+
+  wake(delayMs = 0) {
+    if (!this.running) return;
+    if (this.processTimer) {
+      clearTimeout(this.processTimer);
+      this.processTimer = null;
+    }
+    this._scheduleProcessIn(delayMs);
+  }
+
+  clearIncompleteRetry(playlistType) {
+    const timer = this.incompleteRetryTimers.get(playlistType);
+    if (timer) {
+      clearTimeout(timer);
+      this.incompleteRetryTimers.delete(playlistType);
+    }
   }
 
   _isAuthFailure(message) {
@@ -206,7 +225,8 @@ export class WeeklyFlowWorker {
 
   _getPlaylistTargetCount(playlistType) {
     const flow = flowPlaylistConfig.getFlow(playlistType);
-    const raw = Number(flow?.size || 0);
+    const sharedPlaylist = flowPlaylistConfig.getSharedPlaylist(playlistType);
+    const raw = Number(flow?.size || sharedPlaylist?.trackCount || 0);
     if (!Number.isFinite(raw) || raw <= 0) return null;
     return Math.max(1, Math.floor(raw));
   }
@@ -253,6 +273,89 @@ export class WeeklyFlowWorker {
       }
     }
     return removed;
+  }
+
+  _requeueFailedJobs(playlistType, reason = null) {
+    const jobs = downloadTracker.getByPlaylistType(playlistType);
+    let requeued = 0;
+    for (const job of jobs) {
+      if (job.status !== "failed") continue;
+      this.retryAttempts.delete(job.id);
+      this.retryNotBefore.delete(job.id);
+      if (downloadTracker.setPending(job.id, reason)) {
+        requeued += 1;
+      }
+    }
+    return requeued;
+  }
+
+  _scheduleIncompleteRetry(playlistType, delayMs = INCOMPLETE_PLAYLIST_RETRY_DELAY_MS) {
+    if (!playlistType) return;
+    if (!flowPlaylistConfig.getFlow(playlistType) && !flowPlaylistConfig.getSharedPlaylist(playlistType)) {
+      this.clearIncompleteRetry(playlistType);
+      return;
+    }
+    if (this.incompleteRetryTimers.has(playlistType)) return;
+    const waitMs = Math.max(1000, Math.floor(Number(delayMs) || INCOMPLETE_PLAYLIST_RETRY_DELAY_MS));
+    const timer = setTimeout(() => {
+      this.incompleteRetryTimers.delete(playlistType);
+      this.retryIncompletePlaylist(playlistType).catch((error) => {
+        console.error(
+          `[WeeklyFlowWorker] Failed incomplete retry for ${playlistType}:`,
+          error.message,
+        );
+        this._scheduleIncompleteRetry(playlistType, INCOMPLETE_PLAYLIST_RETRY_DELAY_MS);
+      });
+    }, waitMs);
+    this.incompleteRetryTimers.set(playlistType, timer);
+  }
+
+  async retryIncompletePlaylist(playlistType) {
+    const flow = flowPlaylistConfig.getFlow(playlistType);
+    const sharedPlaylist = flowPlaylistConfig.getSharedPlaylist(playlistType);
+    if (!flow && !sharedPlaylist) {
+      this.clearIncompleteRetry(playlistType);
+      return 0;
+    }
+
+    const stats = downloadTracker.getPlaylistTypeStats(playlistType);
+    const target = this._getPlaylistTargetCount(playlistType);
+    if (!target || stats.done >= target) {
+      this.clearIncompleteRetry(playlistType);
+      return 0;
+    }
+    if (stats.pending > 0 || stats.downloading > 0) {
+      if (this.running) {
+        this.wake();
+      } else {
+        await this.start();
+      }
+      return 0;
+    }
+
+    let changed = 0;
+    if (flow) {
+      const shortfall = Math.max(0, target - Number(stats.done || 0));
+      if (shortfall > 0) {
+        changed += await this._enqueueBackupJobs(playlistType, shortfall);
+      }
+    }
+    changed += this._requeueFailedJobs(
+      playlistType,
+      "Retrying incomplete playlist",
+    );
+
+    if (changed > 0) {
+      if (this.running) {
+        this.wake();
+      } else {
+        await this.start();
+      }
+      return changed;
+    }
+
+    this._scheduleIncompleteRetry(playlistType, INCOMPLETE_PLAYLIST_RETRY_DELAY_MS);
+    return 0;
   }
 
   async _enqueueBackupJobs(playlistType, shortfall) {
@@ -435,6 +538,10 @@ export class WeeklyFlowWorker {
     this.currentJob = null;
     this.prefetchedSearches.clear();
     this.sanitizeCache.clear();
+    for (const timer of this.incompleteRetryTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.incompleteRetryTimers.clear();
     downloadTracker.resetDownloadingToPending();
     soulseekClient.disconnect().catch(() => {});
     console.log("[WeeklyFlowWorker] Worker stopped");
@@ -745,24 +852,33 @@ export class WeeklyFlowWorker {
   async checkPlaylistComplete(playlistType) {
     const stats = downloadTracker.getPlaylistTypeStats(playlistType);
     const { total, pending, downloading, done, failed } = stats;
-    const allDone = total > 0 && pending === 0 && downloading === 0;
+    const allSettled = total > 0 && pending === 0 && downloading === 0;
     const hasDone = done > 0;
 
     const target = this._getPlaylistTargetCount(playlistType);
-    if (allDone && hasDone && target && done < target) {
+    if (allSettled && target && done < target) {
       const shortfall = target - done;
       const rounds = Number(this.backupRefillRounds.get(playlistType) || 0);
       if (rounds < MAX_BACKUP_REFILL_ROUNDS) {
         const enqueued = await this._enqueueBackupJobs(playlistType, shortfall);
         this.backupRefillRounds.set(playlistType, rounds + 1);
         if (enqueued > 0) {
+          this.wake();
           return;
         }
+      }
+      if (failed > 0 || flowPlaylistConfig.getFlow(playlistType)) {
+        this._scheduleIncompleteRetry(
+          playlistType,
+          INCOMPLETE_PLAYLIST_RETRY_DELAY_MS,
+        );
+        return;
       }
       this.backupRefillRounds.delete(playlistType);
     }
 
-    if (allDone && hasDone) {
+    if (allSettled && hasDone) {
+      this.clearIncompleteRetry(playlistType);
       this.backupRefillRounds.delete(playlistType);
       console.log(
         `[WeeklyFlowWorker] All jobs complete for ${playlistType}, ensuring smart playlists...`,

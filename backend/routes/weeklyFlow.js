@@ -27,6 +27,34 @@ const AUDIO_CONTENT_TYPES = {
   ".wav": "audio/wav",
 };
 
+const normalizeImportedTrackList = (value) => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((track) => {
+      if (!track || typeof track !== "object" || Array.isArray(track)) return null;
+      const artistName = String(
+        track.artistName ?? track.artist ?? track.artist_name ?? "",
+      ).trim();
+      const trackName = String(
+        track.trackName ?? track.title ?? track.name ?? track.track ?? "",
+      ).trim();
+      if (!artistName || !trackName) return null;
+      const albumName = String(track.albumName ?? track.album ?? "").trim();
+      const artistMbid = String(
+        track.artistMbid ?? track.artistId ?? track.mbid ?? "",
+      ).trim();
+      const reason = String(track.reason ?? "").trim();
+      return {
+        artistName,
+        trackName,
+        albumName: albumName || null,
+        artistMbid: artistMbid || null,
+        reason: reason || null,
+      };
+    })
+    .filter(Boolean);
+};
+
 router.get("/stream/:jobId", noCache, async (req, res) => {
   if (!verifyTokenAuth(req)) {
     return res
@@ -115,6 +143,7 @@ const queueFlowEnableRefresh = (flowId, mutationVersion) => {
       if (shouldStopWorker) {
         weeklyFlowWorker.stop();
       }
+      weeklyFlowWorker.clearIncompleteRetry(flowId);
       playlistManager.updateConfig(false);
       await playlistManager.weeklyReset([flowId]);
       downloadTracker.clearByPlaylistType(flowId);
@@ -155,6 +184,8 @@ const queueFlowEnableRefresh = (flowId, mutationVersion) => {
       downloadTracker.addJobs(tracks, flowId);
       if (!weeklyFlowWorker.running) {
         await weeklyFlowWorker.start();
+      } else {
+        weeklyFlowWorker.wake();
       }
     })
     .catch((error) => {
@@ -179,6 +210,7 @@ const queueFlowDisableCleanup = (flowId, mutationVersion) => {
       if (shouldStopWorker) {
         weeklyFlowWorker.stop();
       }
+      weeklyFlowWorker.clearIncompleteRetry(flowId);
       playlistManager.updateConfig(false);
       await playlistManager.weeklyReset([flowId]);
       downloadTracker.clearByPlaylistType(flowId);
@@ -233,6 +265,8 @@ router.post("/start/:flowId", async (req, res) => {
 
     if (!weeklyFlowWorker.running) {
       await weeklyFlowWorker.start();
+    } else {
+      weeklyFlowWorker.wake();
     }
 
     res.json({
@@ -440,6 +474,100 @@ router.put("/flows/:flowId/enabled", async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: "Failed to update flow",
+      message: error.message,
+    });
+  }
+});
+
+router.post("/shared-playlists/import", async (req, res) => {
+  try {
+    const {
+      name,
+      sourceName = null,
+      sourceFlowId = null,
+      tracks,
+    } = req.body || {};
+    const safeName = String(name || "").trim();
+    const normalizedTracks = normalizeImportedTrackList(tracks);
+
+    if (!safeName) {
+      return res.status(400).json({ error: "name is required" });
+    }
+    if (normalizedTracks.length === 0) {
+      return res.status(400).json({
+        error: "tracks are required",
+        message: "Import file must include at least one track",
+      });
+    }
+    if (!soulseekClient.isConfigured()) {
+      return res.status(400).json({
+        error: "Soulseek credentials not configured",
+      });
+    }
+
+    const playlist = flowPlaylistConfig.createSharedPlaylist({
+      name: safeName,
+      sourceName,
+      sourceFlowId,
+      tracks: normalizedTracks,
+    });
+
+    const jobIds = downloadTracker.addJobs(normalizedTracks, playlist.id);
+    playlistManager.updateConfig(false);
+    await playlistManager.ensureSmartPlaylists();
+    if (jobIds.length > 0 && !weeklyFlowWorker.running) {
+      await weeklyFlowWorker.start();
+    } else if (jobIds.length > 0) {
+      weeklyFlowWorker.wake();
+    }
+
+    res.json({
+      success: true,
+      playlist,
+      tracksQueued: jobIds.length,
+      jobIds,
+    });
+  } catch (error) {
+    if (error?.code === "SHARED_PLAYLIST_NAME_CONFLICT") {
+      return res.status(400).json({
+        error: "Shared playlist name already exists",
+        message: error.message,
+      });
+    }
+    res.status(500).json({
+      error: "Failed to import shared playlist",
+      message: error.message,
+    });
+  }
+});
+
+router.delete("/shared-playlists/:playlistId", async (req, res) => {
+  try {
+    const { playlistId } = req.params;
+    const exists = flowPlaylistConfig.getSharedPlaylist(playlistId);
+    if (!exists) {
+      return res.status(404).json({ error: "Shared playlist not found" });
+    }
+
+    weeklyFlowWorker.stop();
+    weeklyFlowWorker.clearIncompleteRetry(playlistId);
+    playlistManager.updateConfig(false);
+    await playlistManager.weeklyReset([playlistId]);
+    const deleted = flowPlaylistConfig.deleteSharedPlaylist(playlistId);
+    await playlistManager.ensureSmartPlaylists();
+    const stillPending = downloadTracker.getNextPending();
+    if (stillPending && !weeklyFlowWorker.running) {
+      await weeklyFlowWorker.start();
+    }
+
+    if (!deleted) {
+      return res.status(404).json({ error: "Shared playlist not found" });
+    }
+
+    res.json({ success: true, playlistId });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to delete shared playlist",
       message: error.message,
     });
   }

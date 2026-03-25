@@ -660,6 +660,16 @@ export const setFlowEnabled = async (flowId, enabled) => {
   return response.data;
 };
 
+export const importSharedPlaylist = async (payload) => {
+  const response = await api.post("/weekly-flow/shared-playlists/import", payload);
+  return response.data;
+};
+
+export const deleteSharedPlaylist = async (playlistId) => {
+  const response = await api.delete(`/weekly-flow/shared-playlists/${playlistId}`);
+  return response.data;
+};
+
 export const startFlowPlaylist = async (flowId, limit = 30) => {
   const response = await api.post(`/weekly-flow/start/${flowId}`, {
     limit,

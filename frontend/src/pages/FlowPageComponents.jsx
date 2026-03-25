@@ -6,6 +6,8 @@ import {
   Pencil,
   FilePlus2,
   ListMusic,
+  Download,
+  Upload,
   Play,
   Pause,
   Shuffle,
@@ -730,8 +732,10 @@ export function FlowCard({
   simpleError,
   isApplying,
   hasChanges,
+  canExport,
   togglingId,
   deletingId,
+  onExport,
   onToggleEditing,
   onToggleEnabled,
   onDelete,
@@ -818,22 +822,26 @@ export function FlowCard({
   if (enabled && nextRun && state !== "running" && !isGeneratingThisFlow) {
     metaItems.push(`Next update in ${nextRun}`);
   }
+  const typeLabel = enabled ? "Flow" : "Flow Draft";
+  const statusSummary = enabled
+    ? "Recommended playlist refreshed weekly"
+    : "Recommended playlist ready when enabled";
 
   return (
     <div className="bg-card rounded-lg border border-white/5 overflow-hidden">
       <div
-        className={`p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-opacity ${
+        className={`p-4 flex flex-col md:flex-row md:items-start justify-between gap-4 transition-opacity ${
           enabled ? "opacity-100" : "opacity-50"
         }`}
       >
         <div className="min-w-0 flex-1 grid gap-2.5">
-          <div className="flex items-center gap-3">
-            <span className="inline-flex h-5 min-w-[1.5rem] items-center justify-center rounded-full border border-white/10 bg-white/5 px-1.5 text-[11px] font-medium text-[#b5b5bc]">
-              {flow.size}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-black/25 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[#d2dac9]">
+              {typeLabel}
             </span>
-            <h3 className="text-base font-medium text-white truncate">
-              {flow.name}
-            </h3>
+            <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-[#c6c6cb]">
+              {flow.size} tracks
+            </span>
             {state === "running" && (
               <span className="badge badge-success badge-sm gap-1.5 pl-1.5 pr-2">
                 <Loader2 className="w-3 h-3 animate-spin" />
@@ -847,11 +855,20 @@ export function FlowCard({
               </span>
             )}
           </div>
-          {metaItems.length > 0 ? (
+          <div className="space-y-1">
+            <h3 className="text-base font-medium text-white truncate">
+              {flow.name}
+            </h3>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#b5b5bc]">
-              <span>{metaItems.join(" • ")}</span>
+              <span>{statusSummary}</span>
+              {metaItems.length > 0 ? (
+                <>
+                  <span className="text-white/25">•</span>
+                  <span>{metaItems.join(" • ")}</span>
+                </>
+              ) : null}
             </div>
-          ) : null}
+          </div>
           {flowWorkerMessage ? (
             <div className="truncate text-xs text-[#9aa886]">
               {flowWorkerMessage}
@@ -869,14 +886,27 @@ export function FlowCard({
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#d3d3d8]">
                 <span>{progressPct}% complete</span>
-                <span className="text-[#b5b5bc]">{processedDisplay}/{total} processed</span>
+                <span className="text-white/25">•</span>
+                <span>Pending {pendingCount}</span>
+                <span className="text-white/25">•</span>
+                <span>Downloading {downloadingCount}</span>
+                <span className="text-white/25">•</span>
+                <span>Done {processedDisplay}</span>
               </div>
             </div>
           ) : null}
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="flex items-center gap-1 rounded-md border border-white/10 bg-white/5 p-1">
+        <div className="flex flex-wrap items-center justify-end gap-3 shrink-0">
+          <div className="flex items-center gap-1 rounded-md bg-black/20 p-1">
+            <button
+              onClick={onExport}
+              className="btn btn-secondary btn-sm px-2"
+              aria-label={`Export ${flow.name}`}
+              disabled={!canExport}
+            >
+              <Download className="w-4 h-4" />
+            </button>
             {isEditing && (
               <button
                 onClick={onDelete}
@@ -906,7 +936,7 @@ export function FlowCard({
             </button>
           </div>
           
-          <div className="flex items-center gap-1.5 rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
+          <div className="flex items-center gap-1.5 rounded-md bg-black/20 px-2 py-1.5">
             {togglingId === flow.id && (
               <Loader2 className="w-3.5 h-3.5 animate-spin text-white/50" />
             )}
@@ -1370,8 +1400,234 @@ export function FlowEmptyState({ onCreate, creating }) {
   );
 }
 
+export function SharedPlaylistCard({
+  playlist,
+  stats,
+  currentJob,
+  isTracksOpen,
+  tracks,
+  tracksLoading,
+  tracksError,
+  deletingId,
+  onDelete,
+  onViewTracks,
+  onNavigateArtist,
+}) {
+  const pending = Number(stats?.pending || 0);
+  const downloading = Number(stats?.downloading || 0);
+  const done = Number(stats?.done || 0);
+  const total = Math.max(Number(playlist?.trackCount || 0), pending + downloading + done);
+  const progressPct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+  const isCurrentJob =
+    currentJob?.playlistType === playlist.id &&
+    currentJob?.artistName &&
+    currentJob?.trackName;
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-white/5 bg-card">
+      <div className="flex flex-col gap-4 px-4 py-4 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-black/25 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[#d6e5c8]">
+              Playlist
+            </span>
+            <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-[#c6c6cb]">
+              {playlist.trackCount} tracks
+            </span>
+          </div>
+          <div className="space-y-1">
+            <h3 className="truncate text-base font-medium text-white">
+              {playlist.name}
+            </h3>
+            {isCurrentJob ? (
+              <p className="truncate text-xs text-[#9ed3a1]">
+                Downloading {currentJob.trackName}
+              </p>
+            ) : null}
+          </div>
+          <div className="grid gap-1.5">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-[#707e61] transition-all duration-300"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#c7ccc7]">
+              <span>{progressPct}% complete</span>
+              <span className="text-white/25">•</span>
+              <span>Pending {pending}</span>
+              <span className="text-white/25">•</span>
+              <span>Downloading {downloading}</span>
+              <span className="text-white/25">•</span>
+              <span>Done {done}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-3 shrink-0">
+          <div className="flex items-center gap-1 rounded-md bg-black/20 p-1">
+          <button
+            type="button"
+            onClick={onViewTracks}
+            className={`btn ${isTracksOpen ? "btn-primary" : "btn-secondary"} btn-sm px-2`}
+            aria-label={isTracksOpen ? `Close ${playlist.name} tracks` : `View ${playlist.name} tracks`}
+            aria-pressed={isTracksOpen}
+          >
+            <ListMusic className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="btn btn-sm btn-ghost px-2 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+            disabled={deletingId === playlist.id}
+            aria-label={`Delete ${playlist.name}`}
+          >
+            {deletingId === playlist.id ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Trash2 className="w-4 h-4" />
+            )}
+          </button>
+          </div>
+        </div>
+      </div>
+
+      {isTracksOpen && (
+        <div className="px-4 pb-4">
+          <div className="card-separator mb-4" />
+          <FlowTracksPanel
+            tracks={tracks}
+            loading={tracksLoading}
+            error={tracksError}
+            onNavigateArtist={onNavigateArtist}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function FlowImportReviewModal({
+  importReview,
+  importing,
+  onCancel,
+  onConfirm,
+}) {
+  if (!importReview) return null;
+
+  const flows = Array.isArray(importReview.flows) ? importReview.flows : [];
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ backgroundColor: "rgba(0, 0, 0, 0.78)" }}
+      onClick={importing ? undefined : onCancel}
+    >
+      <div
+        className="w-full max-w-3xl overflow-hidden rounded-2xl border border-white/10 bg-[#17171c] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="border-b border-white/10 bg-[linear-gradient(135deg,rgba(154,168,134,0.16),rgba(23,23,28,0.98)_58%)] px-5 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="text-xs font-medium uppercase tracking-[0.2em] text-[#dbe6cf]">
+                Ready To Import
+              </div>
+              <h3 className="text-lg font-semibold text-white">
+                {importReview.fileName || "Selected flow bundle"}
+              </h3>
+              <p className="text-sm text-[#bcc4b4]">
+                {flows.length} {flows.length === 1 ? "tracklist" : "tracklists"} detected. Each import becomes a separate static playlist and does not change any weekly flow configuration.
+              </p>
+            </div>
+            <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-sm text-[#dbe6cf]">
+              JSON import
+            </div>
+          </div>
+        </div>
+
+        <div className="max-h-[60vh] overflow-auto px-5 py-4">
+          <div className="grid gap-3">
+            {flows.map((flow, index) => {
+              const trackCount = Number(flow?.tracks?.length || flow?.trackCount || 0);
+              const previewTracks = Array.isArray(flow?.tracks) ? flow.tracks.slice(0, 3) : [];
+              return (
+                <div
+                  key={`${flow?.name || "flow"}-${index}`}
+                  className="rounded-xl border border-white/8 bg-white/[0.035] px-4 py-3"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h4 className="text-sm font-medium text-white">
+                      {flow?.name || `Playlist ${index + 1}`}
+                    </h4>
+                    <span className="rounded-full border border-white/10 bg-black/25 px-2 py-0.5 text-[11px] text-[#c6c6cb]">
+                      {trackCount} tracks
+                    </span>
+                    {flow?.sourceName ? (
+                      <span className="rounded-full border border-[#9aa886]/25 bg-[#9aa886]/10 px-2 py-0.5 text-[11px] text-[#dce8d0]">
+                        From {flow.sourceName}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 grid gap-1 text-xs text-[#aeb0b6]">
+                    {previewTracks.map((track) => (
+                      <span key={`${track.artistName}-${track.trackName}`}>
+                        {track.artistName} — {track.trackName}
+                      </span>
+                    ))}
+                    {trackCount > previewTracks.length ? (
+                      <span className="text-[#89938a]">
+                        +{trackCount - previewTracks.length} more tracks
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4">
+          <p className="max-w-xl text-xs leading-5 text-[#9ca09f]">
+            Supports exported tracklist files, a single playlist object, or a raw array of tracks. Imported playlists queue their own downloads and stay separate from weekly resets and scheduled refreshes.
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="btn btn-secondary"
+              disabled={importing}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              className="btn btn-primary gap-2"
+              disabled={importing || flows.length === 0}
+            >
+              {importing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Importing...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4" />
+                  Import Tracklists
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ConfirmDeleteModal({ confirmDelete, deletingId, onCancel, onConfirm }) {
   if (!confirmDelete) return null;
+  const isShared = confirmDelete.kind === "shared";
 
   return (
     <div
@@ -1384,7 +1640,9 @@ export function ConfirmDeleteModal({ confirmDelete, deletingId, onCancel, onConf
           Delete {confirmDelete.title}?
         </h3>
         <p className="text-[#c1c1c3] mb-6">
-          This removes the flow and its playlist setup. You can recreate it later.
+          {isShared
+            ? "This removes the imported static playlist and any downloaded files tied to it."
+            : "This removes the flow and its playlist setup. You can recreate it later."}
         </p>
         <div className="flex gap-3 justify-end">
           <button onClick={onCancel} className="btn btn-secondary">
