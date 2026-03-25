@@ -1524,23 +1524,23 @@ export function FlowImportReviewModal({
       onClick={importing ? undefined : onCancel}
     >
       <div
-        className="w-full max-w-3xl overflow-hidden rounded-2xl border border-white/10 bg-[#17171c] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+        className="mx-4 w-full max-w-3xl overflow-hidden rounded-lg border border-white/5 bg-card shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="border-b border-white/10 bg-[linear-gradient(135deg,rgba(154,168,134,0.16),rgba(23,23,28,0.98)_58%)] px-5 py-4">
+        <div className="border-b border-white/10 px-5 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-1">
               <div className="text-xs font-medium uppercase tracking-[0.2em] text-[#dbe6cf]">
-                Ready To Import
+                Import Playlist
               </div>
               <h3 className="text-lg font-semibold text-white">
-                {importReview.fileName || "Selected flow bundle"}
+                {importReview.fileName || "Selected playlist file"}
               </h3>
               <p className="text-sm text-[#bcc4b4]">
-                {flows.length} {flows.length === 1 ? "tracklist" : "tracklists"} detected. Each import becomes a separate static playlist and does not change any weekly flow configuration.
+                {flows.length} {flows.length === 1 ? "playlist" : "playlists"} detected. Imports stay separate from weekly flows and queue their own downloads.
               </p>
             </div>
-            <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-sm text-[#dbe6cf]">
+            <div className="rounded-full bg-black/25 px-3 py-1 text-sm text-[#dbe6cf]">
               JSON import
             </div>
           </div>
@@ -1554,17 +1554,17 @@ export function FlowImportReviewModal({
               return (
                 <div
                   key={`${flow?.name || "flow"}-${index}`}
-                  className="rounded-xl border border-white/8 bg-white/[0.035] px-4 py-3"
+                  className="rounded-lg border border-white/5 bg-black/20 px-4 py-3"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <h4 className="text-sm font-medium text-white">
                       {flow?.name || `Playlist ${index + 1}`}
                     </h4>
-                    <span className="rounded-full border border-white/10 bg-black/25 px-2 py-0.5 text-[11px] text-[#c6c6cb]">
+                    <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-[#c6c6cb]">
                       {trackCount} tracks
                     </span>
                     {flow?.sourceName ? (
-                      <span className="rounded-full border border-[#9aa886]/25 bg-[#9aa886]/10 px-2 py-0.5 text-[11px] text-[#dce8d0]">
+                      <span className="rounded-full bg-black/25 px-2 py-0.5 text-[11px] text-[#dce8d0]">
                         From {flow.sourceName}
                       </span>
                     ) : null}
@@ -1589,7 +1589,7 @@ export function FlowImportReviewModal({
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4">
           <p className="max-w-xl text-xs leading-5 text-[#9ca09f]">
-            Supports exported tracklist files, a single playlist object, or a raw array of tracks. Imported playlists queue their own downloads and stay separate from weekly resets and scheduled refreshes.
+            Supports exported playlist files, a single playlist object, or a raw array of tracks. Imported playlists stay separate from weekly flow refreshes.
           </p>
           <div className="flex items-center gap-2">
             <button
@@ -1614,7 +1614,7 @@ export function FlowImportReviewModal({
               ) : (
                 <>
                   <Upload className="w-4 h-4" />
-                  Import Tracklists
+                  Import Playlists
                 </>
               )}
             </button>
