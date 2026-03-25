@@ -81,6 +81,7 @@ export class WeeklyFlowPlaylistManager {
 
   async _ensureSmartPlaylistsInternal() {
     const flows = flowPlaylistConfig.getFlows();
+    const sharedPlaylists = flowPlaylistConfig.getSharedPlaylists();
     let libraryId = null;
     let playlists = null;
     if (this.navidromeClient?.isConfigured()) {
@@ -116,23 +117,29 @@ export class WeeklyFlowPlaylistManager {
       await fs.mkdir(this.libraryRoot, { recursive: true });
       const existingFiles = await fs.readdir(this.libraryRoot).catch(() => []);
       const expectedFiles = new Set();
+      const writePlaylistFile = async (playlistName, playlistType) => {
+        const fileName = `${this._sanitize(playlistName)}.nsp`;
+        const nspPath = path.join(this.libraryRoot, fileName);
+        expectedFiles.add(fileName);
+        const pathCondition = { contains: { filepath: playlistType } };
+        const all =
+          libraryId != null
+            ? [{ is: { library_id: libraryId } }, pathCondition]
+            : [pathCondition];
+        const payload = {
+          all,
+          sort: "random",
+          limit: 1000,
+        };
+        await fs.writeFile(nspPath, JSON.stringify(payload), "utf8");
+      };
       for (const flow of flows) {
         const playlistName = `Aurral ${flow.name}`;
         const fileName = `${this._sanitize(playlistName)}.nsp`;
         const nspPath = path.join(this.libraryRoot, fileName);
         expectedFiles.add(fileName);
         if (flow.enabled) {
-          const pathCondition = { contains: { filepath: flow.id } };
-          const all =
-            libraryId != null
-              ? [{ is: { library_id: libraryId } }, pathCondition]
-              : [pathCondition];
-          const payload = {
-            all,
-            sort: "random",
-            limit: 1000,
-          };
-          await fs.writeFile(nspPath, JSON.stringify(payload), "utf8");
+          await writePlaylistFile(playlistName, flow.id);
         } else {
           if (playlists?.length) {
             const existing = playlists.find((p) => p.name === playlistName);
@@ -151,6 +158,9 @@ export class WeeklyFlowPlaylistManager {
             await fs.unlink(nspPath);
           } catch {}
         }
+      }
+      for (const playlist of sharedPlaylists) {
+        await writePlaylistFile(`Aurral Shared ${playlist.name}`, playlist.id);
       }
       const toRemove = existingFiles.filter(
         (file) => file.endsWith(".nsp") && !expectedFiles.has(file),
@@ -210,6 +220,8 @@ export class WeeklyFlowPlaylistManager {
   getPlaylistName(playlistType) {
     const flow = flowPlaylistConfig.getFlow(playlistType);
     if (flow) return `Aurral ${flow.name}`;
+    const sharedPlaylist = flowPlaylistConfig.getSharedPlaylist(playlistType);
+    if (sharedPlaylist) return `Aurral Shared ${sharedPlaylist.name}`;
     return `Aurral ${playlistType}`;
   }
 }

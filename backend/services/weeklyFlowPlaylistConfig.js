@@ -287,6 +287,52 @@ const normalizeFlow = (flow) => {
   };
 };
 
+const normalizeSharedTrack = (track) => {
+  if (!track || typeof track !== "object" || Array.isArray(track)) return null;
+  const artistName = String(
+    track.artistName ?? track.artist ?? track.artist_name ?? "",
+  ).trim();
+  const trackName = String(
+    track.trackName ?? track.title ?? track.name ?? track.track ?? "",
+  ).trim();
+  if (!artistName || !trackName) return null;
+  const albumName = String(track.albumName ?? track.album ?? "").trim();
+  const artistMbid = String(
+    track.artistMbid ?? track.artistId ?? track.mbid ?? "",
+  ).trim();
+  const reason = String(track.reason ?? "").trim();
+  return {
+    artistName,
+    trackName,
+    albumName: albumName || null,
+    artistMbid: artistMbid || null,
+    reason: reason || null,
+  };
+};
+
+const normalizeSharedPlaylist = (playlist) => {
+  const name = String(playlist?.name || "").trim();
+  const tracks = Array.isArray(playlist?.tracks)
+    ? playlist.tracks.map(normalizeSharedTrack).filter(Boolean)
+    : [];
+  return {
+    id: playlist?.id || randomUUID(),
+    name: name || "Shared Playlist",
+    sourceName: String(playlist?.sourceName || "").trim() || null,
+    sourceFlowId: String(playlist?.sourceFlowId || "").trim() || null,
+    importedAt:
+      playlist?.importedAt != null && Number.isFinite(Number(playlist.importedAt))
+        ? Number(playlist.importedAt)
+        : Date.now(),
+    createdAt:
+      playlist?.createdAt != null && Number.isFinite(Number(playlist.createdAt))
+        ? Number(playlist.createdAt)
+        : Date.now(),
+    tracks,
+    trackCount: tracks.length,
+  };
+};
+
 const buildLegacyFlows = (settings) => {
   const playlists = settings.weeklyFlowPlaylists || {};
   return LEGACY_TYPES.map((type) => {
@@ -356,11 +402,48 @@ const setFlows = (flows) => {
   });
 };
 
+const getStoredSharedPlaylists = () => {
+  const settings = dbOps.getSettings();
+  const stored = settings.sharedFlowPlaylists;
+  if (Array.isArray(stored)) {
+    const next = stored.map(normalizeSharedPlaylist);
+    const needsSave =
+      next.length !== stored.length ||
+      next.some((playlist, index) => JSON.stringify(playlist) !== JSON.stringify(stored[index]));
+    if (needsSave) {
+      dbOps.updateSettings({
+        ...settings,
+        sharedFlowPlaylists: next,
+      });
+    }
+    return next;
+  }
+  dbOps.updateSettings({
+    ...settings,
+    sharedFlowPlaylists: [],
+  });
+  return [];
+};
+
+const setSharedPlaylists = (playlists) => {
+  const current = dbOps.getSettings();
+  dbOps.updateSettings({
+    ...current,
+    sharedFlowPlaylists: playlists,
+  });
+};
+
 const normalizeNameKey = (value) => String(value || "").trim().toLowerCase();
 
 const createNameConflictError = (name) => {
   const error = new Error(`Flow name "${name}" already exists`);
   error.code = "FLOW_NAME_CONFLICT";
+  return error;
+};
+
+const createSharedPlaylistNameConflictError = (name) => {
+  const error = new Error(`Shared playlist "${name}" already exists`);
+  error.code = "SHARED_PLAYLIST_NAME_CONFLICT";
   return error;
 };
 
@@ -374,6 +457,23 @@ const assertUniqueFlowName = (flows, nextName, exceptFlowId = null) => {
   });
   if (hasConflict) {
     throw createNameConflictError(String(nextName || "").trim());
+  }
+};
+
+const assertUniqueSharedPlaylistName = (
+  playlists,
+  nextName,
+  exceptPlaylistId = null,
+) => {
+  const key = normalizeNameKey(nextName);
+  if (!key) return;
+  const hasConflict = playlists.some((playlist) => {
+    if (!playlist) return false;
+    if (exceptPlaylistId && playlist.id === exceptPlaylistId) return false;
+    return normalizeNameKey(playlist.name) === key;
+  });
+  if (hasConflict) {
+    throw createSharedPlaylistNameConflictError(String(nextName || "").trim());
   }
 };
 
@@ -522,5 +622,41 @@ export const flowPlaylistConfig = {
         flow.nextRunAt != null &&
         flow.nextRunAt <= now,
     );
+  },
+
+  getSharedPlaylists() {
+    return getStoredSharedPlaylists();
+  },
+
+  getSharedPlaylist(playlistId) {
+    return (
+      getStoredSharedPlaylists().find((playlist) => playlist.id === playlistId) ||
+      null
+    );
+  },
+
+  createSharedPlaylist({ name, sourceName, sourceFlowId, tracks }) {
+    const playlists = getStoredSharedPlaylists();
+    assertUniqueSharedPlaylistName(playlists, name);
+    const playlist = normalizeSharedPlaylist({
+      id: randomUUID(),
+      name,
+      sourceName,
+      sourceFlowId,
+      tracks,
+      importedAt: Date.now(),
+      createdAt: Date.now(),
+    });
+    playlists.push(playlist);
+    setSharedPlaylists(playlists);
+    return playlist;
+  },
+
+  deleteSharedPlaylist(playlistId) {
+    const playlists = getStoredSharedPlaylists();
+    const next = playlists.filter((playlist) => playlist.id !== playlistId);
+    if (next.length === playlists.length) return false;
+    setSharedPlaylists(next);
+    return true;
   },
 };
