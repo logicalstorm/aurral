@@ -824,8 +824,8 @@ export function FlowCard({
   }
   const typeLabel = enabled ? "Flow" : "Flow Draft";
   const statusSummary = enabled
-    ? "Recommended playlist refreshed weekly"
-    : "Recommended playlist ready when enabled";
+    ? "Flow refreshed weekly"
+    : "Flow ready when enabled";
 
   return (
     <div className="bg-card rounded-lg border border-white/5 overflow-hidden">
