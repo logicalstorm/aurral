@@ -59,7 +59,6 @@ export class WeeklyFlowWorker {
     this.fallbackSweepInFlight = null;
     this.fallbackSweepTimer = null;
     this.lastJobMetrics = null;
-    this.prefetchedSearches = new Map();
     this.sanitizeCache = new Map();
     this.incompleteRetryTimers = new Map();
   }
@@ -282,21 +281,34 @@ export class WeeklyFlowWorker {
       if (job.status !== "failed") continue;
       this.retryAttempts.delete(job.id);
       this.retryNotBefore.delete(job.id);
-      if (downloadTracker.setPending(job.id, reason)) {
+      const priorError = String(job?.error || "").trim();
+      const retryReason = [String(reason || "").trim(), priorError]
+        .filter(Boolean)
+        .join(" • ");
+      if (downloadTracker.setPending(job.id, retryReason || null)) {
         requeued += 1;
       }
     }
     return requeued;
   }
 
-  _scheduleIncompleteRetry(playlistType, delayMs = INCOMPLETE_PLAYLIST_RETRY_DELAY_MS) {
+  _scheduleIncompleteRetry(
+    playlistType,
+    delayMs = INCOMPLETE_PLAYLIST_RETRY_DELAY_MS,
+  ) {
     if (!playlistType) return;
-    if (!flowPlaylistConfig.getFlow(playlistType) && !flowPlaylistConfig.getSharedPlaylist(playlistType)) {
+    if (
+      !flowPlaylistConfig.getFlow(playlistType) &&
+      !flowPlaylistConfig.getSharedPlaylist(playlistType)
+    ) {
       this.clearIncompleteRetry(playlistType);
       return;
     }
     if (this.incompleteRetryTimers.has(playlistType)) return;
-    const waitMs = Math.max(1000, Math.floor(Number(delayMs) || INCOMPLETE_PLAYLIST_RETRY_DELAY_MS));
+    const waitMs = Math.max(
+      1000,
+      Math.floor(Number(delayMs) || INCOMPLETE_PLAYLIST_RETRY_DELAY_MS),
+    );
     const timer = setTimeout(() => {
       this.incompleteRetryTimers.delete(playlistType);
       this.retryIncompletePlaylist(playlistType).catch((error) => {
@@ -304,7 +316,10 @@ export class WeeklyFlowWorker {
           `[WeeklyFlowWorker] Failed incomplete retry for ${playlistType}:`,
           error.message,
         );
-        this._scheduleIncompleteRetry(playlistType, INCOMPLETE_PLAYLIST_RETRY_DELAY_MS);
+        this._scheduleIncompleteRetry(
+          playlistType,
+          INCOMPLETE_PLAYLIST_RETRY_DELAY_MS,
+        );
       });
     }, waitMs);
     this.incompleteRetryTimers.set(playlistType, timer);
@@ -354,7 +369,10 @@ export class WeeklyFlowWorker {
       return changed;
     }
 
-    this._scheduleIncompleteRetry(playlistType, INCOMPLETE_PLAYLIST_RETRY_DELAY_MS);
+    this._scheduleIncompleteRetry(
+      playlistType,
+      INCOMPLETE_PLAYLIST_RETRY_DELAY_MS,
+    );
     return 0;
   }
 
@@ -502,13 +520,11 @@ export class WeeklyFlowWorker {
           })
           .finally(() => {
             this.activeCount--;
-            this.prefetchedSearches.delete(job.id);
             if (this.activeCount <= 0) {
               this.currentJob = null;
             }
-            this._scheduleProcessIn(JOB_COOLDOWN_MS);
+            this.wake(0);
           });
-        this._prefetchUpcomingSearches();
       }
     };
 
@@ -536,7 +552,6 @@ export class WeeklyFlowWorker {
     this.backupRefillRounds.clear();
     this.pausedUntil = 0;
     this.currentJob = null;
-    this.prefetchedSearches.clear();
     this.sanitizeCache.clear();
     for (const timer of this.incompleteRetryTimers.values()) {
       clearTimeout(timer);
@@ -574,20 +589,6 @@ export class WeeklyFlowWorker {
     return sanitized;
   }
 
-  _prefetchUpcomingSearches() {
-    const { concurrency } = this.getWorkerSettings();
-    const upcoming = downloadTracker.peekPending(concurrency * 3);
-    for (const upcomingJob of upcoming) {
-      if (!upcomingJob || this.prefetchedSearches.has(upcomingJob.id)) {
-        continue;
-      }
-      const promise = soulseekClient
-        .search(upcomingJob.artistName, upcomingJob.trackName)
-        .catch(() => null);
-      this.prefetchedSearches.set(upcomingJob.id, promise);
-    }
-  }
-
   async processJob(job) {
     console.log(
       `[WeeklyFlowWorker] Processing job ${job.id}: ${job.artistName} - ${job.trackName} (${job.playlistType})`,
@@ -614,19 +615,11 @@ export class WeeklyFlowWorker {
     try {
       let phaseStart = process.hrtime.bigint();
       const retryAttempt = Number(this.retryAttempts.get(job.id) || 0);
-      const lastErrorMessage = String(job?.error || "").toLowerCase();
-      const shouldForceFreshSearch =
-        retryAttempt > 0 &&
-        (lastErrorMessage.includes("user not exist") ||
-          lastErrorMessage.includes("user offline"));
-      const prefetched = this.prefetchedSearches.get(job.id) || null;
-      this.prefetchedSearches.delete(job.id);
-      const initialResults =
-        prefetched && !shouldForceFreshSearch
-          ? await prefetched
-          : await soulseekClient.search(job.artistName, job.trackName, {
-              forceFresh: shouldForceFreshSearch,
-            });
+      const initialResults = await soulseekClient.search(
+        job.artistName,
+        job.trackName,
+        { forceFresh: true },
+      );
       timingsMs.search += Number(process.hrtime.bigint() - phaseStart) / 1e6;
       if (!initialResults || initialResults.length === 0) {
         throw new Error("No search results found");
