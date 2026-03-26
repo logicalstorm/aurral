@@ -24,6 +24,10 @@ const RETRY_MATCH_CANDIDATES = 10;
 const MAX_RETRY_MATCH_CANDIDATES = 20;
 const STRICT_FORMAT_MATCH_CANDIDATES = 30;
 const STRICT_RETRY_MATCH_CANDIDATES = 20;
+const MAX_DOWNLOAD_ATTEMPTS_PER_JOB = 4;
+const MAX_DOWNLOAD_ATTEMPTS_PER_RETRY = 6;
+const QUEUED_TIMEOUT_FIRST_ATTEMPT_MS = 4500;
+const QUEUED_TIMEOUT_RETRY_ATTEMPT_MS = 3000;
 const FALLBACK_MP3_REGEX = /^[^/\\]+-[a-f0-9]{8}\.mp3$/i;
 const FALLBACK_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
 const MAX_RETRIES_PER_JOB = 1;
@@ -699,12 +703,25 @@ export class WeeklyFlowWorker {
         const orderedCandidates = preferredFormatStrict
           ? rankedCandidates.filter((entry) => entry.ext === preferredExt)
           : rankedCandidates;
+        const maxDownloadAttempts =
+          retryAttempt > 0
+            ? MAX_DOWNLOAD_ATTEMPTS_PER_RETRY
+            : MAX_DOWNLOAD_ATTEMPTS_PER_JOB;
+        const attemptCandidates = orderedCandidates.slice(
+          0,
+          maxDownloadAttempts,
+        );
         if (orderedCandidates.length === 0) {
           lastError = new Error(
             `No ${preferredFormat.toUpperCase()} candidate files returned`,
           );
         }
-        for (const candidate of orderedCandidates) {
+        for (
+          let attemptIndex = 0;
+          attemptIndex < attemptCandidates.length;
+          attemptIndex += 1
+        ) {
+          const candidate = attemptCandidates[attemptIndex];
           const extFromSoulseek = path.extname(candidate.candidate.file || "");
           const ext =
             extFromSoulseek &&
@@ -722,6 +739,12 @@ export class WeeklyFlowWorker {
                   0,
                   Math.min(100, Number(progressPct) || 0),
                 );
+              },
+              {
+                queuedTimeoutMs:
+                  attemptIndex === 0
+                    ? QUEUED_TIMEOUT_FIRST_ATTEMPT_MS
+                    : QUEUED_TIMEOUT_RETRY_ATTEMPT_MS,
               },
             );
             timingsMs.download +=
