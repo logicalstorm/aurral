@@ -290,13 +290,24 @@ const normalizeFlow = (flow) => {
 const normalizeSharedTrack = (track) => {
   if (!track || typeof track !== "object" || Array.isArray(track)) return null;
   const artistName = String(
-    track.artistName ?? track.artist ?? track.artist_name ?? "",
+    track.artistName ??
+      track.artist ??
+      track.artist_name ??
+      track["Artist Name(s)"] ??
+      "",
   ).trim();
   const trackName = String(
-    track.trackName ?? track.title ?? track.name ?? track.track ?? "",
+    track.trackName ??
+      track.title ??
+      track.name ??
+      track.track ??
+      track["Track Name"] ??
+      "",
   ).trim();
   if (!artistName || !trackName) return null;
-  const albumName = String(track.albumName ?? track.album ?? "").trim();
+  const albumName = String(
+    track.albumName ?? track.album ?? track["Album Name"] ?? "",
+  ).trim();
   const artistMbid = String(
     track.artistMbid ?? track.artistId ?? track.mbid ?? "",
   ).trim();
@@ -321,7 +332,8 @@ const normalizeSharedPlaylist = (playlist) => {
     sourceName: String(playlist?.sourceName || "").trim() || null,
     sourceFlowId: String(playlist?.sourceFlowId || "").trim() || null,
     importedAt:
-      playlist?.importedAt != null && Number.isFinite(Number(playlist.importedAt))
+      playlist?.importedAt != null &&
+      Number.isFinite(Number(playlist.importedAt))
         ? Number(playlist.importedAt)
         : Date.now(),
     createdAt:
@@ -409,7 +421,10 @@ const getStoredSharedPlaylists = () => {
     const next = stored.map(normalizeSharedPlaylist);
     const needsSave =
       next.length !== stored.length ||
-      next.some((playlist, index) => JSON.stringify(playlist) !== JSON.stringify(stored[index]));
+      next.some(
+        (playlist, index) =>
+          JSON.stringify(playlist) !== JSON.stringify(stored[index]),
+      );
     if (needsSave) {
       dbOps.updateSettings({
         ...settings,
@@ -433,7 +448,10 @@ const setSharedPlaylists = (playlists) => {
   });
 };
 
-const normalizeNameKey = (value) => String(value || "").trim().toLowerCase();
+const normalizeNameKey = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase();
 
 const createNameConflictError = (name) => {
   const error = new Error(`Flow name "${name}" already exists`);
@@ -630,8 +648,9 @@ export const flowPlaylistConfig = {
 
   getSharedPlaylist(playlistId) {
     return (
-      getStoredSharedPlaylists().find((playlist) => playlist.id === playlistId) ||
-      null
+      getStoredSharedPlaylists().find(
+        (playlist) => playlist.id === playlistId,
+      ) || null
     );
   },
 

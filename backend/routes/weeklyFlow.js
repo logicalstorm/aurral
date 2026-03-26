@@ -31,15 +31,27 @@ const normalizeImportedTrackList = (value) => {
   if (!Array.isArray(value)) return [];
   return value
     .map((track) => {
-      if (!track || typeof track !== "object" || Array.isArray(track)) return null;
+      if (!track || typeof track !== "object" || Array.isArray(track))
+        return null;
       const artistName = String(
-        track.artistName ?? track.artist ?? track.artist_name ?? "",
+        track.artistName ??
+          track.artist ??
+          track.artist_name ??
+          track["Artist Name(s)"] ??
+          "",
       ).trim();
       const trackName = String(
-        track.trackName ?? track.title ?? track.name ?? track.track ?? "",
+        track.trackName ??
+          track.title ??
+          track.name ??
+          track.track ??
+          track["Track Name"] ??
+          "",
       ).trim();
       if (!artistName || !trackName) return null;
-      const albumName = String(track.albumName ?? track.album ?? "").trim();
+      const albumName = String(
+        track.albumName ?? track.album ?? track["Album Name"] ?? "",
+      ).trim();
       const artistMbid = String(
         track.artistMbid ?? track.artistId ?? track.mbid ?? "",
       ).trim();
@@ -597,7 +609,8 @@ router.get("/worker/settings", (req, res) => {
 });
 
 router.put("/worker/settings", (req, res) => {
-  const { concurrency, preferredFormat, preferredFormatStrict } = req.body || {};
+  const { concurrency, preferredFormat, preferredFormatStrict } =
+    req.body || {};
   if (concurrency !== undefined) {
     const parsed = Number(concurrency);
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > 5) {
@@ -614,7 +627,10 @@ router.put("/worker/settings", (req, res) => {
       });
     }
   }
-  if (preferredFormatStrict !== undefined && typeof preferredFormatStrict !== "boolean") {
+  if (
+    preferredFormatStrict !== undefined &&
+    typeof preferredFormatStrict !== "boolean"
+  ) {
     return res.status(400).json({
       error: "preferredFormatStrict must be a boolean",
     });

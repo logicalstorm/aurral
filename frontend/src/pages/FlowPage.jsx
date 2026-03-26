@@ -505,15 +505,26 @@ const normalizeSharedTrackEntry = (track) => {
     throw new Error("Track entries must be objects");
   }
   const artistName = String(
-    track.artistName ?? track.artist ?? track.artist_name ?? "",
+    track.artistName ??
+      track.artist ??
+      track.artist_name ??
+      track["Artist Name(s)"] ??
+      "",
   ).trim();
   const trackName = String(
-    track.trackName ?? track.title ?? track.name ?? track.track ?? "",
+    track.trackName ??
+      track.title ??
+      track.name ??
+      track.track ??
+      track["Track Name"] ??
+      "",
   ).trim();
   if (!artistName || !trackName) {
     throw new Error("Each track needs both artistName and trackName");
   }
-  const albumName = String(track.albumName ?? track.album ?? "").trim();
+  const albumName = String(
+    track.albumName ?? track.album ?? track["Album Name"] ?? "",
+  ).trim();
   const artistMbid = String(track.artistMbid ?? track.artistId ?? track.mbid ?? "").trim();
   return {
     artistName,
@@ -640,6 +651,7 @@ const EMPTY_FLOW_STATS = {
   done: 0,
   pending: 0,
   downloading: 0,
+  failed: 0,
 };
 
 const DEFAULT_WORKER_SETTINGS = {
@@ -652,7 +664,7 @@ const buildFlowStatsFromJobs = (jobs) => {
   const stats = { ...EMPTY_FLOW_STATS };
   if (!Array.isArray(jobs)) return stats;
   for (const job of jobs) {
-    if (!job?.status || job.status === "failed") continue;
+    if (!job?.status) continue;
     stats[job.status] = (stats[job.status] || 0) + 1;
   }
   stats.total = stats.pending + stats.downloading + stats.done;
@@ -663,11 +675,13 @@ const sanitizeFlowStats = (stats) => {
   const pending = Number(stats?.pending || 0);
   const downloading = Number(stats?.downloading || 0);
   const done = Number(stats?.done || 0);
+  const failed = Number(stats?.failed || 0);
   return {
     total: pending + downloading + done,
     pending,
     downloading,
     done,
+    failed,
   };
 };
 
@@ -1196,7 +1210,10 @@ function FlowPage() {
     if (!file) return;
     try {
       const content = await file.text();
-      const flows = parseFlowImportFile(content);
+      const flows = parseFlowImportFile(content).map((flow) => ({
+        ...flow,
+        importName: flow?.name || "",
+      }));
       setImportReview({
         fileName: file.name,
         flows,
@@ -1221,8 +1238,10 @@ function FlowPage() {
     const failed = [];
 
     for (const payload of importReview.flows) {
-      const finalName = reserveUniqueFlowName(reservedNames, payload?.name);
-      if (finalName !== payload?.name) {
+      const desiredName = String(payload?.importName ?? payload?.name ?? "").trim();
+      const baseName = desiredName || String(payload?.name || "").trim();
+      const finalName = reserveUniqueFlowName(reservedNames, baseName);
+      if (finalName !== baseName) {
         renamedCount += 1;
       }
       try {
@@ -1609,6 +1628,18 @@ function FlowPage() {
       <FlowImportReviewModal
         importReview={importReview}
         importing={importing}
+        onNameChange={(index, name) => {
+          setImportReview((prev) => {
+            if (!prev || !Array.isArray(prev.flows)) return prev;
+            const nextFlows = prev.flows.map((flow, flowIndex) =>
+              flowIndex === index ? { ...flow, importName: name } : flow,
+            );
+            return {
+              ...prev,
+              flows: nextFlows,
+            };
+          });
+        }}
         onCancel={() => {
           if (importing) return;
           setImportReview(null);
