@@ -336,6 +336,10 @@ export class WeeklyFlowWorker {
       this.clearIncompleteRetry(playlistType);
       return 0;
     }
+    if (flow && flow.enabled !== true) {
+      this.clearIncompleteRetry(playlistType);
+      return 0;
+    }
 
     const stats = downloadTracker.getPlaylistTypeStats(playlistType);
     const target = this._getPlaylistTargetCount(playlistType);
