@@ -25,10 +25,20 @@ Each track must include:
 
 Accepted aliases:
 
-- artist: `artistName`, `artist`, `artist_name`
-- track: `trackName`, `title`, `name`, `track`
-- album: `albumName`, `album`
+- artist: `artistName`, `artist`, `artist_name`, `Artist Name(s)`
+- track: `trackName`, `title`, `name`, `track`, `Track Name`
+- album: `albumName`, `album`, `Album Name`
 - artist id: `artistMbid`, `artistId`, `mbid`
+
+## Spotify playlist import (Exportify + CSVJSON)
+
+You can import Spotify playlists today with a CSV-to-JSON bridge:
+
+1. Export your Spotify playlist from [Exportify](https://exportify.net/)
+2. Convert that CSV to JSON using [CSVJSON](https://csvjson.com/csv2json)
+3. Import that JSON file in Aurral from the playlist import modal
+
+CSVJSON output is a raw array of track objects, which Aurral accepts directly as one playlist. Aurral reads Spotify-style keys like `Track Name`, `Artist Name(s)`, and `Album Name` during import.
 
 ## Accepted JSON examples
 
@@ -124,9 +134,10 @@ Accepted aliases:
 - Flows can generate replacement tracks when they come up short
 - Imported playlists retry the same tracks from the JSON and do not generate replacements
 
-## Invalid input examples
+## Download retries and failure behavior
 
-These will fail import:
-
-- objects with no `tracks` array
-- tracks missing artist or title
+- Each imported track is queued as its own worker job
+- Retryable failures get an immediate retry with backoff (base 5s, capped at 120s)
+- Known non-retryable errors are effectively blacklisted from immediate retries (`User not exist`, `User offline`, `No search results found`, `No candidate files returned`)
+- If a playlist is incomplete and has no pending/downloading jobs, failed tracks are requeued in the periodic incomplete-playlist cycle (about every 15 minutes)
+- Imported playlists keep retrying the same original tracklist; only flows may generate replacement tracks
