@@ -1416,8 +1416,14 @@ export function SharedPlaylistCard({
   const pending = Number(stats?.pending || 0);
   const downloading = Number(stats?.downloading || 0);
   const done = Number(stats?.done || 0);
+  const failed = Number(stats?.failed || 0);
   const total = Math.max(Number(playlist?.trackCount || 0), pending + downloading + done);
   const progressPct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+  const waitingForRetryCycle =
+    pending === 0 &&
+    downloading === 0 &&
+    failed > 0 &&
+    done < Number(playlist?.trackCount || 0);
   const isCurrentJob =
     currentJob?.playlistType === playlist.id &&
     currentJob?.artistName &&
@@ -1444,6 +1450,11 @@ export function SharedPlaylistCard({
                 Downloading {currentJob.trackName}
               </p>
             ) : null}
+            {waitingForRetryCycle ? (
+              <p className="text-xs text-[#d8c78e]">
+                Waiting for next retry cycle
+              </p>
+            ) : null}
           </div>
           <div className="grid gap-1.5">
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
@@ -1460,6 +1471,8 @@ export function SharedPlaylistCard({
               <span>Downloading {downloading}</span>
               <span className="text-white/25">•</span>
               <span>Done {done}</span>
+              <span className="text-white/25">•</span>
+              <span>Stalled {failed}</span>
             </div>
           </div>
         </div>
@@ -1510,6 +1523,7 @@ export function SharedPlaylistCard({
 export function FlowImportReviewModal({
   importReview,
   importing,
+  onNameChange,
   onCancel,
   onConfirm,
 }) {
@@ -1568,6 +1582,19 @@ export function FlowImportReviewModal({
                         From {flow.sourceName}
                       </span>
                     ) : null}
+                  </div>
+                  <div className="mt-3">
+                    <label className="mb-1 block text-[11px] uppercase tracking-[0.16em] text-[#90988b]">
+                      Playlist Name
+                    </label>
+                    <input
+                      type="text"
+                      value={flow?.importName ?? flow?.name ?? ""}
+                      onChange={(event) => onNameChange?.(index, event.target.value)}
+                      placeholder={`Playlist ${index + 1}`}
+                      disabled={importing}
+                      className="w-full rounded-md border border-white/10 bg-black/35 px-3 py-2 text-sm text-white outline-none transition focus:border-[#90a07d] focus:ring-1 focus:ring-[#90a07d]"
+                    />
                   </div>
                   <div className="mt-2 grid gap-1 text-xs text-[#aeb0b6]">
                     {previewTracks.map((track) => (
