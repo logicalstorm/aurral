@@ -13,6 +13,8 @@ const appVersion =
   rootPackageJson?.version ||
   packageJson.version ||
   "unknown";
+const releaseChannel =
+  globalThis?.process?.env?.VITE_RELEASE_CHANNEL || "stable";
 
 const normalizeBasePath = (baseUrl) => {
   const raw = (baseUrl || "/").trim();
@@ -31,6 +33,7 @@ export default defineConfig(({ mode }) => {
     base: isDev ? "/" : basePath,
     define: {
       "import.meta.env.VITE_APP_VERSION": JSON.stringify(appVersion),
+      "import.meta.env.VITE_RELEASE_CHANNEL": JSON.stringify(releaseChannel),
     },
     plugins: [
       react(),
