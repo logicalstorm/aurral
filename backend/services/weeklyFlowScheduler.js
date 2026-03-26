@@ -65,14 +65,25 @@ export async function runScheduledRefresh() {
   }
 }
 
-export function startWorkerIfPending() {
+export async function startWorkerIfPending() {
   const pending = downloadTracker.getNextPending();
-  if (!pending) return;
-  if (weeklyFlowWorker.running) {
-    weeklyFlowWorker.wake();
+  if (pending) {
+    if (weeklyFlowWorker.running) {
+      weeklyFlowWorker.wake();
+      return;
+    }
+    await weeklyFlowWorker.start();
     return;
   }
-  weeklyFlowWorker.start().catch((err) => {
-    console.error("[WeeklyFlowScheduler] Failed to start worker:", err.message);
-  });
+  const flowIds = flowPlaylistConfig
+    .getFlows()
+    .filter((flow) => flow?.enabled === true)
+    .map((flow) => flow.id);
+  const sharedIds = flowPlaylistConfig
+    .getSharedPlaylists()
+    .map((playlist) => playlist.id);
+  const playlistIds = [...new Set([...flowIds, ...sharedIds])];
+  for (const playlistId of playlistIds) {
+    await weeklyFlowWorker.retryIncompletePlaylist(playlistId);
+  }
 }
