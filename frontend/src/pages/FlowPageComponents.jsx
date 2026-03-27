@@ -16,6 +16,7 @@ import {
   ExternalLink,
   Volume2,
   VolumeX,
+  ChevronDown,
 } from "lucide-react";
 import PillToggle from "../components/PillToggle";
 import FlipSaveButton from "../components/FlipSaveButton";
@@ -61,6 +62,14 @@ const FLOW_WORKER_CONCURRENCY_OPTIONS = [1, 2, 3, 4, 5];
 const FLOW_WORKER_FORMAT_OPTIONS = [
   { id: "flac", label: "FLAC" },
   { id: "mp3", label: "MP3" },
+];
+const FLOW_WORKER_RETRY_CYCLE_OPTIONS = [
+  { minutes: 15, label: "15 min" },
+  { minutes: 30, label: "30 min" },
+  { minutes: 60, label: "1 hour" },
+  { minutes: 360, label: "6 hours" },
+  { minutes: 720, label: "12 hours" },
+  { minutes: 1440, label: "1 day" },
 ];
 
 export function MixSlider({ mix, onChange, normalizeMixPercent }) {
@@ -2029,6 +2038,34 @@ export function FlowWorkerSettingsModal({
                   }
                 />
               </div>
+            </div>
+          </div>
+          <div className="grid gap-1.5">
+            <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
+              Retry Cycle
+            </label>
+            <div className="relative">
+              <select
+                value={settings.retryCycleMinutes}
+                onChange={(event) =>
+                  onChange((prev) => ({
+                    ...prev,
+                    retryCycleMinutes: Number(event.target.value),
+                  }))
+                }
+                className="h-[52px] w-full appearance-none rounded-md border border-white/10 bg-black/20 pl-3 pr-12 text-sm text-white outline-none transition focus:border-[#90a07d] focus:ring-1 focus:ring-[#90a07d]"
+              >
+                {FLOW_WORKER_RETRY_CYCLE_OPTIONS.map((option) => (
+                  <option
+                    key={option.minutes}
+                    value={option.minutes}
+                    className="bg-[#131419] text-white"
+                  >
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white" />
             </div>
           </div>
         </div>

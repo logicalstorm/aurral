@@ -18,6 +18,7 @@ import {
 } from "../middleware/requirePermission.js";
 
 const router = express.Router();
+const FLOW_WORKER_RETRY_CYCLE_OPTIONS_MINUTES = [15, 30, 60, 360, 720, 1440];
 const AUDIO_CONTENT_TYPES = {
   ".mp3": "audio/mpeg",
   ".m4a": "audio/mp4",
@@ -609,7 +610,7 @@ router.get("/worker/settings", (req, res) => {
 });
 
 router.put("/worker/settings", (req, res) => {
-  const { concurrency, preferredFormat, preferredFormatStrict } =
+  const { concurrency, preferredFormat, preferredFormatStrict, retryCycleMinutes } =
     req.body || {};
   if (concurrency !== undefined) {
     const parsed = Number(concurrency);
@@ -635,10 +636,23 @@ router.put("/worker/settings", (req, res) => {
       error: "preferredFormatStrict must be a boolean",
     });
   }
+  if (retryCycleMinutes !== undefined) {
+    const parsed = Number(retryCycleMinutes);
+    if (
+      !Number.isInteger(parsed) ||
+      !FLOW_WORKER_RETRY_CYCLE_OPTIONS_MINUTES.includes(parsed)
+    ) {
+      return res.status(400).json({
+        error:
+          "retryCycleMinutes must be one of: 15, 30, 60, 360, 720, 1440",
+      });
+    }
+  }
   const settings = weeklyFlowWorker.updateWorkerSettings({
     concurrency,
     preferredFormat,
     preferredFormatStrict,
+    retryCycleMinutes,
   });
   return res.json({ success: true, settings });
 });

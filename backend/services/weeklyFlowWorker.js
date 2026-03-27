@@ -12,6 +12,8 @@ const MIN_CONCURRENCY = 1;
 const MAX_CONCURRENCY = 5;
 const DEFAULT_PREFERRED_FORMAT = "flac";
 const DEFAULT_PREFERRED_FORMAT_STRICT = false;
+const FLOW_WORKER_RETRY_CYCLE_OPTIONS_MINUTES = [15, 30, 60, 360, 720, 1440];
+const DEFAULT_RETRY_CYCLE_MINUTES = 15;
 const JOB_COOLDOWN_MS = 750;
 const RETRY_BASE_DELAY_MS = 5000;
 const RETRY_MAX_DELAY_MS = 120000;
@@ -33,7 +35,6 @@ const FALLBACK_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
 const MAX_RETRIES_PER_JOB = 1;
 const MAX_RETRIES_FOR_TIMEOUT_LOGIN = 1;
 const MAX_BACKUP_REFILL_ROUNDS = 3;
-const INCOMPLETE_PLAYLIST_RETRY_DELAY_MS = 15 * 60 * 1000;
 const NON_RETRYABLE_ERRORS = new Set([
   "No search results found",
   "No candidate files returned",
@@ -177,6 +178,21 @@ export class WeeklyFlowWorker {
     return value === true ? true : DEFAULT_PREFERRED_FORMAT_STRICT;
   }
 
+  _normalizeRetryCycleMinutes(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return DEFAULT_RETRY_CYCLE_MINUTES;
+    const normalized = Math.floor(parsed);
+    if (FLOW_WORKER_RETRY_CYCLE_OPTIONS_MINUTES.includes(normalized)) {
+      return normalized;
+    }
+    return DEFAULT_RETRY_CYCLE_MINUTES;
+  }
+
+  _getIncompleteRetryDelayMs() {
+    const { retryCycleMinutes } = this.getWorkerSettings();
+    return Math.max(1000, retryCycleMinutes * 60 * 1000);
+  }
+
   _getAdaptiveMatchLimit(preferredFormatStrict, retryAttempt) {
     if (preferredFormatStrict) {
       if (retryAttempt >= 2) return STRICT_FORMAT_MATCH_CANDIDATES;
@@ -196,6 +212,9 @@ export class WeeklyFlowWorker {
       preferredFormat: this._normalizePreferredFormat(raw.preferredFormat),
       preferredFormatStrict: this._normalizePreferredFormatStrict(
         raw.preferredFormatStrict,
+      ),
+      retryCycleMinutes: this._normalizeRetryCycleMinutes(
+        raw.retryCycleMinutes,
       ),
     };
   }
@@ -218,6 +237,10 @@ export class WeeklyFlowWorker {
           : this._normalizePreferredFormatStrict(
               nextSettings.preferredFormatStrict,
             ),
+      retryCycleMinutes:
+        nextSettings.retryCycleMinutes === undefined
+          ? base.retryCycleMinutes
+          : this._normalizeRetryCycleMinutes(nextSettings.retryCycleMinutes),
     };
     dbOps.updateSettings({
       ...current,
@@ -298,7 +321,7 @@ export class WeeklyFlowWorker {
 
   _scheduleIncompleteRetry(
     playlistType,
-    delayMs = INCOMPLETE_PLAYLIST_RETRY_DELAY_MS,
+    delayMs = this._getIncompleteRetryDelayMs(),
   ) {
     if (!playlistType) return;
     if (
@@ -311,7 +334,7 @@ export class WeeklyFlowWorker {
     if (this.incompleteRetryTimers.has(playlistType)) return;
     const waitMs = Math.max(
       1000,
-      Math.floor(Number(delayMs) || INCOMPLETE_PLAYLIST_RETRY_DELAY_MS),
+      Math.floor(Number(delayMs) || this._getIncompleteRetryDelayMs()),
     );
     const timer = setTimeout(() => {
       this.incompleteRetryTimers.delete(playlistType);
@@ -320,10 +343,7 @@ export class WeeklyFlowWorker {
           `[WeeklyFlowWorker] Failed incomplete retry for ${playlistType}:`,
           error.message,
         );
-        this._scheduleIncompleteRetry(
-          playlistType,
-          INCOMPLETE_PLAYLIST_RETRY_DELAY_MS,
-        );
+        this._scheduleIncompleteRetry(playlistType);
       });
     }, waitMs);
     this.incompleteRetryTimers.set(playlistType, timer);
@@ -377,10 +397,7 @@ export class WeeklyFlowWorker {
       return changed;
     }
 
-    this._scheduleIncompleteRetry(
-      playlistType,
-      INCOMPLETE_PLAYLIST_RETRY_DELAY_MS,
-    );
+    this._scheduleIncompleteRetry(playlistType);
     return 0;
   }
 
@@ -888,10 +905,7 @@ export class WeeklyFlowWorker {
         }
       }
       if (failed > 0 || flowPlaylistConfig.getFlow(playlistType)) {
-        this._scheduleIncompleteRetry(
-          playlistType,
-          INCOMPLETE_PLAYLIST_RETRY_DELAY_MS,
-        );
+        this._scheduleIncompleteRetry(playlistType);
         return;
       }
       this.backupRefillRounds.delete(playlistType);

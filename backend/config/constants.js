@@ -203,6 +203,7 @@ export const defaultData = {
       concurrency: 3,
       preferredFormat: "flac",
       preferredFormatStrict: false,
+      retryCycleMinutes: 15,
     },
   },
   blocklist: [],
