@@ -604,10 +604,24 @@ const ALLOWED_PRIMARY_TYPES = new Set(["album", "ep", "single"]);
  */
 export async function musicbrainzGetArtistReleaseGroups(mbid) {
   try {
-    const data = await musicbrainzRequest(`/artist/${mbid}`, {
-      inc: "release-groups",
-    });
-    const raw = data["release-groups"] || [];
+    const raw = [];
+    const limit = 100;
+    let offset = 0;
+    let totalCount;
+
+    // Fetch all release-groups for the artist
+    do {
+      const data = await musicbrainzRequest("/release-group", {
+        artist: mbid,
+        limit,
+        offset,
+      });
+      totalCount = data["release-group-count"] || 0;
+      const batch = data["release-groups"] || [];
+      raw.push(...batch);
+      offset += limit;
+    } while (offset < totalCount);
+
     const filtered = raw
       .filter(
         (rg) =>
