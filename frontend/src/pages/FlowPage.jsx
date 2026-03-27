@@ -658,6 +658,18 @@ const DEFAULT_WORKER_SETTINGS = {
   concurrency: 3,
   preferredFormat: "flac",
   preferredFormatStrict: false,
+  retryCycleMinutes: 15,
+};
+const FLOW_WORKER_RETRY_CYCLE_OPTIONS = [15, 30, 60, 360, 720, 1440];
+
+const normalizeRetryCycleMinutes = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_WORKER_SETTINGS.retryCycleMinutes;
+  const normalized = Math.floor(parsed);
+  if (FLOW_WORKER_RETRY_CYCLE_OPTIONS.includes(normalized)) {
+    return normalized;
+  }
+  return DEFAULT_WORKER_SETTINGS.retryCycleMinutes;
 };
 
 const buildFlowStatsFromJobs = (jobs) => {
@@ -1140,10 +1152,12 @@ function FlowPage() {
         ? "mp3"
         : "flac";
     const preferredFormatStrict = raw.preferredFormatStrict === true;
+    const retryCycleMinutes = normalizeRetryCycleMinutes(raw.retryCycleMinutes);
     return {
       concurrency,
       preferredFormat,
       preferredFormatStrict,
+      retryCycleMinutes,
     };
   };
 
@@ -1304,11 +1318,15 @@ function FlowPage() {
       workerSettingsDraft.preferredFormat === "mp3" ? "mp3" : "flac";
     const safePreferredFormatStrict =
       workerSettingsDraft.preferredFormatStrict === true;
+    const safeRetryCycleMinutes = normalizeRetryCycleMinutes(
+      workerSettingsDraft.retryCycleMinutes,
+    );
     const current = getCurrentWorkerSettings();
     const hasChanges =
       safeConcurrency !== current.concurrency ||
       safePreferredFormat !== current.preferredFormat ||
-      safePreferredFormatStrict !== current.preferredFormatStrict;
+      safePreferredFormatStrict !== current.preferredFormatStrict ||
+      safeRetryCycleMinutes !== current.retryCycleMinutes;
     if (!hasChanges || savingWorkerSettings) return;
     setSavingWorkerSettings(true);
     try {
@@ -1316,6 +1334,7 @@ function FlowPage() {
         concurrency: safeConcurrency,
         preferredFormat: safePreferredFormat,
         preferredFormatStrict: safePreferredFormatStrict,
+        retryCycleMinutes: safeRetryCycleMinutes,
       });
       showSuccess("Flow worker settings updated");
       setIsWorkerSettingsOpen(false);
@@ -1420,7 +1439,9 @@ function FlowPage() {
     (workerSettingsDraft.preferredFormat === "mp3" ? "mp3" : "flac") !==
       currentWorkerSettings.preferredFormat ||
     (workerSettingsDraft.preferredFormatStrict === true) !==
-      currentWorkerSettings.preferredFormatStrict;
+      currentWorkerSettings.preferredFormatStrict ||
+    normalizeRetryCycleMinutes(workerSettingsDraft.retryCycleMinutes) !==
+      currentWorkerSettings.retryCycleMinutes;
 
   return (
     <div className="flow-page max-w-6xl mx-auto px-4 pb-10">
