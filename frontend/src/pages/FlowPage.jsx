@@ -501,9 +501,7 @@ const isFlowDirty = (flow, draft) => {
 };
 
 const normalizeSharedTrackEntry = (track) => {
-  if (!track || typeof track !== "object" || Array.isArray(track)) {
-    throw new Error("Track entries must be objects");
-  }
+  if (!track || typeof track !== "object" || Array.isArray(track)) return null;
   const artistName = String(
     track.artistName ??
       track.artist ??
@@ -519,9 +517,7 @@ const normalizeSharedTrackEntry = (track) => {
       track["Track Name"] ??
       "",
   ).trim();
-  if (!artistName || !trackName) {
-    throw new Error("Each track needs both artistName and trackName");
-  }
+  if (!artistName || !trackName) return null;
   const albumName = String(
     track.albumName ?? track.album ?? track["Album Name"] ?? "",
   ).trim();
@@ -576,7 +572,10 @@ const parseFlowImportFile = (content) => {
 
   const toPlaylistPayload = (entry, index) => {
     if (Array.isArray(entry)) {
-      const tracks = entry.map(normalizeSharedTrackEntry);
+      const tracks = entry.map(normalizeSharedTrackEntry).filter(Boolean);
+      if (tracks.length === 0) {
+        throw new Error(`Tracklist ${index + 1}: no valid tracks found`);
+      }
       return {
         name: `Imported Playlist ${index + 1}`,
         sourceName: null,
@@ -596,7 +595,10 @@ const parseFlowImportFile = (content) => {
     if (!rawTracks?.length) {
       throw new Error(`Tracklist ${index + 1}: no tracks found`);
     }
-    const tracks = rawTracks.map(normalizeSharedTrackEntry);
+    const tracks = rawTracks.map(normalizeSharedTrackEntry).filter(Boolean);
+    if (tracks.length === 0) {
+      throw new Error(`Tracklist ${index + 1}: no valid tracks found`);
+    }
     return {
       name:
         String(entry.name ?? entry.playlist?.name ?? entry.sourceName ?? "").trim() ||
@@ -643,7 +645,21 @@ const parseFlowImportFile = (content) => {
     throw new Error("Import file does not contain any tracklists");
   }
 
-  return entries.map(toPlaylistPayload);
+  const playlists = entries
+    .map((entry, index) => {
+      try {
+        return toPlaylistPayload(entry, index);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+
+  if (!playlists.length) {
+    throw new Error("Import file does not contain any valid tracks");
+  }
+
+  return playlists;
 };
 
 const EMPTY_FLOW_STATS = {

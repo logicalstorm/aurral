@@ -45,6 +45,7 @@ process.on("unhandledRejection", (reason, promise) => {
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || "5mb";
 
 const allowedCorsOrigins = String(process.env.CORS_ORIGIN || "")
   .split(",")
@@ -104,7 +105,7 @@ app.use(
     frameguard: { action: "deny" },
   }),
 );
-app.use(express.json());
+app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
 app.use(createAuthMiddleware());
 
@@ -175,6 +176,12 @@ if (fs.existsSync(frontendDist)) {
 app.use((err, req, res, next) => {
   console.error(err);
   if (res.headersSent) return next(err);
+  if (err?.type === "entity.too.large" || err?.status === 413) {
+    return res.status(413).json({
+      error: "Payload too large",
+      message: `Request body exceeds limit (${JSON_BODY_LIMIT})`,
+    });
+  }
   return res.status(500).json({ error: "Internal server error" });
 });
 
