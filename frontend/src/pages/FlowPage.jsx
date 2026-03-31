@@ -471,6 +471,7 @@ const DEFAULT_WORKER_SETTINGS = {
   concurrency: 3,
   preferredFormat: "flac",
   preferredFormatStrict: false,
+  seedDownloads: true,
 };
 
 const buildFlowStatsFromJobs = (jobs) => {
@@ -919,10 +920,12 @@ function FlowPage() {
         ? "mp3"
         : "flac";
     const preferredFormatStrict = raw.preferredFormatStrict === true;
+    const seedDownloads = raw.seedDownloads !== false;
     return {
       concurrency,
       preferredFormat,
       preferredFormatStrict,
+      seedDownloads,
     };
   };
 
@@ -940,11 +943,13 @@ function FlowPage() {
       workerSettingsDraft.preferredFormat === "mp3" ? "mp3" : "flac";
     const safePreferredFormatStrict =
       workerSettingsDraft.preferredFormatStrict === true;
+    const safeSeedDownloads = workerSettingsDraft.seedDownloads !== false;
     const current = getCurrentWorkerSettings();
     const hasChanges =
       safeConcurrency !== current.concurrency ||
       safePreferredFormat !== current.preferredFormat ||
-      safePreferredFormatStrict !== current.preferredFormatStrict;
+      safePreferredFormatStrict !== current.preferredFormatStrict ||
+      safeSeedDownloads !== current.seedDownloads;
     if (!hasChanges || savingWorkerSettings) return;
     setSavingWorkerSettings(true);
     try {
@@ -952,6 +957,7 @@ function FlowPage() {
         concurrency: safeConcurrency,
         preferredFormat: safePreferredFormat,
         preferredFormatStrict: safePreferredFormatStrict,
+        seedDownloads: safeSeedDownloads,
       });
       showSuccess("Flow worker settings updated");
       setIsWorkerSettingsOpen(false);
@@ -1056,7 +1062,9 @@ function FlowPage() {
     (workerSettingsDraft.preferredFormat === "mp3" ? "mp3" : "flac") !==
       currentWorkerSettings.preferredFormat ||
     (workerSettingsDraft.preferredFormatStrict === true) !==
-      currentWorkerSettings.preferredFormatStrict;
+      currentWorkerSettings.preferredFormatStrict ||
+    (workerSettingsDraft.seedDownloads !== false) !==
+      currentWorkerSettings.seedDownloads;
 
   return (
     <div className="flow-page max-w-6xl mx-auto px-4 pb-10">
