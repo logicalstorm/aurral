@@ -1926,7 +1926,7 @@ export function FlowWorkerSettingsModal({
       style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
       onClick={onCancel}
     >
-      <div className="card max-w-md w-full mx-4 grid gap-5" onClick={(e) => e.stopPropagation()}>
+      <div className="card max-w-lg w-full mx-4 grid gap-5" onClick={(e) => e.stopPropagation()}>
         <div className="grid gap-1">
           <h3 className="text-xl font-bold text-white">Worker Settings</h3>
         </div>
@@ -2067,6 +2067,23 @@ export function FlowWorkerSettingsModal({
               </select>
               <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white" />
             </div>
+          </div>
+          <div className="flex items-center justify-between rounded-md border border-white/10 bg-black/20 px-3 py-3">
+            <div className="grid gap-0.5 pr-3">
+              <span className="text-sm font-medium text-white">Seed Downloads Folder</span>
+              <span className="text-xs text-[#8b8b90]">
+                Share the flow downloads folder on Soulseek unless you turn this off.
+              </span>
+            </div>
+            <PillToggle
+              checked={settings.seedDownloads !== false}
+              onChange={(event) =>
+                onChange((prev) => ({
+                  ...prev,
+                  seedDownloads: event.target.checked,
+                }))
+              }
+            />
           </div>
         </div>
         <div className="flex gap-3 justify-end">
