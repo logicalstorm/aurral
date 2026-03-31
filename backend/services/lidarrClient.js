@@ -175,10 +175,7 @@ export class LidarrClient {
         return this._artistListCache.data;
       }
     }
-    if (
-      method === "GET" &&
-      (endpoint === "/album" || endpoint.startsWith("/album?"))
-    ) {
+    if (method === "GET" && endpoint === "/album") {
       if (
         this._albumListCache &&
         now - this._albumListCache.at < LIDARR_LIST_CACHE_MS
@@ -279,10 +276,7 @@ export class LidarrClient {
           if (method === "GET" && endpoint === "/artist") {
             this._artistListCache = { data: response.data, at: Date.now() };
           }
-          if (
-            method === "GET" &&
-            (endpoint === "/album" || endpoint.startsWith("/album?"))
-          ) {
+          if (method === "GET" && endpoint === "/album") {
             this._albumListCache = { data: response.data, at: Date.now() };
           }
           if (isStatusRequest) {
