@@ -675,6 +675,7 @@ const DEFAULT_WORKER_SETTINGS = {
   preferredFormat: "flac",
   preferredFormatStrict: false,
   retryCycleMinutes: 15,
+  seedDownloads: true,
 };
 const FLOW_WORKER_RETRY_CYCLE_OPTIONS = [15, 30, 60, 360, 720, 1440];
 
@@ -1169,11 +1170,15 @@ function FlowPage() {
         : "flac";
     const preferredFormatStrict = raw.preferredFormatStrict === true;
     const retryCycleMinutes = normalizeRetryCycleMinutes(raw.retryCycleMinutes);
+    const seedDownloads = raw.seedDownloads !== false;
     return {
       concurrency,
       preferredFormat,
       preferredFormatStrict,
       retryCycleMinutes,
+      seedDownloads,
+      retryCycleMinutes,
+      seedDownloads,
     };
   };
 
@@ -1337,12 +1342,14 @@ function FlowPage() {
     const safeRetryCycleMinutes = normalizeRetryCycleMinutes(
       workerSettingsDraft.retryCycleMinutes,
     );
+    const safeSeedDownloads = workerSettingsDraft.seedDownloads !== false;
     const current = getCurrentWorkerSettings();
     const hasChanges =
       safeConcurrency !== current.concurrency ||
       safePreferredFormat !== current.preferredFormat ||
       safePreferredFormatStrict !== current.preferredFormatStrict ||
-      safeRetryCycleMinutes !== current.retryCycleMinutes;
+      safeRetryCycleMinutes !== current.retryCycleMinutes ||
+      safeSeedDownloads !== current.seedDownloads;
     if (!hasChanges || savingWorkerSettings) return;
     setSavingWorkerSettings(true);
     try {
@@ -1351,6 +1358,9 @@ function FlowPage() {
         preferredFormat: safePreferredFormat,
         preferredFormatStrict: safePreferredFormatStrict,
         retryCycleMinutes: safeRetryCycleMinutes,
+        seedDownloads: safeSeedDownloads,
+        retryCycleMinutes: safeRetryCycleMinutes,
+        seedDownloads: safeSeedDownloads,
       });
       showSuccess("Flow worker settings updated");
       setIsWorkerSettingsOpen(false);
@@ -1457,7 +1467,9 @@ function FlowPage() {
     (workerSettingsDraft.preferredFormatStrict === true) !==
       currentWorkerSettings.preferredFormatStrict ||
     normalizeRetryCycleMinutes(workerSettingsDraft.retryCycleMinutes) !==
-      currentWorkerSettings.retryCycleMinutes;
+      currentWorkerSettings.retryCycleMinutes ||
+    (workerSettingsDraft.seedDownloads !== false) !==
+      currentWorkerSettings.seedDownloads;
 
   return (
     <div className="flow-page max-w-6xl mx-auto px-4 pb-10">

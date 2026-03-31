@@ -14,6 +14,7 @@ const DEFAULT_PREFERRED_FORMAT = "flac";
 const DEFAULT_PREFERRED_FORMAT_STRICT = false;
 const FLOW_WORKER_RETRY_CYCLE_OPTIONS_MINUTES = [15, 30, 60, 360, 720, 1440];
 const DEFAULT_RETRY_CYCLE_MINUTES = 15;
+const DEFAULT_SEED_DOWNLOADS = true;
 const JOB_COOLDOWN_MS = 750;
 const RETRY_BASE_DELAY_MS = 5000;
 const RETRY_MAX_DELAY_MS = 120000;
@@ -193,6 +194,10 @@ export class WeeklyFlowWorker {
     return Math.max(1000, retryCycleMinutes * 60 * 1000);
   }
 
+  _normalizeSeedDownloads(value) {
+    return value === false ? false : DEFAULT_SEED_DOWNLOADS;
+  }
+
   _getAdaptiveMatchLimit(preferredFormatStrict, retryAttempt) {
     if (preferredFormatStrict) {
       if (retryAttempt >= 2) return STRICT_FORMAT_MATCH_CANDIDATES;
@@ -216,6 +221,7 @@ export class WeeklyFlowWorker {
       retryCycleMinutes: this._normalizeRetryCycleMinutes(
         raw.retryCycleMinutes,
       ),
+      seedDownloads: this._normalizeSeedDownloads(raw.seedDownloads),
     };
   }
 
@@ -241,6 +247,10 @@ export class WeeklyFlowWorker {
         nextSettings.retryCycleMinutes === undefined
           ? base.retryCycleMinutes
           : this._normalizeRetryCycleMinutes(nextSettings.retryCycleMinutes),
+      seedDownloads:
+        nextSettings.seedDownloads === undefined
+          ? base.seedDownloads
+          : this._normalizeSeedDownloads(nextSettings.seedDownloads),
     };
     dbOps.updateSettings({
       ...current,
