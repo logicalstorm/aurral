@@ -1736,12 +1736,13 @@ export function FlowWorkerSettingsModal({
                 </div>
                 <PillToggle
                   checked={settings.preferredFormatStrict === true}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const checked = event.target.checked;
                     onChange((prev) => ({
                       ...prev,
-                      preferredFormatStrict: event.target.checked,
-                    }))
-                  }
+                      preferredFormatStrict: checked,
+                    }));
+                  }}
                 />
               </div>
             </div>
@@ -1755,12 +1756,13 @@ export function FlowWorkerSettingsModal({
             </div>
             <PillToggle
               checked={settings.seedDownloads !== false}
-              onChange={(event) =>
+              onChange={(event) => {
+                const checked = event.target.checked;
                 onChange((prev) => ({
                   ...prev,
-                  seedDownloads: event.target.checked,
-                }))
-              }
+                  seedDownloads: checked,
+                }));
+              }}
             />
           </div>
         </div>
