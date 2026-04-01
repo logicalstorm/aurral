@@ -7,7 +7,7 @@ const CIRCUIT_COOLDOWN_MS = 60000;
 const CIRCUIT_FAILURE_THRESHOLD = 3;
 const LIDARR_MAX_CONCURRENT = 12;
 const LIDARR_LIST_CACHE_MS = 30000;
-const LIDARR_ALBUM_CACHE_MAX = 50;
+const LIDARR_ARTIST_ALBUM_CACHE_MAX = 10;
 const LIDARR_RETRY_ATTEMPTS = 2;
 const LIDARR_RETRY_DELAY_MS = 800;
 const LIDARR_STATUS_CACHE_MS = 10000;
@@ -282,7 +282,7 @@ export class LidarrClient {
             method === "GET" &&
             (endpoint === "/album" || endpoint.startsWith("/album?"))
           ) {
-            if (this._albumCache.size >= LIDARR_ALBUM_CACHE_MAX) {
+            if (this._albumCache.size >= LIDARR_ARTIST_ALBUM_CACHE_MAX) {
               const oldestKey = this._albumCache.keys().next().value;
               this._albumCache.delete(oldestKey);
             }
