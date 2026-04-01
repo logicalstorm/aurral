@@ -68,9 +68,13 @@ const generateSoulseekPassword = () => randomBytes(16).toString("hex");
 
 const resolveSharedDownloadsFolder = () => {
   const basePath = process.env.WEEKLY_FLOW_FOLDER || "/app/downloads";
-  return path.isAbsolute(basePath)
+  const resolvedBase = path.isAbsolute(basePath)
     ? basePath
     : path.resolve(process.cwd(), basePath);
+  if (path.basename(resolvedBase) === "aurral-weekly-flow") {
+    return resolvedBase;
+  }
+  return path.join(resolvedBase, "aurral-weekly-flow");
 };
 
 const patchSlskDownloadPeerFile = () => {

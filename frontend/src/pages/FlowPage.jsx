@@ -508,6 +508,9 @@ function FlowPage() {
   const [workerSettingsDraft, setWorkerSettingsDraft] = useState(
     DEFAULT_WORKER_SETTINGS,
   );
+  const [workerSettingsBaseline, setWorkerSettingsBaseline] = useState(
+    DEFAULT_WORKER_SETTINGS,
+  );
   const [savingWorkerSettings, setSavingWorkerSettings] = useState(false);
   const [optimisticEnabled, setOptimisticEnabled] = useState({});
   const [creating, setCreating] = useState(false);
@@ -930,7 +933,9 @@ function FlowPage() {
   };
 
   const handleOpenWorkerSettings = () => {
-    setWorkerSettingsDraft(getCurrentWorkerSettings());
+    const current = getCurrentWorkerSettings();
+    setWorkerSettingsBaseline(current);
+    setWorkerSettingsDraft(current);
     setIsWorkerSettingsOpen(true);
   };
 
@@ -944,7 +949,7 @@ function FlowPage() {
     const safePreferredFormatStrict =
       workerSettingsDraft.preferredFormatStrict === true;
     const safeSeedDownloads = workerSettingsDraft.seedDownloads !== false;
-    const current = getCurrentWorkerSettings();
+    const current = workerSettingsBaseline;
     const hasChanges =
       safeConcurrency !== current.concurrency ||
       safePreferredFormat !== current.preferredFormat ||
@@ -954,6 +959,12 @@ function FlowPage() {
     setSavingWorkerSettings(true);
     try {
       await updateFlowWorkerSettings({
+        concurrency: safeConcurrency,
+        preferredFormat: safePreferredFormat,
+        preferredFormatStrict: safePreferredFormatStrict,
+        seedDownloads: safeSeedDownloads,
+      });
+      setWorkerSettingsBaseline({
         concurrency: safeConcurrency,
         preferredFormat: safePreferredFormat,
         preferredFormatStrict: safePreferredFormatStrict,
@@ -1056,7 +1067,7 @@ function FlowPage() {
       </div>
     );
   }
-  const currentWorkerSettings = getCurrentWorkerSettings();
+  const currentWorkerSettings = workerSettingsBaseline;
   const hasWorkerSettingsChanges =
     Number(workerSettingsDraft.concurrency) !== currentWorkerSettings.concurrency ||
     (workerSettingsDraft.preferredFormat === "mp3" ? "mp3" : "flac") !==
