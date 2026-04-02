@@ -189,12 +189,13 @@ export function useSettingsData(showSuccess, showError, showInfo) {
   );
 
   const handleSaveSettings = useCallback(
-    async (e) => {
+    async (e, settingsOverride) => {
       e?.preventDefault();
+      const toSave = settingsOverride ?? settings;
       setSaving(true);
       try {
-        await updateAppSettings(settings);
-        setOriginalSettings(JSON.parse(JSON.stringify(settings)));
+        await updateAppSettings(toSave);
+        setOriginalSettings(JSON.parse(JSON.stringify(toSave)));
         setHasUnsavedChanges(false);
         showSuccess("Settings saved successfully!");
       } catch (err) {
