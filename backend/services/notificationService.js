@@ -36,11 +36,8 @@ function interpolateBody(str, flowPath, flowName) {
     .replace(/\$flowName/g, flowName ?? "");
 }
 
-async function sendWebhooks(event, flowPath = "", flowName = "") {
-  const settings = dbOps.getSettings();
-  const webhookEvents = settings.integrations?.webhookEvents || {};
+async function sendWebhooks({ webhooks, webhookEvents = {} }, event, flowPath = "", flowName = "") {
   if (!webhookEvents[event]) return;
-  const webhooks = settings.integrations?.webhooks;
   if (!Array.isArray(webhooks) || webhooks.length === 0) return;
 
   for (const webhook of webhooks) {
@@ -106,7 +103,7 @@ export async function notifyDiscoveryUpdated() {
           5
         )
       : Promise.resolve(),
-    sendWebhooks("notifyDiscoveryUpdated", "", "Aurral – Discover"),
+    sendWebhooks(settings.integrations, "notifyDiscoveryUpdated", "", "Aurral – Discover"),
   ]);
 }
 
@@ -119,12 +116,10 @@ export async function notifyWeeklyFlowDone(playlistType, stats = {}, flowPath = 
     gotify.notifyWeeklyFlowDone
       ? sendGotify(
           "Aurral – Weekly Flow",
-          [`Weekly flow "${playlistType}" finished processing.`]
-            .concat(completed > 0 || failed > 0 ? [`Completed: ${completed}, Failed: ${failed}`] : [])
-            .join(" "),
+          `Weekly flow "${playlistType}" finished processing.${completed > 0 || failed > 0 ? ` Completed: ${completed}, Failed: ${failed}` : ""}`,
           5,
         )
       : Promise.resolve(),
-    sendWebhooks("notifyWeeklyFlowDone", flowPath, flowName),
+    sendWebhooks(settings.integrations, "notifyWeeklyFlowDone", flowPath, flowName),
   ]);
 }
