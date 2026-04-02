@@ -39,6 +39,8 @@ export function SettingsNotificationsTab({
     }
   };
 
+  const codeInputStyle = { background: "#171515", color: "#c1c1c3", borderColor: "#2a2a2e" };
+
   const webhooks = settings.integrations?.webhooks || [];
 
   const updateWebhooks = (newWebhooks) => {
@@ -143,7 +145,6 @@ export function SettingsNotificationsTab({
         className="space-y-6"
         autoComplete="off"
       >
-        {/* Gotify */}
         <div
           className="p-6 rounded-lg space-y-4"
           style={{
@@ -316,7 +317,6 @@ export function SettingsNotificationsTab({
           </fieldset>
         </div>
 
-        {/* Webhooks */}
         <div
           className="p-6 rounded-lg space-y-4"
           style={{
@@ -342,11 +342,11 @@ export function SettingsNotificationsTab({
             </button>
           </div>
 
-          {webhooks.length === 0 ? (
+          {!webhooks.length && (
             <p className="text-sm" style={{ color: "#c1c1c3" }}>
               No webhooks configured. Click &ldquo;Add Webhook&rdquo; to create one.
             </p>
-          ) : null}
+          )}
 
           <div className="space-y-4">
             {webhooks.map((wh, index) => (
@@ -357,12 +357,21 @@ export function SettingsNotificationsTab({
                   if (allowDragRef.current !== index) { e.preventDefault(); return; }
                   setDragIdx(index);
                 }}
-                onDragOver={(e) => { e.preventDefault(); if (dragIdx !== null && dragIdx !== index) { moveWebhook(dragIdx, index); setDragIdx(index); } }}
-                onDragEnd={() => { setDragIdx(null); allowDragRef.current = null; }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (dragIdx !== null && dragIdx !== index) {
+                    moveWebhook(dragIdx, index);
+                    setDragIdx(index);
+                  }
+                }}
+                onDragEnd={() => {
+                  setDragIdx(null);
+                  allowDragRef.current = null;
+                }}
                 className="p-4 rounded-lg space-y-3"
                 style={{
-                  backgroundColor: "#111114",
-                  border: `1px solid ${dragIdx === index ? "#555" : "#333"}`,
+                  backgroundColor: "rgba(255,255,255,0.03)",
+                  border: `1px solid ${dragIdx === index ? "#555" : "#2a2a2e"}`,
                   opacity: dragIdx === index ? 0.5 : 1,
                 }}
               >
@@ -397,6 +406,7 @@ export function SettingsNotificationsTab({
                     placeholder="https://example.com/webhook"
                     value={wh.url || ""}
                     onChange={(e) => updateWebhook(index, { url: e.target.value })}
+                    style={codeInputStyle}
                   />
                 </div>
                 <div>
@@ -429,16 +439,18 @@ export function SettingsNotificationsTab({
                     )}
                   </div>
                   {wh.body !== null && (
-                    <>
-                      <textarea
-                        className="input w-full font-mono text-sm"
-                        rows={3}
-                        maxLength={1000}
-                        value={wh.body || ""}
-                        onChange={(e) => updateWebhook(index, { body: e.target.value })}
-                        style={{ resize: "vertical" }}
-                      />
-                    </>
+                    <textarea
+                      className="input w-full font-mono text-sm"
+                      rows={3}
+                      maxLength={1000}
+                      value={wh.body || ""}
+                      onChange={(e) => updateWebhook(index, { body: e.target.value })}
+                      spellCheck={false}
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      style={{ ...codeInputStyle, resize: "vertical" }}
+                    />
                   )}
                 </div>
                 <div>
@@ -461,16 +473,20 @@ export function SettingsNotificationsTab({
                       {(wh.headers || []).map((header, hIndex) => (
                         <div key={hIndex} className="flex gap-2 items-center">
                           <input
-                            className="input flex-1 text-sm"
-                            placeholder="Header name"
+                            className="input flex-1 text-sm font-mono"
+                            placeholder="Header-Name"
+                            spellCheck={false}
                             value={header.key || ""}
                             onChange={(e) => updateHeader(index, hIndex, { key: e.target.value })}
+                            style={codeInputStyle}
                           />
                           <input
-                            className="input flex-1 text-sm"
-                            placeholder="Value"
+                            className="input flex-1 text-sm font-mono"
+                            placeholder="value"
+                            spellCheck={false}
                             value={header.value || ""}
                             onChange={(e) => updateHeader(index, hIndex, { value: e.target.value })}
+                            style={codeInputStyle}
                           />
                           <button
                             type="button"
