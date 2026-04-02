@@ -106,14 +106,21 @@ export function SettingsNotificationsTab({
   };
 
   const handleSave = (e) => {
-    const cleaned = webhooks.map((wh) => ({
+    const cleanedWebhooks = webhooks.map((wh) => ({
       ...wh,
       headers: (wh.headers || []).filter(
         (h) => (h.key || "").trim() && (h.value || "").trim(),
       ),
     }));
-    updateWebhooks(cleaned);
-    handleSaveSettings(e);
+    const settingsToSave = {
+      ...settings,
+      integrations: {
+        ...settings.integrations,
+        webhooks: cleanedWebhooks,
+      },
+    };
+    updateWebhooks(cleanedWebhooks);
+    handleSaveSettings(e, settingsToSave);
   };
 
   return (
