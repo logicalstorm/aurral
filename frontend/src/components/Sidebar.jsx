@@ -9,7 +9,6 @@ import {
   AudioWaveform,
   Pin,
   PinOff,
-  LogOut,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import LogoutButton from "./LogoutButton";
@@ -133,8 +132,6 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
     updateHoverBubble();
   }, [hoveredIndex]);
 
-  // On desktop: hidden mode uses -translate-x-full (no md:translate-x-0 override)
-  // On mobile: always controlled by isOpen prop
   const translateClass = isOpen
     ? "translate-x-0"
     : mode === "hidden"
@@ -274,28 +271,8 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
         </div>
 
         <div className={`flex flex-col items-center gap-2 ${isIcons ? "p-1.5" : "p-3"} mt-auto border-t`} style={{ borderColor: "rgba(255,255,255,0.05)" }}>
-          {authRequired && !isIcons && (
-            <LogoutButton onClick={logout} />
-          )}
-          {authRequired && isIcons && (
-            <button
-              onClick={logout}
-              className="group relative p-2 rounded-md transition-colors hover:bg-white/5"
-              style={{ color: "#c1c1c3" }}
-              aria-label="Log out"
-            >
-              <LogOut className="w-4 h-4" />
-              <span
-                className="absolute left-full ml-2 px-2.5 py-1.5 text-xs font-medium rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-[100]"
-                style={{
-                  backgroundColor: "#2a2a2e",
-                  color: "#fff",
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
-                }}
-              >
-                Log out
-              </span>
-            </button>
+          {authRequired && (
+            <LogoutButton onClick={logout} collapsed={isIcons} />
           )}
 
           {!isIcons && (
