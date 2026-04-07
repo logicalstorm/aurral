@@ -26,6 +26,19 @@ router.post("/", async (req, res) => {
     const { quality, releaseTypes, integrations } = req.body;
 
     const currentSettings = dbOps.getSettings();
+    const lidarrExternalUrl = integrations?.lidarr?.externalUrl;
+    if (lidarrExternalUrl !== undefined) {
+      const trimmedExternalUrl = String(lidarrExternalUrl).trim();
+      if (trimmedExternalUrl) {
+        const urlValidation = validateExternalUrl(trimmedExternalUrl);
+        if (!urlValidation.valid) {
+          return res.status(400).json({ error: urlValidation.error });
+        }
+        integrations.lidarr.externalUrl = urlValidation.url;
+      } else {
+        integrations.lidarr.externalUrl = "";
+      }
+    }
 
     let mergedIntegrations =
       currentSettings.integrations || defaultData.settings.integrations || {};
