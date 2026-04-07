@@ -17,6 +17,7 @@ import {
   Volume2,
   VolumeX,
   ChevronDown,
+  MoreHorizontal,
 } from "lucide-react";
 import PillToggle from "../components/PillToggle";
 import FlipSaveButton from "../components/FlipSaveButton";
@@ -744,6 +745,43 @@ export function FlowStatusCards({
   );
 }
 
+export function MoreMenu({ children }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  return (
+    <div className={`relative ${isOpen ? "z-[300]" : "z-30"}`} ref={menuRef}>
+      <button 
+        type="button" 
+        onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }} 
+        className={`btn btn-sm gap-2 ${isOpen ? "btn-primary" : "btn-secondary"}`}
+        aria-label="More options"
+      >
+        <MoreHorizontal className="w-4 h-4" />
+        <span className="hidden sm:inline">More</span>
+      </button>
+      {isOpen && (
+        <div className="absolute right-0 top-full mt-2 w-48 rounded-md border border-[#3a3a44] bg-[#2d2d36] py-1 z-[320] flex flex-col"
+             onClick={() => setIsOpen(false)}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function FlowCard({
   flow,
   enabled,
@@ -862,13 +900,9 @@ export function FlowCard({
     : "Flow ready when enabled";
 
   return (
-    <div className="bg-card rounded-lg border border-white/5 overflow-hidden">
-      <div
-        className={`p-4 flex flex-col md:flex-row md:items-start justify-between gap-4 transition-opacity ${
-          enabled ? "opacity-100" : "opacity-50"
-        }`}
-      >
-        <div className="min-w-0 flex-1 grid gap-2.5">
+    <div className="bg-card rounded-lg border border-white/5 overflow-visible">
+      <div className="p-4 flex flex-col md:flex-row md:items-start justify-between gap-4">
+        <div className={`min-w-0 flex-1 grid gap-2.5 ${enabled ? "" : "opacity-50"}`}>
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-black/25 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[#d2dac9]">
               {typeLabel}
@@ -890,25 +924,9 @@ export function FlowCard({
             )}
           </div>
           <div className="space-y-1">
-            {isEditing ? (
-              <input
-                type="text"
-                className="input h-10 max-w-xl bg-[#1f1f24] text-base font-medium text-white"
-                value={simpleDraft?.name ?? flow.name}
-                onChange={(event) =>
-                  onDraftChange((prev) => ({
-                    ...prev,
-                    name: event.target.value,
-                  }))
-                }
-                onFocus={onClearError}
-                aria-label={`Edit ${flow.name} name`}
-              />
-            ) : (
-              <h3 className="text-base font-medium text-white truncate">
-                {flow.name}
-              </h3>
-            )}
+            <h3 className="text-base font-medium text-white truncate">
+              {flow.name}
+            </h3>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#b5b5bc]">
               <span>{statusSummary}</span>
               {metaItems.length > 0 ? (
@@ -948,60 +966,58 @@ export function FlowCard({
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-3 shrink-0">
-          <div className="flex items-center gap-1 rounded-md bg-black/20 p-1">
-            <button
-              onClick={onConvertToStatic}
-              className="btn btn-secondary btn-sm px-2"
-              aria-label={`Convert ${flow.name} to a static playlist`}
-              title={`Convert ${flow.name} to a static playlist`}
-              disabled={!canConvertToStatic || convertingId === flow.id}
-            >
-              {convertingId === flow.id ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <FilePlus2 className="w-4 h-4" />
-              )}
-            </button>
-            <button
-              onClick={onExport}
-              className="btn btn-secondary btn-sm px-2"
-              aria-label={`Export ${flow.name}`}
-              title={`Export ${flow.name} tracklist`}
-              disabled={!canExport}
-            >
-              <Download className="w-4 h-4" />
-            </button>
-            {isEditing && (
-              <button
-                onClick={onDelete}
-                className="btn btn-sm btn-ghost px-2 text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                aria-label="Delete flow"
-                title={`Delete ${flow.name}`}
-                disabled={deletingId === flow.id}
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )}
+          <div className="flex items-center gap-1.5">
             <button
               onClick={onViewTracks}
-              className={`btn ${isTracksOpen ? "btn-primary" : "btn-secondary"} btn-sm px-2`}
+              className={`btn ${isTracksOpen ? "btn-primary" : "btn-secondary"} btn-sm gap-2`}
               aria-label={isTracksOpen ? `Close ${flow.name} tracks` : `View ${flow.name} tracks`}
               title={isTracksOpen ? `Close ${flow.name} tracks` : `View ${flow.name} tracks`}
               aria-pressed={isTracksOpen}
               disabled={!enabled && !isTracksOpen}
             >
               <ListMusic className="w-4 h-4" />
+              <span className="hidden sm:inline">Tracks</span>
             </button>
             <button
               onClick={onToggleEditing}
-              className={`btn ${isEditing ? "btn-primary" : "btn-secondary"} btn-sm px-2`}
+              className={`btn ${isEditing ? "btn-primary" : "btn-secondary"} btn-sm gap-2`}
               aria-label={isEditing ? "Close editor" : "Edit flow"}
               title={isEditing ? `Close ${flow.name} editor` : `Edit ${flow.name}`}
               aria-pressed={isEditing}
             >
               <Pencil className="w-4 h-4" />
+              <span className="hidden sm:inline">Manage</span>
             </button>
+            <MoreMenu>
+              <button
+                onClick={onConvertToStatic}
+                className="w-full text-left px-3 py-2.5 text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white flex items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canConvertToStatic || convertingId === flow.id}
+              >
+                {convertingId === flow.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <FilePlus2 className="w-4 h-4" />}
+                Convert to Static
+              </button>
+              <button
+                onClick={onExport}
+                className="w-full text-left px-3 py-2.5 text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white flex items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canExport}
+              >
+                <Download className="w-4 h-4" />
+                Download JSON
+              </button>
+              <div className="my-1 border-t border-white/10" />
+              <button
+                onClick={onDelete}
+                className="w-full text-left px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 flex items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={deletingId === flow.id}
+              >
+                {deletingId === flow.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Delete Flow
+              </button>
+            </MoreMenu>
           </div>
+          
+          <div className="hidden sm:block w-px h-6 bg-white/10" />
           
           <div className="flex items-center gap-1.5 rounded-md bg-black/20 px-2 py-1.5">
             {togglingId === flow.id && (
@@ -1024,7 +1040,7 @@ export function FlowCard({
             <FlowFormFields
               draft={simpleDraft}
               remaining={simpleRemaining}
-              showNameField={false}
+              showNameField={true}
               inputClassName="input bg-[#1f1f24]"
               errorMessage={simpleError}
               onDraftChange={onDraftChange}
@@ -1528,7 +1544,7 @@ export function SharedPlaylistCard({
     currentJob?.trackName;
 
   return (
-    <div className="overflow-hidden rounded-lg border border-white/5 bg-card">
+    <div className="overflow-visible rounded-lg border border-white/5 bg-card">
       <div className="flex flex-col gap-4 px-4 py-4 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -1540,24 +1556,9 @@ export function SharedPlaylistCard({
             </span>
           </div>
           <div className="space-y-1">
-            {isEditing ? (
-              <div className="grid gap-1.5">
-                <input
-                  type="text"
-                  className="input h-10 max-w-xl bg-[#1f1f24] text-base font-medium text-white"
-                  value={nameDraft}
-                  onChange={(event) => onNameChange(event.target.value)}
-                  aria-label={`Edit ${playlist.name} name`}
-                />
-                {nameError ? (
-                  <div className="text-xs text-red-400 font-medium">{nameError}</div>
-                ) : null}
-              </div>
-            ) : (
-              <h3 className="truncate text-base font-medium text-white">
-                {playlist.name}
-              </h3>
-            )}
+            <h3 className="truncate text-base font-medium text-white">
+              {playlist.name}
+            </h3>
             {isCurrentJob ? (
               <p className="truncate text-xs text-[#9ed3a1]">
                 Downloading {currentJob.trackName}
@@ -1591,61 +1592,64 @@ export function SharedPlaylistCard({
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-3 shrink-0">
-          <div className="flex items-center gap-1 rounded-md bg-black/20 p-1">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={onViewTracks}
-              className={`btn ${isTracksOpen ? "btn-primary" : "btn-secondary"} btn-sm px-2`}
+              className={`btn ${isTracksOpen ? "btn-primary" : "btn-secondary"} btn-sm gap-2`}
               aria-label={isTracksOpen ? `Close ${playlist.name} tracks` : `View ${playlist.name} tracks`}
               title={isTracksOpen ? `Close ${playlist.name} tracks` : `View ${playlist.name} tracks`}
               aria-pressed={isTracksOpen}
-              disabled={isEditing}
             >
               <ListMusic className="w-4 h-4" />
+              <span className="hidden sm:inline">Tracks</span>
             </button>
             <button
               type="button"
               onClick={onToggleEditing}
-              className={`btn ${isEditing ? "btn-primary" : "btn-secondary"} btn-sm px-2`}
+              className={`btn ${isEditing ? "btn-primary" : "btn-secondary"} btn-sm gap-2`}
               aria-label={isEditing ? `Close ${playlist.name} editor` : `Edit ${playlist.name}`}
               title={isEditing ? `Close ${playlist.name} editor` : `Edit ${playlist.name}`}
               aria-pressed={isEditing}
             >
               <Pencil className="w-4 h-4" />
+              <span className="hidden sm:inline">Manage</span>
             </button>
-            <button
-              type="button"
-              onClick={onDelete}
-              className="btn btn-sm btn-ghost px-2 text-red-500 hover:text-red-600 hover:bg-red-500/10"
-              disabled={deletingId === playlist.id}
-              aria-label={`Delete ${playlist.name}`}
-              title={`Delete ${playlist.name}`}
-            >
-              {deletingId === playlist.id ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Trash2 className="w-4 h-4" />
-              )}
-            </button>
+            <MoreMenu>
+              <button
+                type="button"
+                onClick={onDelete}
+                className="w-full text-left px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 flex items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={deletingId === playlist.id}
+              >
+                {deletingId === playlist.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Delete Playlist
+              </button>
+            </MoreMenu>
           </div>
         </div>
       </div>
 
-      {isTracksOpen && (
+      {isEditing && (
         <div className="px-4 pb-4">
           <div className="card-separator mb-4" />
-          <FlowTracksPanel
-            tracks={tracks}
-            loading={tracksLoading}
-            error={tracksError}
-            emptyMessage="No downloaded tracks in this static playlist yet."
-            editable={isEditing}
-            deletingTrackId={deletingTrackId}
-            onDeleteTrack={onDeleteTrack}
-            onNavigateArtist={onNavigateArtist}
-          />
-          {isEditing ? (
-            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+          <div className="grid gap-4 rounded-lg border border-white/10 bg-white/5 p-4">
+            <div className="grid gap-1.5">
+              <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
+                Playlist Name
+              </label>
+              <input
+                type="text"
+                className="input bg-[#1f1f24]"
+                value={nameDraft}
+                onChange={(event) => onNameChange(event.target.value)}
+                aria-label={`Edit ${playlist.name} name`}
+              />
+              {nameError ? (
+                <div className="text-xs text-red-400 font-medium">{nameError}</div>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <button onClick={onCancelEdit} className="btn btn-secondary btn-sm">
                 Cancel
               </button>
@@ -1657,7 +1661,35 @@ export function SharedPlaylistCard({
                 savedLabel="Saved"
               />
             </div>
-          ) : null}
+          </div>
+          <div className="mt-4">
+            <FlowTracksPanel
+              tracks={tracks}
+              loading={tracksLoading}
+              error={tracksError}
+              emptyMessage="No downloaded tracks in this static playlist yet."
+              editable={true}
+              deletingTrackId={deletingTrackId}
+              onDeleteTrack={onDeleteTrack}
+              onNavigateArtist={onNavigateArtist}
+            />
+          </div>
+        </div>
+      )}
+
+      {isTracksOpen && !isEditing && (
+        <div className="px-4 pb-4">
+          <div className="card-separator mb-4" />
+          <FlowTracksPanel
+            tracks={tracks}
+            loading={tracksLoading}
+            error={tracksError}
+            emptyMessage="No downloaded tracks in this static playlist yet."
+            editable={false}
+            deletingTrackId={deletingTrackId}
+            onDeleteTrack={onDeleteTrack}
+            onNavigateArtist={onNavigateArtist}
+          />
         </div>
       )}
     </div>
