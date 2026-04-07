@@ -72,6 +72,15 @@ const FLOW_WORKER_RETRY_CYCLE_OPTIONS = [
   { minutes: 720, label: "12 hours" },
   { minutes: 1440, label: "1 day" },
 ];
+const SCHEDULE_HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => {
+  const normalized = `${String(hour).padStart(2, "0")}:00`;
+  const suffix = hour >= 12 ? "PM" : "AM";
+  const hour12 = hour % 12 || 12;
+  return {
+    value: normalized,
+    label: `${hour12}:00 ${suffix}`,
+  };
+});
 
 export function MixSlider({ mix, onChange, normalizeMixPercent }) {
   const normalized = normalizeMixPercent(mix);
@@ -285,6 +294,9 @@ export function FlowFormFields({
       )
     : [];
   const scheduleTime = String(draft?.scheduleTime || "00:00");
+  const scheduleTimeLabel =
+    SCHEDULE_HOUR_OPTIONS.find((option) => option.value === scheduleTime)?.label ||
+    scheduleTime;
   const schedulePhrase =
     scheduleDays.length === 7
       ? "Update daily"
@@ -297,7 +309,7 @@ export function FlowFormFields({
           : scheduleDays.length >= 3 && scheduleDays.length <= 6
             ? `Update ${SCHEDULE_COUNT_LABELS[scheduleDays.length]} a week`
             : "Update weekly";
-  const scheduleTimePhrase = `at ${scheduleTime}`;
+  const scheduleTimePhrase = `at ${scheduleTimeLabel}`;
   const clauses = [
     schedulePhrase,
     scheduleTimePhrase,
@@ -419,21 +431,26 @@ export function FlowFormFields({
               })}
             </div>
           </div>
-          <div className="grid gap-1.5 w-32 shrink-0">
+          <div className="grid gap-1.5 w-36 shrink-0">
               <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
-              Update Time
+              Update Hour
               </label>
-              <input
-              type="time"
+              <select
                 className={inputClassName}
-              value={scheduleTime}
-              onChange={(event) =>
-                updateDraft((prev) => ({
-                  ...prev,
-                  scheduleTime: event.target.value || "00:00",
-                }))
-              }
-              />
+                value={scheduleTime}
+                onChange={(event) =>
+                  updateDraft((prev) => ({
+                    ...prev,
+                    scheduleTime: event.target.value || "00:00",
+                  }))
+                }
+              >
+                {SCHEDULE_HOUR_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
         </div>
       </div>

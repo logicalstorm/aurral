@@ -185,18 +185,14 @@ const normalizeScheduleTime = (value) => {
   const match = /^(\d{1,2}):(\d{2})$/.exec(text);
   if (!match) return "00:00";
   const hours = Number(match[1]);
-  const minutes = Number(match[2]);
   if (
     !Number.isInteger(hours) ||
-    !Number.isInteger(minutes) ||
     hours < 0 ||
-    hours > 23 ||
-    minutes < 0 ||
-    minutes > 59
+    hours > 23
   ) {
     return "00:00";
   }
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  return `${String(hours).padStart(2, "0")}:00`;
 };
 
 const normalizeMixPercent = (mix) => {
