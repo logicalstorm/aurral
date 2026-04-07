@@ -95,7 +95,7 @@ Weekly Flow generates playlists from your library and listening context, then do
 - Multiple flows with adjustable mix (Discover / Mix / Trending) and size
 - Automatic weekly refresh scheduling
 - Optional Navidrome smart playlists and a dedicated “Aurral Weekly Flow” library
-- Community playlist import/export for static shared tracklists. See [Community Playlists](community-playlist.md)
+- Community playlist import/export for static shared tracklists. See [Flows and Playlists](flows-and-playlists.md)
 
 ---
 

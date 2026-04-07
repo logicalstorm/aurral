@@ -1,6 +1,6 @@
-# Community Playlists
+# Flows and Playlists
 
-Community Playlists are static playlists imported from JSON.
+Flows are dynamic weekly recommendations, while playlists are static tracklists imported from JSON.
 
 - **Flows** are recommended playlists that refresh weekly
 - **Playlists** are static tracklists created from exported JSON or hand-written JSON
