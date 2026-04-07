@@ -1578,9 +1578,6 @@ function FlowPage() {
 
   const handleToggleTracks = async (flowId) => {
     if (!flowId) return;
-    if (editingId === flowId && sharedPlaylists.some((playlist) => playlist.id === flowId)) {
-      return;
-    }
     if (tracksExpandedId === flowId) {
       setTracksExpandedId(null);
       return;
@@ -1620,7 +1617,7 @@ function FlowPage() {
       delete next[playlistId];
       return next;
     });
-    setTracksExpandedId(playlistId);
+    setTracksExpandedId(null);
     await fetchFlowTracks(playlistId);
   };
 
