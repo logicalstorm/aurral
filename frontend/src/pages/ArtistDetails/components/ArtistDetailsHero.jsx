@@ -13,6 +13,8 @@ import {
   Play,
   Pause,
   Pencil,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { getCoverImage, getTagColor, formatLifeSpan, getArtistType } from "../utils";
 import AddToLibraryButton from "../../../components/AddToLibraryButton";
@@ -44,6 +46,8 @@ export function ArtistDetailsHero({
   playingPreviewId,
   previewProgress,
   previewSnappingBack,
+  previewVolume,
+  setPreviewVolume,
   handlePreviewPlay,
   onEditIds,
 }) {
@@ -389,6 +393,36 @@ export function ArtistDetailsHero({
             {!loadingPreview && previewTracks.length > 0 && (
               <>
                 <audio ref={previewAudioRef} />
+                <div className="flex items-center gap-2 px-2 pb-2">
+                  {previewVolume <= 0 ? (
+                    <VolumeX className="w-4 h-4 flex-shrink-0" style={{ color: "#c1c1c3" }} />
+                  ) : (
+                    <Volume2 className="w-4 h-4 flex-shrink-0" style={{ color: "#c1c1c3" }} />
+                  )}
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={Math.round(previewVolume * 100)}
+                    onChange={(e) =>
+                      setPreviewVolume(
+                        Math.max(
+                          0,
+                          Math.min(1, Number(e.target.value) / 100),
+                        ),
+                      )
+                    }
+                    className="w-full accent-[#707e61]"
+                    aria-label="Preview volume"
+                  />
+                  <span
+                    className="text-xs tabular-nums w-8 text-right"
+                    style={{ color: "#c1c1c3" }}
+                  >
+                    {Math.round(previewVolume * 100)}
+                  </span>
+                </div>
                 <ul className="space-y-0.5">
                   {previewTracks.map((track) => (
                     <li
@@ -573,6 +607,8 @@ ArtistDetailsHero.propTypes = {
   playingPreviewId: PropTypes.string,
   previewProgress: PropTypes.number,
   previewSnappingBack: PropTypes.bool,
+  previewVolume: PropTypes.number,
+  setPreviewVolume: PropTypes.func,
   handlePreviewPlay: PropTypes.func,
   onEditIds: PropTypes.func,
 };
