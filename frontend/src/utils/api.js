@@ -669,12 +669,32 @@ export const setFlowEnabled = async (flowId, enabled) => {
 };
 
 export const importSharedPlaylist = async (payload) => {
-  const response = await api.post("/weekly-flow/shared-playlists/import", payload);
+  const response = await api.post(
+    "/weekly-flow/shared-playlists/import",
+    payload,
+  );
+  return response.data;
+};
+
+export const updateSharedPlaylist = async (playlistId, payload) => {
+  const response = await api.put(
+    `/weekly-flow/shared-playlists/${playlistId}`,
+    payload,
+  );
   return response.data;
 };
 
 export const deleteSharedPlaylist = async (playlistId) => {
-  const response = await api.delete(`/weekly-flow/shared-playlists/${playlistId}`);
+  const response = await api.delete(
+    `/weekly-flow/shared-playlists/${playlistId}`,
+  );
+  return response.data;
+};
+
+export const deleteSharedPlaylistTrack = async (playlistId, jobId) => {
+  const response = await api.delete(
+    `/weekly-flow/shared-playlists/${playlistId}/tracks/${jobId}`,
+  );
   return response.data;
 };
 

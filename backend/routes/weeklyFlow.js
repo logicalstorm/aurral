@@ -332,6 +332,7 @@ router.post("/flows", async (req, res) => {
       tags,
       relatedArtists,
       scheduleDays,
+      scheduleTime,
     } = req.body || {};
     if (!name || !String(name).trim()) {
       return res.status(400).json({ error: "name is required" });
@@ -345,6 +346,7 @@ router.post("/flows", async (req, res) => {
       tags,
       relatedArtists,
       scheduleDays,
+      scheduleTime,
     });
     await playlistManager.ensureSmartPlaylists();
     res.json({ success: true, flow });
@@ -374,6 +376,7 @@ router.put("/flows/:flowId", async (req, res) => {
       tags,
       relatedArtists,
       scheduleDays,
+      scheduleTime,
     } = req.body || {};
     const updated = flowPlaylistConfig.updateFlow(flowId, {
       name,
@@ -384,6 +387,7 @@ router.put("/flows/:flowId", async (req, res) => {
       tags,
       relatedArtists,
       scheduleDays,
+      scheduleTime,
     });
     if (!updated) {
       return res.status(404).json({ error: "Flow not found" });
@@ -662,6 +666,101 @@ router.post("/shared-playlists/import", async (req, res) => {
     }
     res.status(500).json({
       error: "Failed to import shared playlist",
+      message: error.message,
+    });
+  }
+});
+
+router.put("/shared-playlists/:playlistId", async (req, res) => {
+  try {
+    const { playlistId } = req.params;
+    const { name } = req.body || {};
+    const safeName = String(name || "").trim();
+    if (!safeName) {
+      return res.status(400).json({ error: "name is required" });
+    }
+    const playlist = flowPlaylistConfig.updateSharedPlaylist(playlistId, {
+      name: safeName,
+    });
+    if (!playlist) {
+      return res.status(404).json({ error: "Shared playlist not found" });
+    }
+    playlistManager.updateConfig(false);
+    await playlistManager.ensureSmartPlaylists();
+    await playlistManager.scanLibrary();
+    res.json({ success: true, playlist });
+  } catch (error) {
+    if (error?.code === "SHARED_PLAYLIST_NAME_CONFLICT") {
+      return res.status(400).json({
+        error: "Shared playlist name already exists",
+        message: error.message,
+      });
+    }
+    res.status(500).json({
+      error: "Failed to update shared playlist",
+      message: error.message,
+    });
+  }
+});
+
+router.delete("/shared-playlists/:playlistId/tracks/:jobId", async (req, res) => {
+  try {
+    const { playlistId, jobId } = req.params;
+    const playlist = flowPlaylistConfig.getSharedPlaylist(playlistId);
+    if (!playlist) {
+      return res.status(404).json({ error: "Shared playlist not found" });
+    }
+    const job = downloadTracker.getJob(jobId);
+    if (!job || job.playlistType !== playlistId) {
+      return res.status(404).json({ error: "Track not found" });
+    }
+    if (job.status !== "done" || typeof job.finalPath !== "string") {
+      return res.status(400).json({
+        error: "Only completed tracks can be removed",
+      });
+    }
+
+    const playlistRoot = path.resolve(
+      weeklyFlowWorker.weeklyFlowRoot,
+      "aurral-weekly-flow",
+      playlistId,
+    );
+    const safeFinalPath = path.resolve(job.finalPath);
+    if (!isPathInsideRoot(safeFinalPath, playlistRoot)) {
+      return res.status(400).json({
+        error: "Track path is outside the playlist library",
+      });
+    }
+
+    await fsp.rm(safeFinalPath, { force: true });
+    downloadTracker.removeJob(jobId);
+
+    const nextTracks = Array.isArray(playlist.tracks) ? [...playlist.tracks] : [];
+    const trackIndex = nextTracks.findIndex((track) => {
+      if (!track || typeof track !== "object" || Array.isArray(track)) return false;
+      return (
+        String(track.artistName || "") === String(job.artistName || "") &&
+        String(track.trackName || "") === String(job.trackName || "") &&
+        String(track.albumName || "") === String(job.albumName || "") &&
+        String(track.reason || "") === String(job.reason || "") &&
+        String(track.artistMbid || "") === String(job.artistMbid || "")
+      );
+    });
+    if (trackIndex >= 0) {
+      nextTracks.splice(trackIndex, 1);
+    }
+    const updatedPlaylist = flowPlaylistConfig.updateSharedPlaylist(playlistId, {
+      tracks: nextTracks,
+    });
+
+    res.json({
+      success: true,
+      playlist: updatedPlaylist || playlist,
+      removedJobId: jobId,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to remove shared playlist track",
       message: error.message,
     });
   }
