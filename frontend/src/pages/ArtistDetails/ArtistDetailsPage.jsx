@@ -83,6 +83,8 @@ function ArtistDetailsPage() {
     playingPreviewId,
     previewProgress,
     previewSnappingBack,
+    previewVolume,
+    setPreviewVolume,
     previewAudioRef,
     handlePreviewPlay,
     setPreviewTracks,
@@ -255,6 +257,8 @@ function ArtistDetailsPage() {
         playingPreviewId={playingPreviewId}
         previewProgress={previewProgress}
         previewSnappingBack={previewSnappingBack}
+        previewVolume={previewVolume}
+        setPreviewVolume={setPreviewVolume}
         handlePreviewPlay={handlePreviewPlay}
         onEditIds={handleOpenEditIds}
       />
@@ -303,6 +307,8 @@ function ArtistDetailsPage() {
           requestingAlbum={library.requestingAlbum}
           reSearchingAlbum={library.reSearchingAlbum}
           handleReSearchAlbum={library.handleReSearchAlbum}
+          previewVolume={previewVolume}
+          setPreviewVolume={setPreviewVolume}
           isReleaseGroupDownloadedInLibrary={
             library.isReleaseGroupDownloadedInLibrary
           }
