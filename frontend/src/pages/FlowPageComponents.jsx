@@ -892,7 +892,9 @@ export function FlowCard({
   }
   const metaItems = [];
   if (enabled && nextRun && state !== "running" && !isGeneratingThisFlow) {
-    metaItems.push(`Next update in ${nextRun}`);
+    metaItems.push(
+      nextRun === "soon" ? "Next update soon" : `Next update in ${nextRun}`,
+    );
   }
   const typeLabel = enabled ? "Flow" : "Flow Draft";
   const statusSummary = enabled
