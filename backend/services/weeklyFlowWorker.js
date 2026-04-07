@@ -193,7 +193,6 @@ export class WeeklyFlowWorker {
     const { retryCycleMinutes } = this.getWorkerSettings();
     return Math.max(1000, retryCycleMinutes * 60 * 1000);
   }
-
   _normalizeSeedDownloads(value) {
     return value === false ? false : DEFAULT_SEED_DOWNLOADS;
   }
