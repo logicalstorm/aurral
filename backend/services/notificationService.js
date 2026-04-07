@@ -30,13 +30,22 @@ function buildHeaders(headers) {
   return result;
 }
 
-function interpolateBody(str, flowPath, flowName) {
-  return str
-    .replace(/\$flowPath/g, flowPath ?? "")
-    .replace(/\$flowName/g, flowName ?? "");
+function escapeJsonString(value) {
+  return JSON.stringify(String(value ?? "")).slice(1, -1);
 }
 
-async function sendWebhooks({ webhooks, webhookEvents = {} }, event, flowPath = "", flowName = "") {
+function interpolateBody(str, flowPath, flowName) {
+  return str
+    .replace(/\$flowPath/g, escapeJsonString(flowPath))
+    .replace(/\$flowName/g, escapeJsonString(flowName));
+}
+
+async function sendWebhooks(
+  { webhooks, webhookEvents = {} },
+  event,
+  flowPath = "",
+  flowName = "",
+) {
   if (!webhookEvents[event]) return;
   if (!Array.isArray(webhooks) || webhooks.length === 0) return;
 
@@ -44,7 +53,9 @@ async function sendWebhooks({ webhooks, webhookEvents = {} }, event, flowPath = 
     const url = (webhook.url || "").trim();
     if (!url) continue;
     if (!/^https?:\/\//i.test(url)) {
-      console.warn(`[NotificationService] Skipping webhook with non-http(s) URL: ${url}`);
+      console.warn(
+        `[NotificationService] Skipping webhook with non-http(s) URL: ${url}`,
+      );
       continue;
     }
     const rawBody = (webhook.body || "").trim();
@@ -56,17 +67,28 @@ async function sendWebhooks({ webhooks, webhookEvents = {} }, event, flowPath = 
         try {
           parsed = JSON.parse(interpolated);
         } catch {
-          console.warn(`[NotificationService] Webhook body is not valid JSON, sending as raw string: ${url}`);
+          console.warn(
+            `[NotificationService] Webhook body is not valid JSON, sending as raw string: ${url}`,
+          );
           parsed = interpolated;
         }
-        const headers = { ...buildHeaders(webhook.headers), "Content-Type": "application/json" };
+        const headers = {
+          ...buildHeaders(webhook.headers),
+          "Content-Type": "application/json",
+        };
         await axios.post(url, parsed, { timeout: 30000, headers });
       } else {
         console.log(`[NotificationService] Webhook GET ${url}`);
-        await axios.get(url, { timeout: 30000, headers: buildHeaders(webhook.headers) });
+        await axios.get(url, {
+          timeout: 30000,
+          headers: buildHeaders(webhook.headers),
+        });
       }
     } catch (err) {
-      console.warn(`[NotificationService] Webhook send failed (${url}):`, err.message);
+      console.warn(
+        `[NotificationService] Webhook send failed (${url}):`,
+        err.message,
+      );
     }
   }
 }
@@ -100,14 +122,24 @@ export async function notifyDiscoveryUpdated() {
       ? sendGotify(
           "Aurral – Discover",
           "Daily Discover recommendations have been updated.",
-          5
+          5,
         )
       : Promise.resolve(),
-    sendWebhooks(settings.integrations, "notifyDiscoveryUpdated", "", "Aurral – Discover"),
+    sendWebhooks(
+      settings.integrations,
+      "notifyDiscoveryUpdated",
+      "",
+      "Aurral – Discover",
+    ),
   ]);
 }
 
-export async function notifyWeeklyFlowDone(playlistType, stats = {}, flowPath = "", flowName = "") {
+export async function notifyWeeklyFlowDone(
+  playlistType,
+  stats = {},
+  flowPath = "",
+  flowName = "",
+) {
   const settings = dbOps.getSettings();
   const gotify = settings.integrations?.gotify || {};
   const completed = stats.completed ?? 0;
@@ -120,6 +152,11 @@ export async function notifyWeeklyFlowDone(playlistType, stats = {}, flowPath = 
           5,
         )
       : Promise.resolve(),
-    sendWebhooks(settings.integrations, "notifyWeeklyFlowDone", flowPath, flowName),
+    sendWebhooks(
+      settings.integrations,
+      "notifyWeeklyFlowDone",
+      flowPath,
+      flowName,
+    ),
   ]);
 }
