@@ -28,6 +28,13 @@ const AUDIO_CONTENT_TYPES = {
   ".wav": "audio/wav",
 };
 
+const isPathInsideRoot = (candidatePath, rootPath) => {
+  const relative = path.relative(rootPath, candidatePath);
+  return (
+    relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
+  );
+};
+
 const normalizeImportedTrackList = (value) => {
   if (!Array.isArray(value)) return [];
   return value
@@ -492,6 +499,112 @@ router.put("/flows/:flowId/enabled", async (req, res) => {
   }
 });
 
+router.post("/flows/:flowId/static-playlist", async (req, res) => {
+  let playlist = null;
+  try {
+    const { flowId } = req.params;
+    const flow = flowPlaylistConfig.getFlow(flowId);
+    if (!flow) {
+      return res.status(404).json({ error: "Flow not found" });
+    }
+
+    const requestedName = String(req.body?.name || "").trim();
+    const flowJobs = downloadTracker.getByPlaylistType(flowId);
+    const completedJobs = flowJobs.filter(
+      (job) => job?.status === "done" && typeof job?.finalPath === "string",
+    );
+    if (completedJobs.length === 0) {
+      return res.status(400).json({
+        error: "No completed tracks available",
+        message: "Generate at least one completed flow track before saving it",
+      });
+    }
+
+    const sourceRoot = path.resolve(
+      weeklyFlowWorker.weeklyFlowRoot,
+      "aurral-weekly-flow",
+      flowId,
+    );
+    const tracks = completedJobs.map((job) => ({
+      artistName: job.artistName,
+      trackName: job.trackName,
+      albumName: job.albumName || null,
+      artistMbid: job.artistMbid || null,
+      reason: job.reason || null,
+    }));
+    playlist = flowPlaylistConfig.createSharedPlaylist({
+      name: requestedName || `${flow.name} Static`,
+      sourceName: flow.name,
+      sourceFlowId: flowId,
+      tracks,
+    });
+
+    const targetRoot = path.resolve(
+      weeklyFlowWorker.weeklyFlowRoot,
+      "aurral-weekly-flow",
+      playlist.id,
+    );
+    for (const job of completedJobs) {
+      const safeSourcePath = path.resolve(job.finalPath);
+      if (!isPathInsideRoot(safeSourcePath, sourceRoot)) {
+        throw new Error(
+          `Track path is outside the flow library: ${job.finalPath}`,
+        );
+      }
+      const stat = await fsp.stat(safeSourcePath);
+      if (!stat.isFile()) {
+        throw new Error(`Track file is missing: ${job.finalPath}`);
+      }
+      const relativePath = path.relative(sourceRoot, safeSourcePath);
+      const targetPath = path.join(targetRoot, relativePath);
+      await fsp.mkdir(path.dirname(targetPath), { recursive: true });
+      await fsp.copyFile(safeSourcePath, targetPath);
+
+      const jobId = downloadTracker.addJob(
+        {
+          artistName: job.artistName,
+          trackName: job.trackName,
+          albumName: job.albumName || null,
+          artistMbid: job.artistMbid || null,
+          reason: job.reason || null,
+        },
+        playlist.id,
+      );
+      if (jobId) {
+        downloadTracker.setDone(jobId, targetPath, job.albumName || null);
+      }
+    }
+
+    playlistManager.updateConfig(false);
+    await playlistManager.ensureSmartPlaylists();
+    await playlistManager.scanLibrary();
+
+    res.json({
+      success: true,
+      playlist,
+      trackCount: completedJobs.length,
+    });
+  } catch (error) {
+    if (playlist?.id) {
+      try {
+        await playlistManager.weeklyReset([playlist.id]);
+        flowPlaylistConfig.deleteSharedPlaylist(playlist.id);
+        await playlistManager.ensureSmartPlaylists();
+      } catch {}
+    }
+    if (error?.code === "SHARED_PLAYLIST_NAME_CONFLICT") {
+      return res.status(400).json({
+        error: "Shared playlist name already exists",
+        message: error.message,
+      });
+    }
+    res.status(500).json({
+      error: "Failed to create static playlist",
+      message: error.message,
+    });
+  }
+});
+
 router.post("/shared-playlists/import", async (req, res) => {
   try {
     const {
@@ -648,8 +761,7 @@ router.put("/worker/settings", (req, res) => {
       !FLOW_WORKER_RETRY_CYCLE_OPTIONS_MINUTES.includes(parsed)
     ) {
       return res.status(400).json({
-        error:
-          "retryCycleMinutes must be one of: 15, 30, 60, 360, 720, 1440",
+        error: "retryCycleMinutes must be one of: 15, 30, 60, 360, 720, 1440",
       });
     }
   }

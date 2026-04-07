@@ -742,9 +742,12 @@ export function FlowCard({
   isApplying,
   hasChanges,
   canExport,
+  canConvertToStatic,
+  convertingId,
   togglingId,
   deletingId,
   onExport,
+  onConvertToStatic,
   onToggleEditing,
   onToggleEnabled,
   onDelete,
@@ -908,6 +911,18 @@ export function FlowCard({
 
         <div className="flex flex-wrap items-center justify-end gap-3 shrink-0">
           <div className="flex items-center gap-1 rounded-md bg-black/20 p-1">
+            <button
+              onClick={onConvertToStatic}
+              className="btn btn-secondary btn-sm px-2"
+              aria-label={`Convert ${flow.name} to a static playlist`}
+              disabled={!canConvertToStatic || convertingId === flow.id}
+            >
+              {convertingId === flow.id ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <FilePlus2 className="w-4 h-4" />
+              )}
+            </button>
             <button
               onClick={onExport}
               className="btn btn-secondary btn-sm px-2"
