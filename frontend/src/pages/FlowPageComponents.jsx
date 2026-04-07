@@ -223,6 +223,7 @@ export function FlowFormFields({
   draft,
   remaining,
   inputClassName = "input",
+  showNameField = true,
   errorMessage,
   onDraftChange,
   onClearError,
@@ -282,6 +283,7 @@ export function FlowFormFields({
         (a, b) => a - b
       )
     : [];
+  const scheduleTime = String(draft?.scheduleTime || "00:00");
   const schedulePhrase =
     scheduleDays.length === 7
       ? "Update daily"
@@ -294,8 +296,10 @@ export function FlowFormFields({
           : scheduleDays.length >= 3 && scheduleDays.length <= 6
             ? `Update ${SCHEDULE_COUNT_LABELS[scheduleDays.length]} a week`
             : "Update weekly";
+  const scheduleTimePhrase = `at ${scheduleTime}`;
   const clauses = [
     schedulePhrase,
+    scheduleTimePhrase,
     mixPhrase,
     tagPhrase,
     relatedPhrase,
@@ -332,8 +336,8 @@ export function FlowFormFields({
   return (
     <div className="grid gap-6">
       <div className="grid gap-4 rounded-lg border border-white/10 bg-white/5 p-4">
-        <div className="flex gap-4">
-          <div className="flex-1 grid gap-1.5">
+        {showNameField ? (
+          <div className="grid gap-1.5">
             <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
               Playlist Name
             </label>
@@ -347,7 +351,9 @@ export function FlowFormFields({
               }}
             />
           </div>
-          <div className="w-24 grid gap-1.5">
+        ) : null}
+        <div className="flex flex-wrap items-start gap-6">
+          <div className="grid gap-1.5 w-24 shrink-0">
             <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
               Tracks
             </label>
@@ -363,55 +369,71 @@ export function FlowFormFields({
               }}
             />
           </div>
-        </div>
-        <div className="grid gap-1.5">
-          <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
-            Update Days
-          </label>
-          <div className="flex flex-wrap items-center gap-2">
-            {WEEKDAY_OPTIONS.map((day) => {
-              const checked = scheduleDays.includes(day.id);
-              return (
-                <label
-                  key={day.id}
-                  className={`inline-flex items-center rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors ${
-                    checked
-                      ? "bg-[#718062] text-[#f4f1eb]"
-                      : "bg-[#15161a] text-[#a7aab5] hover:bg-[#202229] hover:text-[#dde1ea]"
-                  }`}
-                  title={day.full}
-                >
-                  <input
-                    type="checkbox"
-                    className="sr-only"
-                    checked={checked}
-                    disabled={checked && scheduleDays.length === 1}
-                    onChange={() =>
-                      updateDraft((prev) => {
-                        const current = Array.isArray(prev?.scheduleDays)
-                          ? prev.scheduleDays
-                          : [];
-                        const normalized = [...new Set(current
-                          .map((entry) => Number(entry))
-                          .filter((entry) => Number.isFinite(entry) && entry >= 0 && entry <= 6))];
-                        if (checked && normalized.length === 1) {
-                          return prev;
-                        }
-                        const next = checked
-                          ? normalized.filter((entry) => entry !== day.id)
-                          : [...normalized, day.id];
-                        return {
-                          ...prev,
-                          scheduleDays: next.sort((a, b) => a - b),
-                        };
-                      })
-                    }
-                  />
-                  <span>{day.short}</span>
-                </label>
-              );
-            })}
+          <div className="grid gap-1.5 shrink-0">
+            <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
+              Update Days
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              {WEEKDAY_OPTIONS.map((day) => {
+                const checked = scheduleDays.includes(day.id);
+                return (
+                  <label
+                    key={day.id}
+                    className={`inline-flex items-center justify-center rounded w-10 h-10 text-xs font-semibold transition-colors cursor-pointer ${
+                      checked
+                        ? "bg-[#718062] text-[#f4f1eb]"
+                        : "bg-[#15161a] text-[#a7aab5] hover:bg-[#202229] hover:text-[#dde1ea]"
+                    }`}
+                    title={day.full}
+                  >
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={checked}
+                      disabled={checked && scheduleDays.length === 1}
+                      onChange={() =>
+                        updateDraft((prev) => {
+                          const current = Array.isArray(prev?.scheduleDays)
+                            ? prev.scheduleDays
+                            : [];
+                          const normalized = [...new Set(current
+                            .map((entry) => Number(entry))
+                            .filter((entry) => Number.isFinite(entry) && entry >= 0 && entry <= 6))];
+                          if (checked && normalized.length === 1) {
+                            return prev;
+                          }
+                          const next = checked
+                            ? normalized.filter((entry) => entry !== day.id)
+                            : [...normalized, day.id];
+                          return {
+                            ...prev,
+                            scheduleDays: next.sort((a, b) => a - b),
+                          };
+                        })
+                      }
+                    />
+                    <span>{day.short}</span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
+          <div className="grid gap-1.5 w-32 shrink-0">
+              <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
+              Update Time
+              </label>
+              <input
+              type="time"
+                className={inputClassName}
+              value={scheduleTime}
+              onChange={(event) =>
+                updateDraft((prev) => ({
+                  ...prev,
+                  scheduleTime: event.target.value || "00:00",
+                }))
+              }
+              />
+            </div>
         </div>
       </div>
 
@@ -868,9 +890,25 @@ export function FlowCard({
             )}
           </div>
           <div className="space-y-1">
-            <h3 className="text-base font-medium text-white truncate">
-              {flow.name}
-            </h3>
+            {isEditing ? (
+              <input
+                type="text"
+                className="input h-10 max-w-xl bg-[#1f1f24] text-base font-medium text-white"
+                value={simpleDraft?.name ?? flow.name}
+                onChange={(event) =>
+                  onDraftChange((prev) => ({
+                    ...prev,
+                    name: event.target.value,
+                  }))
+                }
+                onFocus={onClearError}
+                aria-label={`Edit ${flow.name} name`}
+              />
+            ) : (
+              <h3 className="text-base font-medium text-white truncate">
+                {flow.name}
+              </h3>
+            )}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#b5b5bc]">
               <span>{statusSummary}</span>
               {metaItems.length > 0 ? (
@@ -915,6 +953,7 @@ export function FlowCard({
               onClick={onConvertToStatic}
               className="btn btn-secondary btn-sm px-2"
               aria-label={`Convert ${flow.name} to a static playlist`}
+              title={`Convert ${flow.name} to a static playlist`}
               disabled={!canConvertToStatic || convertingId === flow.id}
             >
               {convertingId === flow.id ? (
@@ -927,6 +966,7 @@ export function FlowCard({
               onClick={onExport}
               className="btn btn-secondary btn-sm px-2"
               aria-label={`Export ${flow.name}`}
+              title={`Export ${flow.name} tracklist`}
               disabled={!canExport}
             >
               <Download className="w-4 h-4" />
@@ -936,6 +976,7 @@ export function FlowCard({
                 onClick={onDelete}
                 className="btn btn-sm btn-ghost px-2 text-red-500 hover:text-red-600 hover:bg-red-500/10"
                 aria-label="Delete flow"
+                title={`Delete ${flow.name}`}
                 disabled={deletingId === flow.id}
               >
                 <Trash2 className="w-4 h-4" />
@@ -945,6 +986,7 @@ export function FlowCard({
               onClick={onViewTracks}
               className={`btn ${isTracksOpen ? "btn-primary" : "btn-secondary"} btn-sm px-2`}
               aria-label={isTracksOpen ? `Close ${flow.name} tracks` : `View ${flow.name} tracks`}
+              title={isTracksOpen ? `Close ${flow.name} tracks` : `View ${flow.name} tracks`}
               aria-pressed={isTracksOpen}
               disabled={!enabled && !isTracksOpen}
             >
@@ -954,6 +996,7 @@ export function FlowCard({
               onClick={onToggleEditing}
               className={`btn ${isEditing ? "btn-primary" : "btn-secondary"} btn-sm px-2`}
               aria-label={isEditing ? "Close editor" : "Edit flow"}
+              title={isEditing ? `Close ${flow.name} editor` : `Edit ${flow.name}`}
               aria-pressed={isEditing}
             >
               <Pencil className="w-4 h-4" />
@@ -981,6 +1024,7 @@ export function FlowCard({
             <FlowFormFields
               draft={simpleDraft}
               remaining={simpleRemaining}
+              showNameField={false}
               inputClassName="input bg-[#1f1f24]"
               errorMessage={simpleError}
               onDraftChange={onDraftChange}
@@ -1024,6 +1068,10 @@ export function FlowTracksPanel({
   tracks,
   loading,
   error,
+  emptyMessage = "No tracks generated for this flow yet.",
+  editable = false,
+  deletingTrackId = null,
+  onDeleteTrack,
   onNavigateArtist,
 }) {
   const [queue, setQueue] = useState([]);
@@ -1331,7 +1379,7 @@ export function FlowTracksPanel({
         )}
         {!loading && !error && tracks.length === 0 && (
           <div className="p-6 text-[#c1c1c3] text-sm">
-            No tracks generated for this flow yet.
+            {emptyMessage}
           </div>
         )}
         {!loading && !error && tracks.length > 0 && (
@@ -1347,6 +1395,7 @@ export function FlowTracksPanel({
             <tbody>
               {tracks.map((track, index) => {
                 const canPlay = track.status === "done" && !!track.streamUrl;
+                const canDelete = editable && track.status === "done" && !!track.id;
                 const isCurrent = track.id === currentTrackId;
                 const progressWidth = `${Math.round(playbackProgress * 100)}%`;
                 return (
@@ -1392,6 +1441,21 @@ export function FlowTracksPanel({
                         >
                           <ExternalLink className="w-3.5 h-3.5" />
                         </button>
+                        {canDelete ? (
+                          <button
+                            onClick={() => onDeleteTrack?.(track)}
+                            className="btn btn-ghost btn-xs px-2 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                            aria-label={`Remove ${track.trackName} from playlist`}
+                            title={`Remove ${track.trackName} from playlist`}
+                            disabled={deletingTrackId === track.id}
+                          >
+                            {deletingTrackId === track.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -1428,12 +1492,22 @@ export function SharedPlaylistCard({
   playlist,
   stats,
   currentJob,
+  isEditing,
   isTracksOpen,
   tracks,
   tracksLoading,
   tracksError,
+  nameDraft,
+  nameError,
+  isApplying,
+  deletingTrackId,
   deletingId,
+  onToggleEditing,
+  onNameChange,
+  onCancelEdit,
+  onApplyEdit,
   onDelete,
+  onDeleteTrack,
   onViewTracks,
   onNavigateArtist,
 }) {
@@ -1466,9 +1540,24 @@ export function SharedPlaylistCard({
             </span>
           </div>
           <div className="space-y-1">
-            <h3 className="truncate text-base font-medium text-white">
-              {playlist.name}
-            </h3>
+            {isEditing ? (
+              <div className="grid gap-1.5">
+                <input
+                  type="text"
+                  className="input h-10 max-w-xl bg-[#1f1f24] text-base font-medium text-white"
+                  value={nameDraft}
+                  onChange={(event) => onNameChange(event.target.value)}
+                  aria-label={`Edit ${playlist.name} name`}
+                />
+                {nameError ? (
+                  <div className="text-xs text-red-400 font-medium">{nameError}</div>
+                ) : null}
+              </div>
+            ) : (
+              <h3 className="truncate text-base font-medium text-white">
+                {playlist.name}
+              </h3>
+            )}
             {isCurrentJob ? (
               <p className="truncate text-xs text-[#9ed3a1]">
                 Downloading {currentJob.trackName}
@@ -1503,28 +1592,41 @@ export function SharedPlaylistCard({
 
         <div className="flex flex-wrap items-center justify-end gap-3 shrink-0">
           <div className="flex items-center gap-1 rounded-md bg-black/20 p-1">
-          <button
-            type="button"
-            onClick={onViewTracks}
-            className={`btn ${isTracksOpen ? "btn-primary" : "btn-secondary"} btn-sm px-2`}
-            aria-label={isTracksOpen ? `Close ${playlist.name} tracks` : `View ${playlist.name} tracks`}
-            aria-pressed={isTracksOpen}
-          >
-            <ListMusic className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={onDelete}
-            className="btn btn-sm btn-ghost px-2 text-red-500 hover:text-red-600 hover:bg-red-500/10"
-            disabled={deletingId === playlist.id}
-            aria-label={`Delete ${playlist.name}`}
-          >
-            {deletingId === playlist.id ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Trash2 className="w-4 h-4" />
-            )}
-          </button>
+            <button
+              type="button"
+              onClick={onViewTracks}
+              className={`btn ${isTracksOpen ? "btn-primary" : "btn-secondary"} btn-sm px-2`}
+              aria-label={isTracksOpen ? `Close ${playlist.name} tracks` : `View ${playlist.name} tracks`}
+              title={isTracksOpen ? `Close ${playlist.name} tracks` : `View ${playlist.name} tracks`}
+              aria-pressed={isTracksOpen}
+              disabled={isEditing}
+            >
+              <ListMusic className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={onToggleEditing}
+              className={`btn ${isEditing ? "btn-primary" : "btn-secondary"} btn-sm px-2`}
+              aria-label={isEditing ? `Close ${playlist.name} editor` : `Edit ${playlist.name}`}
+              title={isEditing ? `Close ${playlist.name} editor` : `Edit ${playlist.name}`}
+              aria-pressed={isEditing}
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={onDelete}
+              className="btn btn-sm btn-ghost px-2 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+              disabled={deletingId === playlist.id}
+              aria-label={`Delete ${playlist.name}`}
+              title={`Delete ${playlist.name}`}
+            >
+              {deletingId === playlist.id ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
+            </button>
           </div>
         </div>
       </div>
@@ -1536,8 +1638,26 @@ export function SharedPlaylistCard({
             tracks={tracks}
             loading={tracksLoading}
             error={tracksError}
+            emptyMessage="No downloaded tracks in this static playlist yet."
+            editable={isEditing}
+            deletingTrackId={deletingTrackId}
+            onDeleteTrack={onDeleteTrack}
             onNavigateArtist={onNavigateArtist}
           />
+          {isEditing ? (
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+              <button onClick={onCancelEdit} className="btn btn-secondary btn-sm">
+                Cancel
+              </button>
+              <FlipSaveButton
+                disabled={String(nameDraft || "").trim() === String(playlist.name || "").trim()}
+                saving={isApplying}
+                onClick={onApplyEdit}
+                label="Save"
+                savedLabel="Saved"
+              />
+            </div>
+          ) : null}
         </div>
       )}
     </div>

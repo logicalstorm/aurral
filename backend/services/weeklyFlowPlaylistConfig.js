@@ -5,6 +5,7 @@ import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 const LEGACY_TYPES = ["discover", "mix", "trending"];
 const DEFAULT_MIX = { discover: 34, mix: 33, trending: 33 };
 const DEFAULT_SIZE = 30;
+const DEFAULT_SCHEDULE_TIME = "00:00";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const titleCase = (value) =>
@@ -93,19 +94,50 @@ const normalizeScheduleDays = (value) => {
 const getDefaultScheduleDay = (timeMs = Date.now()) =>
   new Date(timeMs).getDay();
 
-const computeNextRunAt = (scheduleDays, fromTimeMs = Date.now()) => {
+const normalizeScheduleTime = (value) => {
+  const text = String(value ?? "").trim();
+  const match = /^(\d{1,2}):(\d{2})$/.exec(text);
+  if (!match) return DEFAULT_SCHEDULE_TIME;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return DEFAULT_SCHEDULE_TIME;
+  }
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+};
+
+const buildScheduledTime = (baseTimeMs, scheduleTime) => {
+  const [hoursText, minutesText] = normalizeScheduleTime(scheduleTime).split(":");
+  const candidate = new Date(baseTimeMs);
+  candidate.setHours(Number(hoursText), Number(minutesText), 0, 0);
+  return candidate.getTime();
+};
+
+const computeNextRunAt = (
+  scheduleDays,
+  scheduleTime = DEFAULT_SCHEDULE_TIME,
+  fromTimeMs = Date.now(),
+) => {
   const normalized = normalizeScheduleDays(scheduleDays);
   if (normalized.length === 0) {
-    return fromTimeMs + 7 * DAY_MS;
+    return buildScheduledTime(fromTimeMs + 7 * DAY_MS, scheduleTime);
   }
-  const currentDay = new Date(fromTimeMs).getDay();
-  for (let offset = 1; offset <= 7; offset += 1) {
-    const candidateDay = (currentDay + offset) % 7;
-    if (normalized.includes(candidateDay)) {
-      return fromTimeMs + offset * DAY_MS;
+  for (let offset = 0; offset <= 7; offset += 1) {
+    const candidateBase = fromTimeMs + offset * DAY_MS;
+    const candidateTime = buildScheduledTime(candidateBase, scheduleTime);
+    const candidateDay = new Date(candidateTime).getDay();
+    if (normalized.includes(candidateDay) && candidateTime > fromTimeMs) {
+      return candidateTime;
     }
   }
-  return fromTimeMs + 7 * DAY_MS;
+  return buildScheduledTime(fromTimeMs + 7 * DAY_MS, scheduleTime);
 };
 
 const distributeCount = (total, values) => {
@@ -270,6 +302,7 @@ const normalizeFlow = (flow) => {
     name: name || "Flow",
     enabled: flow?.enabled === true,
     scheduleDays: normalizeScheduleDays(flow?.scheduleDays),
+    scheduleTime: normalizeScheduleTime(flow?.scheduleTime),
     deepDive: flow?.deepDive === true || blocksData?.deepDive === true,
     nextRunAt:
       flow?.nextRunAt != null && Number.isFinite(Number(flow.nextRunAt))
@@ -385,6 +418,9 @@ const getStoredFlows = () => {
       }
       if (flow?.blocks) needsSave = true;
       if (!Array.isArray(flow?.scheduleDays)) needsSave = true;
+      if (normalizeScheduleTime(flow?.scheduleTime) !== flow?.scheduleTime) {
+        needsSave = true;
+      }
       return normalizeFlow(flow);
     });
     if (idMap.size > 0 || needsSave) {
@@ -518,6 +554,7 @@ export const flowPlaylistConfig = {
     tags,
     relatedArtists,
     scheduleDays,
+    scheduleTime,
   }) {
     const flows = getStoredFlows();
     assertUniqueFlowName(flows, name);
@@ -531,6 +568,7 @@ export const flowPlaylistConfig = {
       tags,
       relatedArtists,
       scheduleDays,
+      scheduleTime,
       enabled: false,
       nextRunAt: null,
     });
@@ -547,6 +585,7 @@ export const flowPlaylistConfig = {
     const nextName = updates?.name ?? current.name;
     assertUniqueFlowName(flows, nextName, flowId);
     const currentSchedule = normalizeScheduleDays(current.scheduleDays);
+    const currentScheduleTime = normalizeScheduleTime(current.scheduleTime);
     const next = normalizeFlow({
       ...current,
       name: nextName,
@@ -556,6 +595,7 @@ export const flowPlaylistConfig = {
       tags: updates?.tags ?? current.tags,
       relatedArtists: updates?.relatedArtists ?? current.relatedArtists,
       scheduleDays: updates?.scheduleDays ?? current.scheduleDays,
+      scheduleTime: updates?.scheduleTime ?? current.scheduleTime,
       deepDive:
         typeof updates?.deepDive === "boolean"
           ? updates.deepDive
@@ -565,15 +605,21 @@ export const flowPlaylistConfig = {
       createdAt: current.createdAt,
     });
     const nextSchedule = normalizeScheduleDays(next.scheduleDays);
+    const nextScheduleTime = normalizeScheduleTime(next.scheduleTime);
     const scheduleChanged =
       currentSchedule.length !== nextSchedule.length ||
-      currentSchedule.some((day, idx) => day !== nextSchedule[idx]);
+      currentSchedule.some((day, idx) => day !== nextSchedule[idx]) ||
+      currentScheduleTime !== nextScheduleTime;
     if (current.enabled && (scheduleChanged || next.nextRunAt == null)) {
       const now = Date.now();
       const effectiveSchedule =
         nextSchedule.length > 0 ? nextSchedule : [getDefaultScheduleDay(now)];
       next.scheduleDays = effectiveSchedule;
-      next.nextRunAt = computeNextRunAt(effectiveSchedule, now);
+      next.nextRunAt = computeNextRunAt(
+        effectiveSchedule,
+        nextScheduleTime,
+        now,
+      );
     }
     flows[index] = next;
     setFlows(flows);
@@ -626,7 +672,8 @@ export const flowPlaylistConfig = {
       normalizedSchedule.length > 0
         ? normalizedSchedule
         : [getDefaultScheduleDay(now)];
-    flow.nextRunAt = computeNextRunAt(flow.scheduleDays, now);
+    flow.scheduleTime = normalizeScheduleTime(flow.scheduleTime);
+    flow.nextRunAt = computeNextRunAt(flow.scheduleDays, flow.scheduleTime, now);
     flows[index] = flow;
     setFlows(flows);
     return flow;
@@ -669,6 +716,27 @@ export const flowPlaylistConfig = {
     playlists.push(playlist);
     setSharedPlaylists(playlists);
     return playlist;
+  },
+
+  updateSharedPlaylist(playlistId, updates) {
+    const playlists = getStoredSharedPlaylists();
+    const index = playlists.findIndex((playlist) => playlist.id === playlistId);
+    if (index === -1) return null;
+    const current = playlists[index];
+    const nextName = updates?.name ?? current.name;
+    assertUniqueSharedPlaylistName(playlists, nextName, playlistId);
+    const next = normalizeSharedPlaylist({
+      ...current,
+      name: nextName,
+      sourceName: updates?.sourceName ?? current.sourceName,
+      sourceFlowId: updates?.sourceFlowId ?? current.sourceFlowId,
+      tracks: Array.isArray(updates?.tracks) ? updates.tracks : current.tracks,
+      importedAt: current.importedAt,
+      createdAt: current.createdAt,
+    });
+    playlists[index] = next;
+    setSharedPlaylists(playlists);
+    return next;
   },
 
   deleteSharedPlaylist(playlistId) {

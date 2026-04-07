@@ -9,7 +9,9 @@ import {
   deleteFlow,
   convertFlowToStaticPlaylist,
   deleteSharedPlaylist,
+  deleteSharedPlaylistTrack,
   importSharedPlaylist,
+  updateSharedPlaylist,
   setFlowEnabled,
   getFlowTrackStreamUrl,
   updateFlowWorkerSettings,
@@ -99,6 +101,7 @@ const NEW_FLOW_TEMPLATE = {
   deepDive: false,
   tags: {},
   relatedArtists: {},
+  scheduleTime: "00:00",
 };
 const FLOW_SHARE_FILE_VERSION = 1;
 const FLOW_SHARE_FILE_TYPE = "aurral-static-tracklist";
@@ -175,6 +178,25 @@ const normalizeScheduleDays = (value) => {
     unique.add(normalized);
   }
   return [...unique].sort((a, b) => a - b);
+};
+
+const normalizeScheduleTime = (value) => {
+  const text = String(value ?? "").trim();
+  const match = /^(\d{1,2}):(\d{2})$/.exec(text);
+  if (!match) return "00:00";
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return "00:00";
+  }
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 };
 
 const normalizeMixPercent = (mix) => {
@@ -409,6 +431,7 @@ const flowToForm = (flow) => {
       normalizeScheduleDays(flow?.scheduleDays).length > 0
         ? normalizeScheduleDays(flow?.scheduleDays)
         : [new Date().getDay()],
+    scheduleTime: normalizeScheduleTime(flow?.scheduleTime),
   };
 };
 
@@ -439,6 +462,7 @@ const buildFlowFromForm = (draft) => {
   if (scheduleDays.length === 0) {
     throw new Error("Select at least one day for this flow schedule");
   }
+  const scheduleTime = normalizeScheduleTime(draft?.scheduleTime);
   const focusCounts = buildCountsFromFocusPercent(
     size,
     tagFocusPercent,
@@ -473,6 +497,7 @@ const buildFlowFromForm = (draft) => {
     relatedArtists,
     deepDive: draft?.deepDive === true,
     scheduleDays,
+    scheduleTime,
   };
 };
 
@@ -492,6 +517,7 @@ const normalizeDraftForCompare = (draft) => {
     relatedStrength: draft?.relatedStrength ?? "medium",
     deepDive: draft?.deepDive === true,
     scheduleDays: normalizeScheduleDays(draft?.scheduleDays),
+    scheduleTime: normalizeScheduleTime(draft?.scheduleTime),
   };
 };
 
@@ -738,7 +764,11 @@ function FlowPage() {
   const [editingId, setEditingId] = useState(null);
   const [simpleDrafts, setSimpleDrafts] = useState({});
   const [simpleErrors, setSimpleErrors] = useState({});
+  const [sharedPlaylistDrafts, setSharedPlaylistDrafts] = useState({});
+  const [sharedPlaylistErrors, setSharedPlaylistErrors] = useState({});
   const [applyingFlowId, setApplyingFlowId] = useState(null);
+  const [applyingSharedPlaylistId, setApplyingSharedPlaylistId] = useState(null);
+  const [deletingSharedTrackId, setDeletingSharedTrackId] = useState(null);
   const [flowStatsById, setFlowStatsById] = useState({});
   const [tracksExpandedId, setTracksExpandedId] = useState(null);
   const [tracksLoadingByFlowId, setTracksLoadingByFlowId] = useState({});
@@ -907,6 +937,19 @@ function FlowPage() {
       return next;
     });
   }, [status?.flows]);
+
+  useEffect(() => {
+    if (!status?.sharedPlaylists?.length) return;
+    setSharedPlaylistDrafts((prev) => {
+      const next = { ...prev };
+      for (const playlist of status.sharedPlaylists) {
+        if (typeof next[playlist.id] !== "string") {
+          next[playlist.id] = playlist.name || "";
+        }
+      }
+      return next;
+    });
+  }, [status?.sharedPlaylists]);
 
   const getPlaylistStats = (flowId) => {
     return sanitizeFlowStats(
@@ -1335,6 +1378,77 @@ function FlowPage() {
     });
   };
 
+  const handleCancelSharedPlaylistEdit = (playlist) => {
+    setSharedPlaylistDrafts((prev) => ({
+      ...prev,
+      [playlist.id]: playlist.name || "",
+    }));
+    setSharedPlaylistErrors((prev) => {
+      const next = { ...prev };
+      delete next[playlist.id];
+      return next;
+    });
+    setEditingId((prev) => (prev === playlist.id ? null : prev));
+  };
+
+  const handleApplySharedPlaylist = async (playlist) => {
+    if (!playlist) return;
+    setApplyingSharedPlaylistId(playlist.id);
+    setSharedPlaylistErrors((prev) => {
+      const next = { ...prev };
+      delete next[playlist.id];
+      return next;
+    });
+    try {
+      const name = String(sharedPlaylistDrafts[playlist.id] ?? playlist.name ?? "").trim();
+      const response = await updateSharedPlaylist(playlist.id, { name });
+      const updatedPlaylist = response?.playlist || { ...playlist, name };
+      setSharedPlaylistDrafts((prev) => ({
+        ...prev,
+        [playlist.id]: updatedPlaylist.name || "",
+      }));
+      setEditingId((prev) => (prev === playlist.id ? null : prev));
+      showSuccess("Static playlist updated");
+      await fetchStatus();
+    } catch (err) {
+      const message =
+        err.response?.data?.message ||
+        err.message ||
+        "Failed to update static playlist";
+      setSharedPlaylistErrors((prev) => ({
+        ...prev,
+        [playlist.id]: message,
+      }));
+      showError(message);
+    } finally {
+      setApplyingSharedPlaylistId(null);
+    }
+  };
+
+  const handleDeleteSharedPlaylistTrack = async (playlist, track) => {
+    if (!playlist?.id || !track?.id || deletingSharedTrackId) return;
+    setDeletingSharedTrackId(track.id);
+    try {
+      await deleteSharedPlaylistTrack(playlist.id, track.id);
+      setTracksByFlowId((prev) => ({
+        ...prev,
+        [playlist.id]: (prev[playlist.id] || []).filter((entry) => entry.id !== track.id),
+      }));
+      await fetchStatus();
+      await fetchFlowTracks(playlist.id, { showSpinner: false });
+      showSuccess(`Removed ${track.trackName} from ${playlist.name}`);
+    } catch (err) {
+      showError(
+        err.response?.data?.message ||
+          err.response?.data?.error ||
+          err.message ||
+          "Failed to remove track from static playlist",
+      );
+    } finally {
+      setDeletingSharedTrackId(null);
+    }
+  };
+
   const handleConvertFlowToStatic = async (flow) => {
     if (!flow || convertingId) return;
     setConvertingId(flow.id);
@@ -1464,6 +1578,9 @@ function FlowPage() {
 
   const handleToggleTracks = async (flowId) => {
     if (!flowId) return;
+    if (editingId === flowId && sharedPlaylists.some((playlist) => playlist.id === flowId)) {
+      return;
+    }
     if (tracksExpandedId === flowId) {
       setTracksExpandedId(null);
       return;
@@ -1486,6 +1603,25 @@ function FlowPage() {
       }
       return next;
     });
+  };
+
+  const handleToggleSharedPlaylistEditing = async (playlistId) => {
+    if (!playlistId) return;
+    const isClosing = editingId === playlistId;
+    setEditingId(isClosing ? null : playlistId);
+    if (isClosing) {
+      if (tracksExpandedId === playlistId) {
+        setTracksExpandedId(null);
+      }
+      return;
+    }
+    setSharedPlaylistErrors((prev) => {
+      const next = { ...prev };
+      delete next[playlistId];
+      return next;
+    });
+    setTracksExpandedId(playlistId);
+    await fetchFlowTracks(playlistId);
   };
 
   const handleNavigateArtist = (track) => {
@@ -1593,13 +1729,28 @@ function FlowPage() {
                 playlist={playlist}
                 stats={getPlaylistStats(playlist.id)}
                 currentJob={status?.worker?.currentJob}
+                isEditing={editingId === playlist.id}
                 isTracksOpen={tracksExpandedId === playlist.id}
                 tracks={tracksByFlowId[playlist.id] || []}
                 tracksLoading={tracksLoadingByFlowId[playlist.id] === true}
                 tracksError={tracksErrorByFlowId[playlist.id] || ""}
+                nameDraft={sharedPlaylistDrafts[playlist.id] ?? playlist.name ?? ""}
+                nameError={sharedPlaylistErrors[playlist.id] || ""}
+                isApplying={applyingSharedPlaylistId === playlist.id}
+                deletingTrackId={deletingSharedTrackId}
                 deletingId={deletingId}
+                onToggleEditing={() => handleToggleSharedPlaylistEditing(playlist.id)}
+                onNameChange={(name) =>
+                  setSharedPlaylistDrafts((prev) => ({
+                    ...prev,
+                    [playlist.id]: name,
+                  }))
+                }
+                onCancelEdit={() => handleCancelSharedPlaylistEdit(playlist)}
+                onApplyEdit={() => handleApplySharedPlaylist(playlist)}
                 onDelete={() => handleDeleteSharedPlaylist(playlist)}
                 onViewTracks={() => handleToggleTracks(playlist.id)}
+                onDeleteTrack={(track) => handleDeleteSharedPlaylistTrack(playlist, track)}
                 onNavigateArtist={handleNavigateArtist}
               />
             ))}
