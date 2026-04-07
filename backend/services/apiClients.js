@@ -56,6 +56,7 @@ const musicbrainzRequestWithRetry = async (
   endpoint,
   params = {},
   retryCount = 0,
+  forceIpv4 = false,
 ) => {
   const cacheKey = `mb:${endpoint}:${JSON.stringify(params)}`;
   const cached = mbCache.get(cacheKey);
@@ -101,14 +102,16 @@ const musicbrainzRequestWithRetry = async (
       {
         headers: { "User-Agent": userAgent },
         timeout: 5000,
+        ...(forceIpv4 ? { family: 4 } : {}),
       },
     );
     mbCache.set(cacheKey, response.data);
     return response.data;
   } catch (error) {
+    const connectionError = isConnectionError(error);
     const shouldRetry =
       retryCount < MAX_RETRIES &&
-      (isConnectionError(error) ||
+      (connectionError ||
         (error.response &&
           [429, 500, 502, 503, 504].includes(error.response.status)));
 
@@ -123,7 +126,12 @@ const musicbrainzRequestWithRetry = async (
         }/${MAX_RETRIES})`,
       );
       await new Promise((resolve) => setTimeout(resolve, delay));
-      return musicbrainzRequestWithRetry(endpoint, params, retryCount + 1);
+      return musicbrainzRequestWithRetry(
+        endpoint,
+        params,
+        retryCount + 1,
+        forceIpv4 || connectionError,
+      );
     }
 
     if (error.response && error.response.status === 404) {
