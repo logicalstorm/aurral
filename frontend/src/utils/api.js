@@ -653,6 +653,14 @@ export const deleteFlow = async (flowId) => {
   return response.data;
 };
 
+export const convertFlowToStaticPlaylist = async (flowId, payload = {}) => {
+  const response = await api.post(
+    `/weekly-flow/flows/${flowId}/static-playlist`,
+    payload,
+  );
+  return response.data;
+};
+
 export const setFlowEnabled = async (flowId, enabled) => {
   const response = await api.put(`/weekly-flow/flows/${flowId}/enabled`, {
     enabled,

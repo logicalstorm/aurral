@@ -7,6 +7,7 @@ import {
   createFlow,
   updateFlow,
   deleteFlow,
+  convertFlowToStaticPlaylist,
   deleteSharedPlaylist,
   importSharedPlaylist,
   setFlowEnabled,
@@ -732,6 +733,7 @@ function FlowPage() {
   const [optimisticEnabled, setOptimisticEnabled] = useState({});
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [convertingId, setConvertingId] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [simpleDrafts, setSimpleDrafts] = useState({});
@@ -1180,8 +1182,6 @@ function FlowPage() {
       preferredFormatStrict,
       retryCycleMinutes,
       seedDownloads,
-      retryCycleMinutes,
-      seedDownloads,
     };
   };
 
@@ -1335,6 +1335,38 @@ function FlowPage() {
     });
   };
 
+  const handleConvertFlowToStatic = async (flow) => {
+    if (!flow || convertingId) return;
+    setConvertingId(flow.id);
+    try {
+      const reservedNames = new Set(
+        (status?.sharedPlaylists || [])
+          .map((playlist) => normalizeNameKey(playlist?.name))
+          .filter(Boolean),
+      );
+      const playlistName = reserveUniqueFlowName(
+        reservedNames,
+        `${flow.name} Static`,
+      );
+      const response = await convertFlowToStaticPlaylist(flow.id, {
+        name: playlistName,
+      });
+      showSuccess(
+        `Saved ${flow.name} as static playlist${response?.playlist?.name ? `: ${response.playlist.name}` : ""}`,
+      );
+      await fetchStatus();
+    } catch (err) {
+      showError(
+        err.response?.data?.message ||
+          err.response?.data?.error ||
+          err.message ||
+          "Failed to create static playlist",
+      );
+    } finally {
+      setConvertingId(null);
+    }
+  };
+
   const handleSaveWorkerSettings = async () => {
     const safeConcurrency = Math.min(
       5,
@@ -1364,13 +1396,12 @@ function FlowPage() {
         preferredFormatStrict: safePreferredFormatStrict,
         retryCycleMinutes: safeRetryCycleMinutes,
         seedDownloads: safeSeedDownloads,
-        retryCycleMinutes: safeRetryCycleMinutes,
-        seedDownloads: safeSeedDownloads,
       });
       setWorkerSettingsBaseline({
         concurrency: safeConcurrency,
         preferredFormat: safePreferredFormat,
         preferredFormatStrict: safePreferredFormatStrict,
+        retryCycleMinutes: safeRetryCycleMinutes,
         seedDownloads: safeSeedDownloads,
       });
       showSuccess("Flow worker settings updated");
@@ -1600,6 +1631,7 @@ function FlowPage() {
           const isApplying = applyingFlowId === flow.id;
           const hasChanges = isFlowDirty(flow, simpleDraft);
           const canExport = Number(stats?.total || 0) > 0;
+          const canConvertToStatic = Number(stats?.done || 0) > 0;
           return (
             <FlowCard
               key={flow.id}
@@ -1622,9 +1654,12 @@ function FlowPage() {
               isApplying={isApplying}
               hasChanges={hasChanges}
               canExport={canExport}
+              canConvertToStatic={canConvertToStatic}
+              convertingId={convertingId}
               togglingId={togglingId}
               deletingId={deletingId}
               onExport={() => handleExportFlow(flow)}
+              onConvertToStatic={() => handleConvertFlowToStatic(flow)}
               onToggleEditing={() => handleToggleEditing(flow.id)}
               onToggleEnabled={(checked) => handleToggleRequest(flow, checked)}
               onDelete={() => handleDelete(flow)}
