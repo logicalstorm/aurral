@@ -24,8 +24,26 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const linkRefs = useRef({});
   const asideRef = useRef(null);
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia("(min-width: 768px)").matches
+      : true
+  );
 
-  const isIcons = mode === "icons";
+  const isIcons = mode === "icons" && isDesktop;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const mediaQuery = window.matchMedia("(min-width: 768px)");
+    const onChange = (event) => setIsDesktop(event.matches);
+    setIsDesktop(mediaQuery.matches);
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener("change", onChange);
+      return () => mediaQuery.removeEventListener("change", onChange);
+    }
+    mediaQuery.addListener(onChange);
+    return () => mediaQuery.removeListener(onChange);
+  }, []);
 
   const isActive = useCallback(
     (path) => {
