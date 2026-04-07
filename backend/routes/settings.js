@@ -75,6 +75,15 @@ router.post("/", async (req, res) => {
               ...integrations.gotify,
             }
           : mergedIntegrations.gotify,
+        webhooks: integrations.webhooks !== undefined
+          ? integrations.webhooks
+          : mergedIntegrations.webhooks,
+        webhookEvents: integrations.webhookEvents
+          ? {
+              ...(mergedIntegrations.webhookEvents || {}),
+              ...integrations.webhookEvents,
+            }
+          : mergedIntegrations.webhookEvents,
       };
     }
 
