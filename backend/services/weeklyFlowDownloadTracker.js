@@ -17,6 +17,7 @@ function rowToJob(row) {
     finalPath: row.final_path,
     error: row.error,
     createdAt: row.created_at,
+    retryCycle: false,
   };
 }
 
@@ -233,6 +234,7 @@ export class WeeklyFlowDownloadTracker {
       finalPath: null,
       error: null,
       createdAt: Date.now(),
+      retryCycle: false,
     };
     this.jobs.set(id, job);
     this._insert(job);
@@ -382,6 +384,7 @@ export class WeeklyFlowDownloadTracker {
     job.startedAt = null;
     job.completedAt = null;
     job.stagingPath = null;
+    job.retryCycle = asRetryCycle;
     job.error =
       typeof error === "string" ? error : (error && error.message) || null;
     this._update(job);
@@ -427,6 +430,7 @@ export class WeeklyFlowDownloadTracker {
     this.pendingRetrySet.delete(id);
     this._removeFromPendingQueues(id);
     job.status = "done";
+    job.retryCycle = false;
     job.completedAt = Date.now();
     job.finalPath = finalPath;
     const safeAlbum = String(albumName || "").trim();
@@ -448,6 +452,7 @@ export class WeeklyFlowDownloadTracker {
     this.pendingRetrySet.delete(id);
     this._removeFromPendingQueues(id);
     job.status = "failed";
+    job.retryCycle = false;
     job.completedAt = Date.now();
     job.error =
       typeof error === "string" ? error : (error && error.message) || null;
@@ -513,11 +518,50 @@ export class WeeklyFlowDownloadTracker {
         this._update(job);
         this._applyStatusDelta(job.playlistType, previousStatus, job.status);
         this.pendingSet.add(job.id);
-        this.pendingRetrySet.delete(job.id);
         this._removeFromPendingQueues(job.id);
-        this.pendingFreshQueue.push(job.id);
+        if (job.retryCycle === true) {
+          this.pendingRetrySet.add(job.id);
+          this.pendingRetryQueue.push(job.id);
+        } else {
+          this.pendingRetrySet.delete(job.id);
+          this.pendingFreshQueue.push(job.id);
+        }
         count++;
       }
+    }
+    return count;
+  }
+
+  hasRetryCycleJobs(playlistType) {
+    for (const job of this.jobs.values()) {
+      if (job.playlistType !== playlistType) continue;
+      if (job.retryCycle !== true) continue;
+      if (job.status === "pending" || job.status === "downloading") {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  failRetryCycleJobs(playlistType, error = "Retry cycle paused") {
+    let count = 0;
+    for (const job of this.jobs.values()) {
+      if (job.playlistType !== playlistType) continue;
+      if (job.retryCycle !== true) continue;
+      if (job.status !== "pending" && job.status !== "downloading") continue;
+      const previousStatus = job.status;
+      this.pendingSet.delete(job.id);
+      this.pendingRetrySet.delete(job.id);
+      this._removeFromPendingQueues(job.id);
+      job.status = "failed";
+      job.retryCycle = false;
+      job.startedAt = null;
+      job.stagingPath = null;
+      job.completedAt = Date.now();
+      job.error = typeof error === "string" ? error : String(error || "");
+      this._update(job);
+      this._applyStatusDelta(job.playlistType, previousStatus, job.status);
+      count += 1;
     }
     return count;
   }

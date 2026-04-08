@@ -146,6 +146,42 @@ router.use(requirePermission("accessFlow"));
 const DEFAULT_LIMIT = 30;
 const QUEUE_LIMIT = 50;
 const flowEnableMutationVersion = new Map();
+
+const restartWorkerIfPending = async () => {
+  const stillPending = downloadTracker.getNextPending();
+  if (stillPending && !weeklyFlowWorker.running) {
+    await weeklyFlowWorker.start();
+  }
+};
+
+const stopWorkerForPlaylistIfDownloading = (playlistType) => {
+  const stats = downloadTracker.getPlaylistTypeStats(playlistType);
+  const shouldStopWorker =
+    weeklyFlowWorker.running && Number(stats?.downloading || 0) > 0;
+  if (shouldStopWorker) {
+    weeklyFlowWorker.stop();
+  }
+  return shouldStopWorker;
+};
+
+const pauseSharedPlaylistRetryCycle = async (playlistId) => {
+  weeklyFlowWorker.setRetryCyclePaused(playlistId, true);
+  weeklyFlowWorker.clearIncompleteRetry(playlistId);
+  const shouldStopWorker =
+    weeklyFlowWorker.running && downloadTracker.hasRetryCycleJobs(playlistId);
+  if (shouldStopWorker) {
+    weeklyFlowWorker.stop();
+  }
+  const cancelledJobs = downloadTracker.failRetryCycleJobs(
+    playlistId,
+    "Retry cycle paused",
+  );
+  if (shouldStopWorker) {
+    await restartWorkerIfPending();
+  }
+  return cancelledJobs;
+};
+
 const queueFlowEnableRefresh = (flowId, mutationVersion) => {
   weeklyFlowOperationQueue
     .enqueue(`enable:${flowId}`, async () => {
@@ -156,13 +192,7 @@ const queueFlowEnableRefresh = (flowId, mutationVersion) => {
         return;
       }
 
-      const flowStats = downloadTracker.getPlaylistTypeStats(flowId);
-      const shouldStopWorker =
-        weeklyFlowWorker.running &&
-        (flowStats.pending > 0 || flowStats.downloading > 0);
-      if (shouldStopWorker) {
-        weeklyFlowWorker.stop();
-      }
+      const shouldStopWorker = stopWorkerForPlaylistIfDownloading(flowId);
       weeklyFlowWorker.clearIncompleteRetry(flowId);
       playlistManager.updateConfig(false);
       await playlistManager.weeklyReset([flowId]);
@@ -173,10 +203,7 @@ const queueFlowEnableRefresh = (flowId, mutationVersion) => {
         !flowPlaylistConfig.isEnabled(flowId)
       ) {
         if (shouldStopWorker) {
-          const stillPending = downloadTracker.getNextPending();
-          if (stillPending && !weeklyFlowWorker.running) {
-            await weeklyFlowWorker.start();
-          }
+          await restartWorkerIfPending();
         }
         return;
       }
@@ -194,10 +221,7 @@ const queueFlowEnableRefresh = (flowId, mutationVersion) => {
 
       if (tracks.length === 0) {
         if (shouldStopWorker) {
-          const stillPending = downloadTracker.getNextPending();
-          if (stillPending && !weeklyFlowWorker.running) {
-            await weeklyFlowWorker.start();
-          }
+          await restartWorkerIfPending();
         }
         return;
       }
@@ -223,13 +247,7 @@ const queueFlowDisableCleanup = (flowId, mutationVersion) => {
         return;
       }
 
-      const flowStats = downloadTracker.getPlaylistTypeStats(flowId);
-      const shouldStopWorker =
-        weeklyFlowWorker.running &&
-        (flowStats.pending > 0 || flowStats.downloading > 0);
-      if (shouldStopWorker) {
-        weeklyFlowWorker.stop();
-      }
+      const shouldStopWorker = stopWorkerForPlaylistIfDownloading(flowId);
       weeklyFlowWorker.clearIncompleteRetry(flowId);
       playlistManager.updateConfig(false);
       await playlistManager.weeklyReset([flowId]);
@@ -239,9 +257,8 @@ const queueFlowDisableCleanup = (flowId, mutationVersion) => {
         return;
       }
 
-      const stillPending = downloadTracker.getNextPending();
-      if (stillPending && !weeklyFlowWorker.running) {
-        await weeklyFlowWorker.start();
+      if (shouldStopWorker) {
+        await restartWorkerIfPending();
       }
     })
     .catch((error) => {
@@ -419,16 +436,15 @@ router.delete("/flows/:flowId", async (req, res) => {
         if (flowEnableMutationVersion.get(flowId) !== mutationVersion) {
           return false;
         }
-        weeklyFlowWorker.stop();
+        const shouldStopWorker = stopWorkerForPlaylistIfDownloading(flowId);
         weeklyFlowWorker.setRetryCyclePaused(flowId, false);
         playlistManager.updateConfig(false);
         await playlistManager.weeklyReset([flowId]);
         downloadTracker.clearByPlaylistType(flowId);
         const didDelete = flowPlaylistConfig.deleteFlow(flowId);
         await playlistManager.ensureSmartPlaylists();
-        const stillPending = downloadTracker.getNextPending();
-        if (stillPending && !weeklyFlowWorker.running) {
-          await weeklyFlowWorker.start();
+        if (shouldStopWorker) {
+          await restartWorkerIfPending();
         }
         flowEnableMutationVersion.delete(flowId);
         return didDelete;
@@ -784,16 +800,16 @@ router.delete("/shared-playlists/:playlistId", async (req, res) => {
       return res.status(404).json({ error: "Shared playlist not found" });
     }
 
-    weeklyFlowWorker.stop();
+    const shouldStopWorker = stopWorkerForPlaylistIfDownloading(playlistId);
     weeklyFlowWorker.clearIncompleteRetry(playlistId);
     weeklyFlowWorker.setRetryCyclePaused(playlistId, false);
     playlistManager.updateConfig(false);
     await playlistManager.weeklyReset([playlistId]);
+    downloadTracker.clearByPlaylistType(playlistId);
     const deleted = flowPlaylistConfig.deleteSharedPlaylist(playlistId);
     await playlistManager.ensureSmartPlaylists();
-    const stillPending = downloadTracker.getNextPending();
-    if (stillPending && !weeklyFlowWorker.running) {
-      await weeklyFlowWorker.start();
+    if (shouldStopWorker) {
+      await restartWorkerIfPending();
     }
 
     if (!deleted) {
@@ -828,34 +844,38 @@ router.get("/jobs", (req, res) => {
   res.json(jobs);
 });
 
-router.put("/playlists/:playlistId/retry-cycle", (req, res) => {
-  const { playlistId } = req.params;
-  const { paused } = req.body || {};
-  if (typeof paused !== "boolean") {
-    return res.status(400).json({
-      error: "paused must be a boolean",
+router.put("/playlists/:playlistId/retry-cycle", async (req, res) => {
+  try {
+    const { playlistId } = req.params;
+    const { paused } = req.body || {};
+    if (typeof paused !== "boolean") {
+      return res.status(400).json({
+        error: "paused must be a boolean",
+      });
+    }
+    const shared = flowPlaylistConfig.getSharedPlaylist(playlistId);
+    if (!shared) {
+      return res.status(404).json({
+        error: "Static playlist not found",
+      });
+    }
+    if (paused) {
+      await pauseSharedPlaylistRetryCycle(playlistId);
+    } else {
+      weeklyFlowWorker.setRetryCyclePaused(playlistId, false);
+      await weeklyFlowWorker.retryIncompletePlaylist(playlistId);
+    }
+    return res.json({
+      success: true,
+      playlistId,
+      paused,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: "Failed to update retry cycle",
+      message: error.message,
     });
   }
-  const shared = flowPlaylistConfig.getSharedPlaylist(playlistId);
-  if (!shared) {
-    return res.status(404).json({
-      error: "Static playlist not found",
-    });
-  }
-  weeklyFlowWorker.setRetryCyclePaused(playlistId, paused);
-  if (!paused) {
-    weeklyFlowWorker.retryIncompletePlaylist(playlistId).catch((error) => {
-      console.warn(
-        `[WeeklyFlow] Failed to resume retry cycle for ${playlistId}:`,
-        error.message,
-      );
-    });
-  }
-  return res.json({
-    success: true,
-    playlistId,
-    paused,
-  });
 });
 
 router.get("/worker/settings", (req, res) => {
