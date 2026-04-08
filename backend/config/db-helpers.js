@@ -252,6 +252,15 @@ export const dbOps = {
         ? Math.floor(parsedRetryCycleMinutes)
         : 15;
     const seedDownloads = weeklyFlowWorker?.seedDownloads !== false;
+    const retryPausedPlaylistIds = Array.isArray(
+      weeklyFlowWorker?.retryPausedPlaylistIds,
+    )
+      ? [...new Set(
+          weeklyFlowWorker.retryPausedPlaylistIds
+            .map((entry) => String(entry || "").trim())
+            .filter(Boolean),
+        )]
+      : [];
 
     const defaultFlowPlaylists = {
       discover: { enabled: false, nextRunAt: null },
@@ -285,6 +294,7 @@ export const dbOps = {
         preferredFormatStrict,
         retryCycleMinutes,
         seedDownloads,
+        retryPausedPlaylistIds,
       },
       onboardingComplete: !!onboardingComplete,
     };

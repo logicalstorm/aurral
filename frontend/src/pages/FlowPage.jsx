@@ -15,6 +15,7 @@ import {
   setFlowEnabled,
   getFlowTrackStreamUrl,
   updateFlowWorkerSettings,
+  setPlaylistRetryCyclePaused,
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
 import { useWebSocketChannel } from "../hooks/useWebSocket";
@@ -23,7 +24,6 @@ import {
   FlowEmptyState,
   ConfirmDeleteModal,
   ConfirmDisableModal,
-  ConfirmStopAllModal,
   FlowWorkerSettingsModal,
   FlowImportReviewModal,
   SharedPlaylistCard,
@@ -743,7 +743,6 @@ function FlowPage() {
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [confirmDisable, setConfirmDisable] = useState(null);
-  const [confirmStopAll, setConfirmStopAll] = useState(false);
   const [isWorkerSettingsOpen, setIsWorkerSettingsOpen] = useState(false);
   const [workerSettingsDraft, setWorkerSettingsDraft] = useState(
     DEFAULT_WORKER_SETTINGS,
@@ -765,12 +764,12 @@ function FlowPage() {
   const [applyingFlowId, setApplyingFlowId] = useState(null);
   const [applyingSharedPlaylistId, setApplyingSharedPlaylistId] = useState(null);
   const [deletingSharedTrackId, setDeletingSharedTrackId] = useState(null);
+  const [retryActionPlaylistId, setRetryActionPlaylistId] = useState(null);
   const [flowStatsById, setFlowStatsById] = useState({});
   const [tracksExpandedId, setTracksExpandedId] = useState(null);
   const [tracksLoadingByFlowId, setTracksLoadingByFlowId] = useState({});
   const [tracksErrorByFlowId, setTracksErrorByFlowId] = useState({});
   const [tracksByFlowId, setTracksByFlowId] = useState({});
-  const [bulkActionRunning, setBulkActionRunning] = useState(false);
   const [countdownNow, setCountdownNow] = useState(() => Date.now());
   const [importReview, setImportReview] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -1111,11 +1110,6 @@ function FlowPage() {
       enabled: optimisticValue,
     };
   });
-  const disabledFlowCount = effectiveFlowList.filter(
-    (flow) => flow.enabled !== true,
-  ).length;
-  const enabledFlowCount = effectiveFlowList.length - disabledFlowCount;
-
   const handleConfirmDisable = async () => {
     if (!confirmDisable) return;
     const flow = flowList.find((entry) => entry.id === confirmDisable.flowId);
@@ -1124,81 +1118,6 @@ function FlowPage() {
       await handleToggleEnabled(flow, false);
     }
     setConfirmDisable(null);
-  };
-
-  const handleSetAllEnabled = async (targetEnabled) => {
-    if (bulkActionRunning) return;
-    const targetFlows = flowList.filter((flow) => {
-      const optimisticValue = optimisticEnabled[flow.id];
-      const isEnabled =
-        typeof optimisticValue === "boolean"
-          ? optimisticValue
-          : flow.enabled === true;
-      return targetEnabled ? !isEnabled : isEnabled;
-    });
-    if (targetFlows.length === 0) return;
-
-    setBulkActionRunning(true);
-    setOptimisticEnabled((prev) => {
-      const next = { ...prev };
-      for (const flow of targetFlows) {
-        next[flow.id] = targetEnabled;
-      }
-      return next;
-    });
-
-    let successCount = 0;
-    const failed = [];
-    for (const flow of targetFlows) {
-      try {
-        await setFlowEnabled(flow.id, targetEnabled);
-        successCount += 1;
-      } catch (err) {
-        failed.push({
-          name: flow.name || "Flow",
-          message:
-            err.response?.data?.message ||
-            err.message ||
-            `Failed to ${targetEnabled ? "start" : "stop"} flow`,
-        });
-      }
-    }
-
-    if (successCount > 0) {
-      showSuccess(
-        successCount === targetFlows.length
-          ? `${targetEnabled ? "Started" : "Stopped"} ${successCount} flows`
-          : `${targetEnabled ? "Started" : "Stopped"} ${successCount} flows with ${failed.length} failures`,
-      );
-    }
-    if (failed.length > 0) {
-      const first = failed[0];
-      showError(
-        failed.length === 1
-          ? `${first.name}: ${first.message}`
-          : `Failed to ${targetEnabled ? "start" : "stop"} ${failed.length} flows. First issue: ${first.name} - ${first.message}`,
-      );
-    }
-
-    await fetchStatus();
-    setOptimisticEnabled((prev) => {
-      const next = { ...prev };
-      for (const flow of targetFlows) {
-        delete next[flow.id];
-      }
-      return next;
-    });
-    setBulkActionRunning(false);
-  };
-
-  const handleStopAllRequest = () => {
-    if (bulkActionRunning || enabledFlowCount === 0) return;
-    setConfirmStopAll(true);
-  };
-
-  const handleConfirmStopAll = async () => {
-    setConfirmStopAll(false);
-    await handleSetAllEnabled(false);
   };
 
   const getCurrentWorkerSettings = () => {
@@ -1445,6 +1364,24 @@ function FlowPage() {
     }
   };
 
+  const handleSetRetryCyclePaused = async (playlistId, paused) => {
+    if (!playlistId || retryActionPlaylistId) return;
+    setRetryActionPlaylistId(playlistId);
+    try {
+      await setPlaylistRetryCyclePaused(playlistId, paused);
+      showSuccess(paused ? "Retry cycle paused" : "Retry cycle resumed");
+      await fetchStatus();
+    } catch (err) {
+      showError(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to update retry cycle state",
+      );
+    } finally {
+      setRetryActionPlaylistId(null);
+    }
+  };
+
   const handleConvertFlowToStatic = async (flow) => {
     if (!flow || convertingId) return;
     setConvertingId(flow.id);
@@ -1538,6 +1475,7 @@ function FlowPage() {
     }
     return "Flow selection";
   };
+  const retryCyclePausedByPlaylist = status?.retryCyclePausedByPlaylist || {};
 
   const fetchFlowTracks = async (flowId, { showSpinner = true } = {}) => {
     if (!flowId) return;
@@ -1666,36 +1604,6 @@ function FlowPage() {
           </button>
           <button
             type="button"
-            onClick={() => handleSetAllEnabled(true)}
-            className="btn btn-secondary btn-sm"
-            disabled={bulkActionRunning || disabledFlowCount === 0}
-          >
-            {bulkActionRunning ? (
-              <span className="inline-flex items-center gap-1.5">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Working...
-              </span>
-            ) : (
-              "Start All"
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={handleStopAllRequest}
-            className="btn btn-secondary btn-sm"
-            disabled={bulkActionRunning || enabledFlowCount === 0}
-          >
-            {bulkActionRunning ? (
-              <span className="inline-flex items-center gap-1.5">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Working...
-              </span>
-            ) : (
-              "Stop All"
-            )}
-          </button>
-          <button
-            type="button"
             onClick={handleOpenImportPicker}
             className="btn btn-secondary btn-sm gap-2"
           >
@@ -1745,6 +1653,11 @@ function FlowPage() {
                 onViewTracks={() => handleToggleTracks(playlist.id)}
                 onDeleteTrack={(track) => handleDeleteSharedPlaylistTrack(playlist, track)}
                 onNavigateArtist={handleNavigateArtist}
+                retryCyclePaused={retryCyclePausedByPlaylist[playlist.id] === true}
+                retryActionInFlight={retryActionPlaylistId === playlist.id}
+                onSetRetryCyclePaused={(paused) =>
+                  handleSetRetryCyclePaused(playlist.id, paused)
+                }
               />
             ))}
           </div>
@@ -1845,12 +1758,6 @@ function FlowPage() {
         togglingId={togglingId}
         onCancel={() => setConfirmDisable(null)}
         onConfirm={handleConfirmDisable}
-      />
-      <ConfirmStopAllModal
-        confirmStopAll={confirmStopAll}
-        bulkActionRunning={bulkActionRunning}
-        onCancel={() => setConfirmStopAll(false)}
-        onConfirm={handleConfirmStopAll}
       />
       <FlowWorkerSettingsModal
         isOpen={isWorkerSettingsOpen}
