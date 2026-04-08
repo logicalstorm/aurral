@@ -233,7 +233,6 @@ export function FlowFormFields({
   draft,
   remaining,
   inputClassName = "input",
-  showNameField = true,
   errorMessage,
   onDraftChange,
   onClearError,
@@ -349,22 +348,6 @@ export function FlowFormFields({
   return (
     <div className="grid gap-6">
       <div className="grid gap-4 rounded-lg border border-white/10 bg-white/5 p-4">
-        {showNameField ? (
-          <div className="grid gap-1.5">
-            <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
-              Playlist Name
-            </label>
-            <input
-              type="text"
-              className={inputClassName}
-              value={draft.name}
-              onChange={(event) => {
-                const value = event.target.value;
-                updateDraft((prev) => ({ ...prev, name: value }));
-              }}
-            />
-          </div>
-        ) : null}
         <div className="flex flex-wrap items-start gap-6">
           <div className="grid gap-1.5 w-24 shrink-0">
             <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
@@ -943,9 +926,25 @@ export function FlowCard({
             )}
           </div>
           <div className="space-y-1">
-            <h3 className="text-base font-medium text-white truncate">
-              {flow.name}
-            </h3>
+            {isEditing ? (
+              <input
+                type="text"
+                className="input input-sm h-9 w-full max-w-md bg-[#1c1b22] text-base font-medium text-white"
+                value={simpleDraft?.name ?? ""}
+                onChange={(event) =>
+                  onDraftChange((prev) => ({
+                    ...prev,
+                    name: event.target.value,
+                  }))
+                }
+                onInput={onClearError}
+                aria-label={`Edit ${flow.name} name`}
+              />
+            ) : (
+              <h3 className="text-base font-medium text-white truncate">
+                {flow.name}
+              </h3>
+            )}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#b5b5bc]">
               <span>{statusSummary}</span>
               {metaItems.length > 0 ? (
@@ -1059,7 +1058,6 @@ export function FlowCard({
             <FlowFormFields
               draft={simpleDraft}
               remaining={simpleRemaining}
-              showNameField={true}
               inputClassName="input bg-[#1f1f24]"
               errorMessage={simpleError}
               onDraftChange={onDraftChange}
@@ -1575,9 +1573,19 @@ export function SharedPlaylistCard({
             </span>
           </div>
           <div className="space-y-1">
-            <h3 className="truncate text-base font-medium text-white">
-              {playlist.name}
-            </h3>
+            {isEditing ? (
+              <input
+                type="text"
+                className="input input-sm h-9 w-full max-w-md bg-[#1c1b22] text-base font-medium text-white"
+                value={nameDraft ?? ""}
+                onChange={(event) => onNameChange(event.target.value)}
+                aria-label={`Edit ${playlist.name} name`}
+              />
+            ) : (
+              <h3 className="truncate text-base font-medium text-white">
+                {playlist.name}
+              </h3>
+            )}
             {isCurrentJob ? (
               <p className="truncate text-xs text-[#9ed3a1]">
                 Downloading {currentJob.trackName}
@@ -1653,21 +1661,19 @@ export function SharedPlaylistCard({
         <div className="px-4 pb-4">
           <div className="card-separator mb-4" />
           <div className="grid gap-4 rounded-lg border border-white/10 bg-white/5 p-4">
-            <div className="grid gap-1.5">
-              <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
-                Playlist Name
-              </label>
-              <input
-                type="text"
-                className="input bg-[#1f1f24]"
-                value={nameDraft}
-                onChange={(event) => onNameChange(event.target.value)}
-                aria-label={`Edit ${playlist.name} name`}
-              />
-              {nameError ? (
-                <div className="text-xs text-red-400 font-medium">{nameError}</div>
-              ) : null}
-            </div>
+            <FlowTracksPanel
+              tracks={tracks}
+              loading={tracksLoading}
+              error={tracksError}
+              emptyMessage="No downloaded tracks in this static playlist yet."
+              editable={true}
+              deletingTrackId={deletingTrackId}
+              onDeleteTrack={onDeleteTrack}
+              onNavigateArtist={onNavigateArtist}
+            />
+            {nameError ? (
+              <div className="text-xs text-red-400 font-medium">{nameError}</div>
+            ) : null}
             <div className="flex flex-wrap items-center justify-end gap-2">
               <button onClick={onCancelEdit} className="btn btn-secondary btn-sm">
                 Cancel
@@ -1680,18 +1686,6 @@ export function SharedPlaylistCard({
                 savedLabel="Saved"
               />
             </div>
-          </div>
-          <div className="mt-4">
-            <FlowTracksPanel
-              tracks={tracks}
-              loading={tracksLoading}
-              error={tracksError}
-              emptyMessage="No downloaded tracks in this static playlist yet."
-              editable={true}
-              deletingTrackId={deletingTrackId}
-              onDeleteTrack={onDeleteTrack}
-              onNavigateArtist={onNavigateArtist}
-            />
           </div>
         </div>
       )}
