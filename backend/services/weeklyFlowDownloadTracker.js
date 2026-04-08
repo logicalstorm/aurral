@@ -532,10 +532,9 @@ export class WeeklyFlowDownloadTracker {
     return count;
   }
 
-  hasRetryCycleJobs(playlistType) {
+  hasActiveJobsForPlaylist(playlistType) {
     for (const job of this.jobs.values()) {
       if (job.playlistType !== playlistType) continue;
-      if (job.retryCycle !== true) continue;
       if (job.status === "pending" || job.status === "downloading") {
         return true;
       }
@@ -543,11 +542,10 @@ export class WeeklyFlowDownloadTracker {
     return false;
   }
 
-  failRetryCycleJobs(playlistType, error = "Retry cycle paused") {
+  failActiveJobsForPlaylist(playlistType, error = "Retry cycle paused") {
     let count = 0;
     for (const job of this.jobs.values()) {
       if (job.playlistType !== playlistType) continue;
-      if (job.retryCycle !== true) continue;
       if (job.status !== "pending" && job.status !== "downloading") continue;
       const previousStatus = job.status;
       this.pendingSet.delete(job.id);

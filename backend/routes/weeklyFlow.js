@@ -167,12 +167,15 @@ const stopWorkerForPlaylistIfDownloading = (playlistType) => {
 const pauseSharedPlaylistRetryCycle = async (playlistId) => {
   weeklyFlowWorker.setRetryCyclePaused(playlistId, true);
   weeklyFlowWorker.clearIncompleteRetry(playlistId);
+  const playlistStats = downloadTracker.getPlaylistTypeStats(playlistId);
   const shouldStopWorker =
-    weeklyFlowWorker.running && downloadTracker.hasRetryCycleJobs(playlistId);
+    weeklyFlowWorker.running &&
+    (Number(playlistStats?.pending || 0) > 0 ||
+      Number(playlistStats?.downloading || 0) > 0);
   if (shouldStopWorker) {
     weeklyFlowWorker.stop();
   }
-  const cancelledJobs = downloadTracker.failRetryCycleJobs(
+  const cancelledJobs = downloadTracker.failActiveJobsForPlaylist(
     playlistId,
     "Retry cycle paused",
   );
