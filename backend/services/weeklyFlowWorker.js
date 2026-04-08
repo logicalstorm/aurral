@@ -62,6 +62,7 @@ export class WeeklyFlowWorker {
     this.backupRefillRounds = new Map();
     this.currentJob = null;
     this.pausedUntil = 0;
+    this.lastDequeuedPlaylistType = null;
     this.fallbackSweepInFlight = null;
     this.fallbackSweepTimer = null;
     this.lastJobMetrics = null;
@@ -96,6 +97,67 @@ export class WeeklyFlowWorker {
       clearTimeout(timer);
       this.incompleteRetryTimers.delete(playlistType);
     }
+  }
+
+  _normalizeRetryPausedPlaylistIds(value) {
+    if (!Array.isArray(value)) return [];
+    const out = new Set();
+    for (const entry of value) {
+      const id = String(entry || "").trim();
+      if (!id) continue;
+      out.add(id);
+    }
+    return [...out];
+  }
+
+  _getRetryPausedPlaylistIds() {
+    const settings = dbOps.getSettings();
+    const raw = settings?.weeklyFlowWorker || {};
+    return this._normalizeRetryPausedPlaylistIds(raw.retryPausedPlaylistIds);
+  }
+
+  _isRetryCyclePaused(playlistType) {
+    if (!playlistType) return false;
+    const paused = this._getRetryPausedPlaylistIds();
+    return paused.includes(String(playlistType));
+  }
+
+  setRetryCyclePaused(playlistType, paused) {
+    const id = String(playlistType || "").trim();
+    if (!id) return false;
+    const current = dbOps.getSettings();
+    const worker = current?.weeklyFlowWorker || {};
+    const pausedIds = new Set(
+      this._normalizeRetryPausedPlaylistIds(worker.retryPausedPlaylistIds),
+    );
+    if (paused) {
+      pausedIds.add(id);
+      this.clearIncompleteRetry(id);
+    } else {
+      pausedIds.delete(id);
+    }
+    dbOps.updateSettings({
+      ...current,
+      weeklyFlowWorker: {
+        ...worker,
+        retryPausedPlaylistIds: [...pausedIds],
+      },
+    });
+    if (!paused && this.running) {
+      this.wake();
+    }
+    return true;
+  }
+
+  getRetryCyclePausedMap(playlistIds = []) {
+    const paused = new Set(this._getRetryPausedPlaylistIds());
+    const out = {};
+    for (const id of Array.isArray(playlistIds) ? playlistIds : []) {
+      const key = String(id || "").trim();
+      if (!key) continue;
+      out[key] = paused.has(key);
+    }
+    return out;
   }
 
   _isAuthFailure(message) {
@@ -221,6 +283,9 @@ export class WeeklyFlowWorker {
         raw.retryCycleMinutes,
       ),
       seedDownloads: this._normalizeSeedDownloads(raw.seedDownloads),
+      retryPausedPlaylistIds: this._normalizeRetryPausedPlaylistIds(
+        raw.retryPausedPlaylistIds,
+      ),
     };
   }
 
@@ -250,6 +315,9 @@ export class WeeklyFlowWorker {
         nextSettings.seedDownloads === undefined
           ? base.seedDownloads
           : this._normalizeSeedDownloads(nextSettings.seedDownloads),
+      retryPausedPlaylistIds: this._normalizeRetryPausedPlaylistIds(
+        base.retryPausedPlaylistIds,
+      ),
     };
     dbOps.updateSettings({
       ...current,
@@ -311,6 +379,7 @@ export class WeeklyFlowWorker {
   }
 
   _requeueFailedJobs(playlistType, reason = null) {
+    if (this._isRetryCyclePaused(playlistType)) return 0;
     const jobs = downloadTracker.getByPlaylistType(playlistType);
     let requeued = 0;
     for (const job of jobs) {
@@ -321,7 +390,11 @@ export class WeeklyFlowWorker {
       const retryReason = [String(reason || "").trim(), priorError]
         .filter(Boolean)
         .join(" • ");
-      if (downloadTracker.setPending(job.id, retryReason || null)) {
+      if (
+        downloadTracker.setPending(job.id, retryReason || null, {
+          asRetryCycle: true,
+        })
+      ) {
         requeued += 1;
       }
     }
@@ -333,6 +406,10 @@ export class WeeklyFlowWorker {
     delayMs = this._getIncompleteRetryDelayMs(),
   ) {
     if (!playlistType) return;
+    if (this._isRetryCyclePaused(playlistType)) {
+      this.clearIncompleteRetry(playlistType);
+      return;
+    }
     if (
       !flowPlaylistConfig.getFlow(playlistType) &&
       !flowPlaylistConfig.getSharedPlaylist(playlistType)
@@ -359,6 +436,10 @@ export class WeeklyFlowWorker {
   }
 
   async retryIncompletePlaylist(playlistType) {
+    if (this._isRetryCyclePaused(playlistType)) {
+      this.clearIncompleteRetry(playlistType);
+      return 0;
+    }
     const flow = flowPlaylistConfig.getFlow(playlistType);
     const sharedPlaylist = flowPlaylistConfig.getSharedPlaylist(playlistType);
     if (!flow && !sharedPlaylist) {
@@ -496,8 +577,11 @@ export class WeeklyFlowWorker {
       }
       const { concurrency } = this.getWorkerSettings();
       while (this.activeCount < concurrency) {
-        const job = downloadTracker.getNextPending();
+        const job = downloadTracker.getNextPending(
+          this.lastDequeuedPlaylistType,
+        );
         if (!job) break;
+        this.lastDequeuedPlaylistType = job.playlistType;
         if (this._hasReachedPlaylistTarget(job.playlistType)) {
           downloadTracker.removeJob(job.id);
           continue;
@@ -539,6 +623,9 @@ export class WeeklyFlowWorker {
               downloadTracker.setPending(
                 job.id,
                 `${message} (retry ${retryAttempt}/${retryLimit} in ${Math.ceil(retryDelayMs / 1000)}s)`,
+                {
+                  asRetryCycle: true,
+                },
               );
               return;
             }
@@ -585,6 +672,7 @@ export class WeeklyFlowWorker {
     this.retryableFailureStreak = 0;
     this.backupRefillRounds.clear();
     this.pausedUntil = 0;
+    this.lastDequeuedPlaylistType = null;
     this.currentJob = null;
     this.sanitizeCache.clear();
     for (const timer of this.incompleteRetryTimers.values()) {
@@ -949,9 +1037,10 @@ export class WeeklyFlowWorker {
       const flow = flowPlaylistConfig.getFlow(playlistType);
       const completed = done;
       const { notifyWeeklyFlowDone } = await import("./notificationService.js");
-      notifyWeeklyFlowDone(playlistType, { completed, failed }, path.join(
-        playlistManager.libraryRoot,
-        playlistType),
+      notifyWeeklyFlowDone(
+        playlistType,
+        { completed, failed },
+        path.join(playlistManager.libraryRoot, playlistType),
         flow ? flow.name : playlistType,
       ).catch((err) =>
         console.warn(

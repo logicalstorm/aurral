@@ -420,6 +420,7 @@ router.delete("/flows/:flowId", async (req, res) => {
           return false;
         }
         weeklyFlowWorker.stop();
+        weeklyFlowWorker.setRetryCyclePaused(flowId, false);
         playlistManager.updateConfig(false);
         await playlistManager.weeklyReset([flowId]);
         downloadTracker.clearByPlaylistType(flowId);
@@ -785,6 +786,7 @@ router.delete("/shared-playlists/:playlistId", async (req, res) => {
 
     weeklyFlowWorker.stop();
     weeklyFlowWorker.clearIncompleteRetry(playlistId);
+    weeklyFlowWorker.setRetryCyclePaused(playlistId, false);
     playlistManager.updateConfig(false);
     await playlistManager.weeklyReset([playlistId]);
     const deleted = flowPlaylistConfig.deleteSharedPlaylist(playlistId);
@@ -824,6 +826,36 @@ router.get("/jobs", (req, res) => {
     ? downloadTracker.getByStatus(status)
     : downloadTracker.getAll();
   res.json(jobs);
+});
+
+router.put("/playlists/:playlistId/retry-cycle", (req, res) => {
+  const { playlistId } = req.params;
+  const { paused } = req.body || {};
+  if (typeof paused !== "boolean") {
+    return res.status(400).json({
+      error: "paused must be a boolean",
+    });
+  }
+  const shared = flowPlaylistConfig.getSharedPlaylist(playlistId);
+  if (!shared) {
+    return res.status(404).json({
+      error: "Static playlist not found",
+    });
+  }
+  weeklyFlowWorker.setRetryCyclePaused(playlistId, paused);
+  if (!paused) {
+    weeklyFlowWorker.retryIncompletePlaylist(playlistId).catch((error) => {
+      console.warn(
+        `[WeeklyFlow] Failed to resume retry cycle for ${playlistId}:`,
+        error.message,
+      );
+    });
+  }
+  return res.json({
+    success: true,
+    playlistId,
+    paused,
+  });
 });
 
 router.get("/worker/settings", (req, res) => {

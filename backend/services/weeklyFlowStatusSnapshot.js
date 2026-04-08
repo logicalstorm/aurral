@@ -114,6 +114,10 @@ export function getWeeklyFlowStatusSnapshot({
   for (const playlistId of sharedPlaylistIds) {
     sharedPlaylistStats[playlistId] = scopedStats[playlistId] || aggregateStats({}, []);
   }
+  const retryCyclePausedByPlaylist = weeklyFlowWorker.getRetryCyclePausedMap([
+    ...flowIds,
+    ...sharedPlaylistIds,
+  ]);
   let jobs;
   if (includeJobs) {
     const sourceJobs = flowId
@@ -134,6 +138,7 @@ export function getWeeklyFlowStatusSnapshot({
     jobs,
     flows,
     sharedPlaylists,
+    retryCyclePausedByPlaylist,
     operationQueue,
     hint: {
       phase,

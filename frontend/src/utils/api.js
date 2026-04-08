@@ -727,4 +727,12 @@ export const updateFlowWorkerSettings = async (settings) => {
   return response.data;
 };
 
+export const setPlaylistRetryCyclePaused = async (playlistId, paused) => {
+  const response = await api.put(
+    `/weekly-flow/playlists/${playlistId}/retry-cycle`,
+    { paused },
+  );
+  return response.data;
+};
+
 export default api;

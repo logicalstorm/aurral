@@ -1543,6 +1543,9 @@ export function SharedPlaylistCard({
   onDeleteTrack,
   onViewTracks,
   onNavigateArtist,
+  retryCyclePaused,
+  retryActionInFlight,
+  onSetRetryCyclePaused,
 }) {
   const pending = Number(stats?.pending || 0);
   const downloading = Number(stats?.downloading || 0);
@@ -1643,6 +1646,22 @@ export function SharedPlaylistCard({
               <span className="hidden sm:inline">Manage</span>
             </button>
             <MoreMenu>
+              <button
+                type="button"
+                onClick={() => onSetRetryCyclePaused?.(!retryCyclePaused)}
+                className="w-full text-left px-3 py-2.5 text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white flex items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={retryActionInFlight}
+              >
+                {retryActionInFlight ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : retryCyclePaused ? (
+                  <Play className="w-4 h-4" />
+                ) : (
+                  <Pause className="w-4 h-4" />
+                )}
+                {retryCyclePaused ? "Resume Retry Cycle" : "Pause Retry Cycle"}
+              </button>
+              <div className="my-1 border-t border-white/10" />
               <button
                 type="button"
                 onClick={onDelete}
