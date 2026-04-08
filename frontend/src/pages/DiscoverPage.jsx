@@ -106,21 +106,20 @@ const formatReleaseStatus = (releaseDate) => {
 };
 
 const ArtistCard = memo(
-  ({ artist, status, isInLibrary, onNavigate }) => {
-    const navigateTo = artist.navigateTo || artist.id;
-    const hasValidMbid =
-      navigateTo && navigateTo !== "null" && navigateTo !== "undefined";
-    const artistTypeLabel = artist.type === "Person" ? "Artist" : artist.type;
-    const artistMetaText = [artistTypeLabel, artist.sourceArtist && `Similar to ${artist.sourceArtist}`]
-      .filter(Boolean)
-      .join(" • ");
-    const handleClick = useCallback(() => {
-      if (hasValidMbid) {
-        onNavigate(`/artist/${navigateTo}`, {
-          state: { artistName: artist.name },
-        });
-      }
-    }, [navigateTo, hasValidMbid, artist.name, onNavigate]);
+    ({ artist, status, isInLibrary, onNavigate }) => {
+      const navigateTo = artist.navigateTo || artist.id;
+      const hasValidMbid =
+        navigateTo && navigateTo !== "null" && navigateTo !== "undefined";
+      const artistMetaText = [artist.sourceArtist && `Similar to ${artist.sourceArtist}`]
+        .filter(Boolean)
+        .join(" • ");
+      const handleClick = useCallback(() => {
+        if (hasValidMbid) {
+          onNavigate(`/artist/${navigateTo}`, {
+            state: { artistName: artist.name },
+          });
+        }
+      }, [navigateTo, hasValidMbid, artist.name, onNavigate]);
 
     return (
       <div className="group relative flex flex-col w-full min-w-0">
@@ -908,7 +907,7 @@ function DiscoverPage() {
         <div key="genreSections" className="space-y-10">
           {genreSections.map((section) => (
             <section key={section.genre}>
-              <div className="flex items-center justify-between mb-6 pb-2">
+              <div className="flex items-center justify-between mb-2 pb-2">
                 <h2
                   className="text-xl font-bold flex items-center"
                   style={{ color: "#fff" }}
@@ -1101,98 +1100,75 @@ function DiscoverPage() {
             "linear-gradient(90deg, rgba(33,31,39,0.5) 50%, transparent 100%), linear-gradient(90deg, rgba(33,31,39,0.2) 0%, transparent 100%)",
         }}
       >
-        <div className="relative p-8 md:p-12">
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-2 -ml-6 font-medium" style={{ color: "#fff" }}>
-              <span>Your Daily Mix</span>
+        <div className="relative p-6 md:p-8 flex flex-col gap-6">
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl md:text-4xl font-bold" style={{ color: "#fff" }}>
+                  Discover
+                </h1>
+                {lastUpdated && (
+                  <span className="flex items-center text-xs font-medium mt-1.5 px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "#8a8a8f" }}>
+                    <Clock className="w-3 h-3 mr-1.5" />
+                    Updated {new Date(lastUpdated).toLocaleDateString()}
+                    {isUpdating && <Loader className="w-3 h-3 ml-2 animate-spin" />}
+                  </span>
+                )}
+              </div>
+              <p className="max-w-xl text-base" style={{ color: "#c1c1c3" }}>
+                Your daily mix, curated from your library.
+              </p>
             </div>
+            
             <button
               type="button"
               onClick={openDiscoverModal}
-              className="flex items-center justify-center h-9 w-9 transition-colors"
-              style={{
-                color: "#c1c1c3",
-              }}
-              aria-label="Customize Discover layout"
+              className="flex items-center gap-2 px-3 py-2 mt-1.5 rounded-md transition-colors hover:bg-white/5 border border-white/10 shrink-0"
+              style={{ color: "#c1c1c3" }}
             >
               <LayoutTemplate className="w-4 h-4" />
+              <span className="text-sm font-medium">Customize</span>
             </button>
           </div>
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-8">
-            <div>
-              <h1
-                className="text-3xl md:text-5xl font-bold mb-4"
-                style={{ color: "#fff" }}
-              >
-                Music Discovery
-              </h1>
-              <p className="max-w-xl text-lg" style={{ color: "#c1c1c3" }}>
-                Curated recommendations updated daily based on your library.
-              </p>
-            </div>
 
-            <div className="flex flex-col items-end gap-2">
-              {lastUpdated && (
-                <div
-                  className="flex items-center text-sm"
-                  style={{ color: "#c1c1c3" }}
+          <div className="flex flex-col gap-3 pt-4 border-t border-white/5">
+            {topGenres.length > 0 && (
+              <div className="flex flex-col gap-2.5">
+                <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#8a8a8f" }}>
+                  Top Tags
+                </h3>
+                <div 
+                  className="flex flex-wrap gap-2 max-h-[4rem] overflow-hidden"
                 >
-                  <Clock className="w-3 h-3 mr-1.5" />
-                  Updated {new Date(lastUpdated).toLocaleDateString()}
-                  {isUpdating && (
-                    <Loader className="w-3 h-3 ml-2 animate-spin" />
-                  )}
+                  {topGenres.map((genre, i) => (
+                    <button
+                      key={i}
+                      onClick={() => navigate(`/search?q=${encodeURIComponent(`#${genre}`)}&type=tag`)}
+                      className="genre-tag-pill px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-90"
+                      style={{ backgroundColor: getTagColor(genre), color: "#fff" }}
+                    >
+                      #{genre}
+                    </button>
+                  ))}
                 </div>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <h3
-                className="text-sm font-semibold uppercase tracking-wider mb-3"
-                style={{ color: "#fff" }}
-              >
-                Your Top Tags
-              </h3>
-              <div className="flex flex-wrap gap-2 max-h-[5.5rem] overflow-hidden">
-                {topGenres.map((genre, i) => (
-                  <button
-                    key={i}
-                    onClick={() =>
-                      navigate(
-                        `/search?q=${encodeURIComponent(`#${genre}`)}&type=tag`,
-                      )
-                    }
-                    className="genre-tag-pill px-4 py-2 text-sm font-medium"
-                    style={{
-                      backgroundColor: getTagColor(genre),
-                      color: "#fff",
-                    }}
-                  >
-                    #{genre}
-                  </button>
-                ))}
               </div>
-            </div>
+            )}
 
             {heroBasedOn.length > 0 && (
-              <div className="pt-2">
-                <p className="text-xs" style={{ color: "#c1c1c3" }}>
-                  Based on{" "}
-                  {heroBasedOn.length === 1
-                    ? heroBasedOn[0].name
-                    : heroBasedOn.length === 2
-                      ? `${heroBasedOn[0].name} and ${heroBasedOn[1].name}`
-                      : heroBasedOn.length === 3
-                        ? `${heroBasedOn[0].name}, ${heroBasedOn[1].name} and ${heroBasedOn[2].name}`
-                        : heroBasedOn
-                            .slice(0, 2)
-                            .map((a) => a.name)
-                            .join(", ") +
-                          ` and ${heroBasedOn.length - 2} other artist${heroBasedOn.length - 2 === 1 ? "" : "s"}`}
-                </p>
-              </div>
+              <p className="text-xs" style={{ color: "#8a8a8f" }}>
+                Based on{" "}
+                {heroBasedOn.length === 1
+                  ? heroBasedOn[0].name
+                  : heroBasedOn.length === 2
+                    ? `${heroBasedOn[0].name} and ${heroBasedOn[1].name}`
+                    : heroBasedOn.length === 3
+                      ? `${heroBasedOn[0].name}, ${heroBasedOn[1].name} and ${heroBasedOn[2].name}`
+                      : heroBasedOn
+                          .slice(0, 2)
+                          .map((a) => a.name)
+                          .join(", ") +
+                        ` and ${heroBasedOn.length - 2} other artist${heroBasedOn.length - 2 === 1 ? "" : "s"}`}
+              </p>
             )}
           </div>
         </div>
