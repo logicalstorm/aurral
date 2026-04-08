@@ -3,10 +3,7 @@ import { allReleaseTypes } from "./constants";
 export const normalizeSettings = (savedSettings) => {
   const lidarr = savedSettings.integrations?.lidarr || {};
   const lastfm = savedSettings.integrations?.lastfm || {};
-  const parsedAutoRefreshHours = parseInt(
-    lastfm.discoveryAutoRefreshHours,
-    10,
-  );
+  const parsedAutoRefreshHours = parseInt(lastfm.discoveryAutoRefreshHours, 10);
   const parsedRecommendationLimit = parseInt(
     lastfm.discoveryRecommendationsPerRefresh,
     10,
@@ -57,6 +54,11 @@ export const normalizeSettings = (savedSettings) => {
         url: "",
         apiKey: "",
         ...(savedSettings.integrations?.slskd || {}),
+      },
+      ticketmaster: {
+        apiKey: "",
+        searchRadiusMiles: 50,
+        ...(savedSettings.integrations?.ticketmaster || {}),
       },
       musicbrainz: {
         email: "",

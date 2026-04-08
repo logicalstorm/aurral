@@ -172,6 +172,7 @@ export const defaultData = {
       },
       slskd: { url: "", apiKey: "" },
       soulseek: { username: "", password: "" },
+      ticketmaster: { apiKey: "", searchRadiusMiles: 50 },
       lidarr: {
         url: "",
         externalUrl: "",
