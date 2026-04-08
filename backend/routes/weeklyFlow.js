@@ -703,68 +703,77 @@ router.put("/shared-playlists/:playlistId", async (req, res) => {
   }
 });
 
-router.delete("/shared-playlists/:playlistId/tracks/:jobId", async (req, res) => {
-  try {
-    const { playlistId, jobId } = req.params;
-    const playlist = flowPlaylistConfig.getSharedPlaylist(playlistId);
-    if (!playlist) {
-      return res.status(404).json({ error: "Shared playlist not found" });
-    }
-    const job = downloadTracker.getJob(jobId);
-    if (!job || job.playlistType !== playlistId) {
-      return res.status(404).json({ error: "Track not found" });
-    }
-    if (job.status !== "done" || typeof job.finalPath !== "string") {
-      return res.status(400).json({
-        error: "Only completed tracks can be removed",
-      });
-    }
+router.delete(
+  "/shared-playlists/:playlistId/tracks/:jobId",
+  async (req, res) => {
+    try {
+      const { playlistId, jobId } = req.params;
+      const playlist = flowPlaylistConfig.getSharedPlaylist(playlistId);
+      if (!playlist) {
+        return res.status(404).json({ error: "Shared playlist not found" });
+      }
+      const job = downloadTracker.getJob(jobId);
+      if (!job || job.playlistType !== playlistId) {
+        return res.status(404).json({ error: "Track not found" });
+      }
+      if (job.status !== "done" || typeof job.finalPath !== "string") {
+        return res.status(400).json({
+          error: "Only completed tracks can be removed",
+        });
+      }
 
-    const playlistRoot = path.resolve(
-      weeklyFlowWorker.weeklyFlowRoot,
-      "aurral-weekly-flow",
-      playlistId,
-    );
-    const safeFinalPath = path.resolve(job.finalPath);
-    if (!isPathInsideRoot(safeFinalPath, playlistRoot)) {
-      return res.status(400).json({
-        error: "Track path is outside the playlist library",
-      });
-    }
-
-    await fsp.rm(safeFinalPath, { force: true });
-    downloadTracker.removeJob(jobId);
-
-    const nextTracks = Array.isArray(playlist.tracks) ? [...playlist.tracks] : [];
-    const trackIndex = nextTracks.findIndex((track) => {
-      if (!track || typeof track !== "object" || Array.isArray(track)) return false;
-      return (
-        String(track.artistName || "") === String(job.artistName || "") &&
-        String(track.trackName || "") === String(job.trackName || "") &&
-        String(track.albumName || "") === String(job.albumName || "") &&
-        String(track.reason || "") === String(job.reason || "") &&
-        String(track.artistMbid || "") === String(job.artistMbid || "")
+      const playlistRoot = path.resolve(
+        weeklyFlowWorker.weeklyFlowRoot,
+        "aurral-weekly-flow",
+        playlistId,
       );
-    });
-    if (trackIndex >= 0) {
-      nextTracks.splice(trackIndex, 1);
-    }
-    const updatedPlaylist = flowPlaylistConfig.updateSharedPlaylist(playlistId, {
-      tracks: nextTracks,
-    });
+      const safeFinalPath = path.resolve(job.finalPath);
+      if (!isPathInsideRoot(safeFinalPath, playlistRoot)) {
+        return res.status(400).json({
+          error: "Track path is outside the playlist library",
+        });
+      }
 
-    res.json({
-      success: true,
-      playlist: updatedPlaylist || playlist,
-      removedJobId: jobId,
-    });
-  } catch (error) {
-    res.status(500).json({
-      error: "Failed to remove shared playlist track",
-      message: error.message,
-    });
-  }
-});
+      await fsp.rm(safeFinalPath, { force: true });
+      downloadTracker.removeJob(jobId);
+
+      const nextTracks = Array.isArray(playlist.tracks)
+        ? [...playlist.tracks]
+        : [];
+      const trackIndex = nextTracks.findIndex((track) => {
+        if (!track || typeof track !== "object" || Array.isArray(track))
+          return false;
+        return (
+          String(track.artistName || "") === String(job.artistName || "") &&
+          String(track.trackName || "") === String(job.trackName || "") &&
+          String(track.albumName || "") === String(job.albumName || "") &&
+          String(track.reason || "") === String(job.reason || "") &&
+          String(track.artistMbid || "") === String(job.artistMbid || "")
+        );
+      });
+      if (trackIndex >= 0) {
+        nextTracks.splice(trackIndex, 1);
+      }
+      const updatedPlaylist = flowPlaylistConfig.updateSharedPlaylist(
+        playlistId,
+        {
+          tracks: nextTracks,
+        },
+      );
+
+      res.json({
+        success: true,
+        playlist: updatedPlaylist || playlist,
+        removedJobId: jobId,
+      });
+    } catch (error) {
+      res.status(500).json({
+        error: "Failed to remove shared playlist track",
+        message: error.message,
+      });
+    }
+  },
+);
 
 router.delete("/shared-playlists/:playlistId", async (req, res) => {
   try {
@@ -821,7 +830,7 @@ router.get("/worker/settings", (req, res) => {
   res.json(weeklyFlowWorker.getWorkerSettings());
 });
 
-router.put("/worker/settings", (req, res) => {
+router.put("/worker/settings", async (req, res) => {
   const {
     concurrency,
     preferredFormat,
@@ -876,7 +885,14 @@ router.put("/worker/settings", (req, res) => {
     retryCycleMinutes,
     seedDownloads,
   });
-  soulseekClient.updateConfig();
+  try {
+    await soulseekClient.applyConfigChanges();
+  } catch (error) {
+    console.warn(
+      "[WeeklyFlow] Failed to apply Soulseek config changes:",
+      error.message,
+    );
+  }
   return res.json({ success: true, settings });
 });
 
