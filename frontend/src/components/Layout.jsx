@@ -32,6 +32,11 @@ function Layout({ children, appVersion }) {
       return "full";
     }
   });
+  const prevVisibleMode = useRef(
+    sidebarMode !== "hidden"
+      ? sidebarMode
+      : (() => { try { const s = localStorage.getItem("sidebarVisibleMode"); return s === "full" || s === "icons" ? s : "full"; } catch { return "full"; } })()
+  );
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionMode, setSuggestionMode] = useState(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
@@ -42,9 +47,15 @@ function Layout({ children, appVersion }) {
   const location = useLocation();
 
   const handleSetSidebarMode = useCallback((newMode) => {
+    if (newMode !== "hidden") {
+      prevVisibleMode.current = newMode;
+    }
     setSidebarMode(newMode);
     try {
       localStorage.setItem("sidebarMode", newMode);
+      if (newMode !== "hidden") {
+        localStorage.setItem("sidebarVisibleMode", newMode);
+      }
     } catch {
       // localStorage unavailable
     }
@@ -218,7 +229,7 @@ function Layout({ children, appVersion }) {
             onClick={() => {
               const isDesktop = window.matchMedia("(min-width: 768px)").matches;
               if (isDesktop) {
-                handleSetSidebarMode(sidebarMode === "hidden" ? "full" : "hidden");
+                handleSetSidebarMode(sidebarMode === "hidden" ? prevVisibleMode.current : "hidden");
               } else {
                 setIsSidebarOpen(true);
               }

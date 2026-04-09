@@ -30,7 +30,13 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
       : true
   );
 
-  const isIcons = mode === "icons" && isDesktop;
+  const prevModeRef = useRef(mode);
+  useEffect(() => {
+    if (mode !== "hidden") {
+      prevModeRef.current = mode;
+    }
+  }, [mode]);
+  const isIcons = (mode === "icons" || (mode === "hidden" && prevModeRef.current === "icons")) && isDesktop;
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
