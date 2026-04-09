@@ -891,7 +891,6 @@ router.put("/worker/settings", async (req, res) => {
     preferredFormat,
     preferredFormatStrict,
     retryCycleMinutes,
-    seedDownloads,
   } = req.body || {};
   if (concurrency !== undefined) {
     const parsed = Number(concurrency);
@@ -928,17 +927,11 @@ router.put("/worker/settings", async (req, res) => {
       });
     }
   }
-  if (seedDownloads !== undefined && typeof seedDownloads !== "boolean") {
-    return res.status(400).json({
-      error: "seedDownloads must be a boolean",
-    });
-  }
   const settings = weeklyFlowWorker.updateWorkerSettings({
     concurrency,
     preferredFormat,
     preferredFormatStrict,
     retryCycleMinutes,
-    seedDownloads,
   });
   try {
     await soulseekClient.applyConfigChanges();

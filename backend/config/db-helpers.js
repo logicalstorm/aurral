@@ -251,7 +251,6 @@ export const dbOps = {
       )
         ? Math.floor(parsedRetryCycleMinutes)
         : 15;
-    const seedDownloads = weeklyFlowWorker?.seedDownloads !== false;
     const retryPausedPlaylistIds = Array.isArray(
       weeklyFlowWorker?.retryPausedPlaylistIds,
     )
@@ -293,7 +292,6 @@ export const dbOps = {
         preferredFormat,
         preferredFormatStrict,
         retryCycleMinutes,
-        seedDownloads,
         retryPausedPlaylistIds,
       },
       onboardingComplete: !!onboardingComplete,

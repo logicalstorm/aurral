@@ -2268,24 +2268,6 @@ export function FlowWorkerSettingsModal({
               <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white" />
             </div>
           </div>
-          <div className="flex items-center justify-between rounded-md border border-white/10 bg-black/20 px-3 py-3">
-            <div className="grid gap-0.5 pr-3">
-              <span className="text-sm font-medium text-white">Seed Downloads Folder</span>
-              <span className="text-xs text-[#8b8b90]">
-                Share the flow downloads folder on Soulseek unless you turn this off.
-              </span>
-            </div>
-            <PillToggle
-              checked={settings.seedDownloads !== false}
-              onChange={(event) => {
-                const checked = event.target.checked;
-                onChange((prev) => ({
-                  ...prev,
-                  seedDownloads: checked,
-                }));
-              }}
-            />
-          </div>
         </div>
         <div className="flex gap-3 justify-end">
           <button onClick={onCancel} className="btn btn-secondary" disabled={saving}>
