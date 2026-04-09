@@ -210,7 +210,6 @@ export const defaultData = {
       preferredFormat: "flac",
       preferredFormatStrict: false,
       retryCycleMinutes: 15,
-      seedDownloads: true,
     },
   },
   blocklist: [],
