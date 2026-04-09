@@ -629,6 +629,26 @@ export class WeeklyFlowDownloadTracker {
     return toDelete.length;
   }
 
+  clearPendingByPlaylistType(playlistType) {
+    const toDelete = [];
+    for (const [id, job] of this.jobs.entries()) {
+      if (job.playlistType === playlistType && job.status === "pending") {
+        toDelete.push(id);
+      }
+    }
+    for (const id of toDelete) {
+      this.jobs.delete(id);
+      this.pendingSet.delete(id);
+      this.pendingRetrySet.delete(id);
+      this._removeFromPendingQueues(id);
+      deleteStmt.run(id);
+    }
+    if (toDelete.length > 0) {
+      this._rebuildStatsByPlaylistType();
+    }
+    return toDelete.length;
+  }
+
   clearAll() {
     const count = this.jobs.size;
     this.jobs.clear();

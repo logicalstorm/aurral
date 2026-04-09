@@ -154,32 +154,54 @@ const restartWorkerIfPending = async () => {
   }
 };
 
-const stopWorkerForPlaylistIfDownloading = (playlistType) => {
-  const stats = downloadTracker.getPlaylistTypeStats(playlistType);
-  const shouldStopWorker =
-    weeklyFlowWorker.running && Number(stats?.downloading || 0) > 0;
-  if (shouldStopWorker) {
-    weeklyFlowWorker.stop();
+const beginPlaylistMutation = async (playlistTypes) => {
+  const types = [
+    ...new Set(
+      (Array.isArray(playlistTypes) ? playlistTypes : [playlistTypes]).filter(
+        Boolean,
+      ),
+    ),
+  ];
+  for (const playlistType of types) {
+    weeklyFlowWorker.blockPlaylist(playlistType);
+    weeklyFlowWorker.clearIncompleteRetry(playlistType);
+    downloadTracker.clearPendingByPlaylistType(playlistType);
   }
-  return shouldStopWorker;
+  try {
+    await Promise.all(
+      types.map((playlistType) =>
+        weeklyFlowWorker.waitForPlaylistIdle(playlistType),
+      ),
+    );
+  } catch (error) {
+    for (const playlistType of types) {
+      weeklyFlowWorker.unblockPlaylist(playlistType);
+    }
+    throw error;
+  }
+  return () => {
+    for (const playlistType of types) {
+      weeklyFlowWorker.unblockPlaylist(playlistType);
+    }
+    weeklyFlowWorker.pruneOrphanedJobState();
+  };
 };
 
 const pauseSharedPlaylistRetryCycle = async (playlistId) => {
   weeklyFlowWorker.setRetryCyclePaused(playlistId, true);
-  weeklyFlowWorker.clearIncompleteRetry(playlistId);
-  const playlistStats = downloadTracker.getPlaylistTypeStats(playlistId);
-  const shouldStopWorker =
-    weeklyFlowWorker.running &&
-    (Number(playlistStats?.pending || 0) > 0 ||
-      Number(playlistStats?.downloading || 0) > 0);
-  if (shouldStopWorker) {
-    weeklyFlowWorker.stop();
+  const releaseMutation = await beginPlaylistMutation(playlistId);
+  let cancelledJobs = 0;
+  try {
+    cancelledJobs = downloadTracker.failActiveJobsForPlaylist(
+      playlistId,
+      "Retry cycle paused",
+    );
+  } finally {
+    releaseMutation();
   }
-  const cancelledJobs = downloadTracker.failActiveJobsForPlaylist(
-    playlistId,
-    "Retry cycle paused",
-  );
-  if (shouldStopWorker) {
+  if (weeklyFlowWorker.running) {
+    weeklyFlowWorker.wake();
+  } else {
     await restartWorkerIfPending();
   }
   return cancelledJobs;
@@ -195,40 +217,39 @@ const queueFlowEnableRefresh = (flowId, mutationVersion) => {
         return;
       }
 
-      const shouldStopWorker = stopWorkerForPlaylistIfDownloading(flowId);
-      weeklyFlowWorker.clearIncompleteRetry(flowId);
-      playlistManager.updateConfig(false);
-      await playlistManager.weeklyReset([flowId]);
-      downloadTracker.clearByPlaylistType(flowId);
+      const releaseMutation = await beginPlaylistMutation(flowId);
+      try {
+        playlistManager.updateConfig(false);
+        await playlistManager.weeklyReset([flowId]);
+        downloadTracker.clearByPlaylistType(flowId);
 
-      if (
-        flowEnableMutationVersion.get(flowId) !== mutationVersion ||
-        !flowPlaylistConfig.isEnabled(flowId)
-      ) {
-        if (shouldStopWorker) {
+        if (
+          flowEnableMutationVersion.get(flowId) !== mutationVersion ||
+          !flowPlaylistConfig.isEnabled(flowId)
+        ) {
           await restartWorkerIfPending();
+          return;
         }
-        return;
-      }
 
-      const latestFlow = flowPlaylistConfig.getFlow(flowId);
-      if (!latestFlow) return;
-      const tracks = await playlistSource.getTracksForFlow(latestFlow);
+        const latestFlow = flowPlaylistConfig.getFlow(flowId);
+        if (!latestFlow) return;
+        const tracks = await playlistSource.getTracksForFlow(latestFlow);
 
-      if (
-        flowEnableMutationVersion.get(flowId) !== mutationVersion ||
-        !flowPlaylistConfig.isEnabled(flowId)
-      ) {
-        return;
-      }
+        if (
+          flowEnableMutationVersion.get(flowId) !== mutationVersion ||
+          !flowPlaylistConfig.isEnabled(flowId)
+        ) {
+          return;
+        }
 
-      if (tracks.length === 0) {
-        if (shouldStopWorker) {
+        if (tracks.length === 0) {
           await restartWorkerIfPending();
+          return;
         }
-        return;
+        downloadTracker.addJobs(tracks, flowId);
+      } finally {
+        releaseMutation();
       }
-      downloadTracker.addJobs(tracks, flowId);
       if (!weeklyFlowWorker.running) {
         await weeklyFlowWorker.start();
       } else {
@@ -250,19 +271,19 @@ const queueFlowDisableCleanup = (flowId, mutationVersion) => {
         return;
       }
 
-      const shouldStopWorker = stopWorkerForPlaylistIfDownloading(flowId);
-      weeklyFlowWorker.clearIncompleteRetry(flowId);
-      playlistManager.updateConfig(false);
-      await playlistManager.weeklyReset([flowId]);
-      downloadTracker.clearByPlaylistType(flowId);
+      const releaseMutation = await beginPlaylistMutation(flowId);
+      try {
+        playlistManager.updateConfig(false);
+        await playlistManager.weeklyReset([flowId]);
+        downloadTracker.clearByPlaylistType(flowId);
 
-      if (flowEnableMutationVersion.get(flowId) !== mutationVersion) {
-        return;
+        if (flowEnableMutationVersion.get(flowId) !== mutationVersion) {
+          return;
+        }
+      } finally {
+        releaseMutation();
       }
-
-      if (shouldStopWorker) {
-        await restartWorkerIfPending();
-      }
+      await restartWorkerIfPending();
     })
     .catch((error) => {
       console.error(
@@ -287,21 +308,66 @@ router.post("/start/:flowId", async (req, res) => {
       });
     }
 
-    const size =
-      Number.isFinite(Number(limit)) && Number(limit) > 0
-        ? Number(limit)
-        : flow.size || DEFAULT_LIMIT;
-    const tracks = await playlistSource.getTracksForFlow({
-      ...flow,
-      size,
-    });
-    if (tracks.length === 0) {
-      return res.status(400).json({
-        error: `No tracks found for flow: ${flow.name}`,
+    const mutationVersion = (flowEnableMutationVersion.get(flowId) || 0) + 1;
+    flowEnableMutationVersion.set(flowId, mutationVersion);
+    const result = await weeklyFlowOperationQueue.enqueue(
+      `manual-start:${flowId}`,
+      async () => {
+        if (flowEnableMutationVersion.get(flowId) !== mutationVersion) {
+          return { cancelled: true };
+        }
+
+        const latestFlow = flowPlaylistConfig.getFlow(flowId);
+        if (!latestFlow) {
+          return { missing: true };
+        }
+
+        const releaseMutation = await beginPlaylistMutation(flowId);
+        try {
+          playlistManager.updateConfig(false);
+          await playlistManager.weeklyReset([flowId]);
+          downloadTracker.clearByPlaylistType(flowId);
+
+          if (flowEnableMutationVersion.get(flowId) !== mutationVersion) {
+            return { cancelled: true };
+          }
+
+          const size =
+            Number.isFinite(Number(limit)) && Number(limit) > 0
+              ? Number(limit)
+              : latestFlow.size || DEFAULT_LIMIT;
+          const tracks = await playlistSource.getTracksForFlow({
+            ...latestFlow,
+            size,
+          });
+          if (flowEnableMutationVersion.get(flowId) !== mutationVersion) {
+            return { cancelled: true };
+          }
+          if (tracks.length === 0) {
+            return { empty: true, flowName: latestFlow.name };
+          }
+
+          const jobIds = downloadTracker.addJobs(tracks, flowId);
+          return { jobIds, tracksQueued: tracks.length };
+        } finally {
+          releaseMutation();
+        }
+      },
+    );
+
+    if (result?.missing) {
+      return res.status(404).json({ error: "Flow not found" });
+    }
+    if (result?.cancelled) {
+      return res.status(409).json({
+        error: "Flow start superseded by another change",
       });
     }
-
-    const jobIds = downloadTracker.addJobs(tracks, flowId);
+    if (result?.empty) {
+      return res.status(400).json({
+        error: `No tracks found for flow: ${result.flowName || flow.name}`,
+      });
+    }
 
     if (!weeklyFlowWorker.running) {
       await weeklyFlowWorker.start();
@@ -312,8 +378,8 @@ router.post("/start/:flowId", async (req, res) => {
     res.json({
       success: true,
       flowId,
-      tracksQueued: tracks.length,
-      jobIds,
+      tracksQueued: result?.tracksQueued || 0,
+      jobIds: result?.jobIds || [],
     });
   } catch (error) {
     res.status(500).json({
@@ -439,17 +505,25 @@ router.delete("/flows/:flowId", async (req, res) => {
         if (flowEnableMutationVersion.get(flowId) !== mutationVersion) {
           return false;
         }
-        const shouldStopWorker = stopWorkerForPlaylistIfDownloading(flowId);
-        weeklyFlowWorker.setRetryCyclePaused(flowId, false);
-        playlistManager.updateConfig(false);
-        await playlistManager.weeklyReset([flowId]);
-        downloadTracker.clearByPlaylistType(flowId);
-        const didDelete = flowPlaylistConfig.deleteFlow(flowId);
-        await playlistManager.ensureSmartPlaylists();
-        if (shouldStopWorker) {
+        const releaseMutation = await beginPlaylistMutation(flowId);
+        let didDelete = false;
+        try {
+          weeklyFlowWorker.setRetryCyclePaused(flowId, false);
+          playlistManager.updateConfig(false);
+          await playlistManager.weeklyReset([flowId]);
+          downloadTracker.clearByPlaylistType(flowId);
+          didDelete = flowPlaylistConfig.deleteFlow(flowId);
+          await playlistManager.ensureSmartPlaylists();
+        } finally {
+          releaseMutation();
+        }
+        if (!didDelete) {
+          flowEnableMutationVersion.delete(flowId);
           await restartWorkerIfPending();
+          return false;
         }
         flowEnableMutationVersion.delete(flowId);
+        await restartWorkerIfPending();
         return didDelete;
       },
     );
@@ -803,21 +877,23 @@ router.delete("/shared-playlists/:playlistId", async (req, res) => {
       return res.status(404).json({ error: "Shared playlist not found" });
     }
 
-    const shouldStopWorker = stopWorkerForPlaylistIfDownloading(playlistId);
-    weeklyFlowWorker.clearIncompleteRetry(playlistId);
-    weeklyFlowWorker.setRetryCyclePaused(playlistId, false);
-    playlistManager.updateConfig(false);
-    await playlistManager.weeklyReset([playlistId]);
-    downloadTracker.clearByPlaylistType(playlistId);
-    const deleted = flowPlaylistConfig.deleteSharedPlaylist(playlistId);
-    await playlistManager.ensureSmartPlaylists();
-    if (shouldStopWorker) {
-      await restartWorkerIfPending();
+    const releaseMutation = await beginPlaylistMutation(playlistId);
+    let deleted = false;
+    try {
+      weeklyFlowWorker.setRetryCyclePaused(playlistId, false);
+      playlistManager.updateConfig(false);
+      await playlistManager.weeklyReset([playlistId]);
+      downloadTracker.clearByPlaylistType(playlistId);
+      deleted = flowPlaylistConfig.deleteSharedPlaylist(playlistId);
+      await playlistManager.ensureSmartPlaylists();
+    } finally {
+      releaseMutation();
     }
-
     if (!deleted) {
+      await restartWorkerIfPending();
       return res.status(404).json({ error: "Shared playlist not found" });
     }
+    await restartWorkerIfPending();
 
     res.json({ success: true, playlistId });
   } catch (error) {
@@ -956,9 +1032,16 @@ router.post("/worker/start", async (req, res) => {
   }
 });
 
-router.post("/worker/stop", (req, res) => {
-  weeklyFlowWorker.stop();
-  res.json({ success: true, message: "Worker stopped" });
+router.post("/worker/stop", async (req, res) => {
+  try {
+    await weeklyFlowWorker.stopAndDrain();
+    res.json({ success: true, message: "Worker stopped" });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to stop worker",
+      message: error.message,
+    });
+  }
 });
 
 router.delete("/jobs/completed", (req, res) => {
@@ -978,9 +1061,13 @@ router.post("/reset", async (req, res) => {
       flowIds || flowPlaylistConfig.getFlows().map((flow) => flow.id);
 
     await weeklyFlowOperationQueue.enqueue("reset:manual", async () => {
-      weeklyFlowWorker.stop();
-      playlistManager.updateConfig(false);
-      await playlistManager.weeklyReset(types);
+      const releaseMutation = await beginPlaylistMutation(types);
+      try {
+        playlistManager.updateConfig(false);
+        await playlistManager.weeklyReset(types);
+      } finally {
+        releaseMutation();
+      }
     });
 
     res.json({
