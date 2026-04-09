@@ -95,7 +95,7 @@ function AppContent() {
   const [rootFolderConfigured, setRootFolderConfigured] = useState(false);
   const [appVersion, setAppVersion] = useState(null);
   const discoveryToastShownRef = useRef(false);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { showSuccess, showError } = useToast();
 
   useWebSocketChannel("discovery", (msg) => {
@@ -165,7 +165,10 @@ function AppContent() {
           rootFolderConfigured={rootFolderConfigured}
           appVersion={appVersion}
         >
-          <UpdateBanner currentVersion={appVersion} />
+          <UpdateBanner
+            currentVersion={appVersion}
+            visible={!user || user.role === "admin"}
+          />
           {isHealthy === false && (
             <div className="mb-6 bg-red-500/20 border border-red-500/30 p-4">
               <div className="flex items-center">
