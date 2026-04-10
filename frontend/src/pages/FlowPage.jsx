@@ -1501,15 +1501,6 @@ function FlowPage() {
     }
   };
 
-  const normalizeReason = (job) => {
-    if (job?.reason) return job.reason;
-    if (job?.playlistType) {
-      if (job.playlistType === "discover") return "From discovery recommendations";
-      if (job.playlistType === "mix") return "From your library mix";
-      if (job.playlistType === "trending") return "From trending artists";
-    }
-    return "Flow selection";
-  };
   const retryCyclePausedByPlaylist = status?.retryCyclePausedByPlaylist || {};
   const retryCycleScheduledByPlaylist = status?.retryCycleScheduledByPlaylist || {};
 
