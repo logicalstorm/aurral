@@ -76,7 +76,6 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
         path: "/settings",
         label: "Settings",
         icon: Settings,
-        permission: "accessSettings",
       },
     ];
     return items.filter(
