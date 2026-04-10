@@ -783,10 +783,6 @@ export class WeeklyFlowWorker {
     this.lastDequeuedPlaylistType = null;
     this.currentJob = null;
     this.sanitizeCache.clear();
-    for (const timer of this.incompleteRetryTimers.values()) {
-      clearTimeout(timer);
-    }
-    this.incompleteRetryTimers.clear();
     soulseekClient.disconnect().catch(() => {});
     console.log("[WeeklyFlowWorker] Worker stopped");
     return true;
