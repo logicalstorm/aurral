@@ -70,6 +70,12 @@ router.post("/", async (req, res) => {
               ...integrations.lastfm,
             }
           : mergedIntegrations.lastfm,
+        ticketmaster: integrations.ticketmaster
+          ? {
+              ...(mergedIntegrations.ticketmaster || {}),
+              ...integrations.ticketmaster,
+            }
+          : mergedIntegrations.ticketmaster,
         musicbrainz: integrations.musicbrainz
           ? {
               ...(mergedIntegrations.musicbrainz || {}),

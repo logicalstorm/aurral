@@ -19,6 +19,7 @@ import { useWebSocketChannel } from "./hooks/useWebSocket";
 
 const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
 const DiscoverPage = lazy(() => import("./pages/DiscoverPage"));
+const ShowsPage = lazy(() => import("./pages/ShowsPage"));
 const LibraryPage = lazy(() => import("./pages/LibraryPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const ArtistDetailsPage = lazy(() => import("./pages/ArtistDetailsPage"));
@@ -216,6 +217,7 @@ function AppContent() {
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/" element={<DiscoverPage />} />
+              <Route path="/shows" element={<ShowsPage />} />
               <Route path="/search" element={<SearchResultsPage />} />
               <Route path="/discover" element={<Navigate to="/" replace />} />
               <Route path="/library" element={<LibraryPage />} />
