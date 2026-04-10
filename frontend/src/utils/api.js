@@ -471,6 +471,18 @@ export const getDiscovery = async (cacheBust = false) => {
   return response.data;
 };
 
+export const getNearbyShows = async (zipCode = "", limit) => {
+  const params = { _: Date.now() };
+  if (typeof zipCode === "string" && zipCode.trim()) {
+    params.zip = zipCode.trim();
+  }
+  if (Number.isFinite(limit) && limit > 0) {
+    params.limit = Math.floor(limit);
+  }
+  const response = await api.get("/discover/nearby-shows", { params });
+  return response.data;
+};
+
 export const getRelatedArtists = async (limit = 20) => {
   const response = await api.get("/discover/related", {
     params: { limit },

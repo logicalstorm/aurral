@@ -9,6 +9,7 @@ import {
   AudioWaveform,
   Pin,
   PinOff,
+  Ticket,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import LogoutButton from "./LogoutButton";
@@ -63,6 +64,7 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
     const items = [
       { path: "/discover", label: "Discover", icon: Sparkles },
       { path: "/library", label: "Library", icon: Library },
+      { path: "/shows", label: "Shows", icon: Ticket },
       {
         path: "/flow",
         label: "Flow",

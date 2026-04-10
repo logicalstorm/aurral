@@ -26,6 +26,15 @@ export const getLastfmApiKey = () => {
   return settings.integrations?.lastfm?.apiKey || process.env.LASTFM_API_KEY;
 };
 
+export const getTicketmasterApiKey = () => {
+  const settings = dbOps.getSettings();
+  const configuredValue = settings.integrations?.ticketmaster?.apiKey;
+  if (configuredValue !== undefined && configuredValue !== null) {
+    return String(configuredValue).trim();
+  }
+  return String(process.env.TICKETMASTER_API_KEY || "").trim();
+};
+
 export const getMusicBrainzContact = () => {
   const settings = dbOps.getSettings();
   return (
