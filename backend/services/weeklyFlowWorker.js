@@ -189,6 +189,20 @@ export class WeeklyFlowWorker {
     }
   }
 
+  _rescheduleIncompleteRetries(
+    delayMs = this._getIncompleteRetryDelayMs(),
+  ) {
+    const playlistTypes = [...this.incompleteRetryTimers.keys()];
+    if (playlistTypes.length === 0) return 0;
+    for (const playlistType of playlistTypes) {
+      this.clearIncompleteRetry(playlistType);
+    }
+    for (const playlistType of playlistTypes) {
+      this._scheduleIncompleteRetry(playlistType, delayMs);
+    }
+    return playlistTypes.length;
+  }
+
   _normalizeRetryPausedPlaylistIds(value) {
     if (!Array.isArray(value)) return [];
     const out = new Set();
@@ -404,6 +418,11 @@ export class WeeklyFlowWorker {
       ...current,
       weeklyFlowWorker: normalized,
     });
+    if (normalized.retryCycleMinutes !== base.retryCycleMinutes) {
+      this._rescheduleIncompleteRetries(
+        Math.max(1000, normalized.retryCycleMinutes * 60 * 1000),
+      );
+    }
     return normalized;
   }
 
