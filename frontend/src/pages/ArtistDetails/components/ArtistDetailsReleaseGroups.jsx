@@ -36,6 +36,7 @@ export function ArtistDetailsReleaseGroups({
   showFilterDropdown,
   setShowFilterDropdown,
   existsInLibrary,
+  canBulkAddAlbums,
   handleMonitorAll,
   processingBulk,
   albumCovers,
@@ -46,10 +47,13 @@ export function ArtistDetailsReleaseGroups({
   albumDropdownOpen,
   setAlbumDropdownOpen,
   handleReleaseGroupAlbumClick,
+  canAddAlbum,
   handleRequestAlbum,
+  canDeleteAlbum,
   handleDeleteAlbumClick,
   requestingAlbum,
   reSearchingAlbum,
+  canReSearchAlbum,
   handleReSearchAlbum,
   previewVolume,
   setPreviewVolume,
@@ -367,7 +371,7 @@ export function ArtistDetailsReleaseGroups({
             )}
           </div>
 
-          {existsInLibrary && (
+          {existsInLibrary && canBulkAddAlbums && (
             <button
               onClick={handleMonitorAll}
               disabled={processingBulk}
@@ -448,7 +452,7 @@ export function ArtistDetailsReleaseGroups({
                     <ExternalLink className="w-4 h-4 mr-2" />
                     View on Last.fm
                   </a>
-                  {canReSearch && (
+                  {canReSearch && canReSearchAlbum && (
                     <>
                       <div className="my-1 border-t border-white/10" />
                       <button
@@ -476,21 +480,25 @@ export function ArtistDetailsReleaseGroups({
                       </button>
                     </>
                   )}
-                  <div className="my-1 border-t border-white/10" />
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteAlbumClick(
-                        releaseGroup.id,
-                        releaseGroup.title
-                      );
-                    }}
-                    className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20 transition-colors flex items-center"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete Album
-                  </button>
+                  {canDeleteAlbum && (
+                    <>
+                      <div className="my-1 border-t border-white/10" />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteAlbumClick(
+                            releaseGroup.id,
+                            releaseGroup.title
+                          );
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20 transition-colors flex items-center"
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete Album
+                      </button>
+                    </>
+                  )}
                 </div>
               </>
             );
@@ -776,6 +784,26 @@ export function ArtistDetailsReleaseGroups({
                           </div>
                         </>
                       ) : (
+                        canAddAlbum ? (
+                          <AddAlbumButton
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRequestAlbum(
+                                releaseGroup.id,
+                                releaseGroup.title
+                              );
+                            }}
+                            isLoading={requestingAlbum === releaseGroup.id}
+                            disabled={requestingAlbum === releaseGroup.id}
+                            style={{
+                              backgroundColor: itemBg,
+                              borderColor: itemBg,
+                            }}
+                          />
+                        ) : null
+                      )
+                    ) : (
+                      canAddAlbum ? (
                         <AddAlbumButton
                           onClick={(e) => {
                             e.stopPropagation();
@@ -791,23 +819,7 @@ export function ArtistDetailsReleaseGroups({
                             borderColor: itemBg,
                           }}
                         />
-                      )
-                    ) : (
-                      <AddAlbumButton
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRequestAlbum(
-                            releaseGroup.id,
-                            releaseGroup.title
-                          );
-                        }}
-                        isLoading={requestingAlbum === releaseGroup.id}
-                        disabled={requestingAlbum === releaseGroup.id}
-                        style={{
-                          backgroundColor: itemBg,
-                          borderColor: itemBg,
-                        }}
-                      />
+                      ) : null
                     )}
                   </div>
                 </div>
@@ -962,6 +974,7 @@ ArtistDetailsReleaseGroups.propTypes = {
   showFilterDropdown: PropTypes.bool,
   setShowFilterDropdown: PropTypes.func,
   existsInLibrary: PropTypes.bool,
+  canBulkAddAlbums: PropTypes.bool,
   handleMonitorAll: PropTypes.func,
   processingBulk: PropTypes.bool,
   albumCovers: PropTypes.object,
@@ -972,10 +985,13 @@ ArtistDetailsReleaseGroups.propTypes = {
   albumDropdownOpen: PropTypes.string,
   setAlbumDropdownOpen: PropTypes.func,
   handleReleaseGroupAlbumClick: PropTypes.func,
+  canAddAlbum: PropTypes.bool,
   handleRequestAlbum: PropTypes.func,
+  canDeleteAlbum: PropTypes.bool,
   handleDeleteAlbumClick: PropTypes.func,
   requestingAlbum: PropTypes.string,
   reSearchingAlbum: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  canReSearchAlbum: PropTypes.bool,
   handleReSearchAlbum: PropTypes.func,
   previewVolume: PropTypes.number,
   setPreviewVolume: PropTypes.func,
