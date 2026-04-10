@@ -1,6 +1,16 @@
-import { useEffect, useRef, useCallback, useMemo, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  useState,
+  useImperativeHandle,
+  forwardRef,
+} from "react";
 import {
   Loader2,
+  Check,
+  CircleDashed,
   Clock,
   Trash2,
   Pencil,
@@ -16,8 +26,10 @@ import {
   ExternalLink,
   Volume2,
   VolumeX,
+  Plus,
   ChevronDown,
   MoreHorizontal,
+  X,
 } from "lucide-react";
 import PillToggle from "../components/PillToggle";
 import FlipSaveButton from "../components/FlipSaveButton";
@@ -782,6 +794,299 @@ export function MoreMenu({ children }) {
   );
 }
 
+function buildEditableTrackRows(tracks) {
+  return (Array.isArray(tracks) ? tracks : []).map((track, index) => ({
+    rowId:
+      track?.id ||
+      `track-${index}-${Math.random().toString(36).slice(2, 10)}`,
+    artistName: String(track?.artistName || ""),
+    trackName: String(track?.trackName || ""),
+    albumName: String(track?.albumName || ""),
+    artistMbid: String(track?.artistMbid || ""),
+    reason: String(track?.reason || ""),
+    status: String(track?.status || "draft"),
+    error: String(track?.error || ""),
+  }));
+}
+
+function TrackStatusBadge({ status }) {
+  const isDownloaded = status === "done";
+  const label = isDownloaded ? "Downloaded" : "Not Downloaded";
+  return (
+    <span
+      className={`inline-flex h-6 w-6 items-center justify-center rounded-full border ${
+        isDownloaded
+          ? "border-[#35533a] bg-[#223124] text-[#7ee081]"
+          : "border-[#4b4231] bg-[#30281d] text-[#d8b16f]"
+      }`}
+      title={label}
+      aria-label={label}
+    >
+      {isDownloaded ? (
+        <Check className="w-3.5 h-3.5" />
+      ) : (
+        <CircleDashed className="w-3.5 h-3.5" />
+      )}
+    </span>
+  );
+}
+
+export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrackEditor({
+  tracks,
+  loading,
+  error,
+  saving,
+  headerActions = null,
+  onSave,
+}, ref) {
+  const [draftTracks, setDraftTracks] = useState(() => buildEditableTrackRows(tracks));
+  const [editorError, setEditorError] = useState("");
+  const [missingOnly, setMissingOnly] = useState(false);
+
+  useEffect(() => {
+    setDraftTracks(buildEditableTrackRows(tracks));
+    setEditorError("");
+    setMissingOnly(false);
+  }, [tracks]);
+
+  const missingCount = draftTracks.filter((track) => track.status === "failed").length;
+  const visibleTracks = missingOnly
+    ? draftTracks.filter((track) => track.status === "failed")
+    : draftTracks;
+
+  const updateTrack = (rowId, key, value) => {
+    setDraftTracks((prev) =>
+      prev.map((track) =>
+        track.rowId === rowId ? { ...track, [key]: value } : track,
+      ),
+    );
+    if (editorError) {
+      setEditorError("");
+    }
+  };
+
+  const handleAddTrack = () => {
+    setDraftTracks((prev) => [
+      ...prev,
+      {
+        rowId: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        artistName: "",
+        trackName: "",
+        albumName: "",
+        artistMbid: "",
+        reason: "",
+        status: "draft",
+        error: "",
+      },
+    ]);
+    setMissingOnly(false);
+  };
+
+  const buildPayload = () => {
+    const nextTracks = [];
+    for (const track of draftTracks) {
+      const artistName = String(track.artistName || "").trim();
+      const trackName = String(track.trackName || "").trim();
+      const albumName = String(track.albumName || "").trim();
+      const artistMbid = String(track.artistMbid || "").trim();
+      const reason = String(track.reason || "").trim();
+      if (!artistName && !trackName && !albumName && !artistMbid && !reason) {
+        continue;
+      }
+      if (!artistName || !trackName) {
+        throw new Error("Each edited track needs both an artist and song name");
+      }
+      nextTracks.push({
+        artistName,
+        trackName,
+        albumName: albumName || null,
+        artistMbid: artistMbid || null,
+        reason: reason || null,
+      });
+    }
+    if (nextTracks.length === 0) {
+      throw new Error("Playlist must include at least one track");
+    }
+    return nextTracks;
+  };
+
+  const handleSave = async () => {
+    try {
+      const payload = buildPayload();
+      setEditorError("");
+      await onSave?.(payload);
+      return true;
+    } catch (saveError) {
+      setEditorError(saveError?.message || "Failed to save tracklist");
+      return false;
+    }
+  };
+
+  useImperativeHandle(ref, () => ({
+    save: handleSave,
+  }));
+
+  if (loading) {
+    return (
+      <div className="rounded-lg border border-white/10 bg-[#1f1f24] p-6 flex items-center gap-2 text-[#c1c1c3]">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        Loading tracks...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-lg border border-white/10 bg-[#1f1f24] p-6 text-red-400 text-sm">
+        {error}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#1f1f24] overflow-hidden">
+      <div className="border-b border-white/10 px-3 py-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-[#b7bbc7]">
+          <span>{draftTracks.length} tracks</span>
+          {missingCount > 0 ? (
+            <>
+              <span className="text-white/25">•</span>
+              <span>{missingCount} missing</span>
+            </>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {headerActions}
+          {missingCount > 0 ? (
+            <button
+              type="button"
+              onClick={() => setMissingOnly((prev) => !prev)}
+              className={`btn btn-xs ${missingOnly ? "btn-primary" : "btn-secondary"}`}
+            >
+              {missingOnly ? "Show All" : "Missing Only"}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={handleAddTrack}
+              className="btn btn-secondary btn-xs gap-1.5"
+              disabled={saving}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add Track
+          </button>
+        </div>
+      </div>
+      <div className="overflow-auto max-h-[60vh]">
+        {visibleTracks.length === 0 ? (
+          <div className="p-6 text-sm text-[#c1c1c3]">
+            {missingOnly ? "No missing tracks right now." : "No tracks in this playlist yet."}
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 z-20 bg-[#1c1b22]">
+              <tr className="text-left text-[#8b8b90] uppercase text-xs tracking-wider">
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Song</th>
+                <th className="px-3 py-2">Artist</th>
+                <th className="px-3 py-2">Album</th>
+                <th className="px-3 py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleTracks.map((track, index) => {
+                const isLocked = track.status === "done";
+                return (
+                  <tr
+                    key={track.rowId}
+                    className={`border-t border-white/5 text-[#d6d6d8] ${
+                      index % 2 === 0 ? "bg-[#202027]/35" : "bg-[#181820]/75"
+                    }`}
+                  >
+                    <td className="px-3 py-2 align-top">
+                      <TrackStatusBadge status={track.status} />
+                    </td>
+                    <td className="px-3 py-2 align-top">
+                      {isLocked ? (
+                        <div className="min-w-[180px]">{track.trackName}</div>
+                      ) : (
+                        <div className="grid gap-1 min-w-[180px]">
+                          <input
+                            type="text"
+                            className="input input-xs bg-[#141419]"
+                            value={track.trackName}
+                            onChange={(event) =>
+                              updateTrack(track.rowId, "trackName", event.target.value)
+                            }
+                            placeholder="Song name"
+                          />
+                          {track.error ? (
+                            <span className="text-[11px] text-[#d49c9c]">
+                              {track.error}
+                            </span>
+                          ) : null}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 align-top">
+                      {isLocked ? (
+                        <div className="min-w-[180px]">{track.artistName}</div>
+                      ) : (
+                        <input
+                          type="text"
+                          className="input input-xs min-w-[180px] bg-[#141419]"
+                          value={track.artistName}
+                          onChange={(event) =>
+                            updateTrack(track.rowId, "artistName", event.target.value)
+                          }
+                          placeholder="Artist name"
+                        />
+                      )}
+                    </td>
+                    <td className="px-3 py-2 align-top">
+                      {isLocked ? (
+                        <div className="min-w-[180px]">{track.albumName || "Unknown Album"}</div>
+                      ) : (
+                        <input
+                          type="text"
+                          className="input input-xs min-w-[180px] bg-[#141419]"
+                          value={track.albumName}
+                          onChange={(event) =>
+                            updateTrack(track.rowId, "albumName", event.target.value)
+                          }
+                          placeholder="Album name"
+                        />
+                      )}
+                    </td>
+                    <td className="px-3 py-2 align-top">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDraftTracks((prev) =>
+                            prev.filter((entry) => entry.rowId !== track.rowId),
+                          )
+                        }
+                        className="btn btn-ghost btn-xs px-2 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+      {editorError ? (
+        <div className="border-t border-white/10 px-3 py-2 text-xs text-red-400">
+          {editorError}
+        </div>
+      ) : null}
+    </div>
+  );
+});
+
 export function FlowCard({
   flow,
   enabled,
@@ -926,25 +1231,59 @@ export function FlowCard({
             )}
           </div>
           <div className="space-y-1">
-            {isEditing ? (
-              <input
-                type="text"
-                className="input input-sm h-9 w-full max-w-md bg-[#1c1b22] text-base font-medium text-white"
-                value={simpleDraft?.name ?? ""}
-                onChange={(event) =>
-                  onDraftChange((prev) => ({
-                    ...prev,
-                    name: event.target.value,
-                  }))
-                }
-                onInput={onClearError}
-                aria-label={`Edit ${flow.name} name`}
-              />
-            ) : (
-              <h3 className="text-base font-medium text-white truncate">
-                {flow.name}
-              </h3>
-            )}
+            <div className="flex items-center gap-2 min-w-0">
+              {isEditing ? (
+                <input
+                  type="text"
+                  className="input input-sm h-9 w-full max-w-md bg-[#1c1b22] text-base font-medium text-white"
+                  value={simpleDraft?.name ?? ""}
+                  onChange={(event) =>
+                    onDraftChange((prev) => ({
+                      ...prev,
+                      name: event.target.value,
+                    }))
+                  }
+                  onInput={onClearError}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      onApply();
+                    }
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      onCancel();
+                    }
+                  }}
+                  aria-label={`Edit ${flow.name} name`}
+                />
+              ) : (
+                <h3 className="text-base font-medium text-white truncate">
+                  {flow.name}
+                </h3>
+              )}
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={isEditing ? (hasChanges ? onApply : onCancel) : onToggleEditing}
+                  className={`btn ${isEditing ? "btn-primary" : "btn-ghost"} btn-xs px-2`}
+                  aria-label={isEditing ? `Save ${flow.name}` : `Edit ${flow.name}`}
+                  title={isEditing ? `Save ${flow.name}` : `Edit ${flow.name}`}
+                >
+                  {isEditing ? <Check className="w-3.5 h-3.5" /> : <Pencil className="w-3.5 h-3.5" />}
+                </button>
+                {isEditing ? (
+                  <button
+                    type="button"
+                    onClick={onCancel}
+                    className="btn btn-ghost btn-xs px-2"
+                    aria-label={`Cancel editing ${flow.name}`}
+                    title={`Cancel editing ${flow.name}`}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                ) : null}
+              </div>
+            </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#b5b5bc]">
               <span>{statusSummary}</span>
               {metaItems.length > 0 ? (
@@ -1103,6 +1442,8 @@ export function FlowTracksPanel({
   error,
   emptyMessage = "No tracks generated for this flow yet.",
   editable = false,
+  showStatus = false,
+  headerActions = null,
   deletingTrackId = null,
   onDeleteTrack,
   onNavigateArtist,
@@ -1377,6 +1718,7 @@ export function FlowTracksPanel({
           </button>
         </div>
         <div className="ml-auto flex items-center gap-2 relative z-10">
+          {headerActions}
           <button
             onClick={handleToggleMute}
             className="btn btn-ghost btn-xs px-1.5"
@@ -1419,6 +1761,7 @@ export function FlowTracksPanel({
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-20 bg-[#1c1b22]">
               <tr className="text-left text-[#8b8b90] uppercase text-xs tracking-wider">
+                {showStatus ? <th className="px-3 py-2">Status</th> : null}
                 <th className="px-3 py-2">Song</th>
                 <th className="px-3 py-2">Artist</th>
                 <th className="px-3 py-2">Album</th>
@@ -1450,9 +1793,23 @@ export function FlowTracksPanel({
                         : undefined
                     }
                   >
+                    {showStatus ? (
+                      <td className="px-3 py-2 align-top">
+                        <TrackStatusBadge status={track.status} />
+                      </td>
+                    ) : null}
                     <td className="px-3 py-2">{track.trackName}</td>
                     <td className="px-3 py-2">{track.artistName}</td>
-                    <td className="px-3 py-2">{track.albumName || "Unknown Album"}</td>
+                    <td className="px-3 py-2">
+                      <div className="grid gap-1">
+                        <span>{track.albumName || "Unknown Album"}</span>
+                        {track.status === "failed" && track.error ? (
+                          <span className="text-[11px] text-[#d49c9c]">
+                            {track.error}
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
                         <button
@@ -1466,14 +1823,15 @@ export function FlowTracksPanel({
                             <Play className="w-3.5 h-3.5" />
                           )}
                         </button>
-                        <button
-                          onClick={() => onNavigateArtist(track)}
-                          className="btn btn-secondary btn-xs px-2"
-                          aria-label={`Open artist details for ${track.artistName}`}
-                          disabled={!track.artistMbid}
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </button>
+                        {track.artistMbid ? (
+                          <button
+                            onClick={() => onNavigateArtist(track)}
+                            className="btn btn-secondary btn-xs px-2"
+                            aria-label={`Open artist details for ${track.artistName}`}
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </button>
+                        ) : null}
                         {canDelete ? (
                           <button
                             onClick={() => onDeleteTrack?.(track)}
@@ -1526,6 +1884,7 @@ export function SharedPlaylistCard({
   stats,
   currentJob,
   isEditing,
+  isTrackEditing,
   isTracksOpen,
   tracks,
   tracksLoading,
@@ -1533,20 +1892,22 @@ export function SharedPlaylistCard({
   nameDraft,
   nameError,
   isApplying,
-  deletingTrackId,
   deletingId,
   onToggleEditing,
   onNameChange,
   onCancelEdit,
   onApplyEdit,
+  onToggleTrackEditing,
+  onSaveTracks,
   onDelete,
-  onDeleteTrack,
   onViewTracks,
   onNavigateArtist,
   retryCyclePaused,
+  retryCycleScheduled,
   retryActionInFlight,
   onSetRetryCyclePaused,
 }) {
+  const trackEditorRef = useRef(null);
   const pending = Number(stats?.pending || 0);
   const downloading = Number(stats?.downloading || 0);
   const done = Number(stats?.done || 0);
@@ -1554,9 +1915,9 @@ export function SharedPlaylistCard({
   const total = Math.max(Number(playlist?.trackCount || 0), pending + downloading + done);
   const progressPct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
   const waitingForRetryCycle =
+    retryCycleScheduled === true &&
     pending === 0 &&
     downloading === 0 &&
-    failed > 0 &&
     done < Number(playlist?.trackCount || 0);
   const isCurrentJob =
     currentJob?.playlistType === playlist.id &&
@@ -1576,19 +1937,60 @@ export function SharedPlaylistCard({
             </span>
           </div>
           <div className="space-y-1">
-            {isEditing ? (
-              <input
-                type="text"
-                className="input input-sm h-9 w-full max-w-md bg-[#1c1b22] text-base font-medium text-white"
-                value={nameDraft ?? ""}
-                onChange={(event) => onNameChange(event.target.value)}
-                aria-label={`Edit ${playlist.name} name`}
-              />
-            ) : (
-              <h3 className="truncate text-base font-medium text-white">
-                {playlist.name}
-              </h3>
-            )}
+            <div className="flex items-center gap-2 min-w-0">
+              {isEditing ? (
+                <input
+                  type="text"
+                  className="input input-sm h-9 w-full max-w-md bg-[#1c1b22] text-base font-medium text-white"
+                  value={nameDraft ?? ""}
+                  onChange={(event) => onNameChange(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      onApplyEdit();
+                    }
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      onCancelEdit();
+                    }
+                  }}
+                  aria-label={`Edit ${playlist.name} name`}
+                />
+              ) : (
+                <h3 className="truncate text-base font-medium text-white">
+                  {playlist.name}
+                </h3>
+              )}
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={isEditing ? onApplyEdit : onToggleEditing}
+                  className={`btn ${isEditing ? "btn-primary" : "btn-ghost"} btn-xs px-2`}
+                  aria-label={isEditing ? `Save ${playlist.name}` : `Edit ${playlist.name}`}
+                  title={isEditing ? `Save ${playlist.name}` : `Edit ${playlist.name}`}
+                  disabled={isApplying}
+                >
+                  {isEditing ? <Check className="w-3.5 h-3.5" /> : <Pencil className="w-3.5 h-3.5" />}
+                </button>
+                {isEditing ? (
+                  <button
+                    type="button"
+                    onClick={onCancelEdit}
+                    className="btn btn-ghost btn-xs px-2"
+                    aria-label={`Cancel editing ${playlist.name}`}
+                    title={`Cancel editing ${playlist.name}`}
+                    disabled={isApplying}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            {nameError ? (
+              <p className="text-xs text-red-400">
+                {nameError}
+              </p>
+            ) : null}
             {isCurrentJob ? (
               <p className="truncate text-xs text-[#9ed3a1]">
                 Downloading {currentJob.trackName}
@@ -1634,17 +2036,6 @@ export function SharedPlaylistCard({
               <ListMusic className="w-4 h-4" />
               <span className="hidden sm:inline">Tracks</span>
             </button>
-            <button
-              type="button"
-              onClick={onToggleEditing}
-              className={`btn ${isEditing ? "btn-primary" : "btn-secondary"} btn-sm gap-2`}
-              aria-label={isEditing ? `Close ${playlist.name} editor` : `Edit ${playlist.name}`}
-              title={isEditing ? `Close ${playlist.name} editor` : `Edit ${playlist.name}`}
-              aria-pressed={isEditing}
-            >
-              <Pencil className="w-4 h-4" />
-              <span className="hidden sm:inline">Manage</span>
-            </button>
             <MoreMenu>
               <button
                 type="button"
@@ -1676,52 +2067,71 @@ export function SharedPlaylistCard({
         </div>
       </div>
 
-      {isEditing && (
+      {isTracksOpen && (
         <div className="px-4 pb-4">
           <div className="card-separator mb-4" />
-          <div className="grid gap-4 rounded-lg border border-white/10 bg-white/5 p-4">
+          {isTrackEditing ? (
+            <SharedPlaylistTrackEditor
+              ref={trackEditorRef}
+              tracks={tracks}
+              loading={tracksLoading}
+              error={tracksError}
+              saving={isApplying}
+              headerActions={
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await trackEditorRef.current?.save?.();
+                  }}
+                  className="btn btn-primary btn-xs p-2"
+                  aria-label={`Save ${playlist.name} tracklist`}
+                  title={`Save ${playlist.name} tracklist`}
+                  disabled={isApplying}
+                >
+                  {isApplying ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              }
+              onSave={onSaveTracks}
+            />
+          ) : (
             <FlowTracksPanel
               tracks={tracks}
               loading={tracksLoading}
               error={tracksError}
-              emptyMessage="No downloaded tracks in this static playlist yet."
-              editable={true}
-              deletingTrackId={deletingTrackId}
-              onDeleteTrack={onDeleteTrack}
+              emptyMessage="No tracks in this static playlist yet."
+              editable={false}
+              showStatus={true}
+              headerActions={
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (isTrackEditing) {
+                      await trackEditorRef.current?.save?.();
+                      return;
+                    }
+                    onToggleTrackEditing();
+                  }}
+                  className={`btn ${isTrackEditing ? "btn-primary" : "btn-secondary"} btn-xs p-2`}
+                  aria-label={isTrackEditing ? `Save ${playlist.name} tracklist` : `Edit ${playlist.name} tracklist`}
+                  title={isTrackEditing ? `Save ${playlist.name} tracklist` : `Edit ${playlist.name} tracklist`}
+                  disabled={isApplying}
+                >
+                  {isApplying ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : isTrackEditing ? (
+                    <Check className="w-3.5 h-3.5" />
+                  ) : (
+                    <Pencil className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              }
               onNavigateArtist={onNavigateArtist}
             />
-            {nameError ? (
-              <div className="text-xs text-red-400 font-medium">{nameError}</div>
-            ) : null}
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <button onClick={onCancelEdit} className="btn btn-secondary btn-sm">
-                Cancel
-              </button>
-              <FlipSaveButton
-                disabled={String(nameDraft || "").trim() === String(playlist.name || "").trim()}
-                saving={isApplying}
-                onClick={onApplyEdit}
-                label="Save"
-                savedLabel="Saved"
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isTracksOpen && !isEditing && (
-        <div className="px-4 pb-4">
-          <div className="card-separator mb-4" />
-          <FlowTracksPanel
-            tracks={tracks}
-            loading={tracksLoading}
-            error={tracksError}
-            emptyMessage="No downloaded tracks in this static playlist yet."
-            editable={false}
-            deletingTrackId={deletingTrackId}
-            onDeleteTrack={onDeleteTrack}
-            onNavigateArtist={onNavigateArtist}
-          />
+          )}
         </div>
       )}
     </div>

@@ -75,6 +75,29 @@ const normalizeImportedTrackList = (value) => {
     .filter(Boolean);
 };
 
+const buildTrackIdentity = (track) =>
+  [
+    String(track?.artistName || "").trim(),
+    String(track?.trackName || "").trim(),
+    String(track?.albumName || "").trim(),
+    String(track?.reason || "").trim(),
+    String(track?.artistMbid || "").trim(),
+  ].join("\u0001");
+
+const sortJobsForTrackReuse = (jobs) =>
+  [...jobs].sort((a, b) => {
+    const priority = (job) => {
+      if (job?.status === "done") return 0;
+      if (job?.status === "failed") return 1;
+      if (job?.status === "downloading") return 2;
+      if (job?.status === "pending") return 3;
+      return 4;
+    };
+    const priorityDiff = priority(a) - priority(b);
+    if (priorityDiff !== 0) return priorityDiff;
+    return Number(a?.createdAt || 0) - Number(b?.createdAt || 0);
+  });
+
 router.get("/stream/:jobId", noCache, async (req, res) => {
   if (!verifyTokenAuth(req)) {
     return res
@@ -768,21 +791,121 @@ router.post("/shared-playlists/import", async (req, res) => {
 router.put("/shared-playlists/:playlistId", async (req, res) => {
   try {
     const { playlistId } = req.params;
-    const { name } = req.body || {};
-    const safeName = String(name || "").trim();
+    const { name, tracks } = req.body || {};
+    const hasNameUpdate = Object.prototype.hasOwnProperty.call(
+      req.body || {},
+      "name",
+    );
+    const hasTracksUpdate = Object.prototype.hasOwnProperty.call(
+      req.body || {},
+      "tracks",
+    );
+    if (!hasNameUpdate && !hasTracksUpdate) {
+      return res.status(400).json({
+        error: "At least one playlist field is required",
+      });
+    }
+    const currentPlaylist = flowPlaylistConfig.getSharedPlaylist(playlistId);
+    if (!currentPlaylist) {
+      return res.status(404).json({ error: "Shared playlist not found" });
+    }
+    const safeName = hasNameUpdate
+      ? String(name || "").trim()
+      : String(currentPlaylist.name || "").trim();
     if (!safeName) {
       return res.status(400).json({ error: "name is required" });
     }
-    const playlist = flowPlaylistConfig.updateSharedPlaylist(playlistId, {
-      name: safeName,
-    });
-    if (!playlist) {
-      return res.status(404).json({ error: "Shared playlist not found" });
+    const normalizedTracks = hasTracksUpdate
+      ? normalizeImportedTrackList(tracks)
+      : currentPlaylist.tracks;
+    if (hasTracksUpdate && normalizedTracks.length === 0) {
+      return res.status(400).json({
+        error: "tracks are required",
+        message: "Playlist must include at least one valid track",
+      });
     }
+
+    let playlist = null;
+    let tracksQueued = 0;
+    if (!hasTracksUpdate) {
+      playlist = flowPlaylistConfig.updateSharedPlaylist(playlistId, {
+        name: safeName,
+      });
+    } else {
+      const releaseMutation = await beginPlaylistMutation(playlistId);
+      try {
+        const existingJobs = downloadTracker.getByPlaylistType(playlistId);
+        const reusableJobsByIdentity = new Map();
+        for (const job of existingJobs) {
+          const identity = buildTrackIdentity(job);
+          const current = reusableJobsByIdentity.get(identity) || [];
+          current.push(job);
+          reusableJobsByIdentity.set(identity, current);
+        }
+        for (const [
+          identity,
+          jobsForIdentity,
+        ] of reusableJobsByIdentity.entries()) {
+          reusableJobsByIdentity.set(
+            identity,
+            sortJobsForTrackReuse(jobsForIdentity),
+          );
+        }
+
+        const matchedJobIds = new Set();
+        const tracksToQueue = [];
+        for (const track of normalizedTracks) {
+          const identity = buildTrackIdentity(track);
+          const reusableJobs = reusableJobsByIdentity.get(identity) || [];
+          const matchedJob = reusableJobs.shift();
+          if (matchedJob) {
+            matchedJobIds.add(matchedJob.id);
+          } else {
+            tracksToQueue.push(track);
+          }
+        }
+
+        const playlistRoot = path.resolve(
+          weeklyFlowWorker.weeklyFlowRoot,
+          "aurral-weekly-flow",
+          playlistId,
+        );
+        for (const job of existingJobs) {
+          if (matchedJobIds.has(job.id)) continue;
+          if (job.status === "done" && typeof job.finalPath === "string") {
+            const safeFinalPath = path.resolve(job.finalPath);
+            if (isPathInsideRoot(safeFinalPath, playlistRoot)) {
+              await fsp.rm(safeFinalPath, { force: true });
+            }
+          }
+          downloadTracker.removeJob(job.id);
+        }
+
+        playlist = flowPlaylistConfig.updateSharedPlaylist(playlistId, {
+          name: safeName,
+          tracks: normalizedTracks,
+        });
+        tracksQueued = downloadTracker.addJobs(
+          tracksToQueue,
+          playlistId,
+        ).length;
+      } finally {
+        releaseMutation();
+      }
+      weeklyFlowWorker.pruneOrphanedJobState();
+    }
+
     playlistManager.updateConfig(false);
     await playlistManager.ensureSmartPlaylists();
     await playlistManager.scanLibrary();
-    res.json({ success: true, playlist });
+    if (tracksQueued > 0) {
+      if (!weeklyFlowWorker.running) {
+        await weeklyFlowWorker.start();
+      } else {
+        weeklyFlowWorker.wake();
+      }
+    }
+    res.json({ success: true, playlist, tracksQueued });
   } catch (error) {
     if (error?.code === "SHARED_PLAYLIST_NAME_CONFLICT") {
       return res.status(400).json({

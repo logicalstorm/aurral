@@ -9,7 +9,6 @@ import {
   deleteFlow,
   convertFlowToStaticPlaylist,
   deleteSharedPlaylist,
-  deleteSharedPlaylistTrack,
   importSharedPlaylist,
   updateSharedPlaylist,
   setFlowEnabled,
@@ -762,8 +761,8 @@ function FlowPage() {
   const [sharedPlaylistErrors, setSharedPlaylistErrors] = useState({});
   const [applyingFlowId, setApplyingFlowId] = useState(null);
   const [applyingSharedPlaylistId, setApplyingSharedPlaylistId] = useState(null);
-  const [deletingSharedTrackId, setDeletingSharedTrackId] = useState(null);
   const [retryActionPlaylistId, setRetryActionPlaylistId] = useState(null);
+  const [trackEditingId, setTrackEditingId] = useState(null);
   const [flowStatsById, setFlowStatsById] = useState({});
   const [tracksExpandedId, setTracksExpandedId] = useState(null);
   const [tracksLoadingByFlowId, setTracksLoadingByFlowId] = useState({});
@@ -1337,30 +1336,6 @@ function FlowPage() {
     }
   };
 
-  const handleDeleteSharedPlaylistTrack = async (playlist, track) => {
-    if (!playlist?.id || !track?.id || deletingSharedTrackId) return;
-    setDeletingSharedTrackId(track.id);
-    try {
-      await deleteSharedPlaylistTrack(playlist.id, track.id);
-      setTracksByFlowId((prev) => ({
-        ...prev,
-        [playlist.id]: (prev[playlist.id] || []).filter((entry) => entry.id !== track.id),
-      }));
-      await fetchStatus();
-      await fetchFlowTracks(playlist.id, { showSpinner: false });
-      showSuccess(`Removed ${track.trackName} from ${playlist.name}`);
-    } catch (err) {
-      showError(
-        err.response?.data?.message ||
-          err.response?.data?.error ||
-          err.message ||
-          "Failed to remove track from static playlist",
-      );
-    } finally {
-      setDeletingSharedTrackId(null);
-    }
-  };
-
   const handleSetRetryCyclePaused = async (playlistId, paused) => {
     if (!playlistId || retryActionPlaylistId) return;
     setRetryActionPlaylistId(playlistId);
@@ -1469,8 +1444,12 @@ function FlowPage() {
     return "Flow selection";
   };
   const retryCyclePausedByPlaylist = status?.retryCyclePausedByPlaylist || {};
+  const retryCycleScheduledByPlaylist = status?.retryCycleScheduledByPlaylist || {};
 
-  const fetchFlowTracks = async (flowId, { showSpinner = true } = {}) => {
+  const fetchFlowTracks = async (
+    flowId,
+    { showSpinner = true, includeFailed = false } = {},
+  ) => {
     if (!flowId) return;
     if (showSpinner) {
       setTracksLoadingByFlowId((prev) => ({ ...prev, [flowId]: true }));
@@ -1479,7 +1458,7 @@ function FlowPage() {
     try {
       const jobs = await getFlowJobs(flowId, 500);
       const normalized = (Array.isArray(jobs) ? jobs : [])
-        .filter((job) => job?.status !== "failed")
+        .filter((job) => includeFailed || job?.status !== "failed")
         .map((job) => ({
           ...job,
           albumName: job?.albumName || null,
@@ -1503,15 +1482,17 @@ function FlowPage() {
     }
   };
 
-  const handleToggleTracks = async (flowId) => {
+  const handleToggleTracks = async (flowId, options = {}) => {
     if (!flowId) return;
     if (tracksExpandedId === flowId) {
       setTracksExpandedId(null);
+      setTrackEditingId((prev) => (prev === flowId ? null : prev));
       return;
     }
     setEditingId(null);
+    setTrackEditingId(null);
     setTracksExpandedId(flowId);
-    await fetchFlowTracks(flowId);
+    await fetchFlowTracks(flowId, options);
   };
 
   const handleToggleEditing = (flowId) => {
@@ -1524,6 +1505,7 @@ function FlowPage() {
           return nextErrors;
         });
         setTracksExpandedId(null);
+        setTrackEditingId(null);
       }
       return next;
     });
@@ -1544,8 +1526,48 @@ function FlowPage() {
       delete next[playlistId];
       return next;
     });
+    setTrackEditingId(null);
     setTracksExpandedId(null);
-    await fetchFlowTracks(playlistId);
+    await fetchFlowTracks(playlistId, { includeFailed: true });
+  };
+
+  const handleToggleSharedPlaylistTrackEditing = async (playlistId) => {
+    if (!playlistId) return;
+    if (trackEditingId === playlistId) {
+      setTrackEditingId(null);
+      return;
+    }
+    setEditingId(null);
+    if (tracksExpandedId !== playlistId) {
+      setTracksExpandedId(playlistId);
+      await fetchFlowTracks(playlistId, { includeFailed: true });
+    }
+    setTrackEditingId(playlistId);
+  };
+
+  const handleSaveSharedPlaylistTracks = async (playlist, tracks) => {
+    if (!playlist?.id) return;
+    setApplyingSharedPlaylistId(playlist.id);
+    try {
+      await updateSharedPlaylist(playlist.id, { tracks });
+      setTrackEditingId(null);
+      showSuccess("Static playlist tracklist updated");
+      await fetchStatus();
+      await fetchFlowTracks(playlist.id, {
+        showSpinner: false,
+        includeFailed: true,
+      });
+    } catch (err) {
+      const message =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        "Failed to update static playlist tracklist";
+      showError(message);
+      throw new Error(message);
+    } finally {
+      setApplyingSharedPlaylistId(null);
+    }
   };
 
   const handleNavigateArtist = (track) => {
@@ -1622,6 +1644,7 @@ function FlowPage() {
                 stats={getPlaylistStats(playlist.id)}
                 currentJob={status?.worker?.currentJob}
                 isEditing={editingId === playlist.id}
+                isTrackEditing={trackEditingId === playlist.id}
                 isTracksOpen={tracksExpandedId === playlist.id}
                 tracks={tracksByFlowId[playlist.id] || []}
                 tracksLoading={tracksLoadingByFlowId[playlist.id] === true}
@@ -1629,7 +1652,6 @@ function FlowPage() {
                 nameDraft={sharedPlaylistDrafts[playlist.id] ?? playlist.name ?? ""}
                 nameError={sharedPlaylistErrors[playlist.id] || ""}
                 isApplying={applyingSharedPlaylistId === playlist.id}
-                deletingTrackId={deletingSharedTrackId}
                 deletingId={deletingId}
                 onToggleEditing={() => handleToggleSharedPlaylistEditing(playlist.id)}
                 onNameChange={(name) =>
@@ -1640,11 +1662,21 @@ function FlowPage() {
                 }
                 onCancelEdit={() => handleCancelSharedPlaylistEdit(playlist)}
                 onApplyEdit={() => handleApplySharedPlaylist(playlist)}
+                onToggleTrackEditing={() =>
+                  handleToggleSharedPlaylistTrackEditing(playlist.id)
+                }
+                onSaveTracks={(tracks) =>
+                  handleSaveSharedPlaylistTracks(playlist, tracks)
+                }
                 onDelete={() => handleDeleteSharedPlaylist(playlist)}
-                onViewTracks={() => handleToggleTracks(playlist.id)}
-                onDeleteTrack={(track) => handleDeleteSharedPlaylistTrack(playlist, track)}
+                onViewTracks={() =>
+                  handleToggleTracks(playlist.id, { includeFailed: true })
+                }
                 onNavigateArtist={handleNavigateArtist}
                 retryCyclePaused={retryCyclePausedByPlaylist[playlist.id] === true}
+                retryCycleScheduled={
+                  retryCycleScheduledByPlaylist[playlist.id] === true
+                }
                 retryActionInFlight={retryActionPlaylistId === playlist.id}
                 onSetRetryCyclePaused={(paused) =>
                   handleSetRetryCyclePaused(playlist.id, paused)
