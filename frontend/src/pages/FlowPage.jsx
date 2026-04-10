@@ -1462,7 +1462,7 @@ function FlowPage() {
         .map((job) => ({
           ...job,
           albumName: job?.albumName || null,
-          reason: normalizeReason(job),
+          reason: job?.reason || null,
           streamUrl:
             job?.status === "done" && job?.id ? getFlowTrackStreamUrl(job.id) : null,
         }));
