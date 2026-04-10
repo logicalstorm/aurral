@@ -841,6 +841,37 @@ function TrackStatusBadge({ status, pendingDelete = false }) {
   );
 }
 
+function buildTrackSavePayload(tracks) {
+  const nextTracks = [];
+  for (const track of Array.isArray(tracks) ? tracks : []) {
+    if (track?.isMarkedForDeletion) {
+      continue;
+    }
+    const artistName = String(track?.artistName || "").trim();
+    const trackName = String(track?.trackName || "").trim();
+    const albumName = String(track?.albumName || "").trim();
+    const artistMbid = String(track?.artistMbid || "").trim();
+    const reason = String(track?.reason || "").trim();
+    if (!artistName && !trackName && !albumName && !artistMbid && !reason) {
+      continue;
+    }
+    if (!artistName || !trackName) {
+      throw new Error("Each edited track needs both an artist and song name");
+    }
+    nextTracks.push({
+      artistName,
+      trackName,
+      albumName: albumName || null,
+      artistMbid: artistMbid || null,
+      reason: reason || null,
+    });
+  }
+  if (nextTracks.length === 0) {
+    throw new Error("Playlist must include at least one track");
+  }
+  return nextTracks;
+}
+
 export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrackEditor({
   tracks,
   loading,
@@ -874,6 +905,13 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
     "inline-flex h-8 items-center gap-1.5 rounded-md border border-white/12 bg-[#4a4a52] px-3 text-xs font-medium text-[#ededf0] transition hover:border-white/20 hover:bg-[#575762] disabled:cursor-not-allowed disabled:opacity-50";
   const activeUtilityButtonClass =
     "border-white/20 bg-[#5a5a64] text-white hover:bg-[#676773]";
+  const initialPayload = useMemo(() => {
+    try {
+      return JSON.stringify(buildTrackSavePayload(buildEditableTrackRows(tracks)));
+    } catch {
+      return "";
+    }
+  }, [tracks]);
 
   const updateTrack = (rowId, key, value) => {
     setDraftTracks((prev) =>
@@ -924,45 +962,23 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
   };
 
   const buildPayload = () => {
-    const nextTracks = [];
-    for (const track of draftTracks) {
-      if (track.isMarkedForDeletion) {
-        continue;
-      }
-      const artistName = String(track.artistName || "").trim();
-      const trackName = String(track.trackName || "").trim();
-      const albumName = String(track.albumName || "").trim();
-      const artistMbid = String(track.artistMbid || "").trim();
-      const reason = String(track.reason || "").trim();
-      if (!artistName && !trackName && !albumName && !artistMbid && !reason) {
-        continue;
-      }
-      if (!artistName || !trackName) {
-        throw new Error("Each edited track needs both an artist and song name");
-      }
-      nextTracks.push({
-        artistName,
-        trackName,
-        albumName: albumName || null,
-        artistMbid: artistMbid || null,
-        reason: reason || null,
-      });
-    }
-    if (nextTracks.length === 0) {
-      throw new Error("Playlist must include at least one track");
-    }
-    return nextTracks;
+    return buildTrackSavePayload(draftTracks);
   };
 
   const handleSave = async () => {
     try {
       const payload = buildPayload();
+      const currentPayload = JSON.stringify(payload);
+      if (currentPayload === initialPayload) {
+        setEditorError("");
+        return "unchanged";
+      }
       setEditorError("");
       await onSave?.(payload);
-      return true;
+      return "saved";
     } catch (saveError) {
       setEditorError(saveError?.message || "Failed to save tracklist");
-      return false;
+      return "error";
     }
   };
 
@@ -2198,7 +2214,10 @@ export function SharedPlaylistCard({
                 <button
                   type="button"
                   onClick={async () => {
-                    await trackEditorRef.current?.save?.();
+                    const result = await trackEditorRef.current?.save?.();
+                    if (result === "unchanged") {
+                      onToggleTrackEditing();
+                    }
                   }}
                   className="btn btn-primary btn-xs p-2"
                   aria-label={`Save ${playlist.name} tracklist`}
@@ -2229,7 +2248,10 @@ export function SharedPlaylistCard({
                   type="button"
                   onClick={async () => {
                     if (isTrackEditing) {
-                      await trackEditorRef.current?.save?.();
+                      const result = await trackEditorRef.current?.save?.();
+                      if (result === "unchanged") {
+                        onToggleTrackEditing();
+                      }
                       return;
                     }
                     onToggleTrackEditing();
