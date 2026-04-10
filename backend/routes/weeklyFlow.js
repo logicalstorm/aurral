@@ -80,7 +80,6 @@ const buildTrackIdentity = (track) =>
     String(track?.artistName || "").trim(),
     String(track?.trackName || "").trim(),
     String(track?.albumName || "").trim(),
-    String(track?.reason || "").trim(),
     String(track?.artistMbid || "").trim(),
   ].join("\u0001");
 
