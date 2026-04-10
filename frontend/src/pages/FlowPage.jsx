@@ -755,12 +755,16 @@ function FlowPage() {
   const [convertingId, setConvertingId] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const [flowNameEditingId, setFlowNameEditingId] = useState(null);
+  const [flowManageEditingId, setFlowManageEditingId] = useState(null);
   const [simpleDrafts, setSimpleDrafts] = useState({});
   const [simpleErrors, setSimpleErrors] = useState({});
   const [sharedPlaylistDrafts, setSharedPlaylistDrafts] = useState({});
   const [sharedPlaylistErrors, setSharedPlaylistErrors] = useState({});
   const [applyingFlowId, setApplyingFlowId] = useState(null);
+  const [applyingFlowNameId, setApplyingFlowNameId] = useState(null);
   const [applyingSharedPlaylistId, setApplyingSharedPlaylistId] = useState(null);
+  const [applyingSharedPlaylistNameId, setApplyingSharedPlaylistNameId] = useState(null);
   const [retryActionPlaylistId, setRetryActionPlaylistId] = useState(null);
   const [trackEditingId, setTrackEditingId] = useState(null);
   const [flowStatsById, setFlowStatsById] = useState({});
@@ -971,7 +975,28 @@ function FlowPage() {
       delete next[flow.id];
       return next;
     });
-    setEditingId((prev) => (prev === flow.id ? null : prev));
+    setFlowNameEditingId((prev) => (prev === flow.id ? null : prev));
+    setFlowManageEditingId((prev) => (prev === flow.id ? null : prev));
+  };
+
+  const handleCancelFlowNameEdit = (flow) => {
+    if (!flow?.id) return;
+    setSimpleDrafts((prev) => {
+      const base = prev[flow.id] ?? flowToForm(flow);
+      return {
+        ...prev,
+        [flow.id]: {
+          ...base,
+          name: flow.name || "",
+        },
+      };
+    });
+    setSimpleErrors((prev) => {
+      const next = { ...prev };
+      delete next[flow.id];
+      return next;
+    });
+    setFlowNameEditingId((prev) => (prev === flow.id ? null : prev));
   };
 
   const handleApplySimple = async (flow) => {
@@ -993,6 +1018,8 @@ function FlowPage() {
         ...prev,
         [flow.id]: flowToForm(updatedFlow),
       }));
+      setFlowNameEditingId((prev) => (prev === flow.id ? null : prev));
+      setFlowManageEditingId((prev) => (prev === flow.id ? null : prev));
       showSuccess("Flow updated");
       await fetchStatus();
     } catch (err) {
@@ -1002,6 +1029,46 @@ function FlowPage() {
       showError(message);
     } finally {
       setApplyingFlowId(null);
+    }
+  };
+
+  const handleApplyFlowNameEdit = async (flow) => {
+    if (!flow?.id) return;
+    setApplyingFlowNameId(flow.id);
+    setSimpleErrors((prev) => {
+      const next = { ...prev };
+      delete next[flow.id];
+      return next;
+    });
+    try {
+      const currentDraft = simpleDrafts[flow.id] ?? flowToForm(flow);
+      const nextName = String(currentDraft?.name ?? flow.name ?? "").trim();
+      const payload = buildFlowFromForm({
+        ...flowToForm(flow),
+        name: nextName,
+      });
+      const response = await updateFlow(flow.id, payload);
+      const updatedFlow = response?.flow || {
+        ...flow,
+        ...payload,
+      };
+      setSimpleDrafts((prev) => ({
+        ...prev,
+        [flow.id]: {
+          ...(prev[flow.id] ?? flowToForm(updatedFlow)),
+          name: updatedFlow.name || "",
+        },
+      }));
+      setFlowNameEditingId((prev) => (prev === flow.id ? null : prev));
+      showSuccess("Flow updated");
+      await fetchStatus();
+    } catch (err) {
+      const message =
+        err.response?.data?.message || err.message || "Failed to update flow";
+      setSimpleErrors((prev) => ({ ...prev, [flow.id]: message }));
+      showError(message);
+    } finally {
+      setApplyingFlowNameId(null);
     }
   };
 
@@ -1022,7 +1089,7 @@ function FlowPage() {
           ...prev,
           [createdFlow.id]: flowToForm(createdFlow),
         }));
-        setEditingId(createdFlow.id);
+        setFlowManageEditingId(createdFlow.id);
       }
       showSuccess("Flow created");
       await fetchStatus();
@@ -1304,7 +1371,7 @@ function FlowPage() {
 
   const handleApplySharedPlaylist = async (playlist) => {
     if (!playlist) return;
-    setApplyingSharedPlaylistId(playlist.id);
+    setApplyingSharedPlaylistNameId(playlist.id);
     setSharedPlaylistErrors((prev) => {
       const next = { ...prev };
       delete next[playlist.id];
@@ -1332,7 +1399,7 @@ function FlowPage() {
       }));
       showError(message);
     } finally {
-      setApplyingSharedPlaylistId(null);
+      setApplyingSharedPlaylistNameId(null);
     }
   };
 
@@ -1489,14 +1556,28 @@ function FlowPage() {
       setTrackEditingId((prev) => (prev === flowId ? null : prev));
       return;
     }
-    setEditingId(null);
+    setFlowManageEditingId(null);
     setTrackEditingId(null);
     setTracksExpandedId(flowId);
     await fetchFlowTracks(flowId, options);
   };
 
+  const handleToggleFlowNameEditing = (flow) => {
+    if (!flow?.id) return;
+    setSimpleDrafts((prev) => ({
+      ...prev,
+      [flow.id]: prev[flow.id] ?? flowToForm(flow),
+    }));
+    setSimpleErrors((prevErrors) => {
+      const nextErrors = { ...prevErrors };
+      delete nextErrors[flow.id];
+      return nextErrors;
+    });
+    setFlowNameEditingId((prev) => (prev === flow.id ? null : flow.id));
+  };
+
   const handleToggleEditing = (flowId) => {
-    setEditingId((prev) => {
+    setFlowManageEditingId((prev) => {
       const next = prev === flowId ? null : flowId;
       if (next) {
         setSimpleErrors((prevErrors) => {
@@ -1515,20 +1596,12 @@ function FlowPage() {
     if (!playlistId) return;
     const isClosing = editingId === playlistId;
     setEditingId(isClosing ? null : playlistId);
-    if (isClosing) {
-      if (tracksExpandedId === playlistId) {
-        setTracksExpandedId(null);
-      }
-      return;
-    }
+    if (isClosing) return;
     setSharedPlaylistErrors((prev) => {
       const next = { ...prev };
       delete next[playlistId];
       return next;
     });
-    setTrackEditingId(null);
-    setTracksExpandedId(null);
-    await fetchFlowTracks(playlistId, { includeFailed: true });
   };
 
   const handleToggleSharedPlaylistTrackEditing = async (playlistId) => {
@@ -1537,7 +1610,6 @@ function FlowPage() {
       setTrackEditingId(null);
       return;
     }
-    setEditingId(null);
     if (tracksExpandedId !== playlistId) {
       setTracksExpandedId(playlistId);
       await fetchFlowTracks(playlistId, { includeFailed: true });
@@ -1651,7 +1723,8 @@ function FlowPage() {
                 tracksError={tracksErrorByFlowId[playlist.id] || ""}
                 nameDraft={sharedPlaylistDrafts[playlist.id] ?? playlist.name ?? ""}
                 nameError={sharedPlaylistErrors[playlist.id] || ""}
-                isApplying={applyingSharedPlaylistId === playlist.id}
+                isApplyingName={applyingSharedPlaylistNameId === playlist.id}
+                isApplyingTracks={applyingSharedPlaylistId === playlist.id}
                 deletingId={deletingId}
                 onToggleEditing={() => handleToggleSharedPlaylistEditing(playlist.id)}
                 onNameChange={(name) =>
@@ -1669,6 +1742,7 @@ function FlowPage() {
                   handleSaveSharedPlaylistTracks(playlist, tracks)
                 }
                 onDelete={() => handleDeleteSharedPlaylist(playlist)}
+                onExport={() => handleExportFlow(playlist)}
                 onViewTracks={() =>
                   handleToggleTracks(playlist.id, { includeFailed: true })
                 }
@@ -1703,12 +1777,16 @@ function FlowPage() {
           };
           const enabled = flow.enabled === true;
           const nextRun = formatNextRun(flow.nextRunAt, countdownNow);
-          const isEditing = editingId === flow.id;
+          const isEditing = flowManageEditingId === flow.id;
+          const isNameEditing = flowNameEditingId === flow.id;
           const simpleDraft = simpleDrafts[flow.id] ?? flowToForm(flow);
           const simpleError = simpleErrors[flow.id];
+          const isNameDirty =
+            String(simpleDraft?.name ?? "").trim() !== String(flow?.name ?? "").trim();
           const simpleSize = Number(simpleDraft?.size ?? 0);
           const simpleMixSize = Number.isFinite(simpleSize) ? simpleSize : 0;
           const isApplying = applyingFlowId === flow.id;
+          const isNameApplying = applyingFlowNameId === flow.id;
           const hasChanges = isFlowDirty(flow, simpleDraft);
           const canExport = Number(stats?.total || 0) > 0;
           const canConvertToStatic = Number(stats?.done || 0) > 0;
@@ -1724,6 +1802,9 @@ function FlowPage() {
               operationQueue={status?.operationQueue}
               nextRun={nextRun}
               isEditing={isEditing}
+              isNameEditing={isNameEditing}
+              isNameDirty={isNameDirty}
+              isNameApplying={isNameApplying}
               isTracksOpen={tracksExpandedId === flow.id}
               tracks={tracksByFlowId[flow.id] || []}
               tracksLoading={tracksLoadingByFlowId[flow.id] === true}
@@ -1740,11 +1821,14 @@ function FlowPage() {
               deletingId={deletingId}
               onExport={() => handleExportFlow(flow)}
               onConvertToStatic={() => handleConvertFlowToStatic(flow)}
+              onToggleNameEditing={() => handleToggleFlowNameEditing(flow)}
               onToggleEditing={() => handleToggleEditing(flow.id)}
               onToggleEnabled={(checked) => handleToggleRequest(flow, checked)}
               onDelete={() => handleDelete(flow)}
               onViewTracks={() => handleToggleTracks(flow.id)}
               onNavigateArtist={handleNavigateArtist}
+              onNameCancel={() => handleCancelFlowNameEdit(flow)}
+              onNameApply={() => handleApplyFlowNameEdit(flow)}
               onCancel={() => handleCancelSimple(flow)}
               onApply={() => handleApplySimple(flow)}
               onDraftChange={(updater) =>

@@ -799,6 +799,7 @@ function buildEditableTrackRows(tracks) {
     rowId:
       track?.id ||
       `track-${index}-${Math.random().toString(36).slice(2, 10)}`,
+    persistedTrackId: track?.id || null,
     artistName: String(track?.artistName || ""),
     trackName: String(track?.trackName || ""),
     albumName: String(track?.albumName || ""),
@@ -806,23 +807,32 @@ function buildEditableTrackRows(tracks) {
     reason: String(track?.reason || ""),
     status: String(track?.status || "draft"),
     error: String(track?.error || ""),
+    isMarkedForDeletion: false,
   }));
 }
 
-function TrackStatusBadge({ status }) {
+function TrackStatusBadge({ status, pendingDelete = false }) {
   const isDownloaded = status === "done";
-  const label = isDownloaded ? "Downloaded" : "Not Downloaded";
+  const label = pendingDelete
+    ? "Pending Delete"
+    : isDownloaded
+      ? "Downloaded"
+      : "Not Downloaded";
   return (
     <span
       className={`inline-flex h-6 w-6 items-center justify-center rounded-full border ${
-        isDownloaded
+        pendingDelete
+          ? "border-[#6f5941] bg-[#3a3025] text-[#ddb98b]"
+          : isDownloaded
           ? "border-[#35533a] bg-[#223124] text-[#7ee081]"
           : "border-[#4b4231] bg-[#30281d] text-[#d8b16f]"
       }`}
       title={label}
       aria-label={label}
     >
-      {isDownloaded ? (
+      {pendingDelete ? (
+        <X className="w-3.5 h-3.5" />
+      ) : isDownloaded ? (
         <Check className="w-3.5 h-3.5" />
       ) : (
         <CircleDashed className="w-3.5 h-3.5" />
@@ -849,10 +859,21 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
     setMissingOnly(false);
   }, [tracks]);
 
-  const missingCount = draftTracks.filter((track) => track.status === "failed").length;
+  const missingCount = draftTracks.filter(
+    (track) => track.status === "failed" && !track.isMarkedForDeletion,
+  ).length;
+  const pendingDeletionCount = draftTracks.filter(
+    (track) => track.isMarkedForDeletion,
+  ).length;
   const visibleTracks = missingOnly
-    ? draftTracks.filter((track) => track.status === "failed")
+    ? draftTracks.filter(
+        (track) => track.isMarkedForDeletion || track.status === "failed",
+      )
     : draftTracks;
+  const utilityButtonClass =
+    "inline-flex h-8 items-center gap-1.5 rounded-md border border-white/12 bg-[#4a4a52] px-3 text-xs font-medium text-[#ededf0] transition hover:border-white/20 hover:bg-[#575762] disabled:cursor-not-allowed disabled:opacity-50";
+  const activeUtilityButtonClass =
+    "border-white/20 bg-[#5a5a64] text-white hover:bg-[#676773]";
 
   const updateTrack = (rowId, key, value) => {
     setDraftTracks((prev) =>
@@ -865,11 +886,30 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
     }
   };
 
+  const toggleTrackDeletion = (rowId) => {
+    setDraftTracks((prev) => {
+      const target = prev.find((track) => track.rowId === rowId);
+      if (!target) return prev;
+      if (!target.persistedTrackId && target.status === "draft") {
+        return prev.filter((track) => track.rowId !== rowId);
+      }
+      return prev.map((track) =>
+        track.rowId === rowId
+          ? { ...track, isMarkedForDeletion: !track.isMarkedForDeletion }
+          : track,
+      );
+    });
+    if (editorError) {
+      setEditorError("");
+    }
+  };
+
   const handleAddTrack = () => {
     setDraftTracks((prev) => [
       ...prev,
       {
         rowId: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        persistedTrackId: null,
         artistName: "",
         trackName: "",
         albumName: "",
@@ -877,6 +917,7 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
         reason: "",
         status: "draft",
         error: "",
+        isMarkedForDeletion: false,
       },
     ]);
     setMissingOnly(false);
@@ -885,6 +926,9 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
   const buildPayload = () => {
     const nextTracks = [];
     for (const track of draftTracks) {
+      if (track.isMarkedForDeletion) {
+        continue;
+      }
       const artistName = String(track.artistName || "").trim();
       const trackName = String(track.trackName || "").trim();
       const albumName = String(track.albumName || "").trim();
@@ -944,7 +988,7 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
   }
 
   return (
-    <div className="rounded-lg border border-white/10 bg-[#1f1f24] overflow-hidden">
+    <div className="rounded-lg border border-white/10 bg-[#211f27] overflow-hidden">
       <div className="border-b border-white/10 px-3 py-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2 text-xs text-[#b7bbc7]">
           <span>{draftTracks.length} tracks</span>
@@ -954,14 +998,22 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
               <span>{missingCount} missing</span>
             </>
           ) : null}
+          {pendingDeletionCount > 0 ? (
+            <>
+              <span className="text-white/25">•</span>
+              <span className="text-[#d7b58a]">
+                {pendingDeletionCount} marked for deletion
+              </span>
+            </>
+          ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {headerActions}
           {missingCount > 0 ? (
             <button
               type="button"
               onClick={() => setMissingOnly((prev) => !prev)}
-              className={`btn btn-xs ${missingOnly ? "btn-primary" : "btn-secondary"}`}
+              className={`${utilityButtonClass} ${missingOnly ? activeUtilityButtonClass : ""}`}
             >
               {missingOnly ? "Show All" : "Missing Only"}
             </button>
@@ -969,8 +1021,8 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
           <button
             type="button"
             onClick={handleAddTrack}
-              className="btn btn-secondary btn-xs gap-1.5"
-              disabled={saving}
+            className={utilityButtonClass}
+            disabled={saving}
           >
             <Plus className="w-3.5 h-3.5" />
             Add Track
@@ -996,19 +1048,26 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
             <tbody>
               {visibleTracks.map((track, index) => {
                 const isLocked = track.status === "done";
+                const isMarkedForDeletion = track.isMarkedForDeletion === true;
+                const showStaticValues = isLocked || isMarkedForDeletion;
                 return (
                   <tr
                     key={track.rowId}
                     className={`border-t border-white/5 text-[#d6d6d8] ${
-                      index % 2 === 0 ? "bg-[#202027]/35" : "bg-[#181820]/75"
-                    }`}
+                      index % 2 === 0 ? "bg-[#211f27]" : "bg-[#1c1b22]"
+                    } ${isMarkedForDeletion ? "opacity-50" : ""}`}
                   >
                     <td className="px-3 py-2 align-top">
-                      <TrackStatusBadge status={track.status} />
+                      <TrackStatusBadge
+                        status={track.status}
+                        pendingDelete={isMarkedForDeletion}
+                      />
                     </td>
                     <td className="px-3 py-2 align-top">
-                      {isLocked ? (
-                        <div className="min-w-[180px]">{track.trackName}</div>
+                      {showStaticValues ? (
+                        <div className={`min-w-[180px] ${isMarkedForDeletion ? "line-through" : ""}`}>
+                          {track.trackName || "Untitled Song"}
+                        </div>
                       ) : (
                         <div className="grid gap-1 min-w-[180px]">
                           <input
@@ -1029,8 +1088,10 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                       )}
                     </td>
                     <td className="px-3 py-2 align-top">
-                      {isLocked ? (
-                        <div className="min-w-[180px]">{track.artistName}</div>
+                      {showStaticValues ? (
+                        <div className={`min-w-[180px] ${isMarkedForDeletion ? "line-through" : ""}`}>
+                          {track.artistName || "Unknown Artist"}
+                        </div>
                       ) : (
                         <input
                           type="text"
@@ -1044,8 +1105,10 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                       )}
                     </td>
                     <td className="px-3 py-2 align-top">
-                      {isLocked ? (
-                        <div className="min-w-[180px]">{track.albumName || "Unknown Album"}</div>
+                      {showStaticValues ? (
+                        <div className={`min-w-[180px] ${isMarkedForDeletion ? "line-through" : ""}`}>
+                          {track.albumName || "Unknown Album"}
+                        </div>
                       ) : (
                         <input
                           type="text"
@@ -1059,17 +1122,23 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                       )}
                     </td>
                     <td className="px-3 py-2 align-top">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setDraftTracks((prev) =>
-                            prev.filter((entry) => entry.rowId !== track.rowId),
-                          )
-                        }
-                        className="btn btn-ghost btn-xs px-2 text-red-400 hover:bg-red-500/10 hover:text-red-300"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {isMarkedForDeletion ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleTrackDeletion(track.rowId)}
+                          className="btn btn-secondary btn-xs px-2"
+                        >
+                          Undo
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => toggleTrackDeletion(track.rowId)}
+                          className="btn btn-ghost btn-xs px-2 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );
@@ -1097,6 +1166,9 @@ export function FlowCard({
   operationQueue,
   nextRun,
   isEditing,
+  isNameEditing,
+  isNameDirty,
+  isNameApplying,
   isTracksOpen,
   tracks,
   tracksLoading,
@@ -1113,11 +1185,14 @@ export function FlowCard({
   deletingId,
   onExport,
   onConvertToStatic,
+  onToggleNameEditing,
   onToggleEditing,
   onToggleEnabled,
   onDelete,
   onViewTracks,
   onNavigateArtist,
+  onNameCancel,
+  onNameApply,
   onCancel,
   onApply,
   onDraftChange,
@@ -1232,7 +1307,7 @@ export function FlowCard({
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-2 min-w-0">
-              {isEditing ? (
+              {isNameEditing ? (
                 <input
                   type="text"
                   className="input input-sm h-9 w-full max-w-md bg-[#1c1b22] text-base font-medium text-white"
@@ -1247,11 +1322,15 @@ export function FlowCard({
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       event.preventDefault();
-                      onApply();
+                      if (isNameDirty) {
+                        onNameApply();
+                        return;
+                      }
+                      onNameCancel();
                     }
                     if (event.key === "Escape") {
                       event.preventDefault();
-                      onCancel();
+                      onNameCancel();
                     }
                   }}
                   aria-label={`Edit ${flow.name} name`}
@@ -1264,20 +1343,32 @@ export function FlowCard({
               <div className="flex items-center gap-1 shrink-0">
                 <button
                   type="button"
-                  onClick={isEditing ? (hasChanges ? onApply : onCancel) : onToggleEditing}
-                  className={`btn ${isEditing ? "btn-primary" : "btn-ghost"} btn-xs px-2`}
-                  aria-label={isEditing ? `Save ${flow.name}` : `Edit ${flow.name}`}
-                  title={isEditing ? `Save ${flow.name}` : `Edit ${flow.name}`}
+                  onClick={
+                    isNameEditing
+                      ? (isNameDirty ? onNameApply : onNameCancel)
+                      : onToggleNameEditing
+                  }
+                  className={`btn ${isNameEditing ? "btn-primary" : "btn-ghost"} btn-xs px-2`}
+                  aria-label={isNameEditing ? `Save ${flow.name}` : `Edit ${flow.name}`}
+                  title={isNameEditing ? `Save ${flow.name}` : `Edit ${flow.name}`}
+                  disabled={isNameApplying}
                 >
-                  {isEditing ? <Check className="w-3.5 h-3.5" /> : <Pencil className="w-3.5 h-3.5" />}
+                  {isNameApplying ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : isNameEditing ? (
+                    <Check className="w-3.5 h-3.5" />
+                  ) : (
+                    <Pencil className="w-3.5 h-3.5" />
+                  )}
                 </button>
-                {isEditing ? (
+                {isNameEditing ? (
                   <button
                     type="button"
-                    onClick={onCancel}
+                    onClick={onNameCancel}
                     className="btn btn-ghost btn-xs px-2"
                     aria-label={`Cancel editing ${flow.name}`}
                     title={`Cancel editing ${flow.name}`}
+                    disabled={isNameApplying}
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -1443,6 +1534,8 @@ export function FlowTracksPanel({
   emptyMessage = "No tracks generated for this flow yet.",
   editable = false,
   showStatus = false,
+  hideFailedTracks = false,
+  showFailedDetails = true,
   headerActions = null,
   deletingTrackId = null,
   onDeleteTrack,
@@ -1468,6 +1561,13 @@ export function FlowTracksPanel({
   const currentTrack = useMemo(
     () => playableTracks.find((track) => track.id === currentTrackId) || null,
     [playableTracks, currentTrackId],
+  );
+  const visibleTracks = useMemo(
+    () =>
+      hideFailedTracks
+        ? tracks.filter((track) => track.status !== "failed")
+        : tracks,
+    [hideFailedTracks, tracks],
   );
 
   const startQueue = (trackIds) => {
@@ -1677,8 +1777,8 @@ export function FlowTracksPanel({
   }, []);
 
   return (
-    <div className="rounded-lg border border-white/10 bg-[#1f1f24] overflow-hidden">
-      <div className="relative px-3 py-2.5 border-b border-white/10 flex items-center">
+    <div className="rounded-lg border border-white/10 bg-[#211f27] overflow-hidden">
+      <div className="relative bg-[#211f27] px-3 py-2.5 border-b border-white/10 flex items-center">
         <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center gap-2">
           <button
             onClick={handlePrevious}
@@ -1752,12 +1852,12 @@ export function FlowTracksPanel({
         {!loading && error && (
           <div className="p-6 text-red-400 text-sm">{error}</div>
         )}
-        {!loading && !error && tracks.length === 0 && (
+        {!loading && !error && visibleTracks.length === 0 && (
           <div className="p-6 text-[#c1c1c3] text-sm">
             {emptyMessage}
           </div>
         )}
-        {!loading && !error && tracks.length > 0 && (
+        {!loading && !error && visibleTracks.length > 0 && (
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-20 bg-[#1c1b22]">
               <tr className="text-left text-[#8b8b90] uppercase text-xs tracking-wider">
@@ -1769,7 +1869,7 @@ export function FlowTracksPanel({
               </tr>
             </thead>
             <tbody>
-              {tracks.map((track, index) => {
+              {visibleTracks.map((track, index) => {
                 const canPlay = track.status === "done" && !!track.streamUrl;
                 const canDelete = editable && track.status === "done" && !!track.id;
                 const isCurrent = track.id === currentTrackId;
@@ -1778,7 +1878,7 @@ export function FlowTracksPanel({
                   <tr
                     key={track.id}
                     className={`border-t border-white/5 text-[#d6d6d8] relative overflow-hidden ${
-                      index % 2 === 0 ? "bg-[#202027]/35" : "bg-[#181820]/75"
+                      index % 2 === 0 ? "bg-[#211f27]" : "bg-[#1c1b22]"
                     }`}
                     style={
                       isCurrent
@@ -1803,7 +1903,7 @@ export function FlowTracksPanel({
                     <td className="px-3 py-2">
                       <div className="grid gap-1">
                         <span>{track.albumName || "Unknown Album"}</span>
-                        {track.status === "failed" && track.error ? (
+                        {showFailedDetails && track.status === "failed" && track.error ? (
                           <span className="text-[11px] text-[#d49c9c]">
                             {track.error}
                           </span>
@@ -1891,7 +1991,8 @@ export function SharedPlaylistCard({
   tracksError,
   nameDraft,
   nameError,
-  isApplying,
+  isApplyingName,
+  isApplyingTracks,
   deletingId,
   onToggleEditing,
   onNameChange,
@@ -1900,6 +2001,7 @@ export function SharedPlaylistCard({
   onToggleTrackEditing,
   onSaveTracks,
   onDelete,
+  onExport,
   onViewTracks,
   onNavigateArtist,
   retryCyclePaused,
@@ -1968,9 +2070,15 @@ export function SharedPlaylistCard({
                   className={`btn ${isEditing ? "btn-primary" : "btn-ghost"} btn-xs px-2`}
                   aria-label={isEditing ? `Save ${playlist.name}` : `Edit ${playlist.name}`}
                   title={isEditing ? `Save ${playlist.name}` : `Edit ${playlist.name}`}
-                  disabled={isApplying}
+                  disabled={isApplyingName}
                 >
-                  {isEditing ? <Check className="w-3.5 h-3.5" /> : <Pencil className="w-3.5 h-3.5" />}
+                  {isApplyingName ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : isEditing ? (
+                    <Check className="w-3.5 h-3.5" />
+                  ) : (
+                    <Pencil className="w-3.5 h-3.5" />
+                  )}
                 </button>
                 {isEditing ? (
                   <button
@@ -1979,7 +2087,7 @@ export function SharedPlaylistCard({
                     className="btn btn-ghost btn-xs px-2"
                     aria-label={`Cancel editing ${playlist.name}`}
                     title={`Cancel editing ${playlist.name}`}
-                    disabled={isApplying}
+                    disabled={isApplyingName}
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -2039,6 +2147,15 @@ export function SharedPlaylistCard({
             <MoreMenu>
               <button
                 type="button"
+                onClick={onExport}
+                className="w-full text-left px-3 py-2.5 text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white flex items-center gap-2.5"
+              >
+                <Download className="w-4 h-4" />
+                Download JSON
+              </button>
+              <div className="my-1 border-t border-white/10" />
+              <button
+                type="button"
                 onClick={() => onSetRetryCyclePaused?.(!retryCyclePaused)}
                 className="w-full text-left px-3 py-2.5 text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white flex items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={retryActionInFlight}
@@ -2076,7 +2193,7 @@ export function SharedPlaylistCard({
               tracks={tracks}
               loading={tracksLoading}
               error={tracksError}
-              saving={isApplying}
+              saving={isApplyingTracks}
               headerActions={
                 <button
                   type="button"
@@ -2086,9 +2203,9 @@ export function SharedPlaylistCard({
                   className="btn btn-primary btn-xs p-2"
                   aria-label={`Save ${playlist.name} tracklist`}
                   title={`Save ${playlist.name} tracklist`}
-                  disabled={isApplying}
+                  disabled={isApplyingTracks}
                 >
-                  {isApplying ? (
+                  {isApplyingTracks ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
                     <Check className="w-3.5 h-3.5" />
@@ -2105,6 +2222,8 @@ export function SharedPlaylistCard({
               emptyMessage="No tracks in this static playlist yet."
               editable={false}
               showStatus={true}
+              hideFailedTracks={true}
+              showFailedDetails={false}
               headerActions={
                 <button
                   type="button"
@@ -2118,9 +2237,9 @@ export function SharedPlaylistCard({
                   className={`btn ${isTrackEditing ? "btn-primary" : "btn-secondary"} btn-xs p-2`}
                   aria-label={isTrackEditing ? `Save ${playlist.name} tracklist` : `Edit ${playlist.name} tracklist`}
                   title={isTrackEditing ? `Save ${playlist.name} tracklist` : `Edit ${playlist.name} tracklist`}
-                  disabled={isApplying}
+                  disabled={isApplyingTracks}
                 >
-                  {isApplying ? (
+                  {isApplyingTracks ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : isTrackEditing ? (
                     <Check className="w-3.5 h-3.5" />
