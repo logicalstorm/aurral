@@ -118,6 +118,10 @@ export function getWeeklyFlowStatusSnapshot({
     ...flowIds,
     ...sharedPlaylistIds,
   ]);
+  const retryCycleScheduledByPlaylist = weeklyFlowWorker.getIncompleteRetryMap([
+    ...flowIds,
+    ...sharedPlaylistIds,
+  ]);
   let jobs;
   if (includeJobs) {
     const sourceJobs = flowId
@@ -139,6 +143,7 @@ export function getWeeklyFlowStatusSnapshot({
     flows,
     sharedPlaylists,
     retryCyclePausedByPlaylist,
+    retryCycleScheduledByPlaylist,
     operationQueue,
     hint: {
       phase,

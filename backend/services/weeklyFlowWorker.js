@@ -264,6 +264,17 @@ export class WeeklyFlowWorker {
     return out;
   }
 
+  getIncompleteRetryMap(playlistIds = []) {
+    const scheduled = new Set(this.incompleteRetryTimers.keys());
+    const out = {};
+    for (const id of Array.isArray(playlistIds) ? playlistIds : []) {
+      const key = String(id || "").trim();
+      if (!key) continue;
+      out[key] = scheduled.has(key);
+    }
+    return out;
+  }
+
   _isAuthFailure(message) {
     const text = String(message || "").toLowerCase();
     return text.includes("timeout login") || text.includes("invalidpass");
