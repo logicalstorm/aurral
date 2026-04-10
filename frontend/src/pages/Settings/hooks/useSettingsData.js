@@ -29,6 +29,7 @@ const defaultSettings = {
       discoveryRecommendationsPerRefresh: 100,
     },
     slskd: { url: "", apiKey: "" },
+    ticketmaster: { apiKey: "", searchRadiusMiles: 50 },
     lidarr: {
       url: "",
       externalUrl: "",
