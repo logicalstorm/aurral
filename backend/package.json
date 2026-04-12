@@ -33,7 +33,7 @@
     "express-rate-limit": "^7.5.1",
     "helmet": "^8.1.0",
     "lowdb": "^7.0.1",
-    "music-metadata": "^11.10.6",
+    "music-metadata": "^11.12.3",
     "node-cache": "^5.1.2",
     "slsk-client": "^1.1.0",
     "uuid": "^11.0.0",
