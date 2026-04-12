@@ -2211,25 +2211,37 @@ export function SharedPlaylistCard({
               error={tracksError}
               saving={isApplyingTracks}
               headerActions={
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const result = await trackEditorRef.current?.save?.();
-                    if (result === "unchanged") {
-                      onToggleTrackEditing();
-                    }
-                  }}
-                  className="btn btn-primary btn-xs p-2"
-                  aria-label={`Save ${playlist.name} tracklist`}
-                  title={`Save ${playlist.name} tracklist`}
-                  disabled={isApplyingTracks}
-                >
-                  {isApplyingTracks ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Check className="w-3.5 h-3.5" />
-                  )}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={onToggleTrackEditing}
+                    className="btn btn-ghost btn-xs p-2"
+                    aria-label={`Cancel editing ${playlist.name} tracklist`}
+                    title={`Cancel editing ${playlist.name} tracklist`}
+                    disabled={isApplyingTracks}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const result = await trackEditorRef.current?.save?.();
+                      if (result === "unchanged") {
+                        onToggleTrackEditing();
+                      }
+                    }}
+                    className="btn btn-primary btn-xs p-2"
+                    aria-label={`Save ${playlist.name} tracklist`}
+                    title={`Save ${playlist.name} tracklist`}
+                    disabled={isApplyingTracks}
+                  >
+                    {isApplyingTracks ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Check className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </>
               }
               onSave={onSaveTracks}
             />
