@@ -13,6 +13,7 @@ import {
   updateSharedPlaylist,
   setFlowEnabled,
   getFlowTrackStreamUrl,
+  getFlowArtworkUrl,
   updateFlowWorkerSettings,
   setPlaylistRetryCyclePaused,
 } from "../utils/api";
@@ -1716,6 +1717,7 @@ function FlowPage() {
                 nameError={sharedPlaylistErrors[playlist.id] || ""}
                 isApplyingName={applyingSharedPlaylistNameId === playlist.id}
                 isApplyingTracks={applyingSharedPlaylistId === playlist.id}
+                artworkUrl={getFlowArtworkUrl(playlist.id)}
                 deletingId={deletingId}
                 onToggleEditing={() => handleToggleSharedPlaylistEditing(playlist.id)}
                 onNameChange={(name) =>
@@ -1805,6 +1807,7 @@ function FlowPage() {
               simpleError={simpleError}
               isApplying={isApplying}
               hasChanges={hasChanges}
+              artworkUrl={getFlowArtworkUrl(flow.id)}
               canExport={canExport}
               canConvertToStatic={canConvertToStatic}
               convertingId={convertingId}

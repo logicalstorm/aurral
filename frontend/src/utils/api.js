@@ -274,6 +274,16 @@ export const getFlowTrackStreamUrl = (jobId) => {
   return url;
 };
 
+export const getFlowArtworkUrl = (playlistId) => {
+  const base = import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
+  const { token } = getStoredAuth();
+  let url = `${base}/weekly-flow/artwork/${encodeURIComponent(playlistId)}`;
+  if (token) {
+    url += `?token=${encodeURIComponent(token)}`;
+  }
+  return url;
+};
+
 export const getLibraryArtists = async () => {
   const response = await api.get("/library/artists");
   return response.data;
