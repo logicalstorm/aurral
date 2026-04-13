@@ -163,6 +163,44 @@ router.get("/stream/:jobId", noCache, async (req, res) => {
   fs.createReadStream(safePath, { start, end }).pipe(res);
 });
 
+router.get("/artwork/:playlistId", noCache, async (req, res) => {
+  if (!verifyTokenAuth(req)) {
+    return res
+      .status(401)
+      .json({ error: "Unauthorized", message: "Authentication required" });
+  }
+  if (req.user && !hasPermission(req.user, "accessFlow")) {
+    return res
+      .status(403)
+      .json({ error: "Forbidden", message: "Permission required: accessFlow" });
+  }
+
+  const { playlistId } = req.params;
+  const playlistName = playlistManager.getPlaylistName(playlistId);
+  if (!playlistName) {
+    return res.status(404).json({ error: "Playlist artwork not found" });
+  }
+
+  const fileName = `${playlistManager._getPlaylistBaseName(playlistName)}.png`;
+  const safeRoot = path.resolve(playlistManager.libraryRoot);
+  const safePath = path.resolve(safeRoot, fileName);
+  if (path.dirname(safePath) !== safeRoot) {
+    return res.status(403).json({ error: "Invalid artwork path" });
+  }
+
+  try {
+    const stat = await fsp.stat(safePath);
+    if (!stat.isFile()) {
+      return res.status(404).json({ error: "Playlist artwork not found" });
+    }
+  } catch {
+    return res.status(404).json({ error: "Playlist artwork not found" });
+  }
+
+  res.type("png");
+  res.sendFile(safePath);
+});
+
 router.use(requireAuth);
 router.use(requirePermission("accessFlow"));
 const DEFAULT_LIMIT = 30;

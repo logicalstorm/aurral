@@ -1172,8 +1172,37 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
   );
 });
 
+function PlaylistArtworkThumb({ artworkUrl, name }) {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [artworkUrl]);
+
+  const fallbackLabel = String(name || "?").trim().charAt(0).toUpperCase() || "?";
+
+  return (
+    <div className="h-20 w-20 shrink-0 overflow-hidden rounded-[1.25rem] border border-white/10 bg-[#1c1b22]">
+      {!imageFailed && artworkUrl ? (
+        <img
+          src={artworkUrl}
+          alt={`${name} cover`}
+          className="h-full w-full object-cover"
+          loading="lazy"
+          onError={() => setImageFailed(true)}
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center bg-white/5 text-lg font-semibold text-[#d2dac9]">
+          {fallbackLabel}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function FlowCard({
   flow,
+  artworkUrl,
   enabled,
   state,
   stats,
@@ -1300,133 +1329,136 @@ export function FlowCard({
   return (
     <div className="bg-card rounded-lg border border-white/5 overflow-visible">
       <div className="p-4 flex flex-col md:flex-row md:items-start justify-between gap-4">
-        <div className={`min-w-0 flex-1 grid gap-2.5 ${enabled ? "" : "opacity-50"}`}>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-black/25 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[#d2dac9]">
-              {typeLabel}
-            </span>
-            <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-[#c6c6cb]">
-              {flow.size} tracks
-            </span>
-            {state === "running" && (
-              <span className="badge badge-success badge-sm gap-1.5 pl-1.5 pr-2">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Running
+        <div className={`min-w-0 flex-1 flex gap-4 ${enabled ? "" : "opacity-50"}`}>
+          <PlaylistArtworkThumb artworkUrl={artworkUrl} name={flow.name} />
+          <div className="min-w-0 flex-1 grid gap-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-black/25 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[#d2dac9]">
+                {typeLabel}
               </span>
-            )}
-            {togglingId === flow.id && (
-              <span className="badge badge-secondary badge-sm gap-1.5 pl-1.5 pr-2">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Updating
+              <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-[#c6c6cb]">
+                {flow.size} tracks
               </span>
-            )}
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 min-w-0">
-              {isNameEditing ? (
-                <input
-                  type="text"
-                  className="input input-sm h-9 w-full max-w-md bg-[#1c1b22] text-base font-medium text-white"
-                  value={simpleDraft?.name ?? ""}
-                  onChange={(event) =>
-                    onDraftChange((prev) => ({
-                      ...prev,
-                      name: event.target.value,
-                    }))
-                  }
-                  onInput={onClearError}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      if (isNameDirty) {
-                        onNameApply();
-                        return;
-                      }
-                      onNameCancel();
-                    }
-                    if (event.key === "Escape") {
-                      event.preventDefault();
-                      onNameCancel();
-                    }
-                  }}
-                  aria-label={`Edit ${flow.name} name`}
-                />
-              ) : (
-                <h3 className="text-base font-medium text-white truncate">
-                  {flow.name}
-                </h3>
+              {state === "running" && (
+                <span className="badge badge-success badge-sm gap-1.5 pl-1.5 pr-2">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Running
+                </span>
               )}
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  type="button"
-                  onClick={
-                    isNameEditing
-                      ? (isNameDirty ? onNameApply : onNameCancel)
-                      : onToggleNameEditing
-                  }
-                  className={`btn ${isNameEditing ? "btn-primary" : "btn-ghost"} btn-xs px-2`}
-                  aria-label={isNameEditing ? `Save ${flow.name}` : `Edit ${flow.name}`}
-                  title={isNameEditing ? `Save ${flow.name}` : `Edit ${flow.name}`}
-                  disabled={isNameApplying}
-                >
-                  {isNameApplying ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : isNameEditing ? (
-                    <Check className="w-3.5 h-3.5" />
-                  ) : (
-                    <Pencil className="w-3.5 h-3.5" />
-                  )}
-                </button>
+              {togglingId === flow.id && (
+                <span className="badge badge-secondary badge-sm gap-1.5 pl-1.5 pr-2">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Updating
+                </span>
+              )}
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 min-w-0">
                 {isNameEditing ? (
+                  <input
+                    type="text"
+                    className="input input-sm h-9 w-full max-w-md bg-[#1c1b22] text-base font-medium text-white"
+                    value={simpleDraft?.name ?? ""}
+                    onChange={(event) =>
+                      onDraftChange((prev) => ({
+                        ...prev,
+                        name: event.target.value,
+                      }))
+                    }
+                    onInput={onClearError}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        if (isNameDirty) {
+                          onNameApply();
+                          return;
+                        }
+                        onNameCancel();
+                      }
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        onNameCancel();
+                      }
+                    }}
+                    aria-label={`Edit ${flow.name} name`}
+                  />
+                ) : (
+                  <h3 className="text-base font-medium text-white truncate">
+                    {flow.name}
+                  </h3>
+                )}
+                <div className="flex items-center gap-1 shrink-0">
                   <button
                     type="button"
-                    onClick={onNameCancel}
-                    className="btn btn-ghost btn-xs px-2"
-                    aria-label={`Cancel editing ${flow.name}`}
-                    title={`Cancel editing ${flow.name}`}
+                    onClick={
+                      isNameEditing
+                        ? (isNameDirty ? onNameApply : onNameCancel)
+                        : onToggleNameEditing
+                    }
+                    className={`btn ${isNameEditing ? "btn-primary" : "btn-ghost"} btn-xs px-2`}
+                    aria-label={isNameEditing ? `Save ${flow.name}` : `Edit ${flow.name}`}
+                    title={isNameEditing ? `Save ${flow.name}` : `Edit ${flow.name}`}
                     disabled={isNameApplying}
                   >
-                    <X className="w-3.5 h-3.5" />
+                    {isNameApplying ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : isNameEditing ? (
+                      <Check className="w-3.5 h-3.5" />
+                    ) : (
+                      <Pencil className="w-3.5 h-3.5" />
+                    )}
                   </button>
+                  {isNameEditing ? (
+                    <button
+                      type="button"
+                      onClick={onNameCancel}
+                      className="btn btn-ghost btn-xs px-2"
+                      aria-label={`Cancel editing ${flow.name}`}
+                      title={`Cancel editing ${flow.name}`}
+                      disabled={isNameApplying}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#b5b5bc]">
+                <span>{statusSummary}</span>
+                {metaItems.length > 0 ? (
+                  <>
+                    <span className="text-white/25">•</span>
+                    <span>{metaItems.join(" • ")}</span>
+                  </>
                 ) : null}
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#b5b5bc]">
-              <span>{statusSummary}</span>
-              {metaItems.length > 0 ? (
-                <>
+            {flowWorkerMessage ? (
+              <div className="truncate text-xs text-[#9aa886]">
+                {flowWorkerMessage}
+              </div>
+            ) : null}
+            {(state === "running" || state === "completed") && total > 0 ? (
+              <div className="grid gap-1.5">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      state === "completed" ? "bg-[#7aa2f7]" : "bg-[#9aa886]"
+                    }`}
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#d3d3d8]">
+                  <span>{progressPct}% complete</span>
                   <span className="text-white/25">•</span>
-                  <span>{metaItems.join(" • ")}</span>
-                </>
-              ) : null}
-            </div>
+                  <span>Pending {pendingCount}</span>
+                  <span className="text-white/25">•</span>
+                  <span>Downloading {downloadingCount}</span>
+                  <span className="text-white/25">•</span>
+                  <span>Done {processedDisplay}</span>
+                </div>
+              </div>
+            ) : null}
           </div>
-          {flowWorkerMessage ? (
-            <div className="truncate text-xs text-[#9aa886]">
-              {flowWorkerMessage}
-            </div>
-          ) : null}
-          {(state === "running" || state === "completed") && total > 0 ? (
-            <div className="grid gap-1.5">
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                <div
-                  className={`h-full rounded-full transition-all duration-300 ${
-                    state === "completed" ? "bg-[#7aa2f7]" : "bg-[#9aa886]"
-                  }`}
-                  style={{ width: `${progressPct}%` }}
-                />
-              </div>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#d3d3d8]">
-                <span>{progressPct}% complete</span>
-                <span className="text-white/25">•</span>
-                <span>Pending {pendingCount}</span>
-                <span className="text-white/25">•</span>
-                <span>Downloading {downloadingCount}</span>
-                <span className="text-white/25">•</span>
-                <span>Done {processedDisplay}</span>
-              </div>
-            </div>
-          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-3 shrink-0">
@@ -1999,6 +2031,7 @@ export function SharedPlaylistCard({
   playlist,
   stats,
   currentJob,
+  artworkUrl,
   isEditing,
   isTrackEditing,
   isTracksOpen,
@@ -2045,104 +2078,107 @@ export function SharedPlaylistCard({
   return (
     <div className="overflow-visible rounded-lg border border-white/5 bg-card">
       <div className="flex flex-col gap-4 px-4 py-4 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-black/25 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[#d6e5c8]">
-              Playlist
-            </span>
-            <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-[#c6c6cb]">
-              {playlist.trackCount} tracks
-            </span>
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 min-w-0">
-              {isEditing ? (
-                <input
-                  type="text"
-                  className="input input-sm h-9 w-full max-w-md bg-[#1c1b22] text-base font-medium text-white"
-                  value={nameDraft ?? ""}
-                  onChange={(event) => onNameChange(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      onApplyEdit();
-                    }
-                    if (event.key === "Escape") {
-                      event.preventDefault();
-                      onCancelEdit();
-                    }
-                  }}
-                  aria-label={`Edit ${playlist.name} name`}
-                />
-              ) : (
-                <h3 className="truncate text-base font-medium text-white">
-                  {playlist.name}
-                </h3>
-              )}
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  type="button"
-                  onClick={isEditing ? onApplyEdit : onToggleEditing}
-                  className={`btn ${isEditing ? "btn-primary" : "btn-ghost"} btn-xs px-2`}
-                  aria-label={isEditing ? `Save ${playlist.name}` : `Edit ${playlist.name}`}
-                  title={isEditing ? `Save ${playlist.name}` : `Edit ${playlist.name}`}
-                  disabled={isApplyingName}
-                >
-                  {isApplyingName ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : isEditing ? (
-                    <Check className="w-3.5 h-3.5" />
-                  ) : (
-                    <Pencil className="w-3.5 h-3.5" />
-                  )}
-                </button>
+        <div className="min-w-0 flex-1 flex gap-4">
+          <PlaylistArtworkThumb artworkUrl={artworkUrl} name={playlist.name} />
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-black/25 px-3.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[#d6e5c8]">
+                Playlist
+              </span>
+              <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-[#c6c6cb]">
+                {playlist.trackCount} tracks
+              </span>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 min-w-0">
                 {isEditing ? (
+                  <input
+                    type="text"
+                    className="input input-sm h-9 w-full max-w-md bg-[#1c1b22] text-base font-medium text-white"
+                    value={nameDraft ?? ""}
+                    onChange={(event) => onNameChange(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        onApplyEdit();
+                      }
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        onCancelEdit();
+                      }
+                    }}
+                    aria-label={`Edit ${playlist.name} name`}
+                  />
+                ) : (
+                  <h3 className="truncate text-base font-medium text-white">
+                    {playlist.name}
+                  </h3>
+                )}
+                <div className="flex items-center gap-1 shrink-0">
                   <button
                     type="button"
-                    onClick={onCancelEdit}
-                    className="btn btn-ghost btn-xs px-2"
-                    aria-label={`Cancel editing ${playlist.name}`}
-                    title={`Cancel editing ${playlist.name}`}
+                    onClick={isEditing ? onApplyEdit : onToggleEditing}
+                    className={`btn ${isEditing ? "btn-primary" : "btn-ghost"} btn-xs px-2`}
+                    aria-label={isEditing ? `Save ${playlist.name}` : `Edit ${playlist.name}`}
+                    title={isEditing ? `Save ${playlist.name}` : `Edit ${playlist.name}`}
                     disabled={isApplyingName}
                   >
-                    <X className="w-3.5 h-3.5" />
+                    {isApplyingName ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : isEditing ? (
+                      <Check className="w-3.5 h-3.5" />
+                    ) : (
+                      <Pencil className="w-3.5 h-3.5" />
+                    )}
                   </button>
-                ) : null}
+                  {isEditing ? (
+                    <button
+                      type="button"
+                      onClick={onCancelEdit}
+                      className="btn btn-ghost btn-xs px-2"
+                      aria-label={`Cancel editing ${playlist.name}`}
+                      title={`Cancel editing ${playlist.name}`}
+                      disabled={isApplyingName}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  ) : null}
+                </div>
               </div>
+              {nameError ? (
+                <p className="text-xs text-red-400">
+                  {nameError}
+                </p>
+              ) : null}
+              {isCurrentJob ? (
+                <p className="truncate text-xs text-[#9ed3a1]">
+                  Downloading {currentJob.trackName}
+                </p>
+              ) : null}
+              {waitingForRetryCycle ? (
+                <p className="text-xs text-[#d8c78e]">
+                  Waiting for next retry cycle
+                </p>
+              ) : null}
             </div>
-            {nameError ? (
-              <p className="text-xs text-red-400">
-                {nameError}
-              </p>
-            ) : null}
-            {isCurrentJob ? (
-              <p className="truncate text-xs text-[#9ed3a1]">
-                Downloading {currentJob.trackName}
-              </p>
-            ) : null}
-            {waitingForRetryCycle ? (
-              <p className="text-xs text-[#d8c78e]">
-                Waiting for next retry cycle
-              </p>
-            ) : null}
-          </div>
-          <div className="grid gap-1.5">
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-              <div
-                className="h-full rounded-full bg-[#707e61] transition-all duration-300"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#c7ccc7]">
-              <span>{progressPct}% complete</span>
-              <span className="text-white/25">•</span>
-              <span>Pending {pending}</span>
-              <span className="text-white/25">•</span>
-              <span>Downloading {downloading}</span>
-              <span className="text-white/25">•</span>
-              <span>Done {done}</span>
-              <span className="text-white/25">•</span>
-              <span>Stalled {failed}</span>
+            <div className="grid gap-1.5">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-[#707e61] transition-all duration-300"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#c7ccc7]">
+                <span>{progressPct}% complete</span>
+                <span className="text-white/25">•</span>
+                <span>Pending {pending}</span>
+                <span className="text-white/25">•</span>
+                <span>Downloading {downloading}</span>
+                <span className="text-white/25">•</span>
+                <span>Done {done}</span>
+                <span className="text-white/25">•</span>
+                <span>Stalled {failed}</span>
+              </div>
             </div>
           </div>
         </div>
