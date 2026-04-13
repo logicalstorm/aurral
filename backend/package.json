@@ -35,6 +35,7 @@
     "lowdb": "^7.0.1",
     "music-metadata": "^11.12.3",
     "node-cache": "^5.1.2",
+    "sharp": "^0.34.5",
     "slsk-client": "^1.1.0",
     "uuid": "^11.0.0",
     "ws": "^8.18.0"
