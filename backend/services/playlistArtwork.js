@@ -198,9 +198,6 @@ const buildArtworkSvg = ({ playlistName, kind }) => {
   const titleLines = buildTitleLines(displayName);
   const titleY = titleLines.length === 1 ? 500 : 450;
   const titleSize = titleLines.some((line) => line.length > 16) ? 104 : 116;
-  const letterSpacing = titleLines.some((line) => line.length > 18)
-    ? "-1.5px"
-    : "-2px";
   const seed = hashString(`${normalizedKind}:${displayName}`);
   const angle = seed % 360;
 
@@ -249,7 +246,11 @@ const buildArtworkSvg = ({ playlistName, kind }) => {
       <stop offset="100%" stop-color="${palette.bgEnd}" />
     </linearGradient>
     <filter id="blur" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="64" />
+      <feGaussianBlur stdDeviation="24" />
+    </filter>
+    <filter id="noise">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch" />
+      <feColorMatrix type="saturate" values="0" />
     </filter>
   </defs>
   <rect width="${ARTWORK_SIZE}" height="${ARTWORK_SIZE}" fill="url(#bg)" rx="52" />
@@ -259,14 +260,15 @@ const buildArtworkSvg = ({ playlistName, kind }) => {
     <path d="${b3}" fill="${palette.blob3}" />
     <path d="${b4}" fill="${palette.blob4}" />
   </g>
+  <rect width="${ARTWORK_SIZE}" height="${ARTWORK_SIZE}" filter="url(#noise)" opacity="0.28" rx="52" style="mix-blend-mode: overlay;" />
   <g transform="rotate(${angle} 500 500)">
     <path d="${lb1}" fill="none" stroke="${palette.line1}" stroke-width="2" />
     <path d="${lb2}" fill="none" stroke="${palette.line2}" stroke-width="1.5" />
   </g>
   <rect x="${chipX}" y="136" width="${chipWidth}" height="58" rx="29" fill="${palette.chip}" stroke="${palette.chipStroke}" />
-  <text x="500" y="174" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" font-weight="700" letter-spacing="3px" fill="${palette.subtitle}">${normalizedKind.toUpperCase()}</text>
-  <text x="500" y="${titleY}" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="${titleSize}" font-weight="800" letter-spacing="${letterSpacing}" fill="${palette.title}">${titleMarkup}</text>
-  <text x="500" y="878" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" font-weight="600" letter-spacing="7px" fill="${palette.subtitle}">AURRAL</text>
+  <text x="500" y="174" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" font-weight="700" fill="${palette.subtitle}">${normalizedKind.toUpperCase().split("").join(" ")}</text>
+  <text x="500" y="${titleY}" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="${titleSize}" font-weight="800" fill="${palette.title}">${titleMarkup}</text>
+  <text x="500" y="878" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" font-weight="600" fill="${palette.subtitle}">A U R R A L</text>
 </svg>`.trim();
 };
 
