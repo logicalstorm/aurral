@@ -71,7 +71,7 @@ const SCHEDULE_COUNT_LABELS = {
   5: "five times",
   6: "six times",
 };
-const FLOW_WORKER_CONCURRENCY_OPTIONS = [1, 2, 3, 4, 5];
+const FLOW_WORKER_CONCURRENCY_OPTIONS = [1, 2, 3];
 const FLOW_WORKER_FORMAT_OPTIONS = [
   { id: "flac", label: "FLAC" },
   { id: "mp3", label: "MP3" },
@@ -2693,50 +2693,80 @@ export function FlowWorkerSettingsModal({
           <h3 className="text-xl font-bold text-white">Worker Settings</h3>
         </div>
         <div className="grid gap-4">
-          <div className="grid gap-1.5">
-            <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
-              Download Concurrency
-            </label>
-            <div
-              ref={concurrencyTabsRef}
-              className="relative p-1.5 inline-flex"
-              style={{ backgroundColor: "#0f0f12" }}
-              role="radiogroup"
-              aria-label="Download concurrency"
-            >
+          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px] md:items-end">
+            <div className="grid gap-1.5">
+              <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
+                Download Concurrency
+              </label>
               <div
-                ref={concurrencyActiveBubbleRef}
-                className="absolute transition-all duration-300 ease-out z-10 opacity-0"
-                style={{ backgroundColor: "#211f27" }}
-              />
-              <div
-                ref={concurrencyHoverBubbleRef}
-                className="absolute transition-all duration-200 ease-out z-0"
-                style={{ backgroundColor: "#1a1a1e" }}
-              />
-              <div
-                className="relative flex gap-1"
-                onMouseLeave={() => setHoveredConcurrencyIndex(null)}
+                ref={concurrencyTabsRef}
+                className="relative p-1.5 inline-flex"
+                style={{ backgroundColor: "#0f0f12" }}
+                role="radiogroup"
+                aria-label="Download concurrency"
               >
-                {FLOW_WORKER_CONCURRENCY_OPTIONS.map((value, index) => (
-                  <button
-                    key={value}
-                    ref={(el) => {
-                      if (el) concurrencyOptionRefs.current[index] = el;
-                    }}
-                    type="button"
-                    role="radio"
-                    aria-checked={settings.concurrency === value}
-                    onMouseEnter={() => setHoveredConcurrencyIndex(index)}
-                    onClick={() =>
-                      onChange((prev) => ({ ...prev, concurrency: value }))
-                    }
-                    className="relative z-20 flex items-center justify-center px-4 py-2.5 font-medium transition-all duration-200 text-sm"
-                    style={{ color: "#fff" }}
-                  >
-                    {value}
-                  </button>
-                ))}
+                <div
+                  ref={concurrencyActiveBubbleRef}
+                  className="absolute transition-all duration-300 ease-out z-10 opacity-0"
+                  style={{ backgroundColor: "#211f27" }}
+                />
+                <div
+                  ref={concurrencyHoverBubbleRef}
+                  className="absolute transition-all duration-200 ease-out z-0"
+                  style={{ backgroundColor: "#1a1a1e" }}
+                />
+                <div
+                  className="relative flex gap-1"
+                  onMouseLeave={() => setHoveredConcurrencyIndex(null)}
+                >
+                  {FLOW_WORKER_CONCURRENCY_OPTIONS.map((value, index) => (
+                    <button
+                      key={value}
+                      ref={(el) => {
+                        if (el) concurrencyOptionRefs.current[index] = el;
+                      }}
+                      type="button"
+                      role="radio"
+                      aria-checked={settings.concurrency === value}
+                      onMouseEnter={() => setHoveredConcurrencyIndex(index)}
+                      onClick={() =>
+                        onChange((prev) => ({ ...prev, concurrency: value }))
+                      }
+                      className="relative z-20 flex items-center justify-center px-4 py-2.5 font-medium transition-all duration-200 text-sm"
+                      style={{ color: "#fff" }}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
+                Retry Cycle
+              </label>
+              <div className="relative">
+                <select
+                  value={settings.retryCycleMinutes}
+                  onChange={(event) =>
+                    onChange((prev) => ({
+                      ...prev,
+                      retryCycleMinutes: Number(event.target.value),
+                    }))
+                  }
+                  className="h-[52px] w-full appearance-none rounded-md border border-white/10 bg-black/20 pl-3 pr-12 text-sm text-white outline-none transition focus:border-[#90a07d] focus:ring-1 focus:ring-[#90a07d]"
+                >
+                  {FLOW_WORKER_RETRY_CYCLE_OPTIONS.map((option) => (
+                    <option
+                      key={option.minutes}
+                      value={option.minutes}
+                      className="bg-[#131419] text-white"
+                    >
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white" />
               </div>
             </div>
           </div>
@@ -2801,34 +2831,6 @@ export function FlowWorkerSettingsModal({
                   }}
                 />
               </div>
-            </div>
-          </div>
-          <div className="grid gap-1.5">
-            <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
-              Retry Cycle
-            </label>
-            <div className="relative">
-              <select
-                value={settings.retryCycleMinutes}
-                onChange={(event) =>
-                  onChange((prev) => ({
-                    ...prev,
-                    retryCycleMinutes: Number(event.target.value),
-                  }))
-                }
-                className="h-[52px] w-full appearance-none rounded-md border border-white/10 bg-black/20 pl-3 pr-12 text-sm text-white outline-none transition focus:border-[#90a07d] focus:ring-1 focus:ring-[#90a07d]"
-              >
-                {FLOW_WORKER_RETRY_CYCLE_OPTIONS.map((option) => (
-                  <option
-                    key={option.minutes}
-                    value={option.minutes}
-                    className="bg-[#131419] text-white"
-                  >
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white" />
             </div>
           </div>
         </div>

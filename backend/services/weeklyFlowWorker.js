@@ -9,7 +9,7 @@ import { dbOps } from "../config/db-helpers.js";
 
 const DEFAULT_CONCURRENCY = 3;
 const MIN_CONCURRENCY = 1;
-const MAX_CONCURRENCY = 5;
+const MAX_CONCURRENCY = 3;
 const DEFAULT_PREFERRED_FORMAT = "flac";
 const DEFAULT_PREFERRED_FORMAT_STRICT = false;
 const FLOW_WORKER_RETRY_CYCLE_OPTIONS_MINUTES = [15, 30, 60, 360, 720, 1440];

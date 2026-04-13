@@ -7,6 +7,8 @@ const DEFAULT_MIX = { discover: 34, mix: 33, trending: 33 };
 const DEFAULT_SIZE = 30;
 const DEFAULT_SCHEDULE_TIME = "00:00";
 const DAY_MS = 24 * 60 * 60 * 1000;
+let cachedFlows = null;
+let cachedSharedPlaylists = null;
 
 const titleCase = (value) =>
   String(value || "")
@@ -399,6 +401,9 @@ const buildLegacyFlows = (settings) => {
 };
 
 const getStoredFlows = () => {
+  if (cachedFlows) {
+    return cachedFlows;
+  }
   const settings = dbOps.getSettings();
   const stored = settings.weeklyFlows;
   if (Array.isArray(stored) && stored.length > 0) {
@@ -426,19 +431,23 @@ const getStoredFlows = () => {
       });
       downloadTracker.migratePlaylistTypes(idMap);
     }
-    return nextFlows;
+    cachedFlows = nextFlows;
+    return cachedFlows;
   }
   if (Array.isArray(stored)) {
-    return [];
+    cachedFlows = [];
+    return cachedFlows;
   }
   dbOps.updateSettings({
     ...settings,
     weeklyFlows: [],
   });
-  return [];
+  cachedFlows = [];
+  return cachedFlows;
 };
 
 const setFlows = (flows) => {
+  cachedFlows = flows;
   const current = dbOps.getSettings();
   dbOps.updateSettings({
     ...current,
@@ -447,6 +456,9 @@ const setFlows = (flows) => {
 };
 
 const getStoredSharedPlaylists = () => {
+  if (cachedSharedPlaylists) {
+    return cachedSharedPlaylists;
+  }
   const settings = dbOps.getSettings();
   const stored = settings.sharedFlowPlaylists;
   if (Array.isArray(stored)) {
@@ -463,16 +475,19 @@ const getStoredSharedPlaylists = () => {
         sharedFlowPlaylists: next,
       });
     }
-    return next;
+    cachedSharedPlaylists = next;
+    return cachedSharedPlaylists;
   }
   dbOps.updateSettings({
     ...settings,
     sharedFlowPlaylists: [],
   });
-  return [];
+  cachedSharedPlaylists = [];
+  return cachedSharedPlaylists;
 };
 
 const setSharedPlaylists = (playlists) => {
+  cachedSharedPlaylists = playlists;
   const current = dbOps.getSettings();
   dbOps.updateSettings({
     ...current,
@@ -687,6 +702,18 @@ export const flowPlaylistConfig = {
 
   getSharedPlaylists() {
     return getStoredSharedPlaylists();
+  },
+
+  getSharedPlaylistSummaries() {
+    return getStoredSharedPlaylists().map((playlist) => ({
+      id: playlist.id,
+      name: playlist.name,
+      sourceName: playlist.sourceName,
+      sourceFlowId: playlist.sourceFlowId,
+      importedAt: playlist.importedAt,
+      createdAt: playlist.createdAt,
+      trackCount: playlist.trackCount,
+    }));
   },
 
   getSharedPlaylist(playlistId) {
