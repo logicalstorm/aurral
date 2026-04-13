@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Loader2, Settings, Upload } from "lucide-react";
+import { ExternalLink, Loader2, Settings, Upload } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   getFlowStatus,
@@ -1687,6 +1687,15 @@ function FlowPage() {
             <Upload className="w-4 h-4" />
             Import
           </button>
+          <a
+            href="https://aurral.org/aurral-convert"
+            target="_blank"
+            rel="noreferrer"
+            className="btn btn-secondary btn-sm gap-2"
+          >
+            <ExternalLink className="w-4 h-4" />
+            Spotify Import
+          </a>
           <button
             type="button"
             onClick={handleCreateInline}
