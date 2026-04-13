@@ -4,10 +4,12 @@ import { dbOps } from "../config/db-helpers.js";
 import { NavidromeClient } from "./navidrome.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
+import { writePlaylistArtworkSidecar } from "./playlistArtwork.js";
 
 export class WeeklyFlowPlaylistManager {
   constructor(
     weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER || "/app/downloads",
+    { triggerEnsureOnInit = process.env.NODE_ENV !== "test" } = {},
   ) {
     this.weeklyFlowRoot = path.isAbsolute(weeklyFlowRoot)
       ? weeklyFlowRoot
@@ -16,7 +18,7 @@ export class WeeklyFlowPlaylistManager {
     this.navidromeClient = null;
     this._navidromeConfigKey = "";
     this._ensureInFlight = null;
-    this.updateConfig();
+    this.updateConfig(triggerEnsureOnInit);
   }
 
   updateConfig(triggerEnsurePlaylists = true) {
@@ -65,6 +67,10 @@ export class WeeklyFlowPlaylistManager {
   _getWeeklyFlowLibraryHostPath() {
     const base = process.env.DOWNLOAD_FOLDER || "/data/downloads/tmp";
     return `${base.replace(/\\/g, "/").replace(/\/+$/, "")}/aurral-weekly-flow`;
+  }
+
+  _getPlaylistBaseName(playlistName) {
+    return this._sanitize(playlistName);
   }
 
   _getFlowPlaylistNames(flowName) {
@@ -151,6 +157,10 @@ export class WeeklyFlowPlaylistManager {
       await fs.mkdir(this.libraryRoot, { recursive: true });
       const existingFiles = await fs.readdir(this.libraryRoot).catch(() => []);
       const expectedFiles = new Set();
+      const trackExpectedFiles = (baseName) => {
+        expectedFiles.add(`${baseName}.nsp`);
+        expectedFiles.add(`${baseName}.png`);
+      };
       const deleteNavidromePlaylistByName = async (playlistName) => {
         if (!playlists?.length) return;
         const existing = playlists.find(
@@ -172,10 +182,28 @@ export class WeeklyFlowPlaylistManager {
           await deleteNavidromePlaylistByName(playlistName);
         }
       };
-      const writePlaylistFile = async (playlistName, playlistType) => {
-        const fileName = `${this._sanitize(playlistName)}.nsp`;
-        const nspPath = path.join(this.libraryRoot, fileName);
-        expectedFiles.add(fileName);
+      const deletePlaylistAssetsByNames = async (playlistNames) => {
+        const uniqueNames = [...new Set((playlistNames || []).filter(Boolean))];
+        for (const playlistName of uniqueNames) {
+          const baseName = this._getPlaylistBaseName(playlistName);
+          for (const extension of [".nsp", ".png"]) {
+            try {
+              await fs.unlink(
+                path.join(this.libraryRoot, `${baseName}${extension}`),
+              );
+            } catch {}
+          }
+        }
+      };
+      const writePlaylistFile = async (
+        playlistName,
+        playlistType,
+        artworkKind,
+      ) => {
+        const baseName = this._getPlaylistBaseName(playlistName);
+        const nspPath = path.join(this.libraryRoot, `${baseName}.nsp`);
+        const artworkPath = path.join(this.libraryRoot, `${baseName}.png`);
+        trackExpectedFiles(baseName);
         const pathCondition = { contains: { filepath: playlistType } };
         const all =
           libraryId != null
@@ -187,41 +215,39 @@ export class WeeklyFlowPlaylistManager {
           limit: 1000,
         };
         await fs.writeFile(nspPath, JSON.stringify(payload), "utf8");
-      };
-      const deletePlaylistFilesByNames = async (playlistNames) => {
-        const uniqueNames = [...new Set((playlistNames || []).filter(Boolean))];
-        for (const playlistName of uniqueNames) {
-          const fileName = `${this._sanitize(playlistName)}.nsp`;
-          try {
-            await fs.unlink(path.join(this.libraryRoot, fileName));
-          } catch {}
-        }
+        await writePlaylistArtworkSidecar({
+          playlistName,
+          kind: artworkKind,
+          outputPath: artworkPath,
+        });
       };
       for (const flow of flows) {
         const { current, legacy } = this._getFlowPlaylistNames(flow.name);
         const playlistName = current;
-        const fileName = `${this._sanitize(playlistName)}.nsp`;
-        expectedFiles.add(fileName);
         if (flow.enabled) {
-          await writePlaylistFile(playlistName, flow.id);
+          await writePlaylistFile(playlistName, flow.id, "Flow");
           await deleteNavidromePlaylistsByNames(legacy);
-          await deletePlaylistFilesByNames(legacy);
+          await deletePlaylistAssetsByNames(legacy);
         } else {
           await deleteNavidromePlaylistsByNames([playlistName, ...legacy]);
-          await deletePlaylistFilesByNames([playlistName, ...legacy]);
+          await deletePlaylistAssetsByNames([playlistName, ...legacy]);
         }
       }
       for (const playlist of sharedPlaylists) {
         const { current, legacy } = this._getSharedPlaylistNames(playlist.name);
-        await writePlaylistFile(current, playlist.id);
+        await writePlaylistFile(current, playlist.id, "Playlist");
         await deleteNavidromePlaylistsByNames(legacy);
-        await deletePlaylistFilesByNames(legacy);
+        await deletePlaylistAssetsByNames(legacy);
       }
       const toRemove = existingFiles.filter(
-        (file) => file.endsWith(".nsp") && !expectedFiles.has(file),
+        (file) =>
+          (file.endsWith(".nsp") || file.endsWith(".png")) &&
+          !expectedFiles.has(file),
       );
       for (const file of toRemove) {
-        await deleteNavidromePlaylistByName(path.basename(file, ".nsp"));
+        if (file.endsWith(".nsp")) {
+          await deleteNavidromePlaylistByName(path.basename(file, ".nsp"));
+        }
         try {
           await fs.unlink(path.join(this.libraryRoot, file));
         } catch {}
