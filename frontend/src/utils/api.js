@@ -109,8 +109,8 @@ api.interceptors.response.use(
   },
   (error) => {
     const status = error?.response?.status;
-    const message = error?.response?.data?.message;
-    if (status === 401 && message === "Authentication required") {
+    const code = error?.response?.data?.code;
+    if (status === 401 && code === "SESSION_INVALID") {
       clearAuthStorage();
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event(AUTH_INVALID_EVENT));

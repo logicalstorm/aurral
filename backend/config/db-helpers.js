@@ -236,7 +236,7 @@ export const dbOps = {
     const parsedConcurrency = Number(weeklyFlowWorker?.concurrency);
     const concurrency =
       Number.isFinite(parsedConcurrency) && parsedConcurrency >= 1
-        ? Math.min(5, Math.floor(parsedConcurrency))
+        ? Math.min(3, Math.floor(parsedConcurrency))
         : 3;
     const preferredFormat =
       String(weeklyFlowWorker?.preferredFormat || "").toLowerCase() === "mp3"

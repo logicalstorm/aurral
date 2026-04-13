@@ -1190,7 +1190,7 @@ function FlowPage() {
     const parsedConcurrency = Number(raw.concurrency);
     const concurrency =
       Number.isFinite(parsedConcurrency) && parsedConcurrency >= 1
-        ? Math.min(5, Math.floor(parsedConcurrency))
+        ? Math.min(3, Math.floor(parsedConcurrency))
         : DEFAULT_WORKER_SETTINGS.concurrency;
     const preferredFormat =
       String(raw.preferredFormat || "").toLowerCase() === "mp3"

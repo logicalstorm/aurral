@@ -59,7 +59,7 @@ export function getWeeklyFlowStatusSnapshot({
 } = {}) {
   const workerStatus = weeklyFlowWorker.getStatus();
   const flows = flowPlaylistConfig.getFlows();
-  const sharedPlaylists = flowPlaylistConfig.getSharedPlaylists();
+  const sharedPlaylists = flowPlaylistConfig.getSharedPlaylistSummaries();
   const flowIds = flows.map((flow) => flow.id);
   const sharedPlaylistIds = sharedPlaylists.map((playlist) => playlist.id);
   const scopedStats = downloadTracker.getStatsByPlaylistType([

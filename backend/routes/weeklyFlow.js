@@ -1092,9 +1092,9 @@ router.put("/worker/settings", async (req, res) => {
   } = req.body || {};
   if (concurrency !== undefined) {
     const parsed = Number(concurrency);
-    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 5) {
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 3) {
       return res.status(400).json({
-        error: "concurrency must be an integer between 1 and 5",
+        error: "concurrency must be an integer between 1 and 3",
       });
     }
   }
