@@ -7,11 +7,7 @@ import {
   musicbrainzGetCachedArtistMbidByName,
 } from "./apiClients.js";
 import { websocketService } from "./websocketService.js";
-
-const getLastfmUsername = () => {
-  const settings = dbOps.getSettings();
-  return settings.integrations?.lastfm?.username || null;
-};
+import {libraryManager} from "./libraryManager.js";
 
 const LASTFM_PERIODS = [
   "none",
@@ -89,7 +85,7 @@ const emitDiscoveryProgress = (
   });
 };
 
-let discoveryCache = {
+const EMPTY_CACHE = {
   recommendations: [],
   globalTop: [],
   basedOn: [],
@@ -98,6 +94,8 @@ let discoveryCache = {
   lastUpdated: null,
   isUpdating: false,
 };
+
+let discoveryCache = { ...EMPTY_CACHE };
 
 const dbData = dbOps.getDiscoveryCache();
 if (
@@ -116,7 +114,25 @@ if (
   };
 }
 
-export const getDiscoveryCache = () => {
+export const getDiscoveryCache = (lastfmUsername = null) => {
+  if (lastfmUsername) {
+    const userDbData = dbOps.getDiscoveryCache(lastfmUsername);
+    const hasUserData =
+      userDbData.recommendations?.length > 0 ||
+      userDbData.basedOn?.length > 0;
+    if (hasUserData) {
+      return {
+        recommendations: userDbData.recommendations || [],
+        globalTop: discoveryCache.globalTop || [],
+        basedOn: userDbData.basedOn || [],
+        topTags: userDbData.topTags?.length > 0 ? userDbData.topTags : discoveryCache.topTags || [],
+        topGenres: userDbData.topGenres?.length > 0 ? userDbData.topGenres : discoveryCache.topGenres || [],
+        lastUpdated: userDbData.lastUpdated || discoveryCache.lastUpdated || null,
+        isUpdating: discoveryCache.isUpdating,
+      };
+    }
+  }
+
   const dbData = dbOps.getDiscoveryCache();
   if (
     (dbData.recommendations?.length > 0 &&
@@ -173,14 +189,6 @@ export const updateDiscoveryCache = async () => {
 
     const hasLastfmKey = !!getLastfmApiKey();
     const lastfmHealth = createLastfmHealth();
-    const lastfmUsername = getLastfmUsername();
-    const hasLastfmUser = hasLastfmKey && lastfmUsername;
-
-    if (hasLastfmKey && !lastfmUsername) {
-      console.log(
-        "Last.fm API key configured but username not set. User-specific recommendations will not be available.",
-      );
-    }
 
     if (allLibraryArtists.length === 0 && !hasLastfmKey) {
       console.log(
@@ -218,96 +226,17 @@ export const updateDiscoveryCache = async () => {
       return;
     }
 
-    let lastfmArtists = [];
     emitDiscoveryProgress(
       "collecting_seeds",
       "Collecting recommendation seed artists",
       20,
     );
-    if (hasLastfmUser) {
-      const discoveryPeriod = getLastfmDiscoveryPeriod();
-      if (discoveryPeriod === "none") {
-        console.log(
-          "Last.fm discovery period set to 'none', skipping Last.fm user top artists.",
-        );
-      } else {
-        console.log(
-          `Fetching Last.fm user top artists for ${lastfmUsername} (period: ${discoveryPeriod})...`,
-        );
-        try {
-          const userTopArtists = await lastfmRequest("user.getTopArtists", {
-            user: lastfmUsername,
-            limit: 50,
-            period: discoveryPeriod,
-          });
-          recordLastfmResult(lastfmHealth, userTopArtists);
 
-          if (!userTopArtists) {
-            console.warn(
-              "Last.fm user.getTopArtists returned null - check API key and username",
-            );
-          } else if (userTopArtists.error) {
-            console.error(
-              `Last.fm API error: ${
-                userTopArtists.message || userTopArtists.error
-              }`,
-            );
-          } else if (userTopArtists?.topartists?.artist) {
-            const artists = Array.isArray(userTopArtists.topartists.artist)
-              ? userTopArtists.topartists.artist
-              : [userTopArtists.topartists.artist];
-
-            const artistsWithMbids = [];
-            const artistsWithoutMbids = [];
-
-            for (const artist of artists) {
-              if (artist.mbid) {
-                artistsWithMbids.push(artist);
-              } else if (artist.name) {
-                artistsWithoutMbids.push(artist);
-              }
-            }
-
-            for (const artist of artistsWithMbids) {
-              lastfmArtists.push({
-                mbid: artist.mbid,
-                artistName: artist.name,
-                playcount: parseInt(artist.playcount || 0),
-              });
-            }
-
-            console.log(
-              `Found ${lastfmArtists.length} Last.fm artists with MBIDs.`,
-            );
-          } else {
-            console.warn(
-              `Last.fm user.getTopArtists response missing expected data structure. Response:`,
-              JSON.stringify(userTopArtists).substring(0, 200),
-            );
-          }
-        } catch (e) {
-          console.error(`Failed to fetch Last.fm user artists: ${e.message}`);
-          console.error(`Stack trace:`, e.stack);
-        }
-      }
-    } else if (hasLastfmKey) {
-      console.log(
-        "Last.fm API key is configured but username is missing. Set Last.fm username in Settings to enable user-specific recommendations.",
-      );
-    }
-
-    const allSourceArtists = [
-      ...libraryArtists.map((a) => ({
-        mbid: a.mbid,
-        artistName: a.artistName,
-        source: "library",
-      })),
-      ...lastfmArtists.map((a) => ({
-        mbid: a.mbid,
-        artistName: a.artistName,
-        source: "lastfm",
-      })),
-    ];
+    const allSourceArtists = libraryArtists.map((a) => ({
+      mbid: a.mbid,
+      artistName: a.artistName,
+      source: "library",
+    }));
 
     const uniqueArtists = [];
     const seenMbids = new Set();
@@ -333,7 +262,7 @@ export const updateDiscoveryCache = async () => {
       .slice(0, profileSampleLimit);
 
     console.log(
-      `Sampling tags/genres from ${profileSample.length} artists (${libraryArtists.length} library, ${lastfmArtists.length} Last.fm)...`,
+      `Sampling tags/genres from ${profileSample.length} artists (${libraryArtists.length} library)...`,
     );
     emitDiscoveryProgress(
       "building_genres",
@@ -525,7 +454,7 @@ export const updateDiscoveryCache = async () => {
     const recommendations = new Map();
 
     console.log(
-      `Generating recommendations based on ${recSample.length} artists (${libraryArtists.length} library, ${lastfmArtists.length} Last.fm)...`,
+      `Generating recommendations based on ${recSample.length} library artists...`,
     );
     emitDiscoveryProgress(
       "generating_recommendations",
@@ -743,4 +672,261 @@ export const updateDiscoveryCache = async () => {
   } finally {
     discoveryCache.isUpdating = false;
   }
+};
+
+const userDiscoveryLocks = new Set();
+
+export const updateUserDiscoveryCache = async (lastfmUsername) => {
+  if (!lastfmUsername) return null;
+  if (!getLastfmApiKey()) return null;
+  if (userDiscoveryLocks.has(lastfmUsername)) return null;
+
+  userDiscoveryLocks.add(lastfmUsername);
+  console.log(
+    `[Discovery] Starting per-user refresh for Last.fm user ${lastfmUsername}...`,
+  );
+
+  try {
+    const allLibraryArtistsRaw = await libraryManager.getAllArtists();
+    const allLibraryArtists = Array.isArray(allLibraryArtistsRaw)
+      ? allLibraryArtistsRaw
+      : [];
+    const existingArtistIds = new Set(
+      allLibraryArtists
+        .map((a) => a.mbid || a.foreignArtistId || a.id)
+        .filter(Boolean),
+    );
+
+    const lastfmHealth = createLastfmHealth();
+    const discoveryPeriod = getLastfmDiscoveryPeriod();
+    const lastfmArtists = [];
+
+    if (discoveryPeriod !== "none") {
+      console.log(
+        `[Discovery] Fetching Last.fm top artists for ${lastfmUsername} (period: ${discoveryPeriod})...`,
+      );
+      try {
+        const userTopArtists = await lastfmRequest("user.getTopArtists", {
+          user: lastfmUsername,
+          limit: 50,
+          period: discoveryPeriod,
+        });
+        recordLastfmResult(lastfmHealth, userTopArtists);
+
+        if (userTopArtists?.topartists?.artist) {
+          const artists = Array.isArray(userTopArtists.topartists.artist)
+            ? userTopArtists.topartists.artist
+            : [userTopArtists.topartists.artist];
+          for (const artist of artists) {
+            if (artist.mbid) {
+              lastfmArtists.push({
+                mbid: artist.mbid,
+                artistName: artist.name,
+                playcount: parseInt(artist.playcount || 0),
+              });
+            }
+          }
+          console.log(
+            `[Discovery] Found ${lastfmArtists.length} Last.fm artists for ${lastfmUsername}.`,
+          );
+        }
+      } catch (e) {
+        console.error(
+          `[Discovery] Failed to fetch Last.fm artists for ${lastfmUsername}: ${e.message}`,
+        );
+      }
+    }
+
+    const allSourceArtists = [
+      ...allLibraryArtists.slice(0, 25).map((a) => ({
+        mbid: a.mbid,
+        artistName: a.artistName,
+        source: "library",
+      })),
+      ...lastfmArtists.map((a) => ({
+        mbid: a.mbid,
+        artistName: a.artistName,
+        source: "lastfm",
+      })),
+    ];
+
+    const uniqueArtists = [];
+    const seenMbids = new Set();
+    for (const artist of allSourceArtists) {
+      if (artist.mbid && !seenMbids.has(artist.mbid)) {
+        seenMbids.add(artist.mbid);
+        uniqueArtists.push(artist);
+      }
+    }
+
+    // Build per-user tag/genre profile
+    const tagCounts = new Map();
+    const genreCounts = new Map();
+    const profileSample = [...uniqueArtists]
+      .sort(() => 0.5 - Math.random())
+      .slice(0, 20);
+
+    await Promise.all(
+      profileSample.map(async (artist) => {
+        try {
+          const data = await lastfmRequest("artist.getTopTags", {
+            mbid: artist.mbid,
+          });
+          recordLastfmResult(lastfmHealth, data);
+          if (data?.toptags?.tag) {
+            const tags = Array.isArray(data.toptags.tag)
+              ? data.toptags.tag
+              : [data.toptags.tag];
+            tags.slice(0, 15).forEach((t) => {
+              tagCounts.set(
+                t.name,
+                (tagCounts.get(t.name) || 0) + (parseInt(t.count) || 1),
+              );
+              const l = t.name.toLowerCase();
+              if (GENRE_KEYWORDS.some((g) => l.includes(g)))
+                genreCounts.set(t.name, (genreCounts.get(t.name) || 0) + 1);
+            });
+          }
+        } catch (e) {
+          console.warn(
+            `[Discovery] Failed to get tags for ${artist.artistName}: ${e.message}`,
+          );
+        }
+      }),
+    );
+
+    const topTags = Array.from(tagCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map((t) => t[0]);
+    const topGenres = Array.from(genreCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 24)
+      .map((t) => t[0]);
+
+    // Generate per-user recommendations
+    const recSample = [...uniqueArtists]
+      .sort(() => 0.5 - Math.random())
+      .slice(0, 20);
+    const recommendations = new Map();
+
+    await Promise.all(
+      recSample.map(async (artist) => {
+        try {
+          let sourceTags = [];
+          const tagData = await lastfmRequest("artist.getTopTags", {
+            mbid: artist.mbid,
+          });
+          recordLastfmResult(lastfmHealth, tagData);
+          if (tagData?.toptags?.tag) {
+            const allTags = Array.isArray(tagData.toptags.tag)
+              ? tagData.toptags.tag
+              : [tagData.toptags.tag];
+            sourceTags = allTags.slice(0, 15).map((t) => t.name);
+          }
+
+          const similar = await lastfmRequest("artist.getSimilar", {
+            mbid: artist.mbid,
+            limit: 20,
+          });
+          recordLastfmResult(lastfmHealth, similar);
+          if (similar?.similarartists?.artist) {
+            const list = Array.isArray(similar.similarartists.artist)
+              ? similar.similarartists.artist
+              : [similar.similarartists.artist];
+            for (const s of list) {
+              if (
+                s.mbid &&
+                !existingArtistIds.has(s.mbid) &&
+                !recommendations.has(s.mbid)
+              ) {
+                let img = null;
+                if (s.image && Array.isArray(s.image)) {
+                  const i =
+                    s.image.find((im) => im.size === "extralarge") ||
+                    s.image.find((im) => im.size === "large");
+                  if (
+                    i &&
+                    i["#text"] &&
+                    !i["#text"].includes("2a96cbd8b46e442fc41c2b86b821562f")
+                  )
+                    img = i["#text"];
+                }
+                recommendations.set(s.mbid, {
+                  id: s.mbid,
+                  name: s.name,
+                  type: "Artist",
+                  sourceArtist: artist.artistName,
+                  sourceType: artist.source || "library",
+                  tags: sourceTags,
+                  score: Math.round((s.match || 0) * 100),
+                  image: img,
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.warn(
+            `[Discovery] Error getting similar for ${artist.artistName}: ${e.message}`,
+          );
+        }
+      }),
+    );
+
+    const recommendationsPerRefresh = getDiscoveryRecommendationsPerRefresh();
+    const recommendationsArray = Array.from(recommendations.values())
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
+      .slice(0, recommendationsPerRefresh);
+
+    // Hydrate images
+    const toHydrate = recommendationsArray.filter((a) => !a.image);
+    const batchSize = 10;
+    for (let i = 0; i < toHydrate.length; i += batchSize) {
+      const batch = toHydrate.slice(i, i + batchSize);
+      await Promise.all(
+        batch.map(async (item) => {
+          try {
+            const artistName = item.name || item.artistName;
+            if (artistName) {
+              const deezer = await deezerSearchArtist(artistName);
+              if (deezer?.imageUrl) item.image = deezer.imageUrl;
+            }
+          } catch {}
+        }),
+      );
+      if (i + batchSize < toHydrate.length) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
+
+    const userData = {
+      recommendations: recommendationsArray,
+      basedOn: recSample.map((a) => ({
+        name: a.artistName,
+        id: a.mbid,
+        source: a.source || "library",
+      })),
+      topTags,
+      topGenres,
+    };
+
+    dbOps.updateDiscoveryCache(userData, lastfmUsername);
+    console.log(
+      `[Discovery] ${lastfmUsername} refresh complete: ${recommendationsArray.length} recommendations, ${topGenres.length} genres.`,
+    );
+    return userData;
+  } catch (error) {
+    console.error(
+      `[Discovery] Failed to update cache for ${lastfmUsername}: ${error.message}`,
+    );
+    return null;
+  } finally {
+    userDiscoveryLocks.delete(lastfmUsername);
+  }
+};
+
+export const getUserDiscoveryCacheStaleness = (lastfmUsername) => {
+  const data = dbOps.getDiscoveryCache(lastfmUsername);
+  if (!data.lastUpdated) return Infinity;
+  return Date.now() - new Date(data.lastUpdated).getTime();
 };
