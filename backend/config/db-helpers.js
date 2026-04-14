@@ -386,8 +386,8 @@ export const dbOps = {
     updateFn();
   },
 
-  getDiscoveryCache(userId = null) {
-    const prefix = userId ? `user:${userId}:` : "";
+  getDiscoveryCache(lastfmUsername = null) {
+    const prefix = lastfmUsername ? `lfm:${lastfmUsername}:` : "";
     const recommendations = dbHelpers.parseJSON(
       getDiscoveryCacheStmt.get(`${prefix}recommendations`)?.value
     );
@@ -403,7 +403,7 @@ export const dbOps = {
     const topGenres = dbHelpers.parseJSON(
       getDiscoveryCacheStmt.get(`${prefix}topGenres`)?.value
     );
-    const lastUpdated = userId
+    const lastUpdated = lastfmUsername
       ? getDiscoveryCacheStmt.get(`${prefix}lastUpdated`)?.value || null
       : getDiscoveryCacheLastUpdatedStmt.get()?.last_updated;
 
@@ -417,9 +417,9 @@ export const dbOps = {
     };
   },
 
-  updateDiscoveryCache(discovery, userId = null) {
+  updateDiscoveryCache(discovery, lastfmUsername = null) {
     const now = new Date().toISOString();
-    const prefix = userId ? `user:${userId}:` : "";
+    const prefix = lastfmUsername ? `lfm:${lastfmUsername}:` : "";
     const updateFn = db.transaction(() => {
       if (discovery.recommendations) {
         upsertDiscoveryCacheStmt.run(
@@ -456,7 +456,7 @@ export const dbOps = {
           now
         );
       }
-      if (userId) {
+      if (lastfmUsername) {
         upsertDiscoveryCacheStmt.run(
           `${prefix}lastUpdated`,
           now,
