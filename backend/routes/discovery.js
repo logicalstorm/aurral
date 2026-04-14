@@ -2,6 +2,8 @@ import express from "express";
 import {
   getDiscoveryCache,
   updateDiscoveryCache,
+  updateUserDiscoveryCache,
+  getUserDiscoveryCacheStaleness,
 } from "../services/discoveryService.js";
 import {
   lastfmRequest,
@@ -10,7 +12,7 @@ import {
   clearApiCaches,
 } from "../services/apiClients.js";
 import { libraryManager } from "../services/libraryManager.js";
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps, userOps } from "../config/db-helpers.js";
 import { imagePrefetchService } from "../services/imagePrefetchService.js";
 import { defaultDiscoveryPreferences } from "../config/constants.js";
 import { requireAuth, requireAdmin } from "../middleware/requirePermission.js";
@@ -74,11 +76,11 @@ router.post("/clear-discovery", requireAuth, requireAdmin, async (req, res) => {
 
 router.get("/", requireAuth, async (req, res) => {
   const hasLastfmKey = !!getLastfmApiKey();
-  const settings = dbOps.getSettings();
-  const lastfmUsername = settings.integrations?.lastfm?.username || null;
-  const hasLastfmUser = hasLastfmKey && lastfmUsername;
   const libraryArtists = await libraryManager.getAllArtists();
   const hasArtists = libraryArtists.length > 0;
+
+  const reqUser = userOps.getUserById(req.user.id);
+  const userLastfmUsername = reqUser?.lastfmUsername || null;
 
   if (!hasLastfmKey && !hasArtists) {
     const dbData = dbOps.getDiscoveryCache();
@@ -109,7 +111,7 @@ router.get("/", requireAuth, async (req, res) => {
       isUpdating: false,
     });
 
-    res.set("Cache-Control", "public, max-age=300");
+    res.set("Cache-Control", "private, max-age=300");
     return res.json({
       recommendations: [],
       globalTop: [],
@@ -122,13 +124,21 @@ router.get("/", requireAuth, async (req, res) => {
     });
   }
 
-  const discoveryCache = getDiscoveryCache();
-  const dbData = dbOps.getDiscoveryCache();
+  if (userLastfmUsername && hasLastfmKey) {
+    const staleness = getUserDiscoveryCacheStaleness(userLastfmUsername);
+    if (staleness > DISCOVERY_STALE_MS) {
+      updateUserDiscoveryCache(userLastfmUsername).catch((err) => {
+        console.error(
+          `[Discover] On-demand refresh for ${userLastfmUsername} failed:`,
+          err.message,
+        );
+      });
+    }
+  }
+
+  const discoveryCache = getDiscoveryCache(userLastfmUsername);
 
   const hasData =
-    dbData.recommendations?.length > 0 ||
-    dbData.globalTop?.length > 0 ||
-    dbData.topGenres?.length > 0 ||
     discoveryCache.recommendations?.length > 0 ||
     discoveryCache.globalTop?.length > 0 ||
     discoveryCache.topGenres?.length > 0;
@@ -143,39 +153,8 @@ router.get("/", requireAuth, async (req, res) => {
     isUpdating = true;
   }
 
-  const dbHasData =
-    dbData.recommendations?.length > 0 ||
-    dbData.globalTop?.length > 0 ||
-    dbData.topGenres?.length > 0;
-  const cacheHasData =
-    discoveryCache.recommendations?.length > 0 ||
-    discoveryCache.globalTop?.length > 0 ||
-    discoveryCache.topGenres?.length > 0;
-
-  let recommendations, globalTop, basedOn, topTags, topGenres, lastUpdated;
-
-  if (dbHasData) {
-    recommendations = dbData.recommendations || [];
-    globalTop = dbData.globalTop || [];
-    basedOn = dbData.basedOn || [];
-    topTags = dbData.topTags || [];
-    topGenres = dbData.topGenres || [];
-    lastUpdated = dbData.lastUpdated || null;
-  } else if (cacheHasData) {
-    recommendations = discoveryCache.recommendations || [];
-    globalTop = discoveryCache.globalTop || [];
-    basedOn = discoveryCache.basedOn || [];
-    topTags = discoveryCache.topTags || [];
-    topGenres = discoveryCache.topGenres || [];
-    lastUpdated = discoveryCache.lastUpdated || null;
-  } else {
-    recommendations = [];
-    globalTop = [];
-    basedOn = [];
-    topTags = [];
-    topGenres = [];
-    lastUpdated = null;
-  }
+  let { recommendations, globalTop, basedOn, topTags, topGenres, lastUpdated } =
+    discoveryCache;
 
   const existingArtistIds = new Set(
     libraryArtists
@@ -188,22 +167,6 @@ router.get("/", requireAuth, async (req, res) => {
   );
   globalTop = globalTop.filter((artist) => !existingArtistIds.has(artist.id));
 
-  if (
-    recommendations.length > 0 ||
-    globalTop.length > 0 ||
-    topGenres.length > 0
-  ) {
-    Object.assign(discoveryCache, {
-      recommendations,
-      globalTop,
-      basedOn,
-      topTags,
-      topGenres,
-      lastUpdated,
-      isUpdating: false,
-    });
-  }
-
   const parsedLastUpdated = lastUpdated ? new Date(lastUpdated).getTime() : 0;
   const isStale =
     Number.isFinite(parsedLastUpdated) &&
@@ -213,6 +176,7 @@ router.get("/", requireAuth, async (req, res) => {
   if (
     isStale &&
     !isUpdating &&
+    !userLastfmUsername &&
     Date.now() - lastDiscoveryRevalidateAt > DISCOVERY_REVALIDATE_COOLDOWN_MS
   ) {
     lastDiscoveryRevalidateAt = Date.now();
@@ -232,11 +196,11 @@ router.get("/", requireAuth, async (req, res) => {
   }
 
   if (recommendations.length > 0 || globalTop.length > 0) {
-    res.set("Cache-Control", "public, max-age=120, stale-while-revalidate=300");
+    res.set("Cache-Control", "private, max-age=120, stale-while-revalidate=300");
   } else if (isUpdating) {
     res.set("Cache-Control", "no-cache, no-store, must-revalidate");
   } else {
-    res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
+    res.set("Cache-Control", "private, max-age=30, stale-while-revalidate=120");
   }
 
   res.json({

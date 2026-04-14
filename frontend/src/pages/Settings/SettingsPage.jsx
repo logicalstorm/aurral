@@ -12,12 +12,15 @@ import { SettingsMetadataTab } from "./components/SettingsMetadataTab";
 import { SettingsDiscoverTab } from "./components/SettingsDiscoverTab";
 import { SettingsNotificationsTab } from "./components/SettingsNotificationsTab";
 import { SettingsUsersTab } from "./components/SettingsUsersTab";
+import { SettingsAccountTab } from "./components/SettingsAccountTab";
+import { useAccountSettings } from "./hooks/useAccountSettings";
 
 function SettingsPage() {
   const { showSuccess, showError, showInfo } = useToast();
   const { user: authUser } = useAuth();
 
   const data = useSettingsData(showSuccess, showError, showInfo);
+  const account = useAccountSettings(authUser, showSuccess, showError);
   const guard = useUnsavedGuard(data.hasUnsavedChanges, data.setHasUnsavedChanges);
   const tabs = useSettingsTabs(authUser);
   const users = useSettingsUsers(
@@ -104,6 +107,17 @@ function SettingsPage() {
             setTestingGotify={data.setTestingGotify}
             showSuccess={showSuccess}
             showError={showError}
+          />
+        );
+      case "account":
+        return (
+          <SettingsAccountTab
+            lastfmUsername={account.lastfmUsername}
+            setLastfmUsername={account.setLastfmUsername}
+            hasUnsavedChanges={account.hasUnsavedChanges}
+            loading={account.loading}
+            saving={account.saving}
+            handleSave={account.handleSave}
           />
         );
       case "users":
