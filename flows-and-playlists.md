@@ -30,15 +30,15 @@ Accepted aliases:
 - album: `albumName`, `album`, `Album Name`
 - artist id: `artistMbid`, `artistId`, `mbid`
 
-## Spotify playlist import
+## Spotify playlist import (Exportify + CSVJSON)
 
-You can import Spotify playlists in two ways:
+You can import Spotify playlists today with a CSV-to-JSON bridge:
 
-1. Paste a **public Spotify playlist URL or ID** into the hosted import helper and download the generated Aurral JSON
-2. For **private playlists**, export your playlist from [Exportify](https://exportify.net/) and convert the CSV with the same helper
-3. Import the JSON file in Aurral from the playlist import modal
+1. Export your Spotify playlist from [Exportify](https://exportify.net/)
+2. Convert that CSV to JSON using [CSVJSON](https://csvjson.com/csv2json)
+3. Import that JSON file in Aurral from the playlist import modal
 
-The helper's direct Spotify mode returns a playlist object with `name` and `tracks`. CSV-based flows still work too, and Aurral reads Spotify-style keys like `Track Name`, `Artist Name(s)`, and `Album Name` during import.
+CSVJSON output is a raw array of track objects, which Aurral accepts directly as one playlist. Aurral reads Spotify-style keys like `Track Name`, `Artist Name(s)`, and `Album Name` during import.
 
 ## Accepted JSON examples
 

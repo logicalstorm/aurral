@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Aurral | Spotify Playlist Import</title>
+    <title>Aurral | Exportify to JSON</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -78,133 +78,81 @@
       </div>
     </nav>
 
-    <main class="wrap import-wrap">
+    <main class="wrap">
       <div class="header">
-        <h1>Spotify ➜ Aurral</h1>
+        <h1>Exportify ➜ Aurral</h1>
       </div>
 
       <div
         class="callout"
         style="
-          margin-bottom: 28px;
+          margin-bottom: 32px;
           text-align: left;
-          max-width: 980px;
-          padding: 24px;
+          max-width: 600px;
+          padding: 20px;
         "
       >
-        <div class="import-callout-grid">
-          <div>
-            <div class="panel-kicker">Public Playlists</div>
-            <ol class="import-steps">
-              <li>Paste a public Spotify playlist link, URI, or raw playlist ID.</li>
-              <li>Click <strong>Fetch Playlist</strong> to build the Aurral JSON payload.</li>
-              <li>Download the result and upload it in Aurral's Playlist Import modal.</li>
-            </ol>
-          </div>
-          <div>
-            <div class="panel-kicker">Private Playlists</div>
-            <ol class="import-steps">
-              <li>
-                Sign in to
-                <a
-                  href="https://exportify.net/"
-                  target="_blank"
-                  style="text-decoration: underline"
-                  >Exportify.net</a
-                >
-                with Spotify.
-              </li>
-              <li>Export the playlist as CSV and drop it into the CSV import panel below.</li>
-              <li>Download the converted JSON and import it in Aurral as usual.</li>
-            </ol>
-          </div>
-        </div>
+        <ol
+          style="
+            margin-bottom: 0;
+            color: var(--muted);
+            line-height: 1.2;
+            padding-left: 20px;
+          "
+        >
+          <li style="margin-bottom: 12px">
+            Log in to
+            <a
+              href="https://exportify.net/"
+              target="_blank"
+              style="text-decoration: underline"
+              >Exportify.net</a
+            >
+            with your Spotify account.
+          </li>
+          <li style="margin-bottom: 12px">
+            Click <strong>Export</strong> next to the playlist you want to bring
+            to Aurral.
+          </li>
+          <li style="margin-bottom: 12px">
+            Drop the downloaded <code>.csv</code> file into the box below and
+            click Convert.
+          </li>
+          <li>
+            Open your Aurral web UI, go to the
+            <strong>Playlist Import</strong> modal, and upload the generated
+            JSON!
+          </li>
+        </ol>
       </div>
 
       <section class="card convert-card">
         <div class="stack">
-          <div class="import-split">
-            <section class="import-panel import-panel-primary">
-              <div class="panel-kicker">Playlist ID Import</div>
-              <h2>Public Spotify Playlist</h2>
-              <p class="panel-copy">
-                Paste a public playlist URL or ID and we'll fetch the tracklist for you.
-              </p>
-
-              <div class="input-shell">
-                <label for="playlistInput">Spotify playlist URL or ID</label>
-                <input
-                  id="playlistInput"
-                  class="text-input"
-                  type="text"
-                  spellcheck="false"
-                  autocomplete="off"
-                  placeholder="https://open.spotify.com/playlist/... or 37i9dQZF1DX..."
-                />
-              </div>
-
-              <div class="actions">
-                <button id="fetchPlaylistBtn" type="button" disabled>
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  >
-                    <path d="M12 5v14"></path>
-                    <path d="M5 12h14"></path>
-                  </svg>
-                  Fetch Playlist
-                </button>
-              </div>
-
-              <div id="spotifySummary" class="helper-note">
-                Works for public playlists only. Private or collaborative
-                playlists still need the Exportify CSV fallback.
-              </div>
-            </section>
-
-            <section class="import-panel">
-              <div class="panel-kicker">CSV Import</div>
-              <h2>Exportify CSV</h2>
-              <p class="panel-copy">
-                Import your Exportify CSV file here. We'll convert it to Aurral JSON for you.
-              </p>
-
-              <div class="dropzone" id="dropzone">
-                <label>Select or drag CSV file</label>
-                <span class="hint">Supports Exportify .csv exports</span>
-                <input id="csvFile" type="file" accept=".csv,text/csv" />
-                <div id="fileName" class="file-name-display"></div>
-              </div>
-
-              <div class="actions">
-                <button id="convertBtn" type="button" disabled>
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  >
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="7 10 12 15 17 10"></polyline>
-                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                  </svg>
-                  Convert CSV
-                </button>
-              </div>
-            </section>
+          <div class="dropzone" id="dropzone">
+            <label>Select or drag CSV File</label>
+            <span class="hint">Supports Exportify .csv exports</span>
+            <input id="csvFile" type="file" accept=".csv,text/csv" />
+            <div id="fileName" class="file-name-display"></div>
           </div>
 
-          <div class="actions actions-single">
+          <div class="actions">
+            <button id="convertBtn" type="button" disabled>
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              Convert CSV
+            </button>
             <button id="downloadBtn" type="button" disabled>
               <svg
                 width="18"
@@ -224,9 +172,7 @@
             </button>
           </div>
 
-          <div id="status" class="status">
-            Paste a public Spotify playlist or drop an Exportify CSV.
-          </div>
+          <div id="status" class="status">Ready to convert</div>
 
           <div class="preview-container" id="previewContainer">
             <div class="preview-label">Preview</div>
@@ -253,14 +199,9 @@
 
     <script src="main.js"></script>
     <script>
-      const defaultStatus =
-        "Paste a public Spotify playlist or drop an Exportify CSV.";
-      const playlistInput = document.getElementById("playlistInput");
-      const fetchPlaylistBtn = document.getElementById("fetchPlaylistBtn");
       const fileInput = document.getElementById("csvFile");
       const dropzone = document.getElementById("dropzone");
       const fileNameEl = document.getElementById("fileName");
-      const spotifySummaryEl = document.getElementById("spotifySummary");
       const convertBtn = document.getElementById("convertBtn");
       const downloadBtn = document.getElementById("downloadBtn");
       const statusEl = document.getElementById("status");
@@ -269,73 +210,21 @@
 
       let outputJson = null;
       let outputName = "playlist";
-      let spotifyRequestPending = false;
 
       function setStatus(message, type = "") {
         statusEl.textContent = message;
         statusEl.className = "status " + type;
       }
 
-      function slugifyFilename(value) {
-        return (
-          String(value || "playlist")
-            .trim()
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, "-")
-            .replace(/^-+|-+$/g, "")
-            .slice(0, 80) || "playlist"
-        );
-      }
-
-      function resetOutput() {
-        outputJson = null;
-        outputName = "playlist";
-        downloadBtn.disabled = true;
-        previewEl.textContent = "";
-        previewContainer.classList.remove("visible");
-      }
-
-      function showOutput(json, filenameBase) {
-        outputJson = json;
-        outputName = slugifyFilename(filenameBase || json.name || "playlist");
-        previewEl.textContent = JSON.stringify(outputJson, null, 2);
-        previewContainer.classList.add("visible");
-        downloadBtn.disabled = false;
-      }
-
-      function updateFetchButtonState() {
-        fetchPlaylistBtn.disabled =
-          spotifyRequestPending || !playlistInput.value.trim();
-      }
-
-      function refreshIdleStatus() {
-        if (outputJson) {
-          return;
-        }
-
-        if (spotifyRequestPending) {
-          setStatus("Fetching Spotify playlist...", "");
-          return;
-        }
-
-        const file = fileInput.files[0];
-        if (playlistInput.value.trim()) {
-          setStatus("Ready to fetch Spotify playlist.", "");
-        } else if (file) {
-          setStatus("Ready to convert: " + file.name);
-        } else {
-          setStatus(defaultStatus);
-        }
-      }
-
-      function preventDefaults(event) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-
+      // Drag and drop handling
       ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
         dropzone.addEventListener(eventName, preventDefaults, false);
       });
+
+      function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
 
       ["dragenter", "dragover"].forEach((eventName) => {
         dropzone.addEventListener(
@@ -353,8 +242,9 @@
         );
       });
 
-      dropzone.addEventListener("drop", (event) => {
-        const files = event.dataTransfer?.files;
+      dropzone.addEventListener("drop", (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
         if (files && files.length) {
           fileInput.files = files;
           updateFileDisplay();
@@ -362,27 +252,18 @@
       });
 
       fileInput.addEventListener("change", updateFileDisplay);
-      playlistInput.addEventListener("input", () => {
-        updateFetchButtonState();
-        refreshIdleStatus();
-      });
-      playlistInput.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" && !fetchPlaylistBtn.disabled) {
-          event.preventDefault();
-          fetchPlaylistBtn.click();
-        }
-      });
 
       function updateFileDisplay() {
         const file = fileInput.files[0];
         if (file) {
           fileNameEl.textContent = file.name;
           convertBtn.disabled = false;
+          setStatus("Ready to convert: " + file.name);
         } else {
           fileNameEl.textContent = "";
           convertBtn.disabled = true;
+          setStatus("Ready to convert");
         }
-        refreshIdleStatus();
       }
 
       function parseCsvLine(line) {
@@ -421,7 +302,7 @@
       function csvToPlaylistJson(csvText, filename) {
         const rows = csvText
           .split(/\r?\n/)
-          .map((row) => row.trim())
+          .map((r) => r.trim())
           .filter(Boolean);
 
         if (rows.length < 2) {
@@ -446,103 +327,32 @@
         const tracks = rows
           .slice(1)
           .map((row) => {
-            const columns = parseCsvLine(row);
+            const cols = parseCsvLine(row);
             return {
-              artistName: columns[artistNameIndex] || "",
-              albumName: columns[albumNameIndex] || "",
-              trackName: columns[trackNameIndex] || "",
+              artistName: cols[artistNameIndex] || "",
+              albumName: cols[albumNameIndex] || "",
+              trackName: cols[trackNameIndex] || "",
             };
           })
           .filter(
             (track) => track.artistName || track.albumName || track.trackName,
           );
 
-        if (!tracks.length) {
+        if (tracks.length === 0) {
           throw new Error("No tracks were found after parsing the CSV.");
         }
 
-        const playlistName =
-          filename
-            .replace(/\.csv$/i, "")
-            .replace(/[_-]+/g, " ")
-            .trim() || "My Playlist";
+        const baseName = filename
+          .replace(/\.csv$/i, "")
+          .replace(/[_-]+/g, " ")
+          .trim();
+        const playlistName = baseName || "My Playlist";
 
         return {
           name: playlistName,
           tracks,
         };
       }
-
-      async function fetchSpotifyPlaylist() {
-        const rawValue = playlistInput.value.trim();
-        if (!rawValue) {
-          setStatus("Enter a Spotify playlist URL or ID first.", "error");
-          return;
-        }
-
-        spotifyRequestPending = true;
-        updateFetchButtonState();
-        resetOutput();
-        spotifySummaryEl.textContent = "Looking up playlist details...";
-        setStatus("Fetching Spotify playlist...", "");
-
-        const originalButtonLabel = fetchPlaylistBtn.innerHTML;
-        fetchPlaylistBtn.innerHTML = "Fetching...";
-
-        try {
-          const response = await fetch("/api/spotify-playlist", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              playlistInput: rawValue,
-            }),
-          });
-
-          let payload = {};
-          try {
-            payload = await response.json();
-          } catch {
-            payload = {};
-          }
-
-          if (!response.ok) {
-            throw new Error(
-              payload.error ||
-                "Spotify lookup failed. Verify that the playlist is public.",
-            );
-          }
-
-          showOutput(payload.playlist, payload.playlist?.name || "spotify-playlist");
-
-          const meta = payload.meta || {};
-          const ownerSuffix = meta.owner ? ` by ${meta.owner}` : "";
-          const skippedSuffix = meta.skippedCount
-            ? ` Skipped ${meta.skippedCount} non-track or unavailable items.`
-            : "";
-          spotifySummaryEl.textContent = `Fetched ${meta.trackCount || payload.playlist.tracks.length} tracks${ownerSuffix}.${skippedSuffix}`;
-          setStatus(
-            `Fetched ${payload.playlist.tracks.length} tracks from "${payload.playlist.name}".`,
-            "ok",
-          );
-        } catch (error) {
-          resetOutput();
-          spotifySummaryEl.textContent =
-            "Public playlists only. Private or collaborative playlists still need the Exportify CSV fallback.";
-          setStatus(
-            error.message ||
-              "Spotify lookup failed. Verify that the playlist is public.",
-            "error",
-          );
-        } finally {
-          spotifyRequestPending = false;
-          fetchPlaylistBtn.innerHTML = originalButtonLabel;
-          updateFetchButtonState();
-        }
-      }
-
-      fetchPlaylistBtn.addEventListener("click", fetchSpotifyPlaylist);
 
       convertBtn.addEventListener("click", async () => {
         const file = fileInput.files[0];
@@ -554,17 +364,20 @@
 
         try {
           const text = await file.text();
-          resetOutput();
-          const converted = csvToPlaylistJson(text, file.name);
-          showOutput(converted, file.name.replace(/\.csv$/i, ""));
-          spotifySummaryEl.textContent =
-            "Converted from Exportify CSV. Use the direct import box above for public playlists.";
+          outputJson = csvToPlaylistJson(text, file.name);
+          outputName = file.name.replace(/\.csv$/i, "");
+          previewEl.textContent = JSON.stringify(outputJson, null, 2);
+          previewContainer.classList.add("visible");
+          downloadBtn.disabled = false;
           setStatus(
-            `Converted ${converted.tracks.length} tracks from "${file.name}".`,
+            `Converted ${outputJson.tracks.length} tracks from "${file.name}".`,
             "ok",
           );
         } catch (error) {
-          resetOutput();
+          outputJson = null;
+          downloadBtn.disabled = true;
+          previewEl.textContent = "";
+          previewContainer.classList.remove("visible");
           setStatus(
             error.message || "Conversion failed. Check your CSV file.",
             "error",
@@ -582,17 +395,14 @@
           type: "application/json",
         });
         const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `${outputName}.json`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${outputName}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
         URL.revokeObjectURL(url);
       });
-
-      updateFetchButtonState();
-      refreshIdleStatus();
     </script>
   </body>
 </html>

@@ -69,19 +69,13 @@ Flows are dynamic playlists that refresh on a schedule. Playlists are static tra
 - Import shared or hand-built JSON playlists
 - Edit imported playlist names and tracklists directly inside the app
 - Use Navidrome to expose the dedicated Aurral flow library and smart playlists
-- Use the built-in Spotify import button or the [Spotify import helper](https://aurral.org/aurral-convert) to fetch public Spotify playlists directly or convert private playlists via Exportify CSV into an Aurral-friendly JSON playlist
+- Use the built-in Spotify import button or the [Spotify import helper](https://aurral.org/aurral-convert) to convert existing Spotify playlists into an Aurral-friendly JSON playlist
 
 Relevant links:
 
 - [Flows and Playlists guide](flows-and-playlists.md)
 - [Spotify import helper](https://aurral.org/aurral-convert)
 - [Exportify](https://exportify.net/)
-
-### Spotify Import Helper On Cloudflare Pages
-
-- The static helper page in `web/` now supports direct import for public Spotify playlists through a Cloudflare Pages Function at `/api/spotify-playlist`
-- Configure `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` as Cloudflare Pages project secrets so credentials never ship to the browser
-- Private or collaborative Spotify playlists still need the Exportify CSV fallback because they require user-authorized Spotify scopes
 
 ---
 
