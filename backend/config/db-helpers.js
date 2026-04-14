@@ -62,16 +62,19 @@ const getUserByUsernameStmt = db.prepare(
   "SELECT * FROM users WHERE username = ?"
 );
 const getAllUsersStmt = db.prepare(
-  "SELECT id, username, role, permissions FROM users ORDER BY username"
+  "SELECT id, username, role, permissions, lastfm_username FROM users ORDER BY username"
 );
 const getUserByIdStmt = db.prepare("SELECT * FROM users WHERE id = ?");
 const insertUserStmt = db.prepare(
   "INSERT INTO users (username, password_hash, role, permissions) VALUES (?, ?, ?, ?)"
 );
 const updateUserStmt = db.prepare(
-  "UPDATE users SET username = ?, password_hash = ?, role = ?, permissions = ? WHERE id = ?"
+  "UPDATE users SET username = ?, password_hash = ?, role = ?, permissions = ?, lastfm_username = ? WHERE id = ?"
 );
 const deleteUserStmt = db.prepare("DELETE FROM users WHERE id = ?");
+const getAllLastfmUsersStmt = db.prepare(
+  "SELECT id, username, lastfm_username FROM users WHERE lastfm_username IS NOT NULL AND lastfm_username != ''"
+);
 
 const DEFAULT_PERMISSIONS = {
   addArtist: true,
@@ -98,6 +101,7 @@ export const userOps = {
       permissions: dbHelpers.parseJSON(row.permissions) || {
         ...DEFAULT_PERMISSIONS,
       },
+      lastfmUsername: row.lastfm_username || null,
     };
   },
   getUserById(id) {
@@ -111,6 +115,7 @@ export const userOps = {
       permissions: dbHelpers.parseJSON(row.permissions) || {
         ...DEFAULT_PERMISSIONS,
       },
+      lastfmUsername: row.lastfm_username || null,
     };
   },
   getAllUsers() {
@@ -122,6 +127,7 @@ export const userOps = {
       permissions: dbHelpers.parseJSON(r.permissions) || {
         ...DEFAULT_PERMISSIONS,
       },
+      lastfmUsername: r.lastfm_username || null,
     }));
   },
   createUser(username, passwordHash, role = "user", permissions = null) {
@@ -163,15 +169,20 @@ export const userOps = {
       data.permissions !== undefined
         ? { ...DEFAULT_PERMISSIONS, ...data.permissions }
         : existing.permissions;
+    const lastfmUsername =
+      data.lastfmUsername !== undefined
+        ? (data.lastfmUsername ? String(data.lastfmUsername).trim() : null)
+        : existing.lastfmUsername;
     try {
       updateUserStmt.run(
         username.toLowerCase(),
         passwordHash,
         role,
         dbHelpers.stringifyJSON(permissions),
+        lastfmUsername,
         parseInt(id, 10)
       );
-      return { id: parseInt(id, 10), username, role, permissions };
+      return { id: parseInt(id, 10), username, role, permissions, lastfmUsername };
     } catch (e) {
       return null;
     }
@@ -183,6 +194,13 @@ export const userOps = {
     } catch (e) {
       return false;
     }
+  },
+  getAllLastfmUsers() {
+    return getAllLastfmUsersStmt.all().map((r) => ({
+      id: r.id,
+      username: r.username,
+      lastfmUsername: r.lastfm_username,
+    }));
   },
 };
 
