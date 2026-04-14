@@ -62,16 +62,19 @@ const getUserByUsernameStmt = db.prepare(
   "SELECT * FROM users WHERE username = ?"
 );
 const getAllUsersStmt = db.prepare(
-  "SELECT id, username, role, permissions FROM users ORDER BY username"
+  "SELECT id, username, role, permissions, lastfm_username FROM users ORDER BY username"
 );
 const getUserByIdStmt = db.prepare("SELECT * FROM users WHERE id = ?");
 const insertUserStmt = db.prepare(
   "INSERT INTO users (username, password_hash, role, permissions) VALUES (?, ?, ?, ?)"
 );
 const updateUserStmt = db.prepare(
-  "UPDATE users SET username = ?, password_hash = ?, role = ?, permissions = ? WHERE id = ?"
+  "UPDATE users SET username = ?, password_hash = ?, role = ?, permissions = ?, lastfm_username = ? WHERE id = ?"
 );
 const deleteUserStmt = db.prepare("DELETE FROM users WHERE id = ?");
+const getAllLastfmUsersStmt = db.prepare(
+  "SELECT id, username, lastfm_username FROM users WHERE lastfm_username IS NOT NULL AND lastfm_username != ''"
+);
 
 const DEFAULT_PERMISSIONS = {
   addArtist: true,
@@ -98,6 +101,7 @@ export const userOps = {
       permissions: dbHelpers.parseJSON(row.permissions) || {
         ...DEFAULT_PERMISSIONS,
       },
+      lastfmUsername: row.lastfm_username || null,
     };
   },
   getUserById(id) {
@@ -111,6 +115,7 @@ export const userOps = {
       permissions: dbHelpers.parseJSON(row.permissions) || {
         ...DEFAULT_PERMISSIONS,
       },
+      lastfmUsername: row.lastfm_username || null,
     };
   },
   getAllUsers() {
@@ -122,6 +127,7 @@ export const userOps = {
       permissions: dbHelpers.parseJSON(r.permissions) || {
         ...DEFAULT_PERMISSIONS,
       },
+      lastfmUsername: r.lastfm_username || null,
     }));
   },
   createUser(username, passwordHash, role = "user", permissions = null) {
@@ -163,15 +169,20 @@ export const userOps = {
       data.permissions !== undefined
         ? { ...DEFAULT_PERMISSIONS, ...data.permissions }
         : existing.permissions;
+    const lastfmUsername =
+      data.lastfmUsername !== undefined
+        ? (data.lastfmUsername ? String(data.lastfmUsername).trim() : null)
+        : existing.lastfmUsername;
     try {
       updateUserStmt.run(
         username.toLowerCase(),
         passwordHash,
         role,
         dbHelpers.stringifyJSON(permissions),
+        lastfmUsername,
         parseInt(id, 10)
       );
-      return { id: parseInt(id, 10), username, role, permissions };
+      return { id: parseInt(id, 10), username, role, permissions, lastfmUsername };
     } catch (e) {
       return null;
     }
@@ -183,6 +194,13 @@ export const userOps = {
     } catch (e) {
       return false;
     }
+  },
+  getAllLastfmUsers() {
+    return getAllLastfmUsersStmt.all().map((r) => ({
+      id: r.id,
+      username: r.username,
+      lastfmUsername: r.lastfm_username,
+    }));
   },
 };
 
@@ -368,23 +386,26 @@ export const dbOps = {
     updateFn();
   },
 
-  getDiscoveryCache() {
+  getDiscoveryCache(lastfmUsername = null) {
+    const prefix = lastfmUsername ? `lfm:${lastfmUsername}:` : "";
     const recommendations = dbHelpers.parseJSON(
-      getDiscoveryCacheStmt.get("recommendations")?.value
+      getDiscoveryCacheStmt.get(`${prefix}recommendations`)?.value
     );
     const globalTop = dbHelpers.parseJSON(
-      getDiscoveryCacheStmt.get("globalTop")?.value
+      getDiscoveryCacheStmt.get(`${prefix}globalTop`)?.value
     );
     const basedOn = dbHelpers.parseJSON(
-      getDiscoveryCacheStmt.get("basedOn")?.value
+      getDiscoveryCacheStmt.get(`${prefix}basedOn`)?.value
     );
     const topTags = dbHelpers.parseJSON(
-      getDiscoveryCacheStmt.get("topTags")?.value
+      getDiscoveryCacheStmt.get(`${prefix}topTags`)?.value
     );
     const topGenres = dbHelpers.parseJSON(
-      getDiscoveryCacheStmt.get("topGenres")?.value
+      getDiscoveryCacheStmt.get(`${prefix}topGenres`)?.value
     );
-    const lastUpdated = getDiscoveryCacheLastUpdatedStmt.get()?.last_updated;
+    const lastUpdated = lastfmUsername
+      ? getDiscoveryCacheStmt.get(`${prefix}lastUpdated`)?.value || null
+      : getDiscoveryCacheLastUpdatedStmt.get()?.last_updated;
 
     return {
       recommendations: recommendations || [],
@@ -396,46 +417,60 @@ export const dbOps = {
     };
   },
 
-  updateDiscoveryCache(discovery) {
+  updateDiscoveryCache(discovery, lastfmUsername = null) {
     const now = new Date().toISOString();
+    const prefix = lastfmUsername ? `lfm:${lastfmUsername}:` : "";
     const updateFn = db.transaction(() => {
       if (discovery.recommendations) {
         upsertDiscoveryCacheStmt.run(
-          "recommendations",
+          `${prefix}recommendations`,
           dbHelpers.stringifyJSON(discovery.recommendations),
           now
         );
       }
       if (discovery.globalTop) {
         upsertDiscoveryCacheStmt.run(
-          "globalTop",
+          `${prefix}globalTop`,
           dbHelpers.stringifyJSON(discovery.globalTop),
           now
         );
       }
       if (discovery.basedOn) {
         upsertDiscoveryCacheStmt.run(
-          "basedOn",
+          `${prefix}basedOn`,
           dbHelpers.stringifyJSON(discovery.basedOn),
           now
         );
       }
       if (discovery.topTags) {
         upsertDiscoveryCacheStmt.run(
-          "topTags",
+          `${prefix}topTags`,
           dbHelpers.stringifyJSON(discovery.topTags),
           now
         );
       }
       if (discovery.topGenres) {
         upsertDiscoveryCacheStmt.run(
-          "topGenres",
+          `${prefix}topGenres`,
           dbHelpers.stringifyJSON(discovery.topGenres),
+          now
+        );
+      }
+      if (lastfmUsername) {
+        upsertDiscoveryCacheStmt.run(
+          `${prefix}lastUpdated`,
+          now,
           now
         );
       }
     });
     updateFn();
+  },
+
+  deleteDiscoveryCacheByPrefix(prefix) {
+    return db.prepare("DELETE FROM discovery_cache WHERE key LIKE ?").run(
+      `${prefix}%`
+    );
   },
 
   getImage(mbid) {

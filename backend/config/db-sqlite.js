@@ -120,6 +120,15 @@ if (!tableColumns.includes("artist_mbid")) {
   db.exec("ALTER TABLE weekly_flow_jobs ADD COLUMN artist_mbid TEXT");
 }
 
+const userColumns = db
+  .prepare("PRAGMA table_info(users)")
+  .all()
+  .map((column) => column.name);
+
+if (!userColumns.includes("lastfm_username")) {
+  db.exec("ALTER TABLE users ADD COLUMN lastfm_username TEXT");
+}
+
 export const dbHelpers = {
   parseJSON: (text) => {
     if (!text) return null;
