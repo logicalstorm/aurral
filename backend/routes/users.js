@@ -1,6 +1,6 @@
 import express from "express";
 import bcrypt from "bcrypt";
-import { userOps } from "../config/db-helpers.js";
+import { userOps, dbOps } from "../config/db-helpers.js";
 import { requireAuth, requireAdmin } from "../middleware/requirePermission.js";
 import { requirePasswordStrength } from "../middleware/validation.js";
 import { deleteSessionsByUserId } from "../config/session-helpers.js";
@@ -66,6 +66,18 @@ router.patch("/:id", requireAuth, (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
     const { password, permissions, role, lastfmUsername } = req.body;
+    if (
+      lastfmUsername !== undefined &&
+      existing.lastfmUsername &&
+      lastfmUsername !== existing.lastfmUsername
+    ) {
+      const otherUsers = userOps.getAllLastfmUsers().filter(
+        (u) => u.lastfmUsername === existing.lastfmUsername && u.id !== id
+      );
+      if (otherUsers.length === 0) {
+        dbOps.deleteDiscoveryCacheByPrefix(`lfm:${existing.lastfmUsername}:`);
+      }
+    }
     if (isSelf && !isAdmin) {
       if (permissions !== undefined || role !== undefined) {
         return res.status(403).json({ error: "Forbidden" });

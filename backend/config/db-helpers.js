@@ -467,6 +467,12 @@ export const dbOps = {
     updateFn();
   },
 
+  deleteDiscoveryCacheByPrefix(prefix) {
+    return db.prepare("DELETE FROM discovery_cache WHERE key LIKE ?").run(
+      `${prefix}%`
+    );
+  },
+
   getImage(mbid) {
     const row = getImageStmt.get(mbid);
     if (!row) return null;

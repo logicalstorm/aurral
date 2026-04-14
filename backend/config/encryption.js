@@ -47,6 +47,7 @@ const SENSITIVE_PATHS = [
   ["lidarr", "apiKey"],
   ["slskd", "apiKey"],
   ["gotify", "token"],
+  ["lastfm", "apiKey"],
 ];
 
 function getAt(obj, path) {
