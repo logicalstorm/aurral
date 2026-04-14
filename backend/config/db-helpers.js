@@ -386,23 +386,26 @@ export const dbOps = {
     updateFn();
   },
 
-  getDiscoveryCache() {
+  getDiscoveryCache(userId = null) {
+    const prefix = userId ? `user:${userId}:` : "";
     const recommendations = dbHelpers.parseJSON(
-      getDiscoveryCacheStmt.get("recommendations")?.value
+      getDiscoveryCacheStmt.get(`${prefix}recommendations`)?.value
     );
     const globalTop = dbHelpers.parseJSON(
-      getDiscoveryCacheStmt.get("globalTop")?.value
+      getDiscoveryCacheStmt.get(`${prefix}globalTop`)?.value
     );
     const basedOn = dbHelpers.parseJSON(
-      getDiscoveryCacheStmt.get("basedOn")?.value
+      getDiscoveryCacheStmt.get(`${prefix}basedOn`)?.value
     );
     const topTags = dbHelpers.parseJSON(
-      getDiscoveryCacheStmt.get("topTags")?.value
+      getDiscoveryCacheStmt.get(`${prefix}topTags`)?.value
     );
     const topGenres = dbHelpers.parseJSON(
-      getDiscoveryCacheStmt.get("topGenres")?.value
+      getDiscoveryCacheStmt.get(`${prefix}topGenres`)?.value
     );
-    const lastUpdated = getDiscoveryCacheLastUpdatedStmt.get()?.last_updated;
+    const lastUpdated = userId
+      ? getDiscoveryCacheStmt.get(`${prefix}lastUpdated`)?.value || null
+      : getDiscoveryCacheLastUpdatedStmt.get()?.last_updated;
 
     return {
       recommendations: recommendations || [],
@@ -414,41 +417,49 @@ export const dbOps = {
     };
   },
 
-  updateDiscoveryCache(discovery) {
+  updateDiscoveryCache(discovery, userId = null) {
     const now = new Date().toISOString();
+    const prefix = userId ? `user:${userId}:` : "";
     const updateFn = db.transaction(() => {
       if (discovery.recommendations) {
         upsertDiscoveryCacheStmt.run(
-          "recommendations",
+          `${prefix}recommendations`,
           dbHelpers.stringifyJSON(discovery.recommendations),
           now
         );
       }
       if (discovery.globalTop) {
         upsertDiscoveryCacheStmt.run(
-          "globalTop",
+          `${prefix}globalTop`,
           dbHelpers.stringifyJSON(discovery.globalTop),
           now
         );
       }
       if (discovery.basedOn) {
         upsertDiscoveryCacheStmt.run(
-          "basedOn",
+          `${prefix}basedOn`,
           dbHelpers.stringifyJSON(discovery.basedOn),
           now
         );
       }
       if (discovery.topTags) {
         upsertDiscoveryCacheStmt.run(
-          "topTags",
+          `${prefix}topTags`,
           dbHelpers.stringifyJSON(discovery.topTags),
           now
         );
       }
       if (discovery.topGenres) {
         upsertDiscoveryCacheStmt.run(
-          "topGenres",
+          `${prefix}topGenres`,
           dbHelpers.stringifyJSON(discovery.topGenres),
+          now
+        );
+      }
+      if (userId) {
+        upsertDiscoveryCacheStmt.run(
+          `${prefix}lastUpdated`,
+          now,
           now
         );
       }
