@@ -26,6 +26,7 @@ import {
   readLibraryLookupCache,
 } from "../utils/api";
 import { useWebSocketChannel } from "../hooks/useWebSocket";
+import { useAuth } from "../contexts/AuthContext";
 import ArtistImage from "../components/ArtistImage";
 import LastfmBanner from "../components/LastfmBanner";
 
@@ -475,6 +476,7 @@ function DiscoverPage() {
   const requestedArtistCoversRef = useRef(new Set());
   const lastDiscoveryWsMessageAtRef = useRef(0);
   const navigate = useNavigate();
+  const { user: authUser } = useAuth();
 
 
   const { isConnected: isDiscoverySocketConnected } = useWebSocketChannel(
@@ -548,7 +550,7 @@ function DiscoverPage() {
   }, [data, data?.isUpdating, data?.stale]);
 
   useEffect(() => {
-    getDiscovery()
+    getDiscovery(true)
       .then((discoveryData) => {
         setData(discoveryData);
         setError(null);
@@ -578,7 +580,7 @@ function DiscoverPage() {
       .then(setRecentReleases)
       .catch(() => {});
 
-  }, []);
+  }, [authUser?.id]);
 
   useEffect(() => {
     try {

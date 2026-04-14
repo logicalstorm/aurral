@@ -111,7 +111,7 @@ router.get("/", requireAuth, async (req, res) => {
       isUpdating: false,
     });
 
-    res.set("Cache-Control", "public, max-age=300");
+    res.set("Cache-Control", "private, max-age=300");
     return res.json({
       recommendations: [],
       globalTop: [],
@@ -196,11 +196,11 @@ router.get("/", requireAuth, async (req, res) => {
   }
 
   if (recommendations.length > 0 || globalTop.length > 0) {
-    res.set("Cache-Control", "public, max-age=120, stale-while-revalidate=300");
+    res.set("Cache-Control", "private, max-age=120, stale-while-revalidate=300");
   } else if (isUpdating) {
     res.set("Cache-Control", "no-cache, no-store, must-revalidate");
   } else {
-    res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
+    res.set("Cache-Control", "private, max-age=30, stale-while-revalidate=120");
   }
 
   res.json({
