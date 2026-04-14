@@ -27,6 +27,7 @@ import {
 } from "../utils/api";
 import { useWebSocketChannel } from "../hooks/useWebSocket";
 import ArtistImage from "../components/ArtistImage";
+import LastfmBanner from "../components/LastfmBanner";
 
 const TAG_COLORS = [
   "#845336",
@@ -474,6 +475,7 @@ function DiscoverPage() {
   const requestedArtistCoversRef = useRef(new Set());
   const lastDiscoveryWsMessageAtRef = useRef(0);
   const navigate = useNavigate();
+
 
   const { isConnected: isDiscoverySocketConnected } = useWebSocketChannel(
     "discovery",
@@ -1450,6 +1452,7 @@ function DiscoverPage() {
 
   return (
     <div className="space-y-10 pb-12">
+      <LastfmBanner />
       <section
         className="relative overflow-hidden"
         style={{
@@ -1477,7 +1480,7 @@ function DiscoverPage() {
                 Your daily mix, curated from your library.
               </p>
             </div>
-            
+
             <button
               type="button"
               onClick={openDiscoverModal}
