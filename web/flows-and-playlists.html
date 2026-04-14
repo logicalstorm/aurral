@@ -164,10 +164,9 @@
       <section class="content-section">
         <h2>Playlist Imports</h2>
         <p>
-          Aurral accepts imported playlists via JSON files. You can fetch a
-          public Spotify playlist directly with our
-          <a href="aurral-convert.html">Spotify import helper</a>, or convert a
-          private Spotify playlist through the Exportify CSV converter.
+          Aurral accepts imported playlists via JSON files. You can convert your
+          existing Spotify playlists into this format using our
+          <a href="aurral-convert.html">CSV to JSON converter</a>.
         </p>
 
         <h3>Required Fields</h3>
@@ -244,7 +243,7 @@
           <h3>2. Raw Array of Tracks</h3>
           <p>
             A top-level array of track objects is treated as one single
-            playlist.
+            playlist. (This is what our CSV converter generates).
           </p>
           <pre><code>[
   { "artistName": "Burial", "trackName": "Archangel" },
