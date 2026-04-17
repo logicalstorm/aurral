@@ -607,6 +607,18 @@ export const getLidarrMetadataProfiles = async (url, apiKey) => {
   return response.data;
 };
 
+export const getLidarrTags = async (url, apiKey) => {
+  const params = new URLSearchParams();
+  if (url) params.append("url", url);
+  if (apiKey) params.append("apiKey", apiKey);
+  const queryString = params.toString();
+  const endpoint = `/settings/lidarr/tags${
+    queryString ? `?${queryString}` : ""
+  }`;
+  const response = await api.get(endpoint);
+  return response.data;
+};
+
 export const testLidarrConnection = async (url, apiKey) => {
   const params = new URLSearchParams();
   if (url) params.append("url", url);

@@ -518,6 +518,10 @@ export class LidarrClient {
     return this.request("/rootFolder");
   }
 
+  async getTags(skipConfigUpdate = false) {
+    return this.request("/tag", "GET", null, skipConfigUpdate);
+  }
+
   async addArtist(mbid, artistName, options = {}) {
     const rootFolders = await this.getRootFolders();
     if (!rootFolders || rootFolders.length === 0) {
@@ -553,6 +557,9 @@ export class LidarrClient {
     }
     if (!metadataProfileId) metadataProfileId = 1;
 
+    const configuredTagId = options.tagId ?? settings.integrations?.lidarr?.tagId ?? null;
+    const tags = configuredTagId ? [parseInt(configuredTagId, 10)] : [];
+
     const lidarrArtist = {
       artistName: artistName,
       foreignArtistId: mbid,
@@ -562,6 +569,7 @@ export class LidarrClient {
       monitored: artistMonitored,
       monitor: effectiveMonitor,
       monitorNewItems: monitorNewItems,
+      tags: tags,
       albumsToMonitor: [],
       addOptions: {
         monitor: effectiveMonitor,
