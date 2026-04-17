@@ -40,6 +40,10 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: "autoUpdate",
         includeAssets: ["arralogo.svg"],
+        workbox: {
+          // SPA fallback must not intercept reverse-proxy auth callbacks or API routes.
+          navigateFallbackDenylist: [/^\/oidc\//, /^\/api\//, /^\/logout$/],
+        },
         manifest: {
           name: "Aurral - Artist Request Manager",
           short_name: "Aurral",
