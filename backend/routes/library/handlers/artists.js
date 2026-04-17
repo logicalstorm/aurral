@@ -238,7 +238,7 @@ export default function registerArtists(router) {
 
         const settings = dbOps.getSettings();
         const defaultMonitorOption =
-          settings.integrations?.lidarr?.defaultMonitorOption || "none";
+          settings.integrations?.lidarr?.defaultMonitorOption || "all";
         const { lidarrClient } =
           await import("../../../services/lidarrClient.js");
         if (!lidarrClient || !lidarrClient.isConfigured()) {
