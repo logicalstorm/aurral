@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { dbOps } from "../config/db-helpers.js";
 import { dbHelpers } from "../config/db-sqlite.js";
+import { hasPermission } from "../middleware/auth.js";
 import {
   musicbrainzRequest,
   musicbrainzGetArtistReleaseGroups,
@@ -677,6 +678,114 @@ export class LibraryManager {
       );
       return { error: error.message };
     }
+  }
+
+  async requestAlbumFromSearch({
+    albumMbid,
+    albumName,
+    artistMbid,
+    artistName,
+    triggerSearch = false,
+    user = null,
+  } = {}) {
+    const lidarr = await getLidarrClient();
+    if (!lidarr || !lidarr.isConfigured()) {
+      const error = new Error("Lidarr is not configured");
+      error.statusCode = 503;
+      throw error;
+    }
+
+    const normalizedAlbumMbid = String(albumMbid || "").trim();
+    const normalizedAlbumName = String(albumName || "").trim();
+    const normalizedArtistMbid = String(artistMbid || "").trim();
+    const normalizedArtistName = String(artistName || "").trim();
+
+    if (!normalizedAlbumMbid || !normalizedAlbumName) {
+      const error = new Error("albumMbid and albumName are required");
+      error.statusCode = 400;
+      throw error;
+    }
+    if (!normalizedArtistMbid || !normalizedArtistName) {
+      const error = new Error("artistMbid and artistName are required");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    let artist = await this.getArtist(normalizedArtistMbid);
+    let createdArtist = false;
+
+    if (!artist) {
+      if (!hasPermission(user, "addArtist")) {
+        const error = new Error(
+          "Permission required: addArtist to create the album artist",
+        );
+        error.statusCode = 403;
+        throw error;
+      }
+
+      const created = await this.addArtist(
+        normalizedArtistMbid,
+        normalizedArtistName,
+        { albumOnly: true },
+      );
+      if (created?.error) {
+        const error = new Error(created.error);
+        error.statusCode = 503;
+        throw error;
+      }
+      artist = created;
+      createdArtist = true;
+    }
+
+    if (!artist?.id) {
+      const error = new Error("Failed to resolve artist in Lidarr");
+      error.statusCode = 503;
+      throw error;
+    }
+
+    const existingAlbum = await lidarr.getAlbumByMbid(normalizedAlbumMbid);
+    if (
+      existingAlbum &&
+      existingAlbum.artistId != null &&
+      String(existingAlbum.artistId) !== String(artist.id)
+    ) {
+      const error = new Error(
+        "Album already exists in Lidarr under a different artist",
+      );
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const settings = getSettings();
+    const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
+    const shouldTriggerSearch = triggerSearch === true || searchOnAdd;
+    const album = await this.addAlbum(artist.id, normalizedAlbumMbid, normalizedAlbumName, {
+      triggerSearch: shouldTriggerSearch,
+    });
+
+    if (album?.error) {
+      const error = new Error(album.error);
+      error.statusCode = 503;
+      throw error;
+    }
+
+    const albumStatus =
+      (album.statistics?.percentOfTracks ?? 0) >= 100 ||
+      (album.statistics?.sizeOnDisk ?? 0) > 0
+        ? "available"
+        : shouldTriggerSearch
+          ? "searching"
+          : "inLibrary";
+
+    return {
+      success: true,
+      artist,
+      album,
+      createdArtist,
+      createdAlbum: !existingAlbum,
+      triggeredSearch: shouldTriggerSearch,
+      status: albumStatus,
+    };
   }
 
   async getAlbums(artistId) {
