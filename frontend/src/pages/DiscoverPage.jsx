@@ -807,11 +807,11 @@ function DiscoverPage() {
 
   const discoverArtistIds = useMemo(() => {
     const ids = new Set();
-    for (const artist of recommendations) {
+    for (const artist of data?.recommendations || []) {
       const id = getArtistId(artist);
       if (id) ids.add(id);
     }
-    for (const artist of globalTop) {
+    for (const artist of data?.globalTop || []) {
       const id = getArtistId(artist);
       if (id) ids.add(id);
     }
@@ -826,11 +826,16 @@ function DiscoverPage() {
       if (id) ids.add(id);
     }
     return [...ids];
-  }, [recommendations, globalTop, genreSections, recentlyAdded]);
+  }, [data, genreSections, recentlyAdded]);
+
+  const discoverArtistIdsKey = discoverArtistIds.join(",");
 
   useEffect(() => {
+    if (discoverArtistIds.length === 0) return;
     const cached = readLibraryLookupCache(discoverArtistIds);
-    setLibraryLookup(cached);
+    if (Object.keys(cached).length > 0) {
+      setLibraryLookup((prev) => ({ ...prev, ...cached }));
+    }
     const missing = discoverArtistIds.filter((id) => cached[id] === undefined);
     if (missing.length === 0) return;
     let cancelled = false;
@@ -840,17 +845,14 @@ function DiscoverPage() {
         if (!cancelled && lookup) {
           setLibraryLookup((prev) => ({ ...prev, ...lookup }));
         }
-      } catch {
-        if (!cancelled) {
-          setLibraryLookup((prev) => ({ ...prev }));
-        }
-      }
+      } catch {}
     };
     fetchLookup();
     return () => {
       cancelled = true;
     };
-  }, [discoverArtistIds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discoverArtistIdsKey]);
 
   const openDiscoverModal = () => {
     setDraftSections(discoverSections.map((item) => ({ ...item })));
