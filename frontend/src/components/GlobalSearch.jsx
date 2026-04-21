@@ -50,7 +50,8 @@ function GlobalSearch() {
   }, []);
 
   const selectedScope =
-    SEARCH_SCOPES.find((scope) => scope.value === searchScope) || SEARCH_SCOPES[0];
+    SEARCH_SCOPES.find((scope) => scope.value === searchScope) ||
+    SEARCH_SCOPES[0];
 
   useEffect(() => {
     setSearchQuery("");
@@ -111,7 +112,9 @@ function GlobalSearch() {
           const raw = data.tags || [];
           const seen = new Set();
           const list = raw.filter((tag) => {
-            const key = String(tag || "").trim().toLowerCase();
+            const key = String(tag || "")
+              .trim()
+              .toLowerCase();
             if (!key || seen.has(key)) return false;
             seen.add(key);
             return true;
@@ -346,7 +349,7 @@ function GlobalSearch() {
               >
                 /
               </span>
-              <span>to search artists, albums, or tags</span>
+              <span>to search</span>
             </div>
           )}
           {loadingSuggestions && (
