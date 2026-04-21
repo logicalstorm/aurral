@@ -1,6 +1,15 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Loader, Music } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  Disc,
+  Disc3,
+  FileMusic,
+  Loader,
+  Music,
+  Tag,
+} from "lucide-react";
 import {
   checkHealth,
   getDiscovery,
@@ -14,8 +23,16 @@ import SearchAlbumResults from "../components/SearchAlbumResults";
 import SearchArtistResults from "../components/SearchArtistResults";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
+import { useReleaseTypeFilter } from "./ArtistDetails/hooks/useReleaseTypeFilter";
 
 const PAGE_SIZE = 24;
+
+function getReleaseTypeIcon(type) {
+  if (type === "Album") return <Disc className="h-4 w-4" />;
+  if (type === "EP") return <Disc3 className="h-4 w-4" />;
+  if (type === "Single") return <FileMusic className="h-4 w-4" />;
+  return <Music className="h-4 w-4" />;
+}
 
 function getArtistId(artist) {
   return artist?.id || artist?.mbid || artist?.foreignArtistId;
@@ -57,10 +74,18 @@ function SearchResultsPage() {
   const [lastfmConfigured, setLastfmConfigured] = useState(null);
   const [libraryLookup, setLibraryLookup] = useState({});
   const [pendingAlbumIds, setPendingAlbumIds] = useState({});
+  const [showReleaseTypeDropdown, setShowReleaseTypeDropdown] = useState(false);
   const sentinelRef = useRef(null);
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
   const { showSuccess, showError } = useToast();
+  const {
+    selectedReleaseTypes,
+    setSelectedReleaseTypes,
+    primaryReleaseTypes,
+    secondaryReleaseTypes,
+    allReleaseTypes,
+  } = useReleaseTypeFilter();
 
   const trimmedQuery = useMemo(() => query.trim(), [query]);
   const normalizedType = useMemo(() => {
@@ -74,6 +99,19 @@ function SearchResultsPage() {
   const tagScope = searchParams.get("scope") || "recommended";
   const showAllTagResults = isTagSearch && tagScope === "all";
   const canAddAlbum = hasPermission("addAlbum");
+  const hasActiveReleaseTypeFilters = useMemo(() => {
+    if (selectedReleaseTypes.length !== allReleaseTypes.length) return true;
+    return !allReleaseTypes.every((typeName) =>
+      selectedReleaseTypes.includes(typeName),
+    );
+  }, [allReleaseTypes, selectedReleaseTypes]);
+  const inactiveReleaseTypeCount = useMemo(
+    () =>
+      allReleaseTypes.filter(
+        (typeName) => !selectedReleaseTypes.includes(typeName),
+      ).length,
+    [allReleaseTypes, selectedReleaseTypes],
+  );
 
   const updateTagScope = useCallback(
     (nextScope) => {
@@ -160,6 +198,7 @@ function SearchResultsPage() {
           limit: PAGE_SIZE,
           offset: 0,
           tagScope,
+          releaseTypes: isAlbumSearch ? selectedReleaseTypes : [],
         });
         const nextResults = isAlbumSearch
           ? dedupeAlbums(data.items || [])
@@ -167,7 +206,10 @@ function SearchResultsPage() {
         setResults(nextResults);
         setFullList(null);
         setSearchTotalCount(data?.count ?? nextResults.length);
-        setHasMore((data?.count ?? nextResults.length) > nextResults.length);
+        setHasMore(
+          data?.hasMore ??
+            (data?.count ?? nextResults.length) > nextResults.length,
+        );
 
         if (!isAlbumSearch && nextResults.length > 0) {
           const imagesMap = {};
@@ -192,7 +234,14 @@ function SearchResultsPage() {
     };
 
     performSearch();
-  }, [trimmedQuery, normalizedType, tagScope, isAlbumSearch, isTagSearch]);
+  }, [
+    trimmedQuery,
+    normalizedType,
+    tagScope,
+    isAlbumSearch,
+    isTagSearch,
+    selectedReleaseTypes,
+  ]);
 
   useEffect(() => {
     if (isAlbumSearch) return undefined;
@@ -294,6 +343,7 @@ function SearchResultsPage() {
         limit: PAGE_SIZE,
         offset: results.length,
         tagScope,
+        releaseTypes: isAlbumSearch ? selectedReleaseTypes : [],
       });
       const newItems = data.items || [];
       setSearchTotalCount(data?.count ?? searchTotalCount);
@@ -311,7 +361,10 @@ function SearchResultsPage() {
           }
         });
       }
-      setHasMore((data?.count ?? 0) > results.length + newItems.length);
+      setHasMore(
+        data?.hasMore ??
+          (data?.count ?? 0) > results.length + newItems.length,
+      );
     } finally {
       setLoadingMore(false);
     }
@@ -325,6 +378,7 @@ function SearchResultsPage() {
     normalizedType,
     results,
     searchTotalCount,
+    selectedReleaseTypes,
     tagScope,
     trimmedQuery,
     visibleCount,
@@ -514,10 +568,166 @@ function SearchResultsPage() {
           </p>
         )}
         {isAlbumSearch && trimmedQuery && (
-          <p style={{ color: "#c1c1c3" }}>
-            Search results include compilations, soundtracks, and releases from
-            Various Artists.
-          </p>
+          <div className="space-y-4">
+            <p style={{ color: "#c1c1c3" }}>
+              Search results include compilations, soundtracks, and releases
+              from Various Artists.
+            </p>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {primaryReleaseTypes.map((typeName) => {
+                  const isSelected = selectedReleaseTypes.includes(typeName);
+                  return (
+                    <button
+                      key={typeName}
+                      type="button"
+                      onClick={() => {
+                        if (isSelected) {
+                          setSelectedReleaseTypes(
+                            selectedReleaseTypes.filter((value) => value !== typeName),
+                          );
+                        } else {
+                          setSelectedReleaseTypes([
+                            ...selectedReleaseTypes,
+                            typeName,
+                          ]);
+                        }
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 text-sm font-medium transition-all"
+                      style={{
+                        backgroundColor: isSelected ? "#4a4a4a" : "#211f27",
+                        color: "#fff",
+                      }}
+                    >
+                      {getReleaseTypeIcon(typeName)}
+                      <span>{typeName}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowReleaseTypeDropdown((current) => !current)
+                  }
+                  className="btn btn-outline-secondary btn-sm flex items-center gap-2 px-3 py-2"
+                >
+                  <Tag className="h-4 w-4" />
+                  <span className="text-sm">Filter</span>
+                  {hasActiveReleaseTypeFilters && (
+                    <span
+                      className="flex h-[18px] min-w-[18px] items-center justify-center px-1.5 text-xs text-white"
+                      style={{ backgroundColor: "#211f27" }}
+                    >
+                      {inactiveReleaseTypeCount}
+                    </span>
+                  )}
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${
+                      showReleaseTypeDropdown ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+
+                {showReleaseTypeDropdown && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setShowReleaseTypeDropdown(false)}
+                    />
+                    <div
+                      className="absolute right-0 top-full z-20 mt-2 min-w-[280px] p-4 shadow-xl"
+                      style={{ backgroundColor: "#211f27" }}
+                    >
+                      <div className="space-y-4">
+                        <div>
+                          <h3
+                            className="mb-2 text-sm font-semibold"
+                            style={{ color: "#fff" }}
+                          >
+                            Secondary Types
+                          </h3>
+                          <div className="space-y-2">
+                            {secondaryReleaseTypes.map((typeName) => (
+                              <label
+                                key={typeName}
+                                className="flex cursor-pointer items-center space-x-2 px-2 py-1.5 transition-colors hover:bg-gray-900/50"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedReleaseTypes.includes(typeName)}
+                                  onChange={(event) => {
+                                    if (event.target.checked) {
+                                      setSelectedReleaseTypes([
+                                        ...selectedReleaseTypes,
+                                        typeName,
+                                      ]);
+                                    } else {
+                                      setSelectedReleaseTypes(
+                                        selectedReleaseTypes.filter(
+                                          (value) => value !== typeName,
+                                        ),
+                                      );
+                                    }
+                                  }}
+                                  className="form-checkbox h-4 w-4"
+                                  style={{ color: "#c1c1c3" }}
+                                />
+                                <span
+                                  className="text-sm"
+                                  style={{ color: "#fff" }}
+                                >
+                                  {typeName}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="pt-3">
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentPrimary = selectedReleaseTypes.filter(
+                                  (value) => primaryReleaseTypes.includes(value),
+                                );
+                                setSelectedReleaseTypes([
+                                  ...currentPrimary,
+                                  ...secondaryReleaseTypes,
+                                ]);
+                              }}
+                              className="text-xs hover:underline"
+                              style={{ color: "#c1c1c3" }}
+                            >
+                              Select All
+                            </button>
+                            <span style={{ color: "#c1c1c3" }}>|</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentPrimary = selectedReleaseTypes.filter(
+                                  (value) => primaryReleaseTypes.includes(value),
+                                );
+                                setSelectedReleaseTypes(currentPrimary);
+                              }}
+                              className="text-xs hover:underline"
+                              style={{ color: "#c1c1c3" }}
+                            >
+                              Clear All
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
         )}
       </div>
 

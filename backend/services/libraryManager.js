@@ -1,6 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps, userOps } from "../config/db-helpers.js";
 import { dbHelpers } from "../config/db-sqlite.js";
 import { hasPermission } from "../middleware/auth.js";
 import {
@@ -72,6 +72,21 @@ function getSettings() {
   return dbOps.getSettings();
 }
 
+function normalizeReleaseTypeName(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function getMetadataProfileTypeName(item) {
+  if (!item) return "";
+  if (typeof item === "string") return item;
+  if (typeof item.name === "string") return item.name;
+  if (typeof item.value === "string") return item.value;
+  if (typeof item.albumType?.name === "string") return item.albumType.name;
+  return "";
+}
+
 export class LibraryManager {
   async addArtist(mbid, artistName, options = {}) {
     const lidarr = await getLidarrClient();
@@ -116,6 +131,219 @@ export class LibraryManager {
       );
       return { error: error.message };
     }
+  }
+
+  async resolveArtistAddOptions(options = {}) {
+    const lidarr = await getLidarrClient();
+    if (!lidarr || !lidarr.isConfigured()) {
+      return { error: "Lidarr is not configured" };
+    }
+
+    const settings = getSettings();
+    const defaultMonitorOption =
+      settings.integrations?.lidarr?.defaultMonitorOption || "none";
+    const requestedMonitorOption =
+      options.monitorOption && options.monitorOption !== "none"
+        ? options.monitorOption
+        : defaultMonitorOption;
+    const currentUser =
+      options.user?.id != null ? userOps.getUserById(options.user.id) : null;
+    const preparedAddOptions = await lidarr.resolveArtistAddConfiguration({
+      requestRootFolderPath: options.rootFolderPath,
+      requestQualityProfileId: options.qualityProfileId,
+      savedRootFolderPath: currentUser?.lidarrRootFolderPath,
+      savedQualityProfileId: currentUser?.lidarrQualityProfileId,
+      settings,
+    });
+
+    return {
+      quality: options.quality || settings.quality || "standard",
+      monitorOption: requestedMonitorOption,
+      rootFolderPath: preparedAddOptions?.resolved?.rootFolderPath || null,
+      qualityProfileId: preparedAddOptions?.resolved?.qualityProfileId ?? null,
+      preparedAddOptions,
+    };
+  }
+
+  async waitForArtistAlbums(artistId) {
+    const attempts = 20;
+    const delayMs = 1500;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      const albums = await this.getAlbums(artistId);
+      if (albums.length > 0) return albums;
+      if (attempt < attempts) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+    return [];
+  }
+
+  async applyArtistMonitoringDefaults(artist, albums = null) {
+    if (
+      !artist?.monitored ||
+      !artist?.monitorOption ||
+      artist.monitorOption === "none"
+    ) {
+      return;
+    }
+
+    const lidarr = await getLidarrClient();
+    let eligibleAlbums = Array.isArray(albums)
+      ? albums
+      : await this.waitForArtistAlbums(artist.id);
+
+    if (lidarr && lidarr.isConfigured() && artist?.id) {
+      try {
+        const lidarrArtist = await lidarr.getArtist(artist.id);
+        const settings = getSettings();
+        const fallbackMetadataProfileId =
+          settings.integrations?.lidarr?.metadataProfileId;
+        const metadataProfileId =
+          lidarrArtist?.metadataProfileId ||
+          lidarrArtist?.metadataProfile?.id ||
+          fallbackMetadataProfileId;
+        const profiles = metadataProfileId
+          ? await lidarr.getMetadataProfiles()
+          : null;
+        const metadataProfile = Array.isArray(profiles)
+          ? profiles.find(
+              (profile) => String(profile?.id) === String(metadataProfileId),
+            )
+          : null;
+
+        let allowedPrimaryTypes = null;
+        if (metadataProfile?.primaryAlbumTypes) {
+          const allowed = new Set();
+          for (const item of metadataProfile.primaryAlbumTypes) {
+            const name = getMetadataProfileTypeName(item);
+            if (!name) continue;
+            const isAllowed =
+              typeof item === "string" ? true : item.allowed !== false;
+            if (!isAllowed) continue;
+            allowed.add(normalizeReleaseTypeName(name));
+          }
+          if (allowed.size > 0) {
+            allowedPrimaryTypes = allowed;
+          }
+        }
+
+        if (allowedPrimaryTypes) {
+          const mbid =
+            artist.mbid || artist.foreignArtistId || artist.id?.toString?.();
+          const releaseGroups = mbid
+            ? await musicbrainzGetArtistReleaseGroups(mbid)
+            : [];
+          const mbidToType = new Map(
+            releaseGroups.map((rg) => [
+              rg.id,
+              normalizeReleaseTypeName(rg["primary-type"]),
+            ]),
+          );
+          eligibleAlbums = eligibleAlbums.filter((album) => {
+            const key =
+              album.mbid || album.foreignAlbumId || album.id?.toString?.();
+            const type = mbidToType.get(key);
+            if (!type) return true;
+            return allowedPrimaryTypes.has(type);
+          });
+        }
+      } catch {}
+    }
+
+    const albumsToMonitor = [];
+    const sortedAlbums = [...eligibleAlbums].sort((a, b) => {
+      const dateA = a.releaseDate || a.addedAt || "";
+      const dateB = b.releaseDate || b.addedAt || "";
+      return dateB.localeCompare(dateA);
+    });
+
+    switch (artist.monitorOption) {
+      case "all":
+      case "existing":
+        albumsToMonitor.push(...eligibleAlbums.filter((album) => !album.monitored));
+        break;
+      case "latest":
+        if (sortedAlbums.length > 0 && !sortedAlbums[0].monitored) {
+          albumsToMonitor.push(sortedAlbums[0]);
+        }
+        break;
+      case "first": {
+        const oldestAlbum = sortedAlbums[sortedAlbums.length - 1];
+        if (oldestAlbum && !oldestAlbum.monitored) {
+          albumsToMonitor.push(oldestAlbum);
+        }
+        break;
+      }
+      case "missing":
+        albumsToMonitor.push(
+          ...eligibleAlbums.filter((album) => {
+            const stats = album.statistics || {};
+            return !album.monitored && (stats.percentOfTracks || 0) < 100;
+          }),
+        );
+        break;
+      case "future": {
+        const artistAddedDate = new Date(artist.addedAt);
+        albumsToMonitor.push(
+          ...eligibleAlbums.filter((album) => {
+            if (album.monitored) return false;
+            if (!album.releaseDate) return false;
+            const releaseDate = new Date(album.releaseDate);
+            return releaseDate > artistAddedDate;
+          }),
+        );
+        break;
+      }
+    }
+
+    if (lidarr && lidarr.isConfigured()) {
+      const settings = getSettings();
+      const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
+      await Promise.allSettled(
+        albumsToMonitor.map(async (album) => {
+          try {
+            await this.updateAlbum(album.id, { monitored: true });
+            if (searchOnAdd) {
+              await lidarr.request("/command", "POST", {
+                name: "AlbumSearch",
+                albumIds: [parseInt(album.id, 10)],
+              });
+            }
+          } catch (err) {
+            console.error(
+              `Failed to monitor/search album ${album.albumName}:`,
+              err.message,
+            );
+          }
+        }),
+      );
+    }
+  }
+
+  async addArtistWithResolvedOptions(mbid, artistName, options = {}) {
+    const requestedMonitorOption = options.monitorOption || "none";
+    const artist = await this.addArtist(mbid, artistName, {
+      quality: options.quality,
+      monitorOption: requestedMonitorOption,
+      rootFolderPath: options.rootFolderPath,
+      qualityProfileId: options.qualityProfileId,
+    });
+    if (artist?.error) {
+      return artist;
+    }
+    if (requestedMonitorOption !== "none") {
+      const albums = await this.waitForArtistAlbums(artist.id);
+      await this.applyArtistMonitoringDefaults(artist, albums);
+    }
+    return artist;
+  }
+
+  async addArtistWithPreferences(mbid, artistName, options = {}) {
+    const resolvedOptions = await this.resolveArtistAddOptions(options);
+    if (resolvedOptions?.error) {
+      return resolvedOptions;
+    }
+    return this.addArtistWithResolvedOptions(mbid, artistName, resolvedOptions);
   }
 
   async fetchArtistAlbums(artistId, mbid) {
@@ -584,12 +812,6 @@ export class LibraryManager {
         }
       }
       if (!lidarrArtist) return { error: "Artist not found in Lidarr" };
-      if (!lidarrArtist.monitored) {
-        await lidarr.updateArtistMonitoring(artistId, "missing");
-        lidarrArtist = await lidarr
-          .getArtist(artistId)
-          .catch(() => lidarrArtist);
-      }
       const existing = await lidarr.getAlbumByMbid(releaseGroupMbid);
       const artistNumericId = parseInt(artistId, 10);
       const sameArtistExisting =
@@ -647,29 +869,6 @@ export class LibraryManager {
       if (!lidarrAlbum) {
         return { error: "Failed to add album to Lidarr" };
       }
-      const allAlbums = await lidarr.request(
-        `/album?artistId=${encodeURIComponent(artistId)}`,
-      );
-      const artistAlbumIds = Array.isArray(allAlbums)
-        ? allAlbums
-            .filter(
-              (a) =>
-                a.artistId === parseInt(artistId) &&
-                a.foreignAlbumId !== releaseGroupMbid &&
-                a.monitored === true,
-            )
-            .map((a) => a.id)
-        : [];
-      for (const albumId of artistAlbumIds) {
-        try {
-          await lidarr.updateAlbum(albumId, { monitored: false });
-        } catch (err) {
-          console.error(
-            `[LibraryManager] Failed to unmonitor album ${albumId}:`,
-            err.message,
-          );
-        }
-      }
       const updatedArtist = await lidarr.getArtist(artistId);
       return this.mapLidarrAlbum(lidarrAlbum, updatedArtist);
     } catch (error) {
@@ -723,10 +922,18 @@ export class LibraryManager {
         throw error;
       }
 
-      const created = await this.addArtist(
+      const resolvedArtistAddOptions = await this.resolveArtistAddOptions({
+        user,
+      });
+      if (resolvedArtistAddOptions?.error) {
+        const error = new Error(resolvedArtistAddOptions.error);
+        error.statusCode = 503;
+        throw error;
+      }
+      const created = await this.addArtistWithResolvedOptions(
         normalizedArtistMbid,
         normalizedArtistName,
-        { albumOnly: true },
+        resolvedArtistAddOptions,
       );
       if (created?.error) {
         const error = new Error(created.error);

@@ -17,6 +17,7 @@ router.get("/", cacheMiddleware(300), async (req, res) => {
       limit = 24,
       offset = 0,
       tagScope = "recommended",
+      releaseTypes = "",
     } = req.query;
 
     if (!String(q || "").trim()) {
@@ -24,7 +25,7 @@ router.get("/", cacheMiddleware(300), async (req, res) => {
     }
 
     if (scope === "album") {
-      return res.json(await searchAlbums(q, limit, offset));
+      return res.json(await searchAlbums(q, limit, offset, releaseTypes));
     }
 
     if (scope === "tag") {
