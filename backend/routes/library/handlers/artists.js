@@ -1,7 +1,7 @@
 import { UUID_REGEX } from "../../../config/constants.js";
 import { libraryManager } from "../../../services/libraryManager.js";
 import { musicbrainzGetArtistReleaseGroups } from "../../../services/apiClients.js";
-import { dbOps } from "../../../config/db-helpers.js";
+import { dbOps, userOps } from "../../../config/db-helpers.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
 import {
   requireAuth,
@@ -224,6 +224,8 @@ export default function registerArtists(router) {
           artistName,
           quality,
           monitorOption,
+          rootFolderPath,
+          qualityProfileId,
         } = req.body;
 
         if (!mbid || !artistName) {
@@ -260,6 +262,33 @@ export default function registerArtists(router) {
           });
         }
 
+        const currentUser =
+          req.user?.id != null ? userOps.getUserById(req.user.id) : null;
+        let preparedAddOptions = null;
+        try {
+          preparedAddOptions = await lidarrClient.resolveArtistAddConfiguration({
+            requestRootFolderPath: rootFolderPath,
+            requestQualityProfileId: qualityProfileId,
+            savedRootFolderPath: currentUser?.lidarrRootFolderPath,
+            savedQualityProfileId: currentUser?.lidarrQualityProfileId,
+            settings,
+          });
+        } catch (error) {
+          const statusCode =
+            error?.statusCode === 400 || error?.statusCode === 409
+              ? error.statusCode
+              : 500;
+          return res.status(statusCode).json({
+            error:
+              statusCode === 409
+                ? "Saved Lidarr default is no longer valid"
+                : "Failed to validate Lidarr add options",
+            message: error.message,
+            field: error.field || null,
+            code: error.code || null,
+          });
+        }
+
         res.status(202).json({
           queued: true,
           foreignArtistId: mbid,
@@ -274,6 +303,8 @@ export default function registerArtists(router) {
           const artist = await libraryManager.addArtist(mbid, artistName, {
             quality: quality || settings.quality || "standard",
             monitorOption: requestedMonitorOption,
+            rootFolderPath: preparedAddOptions?.resolved?.rootFolderPath,
+            qualityProfileId: preparedAddOptions?.resolved?.qualityProfileId,
           });
           if (artist?.error) {
             console.error(

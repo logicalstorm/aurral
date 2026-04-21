@@ -14,6 +14,7 @@ import {
   getDownloadStatus,
   addArtistToLibrary,
   lookupArtistInLibrary,
+  getMyLidarrPreferences,
 } from "../../../utils/api";
 import { deduplicateAlbums } from "../utils";
 import { matchesReleaseTypeFilter } from "../utils";
@@ -53,6 +54,13 @@ export function useArtistDetailsLibrary({
   const [downloadStatuses, setDownloadStatuses] = useState({});
   const [reSearchingAlbum, setReSearchingAlbum] = useState(null);
   const [reSearchOverrides, setReSearchOverrides] = useState({});
+  const [showAddCustomizeModal, setShowAddCustomizeModal] = useState(false);
+  const [loadingLidarrPreferences, setLoadingLidarrPreferences] =
+    useState(false);
+  const [lidarrPreferences, setLidarrPreferences] = useState(null);
+  const [customizeRootFolderPath, setCustomizeRootFolderPath] = useState("");
+  const [customizeQualityProfileId, setCustomizeQualityProfileId] =
+    useState("");
   const reSearchOverridesRef = useRef({});
   const unmonitoredAtRef = useRef({});
   const libraryAlbumIdsRef = useRef([]);
@@ -314,7 +322,52 @@ export function useArtistDetailsLibrary({
     return libraryArtist.monitored ? "all" : "none";
   };
 
-  const handleAddToLibrary = async () => {
+  const applyCustomizeDefaults = (preferences) => {
+    const nextRootFolderPath =
+      preferences?.savedDefaults?.rootFolderPath ||
+      preferences?.fallbacks?.rootFolderPath ||
+      "";
+    const nextQualityProfileId =
+      preferences?.savedDefaults?.qualityProfileId != null
+        ? String(preferences.savedDefaults.qualityProfileId)
+        : preferences?.fallbacks?.qualityProfileId != null
+          ? String(preferences.fallbacks.qualityProfileId)
+          : "";
+    setCustomizeRootFolderPath(nextRootFolderPath);
+    setCustomizeQualityProfileId(nextQualityProfileId);
+  };
+
+  const loadLidarrPreferenceState = async ({ force = false } = {}) => {
+    if (!force && lidarrPreferences) {
+      return lidarrPreferences;
+    }
+    setLoadingLidarrPreferences(true);
+    try {
+      const preferences = await getMyLidarrPreferences();
+      setLidarrPreferences(preferences);
+      return preferences;
+    } finally {
+      setLoadingLidarrPreferences(false);
+    }
+  };
+
+  const handleOpenAddCustomizeModal = async () => {
+    setShowAddCustomizeModal(true);
+    try {
+      const preferences = await loadLidarrPreferenceState();
+      applyCustomizeDefaults(preferences);
+    } catch (err) {
+      setShowAddCustomizeModal(false);
+      showError(
+        err.response?.data?.message ||
+          err.response?.data?.error ||
+          err.message ||
+          "Failed to load Lidarr preferences",
+      );
+    }
+  };
+
+  const addArtistWithOptions = async (overrides = {}) => {
     if (!artist) {
       showError("Artist information not available");
       return;
@@ -325,7 +378,12 @@ export function useArtistDetailsLibrary({
         foreignArtistId: artist.id,
         artistName: artist.name,
         quality: appSettings?.quality || "standard",
-        rootFolderPath: appSettings?.rootFolderPath,
+        ...(Object.hasOwn(overrides, "rootFolderPath")
+          ? { rootFolderPath: overrides.rootFolderPath }
+          : {}),
+        ...(Object.hasOwn(overrides, "qualityProfileId")
+          ? { qualityProfileId: overrides.qualityProfileId }
+          : {}),
       });
       let fullArtist = await resolveArtistFromAddResponse(result, {
         refresh: true,
@@ -357,6 +415,21 @@ export function useArtistDetailsLibrary({
     } finally {
       setAddingToLibrary(false);
     }
+  };
+
+  const handleAddToLibrary = async () => addArtistWithOptions();
+
+  const handleCustomizeAddToLibrary = async () => {
+    const success = await addArtistWithOptions({
+      rootFolderPath: customizeRootFolderPath || null,
+      qualityProfileId: customizeQualityProfileId
+        ? Number(customizeQualityProfileId)
+        : null,
+    });
+    if (success) {
+      setShowAddCustomizeModal(false);
+    }
+    return success;
   };
 
   const handleRequestAlbum = async (albumId, title) => {
@@ -400,7 +473,6 @@ export function useArtistDetailsLibrary({
           foreignArtistId: artist.id,
           artistName: artist.name,
           quality: appSettings?.quality || "standard",
-          rootFolderPath: appSettings?.rootFolderPath,
         });
         let fullArtist = await resolveArtistFromAddResponse(result, {
           refresh: false,
@@ -1003,6 +1075,14 @@ export function useArtistDetailsLibrary({
     setDeleteFiles,
     deletingArtist,
     addingToLibrary,
+    showAddCustomizeModal,
+    setShowAddCustomizeModal,
+    loadingLidarrPreferences,
+    lidarrPreferences,
+    customizeRootFolderPath,
+    setCustomizeRootFolderPath,
+    customizeQualityProfileId,
+    setCustomizeQualityProfileId,
     showMonitorOptionMenu,
     setShowMonitorOptionMenu,
     updatingMonitor,
@@ -1016,6 +1096,8 @@ export function useArtistDetailsLibrary({
     handleUpdateMonitorOption,
     getCurrentMonitorOption,
     handleAddToLibrary,
+    handleOpenAddCustomizeModal,
+    handleCustomizeAddToLibrary,
     handleRequestAlbum,
     handleReSearchAlbum,
     handleLibraryAlbumClick,

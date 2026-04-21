@@ -13,6 +13,22 @@ import {
 
 const router = express.Router();
 
+const normalizeRootFolderPath = (value) => {
+  const normalized = String(value || "").trim();
+  return normalized || null;
+};
+
+const normalizeQualityProfileId = (value) => {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  return Math.trunc(parsed);
+};
+
 const clearOrphanedDiscoveryCache = (userId, existingProfile, nextProfile) => {
   if (
     !hasListenHistoryProfile(existingProfile) ||
@@ -71,6 +87,8 @@ router.post("/", requireAuth, requireAdmin, (req, res) => {
         username: created.username,
         role: created.role,
         permissions: created.permissions,
+        lidarrRootFolderPath: created.lidarrRootFolderPath,
+        lidarrQualityProfileId: created.lidarrQualityProfileId,
       });
   } catch (e) {
     res
@@ -150,6 +168,8 @@ router.patch("/:id", requireAuth, (req, res) => {
           listenHistoryProvider: existing.listenHistoryProvider,
           listenHistoryUsername: existing.listenHistoryUsername,
           lastfmUsername: existing.lastfmUsername,
+          lidarrRootFolderPath: existing.lidarrRootFolderPath,
+          lidarrQualityProfileId: existing.lidarrQualityProfileId,
         });
       }
       const updated = userOps.updateUser(id, updates);
@@ -187,6 +207,8 @@ router.patch("/:id", requireAuth, (req, res) => {
         listenHistoryProvider: existing.listenHistoryProvider,
         listenHistoryUsername: existing.listenHistoryUsername,
         lastfmUsername: existing.lastfmUsername,
+        lidarrRootFolderPath: existing.lidarrRootFolderPath,
+        lidarrQualityProfileId: existing.lidarrQualityProfileId,
       });
     }
     const updated = userOps.updateUser(id, updates);
@@ -219,6 +241,137 @@ const sendListenHistorySettings = (req, res) => {
 
 router.get("/me/listening-history", requireAuth, sendListenHistorySettings);
 router.get("/me/lastfm", requireAuth, sendListenHistorySettings);
+
+router.get("/me/lidarr-preferences", requireAuth, async (req, res) => {
+  try {
+    const user = userOps.getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    const { lidarrClient } = await import("../services/lidarrClient.js");
+    const summary = await lidarrClient.getArtistAddPreferenceSummary(user);
+    res.json(summary);
+  } catch (e) {
+    res.status(500).json({
+      error: "Failed to get Lidarr preferences",
+      message: e.message,
+    });
+  }
+});
+
+router.patch("/me/lidarr-preferences", requireAuth, async (req, res) => {
+  try {
+    const user = userOps.getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const hasRootFolderPath = Object.hasOwn(req.body, "rootFolderPath");
+    const hasQualityProfileId = Object.hasOwn(req.body, "qualityProfileId");
+
+    const nextRootFolderPath = hasRootFolderPath
+      ? req.body.rootFolderPath === null
+        ? null
+        : normalizeRootFolderPath(req.body.rootFolderPath)
+      : user.lidarrRootFolderPath;
+    const nextQualityProfileId = hasQualityProfileId
+      ? req.body.qualityProfileId === null
+        ? null
+        : normalizeQualityProfileId(req.body.qualityProfileId)
+      : user.lidarrQualityProfileId;
+
+    if (hasRootFolderPath && req.body.rootFolderPath !== null && !nextRootFolderPath) {
+      return res.status(400).json({
+        error: "Invalid Lidarr preferences",
+        message: "rootFolderPath must be a non-empty string or null",
+        field: "rootFolderPath",
+      });
+    }
+
+    if (
+      hasQualityProfileId &&
+      req.body.qualityProfileId !== null &&
+      nextQualityProfileId === null
+    ) {
+      return res.status(400).json({
+        error: "Invalid Lidarr preferences",
+        message: "qualityProfileId must be a numeric id or null",
+        field: "qualityProfileId",
+      });
+    }
+
+    const { lidarrClient } = await import("../services/lidarrClient.js");
+    if (!lidarrClient.isConfigured()) {
+      if (nextRootFolderPath !== null || nextQualityProfileId !== null) {
+        return res.status(503).json({
+          error: "Lidarr is not configured",
+          message: "Configure Lidarr before saving library defaults.",
+        });
+      }
+      const updated = userOps.updateUser(req.user.id, {
+        lidarrRootFolderPath: null,
+        lidarrQualityProfileId: null,
+      });
+      return res.json({
+        configured: false,
+        rootFolders: [],
+        qualityProfiles: [],
+        savedDefaults: {
+          rootFolderPath: updated?.lidarrRootFolderPath || null,
+          qualityProfileId: updated?.lidarrQualityProfileId ?? null,
+        },
+        fallbacks: {
+          rootFolderPath: null,
+          qualityProfileId: null,
+        },
+      });
+    }
+
+    const summary = await lidarrClient.getArtistAddPreferenceSummary(user);
+    if (
+      nextRootFolderPath !== null &&
+      !summary.rootFolders.some((folder) => folder.path === nextRootFolderPath)
+    ) {
+      return res.status(400).json({
+        error: "Invalid Lidarr preferences",
+        message: `Unknown Lidarr root folder: ${nextRootFolderPath}`,
+        field: "rootFolderPath",
+      });
+    }
+    if (
+      nextQualityProfileId !== null &&
+      !summary.qualityProfiles.some(
+        (profile) => profile.id === nextQualityProfileId,
+      )
+    ) {
+      return res.status(400).json({
+        error: "Invalid Lidarr preferences",
+        message: `Unknown Lidarr quality profile: ${nextQualityProfileId}`,
+        field: "qualityProfileId",
+      });
+    }
+
+    const updated = userOps.updateUser(req.user.id, {
+      lidarrRootFolderPath: nextRootFolderPath,
+      lidarrQualityProfileId: nextQualityProfileId,
+    });
+    if (!updated) {
+      return res.status(500).json({
+        error: "Failed to save Lidarr preferences",
+      });
+    }
+
+    const refreshedSummary = await lidarrClient.getArtistAddPreferenceSummary(
+      updated,
+    );
+    res.json(refreshedSummary);
+  } catch (e) {
+    res.status(500).json({
+      error: "Failed to save Lidarr preferences",
+      message: e.message,
+    });
+  }
+});
 
 router.post("/me/password", requireAuth, (req, res) => {
   try {

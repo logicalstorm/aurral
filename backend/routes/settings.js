@@ -23,7 +23,7 @@ router.get("/", noCache, (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
-    const { quality, releaseTypes, integrations } = req.body;
+    const { quality, releaseTypes, integrations, rootFolderPath } = req.body;
 
     const currentSettings = dbOps.getSettings();
     const lidarrExternalUrl = integrations?.lidarr?.externalUrl;
@@ -110,6 +110,10 @@ router.post("/", async (req, res) => {
       ...currentSettings,
       quality:
         quality !== undefined ? quality : currentSettings.quality || "standard",
+      rootFolderPath:
+        rootFolderPath !== undefined
+          ? rootFolderPath
+          : currentSettings.rootFolderPath || null,
       releaseTypes:
         releaseTypes !== undefined
           ? releaseTypes

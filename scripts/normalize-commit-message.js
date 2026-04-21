@@ -6,15 +6,23 @@ import { fileURLToPath, pathToFileURL } from "url";
 const CONVENTIONAL_HEADER_RE =
   /^(feat|fix|refactor|chore|docs|ci)(\([a-z0-9-]+\))?(!)?: .+/;
 
+const BRANCH_TYPE_ALIASES = [
+  ["feat/", "feat"],
+  ["feature/", "feat"],
+  ["fix/", "fix"],
+  ["bugfix/", "fix"],
+  ["hotfix/", "fix"],
+  ["refactor/", "refactor"],
+  ["chore/", "chore"],
+  ["docs/", "docs"],
+  ["ci/", "ci"],
+];
+
 export function inferCommitTypeFromBranch(branchName) {
   const branch = String(branchName || "").trim().toLowerCase();
-  if (branch.startsWith("feat/")) return "feat";
-  if (branch.startsWith("fix/")) return "fix";
-  if (branch.startsWith("hotfix/")) return "fix";
-  if (branch.startsWith("refactor/")) return "refactor";
-  if (branch.startsWith("chore/")) return "chore";
-  if (branch.startsWith("docs/")) return "docs";
-  if (branch.startsWith("ci/")) return "ci";
+  for (const [prefix, type] of BRANCH_TYPE_ALIASES) {
+    if (branch.startsWith(prefix)) return type;
+  }
   return null;
 }
 

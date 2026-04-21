@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   getMyListeningHistory,
+  getMyLidarrPreferences,
   updateMyListeningHistory,
+  updateMyLidarrPreferences,
 } from "../../../utils/api";
 
 export function useAccountSettings(authUser, showSuccess, showError) {
@@ -11,25 +13,57 @@ export function useAccountSettings(authUser, showSuccess, showError) {
     useState("lastfm");
   const [savedListenHistoryUsername, setSavedListenHistoryUsername] =
     useState("");
+  const [lidarrConfigured, setLidarrConfigured] = useState(false);
+  const [lidarrRootFolders, setLidarrRootFolders] = useState([]);
+  const [lidarrQualityProfiles, setLidarrQualityProfiles] = useState([]);
+  const [lidarrRootFolderPath, setLidarrRootFolderPath] = useState("");
+  const [savedLidarrRootFolderPath, setSavedLidarrRootFolderPath] =
+    useState("");
+  const [lidarrQualityProfileId, setLidarrQualityProfileId] = useState("");
+  const [savedLidarrQualityProfileId, setSavedLidarrQualityProfileId] =
+    useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const hasUnsavedChanges =
     listenHistoryProvider !== savedListenHistoryProvider ||
-    listenHistoryUsername !== savedListenHistoryUsername;
+    listenHistoryUsername !== savedListenHistoryUsername ||
+    lidarrRootFolderPath !== savedLidarrRootFolderPath ||
+    lidarrQualityProfileId !== savedLidarrQualityProfileId;
 
   const fetchListeningHistory = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await getMyListeningHistory();
-      const provider = data.listenHistoryProvider || "lastfm";
-      const username = data.listenHistoryUsername || "";
+      const [historyData, lidarrData] = await Promise.all([
+        getMyListeningHistory(),
+        getMyLidarrPreferences(),
+      ]);
+      const provider = historyData.listenHistoryProvider || "lastfm";
+      const username = historyData.listenHistoryUsername || "";
       setListenHistoryProvider(provider);
       setListenHistoryUsername(username);
       setSavedListenHistoryProvider(provider);
       setSavedListenHistoryUsername(username);
+      setLidarrConfigured(lidarrData?.configured === true);
+      setLidarrRootFolders(
+        Array.isArray(lidarrData?.rootFolders) ? lidarrData.rootFolders : [],
+      );
+      setLidarrQualityProfiles(
+        Array.isArray(lidarrData?.qualityProfiles)
+          ? lidarrData.qualityProfiles
+          : [],
+      );
+      const nextRootFolderPath = lidarrData?.savedDefaults?.rootFolderPath || "";
+      const nextQualityProfileId =
+        lidarrData?.savedDefaults?.qualityProfileId != null
+          ? String(lidarrData.savedDefaults.qualityProfileId)
+          : "";
+      setLidarrRootFolderPath(nextRootFolderPath);
+      setSavedLidarrRootFolderPath(nextRootFolderPath);
+      setLidarrQualityProfileId(nextQualityProfileId);
+      setSavedLidarrQualityProfileId(nextQualityProfileId);
     } catch {
-      showError("Failed to load listening history settings");
+      showError("Failed to load account settings");
     } finally {
       setLoading(false);
     }
@@ -44,17 +78,43 @@ export function useAccountSettings(authUser, showSuccess, showError) {
     try {
       setSaving(true);
       const trimmedUsername = listenHistoryUsername.trim();
-      await updateMyListeningHistory(
-        authUser.id,
-        listenHistoryProvider,
-        trimmedUsername || null,
-      );
+      const lidarrData = await Promise.all([
+        updateMyListeningHistory(
+          authUser.id,
+          listenHistoryProvider,
+          trimmedUsername || null,
+        ),
+        updateMyLidarrPreferences({
+          rootFolderPath: lidarrRootFolderPath || null,
+          qualityProfileId: lidarrQualityProfileId
+            ? Number(lidarrQualityProfileId)
+            : null,
+        }),
+      ]).then(([, lidarrResponse]) => lidarrResponse);
       setSavedListenHistoryProvider(listenHistoryProvider);
       setSavedListenHistoryUsername(trimmedUsername);
       setListenHistoryUsername(trimmedUsername);
-      showSuccess("Listening history settings saved");
+      setLidarrConfigured(lidarrData?.configured === true);
+      setLidarrRootFolders(
+        Array.isArray(lidarrData?.rootFolders) ? lidarrData.rootFolders : [],
+      );
+      setLidarrQualityProfiles(
+        Array.isArray(lidarrData?.qualityProfiles)
+          ? lidarrData.qualityProfiles
+          : [],
+      );
+      const nextRootFolderPath = lidarrData?.savedDefaults?.rootFolderPath || "";
+      const nextQualityProfileId =
+        lidarrData?.savedDefaults?.qualityProfileId != null
+          ? String(lidarrData.savedDefaults.qualityProfileId)
+          : "";
+      setLidarrRootFolderPath(nextRootFolderPath);
+      setSavedLidarrRootFolderPath(nextRootFolderPath);
+      setLidarrQualityProfileId(nextQualityProfileId);
+      setSavedLidarrQualityProfileId(nextQualityProfileId);
+      showSuccess("Account settings saved");
     } catch {
-      showError("Failed to save listening history settings");
+      showError("Failed to save account settings");
     } finally {
       setSaving(false);
     }
@@ -62,6 +122,8 @@ export function useAccountSettings(authUser, showSuccess, showError) {
     authUser?.id,
     listenHistoryProvider,
     listenHistoryUsername,
+    lidarrRootFolderPath,
+    lidarrQualityProfileId,
     showSuccess,
     showError,
   ]);
@@ -71,6 +133,13 @@ export function useAccountSettings(authUser, showSuccess, showError) {
     setListenHistoryProvider,
     listenHistoryUsername,
     setListenHistoryUsername,
+    lidarrConfigured,
+    lidarrRootFolders,
+    lidarrQualityProfiles,
+    lidarrRootFolderPath,
+    setLidarrRootFolderPath,
+    lidarrQualityProfileId,
+    setLidarrQualityProfileId,
     hasUnsavedChanges,
     loading,
     saving,

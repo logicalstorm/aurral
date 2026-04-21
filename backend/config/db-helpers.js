@@ -69,14 +69,14 @@ const getUserByUsernameStmt = db.prepare(
   "SELECT * FROM users WHERE username = ?"
 );
 const getAllUsersStmt = db.prepare(
-  "SELECT id, username, role, permissions, lastfm_username, listen_history_provider, listen_history_username FROM users ORDER BY username"
+  "SELECT id, username, role, permissions, lastfm_username, listen_history_provider, listen_history_username, lidarr_root_folder_path, lidarr_quality_profile_id FROM users ORDER BY username"
 );
 const getUserByIdStmt = db.prepare("SELECT * FROM users WHERE id = ?");
 const insertUserStmt = db.prepare(
-  "INSERT INTO users (username, password_hash, role, permissions) VALUES (?, ?, ?, ?)"
+  "INSERT INTO users (username, password_hash, role, permissions, lidarr_root_folder_path, lidarr_quality_profile_id) VALUES (?, ?, ?, ?, ?, ?)"
 );
 const updateUserStmt = db.prepare(
-  "UPDATE users SET username = ?, password_hash = ?, role = ?, permissions = ?, lastfm_username = ?, listen_history_provider = ?, listen_history_username = ? WHERE id = ?"
+  "UPDATE users SET username = ?, password_hash = ?, role = ?, permissions = ?, lastfm_username = ?, listen_history_provider = ?, listen_history_username = ?, lidarr_root_folder_path = ?, lidarr_quality_profile_id = ? WHERE id = ?"
 );
 const deleteUserStmt = db.prepare("DELETE FROM users WHERE id = ?");
 const getAllListeningHistoryUsersStmt = db.prepare(
@@ -109,6 +109,11 @@ export const userOps = {
       permissions: dbHelpers.parseJSON(row.permissions) || {
         ...DEFAULT_PERMISSIONS,
       },
+      lidarrRootFolderPath: row.lidarr_root_folder_path || null,
+      lidarrQualityProfileId:
+        row.lidarr_quality_profile_id != null
+          ? Number(row.lidarr_quality_profile_id)
+          : null,
       ...history,
     };
   },
@@ -124,6 +129,11 @@ export const userOps = {
       permissions: dbHelpers.parseJSON(row.permissions) || {
         ...DEFAULT_PERMISSIONS,
       },
+      lidarrRootFolderPath: row.lidarr_root_folder_path || null,
+      lidarrQualityProfileId:
+        row.lidarr_quality_profile_id != null
+          ? Number(row.lidarr_quality_profile_id)
+          : null,
       ...history,
     };
   },
@@ -137,6 +147,11 @@ export const userOps = {
       permissions: dbHelpers.parseJSON(r.permissions) || {
         ...DEFAULT_PERMISSIONS,
       },
+      lidarrRootFolderPath: r.lidarr_root_folder_path || null,
+      lidarrQualityProfileId:
+        r.lidarr_quality_profile_id != null
+          ? Number(r.lidarr_quality_profile_id)
+          : null,
     }));
   },
   createUser(username, passwordHash, role = "user", permissions = null) {
@@ -150,7 +165,9 @@ export const userOps = {
         un.toLowerCase(),
         passwordHash,
         role,
-        dbHelpers.stringifyJSON(perms)
+        dbHelpers.stringifyJSON(perms),
+        null,
+        null,
       );
       return {
         id: result.lastInsertRowid,
@@ -160,6 +177,8 @@ export const userOps = {
         listenHistoryProvider: DEFAULT_LISTEN_HISTORY_PROVIDER,
         listenHistoryUsername: null,
         lastfmUsername: null,
+        lidarrRootFolderPath: null,
+        lidarrQualityProfileId: null,
       };
     } catch (e) {
       return null;
@@ -197,6 +216,26 @@ export const userOps = {
     );
     const lastfmUsername =
       listenHistoryProvider === "lastfm" ? listenHistoryUsername : null;
+    const lidarrRootFolderPath =
+      data.lidarrRootFolderPath !== undefined
+        ? data.lidarrRootFolderPath
+          ? String(data.lidarrRootFolderPath).trim()
+          : null
+        : existing.lidarrRootFolderPath;
+    const parsedLidarrQualityProfileId =
+      data.lidarrQualityProfileId !== undefined &&
+      data.lidarrQualityProfileId !== null
+        ? Number(data.lidarrQualityProfileId)
+        : data.lidarrQualityProfileId === null
+          ? null
+          : existing.lidarrQualityProfileId;
+    const lidarrQualityProfileId =
+      parsedLidarrQualityProfileId != null &&
+      Number.isFinite(parsedLidarrQualityProfileId)
+        ? Math.trunc(parsedLidarrQualityProfileId)
+        : parsedLidarrQualityProfileId === null
+          ? null
+          : existing.lidarrQualityProfileId;
     try {
       updateUserStmt.run(
         username.toLowerCase(),
@@ -206,6 +245,8 @@ export const userOps = {
         lastfmUsername,
         listenHistoryProvider,
         listenHistoryUsername,
+        lidarrRootFolderPath,
+        lidarrQualityProfileId,
         parseInt(id, 10)
       );
       return {
@@ -216,6 +257,8 @@ export const userOps = {
         listenHistoryProvider,
         listenHistoryUsername,
         lastfmUsername,
+        lidarrRootFolderPath,
+        lidarrQualityProfileId,
       };
     } catch (e) {
       return null;

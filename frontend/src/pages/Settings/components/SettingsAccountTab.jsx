@@ -7,6 +7,13 @@ export function SettingsAccountTab({
   setListenHistoryProvider,
   listenHistoryUsername,
   setListenHistoryUsername,
+  lidarrConfigured,
+  lidarrRootFolders,
+  lidarrQualityProfiles,
+  lidarrRootFolderPath,
+  setLidarrRootFolderPath,
+  lidarrQualityProfileId,
+  setLidarrQualityProfileId,
   hasUnsavedChanges,
   loading,
   saving,
@@ -128,6 +135,81 @@ export function SettingsAccountTab({
               </p>
             </div>
           </fieldset>
+        </div>
+
+        <div
+          className="p-6 rounded-lg space-y-4"
+          style={{
+            backgroundColor: "#1a1a1e",
+            border: "1px solid #2a2a2e",
+          }}
+        >
+          <div className="mb-2">
+            <h3
+              className="text-lg font-medium flex items-center"
+              style={{ color: "#fff" }}
+            >
+              Library Defaults
+            </h3>
+            <p className="mt-1 text-sm" style={{ color: "#c1c1c3" }}>
+              These defaults apply to one-click artist adds unless you override
+              them from the Customize action on the artist page.
+            </p>
+          </div>
+
+          <fieldset
+            disabled={!lidarrConfigured}
+            className={`space-y-4 ${lidarrConfigured ? "" : "opacity-60"}`}
+          >
+            <div>
+              <label
+                className="block text-sm font-medium mb-1"
+                style={{ color: "#fff" }}
+              >
+                Default Root Folder
+              </label>
+              <select
+                className="input"
+                value={lidarrRootFolderPath}
+                onChange={(e) => setLidarrRootFolderPath(e.target.value)}
+              >
+                <option value="">Use automatic default</option>
+                {lidarrRootFolders.map((folder) => (
+                  <option key={folder.path} value={folder.path}>
+                    {folder.path}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label
+                className="block text-sm font-medium mb-1"
+                style={{ color: "#fff" }}
+              >
+                Default Quality Profile
+              </label>
+              <select
+                className="input"
+                value={lidarrQualityProfileId}
+                onChange={(e) => setLidarrQualityProfileId(e.target.value)}
+              >
+                <option value="">Use automatic default</option>
+                {lidarrQualityProfiles.map((profile) => (
+                  <option key={profile.id} value={String(profile.id)}>
+                    {profile.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </fieldset>
+
+          {!lidarrConfigured && (
+            <p className="text-xs" style={{ color: "#c1c1c3" }}>
+              Lidarr must be configured by an admin before personal library
+              defaults can be saved.
+            </p>
+          )}
         </div>
       </form>
     </div>
