@@ -578,6 +578,11 @@ export const getMyListeningHistory = async () => {
   return response.data;
 };
 
+export const getMyLidarrPreferences = async () => {
+  const response = await api.get("/users/me/lidarr-preferences");
+  return response.data;
+};
+
 export const updateMyListeningHistory = async (
   userId,
   listenHistoryProvider,
@@ -587,6 +592,11 @@ export const updateMyListeningHistory = async (
     listenHistoryProvider,
     listenHistoryUsername,
   });
+  return response.data;
+};
+
+export const updateMyLidarrPreferences = async (payload) => {
+  const response = await api.patch("/users/me/lidarr-preferences", payload);
   return response.data;
 };
 

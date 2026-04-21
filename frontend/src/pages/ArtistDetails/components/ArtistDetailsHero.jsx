@@ -7,6 +7,7 @@ import {
   CheckCircle,
   RefreshCw,
   ChevronDown,
+  SlidersHorizontal,
   Calendar,
   MapPin,
   Trash2,
@@ -39,6 +40,7 @@ export function ArtistDetailsHero({
   handleDeleteClick,
   canAddArtist,
   handleAddToLibrary,
+  handleOpenAddCustomizeModal,
   addingToLibrary,
   canRefreshArtist,
   handleRefreshArtist,
@@ -104,9 +106,23 @@ export function ArtistDetailsHero({
 
         <div className="flex-1">
           <div className="flex justify-between items-start gap-4">
-            <h1 className="text-4xl font-bold mb-2" style={{ color: "#fff" }}>
-              {artist.name}
-            </h1>
+            <div className="flex items-start gap-3 min-w-0">
+              <h1
+                className="text-4xl font-bold mb-2"
+                style={{ color: "#fff" }}
+              >
+                {artist.name}
+              </h1>
+              <button
+                type="button"
+                onClick={onEditIds}
+                className="btn btn-secondary btn-sm p-2 inline-flex items-center flex-shrink-0 mt-1"
+                aria-label="Edit IDs"
+                title="Edit artist IDs"
+              >
+                <Pencil className="w-5 h-5" />
+              </button>
+            </div>
             {existsInLibrary && canRefreshArtist && (
               <button
                 onClick={handleRefreshArtist}
@@ -317,21 +333,25 @@ export function ArtistDetailsHero({
               </>
             ) : (
               canAddArtist && (
-                <AddToLibraryButton
-                  onClick={handleAddToLibrary}
-                  isLoading={addingToLibrary}
-                />
+                <div className="add-to-library-button-group">
+                  <AddToLibraryButton
+                    onClick={handleAddToLibrary}
+                    isLoading={addingToLibrary}
+                    className="add-to-library-button--split"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleOpenAddCustomizeModal}
+                    disabled={addingToLibrary}
+                    className="add-to-library-button-split-trigger"
+                    aria-label="Customize add options"
+                    title="Customize add options"
+                  >
+                    <SlidersHorizontal className="w-4 h-4" />
+                  </button>
+                </div>
               )
             )}
-
-            <button
-              type="button"
-              onClick={onEditIds}
-              className="btn btn-secondary btn-sm p-2 inline-flex items-center"
-              aria-label="Edit IDs"
-            >
-              <Pencil className="w-5 h-5" />
-            </button>
             <div className="relative inline-flex">
               <button
                 type="button"
@@ -611,6 +631,7 @@ ArtistDetailsHero.propTypes = {
   handleDeleteClick: PropTypes.func,
   canAddArtist: PropTypes.bool,
   handleAddToLibrary: PropTypes.func,
+  handleOpenAddCustomizeModal: PropTypes.func,
   addingToLibrary: PropTypes.bool,
   canRefreshArtist: PropTypes.bool,
   handleRefreshArtist: PropTypes.func,

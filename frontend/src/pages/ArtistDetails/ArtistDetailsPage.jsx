@@ -13,6 +13,7 @@ import { ArtistDetailsReleaseGroups } from "./components/ArtistDetailsReleaseGro
 import { ArtistDetailsSimilar } from "./components/ArtistDetailsSimilar";
 import { DeleteArtistModal } from "./components/DeleteArtistModal";
 import { DeleteAlbumModal } from "./components/DeleteAlbumModal";
+import { AddArtistCustomizeModal } from "./components/AddArtistCustomizeModal";
 import {
   getArtistCover,
   getArtistDetails,
@@ -258,6 +259,7 @@ function ArtistDetailsPage() {
         handleDeleteClick={library.handleDeleteClick}
         canAddArtist={canAddArtist}
         handleAddToLibrary={library.handleAddToLibrary}
+        handleOpenAddCustomizeModal={library.handleOpenAddCustomizeModal}
         addingToLibrary={library.addingToLibrary}
         canRefreshArtist={canChangeMonitoring}
         handleRefreshArtist={library.handleRefreshArtist}
@@ -363,6 +365,20 @@ function ArtistDetailsPage() {
         onCancel={library.handleDeleteAlbumCancel}
         onConfirm={library.handleDeleteAlbumConfirm}
         removing={library.removingAlbum}
+      />
+
+      <AddArtistCustomizeModal
+        show={library.showAddCustomizeModal}
+        artistName={artist?.name}
+        loading={library.loadingLidarrPreferences}
+        preferences={library.lidarrPreferences}
+        rootFolderPath={library.customizeRootFolderPath}
+        setRootFolderPath={library.setCustomizeRootFolderPath}
+        qualityProfileId={library.customizeQualityProfileId}
+        setQualityProfileId={library.setCustomizeQualityProfileId}
+        onClose={() => library.setShowAddCustomizeModal(false)}
+        onConfirm={library.handleCustomizeAddToLibrary}
+        confirming={library.addingToLibrary}
       />
 
       <EditArtistIdsModal
