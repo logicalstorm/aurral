@@ -128,6 +128,28 @@ const userColumns = db
 if (!userColumns.includes("lastfm_username")) {
   db.exec("ALTER TABLE users ADD COLUMN lastfm_username TEXT");
 }
+if (!userColumns.includes("listen_history_provider")) {
+  db.exec("ALTER TABLE users ADD COLUMN listen_history_provider TEXT");
+}
+if (!userColumns.includes("listen_history_username")) {
+  db.exec("ALTER TABLE users ADD COLUMN listen_history_username TEXT");
+}
+
+db.exec(`
+  UPDATE users
+  SET listen_history_username = NULLIF(TRIM(lastfm_username), '')
+  WHERE (listen_history_username IS NULL OR TRIM(listen_history_username) = '')
+    AND lastfm_username IS NOT NULL
+    AND TRIM(lastfm_username) != '';
+`);
+
+db.exec(`
+  UPDATE users
+  SET listen_history_provider = 'lastfm'
+  WHERE (listen_history_provider IS NULL OR TRIM(listen_history_provider) = '')
+    AND listen_history_username IS NOT NULL
+    AND TRIM(listen_history_username) != '';
+`);
 
 export const dbHelpers = {
   parseJSON: (text) => {

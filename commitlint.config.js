@@ -27,6 +27,7 @@ export default {
       ["fix", "feat", "refactor", "chore", "docs", "ci"],
     ],
     "scope-case": [2, "always", "kebab-case"],
+    "subject-case": [0],
     "subject-empty": [2, "never"],
     "breaking-exclamation-required": [2, "always"],
     "body-max-line-length": [0],

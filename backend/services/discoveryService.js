@@ -2,12 +2,17 @@ import { dbOps } from "../config/db-helpers.js";
 import { GENRE_KEYWORDS } from "../config/constants.js";
 import {
   lastfmRequest,
+  listenbrainzRequest,
   getLastfmApiKey,
   deezerSearchArtist,
   musicbrainzGetCachedArtistMbidByName,
 } from "./apiClients.js";
 import { websocketService } from "./websocketService.js";
 import {libraryManager} from "./libraryManager.js";
+import {
+  getListenHistoryCacheNamespace,
+  getListenHistoryProfile,
+} from "./listeningHistory.js";
 
 const LASTFM_PERIODS = [
   "none",
@@ -18,10 +23,23 @@ const LASTFM_PERIODS = [
   "12month",
   "overall",
 ];
+const LISTENBRAINZ_RANGE_BY_PERIOD = {
+  "7day": "week",
+  "1month": "month",
+  "3month": "quarter",
+  "6month": "half_yearly",
+  "12month": "year",
+  overall: "all_time",
+};
 const getLastfmDiscoveryPeriod = () => {
   const settings = dbOps.getSettings();
   const p = settings.integrations?.lastfm?.discoveryPeriod;
   return p && LASTFM_PERIODS.includes(p) ? p : "1month";
+};
+
+const getListenbrainzRange = (discoveryPeriod) => {
+  if (discoveryPeriod === "none") return null;
+  return LISTENBRAINZ_RANGE_BY_PERIOD[discoveryPeriod] || "month";
 };
 
 const clampInt = (value, fallback, min, max) => {
@@ -154,6 +172,71 @@ export const getDiscoveryCache = (lastfmUsername = null) => {
     });
   }
   return discoveryCache;
+};
+
+const fetchListenHistoryArtists = async (
+  listenHistoryProfile,
+  discoveryPeriod,
+  lastfmHealth,
+) => {
+  const profile = getListenHistoryProfile(listenHistoryProfile);
+  if (!profile.listenHistoryUsername || discoveryPeriod === "none") {
+    return [];
+  }
+
+  if (profile.listenHistoryProvider === "listenbrainz") {
+    const data = await listenbrainzRequest(
+      `/1/stats/user/${encodeURIComponent(profile.listenHistoryUsername)}/artists`,
+      {
+        count: 50,
+        range: getListenbrainzRange(discoveryPeriod),
+      },
+    );
+    const artists = Array.isArray(data?.payload?.artists)
+      ? data.payload.artists
+      : [];
+    return artists
+      .map((artist) => {
+        const mbid = Array.isArray(artist.artist_mbids)
+          ? artist.artist_mbids.find(Boolean)
+          : artist.artist_mbid || null;
+        const resolvedMbid =
+          mbid || musicbrainzGetCachedArtistMbidByName(artist.artist_name);
+        if (!resolvedMbid) return null;
+        return {
+          mbid: resolvedMbid,
+          artistName: artist.artist_name,
+          playcount: parseInt(artist.listen_count || 0, 10) || 0,
+        };
+      })
+      .filter(Boolean);
+  }
+
+  const userTopArtists = await lastfmRequest("user.getTopArtists", {
+    user: profile.listenHistoryUsername,
+    limit: 50,
+    period: discoveryPeriod,
+  });
+  recordLastfmResult(lastfmHealth, userTopArtists);
+
+  if (!userTopArtists?.topartists?.artist) {
+    return [];
+  }
+
+  const artists = Array.isArray(userTopArtists.topartists.artist)
+    ? userTopArtists.topartists.artist
+    : [userTopArtists.topartists.artist];
+
+  return artists
+    .map((artist) => {
+      if (!artist.mbid) return null;
+      return {
+        mbid: artist.mbid,
+        artistName: artist.name,
+        playcount: parseInt(artist.playcount || 0, 10) || 0,
+      };
+    })
+    .filter(Boolean);
 };
 
 export const updateDiscoveryCache = async () => {
@@ -676,14 +759,16 @@ export const updateDiscoveryCache = async () => {
 
 const userDiscoveryLocks = new Set();
 
-export const updateUserDiscoveryCache = async (lastfmUsername) => {
-  if (!lastfmUsername) return null;
+export const updateUserDiscoveryCache = async (listenHistoryProfile) => {
+  const profile = getListenHistoryProfile(listenHistoryProfile);
+  const cacheNamespace = getListenHistoryCacheNamespace(profile);
+  if (!cacheNamespace) return null;
   if (!getLastfmApiKey()) return null;
-  if (userDiscoveryLocks.has(lastfmUsername)) return null;
+  if (userDiscoveryLocks.has(cacheNamespace)) return null;
 
-  userDiscoveryLocks.add(lastfmUsername);
+  userDiscoveryLocks.add(cacheNamespace);
   console.log(
-    `[Discovery] Starting per-user refresh for Last.fm user ${lastfmUsername}...`,
+    `[Discovery] Starting per-user refresh for ${profile.listenHistoryProvider} user ${profile.listenHistoryUsername}...`,
   );
 
   try {
@@ -703,36 +788,21 @@ export const updateUserDiscoveryCache = async (lastfmUsername) => {
 
     if (discoveryPeriod !== "none") {
       console.log(
-        `[Discovery] Fetching Last.fm top artists for ${lastfmUsername} (period: ${discoveryPeriod})...`,
+        `[Discovery] Fetching ${profile.listenHistoryProvider} top artists for ${profile.listenHistoryUsername} (period: ${discoveryPeriod})...`,
       );
       try {
-        const userTopArtists = await lastfmRequest("user.getTopArtists", {
-          user: lastfmUsername,
-          limit: 50,
-          period: discoveryPeriod,
-        });
-        recordLastfmResult(lastfmHealth, userTopArtists);
-
-        if (userTopArtists?.topartists?.artist) {
-          const artists = Array.isArray(userTopArtists.topartists.artist)
-            ? userTopArtists.topartists.artist
-            : [userTopArtists.topartists.artist];
-          for (const artist of artists) {
-            if (artist.mbid) {
-              lastfmArtists.push({
-                mbid: artist.mbid,
-                artistName: artist.name,
-                playcount: parseInt(artist.playcount || 0),
-              });
-            }
-          }
-          console.log(
-            `[Discovery] Found ${lastfmArtists.length} Last.fm artists for ${lastfmUsername}.`,
-          );
-        }
+        const historyArtists = await fetchListenHistoryArtists(
+          profile,
+          discoveryPeriod,
+          lastfmHealth,
+        );
+        lastfmArtists.push(...historyArtists);
+        console.log(
+          `[Discovery] Found ${lastfmArtists.length} ${profile.listenHistoryProvider} artists for ${profile.listenHistoryUsername}.`,
+        );
       } catch (e) {
         console.error(
-          `[Discovery] Failed to fetch Last.fm artists for ${lastfmUsername}: ${e.message}`,
+          `[Discovery] Failed to fetch ${profile.listenHistoryProvider} artists for ${profile.listenHistoryUsername}: ${e.message}`,
         );
       }
     }
@@ -746,7 +816,7 @@ export const updateUserDiscoveryCache = async (lastfmUsername) => {
       ...lastfmArtists.map((a) => ({
         mbid: a.mbid,
         artistName: a.artistName,
-        source: "lastfm",
+        source: profile.listenHistoryProvider,
       })),
     ];
 
@@ -910,23 +980,23 @@ export const updateUserDiscoveryCache = async (lastfmUsername) => {
       topGenres,
     };
 
-    dbOps.updateDiscoveryCache(userData, lastfmUsername);
+    dbOps.updateDiscoveryCache(userData, cacheNamespace);
     console.log(
-      `[Discovery] ${lastfmUsername} refresh complete: ${recommendationsArray.length} recommendations, ${topGenres.length} genres.`,
+      `[Discovery] ${profile.listenHistoryProvider}:${profile.listenHistoryUsername} refresh complete: ${recommendationsArray.length} recommendations, ${topGenres.length} genres.`,
     );
     return userData;
   } catch (error) {
     console.error(
-      `[Discovery] Failed to update cache for ${lastfmUsername}: ${error.message}`,
+      `[Discovery] Failed to update cache for ${profile.listenHistoryProvider}:${profile.listenHistoryUsername}: ${error.message}`,
     );
     return null;
   } finally {
-    userDiscoveryLocks.delete(lastfmUsername);
+    userDiscoveryLocks.delete(cacheNamespace);
   }
 };
 
-export const getUserDiscoveryCacheStaleness = (lastfmUsername) => {
-  const data = dbOps.getDiscoveryCache(lastfmUsername);
+export const getUserDiscoveryCacheStaleness = (cacheNamespace) => {
+  const data = dbOps.getDiscoveryCache(cacheNamespace);
   if (!data.lastUpdated) return Infinity;
   return Date.now() - new Date(data.lastUpdated).getTime();
 };

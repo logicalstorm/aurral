@@ -112,8 +112,10 @@ function SettingsPage() {
       case "account":
         return (
           <SettingsAccountTab
-            lastfmUsername={account.lastfmUsername}
-            setLastfmUsername={account.setLastfmUsername}
+            listenHistoryProvider={account.listenHistoryProvider}
+            setListenHistoryProvider={account.setListenHistoryProvider}
+            listenHistoryUsername={account.listenHistoryUsername}
+            setListenHistoryUsername={account.setListenHistoryUsername}
             hasUnsavedChanges={account.hasUnsavedChanges}
             loading={account.loading}
             saving={account.saving}
