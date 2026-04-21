@@ -12,6 +12,71 @@ const LIDARR_RETRY_ATTEMPTS = 2;
 const LIDARR_RETRY_DELAY_MS = 800;
 const LIDARR_STATUS_CACHE_MS = 10000;
 
+function normalizeRootFolderPath(value) {
+  const normalized = String(value || "").trim();
+  return normalized || null;
+}
+
+function normalizeProfileId(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  return Math.trunc(parsed);
+}
+
+function createPreferenceError(statusCode, field, message, code) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  error.field = field;
+  error.code = code;
+  return error;
+}
+
+function mapRootFolders(rootFolders) {
+  return Array.isArray(rootFolders)
+    ? rootFolders
+        .filter((item) => normalizeRootFolderPath(item?.path))
+        .map((item) => ({
+          ...item,
+          path: normalizeRootFolderPath(item.path),
+        }))
+    : [];
+}
+
+function mapQualityProfiles(qualityProfiles) {
+  return Array.isArray(qualityProfiles)
+    ? qualityProfiles
+        .filter((profile) => normalizeProfileId(profile?.id) !== null)
+        .map((profile) => ({
+          ...profile,
+          id: normalizeProfileId(profile.id),
+        }))
+    : [];
+}
+
+function findRootFolder(rootFolders, rootFolderPath) {
+  const normalizedPath = normalizeRootFolderPath(rootFolderPath);
+  if (!normalizedPath) return null;
+  return (
+    rootFolders.find(
+      (folder) => normalizeRootFolderPath(folder?.path) === normalizedPath,
+    ) || null
+  );
+}
+
+function findQualityProfile(qualityProfiles, qualityProfileId) {
+  const normalizedId = normalizeProfileId(qualityProfileId);
+  if (normalizedId === null) return null;
+  return (
+    qualityProfiles.find((profile) => normalizeProfileId(profile?.id) === normalizedId) ||
+    null
+  );
+}
+
 export class LidarrClient {
   constructor() {
     this.config = null;
@@ -140,6 +205,7 @@ export class LidarrClient {
   }
 
   isConfigured() {
+    this.updateConfig();
     return !!this.config.apiKey;
   }
 
@@ -518,14 +584,183 @@ export class LidarrClient {
     return this.request("/rootFolder");
   }
 
-  async addArtist(mbid, artistName, options = {}) {
-    const rootFolders = await this.getRootFolders();
-    if (!rootFolders || rootFolders.length === 0) {
+  getArtistAddFallbacks({ rootFolders, qualityProfiles, settings } = {}) {
+    const safeRootFolders = mapRootFolders(rootFolders);
+    const safeQualityProfiles = mapQualityProfiles(qualityProfiles);
+    const currentSettings = settings || dbOps.getSettings();
+
+    const legacyRootFolderPath = normalizeRootFolderPath(
+      currentSettings.rootFolderPath,
+    );
+    const legacyQualityProfileId = normalizeProfileId(
+      currentSettings.integrations?.lidarr?.qualityProfileId,
+    );
+
+    const fallbackRootFolder =
+      findRootFolder(safeRootFolders, legacyRootFolderPath) || safeRootFolders[0];
+    const fallbackQualityProfile =
+      findQualityProfile(safeQualityProfiles, legacyQualityProfileId) ||
+      safeQualityProfiles[0];
+
+    return {
+      rootFolderPath: fallbackRootFolder?.path || null,
+      qualityProfileId: fallbackQualityProfile?.id ?? null,
+    };
+  }
+
+  async getArtistAddPreferenceSummary(user = null) {
+    if (!this.isConfigured()) {
+      return {
+        configured: false,
+        rootFolders: [],
+        qualityProfiles: [],
+        savedDefaults: {
+          rootFolderPath: normalizeRootFolderPath(user?.lidarrRootFolderPath),
+          qualityProfileId: normalizeProfileId(user?.lidarrQualityProfileId),
+        },
+        fallbacks: {
+          rootFolderPath: null,
+          qualityProfileId: null,
+        },
+      };
+    }
+
+    const [rootFoldersRaw, qualityProfilesRaw] = await Promise.all([
+      this.getRootFolders(),
+      this.getQualityProfiles(),
+    ]);
+    const rootFolders = mapRootFolders(rootFoldersRaw);
+    const qualityProfiles = mapQualityProfiles(qualityProfilesRaw);
+
+    return {
+      configured: true,
+      rootFolders: rootFolders.map((folder) => ({ path: folder.path })),
+      qualityProfiles: qualityProfiles.map((profile) => ({
+        id: profile.id,
+        name: profile.name || `Profile ${profile.id}`,
+      })),
+      savedDefaults: {
+        rootFolderPath: normalizeRootFolderPath(user?.lidarrRootFolderPath),
+        qualityProfileId: normalizeProfileId(user?.lidarrQualityProfileId),
+      },
+      fallbacks: this.getArtistAddFallbacks({
+        rootFolders,
+        qualityProfiles,
+      }),
+    };
+  }
+
+  async resolveArtistAddConfiguration(options = {}) {
+    const rootFolders = mapRootFolders(
+      options.rootFolders || (await this.getRootFolders()),
+    );
+    if (rootFolders.length === 0) {
       throw new Error("No root folders configured in Lidarr");
     }
 
-    const rootFolder = rootFolders[0];
+    const qualityProfiles = mapQualityProfiles(
+      options.qualityProfiles || (await this.getQualityProfiles()),
+    );
+    if (qualityProfiles.length === 0) {
+      throw new Error("No quality profiles configured in Lidarr");
+    }
+
+    const fallbacks = this.getArtistAddFallbacks({
+      rootFolders,
+      qualityProfiles,
+      settings: options.settings,
+    });
+
+    const requestedRootFolderPath = normalizeRootFolderPath(
+      options.requestRootFolderPath,
+    );
+    const requestedQualityProfileId = normalizeProfileId(
+      options.requestQualityProfileId,
+    );
+    const savedRootFolderPath = normalizeRootFolderPath(
+      options.savedRootFolderPath,
+    );
+    const savedQualityProfileId = normalizeProfileId(
+      options.savedQualityProfileId,
+    );
+
+    let resolvedRootFolderPath = fallbacks.rootFolderPath;
+    let resolvedQualityProfileId = fallbacks.qualityProfileId;
+
+    if (requestedRootFolderPath) {
+      const requestRootFolder = findRootFolder(rootFolders, requestedRootFolderPath);
+      if (!requestRootFolder) {
+        throw createPreferenceError(
+          400,
+          "rootFolderPath",
+          `Unknown Lidarr root folder: ${requestedRootFolderPath}`,
+          "INVALID_ROOT_FOLDER_PATH",
+        );
+      }
+      resolvedRootFolderPath = requestRootFolder.path;
+    } else if (savedRootFolderPath) {
+      const savedRootFolder = findRootFolder(rootFolders, savedRootFolderPath);
+      if (!savedRootFolder) {
+        throw createPreferenceError(
+          409,
+          "rootFolderPath",
+          `Your saved Lidarr root folder no longer exists: ${savedRootFolderPath}. Update your Library Defaults or use Customize.`,
+          "STALE_ROOT_FOLDER_PATH",
+        );
+      }
+      resolvedRootFolderPath = savedRootFolder.path;
+    }
+
+    if (requestedQualityProfileId !== null) {
+      const requestQualityProfile = findQualityProfile(
+        qualityProfiles,
+        requestedQualityProfileId,
+      );
+      if (!requestQualityProfile) {
+        throw createPreferenceError(
+          400,
+          "qualityProfileId",
+          `Unknown Lidarr quality profile: ${requestedQualityProfileId}`,
+          "INVALID_QUALITY_PROFILE_ID",
+        );
+      }
+      resolvedQualityProfileId = requestQualityProfile.id;
+    } else if (savedQualityProfileId !== null) {
+      const savedQualityProfile = findQualityProfile(
+        qualityProfiles,
+        savedQualityProfileId,
+      );
+      if (!savedQualityProfile) {
+        throw createPreferenceError(
+          409,
+          "qualityProfileId",
+          `Your saved Lidarr quality profile no longer exists: ${savedQualityProfileId}. Update your Library Defaults or use Customize.`,
+          "STALE_QUALITY_PROFILE_ID",
+        );
+      }
+      resolvedQualityProfileId = savedQualityProfile.id;
+    }
+
+    return {
+      rootFolders,
+      qualityProfiles,
+      fallbacks,
+      resolved: {
+        rootFolderPath: resolvedRootFolderPath,
+        qualityProfileId: resolvedQualityProfileId,
+      },
+    };
+  }
+
+  async addArtist(mbid, artistName, options = {}) {
     const settings = dbOps.getSettings();
+    const { resolved } = await this.resolveArtistAddConfiguration({
+      requestRootFolderPath: options.rootFolderPath,
+      requestQualityProfileId: options.qualityProfileId,
+      savedRootFolderPath: options.savedRootFolderPath,
+      savedQualityProfileId: options.savedQualityProfileId,
+      settings,
+    });
 
     const albumOnly = options.albumOnly === true;
     const monitorOption = options.monitorOption || options.monitor || "none";
@@ -535,10 +770,7 @@ export class LidarrClient {
     const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
     const monitorNewItems = monitorOption === "none" ? "none" : "all";
 
-    const defaultQualityProfileId =
-      settings.integrations?.lidarr?.qualityProfileId;
-    const qualityProfileId =
-      options.qualityProfileId || defaultQualityProfileId || 1;
+    const qualityProfileId = resolved.qualityProfileId;
     const defaultMetadataProfileId =
       settings.integrations?.lidarr?.metadataProfileId;
     let metadataProfileId =
@@ -556,7 +788,7 @@ export class LidarrClient {
     const lidarrArtist = {
       artistName: artistName,
       foreignArtistId: mbid,
-      rootFolderPath: rootFolder.path,
+      rootFolderPath: resolved.rootFolderPath,
       qualityProfileId: qualityProfileId,
       metadataProfileId: metadataProfileId,
       monitored: artistMonitored,

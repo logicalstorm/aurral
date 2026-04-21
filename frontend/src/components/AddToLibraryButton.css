@@ -1,3 +1,13 @@
+.add-to-library-button-group {
+  display: inline-flex;
+  align-items: stretch;
+  overflow: hidden;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #302d38 0%, #2a2830 100%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+}
+
 .add-to-library-button {
   display: block;
   background-color: #2a2830;
@@ -13,6 +23,10 @@
   transition: all 0.25s cubic-bezier(0.310, -0.105, 0.430, 1.400);
   border: none;
   padding: 0;
+}
+
+.add-to-library-button.add-to-library-button--split {
+  border-radius: 0;
 }
 
 .add-to-library-button span,
@@ -35,11 +49,11 @@
 
 .add-to-library-button span:after {
   content: '';
-  background-color: #3a3840; /* Darker separator */
-  width: 2px;
-  height: 70%;
+  background-color: rgba(255, 255, 255, 0.1);
+  width: 1px;
+  height: 58%;
   position: absolute;
-  top: 15%;
+  top: 21%;
   right: -1px;
 }
 
@@ -103,4 +117,46 @@
 
 .add-to-library-button:active {
   opacity: 1;
+}
+
+.add-to-library-button-split-trigger {
+  width: 48px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  position: relative;
+  background: transparent;
+  color: #fff;
+  transition: background-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+}
+
+.add-to-library-button-split-trigger::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 22%;
+  bottom: 22%;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.add-to-library-button-group .add-to-library-button {
+  background: transparent;
+  box-shadow: none;
+}
+
+.add-to-library-button-group .add-to-library-button:hover,
+.add-to-library-button-group .add-to-library-button.success {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.add-to-library-button-split-trigger:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.add-to-library-button-split-trigger:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }

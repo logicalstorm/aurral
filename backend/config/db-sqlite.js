@@ -134,6 +134,12 @@ if (!userColumns.includes("listen_history_provider")) {
 if (!userColumns.includes("listen_history_username")) {
   db.exec("ALTER TABLE users ADD COLUMN listen_history_username TEXT");
 }
+if (!userColumns.includes("lidarr_root_folder_path")) {
+  db.exec("ALTER TABLE users ADD COLUMN lidarr_root_folder_path TEXT");
+}
+if (!userColumns.includes("lidarr_quality_profile_id")) {
+  db.exec("ALTER TABLE users ADD COLUMN lidarr_quality_profile_id INTEGER");
+}
 
 db.exec(`
   UPDATE users
