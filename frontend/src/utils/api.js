@@ -179,11 +179,19 @@ export const searchArtists = async (query, limit = 24, offset = 0) => {
 export const searchCatalog = async (
   query,
   scope = "artist",
-  { limit = 24, offset = 0, tagScope = "recommended" } = {},
+  {
+    limit = 24,
+    offset = 0,
+    tagScope = "recommended",
+    releaseTypes = [],
+  } = {},
 ) => {
   const params = { q: query, scope, limit, offset };
   if (scope === "tag") {
     params.tagScope = tagScope;
+  }
+  if (scope === "album" && Array.isArray(releaseTypes) && releaseTypes.length) {
+    params.releaseTypes = releaseTypes.join(",");
   }
   const response = await api.get("/search", { params });
   return response.data;

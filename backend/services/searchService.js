@@ -8,6 +8,22 @@ import {
 import { getDiscoveryCache } from "./discoveryService.js";
 import { lidarrClient } from "./lidarrClient.js";
 
+const PRIMARY_RELEASE_TYPES = new Set(["Album", "EP", "Single"]);
+const SECONDARY_RELEASE_TYPES = new Set([
+  "Live",
+  "Remix",
+  "Compilation",
+  "Demo",
+  "Broadcast",
+  "Soundtrack",
+  "Spokenword",
+  "Other",
+]);
+const ALL_RELEASE_TYPES = new Set([
+  ...PRIMARY_RELEASE_TYPES,
+  ...SECONDARY_RELEASE_TYPES,
+]);
+
 function parsePositiveInt(value, fallback) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -84,6 +100,51 @@ export function normalizeAlbumSearchItem(releaseGroup, lookup = null) {
     libraryArtistId: lookup?.libraryArtistId || null,
     status: lookup?.status || "missing",
   };
+}
+
+export function normalizeAlbumReleaseTypesFilter(releaseTypes) {
+  const values = Array.isArray(releaseTypes)
+    ? releaseTypes
+    : String(releaseTypes || "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+  return [...new Set(values.filter((value) => ALL_RELEASE_TYPES.has(value)))];
+}
+
+export function matchesAlbumReleaseTypeFilter(
+  releaseGroup,
+  selectedReleaseTypes,
+) {
+  const normalizedSelection =
+    normalizeAlbumReleaseTypesFilter(selectedReleaseTypes);
+  if (
+    normalizedSelection.length === 0 ||
+    normalizedSelection.length === ALL_RELEASE_TYPES.size
+  ) {
+    return true;
+  }
+
+  const selected = new Set(normalizedSelection);
+  const primaryType = releaseGroup?.["primary-type"];
+  const secondaryTypes = Array.isArray(releaseGroup?.["secondary-types"])
+    ? releaseGroup["secondary-types"]
+    : [];
+
+  if (!selected.has(primaryType)) return false;
+  if (secondaryTypes.length === 0) return true;
+
+  const normalizedSecondaryTypes = [
+    ...new Set(
+      secondaryTypes.map((secondaryType) =>
+        SECONDARY_RELEASE_TYPES.has(secondaryType) ? secondaryType : "Other",
+      ),
+    ),
+  ];
+
+  return normalizedSecondaryTypes.every((secondaryType) =>
+    selected.has(secondaryType),
+  );
 }
 
 function normalizeTagArtistItem(artist, tag) {
@@ -192,20 +253,82 @@ export async function searchArtistsLegacy(query, limit = 24, offset = 0) {
   };
 }
 
-export async function searchAlbums(query, limit = 24, offset = 0) {
+export async function searchAlbums(
+  query,
+  limit = 24,
+  offset = 0,
+  releaseTypes = [],
+) {
   const limitInt = parsePositiveInt(limit, 24);
   const offsetInt = Math.max(0, Number.parseInt(offset, 10) || 0);
-  const mbData = await musicbrainzRequest("/release-group", {
-    query,
-    limit: limitInt,
-    offset: offsetInt,
-  });
-  const releaseGroups = Array.isArray(mbData?.["release-groups"])
-    ? mbData["release-groups"]
-    : [];
-  const filteredReleaseGroups = releaseGroups.filter(
-    (releaseGroup) => releaseGroup?.id && releaseGroup?.title,
-  );
+  const selectedReleaseTypes = normalizeAlbumReleaseTypesFilter(releaseTypes);
+  const shouldFilterByReleaseType =
+    selectedReleaseTypes.length > 0 &&
+    selectedReleaseTypes.length < ALL_RELEASE_TYPES.size;
+  const rawPageSize = shouldFilterByReleaseType
+    ? Math.max(limitInt, 50)
+    : limitInt;
+
+  let rawOffset = shouldFilterByReleaseType ? 0 : offsetInt;
+  let matchedCount = 0;
+  let rawCount = 0;
+  let hasMore = false;
+  const filteredReleaseGroups = [];
+
+  while (
+    filteredReleaseGroups.length < limitInt ||
+    (shouldFilterByReleaseType && !hasMore)
+  ) {
+    const mbData = await musicbrainzRequest("/release-group", {
+      query,
+      limit: rawPageSize,
+      offset: rawOffset,
+    });
+    rawCount =
+      Number.parseInt(mbData?.count, 10) ||
+      Number.parseInt(mbData?.["release-group-count"], 10) ||
+      rawCount;
+    const releaseGroups = Array.isArray(mbData?.["release-groups"])
+      ? mbData["release-groups"]
+      : [];
+    const validReleaseGroups = releaseGroups.filter(
+      (releaseGroup) => releaseGroup?.id && releaseGroup?.title,
+    );
+
+    for (const releaseGroup of validReleaseGroups) {
+      if (
+        shouldFilterByReleaseType &&
+        !matchesAlbumReleaseTypeFilter(releaseGroup, selectedReleaseTypes)
+      ) {
+        continue;
+      }
+      if (matchedCount < offsetInt) {
+        matchedCount += 1;
+        continue;
+      }
+      if (filteredReleaseGroups.length < limitInt) {
+        filteredReleaseGroups.push(releaseGroup);
+        continue;
+      }
+      hasMore = true;
+      break;
+    }
+
+    if (hasMore) {
+      break;
+    }
+    if (validReleaseGroups.length === 0) {
+      break;
+    }
+    rawOffset += releaseGroups.length;
+    if (rawCount > 0 && rawOffset >= rawCount) {
+      break;
+    }
+    if (!shouldFilterByReleaseType) {
+      break;
+    }
+  }
+
   const albumLookup = await getAlbumLibraryLookup(
     filteredReleaseGroups.map((releaseGroup) => releaseGroup.id),
   );
@@ -213,11 +336,15 @@ export async function searchAlbums(query, limit = 24, offset = 0) {
   return {
     scope: "album",
     query,
-    count:
-      Number.parseInt(mbData?.count, 10) ||
-      Number.parseInt(mbData?.["release-group-count"], 10) ||
-      filteredReleaseGroups.length,
+    count: shouldFilterByReleaseType
+      ? offsetInt + filteredReleaseGroups.length + (hasMore ? 1 : 0)
+      : rawCount || filteredReleaseGroups.length,
     offset: offsetInt,
+    hasMore:
+      shouldFilterByReleaseType
+        ? hasMore
+        : (rawCount || filteredReleaseGroups.length) >
+          offsetInt + filteredReleaseGroups.length,
     items: filteredReleaseGroups.map((releaseGroup) =>
       normalizeAlbumSearchItem(releaseGroup, albumLookup.get(releaseGroup.id)),
     ),
