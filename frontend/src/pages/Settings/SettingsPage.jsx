@@ -116,6 +116,13 @@ function SettingsPage() {
             setListenHistoryProvider={account.setListenHistoryProvider}
             listenHistoryUsername={account.listenHistoryUsername}
             setListenHistoryUsername={account.setListenHistoryUsername}
+            lidarrConfigured={account.lidarrConfigured}
+            lidarrRootFolders={account.lidarrRootFolders}
+            lidarrQualityProfiles={account.lidarrQualityProfiles}
+            lidarrRootFolderPath={account.lidarrRootFolderPath}
+            setLidarrRootFolderPath={account.setLidarrRootFolderPath}
+            lidarrQualityProfileId={account.lidarrQualityProfileId}
+            setLidarrQualityProfileId={account.setLidarrQualityProfileId}
             hasUnsavedChanges={account.hasUnsavedChanges}
             loading={account.loading}
             saving={account.saving}

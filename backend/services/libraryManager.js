@@ -89,8 +89,12 @@ export class LibraryManager {
       const lidarrArtist = await lidarr.addArtist(mbid, artistName, {
         albumOnly: options.albumOnly === true,
         monitorOption: options.monitorOption || "none",
-        qualityProfileId: lidarrSettings.integrations?.lidarr?.qualityProfileId,
+        rootFolderPath: options.rootFolderPath,
+        savedRootFolderPath: options.savedRootFolderPath,
+        qualityProfileId: options.qualityProfileId,
+        savedQualityProfileId: options.savedQualityProfileId,
         metadataProfileId:
+          options.metadataProfileId ||
           lidarrSettings.integrations?.lidarr?.metadataProfileId,
       });
       console.log(`[LibraryManager] Added artist "${artistName}" to Lidarr`);
