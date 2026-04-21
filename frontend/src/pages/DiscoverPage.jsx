@@ -26,7 +26,9 @@ import {
   readLibraryLookupCache,
 } from "../utils/api";
 import { useWebSocketChannel } from "../hooks/useWebSocket";
+import { useAuth } from "../contexts/AuthContext";
 import ArtistImage from "../components/ArtistImage";
+import LastfmBanner from "../components/LastfmBanner";
 
 const TAG_COLORS = [
   "#845336",
@@ -474,6 +476,8 @@ function DiscoverPage() {
   const requestedArtistCoversRef = useRef(new Set());
   const lastDiscoveryWsMessageAtRef = useRef(0);
   const navigate = useNavigate();
+  const { user: authUser } = useAuth();
+
 
   const { isConnected: isDiscoverySocketConnected } = useWebSocketChannel(
     "discovery",
@@ -546,7 +550,7 @@ function DiscoverPage() {
   }, [data, data?.isUpdating, data?.stale]);
 
   useEffect(() => {
-    getDiscovery()
+    getDiscovery(true)
       .then((discoveryData) => {
         setData(discoveryData);
         setError(null);
@@ -576,7 +580,7 @@ function DiscoverPage() {
       .then(setRecentReleases)
       .catch(() => {});
 
-  }, []);
+  }, [authUser?.id]);
 
   useEffect(() => {
     try {
@@ -1452,6 +1456,7 @@ function DiscoverPage() {
 
   return (
     <div className="space-y-10 pb-12">
+      <LastfmBanner />
       <section
         className="relative overflow-hidden"
         style={{
@@ -1479,7 +1484,7 @@ function DiscoverPage() {
                 Your daily mix, curated from your library.
               </p>
             </div>
-            
+
             <button
               type="button"
               onClick={openDiscoverModal}

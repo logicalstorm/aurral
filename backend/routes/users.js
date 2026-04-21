@@ -1,6 +1,6 @@
 import express from "express";
 import bcrypt from "bcrypt";
-import { userOps } from "../config/db-helpers.js";
+import { userOps, dbOps } from "../config/db-helpers.js";
 import { requireAuth, requireAdmin } from "../middleware/requirePermission.js";
 import { requirePasswordStrength } from "../middleware/validation.js";
 import { deleteSessionsByUserId } from "../config/session-helpers.js";
@@ -65,28 +65,56 @@ router.patch("/:id", requireAuth, (req, res) => {
     if (!existing) {
       return res.status(404).json({ error: "User not found" });
     }
-    const { password, permissions, role } = req.body;
+    const { password, permissions, role, lastfmUsername } = req.body;
+    if (
+      lastfmUsername !== undefined &&
+      existing.lastfmUsername &&
+      lastfmUsername !== existing.lastfmUsername
+    ) {
+      const otherUsers = userOps.getAllLastfmUsers().filter(
+        (u) => u.lastfmUsername === existing.lastfmUsername && u.id !== id
+      );
+      if (otherUsers.length === 0) {
+        dbOps.deleteDiscoveryCacheByPrefix(`lfm:${existing.lastfmUsername}:`);
+      }
+    }
     if (isSelf && !isAdmin) {
       if (permissions !== undefined || role !== undefined) {
         return res.status(403).json({ error: "Forbidden" });
       }
-      const { currentPassword } = req.body;
-      if (!password || !currentPassword) {
-        return res
-          .status(400)
-          .json({ error: "currentPassword and password required" });
+      const updates = {};
+      if (lastfmUsername !== undefined) {
+        updates.lastfmUsername = lastfmUsername;
       }
-      if (!bcrypt.compareSync(currentPassword, existing.passwordHash)) {
-        return res.status(401).json({ error: "Current password is incorrect" });
+      if (password) {
+        const { currentPassword } = req.body;
+        if (!currentPassword) {
+          return res
+            .status(400)
+            .json({ error: "currentPassword required to change password" });
+        }
+        if (!bcrypt.compareSync(currentPassword, existing.passwordHash)) {
+          return res.status(401).json({ error: "Current password is incorrect" });
+        }
+        const passwordValidation = requirePasswordStrength(password);
+        if (!passwordValidation.valid) {
+          return res.status(400).json({ error: passwordValidation.error });
+        }
+        updates.passwordHash = bcrypt.hashSync(password, 10);
       }
-      const passwordValidation = requirePasswordStrength(password);
-      if (!passwordValidation.valid) {
-        return res.status(400).json({ error: passwordValidation.error });
+      if (Object.keys(updates).length === 0) {
+        return res.json({
+          id,
+          username: existing.username,
+          role: existing.role,
+          lastfmUsername: existing.lastfmUsername,
+        });
       }
-      const hash = bcrypt.hashSync(password, 10);
-      userOps.updateUser(id, { passwordHash: hash });
-      deleteSessionsByUserId(id);
-      return res.json({ id, username: existing.username, role: existing.role });
+      const updated = userOps.updateUser(id, updates);
+      if (updates.passwordHash) {
+        deleteSessionsByUserId(id);
+      }
+      return res.json(updated);
     }
     const updates = {};
     if (password) {
@@ -98,12 +126,14 @@ router.patch("/:id", requireAuth, (req, res) => {
     }
     if (permissions !== undefined) updates.permissions = permissions;
     if (role !== undefined) updates.role = role;
+    if (lastfmUsername !== undefined) updates.lastfmUsername = lastfmUsername;
     if (Object.keys(updates).length === 0) {
       return res.json({
         id: existing.id,
         username: existing.username,
         role: existing.role,
         permissions: existing.permissions,
+        lastfmUsername: existing.lastfmUsername,
       });
     }
     const updated = userOps.updateUser(id, updates);
@@ -112,6 +142,18 @@ router.patch("/:id", requireAuth, (req, res) => {
     res
       .status(500)
       .json({ error: "Failed to update user", message: e.message });
+  }
+});
+
+router.get("/me/lastfm", requireAuth, (req, res) => {
+  try {
+    const user = userOps.getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    res.json({ lastfmUsername: user.lastfmUsername });
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get Last.fm settings", message: e.message });
   }
 });
 

@@ -199,8 +199,8 @@ export function SettingsMetadataTab({
                 }
               />
               <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
-                Your Last.fm username for personalized recommendations based on
-                your listening history.
+                Default Last.fm username for users who haven&apos;t set their own
+                in their Account settings.
               </p>
             </div>
             <div>
@@ -242,8 +242,8 @@ export function SettingsMetadataTab({
             </div>
             <p className="text-xs" style={{ color: "#c1c1c3" }}>
               API key is required for high-quality images, better recommendations,
-              and weekly flow. Username enables personalized recommendations from
-              your Last.fm listening history.
+              and weekly flow. Username serves as the default for users who
+              haven&apos;t configured their own in Account settings.
             </p>
           </fieldset>
         </div>
