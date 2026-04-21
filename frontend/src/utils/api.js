@@ -573,13 +573,20 @@ export const changeMyPassword = async (currentPassword, newPassword) => {
   await api.post("/users/me/password", { currentPassword, newPassword });
 };
 
-export const getMyLastfm = async () => {
-  const response = await api.get("/users/me/lastfm");
+export const getMyListeningHistory = async () => {
+  const response = await api.get("/users/me/listening-history");
   return response.data;
 };
 
-export const updateMyLastfm = async (userId, lastfmUsername) => {
-  const response = await api.patch(`/users/${userId}`, { lastfmUsername });
+export const updateMyListeningHistory = async (
+  userId,
+  listenHistoryProvider,
+  listenHistoryUsername,
+) => {
+  const response = await api.patch(`/users/${userId}`, {
+    listenHistoryProvider,
+    listenHistoryUsername,
+  });
   return response.data;
 };
 

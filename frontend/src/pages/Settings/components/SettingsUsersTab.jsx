@@ -209,13 +209,20 @@ export function SettingsUsersTab({
                       >
                         {u.role}
                       </span>
-                      {u.lastfmUsername && (
+                      {u.listenHistoryUsername && (
                         <span
                           className="text-xs truncate"
                           style={{ color: "#8a8a8f" }}
-                          title={`Last.fm: ${u.lastfmUsername}`}
+                          title={`${
+                            u.listenHistoryProvider === "listenbrainz"
+                              ? "ListenBrainz"
+                              : "Last.fm"
+                          }: ${u.listenHistoryUsername}`}
                         >
-                          Last.fm: {u.lastfmUsername}
+                          {u.listenHistoryProvider === "listenbrainz"
+                            ? "ListenBrainz"
+                            : "Last.fm"}
+                          : {u.listenHistoryUsername}
                         </span>
                       )}
                     </div>

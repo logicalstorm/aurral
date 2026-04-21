@@ -17,6 +17,11 @@ import { imagePrefetchService } from "../services/imagePrefetchService.js";
 import { defaultDiscoveryPreferences } from "../config/constants.js";
 import { requireAuth, requireAdmin } from "../middleware/requirePermission.js";
 import { getNearbyShows } from "../services/nearbyShowsService.js";
+import {
+  getListenHistoryCacheNamespace,
+  getListenHistoryProfile,
+  hasListenHistoryProfile,
+} from "../services/listeningHistory.js";
 
 const router = express.Router();
 
@@ -80,7 +85,8 @@ router.get("/", requireAuth, async (req, res) => {
   const hasArtists = libraryArtists.length > 0;
 
   const reqUser = userOps.getUserById(req.user.id);
-  const userLastfmUsername = reqUser?.lastfmUsername || null;
+  const listenHistoryProfile = getListenHistoryProfile(reqUser || {});
+  const userCacheNamespace = getListenHistoryCacheNamespace(listenHistoryProfile);
 
   if (!hasLastfmKey && !hasArtists) {
     const dbData = dbOps.getDiscoveryCache();
@@ -124,19 +130,19 @@ router.get("/", requireAuth, async (req, res) => {
     });
   }
 
-  if (userLastfmUsername && hasLastfmKey) {
-    const staleness = getUserDiscoveryCacheStaleness(userLastfmUsername);
+  if (hasListenHistoryProfile(listenHistoryProfile) && hasLastfmKey) {
+    const staleness = getUserDiscoveryCacheStaleness(userCacheNamespace);
     if (staleness > DISCOVERY_STALE_MS) {
-      updateUserDiscoveryCache(userLastfmUsername).catch((err) => {
+      updateUserDiscoveryCache(listenHistoryProfile).catch((err) => {
         console.error(
-          `[Discover] On-demand refresh for ${userLastfmUsername} failed:`,
+          `[Discover] On-demand refresh for ${listenHistoryProfile.listenHistoryProvider}:${listenHistoryProfile.listenHistoryUsername} failed:`,
           err.message,
         );
       });
     }
   }
 
-  const discoveryCache = getDiscoveryCache(userLastfmUsername);
+  const discoveryCache = getDiscoveryCache(userCacheNamespace);
 
   const hasData =
     discoveryCache.recommendations?.length > 0 ||
@@ -176,7 +182,7 @@ router.get("/", requireAuth, async (req, res) => {
   if (
     isStale &&
     !isUpdating &&
-    !userLastfmUsername &&
+    !hasListenHistoryProfile(listenHistoryProfile) &&
     Date.now() - lastDiscoveryRevalidateAt > DISCOVERY_REVALIDATE_COOLDOWN_MS
   ) {
     lastDiscoveryRevalidateAt = Date.now();
