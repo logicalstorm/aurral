@@ -110,6 +110,7 @@ export const UUID_REGEX =
 
 export const MUSICBRAINZ_API = "https://musicbrainz.org/ws/2";
 export const LASTFM_API = "https://ws.audioscrobbler.com/2.0/";
+export const LISTENBRAINZ_API = "https://api.listenbrainz.org";
 export const APP_NAME = "Aurral";
 export const APP_VERSION = "1.0.0";
 

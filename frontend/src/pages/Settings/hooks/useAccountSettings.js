@@ -1,51 +1,76 @@
 import { useState, useEffect, useCallback } from "react";
-import { getMyLastfm, updateMyLastfm } from "../../../utils/api";
+import {
+  getMyListeningHistory,
+  updateMyListeningHistory,
+} from "../../../utils/api";
 
 export function useAccountSettings(authUser, showSuccess, showError) {
-  const [lastfmUsername, setLastfmUsername] = useState("");
-  const [savedLastfmUsername, setSavedLastfmUsername] = useState("");
+  const [listenHistoryProvider, setListenHistoryProvider] = useState("lastfm");
+  const [listenHistoryUsername, setListenHistoryUsername] = useState("");
+  const [savedListenHistoryProvider, setSavedListenHistoryProvider] =
+    useState("lastfm");
+  const [savedListenHistoryUsername, setSavedListenHistoryUsername] =
+    useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const hasUnsavedChanges = lastfmUsername !== savedLastfmUsername;
+  const hasUnsavedChanges =
+    listenHistoryProvider !== savedListenHistoryProvider ||
+    listenHistoryUsername !== savedListenHistoryUsername;
 
-  const fetchLastfm = useCallback(async () => {
+  const fetchListeningHistory = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await getMyLastfm();
-      const val = data.lastfmUsername || "";
-      setLastfmUsername(val);
-      setSavedLastfmUsername(val);
+      const data = await getMyListeningHistory();
+      const provider = data.listenHistoryProvider || "lastfm";
+      const username = data.listenHistoryUsername || "";
+      setListenHistoryProvider(provider);
+      setListenHistoryUsername(username);
+      setSavedListenHistoryProvider(provider);
+      setSavedListenHistoryUsername(username);
     } catch {
-      showError("Failed to load Last.fm settings");
+      showError("Failed to load listening history settings");
     } finally {
       setLoading(false);
     }
   }, [showError]);
 
   useEffect(() => {
-    fetchLastfm();
-  }, [fetchLastfm]);
+    fetchListeningHistory();
+  }, [fetchListeningHistory]);
 
   const handleSave = useCallback(async () => {
     if (!authUser?.id) return;
     try {
       setSaving(true);
-      await updateMyLastfm(authUser.id, lastfmUsername.trim() || null);
-      const trimmed = lastfmUsername.trim();
-      setSavedLastfmUsername(trimmed);
-      setLastfmUsername(trimmed);
-      showSuccess("Last.fm username saved");
+      const trimmedUsername = listenHistoryUsername.trim();
+      await updateMyListeningHistory(
+        authUser.id,
+        listenHistoryProvider,
+        trimmedUsername || null,
+      );
+      setSavedListenHistoryProvider(listenHistoryProvider);
+      setSavedListenHistoryUsername(trimmedUsername);
+      setListenHistoryUsername(trimmedUsername);
+      showSuccess("Listening history settings saved");
     } catch {
-      showError("Failed to save Last.fm username");
+      showError("Failed to save listening history settings");
     } finally {
       setSaving(false);
     }
-  }, [authUser?.id, lastfmUsername, showSuccess, showError]);
+  }, [
+    authUser?.id,
+    listenHistoryProvider,
+    listenHistoryUsername,
+    showSuccess,
+    showError,
+  ]);
 
   return {
-    lastfmUsername,
-    setLastfmUsername,
+    listenHistoryProvider,
+    setListenHistoryProvider,
+    listenHistoryUsername,
+    setListenHistoryUsername,
     hasUnsavedChanges,
     loading,
     saving,

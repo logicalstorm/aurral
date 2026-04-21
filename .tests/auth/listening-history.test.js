@@ -1,0 +1,109 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import {
+  createIsolatedStateDir,
+  applyIsolatedBackendEnv,
+  cleanupIsolatedState,
+  importFromRepo,
+  resetDatabase,
+} from "../helpers/backendTestHarness.js";
+
+const isolatedState = await createIsolatedStateDir("listening-history");
+applyIsolatedBackendEnv(isolatedState);
+
+const [{ db }, { userOps }, listeningHistoryModule, bcryptModule] =
+  await Promise.all([
+    importFromRepo("backend/config/db-sqlite.js"),
+    importFromRepo("backend/config/db-helpers.js"),
+    importFromRepo("backend/services/listeningHistory.js"),
+    importFromRepo("backend/node_modules/bcrypt/bcrypt.js"),
+  ]);
+
+const bcrypt = bcryptModule.default;
+const {
+  getListenHistoryProfile,
+  getListenHistoryCacheNamespace,
+} = listeningHistoryModule;
+
+test.beforeEach(() => {
+  resetDatabase(db);
+});
+
+test.after(async () => {
+  await cleanupIsolatedState(isolatedState);
+});
+
+test("normalizes legacy and explicit listening history profiles", () => {
+  assert.deepEqual(
+    getListenHistoryProfile({ lastfm_username: "alice" }),
+    {
+      listenHistoryProvider: "lastfm",
+      listenHistoryUsername: "alice",
+      lastfmUsername: "alice",
+    },
+  );
+
+  assert.deepEqual(
+    getListenHistoryProfile({
+      listenHistoryProvider: "listenbrainz",
+      listenHistoryUsername: "  roofuskit  ",
+    }),
+    {
+      listenHistoryProvider: "listenbrainz",
+      listenHistoryUsername: "roofuskit",
+      lastfmUsername: null,
+    },
+  );
+});
+
+test("builds provider-specific discovery cache namespaces", () => {
+  assert.equal(
+    getListenHistoryCacheNamespace({
+      listenHistoryProvider: "lastfm",
+      listenHistoryUsername: "alice",
+    }),
+    "lfm:alice",
+  );
+
+  assert.equal(
+    getListenHistoryCacheNamespace({
+      listenHistoryProvider: "listenbrainz",
+      listenHistoryUsername: "alice",
+    }),
+    "lb:alice",
+  );
+});
+
+test("user updates persist listenbrainz separately from legacy lastfm field", () => {
+  const hash = bcrypt.hashSync("secret", 4);
+  const user = userOps.createUser("alice", hash, "user");
+
+  const updated = userOps.updateUser(user.id, {
+    listenHistoryProvider: "listenbrainz",
+    listenHistoryUsername: "roofuskit",
+  });
+
+  assert.equal(updated?.listenHistoryProvider, "listenbrainz");
+  assert.equal(updated?.listenHistoryUsername, "roofuskit");
+  assert.equal(updated?.lastfmUsername, null);
+
+  const stored = userOps.getUserById(user.id);
+  assert.equal(stored?.listenHistoryProvider, "listenbrainz");
+  assert.equal(stored?.listenHistoryUsername, "roofuskit");
+  assert.equal(stored?.lastfmUsername, null);
+});
+
+test("legacy lastfm_username still resolves as a lastfm profile", () => {
+  const hash = bcrypt.hashSync("secret", 4);
+  const user = userOps.createUser("bob", hash, "user");
+
+  db.prepare(
+    "UPDATE users SET lastfm_username = ?, listen_history_provider = NULL, listen_history_username = NULL WHERE id = ?",
+  ).run("legacybob", user.id);
+
+  const stored = userOps.getUserById(user.id);
+  assert.equal(stored?.listenHistoryProvider, "lastfm");
+  assert.equal(stored?.listenHistoryUsername, "legacybob");
+  assert.equal(stored?.lastfmUsername, "legacybob");
+});

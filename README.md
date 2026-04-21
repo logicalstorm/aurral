@@ -113,7 +113,8 @@ Relevant links:
 ### Required
 
 - Lidarr reachable from Aurral
-- Last.fm API key, with username if you want scrobbling-based discovery
+- Last.fm API key for metadata, images, and recommendation lookups
+- Last.fm or ListenBrainz account if you want listening-history-based discovery
 - MusicBrainz contact email for the required User-Agent policy
 
 ### Recommended stack for new users

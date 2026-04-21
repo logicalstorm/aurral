@@ -3,8 +3,10 @@ import { Pencil } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
 
 export function SettingsAccountTab({
-  lastfmUsername,
-  setLastfmUsername,
+  listenHistoryProvider,
+  setListenHistoryProvider,
+  listenHistoryUsername,
+  setListenHistoryUsername,
   hasUnsavedChanges,
   loading,
   saving,
@@ -55,12 +57,14 @@ export function SettingsAccountTab({
               className="text-lg font-medium flex items-center"
               style={{ color: "#fff" }}
             >
-              Last.fm
+              Listening History
             </h3>
             <div className="flex items-center gap-2">
-              {lastfmUsername && !editing && (
+              {listenHistoryUsername && !editing && (
                 <span className="text-sm" style={{ color: "#c1c1c3" }}>
-                  {lastfmUsername}
+                  {listenHistoryProvider === "listenbrainz"
+                    ? `ListenBrainz: ${listenHistoryUsername}`
+                    : `Last.fm: ${listenHistoryUsername}`}
                 </span>
               )}
               <button
@@ -71,8 +75,8 @@ export function SettingsAccountTab({
                 onClick={() => setEditing((v) => !v)}
                 aria-label={
                   editing
-                    ? "Lock Last.fm settings"
-                    : "Edit Last.fm settings"
+                    ? "Lock listening history settings"
+                    : "Edit listening history settings"
                 }
               >
                 <Pencil className="w-4 h-4" />
@@ -88,18 +92,38 @@ export function SettingsAccountTab({
                 className="block text-sm font-medium mb-1"
                 style={{ color: "#fff" }}
               >
+                Provider
+              </label>
+              <select
+                className="input"
+                value={listenHistoryProvider}
+                onChange={(e) => setListenHistoryProvider(e.target.value)}
+              >
+                <option value="lastfm">Last.fm</option>
+                <option value="listenbrainz">ListenBrainz</option>
+              </select>
+            </div>
+            <div>
+              <label
+                className="block text-sm font-medium mb-1"
+                style={{ color: "#fff" }}
+              >
                 Username
               </label>
               <input
                 type="text"
                 className="input"
-                placeholder="Your Last.fm username"
+                placeholder={
+                  listenHistoryProvider === "listenbrainz"
+                    ? "Your ListenBrainz username"
+                    : "Your Last.fm username"
+                }
                 autoComplete="off"
-                value={lastfmUsername}
-                onChange={(e) => setLastfmUsername(e.target.value)}
+                value={listenHistoryUsername}
+                onChange={(e) => setListenHistoryUsername(e.target.value)}
               />
               <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
-                Connect your Last.fm account for personalized discovery
+                Connect Last.fm or ListenBrainz for personalized discovery
                 recommendations based on your listening history.
               </p>
             </div>
