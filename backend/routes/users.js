@@ -4,8 +4,34 @@ import { userOps, dbOps } from "../config/db-helpers.js";
 import { requireAuth, requireAdmin } from "../middleware/requirePermission.js";
 import { requirePasswordStrength } from "../middleware/validation.js";
 import { deleteSessionsByUserId } from "../config/session-helpers.js";
+import {
+  getListenHistoryCacheNamespace,
+  getListenHistoryProfile,
+  hasListenHistoryProfile,
+  listenHistoryProfilesEqual,
+} from "../services/listeningHistory.js";
 
 const router = express.Router();
+
+const clearOrphanedDiscoveryCache = (userId, existingProfile, nextProfile) => {
+  if (
+    !hasListenHistoryProfile(existingProfile) ||
+    listenHistoryProfilesEqual(existingProfile, nextProfile)
+  ) {
+    return;
+  }
+  const existingNamespace = getListenHistoryCacheNamespace(existingProfile);
+  if (!existingNamespace) return;
+  const otherUsers = userOps
+    .getAllListeningHistoryUsers()
+    .filter(
+      (user) =>
+        user.id !== userId && listenHistoryProfilesEqual(user, existingProfile),
+    );
+  if (otherUsers.length === 0) {
+    dbOps.deleteDiscoveryCacheByPrefix(`${existingNamespace}:`);
+  }
+};
 
 router.get("/", requireAuth, requireAdmin, (req, res) => {
   try {
@@ -65,26 +91,40 @@ router.patch("/:id", requireAuth, (req, res) => {
     if (!existing) {
       return res.status(404).json({ error: "User not found" });
     }
-    const { password, permissions, role, lastfmUsername } = req.body;
-    if (
-      lastfmUsername !== undefined &&
-      existing.lastfmUsername &&
-      lastfmUsername !== existing.lastfmUsername
-    ) {
-      const otherUsers = userOps.getAllLastfmUsers().filter(
-        (u) => u.lastfmUsername === existing.lastfmUsername && u.id !== id
-      );
-      if (otherUsers.length === 0) {
-        dbOps.deleteDiscoveryCacheByPrefix(`lfm:${existing.lastfmUsername}:`);
-      }
-    }
+    const { password, permissions, role } = req.body;
+    const hasLegacyLastfmUpdate = Object.hasOwn(req.body, "lastfmUsername");
+    const hasListenHistoryProviderUpdate = Object.hasOwn(
+      req.body,
+      "listenHistoryProvider",
+    );
+    const hasListenHistoryUsernameUpdate = Object.hasOwn(
+      req.body,
+      "listenHistoryUsername",
+    );
+    const existingProfile = getListenHistoryProfile(existing);
+    const requestedProfile = getListenHistoryProfile({
+      listenHistoryProvider: hasListenHistoryProviderUpdate
+        ? req.body.listenHistoryProvider
+        : hasLegacyLastfmUpdate
+          ? "lastfm"
+          : existing.listenHistoryProvider,
+      listenHistoryUsername: hasListenHistoryUsernameUpdate
+        ? req.body.listenHistoryUsername
+        : hasLegacyLastfmUpdate
+          ? req.body.lastfmUsername
+          : existing.listenHistoryUsername,
+    });
+    clearOrphanedDiscoveryCache(id, existingProfile, requestedProfile);
     if (isSelf && !isAdmin) {
       if (permissions !== undefined || role !== undefined) {
         return res.status(403).json({ error: "Forbidden" });
       }
       const updates = {};
-      if (lastfmUsername !== undefined) {
-        updates.lastfmUsername = lastfmUsername;
+      if (hasListenHistoryProviderUpdate || hasListenHistoryUsernameUpdate) {
+        updates.listenHistoryProvider = req.body.listenHistoryProvider;
+        updates.listenHistoryUsername = req.body.listenHistoryUsername;
+      } else if (hasLegacyLastfmUpdate) {
+        updates.lastfmUsername = req.body.lastfmUsername;
       }
       if (password) {
         const { currentPassword } = req.body;
@@ -107,6 +147,8 @@ router.patch("/:id", requireAuth, (req, res) => {
           id,
           username: existing.username,
           role: existing.role,
+          listenHistoryProvider: existing.listenHistoryProvider,
+          listenHistoryUsername: existing.listenHistoryUsername,
           lastfmUsername: existing.lastfmUsername,
         });
       }
@@ -126,13 +168,24 @@ router.patch("/:id", requireAuth, (req, res) => {
     }
     if (permissions !== undefined) updates.permissions = permissions;
     if (role !== undefined) updates.role = role;
-    if (lastfmUsername !== undefined) updates.lastfmUsername = lastfmUsername;
+    if (hasListenHistoryProviderUpdate || hasListenHistoryUsernameUpdate) {
+      if (hasListenHistoryProviderUpdate) {
+        updates.listenHistoryProvider = req.body.listenHistoryProvider;
+      }
+      if (hasListenHistoryUsernameUpdate) {
+        updates.listenHistoryUsername = req.body.listenHistoryUsername;
+      }
+    } else if (hasLegacyLastfmUpdate) {
+      updates.lastfmUsername = req.body.lastfmUsername;
+    }
     if (Object.keys(updates).length === 0) {
       return res.json({
         id: existing.id,
         username: existing.username,
         role: existing.role,
         permissions: existing.permissions,
+        listenHistoryProvider: existing.listenHistoryProvider,
+        listenHistoryUsername: existing.listenHistoryUsername,
         lastfmUsername: existing.lastfmUsername,
       });
     }
@@ -145,17 +198,27 @@ router.patch("/:id", requireAuth, (req, res) => {
   }
 });
 
-router.get("/me/lastfm", requireAuth, (req, res) => {
+const sendListenHistorySettings = (req, res) => {
   try {
     const user = userOps.getUserById(req.user.id);
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
-    res.json({ lastfmUsername: user.lastfmUsername });
+    res.json({
+      listenHistoryProvider: user.listenHistoryProvider,
+      listenHistoryUsername: user.listenHistoryUsername,
+      lastfmUsername: user.lastfmUsername,
+    });
   } catch (e) {
-    res.status(500).json({ error: "Failed to get Last.fm settings", message: e.message });
+    res.status(500).json({
+      error: "Failed to get listening history settings",
+      message: e.message,
+    });
   }
-});
+};
+
+router.get("/me/listening-history", requireAuth, sendListenHistorySettings);
+router.get("/me/lastfm", requireAuth, sendListenHistorySettings);
 
 router.post("/me/password", requireAuth, (req, res) => {
   try {

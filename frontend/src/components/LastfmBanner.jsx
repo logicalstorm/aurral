@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getMyLastfm } from "../utils/api";
+import { getMyListeningHistory } from "../utils/api";
 
 const DISMISS_KEY = "lastfm_banner_dismissed";
 
@@ -8,17 +8,21 @@ const LastfmBanner = () => {
   const [dismissed, setDismissed] = useState(
     () => sessionStorage.getItem(DISMISS_KEY) === "1",
   );
-  const [lastfmUsername, setLastfmUsername] = useState(null);
+  const [listenHistoryUsername, setListenHistoryUsername] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     if (dismissed) return;
-    getMyLastfm()
-      .then((d) => setLastfmUsername(d.lastfmUsername || ""))
+    getMyListeningHistory()
+      .then((d) => setListenHistoryUsername(d.listenHistoryUsername || ""))
       .catch(() => {});
   }, [dismissed]);
 
-  if (dismissed || lastfmUsername === null || lastfmUsername !== "") {
+  if (
+    dismissed ||
+    listenHistoryUsername === null ||
+    listenHistoryUsername !== ""
+  ) {
     return null;
   }
 
@@ -30,8 +34,8 @@ const LastfmBanner = () => {
             Personalize your discovery
           </p>
           <p className="text-xs text-[#c1c1c3]">
-            Recommendations are based on the admin&apos;s Last.fm account by
-            default. Connect your own for personalized results.
+            Connect your Last.fm or ListenBrainz account for personalized
+            results based on your own listening history.
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
@@ -40,7 +44,7 @@ const LastfmBanner = () => {
             className="btn btn-secondary bg-gray-700/50 hover:bg-gray-700/70 btn-sm w-full sm:w-auto"
             onClick={() => navigate("/settings")}
           >
-            Connect Last.fm
+            Connect History
           </button>
           <button
             type="button"
