@@ -101,6 +101,42 @@ export default function registerAlbums(router) {
     }
   );
 
+  router.post(
+    "/albums/request",
+    requireAuth,
+    requirePermission("addAlbum"),
+    async (req, res) => {
+      try {
+        const {
+          albumMbid,
+          albumName,
+          artistMbid,
+          artistName,
+          triggerSearch = false,
+        } = req.body || {};
+
+        const result = await libraryManager.requestAlbumFromSearch({
+          albumMbid,
+          albumName,
+          artistMbid,
+          artistName,
+          triggerSearch,
+          user: req.user,
+        });
+
+        res.json(result);
+      } catch (error) {
+        const statusCode =
+          Number.isInteger(error?.statusCode) && error.statusCode >= 400
+            ? error.statusCode
+            : 500;
+        res.status(statusCode).json({
+          error: error.message || "Failed to request album",
+        });
+      }
+    },
+  );
+
   router.get("/albums/:id", cacheMiddleware(120), async (req, res) => {
     try {
       const { id } = req.params;
