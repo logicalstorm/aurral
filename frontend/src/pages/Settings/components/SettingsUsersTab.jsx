@@ -209,6 +209,15 @@ export function SettingsUsersTab({
                       >
                         {u.role}
                       </span>
+                      {u.lastfmUsername && (
+                        <span
+                          className="text-xs truncate"
+                          style={{ color: "#8a8a8f" }}
+                          title={`Last.fm: ${u.lastfmUsername}`}
+                        >
+                          Last.fm: {u.lastfmUsername}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <button
