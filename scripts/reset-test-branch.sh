@@ -10,9 +10,9 @@ die() {
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-echo "Fetching branches, tags, and notes..."
-git fetch --all --prune --tags
-git fetch origin 'refs/notes/*:refs/notes/*' >/dev/null 2>&1 || true
+echo "Fetching origin branches, tags, and notes..."
+git fetch origin --prune --force --tags
+git fetch origin '+refs/notes/*:refs/notes/*' >/dev/null 2>&1 || true
 
 local_main="$(git rev-parse main)"
 remote_main="$(git rev-parse origin/main)"
