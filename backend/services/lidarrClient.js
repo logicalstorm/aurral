@@ -204,9 +204,11 @@ export class LidarrClient {
     return this.config;
   }
 
-  isConfigured() {
-    this.updateConfig();
-    return !!this.config.apiKey;
+  isConfigured(skipConfigUpdate = false) {
+    if (!skipConfigUpdate) {
+      this.updateConfig();
+    }
+    return !!this.config?.apiKey?.trim();
   }
 
   getAuthHeaders() {
@@ -229,7 +231,7 @@ export class LidarrClient {
       this.updateConfig();
     }
 
-    if (!this.isConfigured()) {
+    if (!this.isConfigured(skipConfigUpdate)) {
       throw new Error("Lidarr API key not configured");
     }
 
@@ -489,7 +491,7 @@ export class LidarrClient {
       this.updateConfig();
     }
 
-    if (!this.isConfigured()) {
+    if (!this.isConfigured(skipConfigUpdate)) {
       return { connected: false, error: "Lidarr not configured" };
     }
 

@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  normalizeReleaseVersion,
+  selectLatestReleaseForChannel,
+} from "../utils/releaseVersion";
 
 const UpdateBanner = ({ currentVersion, visible = true }) => {
   const [updateInfo, setUpdateInfo] = useState(null);
@@ -33,12 +37,11 @@ const UpdateBanner = ({ currentVersion, visible = true }) => {
     const currentVersion = resolvedVersion;
     const formatSha = (value) => (value ? value.slice(0, 7) : "");
     const isSha = (value) => /^[0-9a-f]{7,40}$/i.test(value || "");
-    const normalizeVersion = (value) => (value || "").replace(/^v/, "");
     if (!currentVersion || currentVersion === "unknown" || !repo) {
       return;
     }
     const currentIsSha = isSha(currentVersion);
-    const currentLabel = normalizeVersion(currentVersion);
+    const currentLabel = normalizeReleaseVersion(currentVersion);
     const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
     let active = true;
     const checkForUpdate = async () => {
@@ -54,10 +57,7 @@ const UpdateBanner = ({ currentVersion, visible = true }) => {
         ) {
           return;
         }
-        const endpoint =
-          releaseChannel === "test"
-            ? `https://api.github.com/repos/${repo}/releases?per_page=10`
-            : `https://api.github.com/repos/${repo}/releases/latest`;
+        const endpoint = `https://api.github.com/repos/${repo}/git/matching-refs/tags/v`;
         const res = await fetch(endpoint);
         if (!res.ok) {
           localStorage.setItem(
@@ -71,29 +71,27 @@ const UpdateBanner = ({ currentVersion, visible = true }) => {
           checkMetaKey,
           JSON.stringify({ lastCheckedAt: Date.now() }),
         );
-        const data = Array.isArray(payload)
-          ? (
-              currentVersion.includes("-test.")
-                ? payload.find((release) => !release?.draft && release.prerelease)
-                : null
-            ) ||
-            payload.find((release) => !release?.draft) ||
-            null
-          : payload;
-        if (!data) {
+        const latestRelease = selectLatestReleaseForChannel(
+          Array.isArray(payload) ? payload : [],
+          releaseChannel,
+        );
+        if (!latestRelease) {
           return;
         }
-        const latestSha = (data.target_commitish || "").trim();
-        const latestLabel = normalizeVersion(data.tag_name || "");
+        const latestLabel = latestRelease.parsed.label;
         const releaseUrl =
-          data.html_url || `https://github.com/${repo}/releases/latest`;
-        const latestKey = currentIsSha ? latestSha : latestLabel;
+          releaseChannel === "test"
+            ? `https://github.com/${repo}/tags`
+            : `https://github.com/${repo}/releases/tag/${latestRelease.tagName}`;
+        const latestKey = latestLabel;
         if (!latestKey) {
           return;
         }
         if (
-          (currentIsSha && latestSha === currentVersion) ||
-          (!currentIsSha && latestLabel === currentLabel)
+          (!currentIsSha && latestLabel === currentLabel) ||
+          (currentIsSha &&
+            updateNotifiedRef.current === latestKey &&
+            currentLabel === latestLabel)
         ) {
           return;
         }
@@ -111,11 +109,10 @@ const UpdateBanner = ({ currentVersion, visible = true }) => {
         }
         setUpdateInfo({
           current: currentIsSha ? formatSha(currentVersion) : currentLabel,
-          latest: currentIsSha
-            ? latestLabel || formatSha(latestSha)
-            : latestLabel,
+          latest: latestLabel,
           latestKey,
           url: releaseUrl,
+          channel: releaseChannel,
         });
         updateNotifiedRef.current = latestKey;
       } catch {}
@@ -149,7 +146,9 @@ const UpdateBanner = ({ currentVersion, visible = true }) => {
             Update available: <span className="text-[#c1c1c3]">{updateInfo.current}</span> → <span className="text-[#90a47a]">{updateInfo.latest}</span>
           </p>
           <p className="text-xs text-[#c1c1c3]">
-            A newer build is ready. Update when convenient.
+            {updateInfo.channel === "test"
+              ? "A newer test build is ready. Update when convenient."
+              : "A newer stable build is ready. Update when convenient."}
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
@@ -159,7 +158,7 @@ const UpdateBanner = ({ currentVersion, visible = true }) => {
             rel="noreferrer"
             className="btn btn-secondary bg-gray-700/50 hover:bg-gray-700/70 btn-sm w-full sm:w-auto"
           >
-            View release
+            {updateInfo.channel === "test" ? "View tags" : "View release"}
           </a>
           <button
             type="button"
