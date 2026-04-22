@@ -12,6 +12,7 @@ Self-hosted music discovery, request management, flows, and playlist importing f
 ## Quick Links
 
 - [Docker image](https://ghcr.io/lklynet/aurral)
+- [Contributing guide](CONTRIBUTING.md)
 - [Flows and Playlists guide](flows-and-playlists.md)
 - [Spotify import helper](https://aurral.org/aurral-convert)
 - [Discord community](https://discord.gg/cpPYfgVURJ)
