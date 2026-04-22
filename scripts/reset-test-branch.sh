@@ -7,6 +7,22 @@ die() {
   exit 1
 }
 
+read_lines_into_array() {
+  local target_name="$1"
+  local line
+  local values=()
+
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && values+=("$line")
+  done
+
+  eval "$target_name=()"
+  local value
+  for value in "${values[@]}"; do
+    eval "$target_name+=(\"\$value\")"
+  done
+}
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
@@ -33,10 +49,10 @@ fi
 
 notes_pattern="^refs/notes/semantic-release-${stable_tag//./\\.}-test\\.[0-9]+$"
 
-mapfile -t local_tags < <(git tag -l "${stable_tag}-test.*")
-mapfile -t remote_tags < <(git ls-remote --tags --refs origin "${stable_tag}-test.*" | awk '{sub("refs/tags/", "", $2); print $2}')
-mapfile -t local_notes < <(git for-each-ref --format='%(refname)' refs/notes | grep -E "$notes_pattern" || true)
-mapfile -t remote_notes < <(git ls-remote origin "refs/notes/semantic-release-${stable_tag}-test.*" | awk '{print $2}')
+read_lines_into_array local_tags < <(git tag -l "${stable_tag}-test.*")
+read_lines_into_array remote_tags < <(git ls-remote --tags --refs origin "${stable_tag}-test.*" | awk '{sub("refs/tags/", "", $2); print $2}')
+read_lines_into_array local_notes < <(git for-each-ref --format='%(refname)' refs/notes | grep -E "$notes_pattern" || true)
+read_lines_into_array remote_notes < <(git ls-remote origin "refs/notes/semantic-release-${stable_tag}-test.*" | awk '{print $2}')
 
 if ((${#local_tags[@]})); then
   echo "Deleting local prerelease tags for ${stable_tag}: ${local_tags[*]}"
