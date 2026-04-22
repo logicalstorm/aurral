@@ -73,6 +73,7 @@ fi
 echo "Resetting test to origin/main..."
 git checkout -B test origin/main
 git push --force-with-lease origin test
+git branch --set-upstream-to=origin/test test >/dev/null
 
 if ((${#remote_tags[@]})); then
   echo "Deleting remote prerelease tags for ${stable_tag}: ${remote_tags[*]}"
