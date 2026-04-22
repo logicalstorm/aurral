@@ -38,7 +38,7 @@ const defaultSettings = {
       qualityProfileId: null,
       metadataProfileId: null,
       tagId: null,
-      defaultMonitorOption: "all",
+      defaultMonitorOption: "none",
       searchOnAdd: false,
     },
     musicbrainz: { email: "" },
