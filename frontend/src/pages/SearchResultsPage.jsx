@@ -84,6 +84,23 @@ function normalizeBlocklistArtists(artists) {
   return out;
 }
 
+function matchesBlockedArtist(target, artist) {
+  const targetId = String(target?.id || target?.mbid || target?.foreignArtistId || "")
+    .trim()
+    .toLowerCase();
+  const targetName = String(target?.name || target?.artistName || "")
+    .trim()
+    .toLowerCase();
+  const artistId = String(artist?.id || artist?.mbid || artist?.foreignArtistId || "")
+    .trim()
+    .toLowerCase();
+  const artistName = String(artist?.name || artist?.artistName || "")
+    .trim()
+    .toLowerCase();
+  return (targetId && artistId && targetId === artistId) ||
+    (targetName && artistName && targetName === artistName);
+}
+
 function SearchResultsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
@@ -534,6 +551,12 @@ function SearchResultsPage() {
         });
         setBlockedArtists(
           normalizeBlocklistArtists(response?.blocklist?.artists || nextArtists),
+        );
+        setResults((prev) => prev.filter((entry) => !matchesBlockedArtist(entry, artist)));
+        setFullList((prev) =>
+          Array.isArray(prev)
+            ? prev.filter((entry) => !matchesBlockedArtist(entry, artist))
+            : prev,
         );
         showSuccess("Artist added to blocklist");
         return true;
