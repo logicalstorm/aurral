@@ -8,8 +8,10 @@ RUN npm ci
 COPY frontend/ ./
 ARG APP_VERSION=unknown
 ARG GITHUB_REPO=lklynet/aurral
+ARG RELEASE_CHANNEL=stable
 ENV VITE_APP_VERSION=$APP_VERSION
 ENV VITE_GITHUB_REPO=$GITHUB_REPO
+ENV VITE_RELEASE_CHANNEL=$RELEASE_CHANNEL
 RUN npm run build
 
 FROM node:20-alpine
@@ -18,7 +20,7 @@ ENV APP_VERSION=$APP_VERSION
 
 WORKDIR /app
 
-RUN apk add --no-cache su-exec && \
+RUN apk add --no-cache su-exec fontconfig ttf-dejavu && \
     addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001 && \
     mkdir -p /app/backend/data && \

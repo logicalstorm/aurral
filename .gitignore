@@ -6,6 +6,7 @@ npm-debug.log
 .DS_Store
 frontend/node_modules
 frontend/dist
+docs/
 data/
 backend/data/db.json
 backend/data/*
@@ -13,6 +14,4 @@ backend/data/*
 *.swp
 *.swo
 *~
-weekly-flow/
 /*.mp3
-docs/

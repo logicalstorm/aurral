@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Server, TrendingUp, Compass, Bell, Users } from "lucide-react";
+import { Server, TrendingUp, Compass, Bell, Users, User } from "lucide-react";
 
 export function useSettingsTabs(authUser) {
-  const [activeTab, setActiveTab] = useState("integrations");
+  const isAdmin = authUser?.role === "admin";
+  const [activeTab, setActiveTab] = useState(isAdmin ? "integrations" : "account");
   const [hoveredTabIndex, setHoveredTabIndex] = useState(null);
   const tabsRef = useRef(null);
   const activeBubbleRef = useRef(null);
@@ -10,17 +11,20 @@ export function useSettingsTabs(authUser) {
   const tabRefs = useRef({});
 
   const tabs = useMemo(() => {
-    const all = [
+    const adminTabs = [
       { id: "integrations", label: "Integrations", icon: Server },
       { id: "metadata", label: "Metadata", icon: TrendingUp },
       { id: "discover", label: "Discover", icon: Compass },
       { id: "notifications", label: "Notifications", icon: Bell },
       { id: "users", label: "Users", icon: Users },
     ];
+    const userTabs = [
+      { id: "account", label: "Account", icon: User },
+    ];
     if (authUser?.role !== "admin") {
-      return all.filter((t) => t.id === "users");
+      return userTabs;
     }
-    return all;
+    return [...adminTabs, ...userTabs];
   }, [authUser?.role]);
 
   useEffect(() => {

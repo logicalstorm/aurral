@@ -501,10 +501,14 @@ export default function registerDownloads(router) {
               message: "Permission required: addArtist",
             });
           }
-          artist = await libraryManager.addArtist(artistMbid, artistName, {
-            albumOnly: true,
-            quality: dbOps.getSettings().quality || "standard",
-          });
+          artist = await libraryManager.addArtistWithPreferences(
+            artistMbid,
+            artistName,
+            {
+              user: req.user,
+              quality: dbOps.getSettings().quality || "standard",
+            },
+          );
           if (artist?.error) artist = null;
         }
 

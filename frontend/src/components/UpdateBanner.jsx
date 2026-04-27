@@ -1,36 +1,47 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  normalizeReleaseVersion,
+  selectLatestReleaseForChannel,
+} from "../utils/releaseVersion";
 
-const UpdateBanner = ({ currentVersion }) => {
+const UpdateBanner = ({ currentVersion, visible = true }) => {
   const [updateInfo, setUpdateInfo] = useState(null);
   const updateNotifiedRef = useRef(null);
   const dismissedUpdateRef = useRef(null);
   const resolvedVersion = currentVersion || import.meta.env.VITE_APP_VERSION;
+  const repo = import.meta.env.VITE_GITHUB_REPO || "lklynet/aurral";
+  const inferredChannel = resolvedVersion?.includes("-test.")
+    ? "test"
+    : "stable";
+  const releaseChannel =
+    (
+      import.meta.env.VITE_RELEASE_CHANNEL ||
+      inferredChannel
+    ).toLowerCase() === "test"
+      ? "test"
+      : "stable";
   const dismissKey = useMemo(
-    () =>
-      `aurral:updateDismissed:${
-        import.meta.env.VITE_GITHUB_REPO || "lklynet/aurral"
-      }`,
-    [],
+    () => `aurral:updateDismissed:${repo}:${releaseChannel}`,
+    [releaseChannel, repo],
   );
   const checkMetaKey = useMemo(
-    () =>
-      `aurral:updateCheckMeta:${
-        import.meta.env.VITE_GITHUB_REPO || "lklynet/aurral"
-      }`,
-    [],
+    () => `aurral:updateCheckMeta:${repo}:${releaseChannel}`,
+    [releaseChannel, repo],
   );
 
   useEffect(() => {
+    if (!visible) {
+      setUpdateInfo(null);
+      return;
+    }
     const currentVersion = resolvedVersion;
     const formatSha = (value) => (value ? value.slice(0, 7) : "");
     const isSha = (value) => /^[0-9a-f]{7,40}$/i.test(value || "");
-    const normalizeVersion = (value) => (value || "").replace(/^v/, "");
-    const repo = import.meta.env.VITE_GITHUB_REPO || "lklynet/aurral";
     if (!currentVersion || currentVersion === "unknown" || !repo) {
       return;
     }
     const currentIsSha = isSha(currentVersion);
-    const currentLabel = normalizeVersion(currentVersion);
+    const currentLabel = normalizeReleaseVersion(currentVersion);
     const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
     let active = true;
     const checkForUpdate = async () => {
@@ -46,7 +57,7 @@ const UpdateBanner = ({ currentVersion }) => {
         ) {
           return;
         }
-        const endpoint = `https://api.github.com/repos/${repo}/releases/latest`;
+        const endpoint = `https://api.github.com/repos/${repo}/git/matching-refs/tags/v`;
         const res = await fetch(endpoint);
         if (!res.ok) {
           localStorage.setItem(
@@ -55,22 +66,32 @@ const UpdateBanner = ({ currentVersion }) => {
           );
           return;
         }
-        const data = await res.json();
+        const payload = await res.json();
         localStorage.setItem(
           checkMetaKey,
           JSON.stringify({ lastCheckedAt: Date.now() }),
         );
-        const latestSha = (data.target_commitish || "").trim();
-        const latestLabel = normalizeVersion(data.tag_name || "");
+        const latestRelease = selectLatestReleaseForChannel(
+          Array.isArray(payload) ? payload : [],
+          releaseChannel,
+        );
+        if (!latestRelease) {
+          return;
+        }
+        const latestLabel = latestRelease.parsed.label;
         const releaseUrl =
-          data.html_url || `https://github.com/${repo}/releases/latest`;
-        const latestKey = currentIsSha ? latestSha : latestLabel;
+          releaseChannel === "test"
+            ? `https://github.com/${repo}/tags`
+            : `https://github.com/${repo}/releases/tag/${latestRelease.tagName}`;
+        const latestKey = latestLabel;
         if (!latestKey) {
           return;
         }
         if (
-          (currentIsSha && latestSha === currentVersion) ||
-          (!currentIsSha && latestLabel === currentLabel)
+          (!currentIsSha && latestLabel === currentLabel) ||
+          (currentIsSha &&
+            updateNotifiedRef.current === latestKey &&
+            currentLabel === latestLabel)
         ) {
           return;
         }
@@ -88,11 +109,10 @@ const UpdateBanner = ({ currentVersion }) => {
         }
         setUpdateInfo({
           current: currentIsSha ? formatSha(currentVersion) : currentLabel,
-          latest: currentIsSha
-            ? latestLabel || formatSha(latestSha)
-            : latestLabel,
+          latest: latestLabel,
           latestKey,
           url: releaseUrl,
+          channel: releaseChannel,
         });
         updateNotifiedRef.current = latestKey;
       } catch {}
@@ -103,7 +123,7 @@ const UpdateBanner = ({ currentVersion }) => {
       active = false;
       clearInterval(intervalId);
     };
-  }, [checkMetaKey, dismissKey, resolvedVersion]);
+  }, [checkMetaKey, dismissKey, releaseChannel, repo, resolvedVersion, visible]);
 
   const dismissUpdate = () => {
     if (!updateInfo?.latestKey) {
@@ -126,7 +146,9 @@ const UpdateBanner = ({ currentVersion }) => {
             Update available: <span className="text-[#c1c1c3]">{updateInfo.current}</span> → <span className="text-[#90a47a]">{updateInfo.latest}</span>
           </p>
           <p className="text-xs text-[#c1c1c3]">
-            A newer build is ready. Update when convenient.
+            {updateInfo.channel === "test"
+              ? "A newer test build is ready. Update when convenient."
+              : "A newer stable build is ready. Update when convenient."}
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
@@ -136,7 +158,7 @@ const UpdateBanner = ({ currentVersion }) => {
             rel="noreferrer"
             className="btn btn-secondary bg-gray-700/50 hover:bg-gray-700/70 btn-sm w-full sm:w-auto"
           >
-            View release
+            {updateInfo.channel === "test" ? "View tags" : "View release"}
           </a>
           <button
             type="button"

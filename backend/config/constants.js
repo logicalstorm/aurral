@@ -110,6 +110,7 @@ export const UUID_REGEX =
 
 export const MUSICBRAINZ_API = "https://musicbrainz.org/ws/2";
 export const LASTFM_API = "https://ws.audioscrobbler.com/2.0/";
+export const LISTENBRAINZ_API = "https://api.listenbrainz.org";
 export const APP_NAME = "Aurral";
 export const APP_VERSION = "1.0.0";
 
@@ -172,11 +173,14 @@ export const defaultData = {
       },
       slskd: { url: "", apiKey: "" },
       soulseek: { username: "", password: "" },
+      ticketmaster: { apiKey: "", searchRadiusMiles: 50 },
       lidarr: {
         url: "",
+        externalUrl: "",
         apiKey: "",
         qualityProfileId: null,
         metadataProfileId: null,
+        tagId: null,
         defaultMonitorOption: "none",
         searchOnAdd: false,
       },
@@ -185,6 +189,11 @@ export const defaultData = {
       gotify: {
         url: "",
         token: "",
+        notifyDiscoveryUpdated: false,
+        notifyWeeklyFlowDone: false,
+      },
+      webhooks: [],
+      webhookEvents: {
         notifyDiscoveryUpdated: false,
         notifyWeeklyFlowDone: false,
       },
@@ -198,6 +207,12 @@ export const defaultData = {
       retryFindingRelease: true,
       retryDelayMinutes: 5,
       maxRetries: 3,
+    },
+    weeklyFlowWorker: {
+      concurrency: 3,
+      preferredFormat: "flac",
+      preferredFormatStrict: false,
+      retryCycleMinutes: 15,
     },
   },
   blocklist: [],
