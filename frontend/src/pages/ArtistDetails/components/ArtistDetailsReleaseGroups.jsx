@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import {
   ArrowDownWideNarrow,
@@ -18,6 +18,10 @@ import {
   Disc3,
   FileMusic,
   RefreshCw,
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import AddAlbumButton from "../../../components/AddAlbumButton";
 import { getPopularityScale, segmentsFromScale } from "../utils";
@@ -32,6 +36,7 @@ export function ArtistDetailsReleaseGroups({
   showFilterDropdown,
   setShowFilterDropdown,
   existsInLibrary,
+  canBulkAddAlbums,
   handleMonitorAll,
   processingBulk,
   albumCovers,
@@ -42,37 +47,23 @@ export function ArtistDetailsReleaseGroups({
   albumDropdownOpen,
   setAlbumDropdownOpen,
   handleReleaseGroupAlbumClick,
+  canAddAlbum,
   handleRequestAlbum,
+  canDeleteAlbum,
   handleDeleteAlbumClick,
   requestingAlbum,
   reSearchingAlbum,
+  canReSearchAlbum,
   handleReSearchAlbum,
+  previewVolume,
+  setPreviewVolume,
   isReleaseGroupDownloadedInLibrary,
 }) {
   const [sortMode, setSortMode] = useState("date");
-  const releaseGroups = artist["release-groups"];
-  if (!releaseGroups || releaseGroups.length === 0) return null;
-
-  const filtered = releaseGroups
-    .filter((rg) => matchesReleaseTypeFilter(rg, selectedReleaseTypes))
-    .filter((rg) => !isReleaseGroupDownloadedInLibrary(rg.id));
-  const totalCount = releaseGroups.length;
-  const filteredCount = filtered.length;
-  const { pivot: popularityPivot } = getPopularityScale(releaseGroups);
-  const sortedReleaseGroups = [...filtered].sort((a, b) => {
-    const fansA = typeof a?.fans === "number" ? a.fans : 0;
-    const fansB = typeof b?.fans === "number" ? b.fans : 0;
-    if (sortMode === "popularityAsc") {
-      const diff = fansA - fansB;
-      if (diff !== 0) return diff;
-    } else if (sortMode === "popularityDesc") {
-      const diff = fansB - fansA;
-      if (diff !== 0) return diff;
-    }
-    const dateA = a["first-release-date"] || "";
-    const dateB = b["first-release-date"] || "";
-    return dateB.localeCompare(dateA);
-  });
+  const [playingTrackId, setPlayingTrackId] = useState(null);
+  const [loadingTrackId, setLoadingTrackId] = useState(null);
+  const previewAudioRef = useRef(null);
+  const releaseGroups = artist["release-groups"] || [];
   const sortTitle =
     sortMode === "date"
       ? "Sort: Default"
@@ -95,8 +86,83 @@ export function ArtistDetailsReleaseGroups({
 
   const activeFilters = hasActiveFilters(selectedReleaseTypes);
 
+  useEffect(() => {
+    const audio = previewAudioRef.current;
+    if (!audio) return;
+    audio.volume = previewVolume;
+  }, [previewVolume]);
+
+  useEffect(() => {
+    const audio = previewAudioRef.current;
+    if (!audio) return;
+    const resetPlayback = () => {
+      setPlayingTrackId(null);
+      setLoadingTrackId(null);
+    };
+    audio.addEventListener("ended", resetPlayback);
+    audio.addEventListener("error", resetPlayback);
+    return () => {
+      audio.removeEventListener("ended", resetPlayback);
+      audio.removeEventListener("error", resetPlayback);
+      audio.pause();
+      audio.src = "";
+    };
+  }, []);
+
+  const handleTrackPreviewPlay = async (track, e) => {
+    e.stopPropagation();
+    const previewUrl = track?.preview_url;
+    const trackId = String(track?.id ?? track?.mbid ?? "");
+    const audio = previewAudioRef.current;
+    if (!audio || !previewUrl || !trackId) return;
+
+    if (playingTrackId === trackId && !audio.paused) {
+      audio.pause();
+      setPlayingTrackId(null);
+      setLoadingTrackId(null);
+      return;
+    }
+
+    try {
+      setLoadingTrackId(trackId);
+      if (audio.src !== previewUrl) {
+        audio.src = previewUrl;
+      }
+      await audio.play();
+      setPlayingTrackId(trackId);
+    } catch {
+      setPlayingTrackId(null);
+    } finally {
+      setLoadingTrackId(null);
+    }
+  };
+
+  if (releaseGroups.length === 0) return null;
+
+  const filtered = releaseGroups
+    .filter((rg) => matchesReleaseTypeFilter(rg, selectedReleaseTypes))
+    .filter((rg) => !isReleaseGroupDownloadedInLibrary(rg.id));
+  const totalCount = releaseGroups.length;
+  const filteredCount = filtered.length;
+  const { pivot: popularityPivot } = getPopularityScale(releaseGroups);
+  const sortedReleaseGroups = [...filtered].sort((a, b) => {
+    const fansA = typeof a?.fans === "number" ? a.fans : 0;
+    const fansB = typeof b?.fans === "number" ? b.fans : 0;
+    if (sortMode === "popularityAsc") {
+      const diff = fansA - fansB;
+      if (diff !== 0) return diff;
+    } else if (sortMode === "popularityDesc") {
+      const diff = fansB - fansA;
+      if (diff !== 0) return diff;
+    }
+    const dateA = a["first-release-date"] || "";
+    const dateB = b["first-release-date"] || "";
+    return dateB.localeCompare(dateA);
+  });
+
   return (
     <div className="card p-4">
+      <audio ref={previewAudioRef} preload="none" />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-2">
           <h2
@@ -124,6 +190,33 @@ export function ArtistDetailsReleaseGroups({
           </button>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 rounded px-2 py-1 bg-black/20">
+            {previewVolume <= 0 ? (
+              <VolumeX className="w-4 h-4 flex-shrink-0" style={{ color: "#c1c1c3" }} />
+            ) : (
+              <Volume2 className="w-4 h-4 flex-shrink-0" style={{ color: "#c1c1c3" }} />
+            )}
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={Math.round(previewVolume * 100)}
+              onChange={(e) =>
+                setPreviewVolume(
+                  Math.max(0, Math.min(1, Number(e.target.value) / 100)),
+                )
+              }
+              className="w-24 accent-[#707e61]"
+              aria-label="Preview volume"
+            />
+            <span
+              className="text-xs tabular-nums w-8 text-right"
+              style={{ color: "#c1c1c3" }}
+            >
+              {Math.round(previewVolume * 100)}
+            </span>
+          </div>
           <div className="flex items-center gap-2">
             {primaryReleaseTypes.map((type) => {
               const isSelected = selectedReleaseTypes.includes(type);
@@ -278,7 +371,7 @@ export function ArtistDetailsReleaseGroups({
             )}
           </div>
 
-          {existsInLibrary && (
+          {existsInLibrary && canBulkAddAlbums && (
             <button
               onClick={handleMonitorAll}
               disabled={processingBulk}
@@ -359,7 +452,7 @@ export function ArtistDetailsReleaseGroups({
                     <ExternalLink className="w-4 h-4 mr-2" />
                     View on Last.fm
                   </a>
-                  {canReSearch && (
+                  {canReSearch && canReSearchAlbum && (
                     <>
                       <div className="my-1 border-t border-white/10" />
                       <button
@@ -387,21 +480,25 @@ export function ArtistDetailsReleaseGroups({
                       </button>
                     </>
                   )}
-                  <div className="my-1 border-t border-white/10" />
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteAlbumClick(
-                        releaseGroup.id,
-                        releaseGroup.title
-                      );
-                    }}
-                    className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20 transition-colors flex items-center"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete Album
-                  </button>
+                  {canDeleteAlbum && (
+                    <>
+                      <div className="my-1 border-t border-white/10" />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteAlbumClick(
+                            releaseGroup.id,
+                            releaseGroup.title
+                          );
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20 transition-colors flex items-center"
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete Album
+                      </button>
+                    </>
+                  )}
                 </div>
               </>
             );
@@ -687,6 +784,26 @@ export function ArtistDetailsReleaseGroups({
                           </div>
                         </>
                       ) : (
+                        canAddAlbum ? (
+                          <AddAlbumButton
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRequestAlbum(
+                                releaseGroup.id,
+                                releaseGroup.title
+                              );
+                            }}
+                            isLoading={requestingAlbum === releaseGroup.id}
+                            disabled={requestingAlbum === releaseGroup.id}
+                            style={{
+                              backgroundColor: itemBg,
+                              borderColor: itemBg,
+                            }}
+                          />
+                        ) : null
+                      )
+                    ) : (
+                      canAddAlbum ? (
                         <AddAlbumButton
                           onClick={(e) => {
                             e.stopPropagation();
@@ -702,23 +819,7 @@ export function ArtistDetailsReleaseGroups({
                             borderColor: itemBg,
                           }}
                         />
-                      )
-                    ) : (
-                      <AddAlbumButton
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRequestAlbum(
-                            releaseGroup.id,
-                            releaseGroup.title
-                          );
-                        }}
-                        isLoading={requestingAlbum === releaseGroup.id}
-                        disabled={requestingAlbum === releaseGroup.id}
-                        style={{
-                          backgroundColor: itemBg,
-                          borderColor: itemBg,
-                        }}
-                      />
+                      ) : null
                     )}
                   </div>
                 </div>
@@ -741,66 +842,109 @@ export function ArtistDetailsReleaseGroups({
                         </div>
                       ) : tracks && tracks.length > 0 ? (
                         <div className="space-y-0">
-                          {tracks.map((track, idx) => (
-                            <div
-                              key={track.id || track.mbid || idx}
-                              className="flex items-center justify-between py-1.5 px-2 transition-colors text-sm"
-                              style={{
-                                backgroundColor:
-                                  idx % 2 === 0
-                                    ? "transparent"
-                                    : "rgba(255, 255, 255, 0.02)",
-                              }}
-                            >
-                              <div className="flex items-center gap-3 flex-1 min-w-0">
-                                <span
-                                  className="text-xs  w-6 flex-shrink-0"
-                                  style={{ color: "#c1c1c3" }}
-                                >
-                                  {track.trackNumber ||
-                                    track.position ||
-                                    idx + 1}
-                                </span>
-                                <span
-                                  className="text-sm  truncate"
-                                  style={{ color: "#fff" }}
-                                >
-                                  {track.title ||
-                                    track.trackName ||
-                                    "Unknown Track"}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2 flex-shrink-0">
-                                {track.length && (
+                          {tracks.map((track, idx) => {
+                            const trackId = String(
+                              track.id ?? track.mbid ?? `${trackKey}-${idx}`,
+                            );
+                            const hasPreview = Boolean(track.preview_url);
+                            const isPlaying = playingTrackId === trackId;
+                            const isLoadingPreview = loadingTrackId === trackId;
+                            const durationLabel = track.length
+                              ? `${Math.floor(track.length / 60000)}:${Math.floor(
+                                  (track.length % 60000) / 1000
+                                )
+                                  .toString()
+                                  .padStart(2, "0")}`
+                              : "";
+
+                            return (
+                              <div
+                                key={trackId}
+                                className="flex items-center justify-between py-1.5 px-2 transition-colors text-sm"
+                                style={{
+                                  backgroundColor:
+                                    idx % 2 === 0
+                                      ? "transparent"
+                                      : "rgba(255, 255, 255, 0.02)",
+                                }}
+                              >
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
                                   <span
-                                    className="text-xs "
+                                    className="text-xs  w-6 flex-shrink-0"
                                     style={{ color: "#c1c1c3" }}
                                   >
-                                    {Math.floor(track.length / 60000)}:
-                                    {Math.floor(
-                                      (track.length % 60000) / 1000
-                                    )
-                                      .toString()
-                                      .padStart(2, "0")}
+                                    {track.trackNumber ||
+                                      track.position ||
+                                      idx + 1}
                                   </span>
-                                )}
-                                {track.hasFile ||
-                                status?.albumInfo?.statistics
-                                  ?.percentOfTracks >= 100 ||
-                                status?.albumInfo?.statistics?.sizeOnDisk >
-                                  0 ? (
-                                  <CheckCircle className="w-4 h-4 text-green-500" />
-                                ) : status?.libraryId ? (
                                   <span
-                                    className="text-xs "
+                                    className="text-sm  truncate"
+                                    style={{ color: "#fff" }}
+                                  >
+                                    {track.title ||
+                                      track.trackName ||
+                                      "Unknown Track"}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  {hasPreview && (
+                                    <button
+                                      type="button"
+                                      className="w-7 h-7 rounded-full flex items-center justify-center transition-colors"
+                                      style={{
+                                        backgroundColor: "rgba(255,255,255,0.06)",
+                                        color: "#fff",
+                                      }}
+                                      onClick={(e) =>
+                                        handleTrackPreviewPlay(track, e)
+                                      }
+                                      title={
+                                        isPlaying ? "Pause preview" : "Play preview"
+                                      }
+                                      aria-label={
+                                        isPlaying ? "Pause preview" : "Play preview"
+                                      }
+                                    >
+                                      {isLoadingPreview ? (
+                                        <Loader className="w-3.5 h-3.5 animate-spin" />
+                                      ) : isPlaying ? (
+                                        <Pause className="w-3.5 h-3.5" />
+                                      ) : (
+                                        <Play className="w-3.5 h-3.5 ml-0.5" />
+                                      )}
+                                    </button>
+                                  )}
+                                  <span
+                                    className="text-xs w-10 text-right tabular-nums"
                                     style={{ color: "#c1c1c3" }}
                                   >
-                                    Missing
+                                    {durationLabel}
                                   </span>
-                                ) : null}
+                                  {track.hasFile ||
+                                  status?.albumInfo?.statistics
+                                    ?.percentOfTracks >= 100 ||
+                                  status?.albumInfo?.statistics?.sizeOnDisk >
+                                    0 ? (
+                                    <span
+                                      className="w-12 flex items-center justify-end"
+                                      style={{ color: "#c1c1c3" }}
+                                    >
+                                      <CheckCircle className="w-4 h-4 text-green-500" />
+                                    </span>
+                                  ) : status?.libraryId ? (
+                                    <span
+                                      className="text-xs w-12 text-right"
+                                      style={{ color: "#c1c1c3" }}
+                                    >
+                                      Missing
+                                    </span>
+                                  ) : (
+                                    <span className="w-12" />
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       ) : (
                         <p
@@ -830,6 +974,7 @@ ArtistDetailsReleaseGroups.propTypes = {
   showFilterDropdown: PropTypes.bool,
   setShowFilterDropdown: PropTypes.func,
   existsInLibrary: PropTypes.bool,
+  canBulkAddAlbums: PropTypes.bool,
   handleMonitorAll: PropTypes.func,
   processingBulk: PropTypes.bool,
   albumCovers: PropTypes.object,
@@ -840,10 +985,15 @@ ArtistDetailsReleaseGroups.propTypes = {
   albumDropdownOpen: PropTypes.string,
   setAlbumDropdownOpen: PropTypes.func,
   handleReleaseGroupAlbumClick: PropTypes.func,
+  canAddAlbum: PropTypes.bool,
   handleRequestAlbum: PropTypes.func,
+  canDeleteAlbum: PropTypes.bool,
   handleDeleteAlbumClick: PropTypes.func,
   requestingAlbum: PropTypes.string,
   reSearchingAlbum: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  canReSearchAlbum: PropTypes.bool,
   handleReSearchAlbum: PropTypes.func,
+  previewVolume: PropTypes.number,
+  setPreviewVolume: PropTypes.func,
   isReleaseGroupDownloadedInLibrary: PropTypes.func,
 };

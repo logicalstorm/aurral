@@ -25,6 +25,7 @@ import settingsRouter from "./backend/routes/settings.js";
 import onboardingRouter from "./backend/routes/onboarding.js";
 import usersRouter from "./backend/routes/users.js";
 import artistsRouter from "./backend/routes/artists.js";
+import searchRouter from "./backend/routes/search.js";
 import libraryRouter from "./backend/routes/library.js";
 import discoveryRouter from "./backend/routes/discovery.js";
 import requestsRouter from "./backend/routes/requests.js";
@@ -45,6 +46,7 @@ process.on("unhandledRejection", (reason, promise) => {
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || "5mb";
 
 const allowedCorsOrigins = String(process.env.CORS_ORIGIN || "")
   .split(",")
@@ -89,8 +91,13 @@ app.use(
           "data:",
           "https://*.deezer.com",
           "https://*.dzcdn.net",
+          "https://ticketm.net",
+          "https://*.ticketm.net",
+          "https://ticketmaster.com",
+          "https://*.ticketmaster.com",
           "https://coverartarchive.org",
           "https://archive.org",
+          "https://*.archive.org",
           "https://*.last.fm",
           "https://lastfm.freetls.fastly.net",
         ],
@@ -103,7 +110,7 @@ app.use(
     frameguard: { action: "deny" },
   }),
 );
-app.use(express.json());
+app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
 app.use(createAuthMiddleware());
 
@@ -123,7 +130,7 @@ app.use("/api/", limiter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/onboarding", onboardingRouter);
 app.use("/api/users", usersRouter);
-app.use("/api/search", artistsRouter);
+app.use("/api/search", searchRouter);
 app.use("/api/artists", artistsRouter);
 app.use("/api/library", libraryRouter);
 app.use("/api/discover", discoveryRouter);
@@ -174,6 +181,12 @@ if (fs.existsSync(frontendDist)) {
 app.use((err, req, res, next) => {
   console.error(err);
   if (res.headersSent) return next(err);
+  if (err?.type === "entity.too.large" || err?.status === 413) {
+    return res.status(413).json({
+      error: "Payload too large",
+      message: `Request body exceeds limit (${JSON_BODY_LIMIT})`,
+    });
+  }
   return res.status(500).json({ error: "Internal server error" });
 });
 
@@ -258,8 +271,14 @@ websocketService.initialize(httpServer);
 
 const DOWNLOAD_STATUS_INTERVAL_MS = 10000;
 let lastDownloadStatusesPayload = null;
+const hasWsSubscribers = (channel) => {
+  const stats = websocketService.getStats();
+  const total = Number(stats?.channels?.[channel] || 0);
+  return total > 0;
+};
 const broadcastDownloadStatuses = async () => {
   try {
+    if (!hasWsSubscribers("downloads")) return;
     const statuses = await getAllDownloadStatuses();
     const payload = JSON.stringify(statuses);
     if (payload !== lastDownloadStatusesPayload) {
@@ -278,6 +297,7 @@ const WEEKLY_FLOW_STATUS_INTERVAL_MS = 4000;
 let lastWeeklyFlowStatusPayload = null;
 const broadcastWeeklyFlowStatus = async () => {
   try {
+    if (!hasWsSubscribers("weekly-flow")) return;
     const status = getWeeklyFlowStatusSnapshot();
     const payload = JSON.stringify(status);
     if (payload !== lastWeeklyFlowStatusPayload) {

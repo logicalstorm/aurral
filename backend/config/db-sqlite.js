@@ -5,13 +5,22 @@ import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DATA_DIR = path.join(__dirname, "..", "data");
+const DEFAULT_DATA_DIR = path.join(__dirname, "..", "data");
+const DATA_DIR = process.env.AURRAL_DATA_DIR
+  ? path.resolve(process.env.AURRAL_DATA_DIR)
+  : DEFAULT_DATA_DIR;
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-const DB_PATH = path.join(DATA_DIR, "aurral.db");
+const DB_PATH = process.env.AURRAL_DB_PATH
+  ? path.resolve(process.env.AURRAL_DB_PATH)
+  : path.join(DATA_DIR, "aurral.db");
+
+if (!fs.existsSync(path.dirname(DB_PATH))) {
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+}
 
 const db = new Database(DB_PATH);
 
@@ -110,6 +119,43 @@ if (!tableColumns.includes("reason")) {
 if (!tableColumns.includes("artist_mbid")) {
   db.exec("ALTER TABLE weekly_flow_jobs ADD COLUMN artist_mbid TEXT");
 }
+
+const userColumns = db
+  .prepare("PRAGMA table_info(users)")
+  .all()
+  .map((column) => column.name);
+
+if (!userColumns.includes("lastfm_username")) {
+  db.exec("ALTER TABLE users ADD COLUMN lastfm_username TEXT");
+}
+if (!userColumns.includes("listen_history_provider")) {
+  db.exec("ALTER TABLE users ADD COLUMN listen_history_provider TEXT");
+}
+if (!userColumns.includes("listen_history_username")) {
+  db.exec("ALTER TABLE users ADD COLUMN listen_history_username TEXT");
+}
+if (!userColumns.includes("lidarr_root_folder_path")) {
+  db.exec("ALTER TABLE users ADD COLUMN lidarr_root_folder_path TEXT");
+}
+if (!userColumns.includes("lidarr_quality_profile_id")) {
+  db.exec("ALTER TABLE users ADD COLUMN lidarr_quality_profile_id INTEGER");
+}
+
+db.exec(`
+  UPDATE users
+  SET listen_history_username = NULLIF(TRIM(lastfm_username), '')
+  WHERE (listen_history_username IS NULL OR TRIM(listen_history_username) = '')
+    AND lastfm_username IS NOT NULL
+    AND TRIM(lastfm_username) != '';
+`);
+
+db.exec(`
+  UPDATE users
+  SET listen_history_provider = 'lastfm'
+  WHERE (listen_history_provider IS NULL OR TRIM(listen_history_provider) = '')
+    AND listen_history_username IS NOT NULL
+    AND TRIM(listen_history_username) != '';
+`);
 
 export const dbHelpers = {
   parseJSON: (text) => {

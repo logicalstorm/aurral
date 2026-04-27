@@ -5,12 +5,18 @@ import { dbOps } from "../config/db-helpers.js";
 import {
   MUSICBRAINZ_API,
   LASTFM_API,
+  LISTENBRAINZ_API,
   APP_NAME,
   APP_VERSION,
 } from "../config/constants.js";
 
 const mbCache = new NodeCache({ stdTTL: 300, checkperiod: 60, maxKeys: 500 });
 const lastfmCache = new NodeCache({
+  stdTTL: 300,
+  checkperiod: 60,
+  maxKeys: 500,
+});
+const listenbrainzCache = new NodeCache({
   stdTTL: 300,
   checkperiod: 60,
   maxKeys: 500,
@@ -24,6 +30,15 @@ const deezerArtistCache = new NodeCache({
 export const getLastfmApiKey = () => {
   const settings = dbOps.getSettings();
   return settings.integrations?.lastfm?.apiKey || process.env.LASTFM_API_KEY;
+};
+
+export const getTicketmasterApiKey = () => {
+  const settings = dbOps.getSettings();
+  const configuredValue = settings.integrations?.ticketmaster?.apiKey;
+  if (configuredValue !== undefined && configuredValue !== null) {
+    return String(configuredValue).trim();
+  }
+  return String(process.env.TICKETMASTER_API_KEY || "").trim();
 };
 
 export const getMusicBrainzContact = () => {
@@ -44,13 +59,27 @@ const lastfmLimiter = new Bottleneck({
   maxConcurrent: 5,
   minTime: 200,
 });
+const listenbrainzLimiter = new Bottleneck({
+  maxConcurrent: 4,
+  minTime: 250,
+});
 
 let musicbrainzLast503Log = 0;
+const lastfmInflightRequests = new Map();
+const lastfmErrorLogAt = new Map();
+const listenbrainzInflightRequests = new Map();
+const listenbrainzErrorLogAt = new Map();
+
+const LASTFM_TIMEOUT_MS = 6000;
+const LASTFM_MAX_RETRIES = 2;
+const LISTENBRAINZ_TIMEOUT_MS = 6000;
+const LISTENBRAINZ_MAX_RETRIES = 2;
 
 const musicbrainzRequestWithRetry = async (
   endpoint,
   params = {},
   retryCount = 0,
+  forceIpv4 = false,
 ) => {
   const cacheKey = `mb:${endpoint}:${JSON.stringify(params)}`;
   const cached = mbCache.get(cacheKey);
@@ -96,14 +125,16 @@ const musicbrainzRequestWithRetry = async (
       {
         headers: { "User-Agent": userAgent },
         timeout: 5000,
+        ...(forceIpv4 ? { family: 4 } : {}),
       },
     );
     mbCache.set(cacheKey, response.data);
     return response.data;
   } catch (error) {
+    const connectionError = isConnectionError(error);
     const shouldRetry =
       retryCount < MAX_RETRIES &&
-      (isConnectionError(error) ||
+      (connectionError ||
         (error.response &&
           [429, 500, 502, 503, 504].includes(error.response.status)));
 
@@ -118,7 +149,12 @@ const musicbrainzRequestWithRetry = async (
         }/${MAX_RETRIES})`,
       );
       await new Promise((resolve) => setTimeout(resolve, delay));
-      return musicbrainzRequestWithRetry(endpoint, params, retryCount + 1);
+      return musicbrainzRequestWithRetry(
+        endpoint,
+        params,
+        retryCount + 1,
+        forceIpv4 || connectionError,
+      );
     }
 
     if (error.response && error.response.status === 404) {
@@ -153,38 +189,164 @@ export const lastfmRequest = lastfmLimiter.wrap(async (method, params = {}) => {
   const cacheKey = `lfm:${method}:${JSON.stringify(params)}`;
   const cached = lastfmCache.get(cacheKey);
   if (cached) return cached;
+  const inflight = lastfmInflightRequests.get(cacheKey);
+  if (inflight) return inflight;
 
-  try {
-    const response = await axios.get(LASTFM_API, {
-      params: {
-        method,
-        api_key: apiKey,
-        format: "json",
-        ...params,
-      },
-      timeout: 3000,
-    });
-    lastfmCache.set(cacheKey, response.data);
-    return response.data;
-  } catch (error) {
-    const status = error.response?.status || null;
+  const requestPromise = (async () => {
+    const isRetryable = (error) => {
+      const status = error.response?.status;
+      const code = error.code;
+      return (
+        code === "ECONNABORTED" ||
+        code === "ETIMEDOUT" ||
+        code === "ECONNRESET" ||
+        code === "ENOTFOUND" ||
+        code === "EAI_AGAIN" ||
+        [408, 425, 429, 500, 502, 503, 504].includes(status)
+      );
+    };
+    const getLogKey = (details) =>
+      `${details.method}:${details.status || "none"}:${details.code || "none"}`;
+    const logError = (message, details) => {
+      const key = getLogKey(details);
+      const now = Date.now();
+      const last = lastfmErrorLogAt.get(key) || 0;
+      if (now - last < 15000) return;
+      lastfmErrorLogAt.set(key, now);
+      console.error(message, details);
+    };
+    let lastError = null;
+    for (let retryCount = 0; retryCount <= LASTFM_MAX_RETRIES; retryCount++) {
+      try {
+        const response = await axios.get(LASTFM_API, {
+          params: {
+            method,
+            api_key: apiKey,
+            format: "json",
+            ...params,
+          },
+          timeout: LASTFM_TIMEOUT_MS,
+        });
+        lastfmCache.set(cacheKey, response.data);
+        return response.data;
+      } catch (error) {
+        lastError = error;
+        if (retryCount < LASTFM_MAX_RETRIES && isRetryable(error)) {
+          const backoffMs = 300 * Math.pow(2, retryCount) + retryCount * 200;
+          await new Promise((resolve) => setTimeout(resolve, backoffMs));
+          continue;
+        }
+        break;
+      }
+    }
+    const status = lastError?.response?.status || null;
     const payloadError =
-      error.response?.data?.message || error.response?.data?.error || null;
+      lastError?.response?.data?.message ||
+      lastError?.response?.data?.error ||
+      null;
     const details = {
       method,
       status,
-      code: error.code || null,
-      message: error.message,
+      code: lastError?.code || null,
+      message: lastError?.message || "Unknown Last.fm error",
       error: payloadError,
     };
-    if (error.code === "ECONNABORTED") {
-      console.error(`Last.fm API timeout (${method})`, details);
+    if (details.code === "ECONNABORTED") {
+      logError(`Last.fm API timeout (${method})`, details);
     } else {
-      console.error(`Last.fm API error (${method})`, details);
+      logError(`Last.fm API error (${method})`, details);
     }
     return null;
+  })();
+  lastfmInflightRequests.set(cacheKey, requestPromise);
+  try {
+    return await requestPromise;
+  } finally {
+    lastfmInflightRequests.delete(cacheKey);
   }
 });
+
+export const listenbrainzRequest = listenbrainzLimiter.wrap(
+  async (path, params = {}) => {
+    const cacheKey = `lb:${path}:${JSON.stringify(params)}`;
+    const cached = listenbrainzCache.get(cacheKey);
+    if (cached) return cached;
+    const inflight = listenbrainzInflightRequests.get(cacheKey);
+    if (inflight) return inflight;
+
+    const requestPromise = (async () => {
+      const isRetryable = (error) => {
+        const status = error.response?.status;
+        const code = error.code;
+        return (
+          code === "ECONNABORTED" ||
+          code === "ETIMEDOUT" ||
+          code === "ECONNRESET" ||
+          code === "ENOTFOUND" ||
+          code === "EAI_AGAIN" ||
+          [408, 425, 429, 500, 502, 503, 504].includes(status)
+        );
+      };
+      const getLogKey = (details) =>
+        `${details.path}:${details.status || "none"}:${details.code || "none"}`;
+      const logError = (message, details) => {
+        const key = getLogKey(details);
+        const now = Date.now();
+        const last = listenbrainzErrorLogAt.get(key) || 0;
+        if (now - last < 15000) return;
+        listenbrainzErrorLogAt.set(key, now);
+        console.error(message, details);
+      };
+
+      let lastError = null;
+      for (
+        let retryCount = 0;
+        retryCount <= LISTENBRAINZ_MAX_RETRIES;
+        retryCount++
+      ) {
+        try {
+          const response = await axios.get(`${LISTENBRAINZ_API}${path}`, {
+            params,
+            timeout: LISTENBRAINZ_TIMEOUT_MS,
+            validateStatus: (status) =>
+              (status >= 200 && status < 300) || status === 204,
+          });
+          const payload = response.status === 204 ? null : response.data;
+          listenbrainzCache.set(cacheKey, payload);
+          return payload;
+        } catch (error) {
+          lastError = error;
+          if (retryCount < LISTENBRAINZ_MAX_RETRIES && isRetryable(error)) {
+            const backoffMs = 300 * Math.pow(2, retryCount) + retryCount * 200;
+            await new Promise((resolve) => setTimeout(resolve, backoffMs));
+            continue;
+          }
+          break;
+        }
+      }
+
+      const details = {
+        path,
+        status: lastError?.response?.status || null,
+        code: lastError?.code || null,
+        message: lastError?.message || "Unknown ListenBrainz error",
+        error:
+          lastError?.response?.data?.error ||
+          lastError?.response?.data?.message ||
+          null,
+      };
+      logError("ListenBrainz API error:", details);
+      throw lastError;
+    })();
+
+    listenbrainzInflightRequests.set(cacheKey, requestPromise);
+    try {
+      return await requestPromise;
+    } finally {
+      listenbrainzInflightRequests.delete(cacheKey);
+    }
+  },
+);
 
 async function getDeezerArtist(artistName) {
   const normalizedName = artistName.toLowerCase().trim();
@@ -555,10 +717,24 @@ const ALLOWED_PRIMARY_TYPES = new Set(["album", "ep", "single"]);
  */
 export async function musicbrainzGetArtistReleaseGroups(mbid) {
   try {
-    const data = await musicbrainzRequest(`/artist/${mbid}`, {
-      inc: "release-groups",
-    });
-    const raw = data["release-groups"] || [];
+    const raw = [];
+    const limit = 100;
+    let offset = 0;
+    let totalCount;
+
+    // Fetch all release-groups for the artist
+    do {
+      const data = await musicbrainzRequest("/release-group", {
+        artist: mbid,
+        limit,
+        offset,
+      });
+      totalCount = data["release-group-count"] || 0;
+      const batch = data["release-groups"] || [];
+      raw.push(...batch);
+      offset += limit;
+    } while (offset < totalCount);
+
     const filtered = raw
       .filter(
         (rg) =>
@@ -773,6 +949,8 @@ export async function deezerGetAlbumTracks(deezerAlbumId) {
       trackNumber: t.track_position || i + 1,
       position: t.track_position || i + 1,
       length: t.duration ? t.duration * 1000 : null,
+      duration_ms: t.duration ? t.duration * 1000 : null,
+      preview_url: t.preview || null,
     }));
   } catch (e) {
     return [];
@@ -919,6 +1097,7 @@ export async function resolveDeezerAlbumToMbid(
 export function clearApiCaches() {
   mbCache.flushAll();
   lastfmCache.flushAll();
+  listenbrainzCache.flushAll();
   deezerArtistCache.flushAll();
   deezerAlbumCache.flushAll();
   deezerBioCache.flushAll();

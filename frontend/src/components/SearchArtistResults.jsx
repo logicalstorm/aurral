@@ -1,0 +1,237 @@
+import { useEffect, useRef, useState } from "react";
+import PropTypes from "prop-types";
+import { Ban, CheckCircle2, Library, Loader2, MoreVertical } from "lucide-react";
+import ArtistImage from "./ArtistImage";
+
+function ArtistActionsMenu({
+  artist,
+  isInLibrary,
+  isBlocked,
+  canAddArtist,
+  onAddToLibrary,
+  onAddToBlocklist,
+}) {
+  const [showMenu, setShowMenu] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!showMenu) return;
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showMenu]);
+
+  const handleAction = async (event, type, fn) => {
+    event.stopPropagation();
+    if (!fn || pendingAction) return;
+    setPendingAction(type);
+    const success = await fn(artist);
+    if (success) setShowMenu(false);
+    setPendingAction(null);
+  };
+
+  return (
+    <div ref={menuRef} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          setShowMenu((prev) => !prev);
+        }}
+        className="flex h-8 w-8 items-center justify-center hover:bg-white/10"
+        style={{ color: "#c1c1c3" }}
+        aria-label={`Artist options for ${artist.name}`}
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+      {showMenu && (
+        <div
+          className="absolute right-0 top-full z-30 mt-1 w-44 border border-white/10 py-1 shadow-xl"
+          style={{ backgroundColor: "#2a2830" }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {canAddArtist && (
+            <button
+              type="button"
+              onClick={(event) => handleAction(event, "library", onAddToLibrary)}
+              disabled={isInLibrary || !!pendingAction}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ color: "#fff" }}
+            >
+              {pendingAction === "library" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Library className="h-4 w-4" />
+              )}
+              {isInLibrary ? "In Library" : "Add to Library"}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={(event) => handleAction(event, "blocklist", onAddToBlocklist)}
+            disabled={isBlocked || !!pendingAction}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ color: isBlocked ? "#c1c1c3" : "#fca5a5" }}
+          >
+            {pendingAction === "blocklist" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Ban className="h-4 w-4" />
+            )}
+            {isBlocked ? "In Blocklist" : "Blocklist Artist"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SearchArtistResults({
+  artists,
+  type,
+  artistImages,
+  libraryLookup,
+  navigate,
+  canAddArtist,
+  blockedArtists,
+  onAddArtistToLibrary,
+  onAddArtistToBlocklist,
+}) {
+  const getArtistId = (artist) =>
+    artist?.id || artist?.mbid || artist?.foreignArtistId;
+
+  const isArtistBlocked = (artist) => {
+    const artistId = String(getArtistId(artist) || "").trim().toLowerCase();
+    const artistName = String(artist?.name || "").trim().toLowerCase();
+    return (blockedArtists || []).some((entry) => {
+      const entryMbid = String(entry?.mbid || "").trim().toLowerCase();
+      const entryName = String(entry?.name || "").trim().toLowerCase();
+      if (artistId && entryMbid && artistId === entryMbid) return true;
+      if (artistName && entryName && artistName === entryName) return true;
+      return false;
+    });
+  };
+
+  return (
+    <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+      {artists.map((artist, index) => {
+        const artistId = getArtistId(artist);
+        const artistMetaText = [
+          type === "recommended" &&
+            artist.sourceArtist &&
+            `Similar to ${artist.sourceArtist}`,
+        ]
+          .filter(Boolean)
+          .join(" • ");
+
+        return (
+          <div
+            key={artistId || `artist-${index}`}
+            className="group relative flex min-w-0 flex-col"
+          >
+            <div
+              onClick={() =>
+                navigate(`/artist/${artistId}`, {
+                  state: { artistName: artist.name },
+                })
+              }
+              className="relative mb-3 aspect-square cursor-pointer overflow-hidden shadow-sm transition-all group-hover:shadow-md"
+              style={{ backgroundColor: "#211f27" }}
+            >
+              <ArtistImage
+                src={artistImages[artistId] || artist.image || artist.imageUrl}
+                mbid={artistId}
+                artistName={artist.name}
+                alt={artist.name}
+                className="h-full w-full transition-transform duration-300 group-hover:scale-105"
+                showLoading={false}
+              />
+            </div>
+
+            <div className="flex min-w-0 items-start gap-2">
+              <div className="flex min-w-0 flex-1 flex-col">
+                <div className="flex min-w-0 items-center gap-2">
+                  <h3
+                    onClick={() =>
+                      navigate(`/artist/${artistId}`, {
+                        state: { artistName: artist.name },
+                      })
+                    }
+                    className="truncate font-semibold hover:underline cursor-pointer"
+                    style={{ color: "#fff" }}
+                    title={artist.name}
+                  >
+                    {artist.name}
+                  </h3>
+                  {libraryLookup[artistId] && (
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-green-400" />
+                  )}
+                </div>
+
+                <div
+                  className="flex min-w-0 flex-col text-sm"
+                  style={{ color: "#c1c1c3" }}
+                >
+                  {artistMetaText && (
+                    <p className="truncate" title={artistMetaText}>
+                      {artistMetaText}
+                    </p>
+                  )}
+                  {artist.country && (
+                    <p
+                      className="truncate text-xs opacity-80"
+                      title={artist.country}
+                    >
+                      {artist.country}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {(canAddArtist || onAddArtistToBlocklist) && (
+                <ArtistActionsMenu
+                  artist={artist}
+                  isInLibrary={!!libraryLookup[artistId]}
+                  isBlocked={isArtistBlocked(artist)}
+                  canAddArtist={canAddArtist}
+                  onAddToLibrary={onAddArtistToLibrary}
+                  onAddToBlocklist={onAddArtistToBlocklist}
+                />
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+SearchArtistResults.propTypes = {
+  artists: PropTypes.arrayOf(PropTypes.object).isRequired,
+  type: PropTypes.string,
+  artistImages: PropTypes.object.isRequired,
+  libraryLookup: PropTypes.object.isRequired,
+  navigate: PropTypes.func.isRequired,
+  canAddArtist: PropTypes.bool,
+  blockedArtists: PropTypes.arrayOf(PropTypes.object),
+  onAddArtistToLibrary: PropTypes.func,
+  onAddArtistToBlocklist: PropTypes.func,
+};
+
+ArtistActionsMenu.propTypes = {
+  artist: PropTypes.object.isRequired,
+  isInLibrary: PropTypes.bool,
+  isBlocked: PropTypes.bool,
+  canAddArtist: PropTypes.bool,
+  onAddToLibrary: PropTypes.func,
+  onAddToBlocklist: PropTypes.func,
+};
+
+export default SearchArtistResults;

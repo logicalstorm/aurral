@@ -1,6 +1,7 @@
 import { libraryManager } from "../../../services/libraryManager.js";
 import { playlistManager } from "../../../services/weeklyFlowPlaylistManager.js";
 import { dbOps } from "../../../config/db-helpers.js";
+import { hasPermission } from "../../../middleware/auth.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
 import {
   requireAuth,
@@ -100,6 +101,42 @@ export default function registerAlbums(router) {
     }
   );
 
+  router.post(
+    "/albums/request",
+    requireAuth,
+    requirePermission("addAlbum"),
+    async (req, res) => {
+      try {
+        const {
+          albumMbid,
+          albumName,
+          artistMbid,
+          artistName,
+          triggerSearch = false,
+        } = req.body || {};
+
+        const result = await libraryManager.requestAlbumFromSearch({
+          albumMbid,
+          albumName,
+          artistMbid,
+          artistName,
+          triggerSearch,
+          user: req.user,
+        });
+
+        res.json(result);
+      } catch (error) {
+        const statusCode =
+          Number.isInteger(error?.statusCode) && error.statusCode >= 400
+            ? error.statusCode
+            : 500;
+        res.status(statusCode).json({
+          error: error.message || "Failed to request album",
+        });
+      }
+    },
+  );
+
   router.get("/albums/:id", cacheMiddleware(120), async (req, res) => {
     try {
       const { id } = req.params;
@@ -119,21 +156,32 @@ export default function registerAlbums(router) {
   router.put(
     "/albums/:id",
     requireAuth,
-    requirePermission("changeMonitoring"),
-    async (req, res) => {
-    try {
-      const { id } = req.params;
-      const album = await libraryManager.updateAlbum(id, req.body);
-      if (album?.error) {
-        return res.status(503).json({ error: album.error });
+    (req, res, next) => {
+      if (
+        hasPermission(req.user, "changeMonitoring") ||
+        hasPermission(req.user, "addAlbum")
+      ) {
+        return next();
       }
-      res.json(album);
-    } catch (error) {
-      res.status(500).json({
-        error: "Failed to update album",
-        message: error.message,
+      return res.status(403).json({
+        error: "Forbidden",
+        message: "Permission required: changeMonitoring or addAlbum",
       });
-    }
+    },
+    async (req, res) => {
+      try {
+        const { id } = req.params;
+        const album = await libraryManager.updateAlbum(id, req.body);
+        if (album?.error) {
+          return res.status(503).json({ error: album.error });
+        }
+        res.json(album);
+      } catch (error) {
+        res.status(500).json({
+          error: "Failed to update album",
+          message: error.message,
+        });
+      }
     },
   );
 
