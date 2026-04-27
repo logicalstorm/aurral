@@ -1,17 +1,61 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Loader, Music, ArrowLeft, CheckCircle2 } from "lucide-react";
 import {
-  searchArtists,
-  searchArtistsByTag,
-  getDiscovery,
+  ArrowLeft,
+  ChevronDown,
+  Disc,
+  Disc3,
+  FileMusic,
+  Loader,
+  Music,
+  Tag,
+} from "lucide-react";
+import {
   checkHealth,
+  getDiscovery,
+  getReleaseGroupCover,
   lookupArtistsInLibraryBatch,
+  requestAlbumFromSearch,
+  searchCatalog,
 } from "../utils/api";
-import ArtistImage from "../components/ArtistImage";
 import PillToggle from "../components/PillToggle";
+import SearchAlbumResults from "../components/SearchAlbumResults";
+import SearchArtistResults from "../components/SearchArtistResults";
+import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../contexts/ToastContext";
+import { useReleaseTypeFilter } from "./ArtistDetails/hooks/useReleaseTypeFilter";
 
 const PAGE_SIZE = 24;
+
+function getReleaseTypeIcon(type) {
+  if (type === "Album") return <Disc className="h-4 w-4" />;
+  if (type === "EP") return <Disc3 className="h-4 w-4" />;
+  if (type === "Single") return <FileMusic className="h-4 w-4" />;
+  return <Music className="h-4 w-4" />;
+}
+
+function getArtistId(artist) {
+  return artist?.id || artist?.mbid || artist?.foreignArtistId;
+}
+
+function dedupeArtists(artists) {
+  const seen = new Set();
+  return artists.filter((artist) => {
+    const artistId = getArtistId(artist);
+    if (!artistId || seen.has(artistId)) return false;
+    seen.add(artistId);
+    return true;
+  });
+}
+
+function dedupeAlbums(albums) {
+  const seen = new Set();
+  return albums.filter((album) => {
+    if (!album?.id || seen.has(album.id)) return false;
+    seen.add(album.id);
+    return true;
+  });
+}
 
 function SearchResultsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -24,36 +68,51 @@ function SearchResultsPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
   const [artistImages, setArtistImages] = useState({});
+  const [albumCovers, setAlbumCovers] = useState({});
   const [hasMore, setHasMore] = useState(false);
   const [searchTotalCount, setSearchTotalCount] = useState(0);
   const [lastfmConfigured, setLastfmConfigured] = useState(null);
   const [libraryLookup, setLibraryLookup] = useState({});
+  const [pendingAlbumIds, setPendingAlbumIds] = useState({});
+  const [showReleaseTypeDropdown, setShowReleaseTypeDropdown] = useState(false);
   const sentinelRef = useRef(null);
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
+  const { showSuccess, showError } = useToast();
+  const {
+    selectedReleaseTypes,
+    setSelectedReleaseTypes,
+    primaryReleaseTypes,
+    secondaryReleaseTypes,
+    allReleaseTypes,
+  } = useReleaseTypeFilter();
 
   const trimmedQuery = useMemo(() => query.trim(), [query]);
-  const isTagSearch = useMemo(
-    () => type === "tag" || trimmedQuery.startsWith("#"),
-    [type, trimmedQuery],
-  );
+  const normalizedType = useMemo(() => {
+    if (type === "recommended" || type === "trending") return type;
+    if (type === "album") return "album";
+    if (type === "tag" || trimmedQuery.startsWith("#")) return "tag";
+    return "artist";
+  }, [type, trimmedQuery]);
+  const isTagSearch = normalizedType === "tag";
+  const isAlbumSearch = normalizedType === "album";
   const tagScope = searchParams.get("scope") || "recommended";
   const showAllTagResults = isTagSearch && tagScope === "all";
-
-  const getArtistId = useCallback(
-    (artist) => artist?.id || artist?.mbid || artist?.foreignArtistId,
-    [],
+  const canAddAlbum = hasPermission("addAlbum");
+  const hasActiveReleaseTypeFilters = useMemo(() => {
+    if (selectedReleaseTypes.length !== allReleaseTypes.length) return true;
+    return !allReleaseTypes.every((typeName) =>
+      selectedReleaseTypes.includes(typeName),
+    );
+  }, [allReleaseTypes, selectedReleaseTypes]);
+  const inactiveReleaseTypeCount = useMemo(
+    () =>
+      allReleaseTypes.filter(
+        (typeName) => !selectedReleaseTypes.includes(typeName),
+      ).length,
+    [allReleaseTypes, selectedReleaseTypes],
   );
 
-  const dedupe = useCallback((artists) => {
-    const seen = new Set();
-    return artists.filter((artist) => {
-      const artistId = getArtistId(artist);
-      if (!artistId) return false;
-      if (seen.has(artistId)) return false;
-      seen.add(artistId);
-      return true;
-    });
-  }, [getArtistId]);
   const updateTagScope = useCallback(
     (nextScope) => {
       const params = new URLSearchParams(searchParams);
@@ -82,19 +141,23 @@ function SearchResultsPage() {
   useEffect(() => {
     const performSearch = async () => {
       setLibraryLookup({});
-      if (type === "recommended" || type === "trending") {
+      setPendingAlbumIds({});
+      setAlbumCovers({});
+
+      if (normalizedType === "recommended" || normalizedType === "trending") {
         setLoading(true);
         setError(null);
         try {
           const data = await getDiscovery();
           const list =
-            type === "recommended"
+            normalizedType === "recommended"
               ? data.recommendations || []
               : data.globalTop || [];
           setFullList(list);
           setResults(list);
           setVisibleCount(PAGE_SIZE);
           setHasMore(list.length > PAGE_SIZE);
+          setSearchTotalCount(list.length);
           if (list.length > 0) {
             const imagesMap = {};
             list.forEach((artist) => {
@@ -115,10 +178,11 @@ function SearchResultsPage() {
         return;
       }
 
-      if (!query.trim() && type !== "recommended" && type !== "trending") {
+      if (!trimmedQuery) {
         setResults([]);
         setFullList(null);
         setHasMore(false);
+        setSearchTotalCount(0);
         return;
       }
 
@@ -127,41 +191,40 @@ function SearchResultsPage() {
       setVisibleCount(PAGE_SIZE);
 
       try {
-        let artists = [];
-        let totalCount = 0;
-        if (isTagSearch) {
-          const tag = trimmedQuery.startsWith("#")
-            ? trimmedQuery.substring(1)
-            : trimmedQuery;
-          const data = await searchArtistsByTag(tag, PAGE_SIZE, 0, tagScope);
-          artists = data.recommendations || [];
-        } else {
-          const data = await searchArtists(trimmedQuery, PAGE_SIZE, 0);
-          artists = data.artists || [];
-          totalCount = data?.count ?? 0;
-        }
-        const uniqueArtists = dedupe(artists);
-        setResults(uniqueArtists);
+        const searchQuery = isTagSearch
+          ? trimmedQuery.replace(/^#/, "")
+          : trimmedQuery;
+        const data = await searchCatalog(searchQuery, normalizedType, {
+          limit: PAGE_SIZE,
+          offset: 0,
+          tagScope,
+          releaseTypes: isAlbumSearch ? selectedReleaseTypes : [],
+        });
+        const nextResults = isAlbumSearch
+          ? dedupeAlbums(data.items || [])
+          : dedupeArtists(data.items || []);
+        setResults(nextResults);
         setFullList(null);
-        if (!isTagSearch) {
-          setSearchTotalCount(totalCount);
-        }
+        setSearchTotalCount(data?.count ?? nextResults.length);
         setHasMore(
-          (isTagSearch && uniqueArtists.length >= PAGE_SIZE) ||
-            (!isTagSearch && totalCount > uniqueArtists.length),
+          data?.hasMore ??
+            (data?.count ?? nextResults.length) > nextResults.length,
         );
-        if (uniqueArtists.length > 0) {
+
+        if (!isAlbumSearch && nextResults.length > 0) {
           const imagesMap = {};
-          uniqueArtists.forEach((artist) => {
+          nextResults.forEach((artist) => {
             const artistId = getArtistId(artist);
-            if (artist.image && artistId) imagesMap[artistId] = artist.image;
+            if ((artist.image || artist.imageUrl) && artistId) {
+              imagesMap[artistId] = artist.image || artist.imageUrl;
+            }
           });
           setArtistImages(imagesMap);
         }
       } catch (err) {
         setError(
           err.response?.data?.message ||
-            "Failed to search artists. Please try again.",
+            `Failed to search ${isAlbumSearch ? "albums" : "artists"}. Please try again.`,
         );
         setResults([]);
         setHasMore(false);
@@ -171,9 +234,17 @@ function SearchResultsPage() {
     };
 
     performSearch();
-  }, [query, type, dedupe, trimmedQuery, isTagSearch, tagScope, getArtistId]);
+  }, [
+    trimmedQuery,
+    normalizedType,
+    tagScope,
+    isAlbumSearch,
+    isTagSearch,
+    selectedReleaseTypes,
+  ]);
 
   useEffect(() => {
+    if (isAlbumSearch) return undefined;
     let cancelled = false;
     const ids = results.map((artist) => getArtistId(artist)).filter(Boolean);
     if (ids.length === 0) {
@@ -183,9 +254,11 @@ function SearchResultsPage() {
       };
     }
     const missing = ids.filter((id) => libraryLookup[id] === undefined);
-    if (missing.length === 0) return () => {
-      cancelled = true;
-    };
+    if (missing.length === 0) {
+      return () => {
+        cancelled = true;
+      };
+    }
 
     const fetchLookup = async () => {
       try {
@@ -204,82 +277,111 @@ function SearchResultsPage() {
     return () => {
       cancelled = true;
     };
-  }, [results, libraryLookup, getArtistId]);
+  }, [results, libraryLookup, isAlbumSearch]);
+
+  useEffect(() => {
+    if (!isAlbumSearch || results.length === 0) return undefined;
+    let cancelled = false;
+    const missingCoverIds = results
+      .map((album) => album.id)
+      .filter((id) => id && albumCovers[id] === undefined);
+
+    if (missingCoverIds.length === 0) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const hydrateCovers = async () => {
+      const coverResults = await Promise.all(
+        missingCoverIds.map(async (id) => {
+          try {
+            const data = await getReleaseGroupCover(id);
+            return [id, data?.images?.[0]?.image || null];
+          } catch {
+            return [id, null];
+          }
+        }),
+      );
+
+      if (cancelled) return;
+
+      setAlbumCovers((prev) => {
+        const next = { ...prev };
+        for (const [id, image] of coverResults) {
+          next[id] = image;
+        }
+        return next;
+      });
+    };
+
+    hydrateCovers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [results, isAlbumSearch, albumCovers]);
 
   const loadMore = useCallback(async () => {
     if (loading || loadingMore || !hasMore) return;
 
-    if (type === "recommended" || type === "trending") {
+    if (normalizedType === "recommended" || normalizedType === "trending") {
       const next = visibleCount + PAGE_SIZE;
-      setVisibleCount((c) =>
-        Math.min(c + PAGE_SIZE, fullList?.length ?? c + PAGE_SIZE),
+      setVisibleCount((count) =>
+        Math.min(count + PAGE_SIZE, fullList?.length ?? count + PAGE_SIZE),
       );
       setHasMore((fullList?.length ?? 0) > next);
       return;
     }
-    if (isTagSearch) {
-      setLoadingMore(true);
-      try {
-        const tag = trimmedQuery.startsWith("#")
-          ? trimmedQuery.substring(1)
-          : trimmedQuery;
-        const data = await searchArtistsByTag(
-          tag,
-          PAGE_SIZE,
-          results.length,
-          tagScope,
-        );
-        const newArtists = data.recommendations || [];
-        const combined = dedupe([...results, ...newArtists]);
-        setResults(combined);
-        setHasMore(newArtists.length >= PAGE_SIZE);
-        newArtists.forEach((artist) => {
-          const artistId = getArtistId(artist);
-          if (artist.image && artistId) {
-            setArtistImages((prev) => ({ ...prev, [artistId]: artist.image }));
-          }
-        });
-      } finally {
-        setLoadingMore(false);
-      }
-      return;
-    }
+
     setLoadingMore(true);
     try {
-      const offset = results.length;
-      const data = await searchArtists(query.trim(), PAGE_SIZE, offset);
-      const newArtists = data.artists || [];
-      const total = data.count ?? 0;
-      if (newArtists.length === 0) {
-        setHasMore(false);
+      const searchQuery = isTagSearch
+        ? trimmedQuery.replace(/^#/, "")
+        : trimmedQuery;
+      const data = await searchCatalog(searchQuery, normalizedType, {
+        limit: PAGE_SIZE,
+        offset: results.length,
+        tagScope,
+        releaseTypes: isAlbumSearch ? selectedReleaseTypes : [],
+      });
+      const newItems = data.items || [];
+      setSearchTotalCount(data?.count ?? searchTotalCount);
+      if (isAlbumSearch) {
+        setResults((prev) => dedupeAlbums([...prev, ...newItems]));
       } else {
-        setResults((prev) => dedupe([...prev, ...newArtists]));
-        setSearchTotalCount(total);
-        setHasMore(total > offset + newArtists.length);
-        newArtists.forEach((artist) => {
+        setResults((prev) => dedupeArtists([...prev, ...newItems]));
+        newItems.forEach((artist) => {
           const artistId = getArtistId(artist);
-          if (artist.image && artistId) {
-            setArtistImages((prev) => ({ ...prev, [artistId]: artist.image }));
+          if ((artist.image || artist.imageUrl) && artistId) {
+            setArtistImages((prev) => ({
+              ...prev,
+              [artistId]: artist.image || artist.imageUrl,
+            }));
           }
         });
       }
+      setHasMore(
+        data?.hasMore ??
+          (data?.count ?? 0) > results.length + newItems.length,
+      );
     } finally {
       setLoadingMore(false);
     }
   }, [
-    type,
     fullList,
-    visibleCount,
-    query,
-    results,
-    dedupe,
-    trimmedQuery,
+    hasMore,
+    isAlbumSearch,
     isTagSearch,
-    tagScope,
-    getArtistId,
     loading,
     loadingMore,
-    hasMore,
+    normalizedType,
+    results,
+    searchTotalCount,
+    selectedReleaseTypes,
+    tagScope,
+    trimmedQuery,
+    visibleCount,
   ]);
 
   const onSentinel = useCallback(
@@ -291,36 +393,93 @@ function SearchResultsPage() {
     [loadMore],
   );
 
-  const displayedArtists =
-    type === "recommended" || type === "trending"
+  const handleAlbumAction = useCallback(
+    async (album) => {
+      if (!album?.id) return;
+      const shouldTriggerSearch = album.status === "inLibrary";
+      setPendingAlbumIds((prev) => ({ ...prev, [album.id]: true }));
+      try {
+        const result = await requestAlbumFromSearch({
+          albumMbid: album.id,
+          albumName: album.title,
+          artistMbid: album.artistMbid,
+          artistName: album.artistName,
+          triggerSearch: shouldTriggerSearch,
+        });
+        setResults((prev) =>
+          prev.map((item) =>
+            item.id === album.id
+              ? {
+                  ...item,
+                  inLibrary: true,
+                  libraryAlbumId: result.album?.id || item.libraryAlbumId,
+                  libraryArtistId: result.artist?.id || item.libraryArtistId,
+                  status: result.status || item.status,
+                }
+              : item,
+          ),
+        );
+        showSuccess(
+          result.triggeredSearch
+            ? `Search triggered for ${album.title}`
+            : `${album.title} added to library`,
+        );
+      } catch (err) {
+        showError(
+          err.response?.data?.error ||
+            err.response?.data?.message ||
+            err.message ||
+            "Failed to request album",
+        );
+      } finally {
+        setPendingAlbumIds((prev) => {
+          const next = { ...prev };
+          delete next[album.id];
+          return next;
+        });
+      }
+    },
+    [showError, showSuccess],
+  );
+
+  const displayedResults =
+    normalizedType === "recommended" || normalizedType === "trending"
       ? results.slice(0, visibleCount)
       : results;
 
   const showContent =
-    !loading && (query || type === "recommended" || type === "trending");
-  const isEmpty = displayedArtists.length === 0;
+    !loading && (query || normalizedType === "recommended" || normalizedType === "trending");
+  const isEmpty = displayedResults.length === 0;
   const showBackButton =
-    type === "recommended" ||
-    type === "trending" ||
-    isTagSearch ||
+    normalizedType === "recommended" ||
+    normalizedType === "trending" ||
     !!trimmedQuery;
   const showLoadMore =
     hasMore &&
-    (type === "recommended" || type === "trending"
+    (normalizedType === "recommended" || normalizedType === "trending"
       ? results.length > PAGE_SIZE
-      : isTagSearch
-        ? results.length >= PAGE_SIZE
-        : results.length >= PAGE_SIZE && searchTotalCount > PAGE_SIZE);
+      : displayedResults.length >= PAGE_SIZE);
 
   useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el || !showContent || isEmpty || !showLoadMore) return;
+    const element = sentinelRef.current;
+    if (!element || !showContent || isEmpty || !showLoadMore) return;
     const observer = new IntersectionObserver(onSentinel, {
       rootMargin: "200px",
     });
-    observer.observe(el);
+    observer.observe(element);
     return () => observer.disconnect();
-  }, [onSentinel, showContent, isEmpty, showLoadMore]);
+  }, [isEmpty, onSentinel, showContent, showLoadMore]);
+
+  const emptyMessage =
+    normalizedType === "recommended" || normalizedType === "trending"
+      ? "Nothing to show here yet."
+      : isAlbumSearch
+        ? `We couldn't find any albums matching "${trimmedQuery}"`
+        : isTagSearch
+          ? `We couldn't find any ${
+              showAllTagResults ? "artists" : "recommended artists"
+            } for tag "${trimmedQuery.replace(/^#/, "")}"`
+          : `We couldn't find any artists matching "${trimmedQuery}"`;
 
   return (
     <div className="animate-fade-in">
@@ -330,24 +489,28 @@ function SearchResultsPage() {
             onClick={() => navigate(-1)}
             className="btn btn-secondary mb-6 inline-flex items-center"
           >
-            <ArrowLeft className="w-5 h-5 mr-2" />
+            <ArrowLeft className="mr-2 h-5 w-5" />
             Back
           </button>
         )}
+
         <div className="flex flex-wrap items-center gap-4">
           <h1 className="text-2xl font-bold" style={{ color: "#fff" }}>
-            {type === "recommended"
+            {normalizedType === "recommended"
               ? "Recommended for You"
-              : type === "trending"
+              : normalizedType === "trending"
                 ? "Global Trending"
                 : isTagSearch
                   ? "Tag Results"
-                  : trimmedQuery
-                    ? loading
-                      ? `Showing results for "${trimmedQuery}"`
-                      : `Showing ${results.length} results for "${trimmedQuery}"`
-                    : "Search Results"}
+                  : isAlbumSearch
+                    ? trimmedQuery
+                      ? `Showing ${displayedResults.length} albums for "${trimmedQuery}"`
+                      : "Album Results"
+                    : trimmedQuery
+                      ? `Showing ${displayedResults.length} artists for "${trimmedQuery}"`
+                      : "Search Results"}
           </h1>
+
           {isTagSearch && (
             <div className="ml-auto inline-flex items-center gap-3">
               <span
@@ -358,8 +521,8 @@ function SearchResultsPage() {
               </span>
               <PillToggle
                 checked={showAllTagResults}
-                onChange={(e) =>
-                  updateTagScope(e.target.checked ? "all" : "recommended")
+                onChange={(event) =>
+                  updateTagScope(event.target.checked ? "all" : "recommended")
                 }
               />
               <span
@@ -371,10 +534,11 @@ function SearchResultsPage() {
             </div>
           )}
         </div>
+
         {isTagSearch && lastfmConfigured === false && (
           <div className="mt-4 bg-yellow-500/20 p-4">
             <div className="flex flex-wrap items-center gap-3">
-              <p className="text-yellow-300 text-sm">
+              <p className="text-sm text-yellow-300">
                 Tag search and discovery recommendations use Last.fm. Add an
                 API key to enable full results.
               </p>
@@ -388,34 +552,195 @@ function SearchResultsPage() {
             </div>
           </div>
         )}
-        {type === "recommended" && (
+
+        {normalizedType === "recommended" && (
           <p style={{ color: "#c1c1c3" }}>
             {results.length} artist{results.length !== 1 ? "s" : ""} we think
             you&apos;ll like
           </p>
         )}
-        {type === "trending" && (
+        {normalizedType === "trending" && (
           <p style={{ color: "#c1c1c3" }}>Trending artists right now</p>
         )}
         {isTagSearch && trimmedQuery && (
-          <p
-            style={{ color: "#c1c1c3" }}
-          >{`${
-            showAllTagResults ? "Top artists" : "Recommended artists"
-          } for tag "${trimmedQuery.startsWith("#") ? trimmedQuery.substring(1) : trimmedQuery}"`}</p>
+          <p style={{ color: "#c1c1c3" }}>
+            {`${showAllTagResults ? "Top artists" : "Recommended artists"} for tag "${trimmedQuery.replace(/^#/, "")}"`}
+          </p>
+        )}
+        {isAlbumSearch && trimmedQuery && (
+          <div className="space-y-4">
+            <p style={{ color: "#c1c1c3" }}>
+              Search results include compilations, soundtracks, and releases
+              from Various Artists.
+            </p>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {primaryReleaseTypes.map((typeName) => {
+                  const isSelected = selectedReleaseTypes.includes(typeName);
+                  return (
+                    <button
+                      key={typeName}
+                      type="button"
+                      onClick={() => {
+                        if (isSelected) {
+                          setSelectedReleaseTypes(
+                            selectedReleaseTypes.filter((value) => value !== typeName),
+                          );
+                        } else {
+                          setSelectedReleaseTypes([
+                            ...selectedReleaseTypes,
+                            typeName,
+                          ]);
+                        }
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 text-sm font-medium transition-all"
+                      style={{
+                        backgroundColor: isSelected ? "#4a4a4a" : "#211f27",
+                        color: "#fff",
+                      }}
+                    >
+                      {getReleaseTypeIcon(typeName)}
+                      <span>{typeName}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowReleaseTypeDropdown((current) => !current)
+                  }
+                  className="btn btn-outline-secondary btn-sm flex items-center gap-2 px-3 py-2"
+                >
+                  <Tag className="h-4 w-4" />
+                  <span className="text-sm">Filter</span>
+                  {hasActiveReleaseTypeFilters && (
+                    <span
+                      className="flex h-[18px] min-w-[18px] items-center justify-center px-1.5 text-xs text-white"
+                      style={{ backgroundColor: "#211f27" }}
+                    >
+                      {inactiveReleaseTypeCount}
+                    </span>
+                  )}
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${
+                      showReleaseTypeDropdown ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+
+                {showReleaseTypeDropdown && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setShowReleaseTypeDropdown(false)}
+                    />
+                    <div
+                      className="absolute right-0 top-full z-20 mt-2 min-w-[280px] p-4 shadow-xl"
+                      style={{ backgroundColor: "#211f27" }}
+                    >
+                      <div className="space-y-4">
+                        <div>
+                          <h3
+                            className="mb-2 text-sm font-semibold"
+                            style={{ color: "#fff" }}
+                          >
+                            Secondary Types
+                          </h3>
+                          <div className="space-y-2">
+                            {secondaryReleaseTypes.map((typeName) => (
+                              <label
+                                key={typeName}
+                                className="flex cursor-pointer items-center space-x-2 px-2 py-1.5 transition-colors hover:bg-gray-900/50"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedReleaseTypes.includes(typeName)}
+                                  onChange={(event) => {
+                                    if (event.target.checked) {
+                                      setSelectedReleaseTypes([
+                                        ...selectedReleaseTypes,
+                                        typeName,
+                                      ]);
+                                    } else {
+                                      setSelectedReleaseTypes(
+                                        selectedReleaseTypes.filter(
+                                          (value) => value !== typeName,
+                                        ),
+                                      );
+                                    }
+                                  }}
+                                  className="form-checkbox h-4 w-4"
+                                  style={{ color: "#c1c1c3" }}
+                                />
+                                <span
+                                  className="text-sm"
+                                  style={{ color: "#fff" }}
+                                >
+                                  {typeName}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="pt-3">
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentPrimary = selectedReleaseTypes.filter(
+                                  (value) => primaryReleaseTypes.includes(value),
+                                );
+                                setSelectedReleaseTypes([
+                                  ...currentPrimary,
+                                  ...secondaryReleaseTypes,
+                                ]);
+                              }}
+                              className="text-xs hover:underline"
+                              style={{ color: "#c1c1c3" }}
+                            >
+                              Select All
+                            </button>
+                            <span style={{ color: "#c1c1c3" }}>|</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentPrimary = selectedReleaseTypes.filter(
+                                  (value) => primaryReleaseTypes.includes(value),
+                                );
+                                setSelectedReleaseTypes(currentPrimary);
+                              }}
+                              className="text-xs hover:underline"
+                              style={{ color: "#c1c1c3" }}
+                            >
+                              Clear All
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
       {error && (
-        <div className="mb-6 bg-red-500/20 ">
+        <div className="mb-6 bg-red-500/20 p-4">
           <p className="text-red-400">{error}</p>
         </div>
       )}
 
       {loading && (
-        <div className="flex justify-center items-center py-20">
+        <div className="flex items-center justify-center py-20">
           <Loader
-            className="w-12 h-12 animate-spin"
+            className="h-12 w-12 animate-spin"
             style={{ color: "#c1c1c3" }}
           />
         </div>
@@ -424,26 +749,18 @@ function SearchResultsPage() {
       {showContent && (
         <div className="animate-slide-up">
           {isEmpty ? (
-            <div className="card text-center py-12">
+            <div className="card py-12 text-center">
               <Music
-                className="w-16 h-16 mx-auto mb-4"
+                className="mx-auto mb-4 h-16 w-16"
                 style={{ color: "#c1c1c3" }}
               />
               <h3
-                className="text-xl font-semibold mb-2"
+                className="mb-2 text-xl font-semibold"
                 style={{ color: "#fff" }}
               >
                 No Results Found
               </h3>
-              <p style={{ color: "#c1c1c3" }}>
-                {type === "recommended" || type === "trending"
-                  ? "Nothing to show here yet."
-                  : isTagSearch
-                    ? `We couldn't find any ${
-                        showAllTagResults ? "artists" : "recommended artists"
-                      } for tag "${trimmedQuery.startsWith("#") ? trimmedQuery.substring(1) : trimmedQuery}"`
-                    : `We couldn't find any artists matching "${trimmedQuery}"`}
-              </p>
+              <p style={{ color: "#c1c1c3" }}>{emptyMessage}</p>
               {isTagSearch && !showAllTagResults && (
                 <button
                   type="button"
@@ -456,93 +773,33 @@ function SearchResultsPage() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-                {displayedArtists.map((artist, index) => {
-                  const artistId = getArtistId(artist);
-                  const artistMetaText = [
-                    type === "recommended" &&
-                      artist.sourceArtist &&
-                      `Similar to ${artist.sourceArtist}`,
-                  ]
-                    .filter(Boolean)
-                    .join(" • ");
-                  return (
-                  <div
-                    key={artistId || `artist-${index}`}
-                    className="group relative flex flex-col w-full min-w-0"
-                  >
-                    <div
-                      onClick={() =>
-                        navigate(`/artist/${artistId}`, {
-                          state: { artistName: artist.name },
-                        })
-                      }
-                      className="relative aspect-square mb-3 overflow-hidden cursor-pointer shadow-sm group-hover:shadow-md transition-all"
-                      style={{ backgroundColor: "#211f27" }}
-                    >
-                      <ArtistImage
-                        src={
-                          artistImages[artistId] ||
-                          artist.image ||
-                          artist.imageUrl
-                        }
-                        mbid={artistId}
-                        artistName={artist.name}
-                        alt={artist.name}
-                        className="h-full w-full group-hover:scale-105 transition-transform duration-300"
-                        showLoading={false}
-                      />
-                    </div>
-
-                    <div className="flex flex-col min-w-0">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <h3
-                          onClick={() =>
-                            navigate(`/artist/${artistId}`, {
-                              state: { artistName: artist.name },
-                            })
-                          }
-                          className="font-semibold truncate hover:underline cursor-pointer"
-                          style={{ color: "#fff" }}
-                          title={artist.name}
-                        >
-                          {artist.name}
-                        </h3>
-                        {libraryLookup[artistId] && (
-                          <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                        )}
-                      </div>
-
-                      <div
-                        className="flex flex-col min-w-0 text-sm"
-                        style={{ color: "#c1c1c3" }}
-                      >
-                        {artistMetaText && (
-                          <p className="truncate" title={artistMetaText}>
-                            {artistMetaText}
-                          </p>
-                        )}
-
-                        {artist.country && (
-                          <p
-                            className="truncate text-xs opacity-80"
-                            title={artist.country}
-                          >
-                            {artist.country}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  );
-                })}
-              </div>
+              {isAlbumSearch ? (
+                <SearchAlbumResults
+                  albums={displayedResults}
+                  albumCovers={albumCovers}
+                  canAddAlbum={canAddAlbum}
+                  pendingAlbumIds={pendingAlbumIds}
+                  onAlbumAction={handleAlbumAction}
+                  navigate={navigate}
+                />
+              ) : (
+                <SearchArtistResults
+                  artists={displayedResults}
+                  type={normalizedType}
+                  artistImages={artistImages}
+                  libraryLookup={libraryLookup}
+                  navigate={navigate}
+                />
+              )}
 
               {showLoadMore && (
                 <div ref={sentinelRef} className="mt-8 flex justify-center">
-                  <div className="px-6 py-3 font-medium rounded-lg" style={{ color: "#c1c1c3" }}>
+                  <div
+                    className="rounded-lg px-6 py-3 font-medium"
+                    style={{ color: "#c1c1c3" }}
+                  >
                     <span className="flex items-center gap-2">
-                      <Loader className="w-5 h-5 animate-spin" />
+                      <Loader className="h-5 w-5 animate-spin" />
                       Loading...
                     </span>
                   </div>
