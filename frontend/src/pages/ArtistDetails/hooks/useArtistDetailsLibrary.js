@@ -61,6 +61,7 @@ export function useArtistDetailsLibrary({
   const [customizeRootFolderPath, setCustomizeRootFolderPath] = useState("");
   const [customizeQualityProfileId, setCustomizeQualityProfileId] =
     useState("");
+  const [customizeTagId, setCustomizeTagId] = useState("");
   const reSearchOverridesRef = useRef({});
   const unmonitoredAtRef = useRef({});
   const libraryAlbumIdsRef = useRef([]);
@@ -333,8 +334,15 @@ export function useArtistDetailsLibrary({
         : preferences?.fallbacks?.qualityProfileId != null
           ? String(preferences.fallbacks.qualityProfileId)
           : "";
+    const nextTagId =
+      preferences?.savedDefaults?.tagId != null
+        ? String(preferences.savedDefaults.tagId)
+        : preferences?.fallbacks?.tagId != null
+          ? String(preferences.fallbacks.tagId)
+          : "";
     setCustomizeRootFolderPath(nextRootFolderPath);
     setCustomizeQualityProfileId(nextQualityProfileId);
+    setCustomizeTagId(nextTagId);
   };
 
   const loadLidarrPreferenceState = async ({ force = false } = {}) => {
@@ -384,6 +392,7 @@ export function useArtistDetailsLibrary({
         ...(Object.hasOwn(overrides, "qualityProfileId")
           ? { qualityProfileId: overrides.qualityProfileId }
           : {}),
+        ...(Object.hasOwn(overrides, "tagId") ? { tagId: overrides.tagId } : {}),
       });
       let fullArtist = await resolveArtistFromAddResponse(result, {
         refresh: true,
@@ -425,6 +434,7 @@ export function useArtistDetailsLibrary({
       qualityProfileId: customizeQualityProfileId
         ? Number(customizeQualityProfileId)
         : null,
+      tagId: customizeTagId ? Number(customizeTagId) : null,
     });
     if (success) {
       setShowAddCustomizeModal(false);
@@ -1083,6 +1093,8 @@ export function useArtistDetailsLibrary({
     setCustomizeRootFolderPath,
     customizeQualityProfileId,
     setCustomizeQualityProfileId,
+    customizeTagId,
+    setCustomizeTagId,
     showMonitorOptionMenu,
     setShowMonitorOptionMenu,
     updatingMonitor,

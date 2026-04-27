@@ -63,6 +63,7 @@ export default function registerArtists(router) {
           monitorOption,
           rootFolderPath,
           qualityProfileId,
+          tagId,
         } = req.body;
 
         if (!mbid || !artistName) {
@@ -104,6 +105,7 @@ export default function registerArtists(router) {
             monitorOption,
             rootFolderPath,
             qualityProfileId,
+            tagId,
           });
         } catch (error) {
           const statusCode =
