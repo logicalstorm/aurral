@@ -28,6 +28,23 @@ function normalizeProfileId(value) {
   return Math.trunc(parsed);
 }
 
+function mapTags(tags) {
+  return Array.isArray(tags)
+    ? tags
+        .filter(
+          (tag) =>
+            normalizeProfileId(tag?.id) !== null &&
+            typeof tag?.label === "string" &&
+            tag.label.trim(),
+        )
+        .map((tag) => ({
+          ...tag,
+          id: normalizeProfileId(tag.id),
+          label: tag.label.trim(),
+        }))
+    : [];
+}
+
 function createPreferenceError(statusCode, field, message, code) {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -615,28 +632,38 @@ export class LidarrClient {
   }
 
   async getArtistAddPreferenceSummary(user = null) {
+    const settings = dbOps.getSettings();
+    const savedTagId = normalizeProfileId(
+      settings.integrations?.lidarr?.tagId,
+    );
+
     if (!this.isConfigured()) {
       return {
         configured: false,
         rootFolders: [],
         qualityProfiles: [],
+        tags: [],
         savedDefaults: {
           rootFolderPath: normalizeRootFolderPath(user?.lidarrRootFolderPath),
           qualityProfileId: normalizeProfileId(user?.lidarrQualityProfileId),
+          tagId: savedTagId,
         },
         fallbacks: {
           rootFolderPath: null,
           qualityProfileId: null,
+          tagId: savedTagId,
         },
       };
     }
 
-    const [rootFoldersRaw, qualityProfilesRaw] = await Promise.all([
+    const [rootFoldersRaw, qualityProfilesRaw, tagsRaw] = await Promise.all([
       this.getRootFolders(),
       this.getQualityProfiles(),
+      this.getTags(),
     ]);
     const rootFolders = mapRootFolders(rootFoldersRaw);
     const qualityProfiles = mapQualityProfiles(qualityProfilesRaw);
+    const tags = mapTags(tagsRaw);
 
     return {
       configured: true,
@@ -645,14 +672,22 @@ export class LidarrClient {
         id: profile.id,
         name: profile.name || `Profile ${profile.id}`,
       })),
+      tags: tags.map((tag) => ({
+        id: tag.id,
+        label: tag.label,
+      })),
       savedDefaults: {
         rootFolderPath: normalizeRootFolderPath(user?.lidarrRootFolderPath),
         qualityProfileId: normalizeProfileId(user?.lidarrQualityProfileId),
+        tagId: savedTagId,
       },
-      fallbacks: this.getArtistAddFallbacks({
-        rootFolders,
-        qualityProfiles,
-      }),
+      fallbacks: {
+        ...this.getArtistAddFallbacks({
+          rootFolders,
+          qualityProfiles,
+        }),
+        tagId: savedTagId,
+      },
     };
   }
 
@@ -791,8 +826,10 @@ export class LidarrClient {
     }
     if (!metadataProfileId) metadataProfileId = 1;
 
-    const configuredTagId = options.tagId ?? settings.integrations?.lidarr?.tagId ?? null;
-    const tags = configuredTagId ? [parseInt(configuredTagId, 10)] : [];
+    const configuredTagId = normalizeProfileId(
+      options.tagId ?? settings.integrations?.lidarr?.tagId,
+    );
+    const tags = configuredTagId !== null ? [configuredTagId] : [];
 
     const lidarrArtist = {
       artistName: artistName,
