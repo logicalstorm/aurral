@@ -133,6 +133,23 @@ const isArtistInEntries = (artist, entries) => {
   });
 };
 
+const matchesBlockedArtist = (target, artist) => {
+  const targetId = String(getArtistId(target) || "")
+    .trim()
+    .toLowerCase();
+  const targetName = String(target?.name || target?.artistName || "")
+    .trim()
+    .toLowerCase();
+  const artistId = String(getArtistId(artist) || "")
+    .trim()
+    .toLowerCase();
+  const artistName = String(artist?.name || artist?.artistName || "")
+    .trim()
+    .toLowerCase();
+  return (targetId && artistId && targetId === artistId) ||
+    (targetName && artistName && targetName === artistName);
+};
+
 const parseCalendarDate = (value) => {
   if (!value) return null;
   const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -311,58 +328,60 @@ const ArtistCard = memo(
               )}
             </div>
           </div>
-          <div ref={menuRef} className="relative shrink-0">
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                setShowMenu((prev) => !prev);
-              }}
-              className="w-8 h-8 flex items-center justify-center hover:bg-white/10"
-              style={{ color: "#c1c1c3" }}
-              aria-label={`Artist options for ${artist.name}`}
-            >
-              <MoreVertical className="w-4 h-4" />
-            </button>
-            {showMenu && (
-              <div
-                className="absolute right-0 top-full mt-1 w-44 z-30 py-1 border border-white/10 shadow-xl"
-                style={{ backgroundColor: "#2a2830" }}
-                onClick={(event) => event.stopPropagation()}
+          {(canAddArtist || onAddToBlocklist) && (
+            <div ref={menuRef} className="relative shrink-0">
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setShowMenu((prev) => !prev);
+                }}
+                className="w-8 h-8 flex items-center justify-center hover:bg-white/10"
+                style={{ color: "#c1c1c3" }}
+                aria-label={`Artist options for ${artist.name}`}
               >
-                {canAddArtist && (
+                <MoreVertical className="w-4 h-4" />
+              </button>
+              {showMenu && (
+                <div
+                  className="absolute right-0 top-full mt-1 w-44 z-30 py-1 border border-white/10 shadow-xl"
+                  style={{ backgroundColor: "#2a2830" }}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {canAddArtist && (
+                    <button
+                      type="button"
+                      onClick={handleAddToLibraryClick}
+                      disabled={isInLibrary || !!pendingAction}
+                      className="w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      style={{ color: "#fff" }}
+                    >
+                      {pendingAction === "library" ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Library className="w-4 h-4" />
+                      )}
+                      {isInLibrary ? "In Library" : "Add to Library"}
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={handleAddToLibraryClick}
-                    disabled={isInLibrary || !!pendingAction}
+                    onClick={handleBlocklistClick}
+                    disabled={isBlocked || !!pendingAction}
                     className="w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                    style={{ color: "#fff" }}
+                    style={{ color: isBlocked ? "#c1c1c3" : "#fca5a5" }}
                   >
-                    {pendingAction === "library" ? (
+                    {pendingAction === "blocklist" ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
-                      <Library className="w-4 h-4" />
+                      <Ban className="w-4 h-4" />
                     )}
-                    {isInLibrary ? "In Library" : "Add to Library"}
+                    {isBlocked ? "In Blocklist" : "Blocklist Artist"}
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={handleBlocklistClick}
-                  disabled={isBlocked || !!pendingAction}
-                  className="w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  style={{ color: isBlocked ? "#c1c1c3" : "#fca5a5" }}
-                >
-                  {pendingAction === "blocklist" ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Ban className="w-4 h-4" />
-                  )}
-                  {isBlocked ? "In Blocklist" : "Blocklist Artist"}
-                </button>
-              </div>
-            )}
-          </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1147,6 +1166,19 @@ function DiscoverPage() {
         setBlockedArtists(
           normalizeBlocklistArtists(response?.blocklist?.artists || nextArtists),
         );
+        setData((prev) =>
+          prev
+            ? {
+                ...prev,
+                recommendations: (prev.recommendations || []).filter(
+                  (entry) => !matchesBlockedArtist(entry, artist),
+                ),
+                globalTop: (prev.globalTop || []).filter(
+                  (entry) => !matchesBlockedArtist(entry, artist),
+                ),
+              }
+            : prev,
+        );
         showSuccess("Artist added to blocklist");
         return true;
       } catch (err) {
@@ -1193,10 +1225,8 @@ function DiscoverPage() {
                     { id: artistId, name: artist.artistName },
                     blockedArtists,
                   )}
-                  canAddArtist={canAddArtist}
+                  canAddArtist={false}
                   onNavigate={navigate}
-                  onAddToLibrary={handleAddArtistToLibrary}
-                  onAddToBlocklist={handleAddArtistToBlocklist}
                   artist={{
                     id: artistId,
                     name: artist.artistName,
