@@ -3,10 +3,7 @@ import { allReleaseTypes } from "./constants";
 export const normalizeSettings = (savedSettings) => {
   const lidarr = savedSettings.integrations?.lidarr || {};
   const lastfm = savedSettings.integrations?.lastfm || {};
-  const parsedAutoRefreshHours = parseInt(
-    lastfm.discoveryAutoRefreshHours,
-    10,
-  );
+  const parsedAutoRefreshHours = parseInt(lastfm.discoveryAutoRefreshHours, 10);
   const parsedRecommendationLimit = parseInt(
     lastfm.discoveryRecommendationsPerRefresh,
     10,
@@ -18,6 +15,7 @@ export const normalizeSettings = (savedSettings) => {
     integrations: {
       lidarr: {
         url: "",
+        externalUrl: "",
         apiKey: "",
         searchOnAdd: false,
         defaultMonitorOption: "none",
@@ -30,6 +28,8 @@ export const normalizeSettings = (savedSettings) => {
           lidarr.metadataProfileId != null
             ? parseInt(lidarr.metadataProfileId, 10)
             : null,
+        tagId:
+          lidarr.tagId != null ? parseInt(lidarr.tagId, 10) : null,
       },
       navidrome: {
         url: "",
@@ -57,6 +57,11 @@ export const normalizeSettings = (savedSettings) => {
         apiKey: "",
         ...(savedSettings.integrations?.slskd || {}),
       },
+      ticketmaster: {
+        apiKey: "",
+        searchRadiusMiles: 50,
+        ...(savedSettings.integrations?.ticketmaster || {}),
+      },
       musicbrainz: {
         email: "",
         ...(savedSettings.integrations?.musicbrainz || {}),
@@ -72,6 +77,12 @@ export const normalizeSettings = (savedSettings) => {
         notifyDiscoveryUpdated: false,
         notifyWeeklyFlowDone: false,
         ...(savedSettings.integrations?.gotify || {}),
+      },
+      webhooks: savedSettings.integrations?.webhooks || [],
+      webhookEvents: {
+        notifyDiscoveryUpdated: false,
+        notifyWeeklyFlowDone: false,
+        ...(savedSettings.integrations?.webhookEvents || {}),
       },
     },
   };

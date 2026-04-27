@@ -7,12 +7,15 @@ import {
   CheckCircle,
   RefreshCw,
   ChevronDown,
+  SlidersHorizontal,
   Calendar,
   MapPin,
   Trash2,
   Play,
   Pause,
   Pencil,
+  Volume2,
+  VolumeX,
   Ban,
 } from "lucide-react";
 import { getCoverImage, getTagColor, formatLifeSpan, getArtistType } from "../utils";
@@ -31,11 +34,16 @@ export function ArtistDetailsHero({
   showMonitorOptionMenu,
   setShowMonitorOptionMenu,
   updatingMonitor,
+  canChangeMonitoring,
   getCurrentMonitorOption,
   handleUpdateMonitorOption,
+  canDeleteArtist,
   handleDeleteClick,
+  canAddArtist,
   handleAddToLibrary,
+  handleOpenAddCustomizeModal,
   addingToLibrary,
+  canRefreshArtist,
   handleRefreshArtist,
   refreshingArtist,
   onNavigate,
@@ -45,6 +53,8 @@ export function ArtistDetailsHero({
   playingPreviewId,
   previewProgress,
   previewSnappingBack,
+  previewVolume,
+  setPreviewVolume,
   handlePreviewPlay,
   onEditIds,
   onToggleBlockArtist,
@@ -59,7 +69,9 @@ export function ArtistDetailsHero({
     libraryArtist?.foreignArtistId ||
     libraryArtist?.mbid ||
     artist?._lidarrData?.foreignArtistId;
-  const lidarrUrl = appSettings?.integrations?.lidarr?.url;
+  const lidarrUrl =
+    appSettings?.integrations?.lidarr?.externalUrl ||
+    appSettings?.integrations?.lidarr?.url;
   const lidarrArtistLink =
     lidarrUrl && lidarrArtistId
       ? `${lidarrUrl.replace(/\/$/, "")}/${
@@ -98,29 +110,47 @@ export function ArtistDetailsHero({
 
         <div className="flex-1">
           <div className="flex justify-between items-start gap-4">
-            <h1 className="text-4xl font-bold mb-2" style={{ color: "#fff" }}>
-              {artist.name}
-            </h1>
-            <div className="inline-flex items-center gap-2">
+            <div className="flex items-start gap-3 min-w-0">
+              <h1
+                className="text-4xl font-bold mb-2"
+                style={{ color: "#fff" }}
+              >
+                {artist.name}
+              </h1>
               <button
                 type="button"
-                onClick={onToggleBlockArtist}
-                disabled={blockingArtist}
-                className="btn btn-secondary btn-sm p-2 flex-shrink-0"
-                title={artistBlocked ? "Remove from blocklist" : "Add to blocklist"}
-                aria-label={artistBlocked ? "Remove from blocklist" : "Add to blocklist"}
+                onClick={onEditIds}
+                className="btn btn-secondary btn-sm p-2 inline-flex items-center flex-shrink-0 mt-1"
+                aria-label="Edit IDs"
+                title="Edit artist IDs"
               >
-                {blockingArtist ? (
-                  <Loader className="w-5 h-5 animate-spin" />
-                ) : (
-                  <Ban className="w-5 h-5" style={{ color: artistBlocked ? "#f87171" : undefined }} />
-                )}
+                <Pencil className="w-5 h-5" />
               </button>
-              {existsInLibrary && (
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {onToggleBlockArtist && (
+                <button
+                  type="button"
+                  onClick={onToggleBlockArtist}
+                  disabled={blockingArtist}
+                  className="btn btn-secondary btn-sm p-2"
+                  title={artistBlocked ? "Remove from blocklist" : "Add to blocklist"}
+                >
+                  {blockingArtist ? (
+                    <Loader className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Ban
+                      className="w-5 h-5"
+                      style={{ color: artistBlocked ? "#f87171" : undefined }}
+                    />
+                  )}
+                </button>
+              )}
+              {existsInLibrary && canRefreshArtist && (
                 <button
                   onClick={handleRefreshArtist}
                   disabled={refreshingArtist}
-                  className="btn btn-secondary btn-sm p-2 flex-shrink-0"
+                  className="btn btn-secondary btn-sm p-2"
                   title="Refresh & Scan Artist"
                 >
                   {refreshingArtist ? (
@@ -213,118 +243,139 @@ export function ArtistDetailsHero({
             ) : existsInLibrary ? (
               <>
                 <div className="relative inline-flex">
-                  <button
-                    type="button"
-                    onClick={() => setShowRemoveDropdown(!showRemoveDropdown)}
-                    className="btn btn-success inline-flex items-center"
-                  >
-                    <CheckCircle className="w-5 h-5 mr-2" />
-                    In Your Library
-                    <ChevronDown
-                      className={`w-4 h-4 ml-2 transition-transform ${
-                        showRemoveDropdown ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
-                  {showRemoveDropdown && (
+                  {canChangeMonitoring || canDeleteArtist ? (
                     <>
-                      <div
-                        className="fixed inset-0 z-10"
-                        onClick={() => setShowRemoveDropdown(false)}
-                      />
-                      <div
-                        className="absolute right-0 top-full w-56 z-20 py-1 rounded shadow-lg border border-white/10"
-                        style={{ backgroundColor: "#2a2830" }}
-                        onClick={(e) => e.stopPropagation()}
+                      <button
+                        type="button"
+                        onClick={() => setShowRemoveDropdown(!showRemoveDropdown)}
+                        className="btn btn-success inline-flex items-center"
                       >
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowMonitorOptionMenu(!showMonitorOptionMenu);
-                          }}
-                          disabled={updatingMonitor}
-                          className="w-full text-left px-4 py-2 text-sm  hover:bg-gray-900/50 transition-colors flex items-center justify-between"
-                          style={{ color: "#fff" }}
-                        >
-                          <span>Change Monitor Option</span>
-                          <ChevronDown
-                            className={`w-4 h-4 transition-transform ${
-                              showMonitorOptionMenu ? "rotate-180" : ""
-                            }`}
+                        <CheckCircle className="w-5 h-5 mr-2" />
+                        In Your Library
+                        <ChevronDown
+                          className={`w-4 h-4 ml-2 transition-transform ${
+                            showRemoveDropdown ? "rotate-180" : ""
+                          }`}
+                        />
+                      </button>
+                      {showRemoveDropdown && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setShowRemoveDropdown(false)}
                           />
-                        </button>
-
-                        {showMonitorOptionMenu && (
-                          <>
-                            <div className="my-1" />
-                            {[
-                              { value: "none", label: "None (Artist Only)" },
-                              { value: "all", label: "All Albums" },
-                              { value: "future", label: "Future Albums" },
-                              { value: "missing", label: "Missing Albums" },
-                              { value: "latest", label: "Latest Album" },
-                              { value: "first", label: "First Album" },
-                            ].map((option) => (
+                          <div
+                            className="absolute right-0 top-full w-56 z-20 py-1 rounded shadow-lg border border-white/10"
+                            style={{ backgroundColor: "#2a2830" }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {canChangeMonitoring && (
                               <button
-                                key={option.value}
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleUpdateMonitorOption(option.value);
-                                  setShowMonitorOptionMenu(false);
-                                  setShowRemoveDropdown(false);
+                                  setShowMonitorOptionMenu(!showMonitorOptionMenu);
                                 }}
                                 disabled={updatingMonitor}
-                                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-900/50 transition-colors"
-                                style={
-                                  getCurrentMonitorOption() === option.value
-                                    ? {
-                                        backgroundColor: "#211f27",
-                                        color: "#fff",
-                                        fontWeight: "500",
-                                      }
-                                    : { color: "#fff" }
-                                }
+                                className="w-full text-left px-4 py-2 text-sm  hover:bg-gray-900/50 transition-colors flex items-center justify-between"
+                                style={{ color: "#fff" }}
                               >
-                                {option.label}
+                                <span>Change Monitor Option</span>
+                                <ChevronDown
+                                  className={`w-4 h-4 transition-transform ${
+                                    showMonitorOptionMenu ? "rotate-180" : ""
+                                  }`}
+                                />
                               </button>
-                            ))}
-                          </>
-                        )}
+                            )}
 
-                        <div className=" my-1" />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            handleDeleteClick();
-                            setShowRemoveDropdown(false);
-                          }}
-                          className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20 transition-colors flex items-center"
-                        >
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Remove from Library
-                        </button>
-                      </div>
+                            {canChangeMonitoring && showMonitorOptionMenu && (
+                              <>
+                                <div className="my-1" />
+                                {[
+                                  { value: "none", label: "None (Artist Only)" },
+                                  { value: "all", label: "All Albums" },
+                                  { value: "future", label: "Future Albums" },
+                                  { value: "missing", label: "Missing Albums" },
+                                  { value: "latest", label: "Latest Album" },
+                                  { value: "first", label: "First Album" },
+                                ].map((option) => (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleUpdateMonitorOption(option.value);
+                                      setShowMonitorOptionMenu(false);
+                                      setShowRemoveDropdown(false);
+                                    }}
+                                    disabled={updatingMonitor}
+                                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-900/50 transition-colors"
+                                    style={
+                                      getCurrentMonitorOption() === option.value
+                                        ? {
+                                            backgroundColor: "#211f27",
+                                            color: "#fff",
+                                            fontWeight: "500",
+                                          }
+                                        : { color: "#fff" }
+                                    }
+                                  >
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </>
+                            )}
+
+                            {canDeleteArtist && (
+                              <>
+                                <div className=" my-1" />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleDeleteClick();
+                                    setShowRemoveDropdown(false);
+                                  }}
+                                  className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20 transition-colors flex items-center"
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Remove from Library
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </>
+                  ) : (
+                    <div className="btn btn-success inline-flex items-center cursor-default">
+                      <CheckCircle className="w-5 h-5 mr-2" />
+                      In Your Library
+                    </div>
                   )}
                 </div>
               </>
             ) : (
-              <AddToLibraryButton
-                onClick={handleAddToLibrary}
-                isLoading={addingToLibrary}
-              />
+              canAddArtist && (
+                <div className="add-to-library-button-group">
+                  <AddToLibraryButton
+                    onClick={handleAddToLibrary}
+                    isLoading={addingToLibrary}
+                    className="add-to-library-button--split"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleOpenAddCustomizeModal}
+                    disabled={addingToLibrary}
+                    className="add-to-library-button-split-trigger"
+                    aria-label="Customize add options"
+                    title="Customize add options"
+                  >
+                    <SlidersHorizontal className="w-4 h-4" />
+                  </button>
+                </div>
+              )
             )}
-
-            <button
-              type="button"
-              onClick={onEditIds}
-              className="btn btn-secondary btn-sm p-2 inline-flex items-center"
-              aria-label="Edit IDs"
-            >
-              <Pencil className="w-5 h-5" />
-            </button>
             <div className="relative inline-flex">
               <button
                 type="button"
@@ -407,6 +458,36 @@ export function ArtistDetailsHero({
             {!loadingPreview && previewTracks.length > 0 && (
               <>
                 <audio ref={previewAudioRef} />
+                <div className="flex items-center gap-2 px-2 pb-2">
+                  {previewVolume <= 0 ? (
+                    <VolumeX className="w-4 h-4 flex-shrink-0" style={{ color: "#c1c1c3" }} />
+                  ) : (
+                    <Volume2 className="w-4 h-4 flex-shrink-0" style={{ color: "#c1c1c3" }} />
+                  )}
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={Math.round(previewVolume * 100)}
+                    onChange={(e) =>
+                      setPreviewVolume(
+                        Math.max(
+                          0,
+                          Math.min(1, Number(e.target.value) / 100),
+                        ),
+                      )
+                    }
+                    className="w-full accent-[#707e61]"
+                    aria-label="Preview volume"
+                  />
+                  <span
+                    className="text-xs tabular-nums w-8 text-right"
+                    style={{ color: "#c1c1c3" }}
+                  >
+                    {Math.round(previewVolume * 100)}
+                  </span>
+                </div>
                 <ul className="space-y-0.5">
                   {previewTracks.map((track) => (
                     <li
@@ -567,11 +648,16 @@ ArtistDetailsHero.propTypes = {
   showMonitorOptionMenu: PropTypes.bool,
   setShowMonitorOptionMenu: PropTypes.func,
   updatingMonitor: PropTypes.bool,
+  canChangeMonitoring: PropTypes.bool,
   getCurrentMonitorOption: PropTypes.func,
   handleUpdateMonitorOption: PropTypes.func,
+  canDeleteArtist: PropTypes.bool,
   handleDeleteClick: PropTypes.func,
+  canAddArtist: PropTypes.bool,
   handleAddToLibrary: PropTypes.func,
+  handleOpenAddCustomizeModal: PropTypes.func,
   addingToLibrary: PropTypes.bool,
+  canRefreshArtist: PropTypes.bool,
   handleRefreshArtist: PropTypes.func,
   refreshingArtist: PropTypes.bool,
   onNavigate: PropTypes.func,
@@ -591,6 +677,8 @@ ArtistDetailsHero.propTypes = {
   playingPreviewId: PropTypes.string,
   previewProgress: PropTypes.number,
   previewSnappingBack: PropTypes.bool,
+  previewVolume: PropTypes.number,
+  setPreviewVolume: PropTypes.func,
   handlePreviewPlay: PropTypes.func,
   onEditIds: PropTypes.func,
   onToggleBlockArtist: PropTypes.func,

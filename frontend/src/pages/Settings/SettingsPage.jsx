@@ -12,12 +12,15 @@ import { SettingsMetadataTab } from "./components/SettingsMetadataTab";
 import { SettingsDiscoverTab } from "./components/SettingsDiscoverTab";
 import { SettingsNotificationsTab } from "./components/SettingsNotificationsTab";
 import { SettingsUsersTab } from "./components/SettingsUsersTab";
+import { SettingsAccountTab } from "./components/SettingsAccountTab";
+import { useAccountSettings } from "./hooks/useAccountSettings";
 
 function SettingsPage() {
   const { showSuccess, showError, showInfo } = useToast();
   const { user: authUser } = useAuth();
 
   const data = useSettingsData(showSuccess, showError, showInfo);
+  const account = useAccountSettings(authUser, showSuccess, showError);
   const guard = useUnsavedGuard(data.hasUnsavedChanges, data.setHasUnsavedChanges);
   const tabs = useSettingsTabs(authUser);
   const users = useSettingsUsers(
@@ -52,6 +55,10 @@ function SettingsPage() {
               data.setLoadingLidarrMetadataProfiles
             }
             setLidarrMetadataProfiles={data.setLidarrMetadataProfiles}
+            lidarrTags={data.lidarrTags}
+            loadingLidarrTags={data.loadingLidarrTags}
+            setLoadingLidarrTags={data.setLoadingLidarrTags}
+            setLidarrTags={data.setLidarrTags}
             testingLidarr={data.testingLidarr}
             setTestingLidarr={data.setTestingLidarr}
             applyingCommunityGuide={data.applyingCommunityGuide}
@@ -104,6 +111,26 @@ function SettingsPage() {
             setTestingGotify={data.setTestingGotify}
             showSuccess={showSuccess}
             showError={showError}
+          />
+        );
+      case "account":
+        return (
+          <SettingsAccountTab
+            listenHistoryProvider={account.listenHistoryProvider}
+            setListenHistoryProvider={account.setListenHistoryProvider}
+            listenHistoryUsername={account.listenHistoryUsername}
+            setListenHistoryUsername={account.setListenHistoryUsername}
+            lidarrConfigured={account.lidarrConfigured}
+            lidarrRootFolders={account.lidarrRootFolders}
+            lidarrQualityProfiles={account.lidarrQualityProfiles}
+            lidarrRootFolderPath={account.lidarrRootFolderPath}
+            setLidarrRootFolderPath={account.setLidarrRootFolderPath}
+            lidarrQualityProfileId={account.lidarrQualityProfileId}
+            setLidarrQualityProfileId={account.setLidarrQualityProfileId}
+            hasUnsavedChanges={account.hasUnsavedChanges}
+            loading={account.loading}
+            saving={account.saving}
+            handleSave={account.handleSave}
           />
         );
       case "users":

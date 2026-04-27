@@ -5,6 +5,7 @@ import api, {
   updateAppSettings,
   getLidarrProfiles,
   getLidarrMetadataProfiles,
+  getLidarrTags,
   testLidarrConnection,
   testGotifyConnection,
   applyLidarrCommunityGuide,
@@ -29,11 +30,14 @@ const defaultSettings = {
       discoveryRecommendationsPerRefresh: 100,
     },
     slskd: { url: "", apiKey: "" },
+    ticketmaster: { apiKey: "", searchRadiusMiles: 50 },
     lidarr: {
       url: "",
+      externalUrl: "",
       apiKey: "",
       qualityProfileId: null,
       metadataProfileId: null,
+      tagId: null,
       defaultMonitorOption: "none",
       searchOnAdd: false,
     },
@@ -42,6 +46,11 @@ const defaultSettings = {
     gotify: {
       url: "",
       token: "",
+      notifyDiscoveryUpdated: false,
+      notifyWeeklyFlowDone: false,
+    },
+    webhooks: [],
+    webhookEvents: {
       notifyDiscoveryUpdated: false,
       notifyWeeklyFlowDone: false,
     },
@@ -62,6 +71,8 @@ export function useSettingsData(showSuccess, showError, showInfo) {
   const [lidarrMetadataProfiles, setLidarrMetadataProfiles] = useState([]);
   const [loadingLidarrMetadataProfiles, setLoadingLidarrMetadataProfiles] =
     useState(false);
+  const [lidarrTags, setLidarrTags] = useState([]);
+  const [loadingLidarrTags, setLoadingLidarrTags] = useState(false);
   const [testingLidarr, setTestingLidarr] = useState(false);
   const [testingGotify, setTestingGotify] = useState(false);
   const [applyingCommunityGuide, setApplyingCommunityGuide] = useState(false);
@@ -133,17 +144,21 @@ export function useSettingsData(showSuccess, showError, showInfo) {
       if (lidarr.url && lidarr.apiKey) {
         setLoadingLidarrProfiles(true);
         setLoadingLidarrMetadataProfiles(true);
+        setLoadingLidarrTags(true);
         try {
-          const [profiles, metadataProfiles] = await Promise.all([
+          const [profiles, metadataProfiles, tags] = await Promise.all([
             getLidarrProfiles(lidarr.url, lidarr.apiKey),
             getLidarrMetadataProfiles(lidarr.url, lidarr.apiKey),
+            getLidarrTags(lidarr.url, lidarr.apiKey),
           ]);
           setLidarrProfiles(profiles);
           setLidarrMetadataProfiles(metadataProfiles);
+          setLidarrTags(Array.isArray(tags) ? tags : []);
         } catch {
         } finally {
           setLoadingLidarrProfiles(false);
           setLoadingLidarrMetadataProfiles(false);
+          setLoadingLidarrTags(false);
         }
       }
     } catch {}
@@ -184,12 +199,13 @@ export function useSettingsData(showSuccess, showError, showInfo) {
   );
 
   const handleSaveSettings = useCallback(
-    async (e) => {
+    async (e, settingsOverride) => {
       e?.preventDefault();
+      const toSave = settingsOverride ?? settings;
       setSaving(true);
       try {
-        await updateAppSettings(settings);
-        setOriginalSettings(JSON.parse(JSON.stringify(settings)));
+        await updateAppSettings(toSave);
+        setOriginalSettings(JSON.parse(JSON.stringify(toSave)));
         setHasUnsavedChanges(false);
         showSuccess("Settings saved successfully!");
       } catch (err) {
@@ -351,6 +367,10 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     setLidarrMetadataProfiles,
     loadingLidarrMetadataProfiles,
     setLoadingLidarrMetadataProfiles,
+    lidarrTags,
+    setLidarrTags,
+    loadingLidarrTags,
+    setLoadingLidarrTags,
     testingLidarr,
     setTestingLidarr,
     testingGotify,

@@ -2,16 +2,26 @@ import express from "express";
 import {
   getDiscoveryCache,
   updateDiscoveryCache,
+  updateUserDiscoveryCache,
+  getUserDiscoveryCacheStaleness,
 } from "../services/discoveryService.js";
 import {
   lastfmRequest,
   getLastfmApiKey,
+  getTicketmasterApiKey,
   clearApiCaches,
 } from "../services/apiClients.js";
 import { libraryManager } from "../services/libraryManager.js";
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps, userOps } from "../config/db-helpers.js";
 import { imagePrefetchService } from "../services/imagePrefetchService.js";
+import { defaultDiscoveryPreferences } from "../config/constants.js";
 import { requireAuth, requireAdmin } from "../middleware/requirePermission.js";
+import { getNearbyShows } from "../services/nearbyShowsService.js";
+import {
+  getListenHistoryCacheNamespace,
+  getListenHistoryProfile,
+  hasListenHistoryProfile,
+} from "../services/listeningHistory.js";
 
 const router = express.Router();
 
@@ -19,9 +29,11 @@ const pendingTagRequests = new Map();
 const pendingTagSuggestRequest = { promise: null, expiry: 0 };
 const DISCOVERY_STALE_MS = 6 * 60 * 60 * 1000;
 const DISCOVERY_REVALIDATE_COOLDOWN_MS = 60 * 1000;
-let lastDiscoveryRevalidateAt = 0;
 const MBID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+let lastDiscoveryRevalidateAt = 0;
+
+let discoveryPreferences = { ...defaultDiscoveryPreferences };
 
 const normalizeTextList = (value) => {
   if (!Array.isArray(value)) return [];
@@ -228,11 +240,12 @@ router.post("/clear-discovery", requireAuth, requireAdmin, async (req, res) => {
 
 router.get("/", requireAuth, async (req, res) => {
   const hasLastfmKey = !!getLastfmApiKey();
-  const settings = dbOps.getSettings();
-  const lastfmUsername = settings.integrations?.lastfm?.username || null;
-  const hasLastfmUser = hasLastfmKey && lastfmUsername;
   const libraryArtists = await libraryManager.getAllArtists();
   const hasArtists = libraryArtists.length > 0;
+
+  const reqUser = userOps.getUserById(req.user.id);
+  const listenHistoryProfile = getListenHistoryProfile(reqUser || {});
+  const userCacheNamespace = getListenHistoryCacheNamespace(listenHistoryProfile);
 
   if (!hasLastfmKey && !hasArtists) {
     const dbData = dbOps.getDiscoveryCache();
@@ -263,7 +276,7 @@ router.get("/", requireAuth, async (req, res) => {
       isUpdating: false,
     });
 
-    res.set("Cache-Control", "public, max-age=300");
+    res.set("Cache-Control", "private, max-age=300");
     return res.json({
       recommendations: [],
       globalTop: [],
@@ -276,13 +289,21 @@ router.get("/", requireAuth, async (req, res) => {
     });
   }
 
-  const discoveryCache = getDiscoveryCache();
-  const dbData = dbOps.getDiscoveryCache();
+  if (hasListenHistoryProfile(listenHistoryProfile) && hasLastfmKey) {
+    const staleness = getUserDiscoveryCacheStaleness(userCacheNamespace);
+    if (staleness > DISCOVERY_STALE_MS) {
+      updateUserDiscoveryCache(listenHistoryProfile).catch((err) => {
+        console.error(
+          `[Discover] On-demand refresh for ${listenHistoryProfile.listenHistoryProvider}:${listenHistoryProfile.listenHistoryUsername} failed:`,
+          err.message,
+        );
+      });
+    }
+  }
+
+  const discoveryCache = getDiscoveryCache(userCacheNamespace);
 
   const hasData =
-    dbData.recommendations?.length > 0 ||
-    dbData.globalTop?.length > 0 ||
-    dbData.topGenres?.length > 0 ||
     discoveryCache.recommendations?.length > 0 ||
     discoveryCache.globalTop?.length > 0 ||
     discoveryCache.topGenres?.length > 0;
@@ -297,39 +318,8 @@ router.get("/", requireAuth, async (req, res) => {
     isUpdating = true;
   }
 
-  const dbHasData =
-    dbData.recommendations?.length > 0 ||
-    dbData.globalTop?.length > 0 ||
-    dbData.topGenres?.length > 0;
-  const cacheHasData =
-    discoveryCache.recommendations?.length > 0 ||
-    discoveryCache.globalTop?.length > 0 ||
-    discoveryCache.topGenres?.length > 0;
-
-  let recommendations, globalTop, basedOn, topTags, topGenres, lastUpdated;
-
-  if (dbHasData) {
-    recommendations = dbData.recommendations || [];
-    globalTop = dbData.globalTop || [];
-    basedOn = dbData.basedOn || [];
-    topTags = dbData.topTags || [];
-    topGenres = dbData.topGenres || [];
-    lastUpdated = dbData.lastUpdated || null;
-  } else if (cacheHasData) {
-    recommendations = discoveryCache.recommendations || [];
-    globalTop = discoveryCache.globalTop || [];
-    basedOn = discoveryCache.basedOn || [];
-    topTags = discoveryCache.topTags || [];
-    topGenres = discoveryCache.topGenres || [];
-    lastUpdated = discoveryCache.lastUpdated || null;
-  } else {
-    recommendations = [];
-    globalTop = [];
-    basedOn = [];
-    topTags = [];
-    topGenres = [];
-    lastUpdated = null;
-  }
+  let { recommendations, globalTop, basedOn, topTags, topGenres, lastUpdated } =
+    discoveryCache;
 
   const existingArtistIds = new Set(
     libraryArtists
@@ -341,30 +331,12 @@ router.get("/", requireAuth, async (req, res) => {
     (artist) => !existingArtistIds.has(artist.id),
   );
   globalTop = globalTop.filter((artist) => !existingArtistIds.has(artist.id));
+
   const blocklist = getStoredBlocklist();
-  recommendations = applyBlocklistToArtistCollection(
-    recommendations,
-    blocklist,
-  );
+  recommendations = applyBlocklistToArtistCollection(recommendations, blocklist);
   globalTop = applyBlocklistToArtistCollection(globalTop, blocklist);
   topTags = applyBlocklistToTagList(topTags, blocklist);
   topGenres = applyBlocklistToTagList(topGenres, blocklist);
-
-  if (
-    recommendations.length > 0 ||
-    globalTop.length > 0 ||
-    topGenres.length > 0
-  ) {
-    Object.assign(discoveryCache, {
-      recommendations,
-      globalTop,
-      basedOn,
-      topTags,
-      topGenres,
-      lastUpdated,
-      isUpdating: false,
-    });
-  }
 
   const parsedLastUpdated = lastUpdated ? new Date(lastUpdated).getTime() : 0;
   const isStale =
@@ -375,6 +347,7 @@ router.get("/", requireAuth, async (req, res) => {
   if (
     isStale &&
     !isUpdating &&
+    !hasListenHistoryProfile(listenHistoryProfile) &&
     Date.now() - lastDiscoveryRevalidateAt > DISCOVERY_REVALIDATE_COOLDOWN_MS
   ) {
     lastDiscoveryRevalidateAt = Date.now();
@@ -394,11 +367,11 @@ router.get("/", requireAuth, async (req, res) => {
   }
 
   if (recommendations.length > 0 || globalTop.length > 0) {
-    res.set("Cache-Control", "public, max-age=120, stale-while-revalidate=300");
+    res.set("Cache-Control", "private, max-age=120, stale-while-revalidate=300");
   } else if (isUpdating) {
     res.set("Cache-Control", "no-cache, no-store, must-revalidate");
   } else {
-    res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
+    res.set("Cache-Control", "private, max-age=30, stale-while-revalidate=120");
   }
 
   res.json({
@@ -584,12 +557,10 @@ router.get("/by-tag", async (req, res) => {
     } else {
       const discoveryCache = getDiscoveryCache();
       const tagLower = String(tag).trim().toLowerCase();
-      const matches = (discoveryCache.recommendations || []).filter(
-        (artist) => {
-          const tags = Array.isArray(artist.tags) ? artist.tags : [];
-          return tags.some((t) => String(t).toLowerCase() === tagLower);
-        },
-      );
+      const matches = (discoveryCache.recommendations || []).filter((artist) => {
+        const tags = Array.isArray(artist.tags) ? artist.tags : [];
+        return tags.some((t) => String(t).toLowerCase() === tagLower);
+      });
       const filteredMatches = applyBlocklistToArtistCollection(
         matches,
         blocklist,
@@ -651,6 +622,54 @@ router.post("/blocklist/reset", requireAuth, (req, res) => {
   });
 });
 
+router.get("/nearby-shows", requireAuth, async (req, res) => {
+  try {
+    const apiKey = getTicketmasterApiKey();
+    if (!apiKey) {
+      res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+      return res.json({
+        configured: false,
+        location: null,
+        shows: [],
+        total: 0,
+        counts: {
+          libraryArtists: 0,
+          matchedLibraryShows: 0,
+        },
+      });
+    }
+
+    const zipCode = String(req.query.zip || "").trim();
+    const limit = req.query.limit;
+    const settings = dbOps.getSettings();
+    const configuredRadius = Number(
+      settings.integrations?.ticketmaster?.searchRadiusMiles,
+    );
+    const radiusMiles = Number.isFinite(configuredRadius)
+      ? Math.max(5, Math.min(250, Math.floor(configuredRadius)))
+      : undefined;
+    const libraryArtists = await libraryManager.getAllArtists();
+    const nearbyShows = await getNearbyShows({
+      req,
+      zipCode,
+      libraryArtists,
+      limit,
+      radiusMiles,
+    });
+
+    res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    return res.json({
+      configured: true,
+      ...nearbyShows,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: "Failed to load nearby shows",
+      message: error.message,
+    });
+  }
+});
+
 router.get("/preferences", requireAuth, (req, res) => {
   const blocklist = getStoredBlocklist();
   res.json({
@@ -684,6 +703,7 @@ router.post("/preferences", requireAuth, (req, res) => {
       artists,
       tags: tags.length > 0 ? tags : undefined,
     });
+
     res.json({
       success: true,
       preferences: {
@@ -763,12 +783,19 @@ router.delete("/preferences/exclude-genre/:genre", requireAuth, (req, res) => {
 router.post("/preferences/exclude-artist", requireAuth, (req, res) => {
   try {
     const { artistId, artistName } = req.body;
-    const target = String(artistName || artistId || "").trim();
-    if (!target) {
+    if (!artistId && !artistName) {
       return res.status(400).json({ error: "artistId is required" });
     }
+
+    const current = getStoredBlocklist();
     const blocklist = updateStoredBlocklist({
-      artists: [...getStoredBlocklist().artists, target],
+      artists: [
+        ...current.artists,
+        {
+          mbid: artistId || null,
+          name: artistName || artistId || null,
+        },
+      ],
     });
 
     res.json({
@@ -791,20 +818,13 @@ router.delete(
   requireAuth,
   (req, res) => {
     try {
-      const { artistId } = req.params;
+      const target = String(req.params.artistId || "").trim().toLowerCase();
       const current = getStoredBlocklist();
-      const target = String(artistId || "")
-        .trim()
-        .toLowerCase();
       const blocklist = updateStoredBlocklist({
         artists: current.artists.filter((artist) => {
-          const artistMbid = String(artist?.mbid || "")
-            .trim()
-            .toLowerCase();
-          const artistName = String(artist?.name || "")
-            .trim()
-            .toLowerCase();
-          return artistMbid !== target && artistName !== target;
+          const mbid = String(artist?.mbid || "").trim().toLowerCase();
+          const name = String(artist?.name || "").trim().toLowerCase();
+          return target !== mbid && target !== name;
         }),
       });
 
@@ -827,9 +847,15 @@ router.delete(
 router.get("/filtered", async (req, res) => {
   try {
     const discoveryCache = getDiscoveryCache();
-    let recommendations = discoveryCache.recommendations || [];
-    let globalTop = discoveryCache.globalTop || [];
     const blocklist = getStoredBlocklist();
+    let recommendations = applyBlocklistToArtistCollection(
+      discoveryCache.recommendations || [],
+      blocklist,
+    );
+    let globalTop = applyBlocklistToArtistCollection(
+      discoveryCache.globalTop || [],
+      blocklist,
+    );
 
     const libraryArtists = await libraryManager.getAllArtists();
     const existingArtistIds = new Set(
@@ -842,12 +868,6 @@ router.get("/filtered", async (req, res) => {
       (artist) => !existingArtistIds.has(artist.id),
     );
     globalTop = globalTop.filter((artist) => !existingArtistIds.has(artist.id));
-
-    recommendations = applyBlocklistToArtistCollection(
-      recommendations,
-      blocklist,
-    );
-    globalTop = applyBlocklistToArtistCollection(globalTop, blocklist);
 
     res.json({
       recommendations,

@@ -7,9 +7,92 @@ const CIRCUIT_COOLDOWN_MS = 60000;
 const CIRCUIT_FAILURE_THRESHOLD = 3;
 const LIDARR_MAX_CONCURRENT = 12;
 const LIDARR_LIST_CACHE_MS = 30000;
+const LIDARR_ARTIST_ALBUM_CACHE_MAX = 10;
 const LIDARR_RETRY_ATTEMPTS = 2;
 const LIDARR_RETRY_DELAY_MS = 800;
 const LIDARR_STATUS_CACHE_MS = 10000;
+
+function normalizeRootFolderPath(value) {
+  const normalized = String(value || "").trim();
+  return normalized || null;
+}
+
+function normalizeProfileId(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  return Math.trunc(parsed);
+}
+
+function mapTags(tags) {
+  return Array.isArray(tags)
+    ? tags
+        .filter(
+          (tag) =>
+            normalizeProfileId(tag?.id) !== null &&
+            typeof tag?.label === "string" &&
+            tag.label.trim(),
+        )
+        .map((tag) => ({
+          ...tag,
+          id: normalizeProfileId(tag.id),
+          label: tag.label.trim(),
+        }))
+    : [];
+}
+
+function createPreferenceError(statusCode, field, message, code) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  error.field = field;
+  error.code = code;
+  return error;
+}
+
+function mapRootFolders(rootFolders) {
+  return Array.isArray(rootFolders)
+    ? rootFolders
+        .filter((item) => normalizeRootFolderPath(item?.path))
+        .map((item) => ({
+          ...item,
+          path: normalizeRootFolderPath(item.path),
+        }))
+    : [];
+}
+
+function mapQualityProfiles(qualityProfiles) {
+  return Array.isArray(qualityProfiles)
+    ? qualityProfiles
+        .filter((profile) => normalizeProfileId(profile?.id) !== null)
+        .map((profile) => ({
+          ...profile,
+          id: normalizeProfileId(profile.id),
+        }))
+    : [];
+}
+
+function findRootFolder(rootFolders, rootFolderPath) {
+  const normalizedPath = normalizeRootFolderPath(rootFolderPath);
+  if (!normalizedPath) return null;
+  return (
+    rootFolders.find(
+      (folder) => normalizeRootFolderPath(folder?.path) === normalizedPath,
+    ) || null
+  );
+}
+
+function findQualityProfile(qualityProfiles, qualityProfileId) {
+  const normalizedId = normalizeProfileId(qualityProfileId);
+  if (normalizedId === null) return null;
+  return (
+    qualityProfiles.find((profile) => normalizeProfileId(profile?.id) === normalizedId) ||
+    null
+  );
+}
 
 export class LidarrClient {
   constructor() {
@@ -22,7 +105,7 @@ export class LidarrClient {
     this._concurrent = 0;
     this._waitQueue = [];
     this._artistListCache = null;
-    this._albumListCache = null;
+    this._albumCache = new Map();
     this._statusCache = new Map();
     this._httpAgent = new http.Agent({
       keepAlive: true,
@@ -128,7 +211,7 @@ export class LidarrClient {
     this.config = newConfig;
     if (didConfigChange) {
       this._artistListCache = null;
-      this._albumListCache = null;
+      this._albumCache = new Map();
       this._statusCache.clear();
     }
   }
@@ -138,8 +221,11 @@ export class LidarrClient {
     return this.config;
   }
 
-  isConfigured() {
-    return !!this.config.apiKey;
+  isConfigured(skipConfigUpdate = false) {
+    if (!skipConfigUpdate) {
+      this.updateConfig();
+    }
+    return !!this.config?.apiKey?.trim();
   }
 
   getAuthHeaders() {
@@ -162,7 +248,7 @@ export class LidarrClient {
       this.updateConfig();
     }
 
-    if (!this.isConfigured()) {
+    if (!this.isConfigured(skipConfigUpdate)) {
       throw new Error("Lidarr API key not configured");
     }
 
@@ -179,11 +265,9 @@ export class LidarrClient {
       method === "GET" &&
       (endpoint === "/album" || endpoint.startsWith("/album?"))
     ) {
-      if (
-        this._albumListCache &&
-        now - this._albumListCache.at < LIDARR_LIST_CACHE_MS
-      ) {
-        return this._albumListCache.data;
+      const cached = this._albumCache.get(endpoint);
+      if (cached && now - cached.at < LIDARR_LIST_CACHE_MS) {
+        return cached.data;
       }
     }
 
@@ -225,7 +309,7 @@ export class LidarrClient {
         endpoint.startsWith("/album/"))
     ) {
       this._artistListCache = null;
-      this._albumListCache = null;
+      this._albumCache = new Map();
     }
     if (method !== "GET" && endpoint.startsWith("/command")) {
       this._statusCache.delete("/command");
@@ -283,7 +367,11 @@ export class LidarrClient {
             method === "GET" &&
             (endpoint === "/album" || endpoint.startsWith("/album?"))
           ) {
-            this._albumListCache = { data: response.data, at: Date.now() };
+            if (this._albumCache.size >= LIDARR_ARTIST_ALBUM_CACHE_MAX) {
+              const oldestKey = this._albumCache.keys().next().value;
+              this._albumCache.delete(oldestKey);
+            }
+            this._albumCache.set(endpoint, { data: response.data, at: Date.now() });
           }
           if (isStatusRequest) {
             this._statusCache.set(endpoint, {
@@ -420,7 +508,7 @@ export class LidarrClient {
       this.updateConfig();
     }
 
-    if (!this.isConfigured()) {
+    if (!this.isConfigured(skipConfigUpdate)) {
       return { connected: false, error: "Lidarr not configured" };
     }
 
@@ -515,14 +603,205 @@ export class LidarrClient {
     return this.request("/rootFolder");
   }
 
-  async addArtist(mbid, artistName, options = {}) {
-    const rootFolders = await this.getRootFolders();
-    if (!rootFolders || rootFolders.length === 0) {
+  async getTags(skipConfigUpdate = false) {
+    return this.request("/tag", "GET", null, skipConfigUpdate);
+  }
+
+  getArtistAddFallbacks({ rootFolders, qualityProfiles, settings } = {}) {
+    const safeRootFolders = mapRootFolders(rootFolders);
+    const safeQualityProfiles = mapQualityProfiles(qualityProfiles);
+    const currentSettings = settings || dbOps.getSettings();
+
+    const legacyRootFolderPath = normalizeRootFolderPath(
+      currentSettings.rootFolderPath,
+    );
+    const legacyQualityProfileId = normalizeProfileId(
+      currentSettings.integrations?.lidarr?.qualityProfileId,
+    );
+
+    const fallbackRootFolder =
+      findRootFolder(safeRootFolders, legacyRootFolderPath) || safeRootFolders[0];
+    const fallbackQualityProfile =
+      findQualityProfile(safeQualityProfiles, legacyQualityProfileId) ||
+      safeQualityProfiles[0];
+
+    return {
+      rootFolderPath: fallbackRootFolder?.path || null,
+      qualityProfileId: fallbackQualityProfile?.id ?? null,
+    };
+  }
+
+  async getArtistAddPreferenceSummary(user = null) {
+    const settings = dbOps.getSettings();
+    const savedTagId = normalizeProfileId(
+      settings.integrations?.lidarr?.tagId,
+    );
+
+    if (!this.isConfigured()) {
+      return {
+        configured: false,
+        rootFolders: [],
+        qualityProfiles: [],
+        tags: [],
+        savedDefaults: {
+          rootFolderPath: normalizeRootFolderPath(user?.lidarrRootFolderPath),
+          qualityProfileId: normalizeProfileId(user?.lidarrQualityProfileId),
+          tagId: savedTagId,
+        },
+        fallbacks: {
+          rootFolderPath: null,
+          qualityProfileId: null,
+          tagId: savedTagId,
+        },
+      };
+    }
+
+    const [rootFoldersRaw, qualityProfilesRaw, tagsRaw] = await Promise.all([
+      this.getRootFolders(),
+      this.getQualityProfiles(),
+      this.getTags(),
+    ]);
+    const rootFolders = mapRootFolders(rootFoldersRaw);
+    const qualityProfiles = mapQualityProfiles(qualityProfilesRaw);
+    const tags = mapTags(tagsRaw);
+
+    return {
+      configured: true,
+      rootFolders: rootFolders.map((folder) => ({ path: folder.path })),
+      qualityProfiles: qualityProfiles.map((profile) => ({
+        id: profile.id,
+        name: profile.name || `Profile ${profile.id}`,
+      })),
+      tags: tags.map((tag) => ({
+        id: tag.id,
+        label: tag.label,
+      })),
+      savedDefaults: {
+        rootFolderPath: normalizeRootFolderPath(user?.lidarrRootFolderPath),
+        qualityProfileId: normalizeProfileId(user?.lidarrQualityProfileId),
+        tagId: savedTagId,
+      },
+      fallbacks: {
+        ...this.getArtistAddFallbacks({
+          rootFolders,
+          qualityProfiles,
+        }),
+        tagId: savedTagId,
+      },
+    };
+  }
+
+  async resolveArtistAddConfiguration(options = {}) {
+    const rootFolders = mapRootFolders(
+      options.rootFolders || (await this.getRootFolders()),
+    );
+    if (rootFolders.length === 0) {
       throw new Error("No root folders configured in Lidarr");
     }
 
-    const rootFolder = rootFolders[0];
+    const qualityProfiles = mapQualityProfiles(
+      options.qualityProfiles || (await this.getQualityProfiles()),
+    );
+    if (qualityProfiles.length === 0) {
+      throw new Error("No quality profiles configured in Lidarr");
+    }
+
+    const fallbacks = this.getArtistAddFallbacks({
+      rootFolders,
+      qualityProfiles,
+      settings: options.settings,
+    });
+
+    const requestedRootFolderPath = normalizeRootFolderPath(
+      options.requestRootFolderPath,
+    );
+    const requestedQualityProfileId = normalizeProfileId(
+      options.requestQualityProfileId,
+    );
+    const savedRootFolderPath = normalizeRootFolderPath(
+      options.savedRootFolderPath,
+    );
+    const savedQualityProfileId = normalizeProfileId(
+      options.savedQualityProfileId,
+    );
+
+    let resolvedRootFolderPath = fallbacks.rootFolderPath;
+    let resolvedQualityProfileId = fallbacks.qualityProfileId;
+
+    if (requestedRootFolderPath) {
+      const requestRootFolder = findRootFolder(rootFolders, requestedRootFolderPath);
+      if (!requestRootFolder) {
+        throw createPreferenceError(
+          400,
+          "rootFolderPath",
+          `Unknown Lidarr root folder: ${requestedRootFolderPath}`,
+          "INVALID_ROOT_FOLDER_PATH",
+        );
+      }
+      resolvedRootFolderPath = requestRootFolder.path;
+    } else if (savedRootFolderPath) {
+      const savedRootFolder = findRootFolder(rootFolders, savedRootFolderPath);
+      if (!savedRootFolder) {
+        throw createPreferenceError(
+          409,
+          "rootFolderPath",
+          `Your saved Lidarr root folder no longer exists: ${savedRootFolderPath}. Update your Library Defaults or use Customize.`,
+          "STALE_ROOT_FOLDER_PATH",
+        );
+      }
+      resolvedRootFolderPath = savedRootFolder.path;
+    }
+
+    if (requestedQualityProfileId !== null) {
+      const requestQualityProfile = findQualityProfile(
+        qualityProfiles,
+        requestedQualityProfileId,
+      );
+      if (!requestQualityProfile) {
+        throw createPreferenceError(
+          400,
+          "qualityProfileId",
+          `Unknown Lidarr quality profile: ${requestedQualityProfileId}`,
+          "INVALID_QUALITY_PROFILE_ID",
+        );
+      }
+      resolvedQualityProfileId = requestQualityProfile.id;
+    } else if (savedQualityProfileId !== null) {
+      const savedQualityProfile = findQualityProfile(
+        qualityProfiles,
+        savedQualityProfileId,
+      );
+      if (!savedQualityProfile) {
+        throw createPreferenceError(
+          409,
+          "qualityProfileId",
+          `Your saved Lidarr quality profile no longer exists: ${savedQualityProfileId}. Update your Library Defaults or use Customize.`,
+          "STALE_QUALITY_PROFILE_ID",
+        );
+      }
+      resolvedQualityProfileId = savedQualityProfile.id;
+    }
+
+    return {
+      rootFolders,
+      qualityProfiles,
+      fallbacks,
+      resolved: {
+        rootFolderPath: resolvedRootFolderPath,
+        qualityProfileId: resolvedQualityProfileId,
+      },
+    };
+  }
+
+  async addArtist(mbid, artistName, options = {}) {
     const settings = dbOps.getSettings();
+    const { resolved } = await this.resolveArtistAddConfiguration({
+      requestRootFolderPath: options.rootFolderPath,
+      requestQualityProfileId: options.qualityProfileId,
+      savedRootFolderPath: options.savedRootFolderPath,
+      savedQualityProfileId: options.savedQualityProfileId,
+      settings,
+    });
 
     const albumOnly = options.albumOnly === true;
     const monitorOption = options.monitorOption || options.monitor || "none";
@@ -532,10 +811,7 @@ export class LidarrClient {
     const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
     const monitorNewItems = monitorOption === "none" ? "none" : "all";
 
-    const defaultQualityProfileId =
-      settings.integrations?.lidarr?.qualityProfileId;
-    const qualityProfileId =
-      options.qualityProfileId || defaultQualityProfileId || 1;
+    const qualityProfileId = resolved.qualityProfileId;
     const defaultMetadataProfileId =
       settings.integrations?.lidarr?.metadataProfileId;
     let metadataProfileId =
@@ -550,15 +826,21 @@ export class LidarrClient {
     }
     if (!metadataProfileId) metadataProfileId = 1;
 
+    const configuredTagId = normalizeProfileId(
+      options.tagId ?? settings.integrations?.lidarr?.tagId,
+    );
+    const tags = configuredTagId !== null ? [configuredTagId] : [];
+
     const lidarrArtist = {
       artistName: artistName,
       foreignArtistId: mbid,
-      rootFolderPath: rootFolder.path,
+      rootFolderPath: resolved.rootFolderPath,
       qualityProfileId: qualityProfileId,
       metadataProfileId: metadataProfileId,
       monitored: artistMonitored,
       monitor: effectiveMonitor,
       monitorNewItems: monitorNewItems,
+      tags: tags,
       albumsToMonitor: [],
       addOptions: {
         monitor: effectiveMonitor,

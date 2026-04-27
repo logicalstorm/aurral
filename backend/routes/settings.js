@@ -23,9 +23,22 @@ router.get("/", noCache, (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
-    const { quality, releaseTypes, integrations } = req.body;
+    const { quality, releaseTypes, integrations, rootFolderPath } = req.body;
 
     const currentSettings = dbOps.getSettings();
+    const lidarrExternalUrl = integrations?.lidarr?.externalUrl;
+    if (lidarrExternalUrl !== undefined) {
+      const trimmedExternalUrl = String(lidarrExternalUrl).trim();
+      if (trimmedExternalUrl) {
+        const urlValidation = validateExternalUrl(trimmedExternalUrl);
+        if (!urlValidation.valid) {
+          return res.status(400).json({ error: urlValidation.error });
+        }
+        integrations.lidarr.externalUrl = urlValidation.url;
+      } else {
+        integrations.lidarr.externalUrl = "";
+      }
+    }
 
     let mergedIntegrations =
       currentSettings.integrations || defaultData.settings.integrations || {};
@@ -57,6 +70,12 @@ router.post("/", async (req, res) => {
               ...integrations.lastfm,
             }
           : mergedIntegrations.lastfm,
+        ticketmaster: integrations.ticketmaster
+          ? {
+              ...(mergedIntegrations.ticketmaster || {}),
+              ...integrations.ticketmaster,
+            }
+          : mergedIntegrations.ticketmaster,
         musicbrainz: integrations.musicbrainz
           ? {
               ...(mergedIntegrations.musicbrainz || {}),
@@ -75,6 +94,15 @@ router.post("/", async (req, res) => {
               ...integrations.gotify,
             }
           : mergedIntegrations.gotify,
+        webhooks: integrations.webhooks !== undefined
+          ? integrations.webhooks
+          : mergedIntegrations.webhooks,
+        webhookEvents: integrations.webhookEvents
+          ? {
+              ...(mergedIntegrations.webhookEvents || {}),
+              ...integrations.webhookEvents,
+            }
+          : mergedIntegrations.webhookEvents,
       };
     }
 
@@ -82,6 +110,10 @@ router.post("/", async (req, res) => {
       ...currentSettings,
       quality:
         quality !== undefined ? quality : currentSettings.quality || "standard",
+      rootFolderPath:
+        rootFolderPath !== undefined
+          ? rootFolderPath
+          : currentSettings.rootFolderPath || null,
       releaseTypes:
         releaseTypes !== undefined
           ? releaseTypes
@@ -244,6 +276,63 @@ router.get("/lidarr/metadata-profiles", async (req, res) => {
     );
     res.status(500).json({
       error: "Failed to fetch Lidarr metadata profiles",
+      message: error.message,
+      details: error.response?.data,
+    });
+  }
+});
+
+router.get("/lidarr/tags", async (req, res) => {
+  try {
+    const { lidarrClient } = await import("../services/lidarrClient.js");
+
+    const testUrl = req.query.url;
+    const testApiKey = req.query.apiKey;
+
+    let url, apiKey;
+    if (testUrl && testApiKey) {
+      url = testUrl.trim();
+      apiKey = testApiKey.trim();
+    } else {
+      lidarrClient.updateConfig();
+      const config = lidarrClient.getConfig();
+      url = config.url;
+      apiKey = config.apiKey;
+    }
+
+    if (!url || !apiKey) {
+      return res.status(400).json({
+        error: "Lidarr not configured",
+        message: "Please configure Lidarr URL and API key in settings first",
+      });
+    }
+    const urlValidation = validateExternalUrl(url);
+    if (!urlValidation.valid) {
+      return res.status(400).json({ error: urlValidation.error });
+    }
+    url = urlValidation.url;
+
+    const originalConfig = { ...lidarrClient.config };
+    const originalApiPath = lidarrClient.apiPath;
+
+    lidarrClient.config = {
+      url: url.replace(/\/+$/, ""),
+      apiKey: apiKey.trim(),
+    };
+    lidarrClient.apiPath = "/api/v1";
+
+    try {
+      const tags = await lidarrClient.getTags(true);
+      res.json(tags);
+    } finally {
+      lidarrClient.config = originalConfig;
+      lidarrClient.apiPath = originalApiPath;
+      lidarrClient.updateConfig();
+    }
+  } catch (error) {
+    console.error("[Settings] Failed to fetch Lidarr tags:", error);
+    res.status(500).json({
+      error: "Failed to fetch Lidarr tags",
       message: error.message,
       details: error.response?.data,
     });
