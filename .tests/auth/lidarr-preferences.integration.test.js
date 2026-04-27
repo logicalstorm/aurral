@@ -30,6 +30,10 @@ const DEFAULT_QUALITY_PROFILES = [
   { id: 7, name: "Lossless" },
   { id: 9, name: "Compressed" },
 ];
+const DEFAULT_TAGS = [
+  { id: 3, label: "Aurral" },
+  { id: 4, label: "Wishlist" },
+];
 
 function json(res, statusCode, payload) {
   res.writeHead(statusCode, { "Content-Type": "application/json" });
@@ -51,6 +55,7 @@ async function startFakeLidarr() {
     qualityProfiles: DEFAULT_QUALITY_PROFILES.map((profile) => ({
       ...profile,
     })),
+    tags: DEFAULT_TAGS.map((tag) => ({ ...tag })),
     metadataProfiles: [{ id: 1, name: "Standard" }],
     artists: [],
     postedArtists: [],
@@ -68,6 +73,9 @@ async function startFakeLidarr() {
     }
     if (req.method === "GET" && url.pathname === "/api/v1/qualityprofile") {
       return json(res, 200, state.qualityProfiles);
+    }
+    if (req.method === "GET" && url.pathname === "/api/v1/tag") {
+      return json(res, 200, state.tags);
     }
     if (req.method === "GET" && url.pathname === "/api/v1/metadataprofile") {
       return json(res, 200, state.metadataProfiles);
@@ -132,6 +140,7 @@ async function startFakeLidarr() {
       state.qualityProfiles = DEFAULT_QUALITY_PROFILES.map((profile) => ({
         ...profile,
       }));
+      state.tags = DEFAULT_TAGS.map((tag) => ({ ...tag }));
       state.metadataProfiles = [{ id: 1, name: "Standard" }];
       state.artists = [];
       state.postedArtists = [];
@@ -257,6 +266,7 @@ test("GET /users/me/lidarr-preferences returns configured false with empty optio
   assert.deepEqual(payload.fallbacks, {
     rootFolderPath: null,
     qualityProfileId: null,
+    tagId: null,
   });
 });
 
@@ -272,13 +282,16 @@ test("GET /users/me/lidarr-preferences returns live options plus saved defaults 
   assert.equal(payload.configured, true);
   assert.deepEqual(payload.rootFolders, DEFAULT_ROOT_FOLDERS);
   assert.deepEqual(payload.qualityProfiles, DEFAULT_QUALITY_PROFILES);
+  assert.deepEqual(payload.tags, DEFAULT_TAGS);
   assert.deepEqual(payload.savedDefaults, {
     rootFolderPath: "/music/alt",
     qualityProfileId: 9,
+    tagId: null,
   });
   assert.deepEqual(payload.fallbacks, {
     rootFolderPath: "/music/main",
     qualityProfileId: 7,
+    tagId: null,
   });
 });
 
@@ -295,6 +308,7 @@ test("PATCH /users/me/lidarr-preferences accepts valid selections and clears the
   assert.deepEqual(saveResult.payload.savedDefaults, {
     rootFolderPath: "/music/alt",
     qualityProfileId: 9,
+    tagId: null,
   });
 
   const stored = userOps.getUserById(adminUserId);
@@ -313,6 +327,7 @@ test("PATCH /users/me/lidarr-preferences accepts valid selections and clears the
   assert.deepEqual(clearResult.payload.savedDefaults, {
     rootFolderPath: null,
     qualityProfileId: null,
+    tagId: null,
   });
 });
 

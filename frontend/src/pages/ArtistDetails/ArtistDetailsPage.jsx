@@ -376,6 +376,8 @@ function ArtistDetailsPage() {
         setRootFolderPath={library.setCustomizeRootFolderPath}
         qualityProfileId={library.customizeQualityProfileId}
         setQualityProfileId={library.setCustomizeQualityProfileId}
+        tagId={library.customizeTagId}
+        setTagId={library.setCustomizeTagId}
         onClose={() => library.setShowAddCustomizeModal(false)}
         onConfirm={library.handleCustomizeAddToLibrary}
         confirming={library.addingToLibrary}

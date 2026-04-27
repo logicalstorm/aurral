@@ -10,6 +10,8 @@ export function AddArtistCustomizeModal({
   setRootFolderPath,
   qualityProfileId,
   setQualityProfileId,
+  tagId,
+  setTagId,
   onClose,
   onConfirm,
   confirming,
@@ -22,6 +24,7 @@ export function AddArtistCustomizeModal({
   const qualityProfiles = Array.isArray(preferences?.qualityProfiles)
     ? preferences.qualityProfiles
     : [];
+  const tags = Array.isArray(preferences?.tags) ? preferences.tags : [];
   const configured = preferences?.configured === true;
 
   return (
@@ -105,9 +108,36 @@ export function AddArtistCustomizeModal({
               </select>
             </div>
 
+            <div>
+              <label
+                className="block text-sm font-medium mb-1"
+                style={{ color: "#fff" }}
+              >
+                Tag
+              </label>
+              <select
+                className="input"
+                value={tagId}
+                onChange={(e) => setTagId(e.target.value)}
+                disabled={!configured || confirming}
+              >
+                <option value="">
+                  {configured
+                    ? "Use saved global default"
+                    : "Lidarr is not configured"}
+                </option>
+                {tags.map((tag) => (
+                  <option key={tag.id} value={String(tag.id)}>
+                    {tag.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <p className="text-xs" style={{ color: "#c1c1c3" }}>
               Leaving a field on automatic uses your saved Library Defaults, or
               the global Lidarr fallback when you do not have a saved default.
+              Leaving tag on automatic uses the global Lidarr tag setting.
             </p>
           </div>
         )}
@@ -152,11 +182,19 @@ AddArtistCustomizeModal.propTypes = {
         name: PropTypes.string,
       }),
     ),
+    tags: PropTypes.arrayOf(
+      PropTypes.shape({
+        id: PropTypes.number,
+        label: PropTypes.string,
+      }),
+    ),
   }),
   rootFolderPath: PropTypes.string,
   setRootFolderPath: PropTypes.func,
   qualityProfileId: PropTypes.string,
   setQualityProfileId: PropTypes.func,
+  tagId: PropTypes.string,
+  setTagId: PropTypes.func,
   onClose: PropTypes.func,
   onConfirm: PropTypes.func,
   confirming: PropTypes.bool,

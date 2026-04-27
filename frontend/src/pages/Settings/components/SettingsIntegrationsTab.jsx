@@ -4,6 +4,7 @@ import FlipSaveButton from "../../../components/FlipSaveButton";
 import {
   getLidarrMetadataProfiles,
   getLidarrProfiles,
+  getLidarrTags,
   testLidarrConnection,
 } from "../../../utils/api";
 
@@ -19,6 +20,10 @@ export function SettingsIntegrationsTab({
   loadingLidarrMetadataProfiles,
   setLoadingLidarrMetadataProfiles,
   setLidarrMetadataProfiles,
+  lidarrTags,
+  loadingLidarrTags,
+  setLoadingLidarrTags,
+  setLidarrTags,
   testingLidarr,
   setTestingLidarr,
   applyingCommunityGuide,
@@ -40,6 +45,7 @@ export function SettingsIntegrationsTab({
   const safeLidarrMetadataProfiles = Array.isArray(lidarrMetadataProfiles)
     ? lidarrMetadataProfiles
     : [];
+  const safeLidarrTags = Array.isArray(lidarrTags) ? lidarrTags : [];
 
   const handleTestLidarr = async () => {
     const url = settings.integrations?.lidarr?.url;
@@ -60,17 +66,21 @@ export function SettingsIntegrationsTab({
         );
         setLoadingLidarrProfiles(true);
         setLoadingLidarrMetadataProfiles(true);
+        setLoadingLidarrTags(true);
         try {
-          const [profiles, metadataProfiles] = await Promise.all([
+          const [profiles, metadataProfiles, tags] = await Promise.all([
             getLidarrProfiles(url, apiKey),
             getLidarrMetadataProfiles(url, apiKey),
+            getLidarrTags(url, apiKey),
           ]);
           const nextProfiles = Array.isArray(profiles) ? profiles : [];
           const nextMetadataProfiles = Array.isArray(metadataProfiles)
             ? metadataProfiles
             : [];
+          const nextTags = Array.isArray(tags) ? tags : [];
           setLidarrProfiles(nextProfiles);
           setLidarrMetadataProfiles(nextMetadataProfiles);
+          setLidarrTags(nextTags);
           if (nextProfiles.length > 0) {
             showInfo(`Loaded ${nextProfiles.length} quality profile(s)`);
           }
@@ -79,10 +89,14 @@ export function SettingsIntegrationsTab({
               `Loaded ${nextMetadataProfiles.length} metadata profile(s)`
             );
           }
+          if (nextTags.length > 0) {
+            showInfo(`Loaded ${nextTags.length} tag(s)`);
+          }
         } catch {
         } finally {
           setLoadingLidarrProfiles(false);
           setLoadingLidarrMetadataProfiles(false);
+          setLoadingLidarrTags(false);
         }
       } else {
         showError(
@@ -154,6 +168,34 @@ export function SettingsIntegrationsTab({
       showError(`Failed to load metadata profiles: ${errorMsg}`);
     } finally {
       setLoadingLidarrMetadataProfiles(false);
+    }
+  };
+
+  const handleRefreshTags = async () => {
+    const url = settings.integrations?.lidarr?.url;
+    const apiKey = settings.integrations?.lidarr?.apiKey;
+    if (!url || !apiKey) {
+      showError("Please enter Lidarr URL and API key first");
+      return;
+    }
+    setLoadingLidarrTags(true);
+    try {
+      const tags = await getLidarrTags(url, apiKey);
+      const nextTags = Array.isArray(tags) ? tags : [];
+      setLidarrTags(nextTags);
+      if (nextTags.length > 0) {
+        showSuccess(`Loaded ${nextTags.length} tag(s)`);
+      } else {
+        showInfo("No tags found in Lidarr");
+      }
+    } catch (err) {
+      const errorMsg =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message;
+      showError(`Failed to load tags: ${errorMsg}`);
+    } finally {
+      setLoadingLidarrTags(false);
     }
   };
 
@@ -455,6 +497,71 @@ export function SettingsIntegrationsTab({
               </div>
               <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
                 Metadata profile used when adding artists to Lidarr.
+              </p>
+            </div>
+            <div>
+              <label
+                className="block text-sm font-medium mb-1"
+                style={{ color: "#fff" }}
+              >
+                Tag
+              </label>
+              <div className="flex gap-2">
+                <select
+                  className="input flex-1"
+                  value={
+                    settings.integrations?.lidarr?.tagId
+                      ? String(settings.integrations.lidarr.tagId)
+                      : ""
+                  }
+                  onChange={(e) =>
+                    updateSettings({
+                      ...settings,
+                      integrations: {
+                        ...settings.integrations,
+                        lidarr: {
+                          ...(settings.integrations?.lidarr || {}),
+                          tagId: e.target.value
+                            ? parseInt(e.target.value)
+                            : null,
+                        },
+                      },
+                    })
+                  }
+                  disabled={loadingLidarrTags}
+                >
+                  <option value="">
+                    {loadingLidarrTags
+                      ? "Loading tags..."
+                      : safeLidarrTags.length === 0
+                      ? "No tags available (test connection first)"
+                      : "None"}
+                  </option>
+                  {safeLidarrTags.map((tag) => (
+                    <option key={tag.id} value={tag.id}>
+                      {tag.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleRefreshTags}
+                  disabled={
+                    loadingLidarrTags ||
+                    !settings.integrations?.lidarr?.url ||
+                    !settings.integrations?.lidarr?.apiKey
+                  }
+                  className="btn btn-secondary"
+                >
+                  <RefreshCw
+                    className={`w-4 h-4 ${
+                      loadingLidarrTags ? "animate-spin" : ""
+                    }`}
+                  />
+                </button>
+              </div>
+              <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
+                Tag applied to artists added through Aurral.
               </p>
             </div>
             <div>

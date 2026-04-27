@@ -180,6 +180,7 @@ export const defaultData = {
         apiKey: "",
         qualityProfileId: null,
         metadataProfileId: null,
+        tagId: null,
         defaultMonitorOption: "none",
         searchOnAdd: false,
       },
