@@ -55,6 +55,10 @@ function SettingsPage() {
               data.setLoadingLidarrMetadataProfiles
             }
             setLidarrMetadataProfiles={data.setLidarrMetadataProfiles}
+            lidarrTags={data.lidarrTags}
+            loadingLidarrTags={data.loadingLidarrTags}
+            setLoadingLidarrTags={data.setLoadingLidarrTags}
+            setLidarrTags={data.setLidarrTags}
             testingLidarr={data.testingLidarr}
             setTestingLidarr={data.setTestingLidarr}
             applyingCommunityGuide={data.applyingCommunityGuide}
