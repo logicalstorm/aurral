@@ -176,16 +176,27 @@ export class WeeklyFlowPlaylistSource {
 
   _filterTracksByBlocklist(tracks, blocklist) {
     const blockedArtists = Array.isArray(blocklist?.artists) ? blocklist.artists : [];
+    const blockedMbids = new Set(
+      blockedArtists
+        .map((entry) => this._artistKey(entry?.mbid))
+        .filter((value) => MBID_REGEX.test(value)),
+    );
     const blockedNames = new Set(
       blockedArtists
         .map((entry) => this._artistKey(entry?.name))
         .filter(Boolean),
     );
-    if (!Array.isArray(tracks) || tracks.length === 0 || blockedNames.size === 0) {
+    if (
+      !Array.isArray(tracks) ||
+      tracks.length === 0 ||
+      (blockedNames.size === 0 && blockedMbids.size === 0)
+    ) {
       return Array.isArray(tracks) ? tracks : [];
     }
     return tracks.filter((track) => {
       const artistKey = this._artistKey(track?.artistName);
+      const artistMbid = this._artistKey(track?.artistMbid);
+      if (artistMbid && blockedMbids.has(artistMbid)) return false;
       return artistKey && !blockedNames.has(artistKey);
     });
   }
@@ -645,7 +656,10 @@ export class WeeklyFlowPlaylistSource {
     }
 
     if (sources.length === 0) {
-      return await this.getDiscoverTracks(limit, { deepDive });
+      return await this.getDiscoverTracks(limit, {
+        deepDive,
+        blocklist: options?.blocklist,
+      });
     }
 
     if (!getLastfmApiKey()) {
@@ -660,6 +674,7 @@ export class WeeklyFlowPlaylistSource {
         if (source.type === "tag") {
           const tracks = await this.getTagTracks(source.key, source.count, {
             reason: `From genre: ${source.key}`,
+            blocklist: options?.blocklist,
           });
           curated.push(...tracks);
         } else {
@@ -669,6 +684,7 @@ export class WeeklyFlowPlaylistSource {
             {
               deepDive,
               reason: `Similar to ${source.key}`,
+              blocklist: options?.blocklist,
             },
           );
           curated.push(...tracks);
@@ -684,6 +700,7 @@ export class WeeklyFlowPlaylistSource {
 
     const fallback = await this.getDiscoverTracks(limit - curated.length, {
       deepDive,
+      blocklist: options?.blocklist,
     }).catch(() => []);
     return [...curated, ...fallback];
   }
@@ -994,6 +1011,10 @@ export class WeeklyFlowPlaylistSource {
       throw new Error("Last.fm API key not configured");
     }
     if (!tag || limit <= 0) return [];
+    const normalizedTag = this._artistKey(tag);
+    if (normalizedTag && this._isTagBlockedByBlocklist([normalizedTag], options?.blocklist)) {
+      return [];
+    }
     const requested = Math.max(limit * 3, 50);
     const trackData = await lastfmRequest("tag.getTopTracks", {
       tag,
