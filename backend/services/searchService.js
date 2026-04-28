@@ -45,6 +45,11 @@ function normalizeArtistImage(cachedImage) {
 
 export function normalizeArtistSearchItem(artist, cachedImages = {}) {
   const imageUrl = normalizeArtistImage(cachedImages[artist.id]);
+  const areaName =
+    artist?.area?.name || artist?.["begin-area"]?.name || artist?.area || null;
+  const lifeSpan = artist?.["life-span"] || artist?.lifeSpan || null;
+  const begin = lifeSpan?.begin || null;
+  const end = lifeSpan?.end || null;
   return {
     type: "artist",
     id: artist.id,
@@ -52,6 +57,12 @@ export function normalizeArtistSearchItem(artist, cachedImages = {}) {
     sortName: artist["sort-name"] || artist.name,
     image: imageUrl,
     imageUrl,
+    artistType: artist.type || null,
+    country: artist.country || null,
+    area: areaName,
+    begin,
+    end,
+    disambiguation: artist.disambiguation || null,
     inLibrary: false,
   };
 }

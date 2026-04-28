@@ -766,6 +766,50 @@ export async function musicbrainzGetArtistReleaseGroups(mbid) {
   }
 }
 
+export async function musicbrainzGetArtistReleaseGroupsPreview(mbid, limit = 50) {
+  if (!mbid) return [];
+  const parsedLimit = Number.parseInt(limit, 10);
+  const safeLimit =
+    Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(100, parsedLimit) : 50;
+  try {
+    const data = await musicbrainzRequest("/release-group", {
+      artist: mbid,
+      limit: safeLimit,
+      offset: 0,
+    });
+    const releaseGroups = Array.isArray(data?.["release-groups"])
+      ? data["release-groups"]
+      : [];
+    return releaseGroups
+      .filter(
+        (rg) =>
+          rg?.id &&
+          ALLOWED_PRIMARY_TYPES.has((rg["primary-type"] || "").toLowerCase()),
+      )
+      .map((rg) => ({
+        id: rg.id,
+        title: rg.title || "",
+        "first-release-date": rg["first-release-date"] || null,
+        "primary-type":
+          rg["primary-type"] === "EP"
+            ? "EP"
+            : rg["primary-type"] === "Single"
+              ? "Single"
+              : "Album",
+        "secondary-types": Array.isArray(rg["secondary-types"])
+          ? rg["secondary-types"]
+          : [],
+      }))
+      .sort((a, b) => {
+        const dateA = a["first-release-date"] || "";
+        const dateB = b["first-release-date"] || "";
+        return dateB.localeCompare(dateA);
+      });
+  } catch (e) {
+    return [];
+  }
+}
+
 /**
  * Enrich MusicBrainz release-groups with Deezer data: cover URL, fans count, and Deezer album ID for tracks.
  * Mutates and returns the same array (adds _coverUrl, fans, _deezerAlbumId when matched).
