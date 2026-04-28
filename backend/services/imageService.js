@@ -1,11 +1,8 @@
 import { dbOps } from "../config/db-helpers.js";
 import {
-  deezerSearchArtist,
-  lastfmGetArtistNameByMbid,
-  getLastfmApiKey,
-  getDeezerArtistById,
-  musicbrainzGetArtistNameByMbid,
+  musicbrainzGetArtistReleaseGroupsPreview,
 } from "./apiClients.js";
+import axios from "axios";
 
 const MAX_NEGATIVE_CACHE = 1000;
 const MAX_PENDING_REQUESTS = 100;
@@ -26,6 +23,53 @@ const addToPendingRequests = (mbid, promise) => {
     pendingImageRequests.delete(firstKey);
   }
   pendingImageRequests.set(mbid, promise);
+};
+
+const getCachedUrl = (cacheKey) => {
+  const cached = dbOps.getImage(cacheKey);
+  if (cached?.imageUrl && cached.imageUrl !== "NOT_FOUND") {
+    return cached.imageUrl;
+  }
+  if (cached?.imageUrl === "NOT_FOUND") {
+    return null;
+  }
+  return undefined;
+};
+
+const fetchReleaseGroupCoverUrl = async (releaseGroupMbid) => {
+  const cacheKey = `rg:${releaseGroupMbid}`;
+  const cached = getCachedUrl(cacheKey);
+  if (cached !== undefined) return cached;
+  try {
+    const coverArtJson = await axios
+      .get(`https://coverartarchive.org/release-group/${releaseGroupMbid}`, {
+        headers: { Accept: "application/json" },
+        timeout: 2000,
+      })
+      .catch(() => null);
+    const images = coverArtJson?.data?.images;
+    if (Array.isArray(images) && images.length > 0) {
+      const front = images.find((img) => img.front) || images[0];
+      const imageUrl =
+        front?.thumbnails?.["500"] ||
+        front?.thumbnails?.large ||
+        front?.image ||
+        null;
+      if (imageUrl) {
+        dbOps.setImage(cacheKey, imageUrl);
+        return imageUrl;
+      }
+    }
+  } catch (e) {}
+  dbOps.setImage(cacheKey, "NOT_FOUND");
+  return null;
+};
+
+const typeRank = (primaryType) => {
+  if (primaryType === "Album") return 0;
+  if (primaryType === "EP") return 1;
+  if (primaryType === "Single") return 2;
+  return 3;
 };
 
 export const getArtistImage = async (mbid, forceRefresh = false) => {
@@ -56,7 +100,7 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
   }
 
   if (!forceRefresh && negativeImageCache.has(mbid)) {
-    negativeImageCache.delete(mbid);
+    return { url: null, images: [] };
   }
 
   if (pendingImageRequests.has(mbid)) {
@@ -65,33 +109,43 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
 
   const fetchPromise = (async () => {
     try {
-      const { libraryManager } = await import("./libraryManager.js");
       const override = dbOps.getArtistOverride(mbid);
       const resolvedMbid = override?.musicbrainzId || mbid;
-      const deezerArtistId = override?.deezerArtistId || null;
-      const libraryArtist = libraryManager.getArtist(mbid);
-      let artistName =
-        libraryArtist?.artistName ||
-        (getLastfmApiKey()
-          ? await lastfmGetArtistNameByMbid(resolvedMbid)
-          : null) ||
-        (await musicbrainzGetArtistNameByMbid(resolvedMbid));
+      const rgCacheKey = `artist_rg:${resolvedMbid}`;
+      const cachedRg = forceRefresh ? null : dbOps.getDeezerMbidCache(rgCacheKey);
+      const releaseGroups = cachedRg
+        ? cachedRg === "NOT_FOUND"
+          ? []
+          : [{ id: cachedRg, "primary-type": "Album", "first-release-date": null }]
+        : await musicbrainzGetArtistReleaseGroupsPreview(resolvedMbid, 80);
 
-      if (artistName) {
-        try {
-          const deezer = deezerArtistId
-            ? await getDeezerArtistById(deezerArtistId)
-            : await deezerSearchArtist(artistName);
-          if (deezer?.imageUrl) {
-            dbOps.setImage(mbid, deezer.imageUrl);
-            return {
-              url: deezer.imageUrl,
-              images: [
-                { image: deezer.imageUrl, front: true, types: ["Front"] },
-              ],
-            };
+      const ordered = releaseGroups
+        .filter((rg) => rg?.id)
+        .sort((a, b) => {
+          const rankDiff = typeRank(a["primary-type"]) - typeRank(b["primary-type"]);
+          if (rankDiff !== 0) return rankDiff;
+          const dateA = a["first-release-date"] || "";
+          const dateB = b["first-release-date"] || "";
+          return dateB.localeCompare(dateA);
+        })
+        .slice(0, 25);
+
+      for (const rg of ordered) {
+        const coverUrl = await fetchReleaseGroupCoverUrl(rg.id);
+        if (coverUrl) {
+          dbOps.setImage(mbid, coverUrl);
+          if (!cachedRg || forceRefresh) {
+            dbOps.setDeezerMbidCache(rgCacheKey, rg.id);
           }
-        } catch (e) {}
+          return {
+            url: coverUrl,
+            images: [{ image: coverUrl, front: true, types: ["Front"] }],
+          };
+        }
+      }
+
+      if (!cachedRg || forceRefresh) {
+        dbOps.setDeezerMbidCache(rgCacheKey, "NOT_FOUND");
       }
     } catch (e) {
       console.warn(`Failed to fetch image for ${mbid}:`, e.message);

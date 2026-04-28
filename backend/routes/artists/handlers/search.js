@@ -34,6 +34,9 @@ const handleSearch = async (req, res) => {
           cachedImage.imageUrl !== "NOT_FOUND"
             ? cachedImage.imageUrl
             : null;
+        const areaName =
+          a?.area?.name || a?.["begin-area"]?.name || a?.area || null;
+        const lifeSpan = a?.["life-span"] || a?.lifeSpan || null;
 
         return {
           id: a.id,
@@ -41,6 +44,12 @@ const handleSearch = async (req, res) => {
           "sort-name": a["sort-name"] || a.name,
           image: imageUrl,
           imageUrl,
+          artistType: a.type || null,
+          country: a.country || null,
+          area: areaName,
+          begin: lifeSpan?.begin || null,
+          end: lifeSpan?.end || null,
+          disambiguation: a.disambiguation || null,
           listeners: null,
         };
       });
