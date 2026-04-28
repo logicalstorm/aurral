@@ -1,8 +1,8 @@
 import { dbOps } from "../config/db-helpers.js";
 import {
+  fetchCoverArtArchiveReleaseGroup,
   musicbrainzGetArtistReleaseGroupsPreview,
 } from "./apiClients.js";
-import axios from "axios";
 
 const MAX_NEGATIVE_CACHE = 1000;
 const MAX_PENDING_REQUESTS = 100;
@@ -41,24 +41,10 @@ const fetchReleaseGroupCoverUrl = async (releaseGroupMbid) => {
   const cached = getCachedUrl(cacheKey);
   if (cached !== undefined) return cached;
   try {
-    const coverArtJson = await axios
-      .get(`https://coverartarchive.org/release-group/${releaseGroupMbid}`, {
-        headers: { Accept: "application/json" },
-        timeout: 2000,
-      })
-      .catch(() => null);
-    const images = coverArtJson?.data?.images;
-    if (Array.isArray(images) && images.length > 0) {
-      const front = images.find((img) => img.front) || images[0];
-      const imageUrl =
-        front?.thumbnails?.["500"] ||
-        front?.thumbnails?.large ||
-        front?.image ||
-        null;
-      if (imageUrl) {
-        dbOps.setImage(cacheKey, imageUrl);
-        return imageUrl;
-      }
+    const cover = await fetchCoverArtArchiveReleaseGroup(releaseGroupMbid);
+    if (cover?.imageUrl) {
+      dbOps.setImage(cacheKey, cover.imageUrl);
+      return cover.imageUrl;
     }
   } catch (e) {}
   dbOps.setImage(cacheKey, "NOT_FOUND");
@@ -117,7 +103,7 @@ export const getArtistImage = async (mbid, forceRefresh = false) => {
         ? cachedRg === "NOT_FOUND"
           ? []
           : [{ id: cachedRg, "primary-type": "Album", "first-release-date": null }]
-        : await musicbrainzGetArtistReleaseGroupsPreview(resolvedMbid, 80);
+        : await musicbrainzGetArtistReleaseGroupsPreview(resolvedMbid, 30);
 
       const ordered = releaseGroups
         .filter((rg) => rg?.id)

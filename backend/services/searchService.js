@@ -1,5 +1,5 @@
+import NodeCache from "node-cache";
 import { dbOps } from "../config/db-helpers.js";
-import { imagePrefetchService } from "./imagePrefetchService.js";
 import {
   getLastfmApiKey,
   lastfmRequest,
@@ -23,6 +23,11 @@ const ALL_RELEASE_TYPES = new Set([
   ...PRIMARY_RELEASE_TYPES,
   ...SECONDARY_RELEASE_TYPES,
 ]);
+const albumLibraryLookupCache = new NodeCache({
+  stdTTL: 60,
+  checkperiod: 60,
+  maxKeys: 10,
+});
 
 function parsePositiveInt(value, fallback) {
   const parsed = Number.parseInt(value, 10);
@@ -192,7 +197,11 @@ async function getAlbumLibraryLookup(albumMbids) {
   }
 
   try {
-    const lidarrAlbums = await lidarrClient.request("/album");
+    let lidarrAlbums = albumLibraryLookupCache.get("lidarrAlbums");
+    if (!lidarrAlbums) {
+      lidarrAlbums = await lidarrClient.request("/album");
+      albumLibraryLookupCache.set("lidarrAlbums", lidarrAlbums);
+    }
     const wanted = new Set(albumMbids);
     for (const album of Array.isArray(lidarrAlbums) ? lidarrAlbums : []) {
       const foreignAlbumId = album?.foreignAlbumId;
@@ -234,10 +243,6 @@ export async function searchArtists(query, limit = 24, offset = 0) {
   const items = filteredArtists.map((artist) =>
     normalizeArtistSearchItem(artist, cachedImages),
   );
-
-  if (items.length > 0) {
-    imagePrefetchService.prefetchSearchResults(items).catch(() => {});
-  }
 
   return {
     scope: "artist",
