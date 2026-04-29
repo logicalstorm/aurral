@@ -246,7 +246,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
             err.message),
       );
     }
-  }, [refreshingDiscovery, showInfo, showError, applyHealthUpdate]);
+  }, [refreshingDiscovery, showInfo, showError, refreshHealth]);
 
   const handleClearCache = useCallback(async () => {
     if (
@@ -270,7 +270,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     } finally {
       setClearingCache(false);
     }
-  }, [showSuccess, showError, applyHealthUpdate]);
+  }, [showSuccess, showError, refreshHealth]);
 
   const handleApplyCommunityGuide = useCallback(async () => {
     setShowCommunityGuideModal(false);
