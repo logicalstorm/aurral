@@ -9,7 +9,7 @@ import PropTypes from "prop-types";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Onboarding from "./pages/Onboarding";
-import { checkHealth } from "./utils/api";
+import { getBootstrapStatus } from "./utils/api";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ToastProvider, useToast } from "./contexts/ToastContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -135,10 +135,10 @@ function AppContent() {
         return;
       }
       try {
-        const health = await checkHealth();
-        setIsHealthy(health.status === "ok");
-        setRootFolderConfigured(health.rootFolderConfigured || false);
-        setAppVersion(health.appVersion || null);
+        const bootstrap = await getBootstrapStatus();
+        setIsHealthy(bootstrap.status === "ok");
+        setRootFolderConfigured(bootstrap.rootFolderConfigured || false);
+        setAppVersion(bootstrap.appVersion || null);
       } catch {
         setIsHealthy(false);
         setAppVersion(null);
@@ -160,7 +160,13 @@ function AppContent() {
   }, [isAuthenticated]);
 
   return (
-    <Router basename={basePath}>
+    <Router
+      basename={basePath}
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true,
+      }}
+    >
       <ProtectedRoute>
         <Layout
           isHealthy={isHealthy}
