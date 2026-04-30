@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import PropTypes from "prop-types";
-import { Ban, CheckCircle2, Library, Loader2, MoreVertical } from "lucide-react";
+import {
+  Ban,
+  CheckCircle2,
+  Library,
+  Loader2,
+  MoreVertical,
+} from "lucide-react";
 import ArtistImage from "./ArtistImage";
 
 function ArtistActionsMenu({
@@ -75,7 +81,9 @@ function ArtistActionsMenu({
           )}
           <button
             type="button"
-            onClick={(event) => handleAction(event, "blocklist", onAddToBlocklist)}
+            onClick={(event) =>
+              handleAction(event, "blocklist", onAddToBlocklist)
+            }
             disabled={isBlocked || !!pendingAction}
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
             style={{ color: isBlocked ? "#c1c1c3" : "#fca5a5" }}
@@ -118,7 +126,6 @@ function SearchArtistResults({
       return false;
     });
   };
-
   const formatLifeSpan = (artist) => {
     const begin =
       artist?.begin || artist?.["life-span"]?.begin || artist?.lifeSpan?.begin;
@@ -218,7 +225,7 @@ function SearchArtistResults({
                         state: { artistName: artist.name },
                       })
                     }
-                    className="truncate font-semibold hover:underline cursor-pointer"
+                    className="truncate cursor-pointer font-semibold hover:underline"
                     style={{ color: "#fff" }}
                     title={artist.name}
                   >
