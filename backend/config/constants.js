@@ -215,7 +215,7 @@ export const defaultData = {
       maxRetries: 3,
     },
     weeklyFlowWorker: {
-      concurrency: 3,
+      concurrency: 2,
       preferredFormat: "flac",
       preferredFormatStrict: false,
       retryCycleMinutes: 15,
