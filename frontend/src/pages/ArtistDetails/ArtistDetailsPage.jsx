@@ -542,6 +542,7 @@ function ArtistDetailsPage() {
           downloadStatuses={library.downloadStatuses}
           requestingAlbum={library.requestingAlbum}
           reSearchingAlbum={library.reSearchingAlbum}
+          reSearchingMissingAlbums={library.reSearchingMissingAlbums}
           albumCovers={albumCovers}
           expandedLibraryAlbum={library.expandedLibraryAlbum}
           albumTracks={library.albumTracks}
@@ -553,6 +554,7 @@ function ArtistDetailsPage() {
           handleDeleteAlbumClick={library.handleDeleteAlbumClick}
           canReSearchAlbum={canAddAlbum}
           handleReSearchAlbum={library.handleReSearchAlbum}
+          handleReSearchMissingDownloads={library.handleReSearchMissingDownloads}
           onAddTrackToPlaylist={handleLibraryTrackAdd}
         />
       )}
