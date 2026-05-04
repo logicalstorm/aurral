@@ -159,18 +159,19 @@ setTimeout(() => {
 }, 5000);
 
 const frontendDist = path.join(__dirname, "frontend", "dist");
+const frontendFallbackRoute = /.*/;
 
 if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist));
 
-  app.get("*", (req, res) => {
+  app.get(frontendFallbackRoute, (req, res) => {
     if (req.path.startsWith("/api")) {
       return res.status(404).json({ error: "Not found" });
     }
     res.sendFile(path.join(frontendDist, "index.html"));
   });
 } else {
-  app.get("*", (req, res) => {
+  app.get(frontendFallbackRoute, (req, res) => {
     if (req.path.startsWith("/api")) {
       return res.status(404).json({ error: "Not found" });
     }
