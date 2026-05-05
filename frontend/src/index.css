@@ -1,6 +1,8 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+}
 
 @layer base {
   body {
@@ -85,7 +87,7 @@
 
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center px-4 py-2 font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center px-4 py-2 font-medium transition-all duration-200 focus:outline-hidden focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-sm {
@@ -127,7 +129,7 @@
   }
 
   .input {
-    @apply w-full px-4 py-2 h-10 focus:outline-none focus:ring-2 transition-shadow placeholder-gray-500;
+    @apply w-full px-4 py-2 h-10 focus:outline-hidden focus:ring-2 transition-shadow placeholder-gray-500;
     background-color: #211f27;
     color: #fff;
     --tw-ring-color: #c1c1c3;
