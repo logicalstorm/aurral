@@ -65,6 +65,7 @@ function dedupeAlbums(albums) {
 }
 
 const ARTIST_IMAGE_HYDRATION_CONCURRENCY = 6;
+const ALBUM_COVER_HYDRATION_CONCURRENCY = 6;
 
 function normalizeBlocklistArtists(artists) {
   const source = Array.isArray(artists) ? artists : [];
@@ -420,30 +421,43 @@ function SearchResultsPage() {
     }
 
     const hydrateCovers = async () => {
-      const coverResults = await Promise.all(
-        missingCoverIds.map(async (id) => {
-          const album = results.find((item) => item.id === id);
-          try {
+      for (
+        let index = 0;
+        index < missingCoverIds.length && !cancelled;
+        index += ALBUM_COVER_HYDRATION_CONCURRENCY
+      ) {
+        const batch = missingCoverIds.slice(
+          index,
+          index + ALBUM_COVER_HYDRATION_CONCURRENCY,
+        );
+        const coverResults = await Promise.allSettled(
+          batch.map(async (id) => {
+            const album = results.find((item) => item.id === id);
             const data = await getReleaseGroupCover(id, {
               artistName: album?.artistName || "",
               albumTitle: album?.title || "",
             });
             return [id, data?.images?.[0]?.image || null];
-          } catch {
-            return [id, null];
-          }
-        }),
-      );
-
-      if (cancelled) return;
-
-      setAlbumCovers((prev) => {
-        const next = { ...prev };
-        for (const [id, image] of coverResults) {
-          next[id] = image;
+          }),
+        );
+        if (cancelled) return;
+        const nextBatch = Object.fromEntries(
+          coverResults
+            .filter(
+              (entry) =>
+                Array.isArray(entry.value) &&
+                entry.value[0] &&
+                entry.value[1] !== undefined,
+            )
+            .map((entry) => entry.value),
+        );
+        if (Object.keys(nextBatch).length > 0) {
+          setAlbumCovers((prev) => ({
+            ...prev,
+            ...nextBatch,
+          }));
         }
-        return next;
-      });
+      }
     };
 
     hydrateCovers();
