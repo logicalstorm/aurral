@@ -6,7 +6,7 @@ import {
   musicbrainzRequest,
 } from "./apiClients.js";
 import { getDiscoveryCache } from "./discoveryService.js";
-import { hydrateArtistImages, primeArtistImageCache } from "./artistImageHydration.js";
+import { primeArtistImageCache } from "./artistImageHydration.js";
 import { buildImageProxyUrl } from "./imageProxyService.js";
 import { lidarrClient } from "./lidarrClient.js";
 
@@ -228,7 +228,12 @@ function canUseDirectPrimaryTypeSearch(selectedReleaseTypes) {
 }
 
 function normalizeTagArtistItem(artist, tag) {
-  let imageUrl = artist.image || artist.imageUrl || null;
+  let imageUrl =
+    typeof artist.imageUrl === "string" && artist.imageUrl.trim()
+      ? artist.imageUrl.trim()
+      : typeof artist.image === "string" && artist.image.trim()
+        ? artist.image.trim()
+        : null;
   if (!imageUrl && Array.isArray(artist.image)) {
     const img =
       artist.image.find((entry) => entry.size === "extralarge") ||
@@ -305,20 +310,12 @@ export async function searchArtists(query, limit = 24, offset = 0) {
   const artists = Array.isArray(mbData?.artists) ? mbData.artists : [];
   const filteredArtists = artists.filter((artist) => artist?.id);
   const cachedImages = dbOps.getImages(filteredArtists.map((artist) => artist.id));
-  let items = filteredArtists.map((artist) =>
+  const items = filteredArtists.map((artist) =>
     normalizeArtistSearchItem(artist, cachedImages),
   );
-
-  const warmLimit = Math.min(items.length, Math.max(8, Math.min(limitInt, 12)));
-  items = await hydrateArtistImages(items, {
-    limit: warmLimit,
-    batchSize: 6,
-    delayMs: 15,
-  });
-
-  if (items.length > warmLimit) {
-    primeArtistImageCache(items.slice(warmLimit)).catch(() => {});
-  }
+  primeArtistImageCache(items.slice(0, Math.min(items.length, limitInt))).catch(
+    () => {},
+  );
 
   return {
     scope: "artist",
