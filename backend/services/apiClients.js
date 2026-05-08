@@ -38,6 +38,17 @@ const musicbrainzReleaseGroupsCache = new NodeCache({
   checkperiod: 120,
   maxKeys: 500,
 });
+const PRIMARY_RELEASE_TYPES = ["Album", "EP", "Single"];
+const SECONDARY_RELEASE_TYPES = [
+  "Live",
+  "Remix",
+  "Compilation",
+  "Demo",
+  "Broadcast",
+  "Soundtrack",
+  "Spokenword",
+  "Other",
+];
 const itunesAlbumArtCache = new NodeCache({
   stdTTL: 24 * 60 * 60,
   checkperiod: 10 * 60,
@@ -1270,32 +1281,101 @@ function normalizeTitle(title) {
 
 const ALLOWED_PRIMARY_TYPES = new Set(["album", "ep", "single"]);
 
+function normalizeArtistReleaseTypeSelection(selectedReleaseTypes = []) {
+  const list = Array.isArray(selectedReleaseTypes) ? selectedReleaseTypes : [];
+  const normalized = new Set(list.map((value) => String(value || "").trim()));
+  const primaryTypes = PRIMARY_RELEASE_TYPES.filter((type) =>
+    normalized.has(type),
+  );
+  const secondaryTypes = SECONDARY_RELEASE_TYPES.filter((type) =>
+    normalized.has(type),
+  );
+  return {
+    primaryTypes,
+    secondaryTypes,
+  };
+}
+
+function buildArtistReleaseGroupQuery(mbid, primaryTypes, secondaryTypes) {
+  const clauses = [`arid:${mbid}`];
+
+  if (Array.isArray(primaryTypes) && primaryTypes.length > 0) {
+    if (primaryTypes.length === 1) {
+      clauses.push(`primarytype:${primaryTypes[0].toLowerCase()}`);
+    } else {
+      clauses.push(
+        `(${primaryTypes
+          .map((type) => `primarytype:${type.toLowerCase()}`)
+          .join(" OR ")})`,
+      );
+    }
+  }
+
+  if (Array.isArray(secondaryTypes) && secondaryTypes.length === 0) {
+    clauses.push("-secondarytype:*");
+  }
+
+  return clauses.join(" AND ");
+}
+
 /**
  * One MusicBrainz call: fetch canonical release-groups for an artist.
  * Returns array of { id, title, "first-release-date", "primary-type", "secondary-types" }.
  */
-export async function musicbrainzGetArtistReleaseGroups(mbid) {
-  const cacheKey = `full:${mbid}`;
+export async function musicbrainzGetArtistReleaseGroups(
+  mbid,
+  selectedReleaseTypes = null,
+) {
+  const normalizedSelection = normalizeArtistReleaseTypeSelection(
+    selectedReleaseTypes,
+  );
+  const shouldOptimizeQuery =
+    normalizedSelection.primaryTypes.length > 0 &&
+    (normalizedSelection.primaryTypes.length < PRIMARY_RELEASE_TYPES.length ||
+      normalizedSelection.secondaryTypes.length === 0);
+  const cacheKey = `full:${mbid}:${JSON.stringify(
+    normalizedSelection.primaryTypes,
+  )}:${JSON.stringify(normalizedSelection.secondaryTypes)}`;
   const cached = musicbrainzReleaseGroupsCache.get(cacheKey);
   if (cached) return cached;
   try {
     const raw = [];
     const limit = 100;
     let offset = 0;
-    let totalCount;
+    let totalCount = 0;
 
-    // Fetch all release-groups for the artist
-    do {
-      const data = await musicbrainzRequest("/release-group", {
-        artist: mbid,
-        limit,
-        offset,
-      });
-      totalCount = data["release-group-count"] || 0;
-      const batch = data["release-groups"] || [];
-      raw.push(...batch);
-      offset += limit;
-    } while (offset < totalCount);
+    if (shouldOptimizeQuery) {
+      const query = buildArtistReleaseGroupQuery(
+        mbid,
+        normalizedSelection.primaryTypes,
+        normalizedSelection.secondaryTypes,
+      );
+      do {
+        const data = await musicbrainzRequest("/release-group", {
+          query,
+          limit,
+          offset,
+        });
+        totalCount = Number(data?.count || 0);
+        const batch = Array.isArray(data?.["release-groups"])
+          ? data["release-groups"]
+          : [];
+        raw.push(...batch);
+        offset += limit;
+      } while (offset < totalCount);
+    } else {
+      do {
+        const data = await musicbrainzRequest("/release-group", {
+          artist: mbid,
+          limit,
+          offset,
+        });
+        totalCount = data["release-group-count"] || 0;
+        const batch = data["release-groups"] || [];
+        raw.push(...batch);
+        offset += limit;
+      } while (offset < totalCount);
+    }
 
     const filtered = raw
       .filter(
@@ -1317,6 +1397,37 @@ export async function musicbrainzGetArtistReleaseGroups(mbid) {
           ? rg["secondary-types"]
           : [],
       }))
+      .filter((rg) => {
+        if (!selectedReleaseTypes || !Array.isArray(selectedReleaseTypes)) {
+          return true;
+        }
+        const { primaryTypes, secondaryTypes } = normalizedSelection;
+        const primaryType = rg["primary-type"];
+        const rgSecondaryTypes = Array.isArray(rg["secondary-types"])
+          ? rg["secondary-types"]
+          : [];
+        if (primaryTypes.length > 0 && !primaryTypes.includes(primaryType)) {
+          return false;
+        }
+        if (secondaryTypes.length === 0 && rgSecondaryTypes.length > 0) {
+          return false;
+        }
+        if (secondaryTypes.length > 0 && rgSecondaryTypes.length > 0) {
+          const normalizedRgSecondaryTypes = [
+            ...new Set(
+              rgSecondaryTypes.map((secondaryType) =>
+                SECONDARY_RELEASE_TYPES.includes(secondaryType)
+                  ? secondaryType
+                  : "Other",
+              ),
+            ),
+          ];
+          return normalizedRgSecondaryTypes.every((secondaryType) =>
+            secondaryTypes.includes(secondaryType),
+          );
+        }
+        return true;
+      })
       .sort((a, b) => {
         const dateA = a["first-release-date"] || "";
         const dateB = b["first-release-date"] || "";
