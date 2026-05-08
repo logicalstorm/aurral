@@ -1,19 +1,18 @@
 import { useState } from "react";
-import { RefreshCw, Trash2, Compass, Pencil } from "lucide-react";
+import { RefreshCw, Trash2, Compass, Pencil, ChevronDown } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
 
 const AUTO_REFRESH_OPTIONS = [
-  { value: 1, label: "Every hour" },
-  { value: 3, label: "Every 3 hours" },
-  { value: 6, label: "Every 6 hours" },
-  { value: 12, label: "Every 12 hours" },
-  { value: 24, label: "Every 24 hours" },
-  { value: 48, label: "Every 48 hours" },
-  { value: 72, label: "Every 72 hours" },
+  { value: 24, label: "Daily" },
   { value: 168, label: "Weekly" },
+  { value: 720, label: "Monthly" },
 ];
 
-const RECOMMENDATION_OPTIONS = [25, 50, 75, 100, 150, 200];
+const DISCOVERY_MODE_OPTIONS = [
+  { value: "safer", label: "Safer" },
+  { value: "balanced", label: "Balanced" },
+  { value: "deeper", label: "Deeper" },
+];
 
 export function SettingsDiscoverTab({
   settings,
@@ -31,8 +30,13 @@ export function SettingsDiscoverTab({
   const [discoverEditing, setDiscoverEditing] = useState(false);
   const autoRefreshHours =
     settings.integrations?.lastfm?.discoveryAutoRefreshHours || 168;
-  const recommendationsPerRefresh =
-    settings.integrations?.lastfm?.discoveryRecommendationsPerRefresh || 100;
+  const discoveryMode =
+    settings.integrations?.lastfm?.discoveryMode || "balanced";
+  const localDiscoveryIncludeRecommendations =
+    settings.integrations?.ticketmaster?.localDiscoveryIncludeRecommendations !==
+    false;
+  const localDiscoveryIncludeTrending =
+    settings.integrations?.ticketmaster?.localDiscoveryIncludeTrending !== false;
 
   return (
     <div className="card animate-fade-in">
@@ -93,65 +97,110 @@ export function SettingsDiscoverTab({
               >
                 Auto-refresh frequency
               </label>
-              <select
-                className="input"
-                value={String(autoRefreshHours)}
-                onChange={(e) =>
-                  updateSettings({
-                    ...settings,
-                    integrations: {
-                      ...settings.integrations,
-                      lastfm: {
-                        ...(settings.integrations?.lastfm || {}),
-                        discoveryAutoRefreshHours: parseInt(
-                          e.target.value,
-                          10,
-                        ),
+              <div className="relative">
+                <select
+                  className="input h-11 w-full appearance-none pr-14 text-sm text-white"
+                  value={String(autoRefreshHours)}
+                  onChange={(e) =>
+                    updateSettings({
+                      ...settings,
+                      integrations: {
+                        ...settings.integrations,
+                        lastfm: {
+                          ...(settings.integrations?.lastfm || {}),
+                          discoveryAutoRefreshHours: parseInt(
+                            e.target.value,
+                            10,
+                          ),
+                        },
                       },
-                    },
-                  })
-                }
-              >
-                {AUTO_REFRESH_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                    })
+                  }
+                >
+                  {AUTO_REFRESH_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#b9bac1]" />
+              </div>
             </div>
             <div>
               <label
                 className="block text-sm font-medium mb-1"
                 style={{ color: "#fff" }}
               >
-                Recommendations per refresh
+                Discovery mode
               </label>
-              <select
-                className="input"
-                value={String(recommendationsPerRefresh)}
+              <div className="relative">
+                <select
+                  className="input h-11 w-full appearance-none pr-14 text-sm text-white"
+                  value={discoveryMode}
+                  onChange={(e) =>
+                    updateSettings({
+                      ...settings,
+                      integrations: {
+                        ...settings.integrations,
+                        lastfm: {
+                          ...(settings.integrations?.lastfm || {}),
+                          discoveryMode: e.target.value,
+                        },
+                      },
+                    })
+                  }
+                >
+                  {DISCOVERY_MODE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#b9bac1]" />
+              </div>
+            </div>
+            <label className="flex items-center justify-between gap-4">
+              <span style={{ color: "#fff" }}>
+                Include recommended artists in local shows
+              </span>
+              <input
+                type="checkbox"
+                checked={localDiscoveryIncludeRecommendations}
                 onChange={(e) =>
                   updateSettings({
                     ...settings,
                     integrations: {
                       ...settings.integrations,
-                      lastfm: {
-                        ...(settings.integrations?.lastfm || {}),
-                        discoveryRecommendationsPerRefresh: parseInt(
-                          e.target.value,
-                          10,
-                        ),
+                      ticketmaster: {
+                        ...(settings.integrations?.ticketmaster || {}),
+                        localDiscoveryIncludeRecommendations: e.target.checked,
                       },
                     },
                   })
                 }
-              >
-                {RECOMMENDATION_OPTIONS.map((count) => (
-                  <option key={count} value={count}>
-                    {count}
-                  </option>
-                ))}
-              </select>
-            </div>
+              />
+            </label>
+            <label className="flex items-center justify-between gap-4">
+              <span style={{ color: "#fff" }}>
+                Include trending artists in local shows
+              </span>
+              <input
+                type="checkbox"
+                checked={localDiscoveryIncludeTrending}
+                onChange={(e) =>
+                  updateSettings({
+                    ...settings,
+                    integrations: {
+                      ...settings.integrations,
+                      ticketmaster: {
+                        ...(settings.integrations?.ticketmaster || {}),
+                        localDiscoveryIncludeTrending: e.target.checked,
+                      },
+                    },
+                  })
+                }
+              />
+            </label>
           </fieldset>
         </div>
 
