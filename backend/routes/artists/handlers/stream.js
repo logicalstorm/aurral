@@ -20,6 +20,14 @@ export default function registerStream(router) {
     try {
       const { mbid } = req.params;
       const streamArtistName = (req.query.artistName || "").trim();
+      const selectedReleaseTypes =
+        typeof req.query.releaseTypes === "string" &&
+        req.query.releaseTypes.trim()
+          ? req.query.releaseTypes
+              .split(",")
+              .map((value) => value.trim())
+              .filter(Boolean)
+          : null;
 
       if (!UUID_REGEX.test(mbid)) {
         return res.status(400).json({
@@ -203,6 +211,7 @@ export default function registerStream(router) {
         if (!pendingPromise) {
           const releaseGroupsPromise = musicbrainzGetArtistReleaseGroups(
             resolvedMbid,
+            selectedReleaseTypes,
           ).catch(() => []);
 
           tasks.push(
