@@ -681,6 +681,21 @@ export const getNearbyShows = async (zipCode = "", limit) => {
   return response.data;
 };
 
+export const getDiscoveryFeedback = async () => {
+  const response = await api.get("/discover/feedback");
+  return response.data;
+};
+
+export const addDiscoveryFeedback = async (payload) => {
+  const response = await api.post("/discover/feedback", payload);
+  return response.data;
+};
+
+export const removeDiscoveryFeedback = async (id) => {
+  const response = await api.delete(`/discover/feedback/${encodeURIComponent(id)}`);
+  return response.data;
+};
+
 export const getRelatedArtists = async (limit = 20) => {
   const response = await api.get("/discover/related", {
     params: { limit },
