@@ -10,16 +10,11 @@ die() {
 read_lines_into_array() {
   local target_name="$1"
   local line
-  local values=()
+  eval "$target_name=()"
 
   while IFS= read -r line; do
-    [[ -n "$line" ]] && values+=("$line")
-  done
-
-  eval "$target_name=()"
-  local value
-  for value in "${values[@]}"; do
-    eval "$target_name+=(\"\$value\")"
+    [[ -n "$line" ]] || continue
+    eval "$target_name+=(\"\$line\")"
   done
 }
 
