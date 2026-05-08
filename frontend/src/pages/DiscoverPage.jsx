@@ -675,7 +675,7 @@ const ShowCard = memo(({ show }) => {
               <p className="truncate text-xs font-medium" style={{ color: "#b8bbc7" }}>
                 {show.artistName}
               </p>
-              <h3 className="mt-1 line-clamp-2 text-[1.65rem] font-bold leading-[0.98] tracking-tight text-white">
+              <h3 className="mt-1 truncate text-[1.65rem] font-bold leading-[0.98] tracking-tight text-white">
                 {show.eventName}
               </h3>
               <div className="mt-3 space-y-1.5 text-xs" style={{ color: "#d7dae4" }}>
@@ -733,12 +733,12 @@ const ShowCard = memo(({ show }) => {
             <p className="text-xs uppercase tracking-[0.22em]" style={{ color: "#8a8a8f" }}>
               {show.artistName}
             </p>
-            <h3 className="mt-1 text-lg font-semibold leading-tight">
+            <h3 className="mt-1 truncate text-lg font-semibold leading-tight">
               <a
                 href={show.url || "#"}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="transition-opacity hover:opacity-80"
+                className="block truncate transition-opacity hover:opacity-80"
                 style={{ color: "#fff" }}
               >
                 {show.eventName}
