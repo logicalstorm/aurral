@@ -140,6 +140,7 @@ function ArtistDetailsPage() {
     loadingSimilar,
     setLoadingSimilar,
     loadingLibrary,
+    loadingReleases,
     existsInLibrary,
     setExistsInLibrary,
     appSettings,
@@ -329,7 +330,9 @@ function ArtistDetailsPage() {
       setShowEditIdsModal(false);
       const name = artist?.name || artistNameFromNav || "";
       const [details, cover, previewData, similar] = await Promise.all([
-        getArtistDetails(mbid, name).catch(() => null),
+        getArtistDetails(mbid, name, {
+          releaseTypes: selectedReleaseTypes,
+        }).catch(() => null),
         getArtistCover(mbid, name, true).catch(() => ({ images: [] })),
         getArtistPreview(mbid, name).catch(() => ({ tracks: [] })),
         getSimilarArtistsForArtist(mbid, name).catch(() => ({ artists: [] })),
@@ -609,6 +612,7 @@ function ArtistDetailsPage() {
           secondaryReleaseTypes={secondaryReleaseTypes}
           showFilterDropdown={showFilterDropdown}
           setShowFilterDropdown={setShowFilterDropdown}
+          loadingReleases={loadingReleases}
           existsInLibrary={existsInLibrary}
           canBulkAddAlbums={canBulkAddAlbums}
           handleMonitorAll={library.handleMonitorAll}

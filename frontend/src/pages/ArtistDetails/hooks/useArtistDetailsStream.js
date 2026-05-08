@@ -25,6 +25,25 @@ const buildInitialArtist = (mbid, artistNameFromNav) =>
       }
     : null;
 
+const normalizeReleaseTypesSelection = (selectedReleaseTypes = []) =>
+  [
+    ...new Set(
+      (Array.isArray(selectedReleaseTypes) ? selectedReleaseTypes : []).filter(
+        Boolean,
+      ),
+    ),
+  ].sort();
+
+const isReleaseTypeSelectionCovered = (
+  selectedReleaseTypes = [],
+  fetchedReleaseTypes = [],
+) => {
+  const fetched = new Set(normalizeReleaseTypesSelection(fetchedReleaseTypes));
+  return normalizeReleaseTypesSelection(selectedReleaseTypes).every((type) =>
+    fetched.has(type),
+  );
+};
+
 export function useArtistDetailsStream(
   mbid,
   artistNameFromNav,
@@ -58,11 +77,17 @@ export function useArtistDetailsStream(
   const [loadingLibrary, setLoadingLibrary] = useState(
     seededExistsInLibrary === undefined,
   );
+  const [loadingReleases, setLoadingReleases] = useState(false);
   const [appSettings, setAppSettings] = useState(null);
   const [albumCovers, setAlbumCovers] = useState({});
   const requestedAlbumCoversRef = useRef(new Set());
   const artistMbidRef = useRef(mbid);
   const artistNameRef = useRef(artistNameFromNav || "");
+  const fetchedReleaseTypesRef = useRef(
+    normalizeReleaseTypesSelection(selectedReleaseTypes),
+  );
+  const releaseRefreshRequestRef = useRef(0);
+  const streamRequestRef = useRef(0);
 
   if (artistMbidRef.current !== mbid) {
     artistMbidRef.current = mbid;
@@ -79,6 +104,8 @@ export function useArtistDetailsStream(
 
   useEffect(() => {
     if (!mbid) return;
+    const requestId = ++streamRequestRef.current;
+    const isCurrentRequest = () => streamRequestRef.current === requestId;
     const nextCachedLookup = readLibraryLookupCache([mbid])?.[mbid];
     const nextSeededExistsInLibrary =
       initialLibraryHint?.existsInLibrary === true || nextCachedLookup === true
@@ -96,13 +123,22 @@ export function useArtistDetailsStream(
     setError(null);
     setLoadingCover(true);
     setLoadingSimilar(true);
+    setLoadingReleases(false);
     setLibraryArtist(nextSeededLibraryArtist);
     setLibraryAlbums([]);
     setExistsInLibrary(nextSeededExistsInLibrary === true);
     setLoadingLibrary(nextSeededExistsInLibrary === undefined);
+    fetchedReleaseTypesRef.current = normalizeReleaseTypesSelection(
+      selectedReleaseTypes,
+    );
+    releaseRefreshRequestRef.current += 1;
 
     getAppSettings()
-      .then(setAppSettings)
+      .then((settings) => {
+        if (isCurrentRequest()) {
+          setAppSettings(settings);
+        }
+      })
       .catch(() => {});
 
     const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
@@ -117,6 +153,11 @@ export function useArtistDetailsStream(
       streamParams.push(`artistName=${encodeURIComponent(artistNameFromNav)}`);
     }
     if (streamParams.length) streamUrl += `?${streamParams.join("&")}`;
+    if (Array.isArray(selectedReleaseTypes) && selectedReleaseTypes.length > 0) {
+      streamUrl += `${streamParams.length ? "&" : "?"}releaseTypes=${encodeURIComponent(
+        selectedReleaseTypes.join(","),
+      )}`;
+    }
 
     const eventSource = new EventSource(streamUrl);
     let artistReceived = false;
@@ -132,22 +173,32 @@ export function useArtistDetailsStream(
         requests.push(
           getArtistCover(mbid, nameForCover, refreshCover)
             .then((coverData) => {
+              if (!isCurrentRequest()) return;
               if (coverData.images && coverData.images.length > 0) {
                 setCoverImages(coverData.images);
               }
             })
             .catch(() => {})
-            .finally(() => setLoadingCover(false)),
+            .finally(() => {
+              if (isCurrentRequest()) {
+                setLoadingCover(false);
+              }
+            }),
         );
       }
       if (!similarReceived) {
         requests.push(
           getSimilarArtistsForArtist(mbid, nameForCover || "")
             .then((similarData) => {
+              if (!isCurrentRequest()) return;
               setSimilarArtists(similarData.artists || []);
             })
             .catch(() => {})
-            .finally(() => setLoadingSimilar(false)),
+            .finally(() => {
+              if (isCurrentRequest()) {
+                setLoadingSimilar(false);
+              }
+            }),
         );
       }
       await Promise.allSettled(requests);
@@ -157,6 +208,7 @@ export function useArtistDetailsStream(
       setLoadingLibrary(true);
       try {
         const lookup = await lookupArtistInLibrary(mbid);
+        if (!isCurrentRequest()) return;
         setExistsInLibrary(lookup.exists);
         if (!lookup.exists || !lookup.artist) return;
 
@@ -166,6 +218,7 @@ export function useArtistDetailsStream(
           console.error("Failed to fetch full artist details:", err);
           return lookup.artist;
         });
+        if (!isCurrentRequest()) return;
 
         setLibraryArtist(fullArtist);
 
@@ -176,10 +229,13 @@ export function useArtistDetailsStream(
           console.error("Failed to fetch library albums:", err);
           return [];
         });
+        if (!isCurrentRequest()) return;
         setLibraryAlbums(albums);
       } catch {}
       finally {
-        setLoadingLibrary(false);
+        if (isCurrentRequest()) {
+          setLoadingLibrary(false);
+        }
       }
     };
 
@@ -192,10 +248,12 @@ export function useArtistDetailsStream(
       try {
         const artistData = await getArtistDetails(mbid, artistNameFromNav, {
           mode: "core",
+          releaseTypes: selectedReleaseTypes,
         });
         if (!artistData || !artistData.id) {
           throw new Error("Invalid artist data received");
         }
+        if (!isCurrentRequest()) return;
         setArtist(artistData);
         setLoading(false);
 
@@ -207,6 +265,7 @@ export function useArtistDetailsStream(
         ]);
       } catch (err) {
         console.error("Error fetching artist data:", err);
+        if (!isCurrentRequest()) return;
         setError(
           err.response?.data?.message ||
             err.response?.data?.error ||
@@ -230,6 +289,7 @@ export function useArtistDetailsStream(
     eventSource.addEventListener("artist", (event) => {
       try {
         const artistData = JSON.parse(event.data);
+        if (!isCurrentRequest()) return;
         if (!artistData || !artistData.id) {
           throw new Error("Invalid artist data received");
         }
@@ -254,6 +314,7 @@ export function useArtistDetailsStream(
         artistReceived = true;
       } catch (err) {
         console.error("Error parsing artist data:", err);
+        if (!isCurrentRequest()) return;
         setError("Failed to parse artist data");
         setLoading(false);
       }
@@ -262,6 +323,7 @@ export function useArtistDetailsStream(
     eventSource.addEventListener("cover", (event) => {
       try {
         const coverData = JSON.parse(event.data);
+        if (!isCurrentRequest()) return;
         coverReceived = true;
         if (coverData.images && coverData.images.length > 0) {
           setCoverImages(coverData.images);
@@ -269,30 +331,40 @@ export function useArtistDetailsStream(
         setLoadingCover(false);
       } catch (err) {
         console.error("Error parsing cover data:", err, event.data);
-        setLoadingCover(false);
+        if (isCurrentRequest()) {
+          setLoadingCover(false);
+        }
       }
     });
 
     eventSource.addEventListener("similar", (event) => {
       try {
         const similarData = JSON.parse(event.data);
+        if (!isCurrentRequest()) return;
         similarReceived = true;
         setSimilarArtists(similarData.artists || []);
         setLoadingSimilar(false);
       } catch (err) {
         console.error("Error parsing similar artists data:", err, event.data);
-        setLoadingSimilar(false);
+        if (isCurrentRequest()) {
+          setLoadingSimilar(false);
+        }
       }
     });
 
     eventSource.addEventListener("library", (event) => {
       try {
         const data = JSON.parse(event.data);
+        if (!isCurrentRequest()) return;
         libraryReceived = true;
         if (data.exists && data.artist) {
           setExistsInLibrary(true);
           setLibraryArtist(data.artist);
           setLibraryAlbums(data.albums || []);
+        } else if (!data.exists) {
+          setExistsInLibrary(false);
+          setLibraryArtist(null);
+          setLibraryAlbums([]);
         }
         setLoadingLibrary(false);
       } catch (err) {
@@ -301,6 +373,7 @@ export function useArtistDetailsStream(
     });
 
     eventSource.addEventListener("complete", () => {
+      if (!isCurrentRequest()) return;
       streamComplete = true;
       clearTimeout(fallbackTimeout);
       eventSource.close();
@@ -315,6 +388,7 @@ export function useArtistDetailsStream(
     eventSource.addEventListener("error", (event) => {
       try {
         const errorData = JSON.parse(event.data);
+        if (!isCurrentRequest()) return;
         if (!artistReceived) {
           loadRestFallback().catch(() => {});
           return;
@@ -327,14 +401,14 @@ export function useArtistDetailsStream(
         setLoading(false);
         eventSource.close();
       } catch {
-        if (eventSource.readyState === EventSource.CLOSED) {
+        if (isCurrentRequest() && eventSource.readyState === EventSource.CLOSED) {
           loadRestFallback().catch(() => {});
         }
       }
     });
 
     eventSource.onerror = () => {
-      if (!artistReceived && !streamComplete) {
+      if (isCurrentRequest() && !artistReceived && !streamComplete) {
         loadRestFallback().catch(() => {});
       }
     };
@@ -344,6 +418,71 @@ export function useArtistDetailsStream(
       eventSource.close();
     };
   }, [mbid, artistNameFromNav, initialLibraryHint]);
+
+  useEffect(() => {
+    if (!mbid || !artist?.id) return;
+
+    const requestedReleaseTypes = normalizeReleaseTypesSelection(
+      selectedReleaseTypes,
+    );
+    const fetchedReleaseTypes = fetchedReleaseTypesRef.current;
+
+    if (
+      requestedReleaseTypes.join(",") === fetchedReleaseTypes.join(",") ||
+      isReleaseTypeSelectionCovered(requestedReleaseTypes, fetchedReleaseTypes)
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const requestId = ++releaseRefreshRequestRef.current;
+    setLoadingReleases(true);
+
+    getArtistDetails(
+      mbid,
+      artistNameRef.current || artist?.name || artistNameFromNav || "",
+      {
+        mode: "core",
+        releaseTypes: requestedReleaseTypes,
+      },
+    )
+      .then((artistData) => {
+        if (
+          cancelled ||
+          requestId !== releaseRefreshRequestRef.current ||
+          !artistData?.id
+        ) {
+          return;
+        }
+        fetchedReleaseTypesRef.current = requestedReleaseTypes;
+        setArtist((prev) => {
+          if (!prev) return artistData;
+          return {
+            ...prev,
+            "release-groups": artistData["release-groups"] || [],
+            "release-group-count":
+              artistData["release-group-count"] ??
+              prev["release-group-count"] ??
+              0,
+            "release-count":
+              artistData["release-count"] ?? prev["release-count"] ?? 0,
+          };
+        });
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled && requestId === releaseRefreshRequestRef.current) {
+          setLoadingReleases(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      if (requestId === releaseRefreshRequestRef.current) {
+        setLoadingReleases(false);
+      }
+    };
+  }, [mbid, artist?.id, artist?.name, artistNameFromNav, selectedReleaseTypes]);
 
   useEffect(() => {
     if (!mbid) return;
@@ -450,6 +589,7 @@ export function useArtistDetailsStream(
     setLoadingSimilar,
     loadingLibrary,
     setLoadingLibrary,
+    loadingReleases,
     existsInLibrary,
     setExistsInLibrary,
     appSettings,
