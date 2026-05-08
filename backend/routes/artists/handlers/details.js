@@ -147,7 +147,10 @@ export default function registerDetails(router) {
             );
             const libraryArtist = await libraryManager.getArtist(mbid);
             if (libraryArtist) {
-              lidarrAlbums = await libraryManager.getAlbums(libraryArtist.id);
+              lidarrAlbums = await libraryManager.getAlbums(
+                libraryArtist.id,
+                lidarrArtist,
+              );
             }
           }
         } catch (error) {

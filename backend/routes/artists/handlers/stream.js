@@ -139,7 +139,10 @@ export default function registerStream(router) {
               albums: [],
             });
 
-            const lidarrAlbums = await libraryManager.getAlbums(libArtist.id);
+            const lidarrAlbums = await libraryManager.getAlbums(
+              libArtist.id,
+              lidarrArtist,
+            );
 
             if (!isClientConnected()) return;
 

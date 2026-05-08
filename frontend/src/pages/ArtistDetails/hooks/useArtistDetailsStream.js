@@ -9,6 +9,7 @@ import {
   getAppSettings,
   getReleaseGroupCover,
   getStoredAuth,
+  readLibraryLookupCache,
 } from "../../../utils/api";
 import { emptyArtistShape } from "../constants";
 import { matchesReleaseTypeFilter } from "../utils";
@@ -28,21 +29,35 @@ export function useArtistDetailsStream(
   mbid,
   artistNameFromNav,
   selectedReleaseTypes = [],
-  { visibleCoverIds = [] } = {},
+  { visibleCoverIds = [], initialLibraryHint = null } = {},
 ) {
   const initialArtist = buildInitialArtist(mbid, artistNameFromNav);
+  const cachedLookupMap = mbid ? readLibraryLookupCache([mbid]) : {};
+  const cachedLookup = cachedLookupMap?.[mbid];
+  const seededExistsInLibrary =
+    initialLibraryHint?.existsInLibrary === true || cachedLookup === true
+      ? true
+      : undefined;
+  const seededLibraryArtist =
+    seededExistsInLibrary && initialLibraryHint?.libraryArtist
+      ? initialLibraryHint.libraryArtist
+      : null;
 
   const [artist, setArtist] = useState(initialArtist);
   const [coverImages, setCoverImages] = useState([]);
-  const [libraryArtist, setLibraryArtist] = useState(null);
+  const [libraryArtist, setLibraryArtist] = useState(seededLibraryArtist);
   const [libraryAlbums, setLibraryAlbums] = useState([]);
   const [similarArtists, setSimilarArtists] = useState([]);
   const [loading, setLoading] = useState(!mbid);
   const [error, setError] = useState(null);
-  const [existsInLibrary, setExistsInLibrary] = useState(false);
+  const [existsInLibrary, setExistsInLibrary] = useState(
+    seededExistsInLibrary === true,
+  );
   const [loadingCover, setLoadingCover] = useState(true);
   const [loadingSimilar, setLoadingSimilar] = useState(true);
-  const [loadingLibrary, setLoadingLibrary] = useState(true);
+  const [loadingLibrary, setLoadingLibrary] = useState(
+    seededExistsInLibrary === undefined,
+  );
   const [appSettings, setAppSettings] = useState(null);
   const [albumCovers, setAlbumCovers] = useState({});
   const requestedAlbumCoversRef = useRef(new Set());
@@ -64,6 +79,15 @@ export function useArtistDetailsStream(
 
   useEffect(() => {
     if (!mbid) return;
+    const nextCachedLookup = readLibraryLookupCache([mbid])?.[mbid];
+    const nextSeededExistsInLibrary =
+      initialLibraryHint?.existsInLibrary === true || nextCachedLookup === true
+        ? true
+        : undefined;
+    const nextSeededLibraryArtist =
+      nextSeededExistsInLibrary && initialLibraryHint?.libraryArtist
+        ? initialLibraryHint.libraryArtist
+        : null;
     setArtist(buildInitialArtist(mbid, artistNameFromNav));
     setCoverImages([]);
     setAlbumCovers({});
@@ -72,10 +96,10 @@ export function useArtistDetailsStream(
     setError(null);
     setLoadingCover(true);
     setLoadingSimilar(true);
-    setLibraryArtist(null);
+    setLibraryArtist(nextSeededLibraryArtist);
     setLibraryAlbums([]);
-    setExistsInLibrary(false);
-    setLoadingLibrary(true);
+    setExistsInLibrary(nextSeededExistsInLibrary === true);
+    setLoadingLibrary(nextSeededExistsInLibrary === undefined);
 
     getAppSettings()
       .then(setAppSettings)
@@ -319,7 +343,7 @@ export function useArtistDetailsStream(
       clearTimeout(fallbackTimeout);
       eventSource.close();
     };
-  }, [mbid, artistNameFromNav]);
+  }, [mbid, artistNameFromNav, initialLibraryHint]);
 
   useEffect(() => {
     if (!mbid) return;
