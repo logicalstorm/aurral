@@ -1111,6 +1111,41 @@ export async function wikipediaGetArtistBioByMbid(mbid) {
   return wikipediaGetBioByTitle(title);
 }
 
+async function resolveFirstNonEmpty(promises) {
+  const pending = Array.isArray(promises) ? promises.length : 0;
+  if (pending === 0) return null;
+
+  return new Promise((resolve) => {
+    let remaining = pending;
+    let settled = false;
+
+    const finishIfDone = () => {
+      remaining -= 1;
+      if (!settled && remaining <= 0) {
+        settled = true;
+        resolve(null);
+      }
+    };
+
+    promises.forEach((promise) => {
+      Promise.resolve(promise)
+        .then((value) => {
+          if (settled) return;
+          if (typeof value === "string" && value.trim()) {
+            settled = true;
+            resolve(value.trim());
+            return;
+          }
+          finishIfDone();
+        })
+        .catch(() => {
+          if (settled) return;
+          finishIfDone();
+        });
+    });
+  });
+}
+
 /**
  * Strip basic HTML tags and decode entities from a string (e.g. Last.fm bio).
  */
@@ -1152,18 +1187,14 @@ export async function lastfmGetArtistBio(mbid) {
 }
 
 /**
- * Get artist biography: prefer Wikipedia via Wikidata, then Last.fm. Returns string or null.
+ * Get artist biography quickly by resolving the first available source.
  */
 export async function getArtistBio(_artistName, mbid) {
-  if (mbid) {
-    const wikiBio = await wikipediaGetArtistBioByMbid(mbid);
-    if (wikiBio) return wikiBio;
-  }
-  if (mbid) {
-    const lastfmBio = await lastfmGetArtistBio(mbid);
-    if (lastfmBio) return lastfmBio;
-  }
-  return null;
+  if (!mbid) return null;
+  return resolveFirstNonEmpty([
+    wikipediaGetArtistBioByMbid(mbid),
+    lastfmGetArtistBio(mbid),
+  ]);
 }
 
 export async function deezerSearchArtist(artistName) {

@@ -95,10 +95,10 @@ export default function registerStream(router) {
           : (async () => {
               if (streamArtistName) return streamArtistName;
               const name =
+                (await musicbrainzGetArtistNameByMbid(resolvedMbid)) ||
                 (getLastfmApiKey()
                   ? await lastfmGetArtistNameByMbid(resolvedMbid)
                   : null) ||
-                (await musicbrainzGetArtistNameByMbid(resolvedMbid)) ||
                 "Unknown Artist";
               return name;
             })();
@@ -113,7 +113,17 @@ export default function registerStream(router) {
 
           try {
             const lidarrArtist = await lidarrClient.getArtistByMbid(mbid);
-            if (!lidarrArtist || !isClientConnected()) return;
+            if (!lidarrArtist) {
+              if (isClientConnected()) {
+                sendSSE(res, "library", {
+                  exists: false,
+                  artist: null,
+                  albums: [],
+                });
+              }
+              return;
+            }
+            if (!isClientConnected()) return;
 
             console.log(
               `[Artists Stream] Found artist in Lidarr: ${lidarrArtist.artistName}`,
@@ -251,8 +261,8 @@ export default function registerStream(router) {
                 .catch(() => [])
             : Promise.resolve([]);
 
-          const bioPromise = namePromise
-            .then((name) => getArtistBio(name, resolvedMbid).catch(() => null))
+          const bioPromise = getArtistBio(null, resolvedMbid)
+            .catch(() => null)
             .then((bio) => {
               if (!bio || !isClientConnected()) return bio;
               sendArtist({ id: resolvedMbid, bio });
