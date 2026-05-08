@@ -19,9 +19,13 @@ import {
   Ban,
   Loader2,
   Library,
+  ThumbsUp,
+  ThumbsDown,
+  EyeOff,
 } from "lucide-react";
 import {
   addArtistToLibrary,
+  addDiscoveryFeedback,
   getBlocklist,
   getDiscovery,
   getNearbyShows,
@@ -143,6 +147,10 @@ const normalizeDiscoveryData = (value) => {
     lastUpdated: value.lastUpdated || null,
     isUpdating: !!value.isUpdating,
     stale: !!value.stale,
+    discoveryMode:
+      value.discoveryMode === "safer" || value.discoveryMode === "deeper"
+        ? value.discoveryMode
+        : "balanced",
     configured:
       typeof value.configured === "boolean" ? value.configured : true,
   };
@@ -305,6 +313,42 @@ const formatShowLocation = (show) =>
     .filter(Boolean)
     .join(" - ");
 
+const getRecommendationReason = (artist) => {
+  if (artist?.metaText) return artist.metaText;
+  const seedNames = Array.isArray(artist?.supportingSeeds)
+    ? artist.supportingSeeds
+        .map((seed) => seed?.artistName)
+        .filter(Boolean)
+        .slice(0, 2)
+    : [];
+  const matchedTags = Array.isArray(artist?.matchedTags)
+    ? artist.matchedTags.filter(Boolean).slice(0, 2)
+    : [];
+  const reasonCodes = Array.isArray(artist?.reasonCodes) ? artist.reasonCodes : [];
+
+  if (reasonCodes.includes("deeper_pick") && matchedTags.length > 0) {
+    return `A deeper pick for ${matchedTags.join(" and ")}`;
+  }
+  if (matchedTags.length >= 2) {
+    return `Matches your ${matchedTags[0]} and ${matchedTags[1]} taste`;
+  }
+  if (matchedTags.length === 1) {
+    return `Fits your ${matchedTags[0]} profile`;
+  }
+  if (seedNames.length >= 2) {
+    return `Because you listen to ${seedNames[0]} and ${seedNames[1]}`;
+  }
+  if (seedNames.length === 1) {
+    return `Because you listen to ${seedNames[0]}`;
+  }
+  if (artist?.sourceArtist) {
+    return `Similar to ${artist.sourceArtist}`;
+  }
+  return artist?.discoveryTier === "deeper"
+    ? "A deeper discovery pick"
+    : "Picked for your profile";
+};
+
 const ArtistCard = memo(
     ({
       artist,
@@ -315,6 +359,7 @@ const ArtistCard = memo(
       onNavigate,
       onAddToLibrary,
       onAddToBlocklist,
+      onFeedback,
     }) => {
       const [showMenu, setShowMenu] = useState(false);
       const [pendingAction, setPendingAction] = useState(null);
@@ -322,9 +367,7 @@ const ArtistCard = memo(
       const navigateTo = artist.navigateTo || artist.id;
       const hasValidMbid =
         navigateTo && navigateTo !== "null" && navigateTo !== "undefined";
-      const artistMetaText = [artist.sourceArtist && `Similar to ${artist.sourceArtist}`]
-        .filter(Boolean)
-        .join(" • ");
+      const artistMetaText = getRecommendationReason(artist);
       const handleClick = useCallback(() => {
         if (hasValidMbid) {
           onNavigate(`/artist/${navigateTo}`, {
@@ -364,6 +407,15 @@ const ArtistCard = memo(
         setPendingAction("blocklist");
         const blocked = await onAddToBlocklist(artist);
         if (blocked) setShowMenu(false);
+        setPendingAction(null);
+      };
+
+      const handleFeedbackClick = async (event, action) => {
+        event.stopPropagation();
+        if (!onFeedback || pendingAction) return;
+        setPendingAction(action);
+        const saved = await onFeedback(artist, action);
+        if (saved) setShowMenu(false);
         setPendingAction(null);
       };
 
@@ -432,7 +484,7 @@ const ArtistCard = memo(
               )}
             </div>
           </div>
-          {(canAddArtist || onAddToBlocklist) && (
+          {(canAddArtist || onAddToBlocklist || onFeedback) && (
             <div
               ref={menuRef}
               className={`relative shrink-0 ${showMenu ? "z-40" : ""}`}
@@ -485,6 +537,58 @@ const ArtistCard = memo(
                     )}
                     {isBlocked ? "In Blocklist" : "Blocklist Artist"}
                   </button>
+                  {onFeedback && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(event) =>
+                          handleFeedbackClick(event, "more_like_this")
+                        }
+                        disabled={!!pendingAction}
+                        className="w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        style={{ color: "#fff" }}
+                      >
+                        <ThumbsUp className="w-4 h-4" />
+                        More like this
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) =>
+                          handleFeedbackClick(event, "less_like_this")
+                        }
+                        disabled={!!pendingAction}
+                        className="w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        style={{ color: "#fff" }}
+                      >
+                        <ThumbsDown className="w-4 h-4" />
+                        Less like this
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) =>
+                          handleFeedbackClick(event, "already_known")
+                        }
+                        disabled={!!pendingAction}
+                        className="w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        style={{ color: "#fff" }}
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        Already know this
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) =>
+                          handleFeedbackClick(event, "hide_for_now")
+                        }
+                        disabled={!!pendingAction}
+                        className="w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        style={{ color: "#fca5a5" }}
+                      >
+                        <EyeOff className="w-4 h-4" />
+                        Hide for now
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -506,6 +610,7 @@ const ArtistCard = memo(
       prevProps.onNavigate === nextProps.onNavigate
       && prevProps.onAddToLibrary === nextProps.onAddToLibrary
       && prevProps.onAddToBlocklist === nextProps.onAddToBlocklist
+      && prevProps.onFeedback === nextProps.onFeedback
     );
   },
 );
@@ -519,8 +624,17 @@ ArtistCard.propTypes = {
     imageUrl: PropTypes.string,
     type: PropTypes.string,
     sourceArtist: PropTypes.string,
+    metaText: PropTypes.string,
     subtitle: PropTypes.string,
     navigateTo: PropTypes.string,
+    matchedTags: PropTypes.arrayOf(PropTypes.string),
+    reasonCodes: PropTypes.arrayOf(PropTypes.string),
+    discoveryTier: PropTypes.string,
+    supportingSeeds: PropTypes.arrayOf(
+      PropTypes.shape({
+        artistName: PropTypes.string,
+      }),
+    ),
   }).isRequired,
   status: PropTypes.string,
   isInLibrary: PropTypes.bool,
@@ -529,6 +643,7 @@ ArtistCard.propTypes = {
   onNavigate: PropTypes.func.isRequired,
   onAddToLibrary: PropTypes.func,
   onAddToBlocklist: PropTypes.func,
+  onFeedback: PropTypes.func,
 };
 
 const AlbumCard = memo(
@@ -941,6 +1056,10 @@ function DiscoverPage() {
           lastUpdated: msg.lastUpdated || null,
           isUpdating: false,
           stale: false,
+          discoveryMode:
+            msg.discoveryMode === "safer" || msg.discoveryMode === "deeper"
+              ? msg.discoveryMode
+              : "balanced",
           configured: true,
         };
         setData(nextData);
@@ -1022,6 +1141,7 @@ function DiscoverPage() {
           lastUpdated: null,
           isUpdating: false,
           stale: false,
+          discoveryMode: "balanced",
           configured: false,
         });
       });
@@ -1218,26 +1338,43 @@ function DiscoverPage() {
     if (!data?.topGenres || !data?.recommendations) return [];
 
     const sections = [];
-    const usedArtistIds = new Set();
+    const usedArtistIds = new Set(
+      (data.recommendations || [])
+        .slice(0, 12)
+        .map((artist) => getArtistId(artist))
+        .filter(Boolean),
+    );
 
-    const sortedGenres = [...data.topGenres].sort((a, b) => a.localeCompare(b));
+    const sortedGenres = [...data.topGenres];
+    const candidatePool = [...(data.recommendations || [])].slice(8);
 
     for (const genre of sortedGenres) {
       if (sections.length >= 4) break;
 
-      const genreArtists = data.recommendations.filter((artist) => {
-        if (usedArtistIds.has(artist.id)) return false;
+      const genreArtists = candidatePool.filter((artist) => {
+        const artistId = getArtistId(artist);
+        if (artistId && usedArtistIds.has(artistId)) return false;
 
-        const artistTags = artist.tags || [];
+        const artistTags = artist.matchedTags || artist.tags || [];
         return artistTags.some((tag) =>
           tag.toLowerCase().includes(genre.toLowerCase()),
         );
       });
 
       if (genreArtists.length >= 4) {
-        const selectedArtists = genreArtists.slice(0, 6);
+        const selectedArtists = genreArtists
+          .sort((left, right) => {
+            const leftScore = Number(left.scoreTotal || left.score || 0);
+            const rightScore = Number(right.scoreTotal || right.score || 0);
+            if (rightScore !== leftScore) return rightScore - leftScore;
+            return String(left.name || "").localeCompare(String(right.name || ""));
+          })
+          .slice(0, 6);
 
-        selectedArtists.forEach((artist) => usedArtistIds.add(artist.id));
+        selectedArtists.forEach((artist) => {
+          const artistId = getArtistId(artist);
+          if (artistId) usedArtistIds.add(artistId);
+        });
 
         sections.push({
           genre,
@@ -1501,6 +1638,51 @@ function DiscoverPage() {
     [showError, showSuccess],
   );
 
+  const handleDiscoveryFeedback = useCallback(
+    async (artist, action) => {
+      try {
+        await addDiscoveryFeedback({
+          artistId: getArtistId(artist),
+          artistName: artist.name || null,
+          action,
+          sourceContext: artist.sourceType || artist.discoveryTier || null,
+          tagContext: artist.matchedTags || artist.tags || [],
+          seedContext: Array.isArray(artist.supportingSeeds)
+            ? artist.supportingSeeds.map((seed) => seed?.artistName).filter(Boolean)
+            : artist.sourceArtists || [],
+        });
+        if (action === "hide_for_now") {
+          setData((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  recommendations: (prev.recommendations || []).filter(
+                    (entry) => getArtistId(entry) !== getArtistId(artist),
+                  ),
+                }
+              : prev,
+          );
+        }
+        showSuccess(
+          action === "more_like_this"
+            ? "We’ll bias future picks toward this taste"
+            : action === "less_like_this"
+              ? "We’ll show less like this"
+              : action === "already_known"
+                ? "We’ll avoid obvious repeats like this"
+                : "Hidden from Discover for now",
+        );
+        return true;
+      } catch (err) {
+        showError(
+          err.response?.data?.message || "Failed to save discovery feedback",
+        );
+        return false;
+      }
+    },
+    [showError, showSuccess],
+  );
+
   const orderedSectionIds = discoverSections
     .filter((item) => item.enabled)
     .map((item) => item.id);
@@ -1594,6 +1776,7 @@ function DiscoverPage() {
                     onNavigate={navigate}
                     onAddToLibrary={handleAddArtistToLibrary}
                     onAddToBlocklist={handleAddArtistToBlocklist}
+                    onFeedback={handleDiscoveryFeedback}
                   />
                 </div>
               ))}
@@ -1783,7 +1966,7 @@ function DiscoverPage() {
             >
               <>
                 {nearbyShows.slice(0, 8).map((show) => (
-                  <div key={`${show.id}-${show.artistName}`} className="w-[288px] shrink-0">
+                  <div key={`${show.id}-${show.artistName}-${show.sourceType || show.matchType || "show"}`} className="w-[288px] shrink-0">
                     <ShowCard show={show} />
                   </div>
                 ))}
@@ -1795,8 +1978,8 @@ function DiscoverPage() {
                 No upcoming nearby matches
               </h3>
               <p className="mt-2 max-w-2xl text-sm" style={{ color: "#c1c1c3" }}>
-                We could not find local Ticketmaster shows for artists from your
-                library around {nearbyLocationLabel}.
+                We could not find local Ticketmaster shows tied to your library or
+                current recommendations around {nearbyLocationLabel}.
               </p>
             </div>
           )}
@@ -1816,13 +1999,17 @@ function DiscoverPage() {
             {globalTop.slice(0, 12).map((artist) => (
               <div key={artist.id} className={DISCOVER_SHELF_CARD_CLASS}>
                 <ArtistCard
-                  artist={artist}
+                  artist={{
+                    ...artist,
+                    metaText: artist.popularityLabel || "Trending on Last.fm",
+                  }}
                   isInLibrary={!!libraryLookup[getArtistId(artist)]}
                   isBlocked={isArtistInEntries(artist, blockedArtists)}
                   canAddArtist={canAddArtist}
                   onNavigate={navigate}
                   onAddToLibrary={handleAddArtistToLibrary}
                   onAddToBlocklist={handleAddArtistToBlocklist}
+                  onFeedback={handleDiscoveryFeedback}
                 />
               </div>
             ))}
@@ -1860,6 +2047,7 @@ function DiscoverPage() {
                       onNavigate={navigate}
                       onAddToLibrary={handleAddArtistToLibrary}
                       onAddToBlocklist={handleAddArtistToBlocklist}
+                      onFeedback={handleDiscoveryFeedback}
                     />
                   </div>
                 ))}
