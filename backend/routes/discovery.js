@@ -5,6 +5,12 @@ import {
   updateUserDiscoveryCache,
   getUserDiscoveryCacheStaleness,
   getDiscoveryAutoRefreshHours,
+  getDiscoveryMode,
+  getDiscoveryFeedback,
+  addDiscoveryFeedback,
+  removeDiscoveryFeedback,
+  rerankCachedRecommendations,
+  getLocalDiscoveryPreferences,
 } from "../services/discoveryService.js";
 import {
   lastfmRequest,
@@ -325,6 +331,8 @@ router.get("/", requireAuth, async (req, res) => {
 
   let { recommendations, globalTop, basedOn, topTags, topGenres, lastUpdated } =
     discoveryCache;
+  const feedback = getDiscoveryFeedback(req.user?.id || "global");
+  const discoveryMode = getDiscoveryMode();
 
   const existingArtistIds = new Set(
     libraryArtists
@@ -357,6 +365,11 @@ router.get("/", requireAuth, async (req, res) => {
   globalTop = applyBlocklistToArtistCollection(globalTop, blocklist);
   topTags = applyBlocklistToTagList(topTags, blocklist);
   topGenres = applyBlocklistToTagList(topGenres, blocklist);
+  recommendations = rerankCachedRecommendations({
+    recommendations,
+    feedback,
+    discoveryMode,
+  });
 
   const parsedLastUpdated = lastUpdated ? new Date(lastUpdated).getTime() : 0;
   const isStale =
@@ -404,6 +417,7 @@ router.get("/", requireAuth, async (req, res) => {
     isUpdating,
     stale: isStale,
     configured: true,
+    discoveryMode,
   });
 });
 
@@ -655,6 +669,7 @@ router.get("/nearby-shows", requireAuth, async (req, res) => {
         counts: {
           libraryArtists: 0,
           matchedLibraryShows: 0,
+          matchedRecommendedShows: 0,
         },
       });
     }
@@ -665,14 +680,41 @@ router.get("/nearby-shows", requireAuth, async (req, res) => {
     const configuredRadius = Number(
       settings.integrations?.ticketmaster?.searchRadiusMiles,
     );
+    const localDiscoveryPreferences = getLocalDiscoveryPreferences();
     const radiusMiles = Number.isFinite(configuredRadius)
       ? Math.max(5, Math.min(250, Math.floor(configuredRadius)))
       : undefined;
     const libraryArtists = await libraryManager.getAllArtists();
+    const reqUser = userOps.getUserById(req.user.id);
+    const userCacheNamespace = getListenHistoryCacheNamespace(
+      getListenHistoryProfile(reqUser || {}),
+    );
+    const discoveryCache = getDiscoveryCache(userCacheNamespace);
+    const feedback = getDiscoveryFeedback(req.user?.id || "global");
+    const blocklist = getStoredBlocklist();
+    const recommendedArtists = localDiscoveryPreferences.includeRecommendations
+      ? rerankCachedRecommendations({
+          recommendations: applyBlocklistToArtistCollection(
+            discoveryCache.recommendations || [],
+            blocklist,
+          ),
+          feedback,
+          discoveryMode: getDiscoveryMode(),
+          limit: 24,
+        })
+      : [];
+    const trendingArtists = localDiscoveryPreferences.includeTrending
+      ? applyBlocklistToArtistCollection(
+          discoveryCache.globalTop || [],
+          blocklist,
+        ).slice(0, 18)
+      : [];
     const nearbyShows = await getNearbyShows({
       req,
       zipCode,
       libraryArtists,
+      recommendedArtists,
+      trendingArtists,
       limit,
       radiusMiles,
     });
@@ -692,6 +734,7 @@ router.get("/nearby-shows", requireAuth, async (req, res) => {
 
 router.get("/preferences", requireAuth, (req, res) => {
   const blocklist = getStoredBlocklist();
+  const localDiscoveryPreferences = getLocalDiscoveryPreferences();
   res.json({
     excludedGenres: blocklist.tags,
     excludedTags: blocklist.tags,
@@ -704,6 +747,10 @@ router.get("/preferences", requireAuth, (req, res) => {
     includeFromLastfm: true,
     includeFromLibrary: true,
     includeTrending: true,
+    discoveryMode: getDiscoveryMode(),
+    localDiscoveryIncludeRecommendations:
+      localDiscoveryPreferences.includeRecommendations,
+    localDiscoveryIncludeTrending: localDiscoveryPreferences.includeTrending,
   });
 });
 
@@ -723,6 +770,28 @@ router.post("/preferences", requireAuth, (req, res) => {
       artists,
       tags: tags.length > 0 ? tags : undefined,
     });
+    const currentSettings = dbOps.getSettings();
+    const nextSettings = {
+      ...currentSettings,
+      integrations: {
+        ...(currentSettings.integrations || {}),
+        lastfm: {
+          ...(currentSettings.integrations?.lastfm || {}),
+          discoveryMode:
+            updates.discoveryMode === "safer" || updates.discoveryMode === "deeper"
+              ? updates.discoveryMode
+              : "balanced",
+        },
+        ticketmaster: {
+          ...(currentSettings.integrations?.ticketmaster || {}),
+          localDiscoveryIncludeRecommendations:
+            updates.localDiscoveryIncludeRecommendations !== false,
+          localDiscoveryIncludeTrending:
+            updates.localDiscoveryIncludeTrending !== false,
+        },
+      },
+    };
+    dbOps.updateSettings(nextSettings);
 
     res.json({
       success: true,
@@ -733,6 +802,13 @@ router.post("/preferences", requireAuth, (req, res) => {
           artistId: artist.mbid || artist.name,
           artistName: artist.name || artist.mbid || "",
         })),
+        discoveryMode: nextSettings.integrations?.lastfm?.discoveryMode || "balanced",
+        localDiscoveryIncludeRecommendations:
+          nextSettings.integrations?.ticketmaster?.localDiscoveryIncludeRecommendations !==
+          false,
+        localDiscoveryIncludeTrending:
+          nextSettings.integrations?.ticketmaster?.localDiscoveryIncludeTrending !==
+          false,
       },
     });
   } catch (error) {
@@ -748,13 +824,65 @@ router.post("/preferences/reset", requireAuth, (req, res) => {
     artists: [],
     tags: [],
   });
+  const currentSettings = dbOps.getSettings();
+  dbOps.updateSettings({
+    ...currentSettings,
+    integrations: {
+      ...(currentSettings.integrations || {}),
+      lastfm: {
+        ...(currentSettings.integrations?.lastfm || {}),
+        discoveryMode: "balanced",
+      },
+      ticketmaster: {
+        ...(currentSettings.integrations?.ticketmaster || {}),
+        localDiscoveryIncludeRecommendations: true,
+        localDiscoveryIncludeTrending: true,
+      },
+    },
+  });
   res.json({
     success: true,
     preferences: {
       excludedGenres: blocklist.tags,
       excludedTags: blocklist.tags,
       excludedArtists: [],
+      discoveryMode: "balanced",
+      localDiscoveryIncludeRecommendations: true,
+      localDiscoveryIncludeTrending: true,
     },
+  });
+});
+
+router.get("/feedback", requireAuth, (req, res) => {
+  res.json({
+    feedback: getDiscoveryFeedback(req.user?.id || "global"),
+  });
+});
+
+router.post("/feedback", requireAuth, (req, res) => {
+  try {
+    const feedback = addDiscoveryFeedback(req.user?.id || "global", req.body || {});
+    res.json({
+      success: true,
+      feedback,
+      feedbackList: getDiscoveryFeedback(req.user?.id || "global"),
+    });
+  } catch (error) {
+    res.status(400).json({
+      error: "Failed to save discovery feedback",
+      message: error.message,
+    });
+  }
+});
+
+router.delete("/feedback/:id", requireAuth, (req, res) => {
+  const feedbackList = removeDiscoveryFeedback(
+    req.user?.id || "global",
+    req.params.id,
+  );
+  res.json({
+    success: true,
+    feedbackList,
   });
 });
 
@@ -864,10 +992,12 @@ router.delete(
   },
 );
 
-router.get("/filtered", async (req, res) => {
+router.get("/filtered", requireAuth, async (req, res) => {
   try {
     const discoveryCache = getDiscoveryCache();
     const blocklist = getStoredBlocklist();
+    const feedback = getDiscoveryFeedback(req.user?.id || "global");
+    const discoveryMode = getDiscoveryMode();
     let recommendations = applyBlocklistToArtistCollection(
       discoveryCache.recommendations || [],
       blocklist,
@@ -888,6 +1018,11 @@ router.get("/filtered", async (req, res) => {
       (artist) => !existingArtistIds.has(artist.id),
     );
     globalTop = globalTop.filter((artist) => !existingArtistIds.has(artist.id));
+    recommendations = rerankCachedRecommendations({
+      recommendations,
+      feedback,
+      discoveryMode,
+    });
 
     res.json({
       recommendations,
@@ -904,6 +1039,7 @@ router.get("/filtered", async (req, res) => {
         genres: blocklist.tags.length,
         artists: blocklist.artists.length,
       },
+      discoveryMode,
     });
   } catch (error) {
     res.status(500).json({
