@@ -5,6 +5,7 @@ import { NavidromeClient } from "./navidrome.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { writePlaylistArtworkSidecar } from "./playlistArtwork.js";
+import { soulseekClient } from "./simpleSoulseekClient.js";
 
 export class WeeklyFlowPlaylistManager {
   constructor(
@@ -296,6 +297,14 @@ export class WeeklyFlowPlaylistManager {
         );
       }
       downloadTracker.clearByPlaylistType(playlistType);
+    }
+    try {
+      await soulseekClient.applyShareChanges();
+    } catch (error) {
+      console.warn(
+        "[WeeklyFlowPlaylistManager] Failed to refresh Soulseek shares:",
+        error.message,
+      );
     }
   }
 

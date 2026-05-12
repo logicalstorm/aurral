@@ -422,6 +422,7 @@ export const dbOps = {
         preferredFormat,
         preferredFormatStrict,
         retryCycleMinutes,
+        shareDownloads: weeklyFlowWorker?.shareDownloads === true,
         retryPausedPlaylistIds,
       },
       blocklist:

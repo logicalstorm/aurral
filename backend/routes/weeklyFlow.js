@@ -196,6 +196,7 @@ const reuseCompletedTrackForPlaylist = async (track, targetPlaylistId, sourceJob
     targetPath,
     sourceJob.albumName || track.albumName || null,
   );
+  refreshSoulseekShares("WeeklyFlow");
   return jobId;
 };
 
@@ -313,6 +314,14 @@ const restartWorkerIfPending = async () => {
   const stillPending = downloadTracker.getNextPending();
   if (stillPending && !weeklyFlowWorker.running) {
     await weeklyFlowWorker.start();
+  }
+};
+
+const refreshSoulseekShares = async (label = "WeeklyFlow") => {
+  try {
+    await soulseekClient.applyShareChanges();
+  } catch (error) {
+    console.warn(`[${label}] Failed to refresh Soulseek shares:`, error.message);
   }
 };
 
@@ -855,6 +864,7 @@ router.post("/flows/:flowId/static-playlist", async (req, res) => {
     playlistManager.updateConfig(false);
     await playlistManager.ensureSmartPlaylists();
     await playlistManager.scanLibrary();
+    await refreshSoulseekShares("WeeklyFlow");
 
     res.json({
       success: true,
@@ -867,6 +877,7 @@ router.post("/flows/:flowId/static-playlist", async (req, res) => {
         await playlistManager.weeklyReset([playlist.id]);
         flowPlaylistConfig.deleteSharedPlaylist(playlist.id);
         await playlistManager.ensureSmartPlaylists();
+        await refreshSoulseekShares("WeeklyFlow");
       } catch {}
     }
     if (error?.code === "SHARED_PLAYLIST_NAME_CONFLICT") {
@@ -1214,6 +1225,7 @@ router.put("/shared-playlists/:playlistId", async (req, res) => {
     playlistManager.updateConfig(false);
     await playlistManager.ensureSmartPlaylists();
     await playlistManager.scanLibrary();
+    await refreshSoulseekShares("WeeklyFlow");
     if (tracksQueued > 0) {
       if (!weeklyFlowWorker.running) {
         await weeklyFlowWorker.start();
@@ -1296,6 +1308,7 @@ router.delete(
           tracks: nextTracks,
         },
       );
+      await refreshSoulseekShares("WeeklyFlow");
 
       res.json({
         success: true,
@@ -1341,6 +1354,7 @@ router.post(
           });
         }
         await fsp.rm(safeFinalPath, { force: true });
+        await refreshSoulseekShares("WeeklyFlow");
       }
 
       const reset = downloadTracker.setPending(jobId, null);
@@ -1394,6 +1408,7 @@ router.delete("/shared-playlists/:playlistId", async (req, res) => {
       return res.status(404).json({ error: "Shared playlist not found" });
     }
     await restartWorkerIfPending();
+    await refreshSoulseekShares("WeeklyFlow");
 
     res.json({ success: true, playlistId });
   } catch (error) {
@@ -1467,6 +1482,7 @@ router.put("/worker/settings", async (req, res) => {
     preferredFormat,
     preferredFormatStrict,
     retryCycleMinutes,
+    shareDownloads,
   } = req.body || {};
   if (concurrency !== undefined) {
     const parsed = Number(concurrency);
@@ -1492,6 +1508,11 @@ router.put("/worker/settings", async (req, res) => {
       error: "preferredFormatStrict must be a boolean",
     });
   }
+  if (shareDownloads !== undefined && typeof shareDownloads !== "boolean") {
+    return res.status(400).json({
+      error: "shareDownloads must be a boolean",
+    });
+  }
   if (retryCycleMinutes !== undefined) {
     const parsed = Number(retryCycleMinutes);
     if (
@@ -1508,9 +1529,11 @@ router.put("/worker/settings", async (req, res) => {
     preferredFormat,
     preferredFormatStrict,
     retryCycleMinutes,
+    shareDownloads,
   });
   try {
     await soulseekClient.applyConfigChanges();
+    await soulseekClient.applyShareChanges();
   } catch (error) {
     console.warn(
       "[WeeklyFlow] Failed to apply Soulseek config changes:",
