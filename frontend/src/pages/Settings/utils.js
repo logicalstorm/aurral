@@ -4,10 +4,11 @@ export const normalizeSettings = (savedSettings) => {
   const lidarr = savedSettings.integrations?.lidarr || {};
   const lastfm = savedSettings.integrations?.lastfm || {};
   const parsedAutoRefreshHours = parseInt(lastfm.discoveryAutoRefreshHours, 10);
-  const parsedRecommendationLimit = parseInt(
-    lastfm.discoveryRecommendationsPerRefresh,
-    10,
-  );
+  const normalizedAutoRefreshHours = [24, 168, 720].includes(
+    parsedAutoRefreshHours,
+  )
+    ? parsedAutoRefreshHours
+    : 168;
   return {
     ...savedSettings,
     releaseTypes: savedSettings.releaseTypes || allReleaseTypes,
@@ -41,15 +42,12 @@ export const normalizeSettings = (savedSettings) => {
         apiKey: "",
         username: "",
         discoveryPeriod: "1month",
-        discoveryAutoRefreshHours:
-          Number.isFinite(parsedAutoRefreshHours) && parsedAutoRefreshHours > 0
-            ? parsedAutoRefreshHours
-            : 168,
-        discoveryRecommendationsPerRefresh:
-          Number.isFinite(parsedRecommendationLimit) &&
-          parsedRecommendationLimit > 0
-            ? parsedRecommendationLimit
-            : 100,
+        discoveryAutoRefreshHours: normalizedAutoRefreshHours,
+        discoveryRecommendationsPerRefresh: 200,
+        discoveryMode:
+          lastfm.discoveryMode === "safer" || lastfm.discoveryMode === "deeper"
+            ? lastfm.discoveryMode
+            : "balanced",
         ...lastfm,
       },
       slskd: {
@@ -60,6 +58,8 @@ export const normalizeSettings = (savedSettings) => {
       ticketmaster: {
         apiKey: "",
         searchRadiusMiles: 50,
+        localDiscoveryIncludeRecommendations: true,
+        localDiscoveryIncludeTrending: true,
         ...(savedSettings.integrations?.ticketmaster || {}),
       },
       musicbrainz: {
