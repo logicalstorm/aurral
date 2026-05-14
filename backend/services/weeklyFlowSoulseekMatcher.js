@@ -362,6 +362,41 @@ function scoreSiblingTrackConflict(baseName, context, titleScore) {
   return 0;
 }
 
+function isStrongEnoughCandidate({
+  titleScore,
+  artistScore,
+  albumScore,
+  variantMatch,
+  trackCountScore,
+  siblingTrackPenalty,
+  context,
+}) {
+  if (variantMatch?.hardMismatch) {
+    return { valid: false, reason: "variant-mismatch" };
+  }
+  if (siblingTrackPenalty <= -100) {
+    return { valid: false, reason: "sibling-track-conflict" };
+  }
+  if (titleScore < 58) {
+    return { valid: false, reason: "weak-title-match" };
+  }
+  if (artistScore < 45) {
+    return { valid: false, reason: "weak-artist-match" };
+  }
+  if (titleScore < 72 && artistScore < 58) {
+    return { valid: false, reason: "weak-title-artist-combo" };
+  }
+  if (
+    context?.albumName &&
+    albumScore < 18 &&
+    trackCountScore < 18 &&
+    titleScore < 92
+  ) {
+    return { valid: false, reason: "weak-album-context" };
+  }
+  return { valid: true, reason: null };
+}
+
 function pickBestArtistScore(context, text) {
   const candidates = [
     context?.artistName,
@@ -429,10 +464,11 @@ function buildGroupCandidate(group, context, options = {}) {
       scoreTextMatch(baseName, context?.trackName),
       scoreTextMatch(path.basename(String(item?.file || "")), context?.trackName),
     );
-    const variantScore = scoreVariantCompatibility(
+    const variantMatch = scoreVariantCompatibility(
       context?.trackName,
       baseName,
-    ).score;
+    );
+    const variantScore = variantMatch.score;
     const trackNumberScore = scoreTrackNumberMatch(
       context?.trackNumber,
       extractTrackNumber(baseName),
@@ -443,6 +479,15 @@ function buildGroupCandidate(group, context, options = {}) {
       context,
       titleScore,
     );
+    const preDownloadCheck = isStrongEnoughCandidate({
+      titleScore,
+      artistScore,
+      albumScore,
+      variantMatch,
+      trackCountScore,
+      siblingTrackPenalty,
+      context,
+    });
     const formatScore =
       ext === `.${preferredFormat}` ? 18 : ext === ".flac" || ext === ".mp3" ? 9 : 0;
     const bitrateScore = Number.isFinite(Number(item?.bitrate))
@@ -468,6 +513,8 @@ function buildGroupCandidate(group, context, options = {}) {
       group,
       ext,
       score: totalScore,
+      preDownloadValid: preDownloadCheck.valid,
+      preDownloadRejectReason: preDownloadCheck.reason,
       isLikelyMatch:
         titleScore >= 75 &&
         artistScore >= 55 &&
@@ -480,10 +527,14 @@ function buildGroupCandidate(group, context, options = {}) {
         trackCountScore,
         userQueuePenaltyScore,
         variantScore,
+        variantHardMismatch: variantMatch.hardMismatch,
         trackNumberScore,
         titleConfidenceScore,
         siblingTrackPenalty,
         formatScore,
+        speed: Number(item?.speed || 0),
+        slots: Number(item?.slots || 0),
+        bitrate: Number(item?.bitrate || 0),
       },
       resolvedAlbumName: context?.albumName || albumDir || null,
     });
