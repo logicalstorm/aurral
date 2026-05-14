@@ -13,6 +13,11 @@ import { getNearbyShows } from "../utils/api";
 const NEARBY_MODE_KEY = "discoverNearbyMode";
 const NEARBY_ZIP_KEY = "discoverNearbyZip";
 const SHOWS_PAGE_LIMIT = 60;
+const SHOW_FILTER_OPTIONS = [
+  { id: "all", label: "All" },
+  { id: "library", label: "Library" },
+  { id: "discover", label: "Discover" },
+];
 
 const formatShowDate = (show) => {
   if (!show?.date && !show?.dateTime) return null;
@@ -209,6 +214,7 @@ function ShowsPage() {
   const [showsData, setShowsData] = useState(null);
   const [showsLoading, setShowsLoading] = useState(false);
   const [showsError, setShowsError] = useState(null);
+  const [showFilter, setShowFilter] = useState("all");
   const [locationMode, setLocationMode] = useState("ip");
   const [appliedZip, setAppliedZip] = useState("");
   const [showZipEditor, setShowZipEditor] = useState(false);
@@ -262,7 +268,15 @@ function ShowsPage() {
     };
   }, [locationMode, appliedZip]);
 
-  const shows = showsData?.shows || [];
+  const allShows = showsData?.shows || [];
+  const libraryShows = showsData?.libraryShows || [];
+  const discoverShows = showsData?.recommendedShows || [];
+  const shows =
+    showFilter === "library"
+      ? libraryShows
+      : showFilter === "discover"
+        ? discoverShows
+        : allShows;
   const locationLabel =
     showsData?.location?.label || showsData?.location?.postalCode || "your area";
   const zipModeActive = locationMode === "zip";
@@ -432,12 +446,37 @@ function ShowsPage() {
       ) : shows.length > 0 ? (
         <div className="space-y-5">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <p className="text-sm" style={{ color: "#8a8a8f" }}>
-              Showing {shows.length}
-              {showsData?.total > shows.length ? ` of ${showsData.total}` : ""} upcoming
-              matches around {locationLabel}
-            </p>
-            {showsData?.total > shows.length && (
+            <div className="space-y-3">
+              <p className="text-sm" style={{ color: "#8a8a8f" }}>
+                Showing {shows.length}
+                {showFilter === "all" && showsData?.total > shows.length
+                  ? ` of ${showsData.total}`
+                  : ""}
+                {" "}upcoming matches around {locationLabel}
+              </p>
+              <div
+                className="inline-flex border border-white/10 p-1"
+                style={{ backgroundColor: "#17161d" }}
+              >
+                {SHOW_FILTER_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setShowFilter(option.id)}
+                    className="px-3 py-1.5 text-xs font-medium transition-colors"
+                    style={{
+                      backgroundColor:
+                        showFilter === option.id ? "#5a5a5f" : "transparent",
+                      color:
+                        showFilter === option.id ? "#0b0b0c" : "#c1c1c3",
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {showFilter === "all" && showsData?.total > shows.length && (
               <p className="text-xs uppercase tracking-wide" style={{ color: "#8a8a8f" }}>
                 Refine the area to narrow the list
               </p>
@@ -445,7 +484,10 @@ function ShowsPage() {
           </div>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {shows.map((show) => (
-              <ShowCard key={`${show.id}-${show.artistName}`} show={show} />
+              <ShowCard
+                key={`${show.id}-${show.artistName}-${show.sourceType || show.matchType || "show"}`}
+                show={show}
+              />
             ))}
           </div>
         </div>
@@ -455,7 +497,11 @@ function ShowsPage() {
             No upcoming nearby matches
           </h2>
           <p className="mt-2 text-sm max-w-2xl" style={{ color: "#c1c1c3" }}>
-            We could not find local Ticketmaster shows for artists from your library around {locationLabel}.
+            {showFilter === "library"
+              ? `We could not find local Ticketmaster shows for artists from your library around ${locationLabel}.`
+              : showFilter === "discover"
+                ? `We could not find local Ticketmaster shows tied to your Discover recommendations around ${locationLabel}.`
+                : `We could not find local Ticketmaster shows for artists from your library or Discover around ${locationLabel}.`}
           </p>
         </div>
       )}

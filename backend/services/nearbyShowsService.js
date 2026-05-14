@@ -33,6 +33,36 @@ const normalizeArtistKey = (value) =>
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 
+const artistKeysForName = (value) => {
+  const normalized = normalizeArtistKey(value);
+  if (!normalized) return [];
+  const parts = normalized.split(" ").filter(Boolean);
+  const keys = new Set([normalized]);
+  if (parts.length > 1) {
+    keys.add(parts.join(" "));
+  }
+  return [...keys];
+};
+
+const findBestArtistMatch = (artistKey, artistMap) => {
+  if (!artistKey || !artistMap || artistMap.size === 0) return null;
+  if (artistMap.has(artistKey)) return artistMap.get(artistKey);
+  const compactArtistKey = artistKey.replace(/\s+/g, "");
+  for (const [candidateKey, candidate] of artistMap.entries()) {
+    if (candidateKey === artistKey) return candidate;
+    const compactCandidateKey = candidateKey.replace(/\s+/g, "");
+    if (
+      compactArtistKey.length >= 7 &&
+      compactCandidateKey.length >= 7 &&
+      (compactArtistKey.includes(compactCandidateKey) ||
+        compactCandidateKey.includes(compactArtistKey))
+    ) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
 const sanitizeZipCode = (value) =>
   String(value || "")
     .trim()
@@ -339,6 +369,7 @@ const buildShowRecord = (event, artist, matchType) => {
     id: event.id,
     artistName: artist.name,
     matchType,
+    sourceType: artist.sourceType || matchType,
     eventName: event.name || artist.name,
     ticketmasterAttractionId: artist.ticketmasterAttractionId || null,
     ticketmasterEventId: event.id || null,
@@ -365,6 +396,8 @@ export const getNearbyShows = async ({
   req,
   zipCode,
   libraryArtists = [],
+  recommendedArtists = [],
+  trendingArtists = [],
   radiusMiles = DEFAULT_RADIUS_MILES,
   limit = DEFAULT_SHOW_LIMIT,
 }) => {
@@ -373,13 +406,45 @@ export const getNearbyShows = async ({
     Math.min(Number(limit) || DEFAULT_SHOW_LIMIT, MAX_SHOW_LIMIT),
   );
   const sanitizedZipCode = sanitizeZipCode(zipCode);
+  const libraryArtistCount = Array.isArray(libraryArtists) ? libraryArtists.length : 0;
   const libraryArtistMap = new Map();
+  const recommendedArtistMap = new Map();
+  const trendingArtistMap = new Map();
 
   for (const artist of libraryArtists) {
     const name = String(artist?.artistName || artist?.name || "").trim();
-    const key = normalizeArtistKey(name);
-    if (!key) continue;
-    libraryArtistMap.set(key, name);
+    for (const key of artistKeysForName(name)) {
+      libraryArtistMap.set(key, {
+        name,
+        sourceType: "library",
+      });
+    }
+  }
+
+  for (const artist of recommendedArtists) {
+    const name = String(artist?.name || artist?.artistName || "").trim();
+    if (!name) continue;
+    for (const key of artistKeysForName(name)) {
+      if (!recommendedArtistMap.has(key)) {
+        recommendedArtistMap.set(key, {
+          name,
+          sourceType: "recommended",
+        });
+      }
+    }
+  }
+
+  for (const artist of trendingArtists) {
+    const name = String(artist?.name || artist?.artistName || "").trim();
+    if (!name) continue;
+    for (const key of artistKeysForName(name)) {
+      if (!trendingArtistMap.has(key)) {
+        trendingArtistMap.set(key, {
+          name,
+          sourceType: "trending",
+        });
+      }
+    }
   }
 
   let location;
@@ -411,42 +476,64 @@ export const getNearbyShows = async ({
       events = await fetchTicketmasterEvents({ location, radiusMiles });
     }
   }
-  const shows = [];
+  const libraryShows = [];
+  const recommendedShows = [];
   const seen = new Set();
 
   for (const event of events) {
     const artists = extractEventArtists(event);
     if (artists.length === 0) continue;
     for (const artist of artists) {
-      if (!libraryArtistMap.has(artist.key)) continue;
-      const dedupeKey = `${event.id}:${artist.key}`;
+      const libraryMatch = findBestArtistMatch(artist.key, libraryArtistMap);
+      const recommendedMatch = findBestArtistMatch(artist.key, recommendedArtistMap);
+      const trendingMatch = findBestArtistMatch(artist.key, trendingArtistMap);
+      const match = libraryMatch || recommendedMatch || trendingMatch;
+      if (!match) continue;
+      const dedupeKey = `${event.id}:${artist.key}:${match.sourceType}`;
       if (seen.has(dedupeKey)) continue;
       seen.add(dedupeKey);
-      shows.push(buildShowRecord(event, artist, "library"));
+      const show = buildShowRecord(event, {
+        ...artist,
+        name: match.name || artist.name,
+        sourceType: match.sourceType,
+      }, libraryMatch ? "library" : "recommended");
+      if (libraryMatch) {
+        libraryShows.push(show);
+      } else {
+        recommendedShows.push(show);
+      }
     }
   }
 
-  shows.sort((a, b) => {
-    const aTime = a.dateTime || a.date || "";
-    const bTime = b.dateTime || b.date || "";
-    if (aTime !== bTime) return aTime.localeCompare(bTime);
-    const aDistance = Number.isFinite(a.distance)
-      ? a.distance
-      : Number.POSITIVE_INFINITY;
-    const bDistance = Number.isFinite(b.distance)
-      ? b.distance
-      : Number.POSITIVE_INFINITY;
-    return aDistance - bDistance;
-  });
+  const sortShows = (shows) =>
+    shows.sort((a, b) => {
+      const aTime = a.dateTime || a.date || "";
+      const bTime = b.dateTime || b.date || "";
+      if (aTime !== bTime) return aTime.localeCompare(bTime);
+      const aDistance = Number.isFinite(a.distance)
+        ? a.distance
+        : Number.POSITIVE_INFINITY;
+      const bDistance = Number.isFinite(b.distance)
+        ? b.distance
+        : Number.POSITIVE_INFINITY;
+      return aDistance - bDistance;
+    });
+
+  sortShows(libraryShows);
+  sortShows(recommendedShows);
+
+  const shows = [...libraryShows, ...recommendedShows].slice(0, resolvedLimit);
 
   return {
     location,
-    shows: shows.slice(0, resolvedLimit),
-    total: shows.length,
+    shows,
+    libraryShows: libraryShows.slice(0, resolvedLimit),
+    recommendedShows: recommendedShows.slice(0, resolvedLimit),
+    total: libraryShows.length + recommendedShows.length,
     counts: {
-      libraryArtists: libraryArtistMap.size,
-      matchedLibraryShows: shows.filter((show) => show.matchType === "library")
-        .length,
+      libraryArtists: libraryArtistCount,
+      matchedLibraryShows: libraryShows.length,
+      matchedRecommendedShows: recommendedShows.length,
     },
   };
 };

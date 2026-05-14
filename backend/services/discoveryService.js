@@ -20,6 +20,7 @@ import {
   buildExistingArtistKeySet,
   finalizeRecommendationAccumulator,
   mergeResolvedRecommendations,
+  rerankRecommendations,
 } from "./discoveryRecommendations.js";
 
 const LASTFM_PERIODS = [
@@ -204,23 +205,213 @@ const applyBlocklistToTagList = (tags, blocklist) => {
 
 export const getDiscoveryAutoRefreshHours = () => {
   const settings = dbOps.getSettings();
-  return clampInt(
+  const parsed = parseInt(
     settings.integrations?.lastfm?.discoveryAutoRefreshHours,
-    168,
-    1,
-    168,
+    10,
   );
+  return [24, 168, 720].includes(parsed) ? parsed : 168;
 };
 
 export const getDiscoveryRecommendationsPerRefresh = () => {
-  const settings = dbOps.getSettings();
-  return clampInt(
-    settings.integrations?.lastfm?.discoveryRecommendationsPerRefresh,
-    100,
-    10,
-    500,
-  );
+  return 200;
 };
+
+export const getDiscoveryMode = () => {
+  const settings = dbOps.getSettings();
+  const value = String(
+    settings.integrations?.lastfm?.discoveryMode || "balanced",
+  )
+    .trim()
+    .toLowerCase();
+  return value === "safer" || value === "deeper" ? value : "balanced";
+};
+
+export const getLocalDiscoveryPreferences = () => {
+  const settings = dbOps.getSettings();
+  return {
+    includeRecommendations:
+      settings.integrations?.ticketmaster?.localDiscoveryIncludeRecommendations !==
+      false,
+    includeTrending:
+      settings.integrations?.ticketmaster?.localDiscoveryIncludeTrending !== false,
+  };
+};
+
+const getDiscoveryFeedbackKey = (userId = "global") =>
+  `discoveryFeedback:${String(userId || "global").trim()}`;
+
+const normalizeFeedbackAction = (value) => {
+  const action = String(value || "")
+    .trim()
+    .toLowerCase();
+  return [
+    "more_like_this",
+    "less_like_this",
+    "already_known",
+    "hide_for_now",
+  ].includes(action)
+    ? action
+    : null;
+};
+
+const normalizeFeedbackList = (value) =>
+  (Array.isArray(value) ? value : [])
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry) => ({
+      id: String(entry.id || "").trim() || null,
+      artistId: String(entry.artistId || "").trim() || null,
+      artistName: String(entry.artistName || "").trim() || null,
+      action: normalizeFeedbackAction(entry.action),
+      sourceContext: String(entry.sourceContext || "").trim() || null,
+      tagContext: normalizeTextList(entry.tagContext).slice(0, 8),
+      seedContext: normalizeTextList(entry.seedContext).slice(0, 8),
+      createdAt: entry.createdAt || null,
+      expiresAt: entry.expiresAt || null,
+    }))
+    .filter((entry) => entry.action && (entry.artistId || entry.artistName))
+    .filter((entry) => {
+      if (!entry.expiresAt) return true;
+      const time = new Date(entry.expiresAt).getTime();
+      return Number.isFinite(time) ? time > Date.now() : true;
+    });
+
+export const getDiscoveryFeedback = (userId = "global") =>
+  normalizeFeedbackList(dbOps.getJSONSetting(getDiscoveryFeedbackKey(userId)));
+
+export const addDiscoveryFeedback = (userId = "global", entry = {}) => {
+  const action = normalizeFeedbackAction(entry.action);
+  if (!action) throw new Error("Invalid discovery feedback action");
+  const artistId = String(entry.artistId || "").trim() || null;
+  const artistName = String(entry.artistName || "").trim() || null;
+  if (!artistId && !artistName) {
+    throw new Error("artistId or artistName is required");
+  }
+
+  const existing = getDiscoveryFeedback(userId);
+  const now = new Date();
+  const expiresAt =
+    action === "hide_for_now"
+      ? new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString()
+      : null;
+  const normalizedEntry = {
+    id:
+      String(entry.id || "").trim() ||
+      `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    artistId,
+    artistName,
+    action,
+    sourceContext: String(entry.sourceContext || "").trim() || null,
+    tagContext: normalizeTextList(entry.tagContext).slice(0, 8),
+    seedContext: normalizeTextList(entry.seedContext).slice(0, 8),
+    createdAt: now.toISOString(),
+    expiresAt,
+  };
+  const deduped = existing.filter((item) => {
+    const sameArtist =
+      (artistId && item.artistId && artistId === item.artistId) ||
+      (artistName &&
+        item.artistName &&
+        artistName.toLowerCase() === item.artistName.toLowerCase());
+    return !(sameArtist && item.action === action);
+  });
+  deduped.unshift(normalizedEntry);
+  dbOps.setJSONSetting(getDiscoveryFeedbackKey(userId), deduped.slice(0, 200));
+  return normalizedEntry;
+};
+
+export const removeDiscoveryFeedback = (userId = "global", feedbackId) => {
+  const target = String(feedbackId || "").trim();
+  const next = getDiscoveryFeedback(userId).filter((entry) => entry.id !== target);
+  dbOps.setJSONSetting(getDiscoveryFeedbackKey(userId), next);
+  return next;
+};
+
+const buildWeightedTopList = (map, limit) =>
+  Array.from(map.entries())
+    .sort((left, right) => {
+      if (right[1] !== left[1]) return right[1] - left[1];
+      return String(left[0] || "").localeCompare(String(right[0] || ""));
+    })
+    .slice(0, limit)
+    .map(([name]) => name);
+
+const buildTasteProfile = ({
+  recentLibraryArtists = [],
+  allLibraryArtists = [],
+  historyArtists = [],
+  tagMap = new Map(),
+  tagWeights = new Map(),
+  genreWeights = new Map(),
+} = {}) => {
+  const recentIds = new Set(
+    recentLibraryArtists
+      .map((artist) => String(artist?.mbid || "").trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const bucketedLibrarySeeds = [];
+
+  recentLibraryArtists.slice(0, 18).forEach((artist, index) => {
+    if (!artist?.mbid || !artist?.artistName) return;
+    bucketedLibrarySeeds.push({
+      mbid: artist.mbid,
+      artistName: artist.artistName,
+      source: "library",
+      profileBucket: index < 8 ? "recent_interest" : "core_favorites",
+      affinityWeight: 1.65 - Math.min(index, 12) * 0.04,
+    });
+  });
+
+  allLibraryArtists.slice(0, 20).forEach((artist, index) => {
+    if (!artist?.mbid || !artist?.artistName) return;
+    if (recentIds.has(String(artist.mbid).trim().toLowerCase())) return;
+    bucketedLibrarySeeds.push({
+      mbid: artist.mbid,
+      artistName: artist.artistName,
+      source: "library",
+      profileBucket: index < 10 ? "collection_anchor" : "exploratory_seed",
+      affinityWeight: index < 10 ? 1.1 : 0.95,
+    });
+  });
+
+  const bucketedHistorySeeds = historyArtists.map((artist, index) => ({
+    ...artist,
+    source: artist.source || "lastfm",
+    profileBucket:
+      index < 12 ? "core_favorites" : index < 24 ? "recent_interest" : "exploratory_seed",
+    affinityWeight:
+      1.35 +
+      Math.min(1.2, Math.log10(Math.max(0, Number(artist.playcount || 0)) + 1) * 0.35),
+  }));
+
+  const profileTagWeights = new Map();
+  for (const [tag, weight] of tagWeights.entries()) {
+    const normalized = String(tag || "").trim().toLowerCase();
+    if (!normalized) continue;
+    profileTagWeights.set(normalized, Number(weight || 0));
+  }
+
+  return {
+    tagMap,
+    profileTagWeights,
+    topTags: buildWeightedTopList(tagWeights, 20),
+    topGenres: buildWeightedTopList(genreWeights, 24),
+    historySeeds: bucketedHistorySeeds,
+    librarySeeds: bucketedLibrarySeeds,
+  };
+};
+
+export const rerankCachedRecommendations = ({
+  recommendations = [],
+  feedback = [],
+  discoveryMode = getDiscoveryMode(),
+  limit = getDiscoveryRecommendationsPerRefresh(),
+} = {}) =>
+  rerankRecommendations(recommendations, limit, {
+    feedback,
+    discoveryMode,
+  });
+
+export { applyBlocklistToArtistCollection, applyBlocklistToTagList };
 
 const createLastfmHealth = () => ({
   success: 0,
@@ -431,6 +622,28 @@ const pickLastfmImage = (images) => {
   return null;
 };
 
+const formatTrendingPopularity = (artist) => {
+  const listeners = parseInt(artist?.listeners || 0, 10) || 0;
+  if (listeners > 0) {
+    return `${new Intl.NumberFormat("en-US", {
+      notation: listeners >= 100000 ? "compact" : "standard",
+      maximumFractionDigits: listeners >= 100000 ? 1 : 0,
+    }).format(listeners)} listeners on Last.fm`;
+  }
+  const playcount = parseInt(artist?.playcount || 0, 10) || 0;
+  if (playcount > 0) {
+    return `${new Intl.NumberFormat("en-US", {
+      notation: playcount >= 100000 ? "compact" : "standard",
+      maximumFractionDigits: playcount >= 100000 ? 1 : 0,
+    }).format(playcount)} plays on Last.fm`;
+  }
+  const rank = parseInt(artist?.["@attr"]?.rank || artist?.rank || 0, 10) || 0;
+  if (rank > 0) {
+    return `Trending #${rank} on Last.fm`;
+  }
+  return "Trending on Last.fm";
+};
+
 const buildTrendingArtistEntry = (artist) => {
   const name = String(artist?.name || artist?.["#text"] || "").trim();
   if (!name) return null;
@@ -439,6 +652,11 @@ const buildTrendingArtistEntry = (artist) => {
     name,
     image: pickLastfmImage(artist?.image),
     type: "Artist",
+    popularityLabel: formatTrendingPopularity(artist),
+    listeners: parseInt(artist?.listeners || 0, 10) || 0,
+    playcount: parseInt(artist?.playcount || 0, 10) || 0,
+    popularityRank:
+      parseInt(artist?.["@attr"]?.rank || artist?.rank || 0, 10) || null,
   };
 };
 
@@ -480,13 +698,18 @@ const collectSeedTagsAndGenres = async (
         for (const tag of tags.slice(0, 15)) {
           const name = String(tag?.name || "").trim();
           if (!name) continue;
+          const tagWeight = parseInt(tag?.count || 0, 10) || 1;
           tagCounts.set(
             name,
-            (tagCounts.get(name) || 0) + (parseInt(tag?.count || 0, 10) || 1),
+            (tagCounts.get(name) || 0) + tagWeight * Math.max(0.5, seed.weight || 1),
           );
           const normalized = name.toLowerCase();
           if (GENRE_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
-            genreCounts.set(name, (genreCounts.get(name) || 0) + 1);
+            genreCounts.set(
+              name,
+              (genreCounts.get(name) || 0) +
+                Math.max(1, Math.round(tagWeight / 25)) * Math.max(0.5, seed.weight || 1),
+            );
           }
         }
       } catch (error) {
@@ -499,15 +722,11 @@ const collectSeedTagsAndGenres = async (
 
   return {
     tagMap,
+    tagWeights: tagCounts,
+    genreWeights: genreCounts,
     tagsFound,
-    topTags: Array.from(tagCounts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 20)
-      .map((entry) => entry[0]),
-    topGenres: Array.from(genreCounts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 24)
-      .map((entry) => entry[0]),
+    topTags: buildWeightedTopList(tagCounts, 20),
+    topGenres: buildWeightedTopList(genreCounts, 24),
   };
 };
 
@@ -538,8 +757,8 @@ const resolveRecommendationCandidates = async (
   const merged = mergeResolvedRecommendations(recommendations, existingArtistKeys)
     .filter((item) => item?.id || item?.navigateTo)
     .sort((left, right) => {
-      if ((right.score || 0) !== (left.score || 0)) {
-        return (right.score || 0) - (left.score || 0);
+      if ((right.scoreTotal || right.score || 0) !== (left.scoreTotal || left.score || 0)) {
+        return (right.scoreTotal || right.score || 0) - (left.scoreTotal || left.score || 0);
       }
       if ((right.seedCount || 0) !== (left.seedCount || 0)) {
         return (right.seedCount || 0) - (left.seedCount || 0);
@@ -547,16 +766,19 @@ const resolveRecommendationCandidates = async (
       return String(left.name || "").localeCompare(String(right.name || ""));
     });
 
-  return merged.slice(0, getDiscoveryRecommendationsPerRefresh());
+  return merged.slice(0, Math.max(120, getDiscoveryRecommendationsPerRefresh() * 4));
 };
 
 const buildRecommendationsFromSeeds = async ({
   seeds,
   existingArtistKeys,
   lastfmHealth,
-  profileTagSet,
+  profileTagWeights,
+  discoveryMode,
 }) => {
   const recommendations = new Map();
+  const maxPerSeed =
+    getLastfmFailureRatio(lastfmHealth) >= 0.3 ? 10 : 16;
 
   await Promise.all(
     seeds.map(async (seed) => {
@@ -586,7 +808,7 @@ const buildRecommendationsFromSeeds = async ({
         const artists = Array.isArray(similar.similarartists.artist)
           ? similar.similarartists.artist
           : [similar.similarartists.artist];
-        for (const artist of artists) {
+        for (const artist of artists.slice(0, maxPerSeed)) {
           addRecommendationCandidate(recommendations, {
             candidate: {
               mbid: artist?.mbid,
@@ -596,7 +818,7 @@ const buildRecommendationsFromSeeds = async ({
             },
             seed,
             sourceTags,
-            profileTagSet,
+            profileTagWeights,
             existingArtistKeys,
           });
         }
@@ -610,7 +832,8 @@ const buildRecommendationsFromSeeds = async ({
 
   return finalizeRecommendationAccumulator(
     recommendations,
-    Math.max(30, getDiscoveryRecommendationsPerRefresh() * 3),
+    Math.max(140, getDiscoveryRecommendationsPerRefresh() * 5),
+    { discoveryMode },
   );
 };
 
@@ -627,7 +850,7 @@ export const updateDiscoveryCache = async () => {
     const { libraryManager } = await import("./libraryManager.js");
     emitDiscoveryProgress("loading_sources", "Loading library artists", 12);
     const [recentLibraryArtists, allLibraryArtistsRaw] = await Promise.all([
-      libraryManager.getRecentArtists(25),
+      libraryManager.getRecentArtists(40),
       libraryManager.getAllArtists(),
     ]);
     const allLibraryArtists = Array.isArray(allLibraryArtistsRaw)
@@ -636,7 +859,7 @@ export const updateDiscoveryCache = async () => {
     const libraryArtists =
       recentLibraryArtists.length > 0
         ? recentLibraryArtists
-        : allLibraryArtists.slice(0, 25);
+        : allLibraryArtists.slice(0, 40);
     console.log(`Found ${allLibraryArtists.length} artists in library.`);
 
     const hasLastfmKey = !!getLastfmApiKey();
@@ -707,36 +930,71 @@ export const updateDiscoveryCache = async () => {
       }
     }
 
-    const librarySeedArtists = libraryArtists.map((a) => ({
-      mbid: a.mbid,
-      artistName: a.artistName,
-      source: "library",
-    }));
-    const seeds = buildDiscoverySeedList({
-      libraryArtists: librarySeedArtists,
+    const profileSampleSeedCount = selectDiscoverySeedSample(
+      buildDiscoverySeedList({
+        libraryArtists: libraryArtists.map((a) => ({
+          mbid: a.mbid,
+          artistName: a.artistName,
+          source: "library",
+        })),
+        historyArtists,
+      }),
+      getLastfmFailureRatio(lastfmHealth),
+    ).length;
+    const existingArtistKeys = buildExistingArtistKeySet(allLibraryArtists);
+
+    const provisionalSeeds = buildDiscoverySeedList({
+      libraryArtists: libraryArtists.map((a) => ({
+        mbid: a.mbid,
+        artistName: a.artistName,
+        source: "library",
+      })),
       historyArtists,
     });
-    const existingArtistKeys = buildExistingArtistKeySet(allLibraryArtists);
-    const profileSample = selectDiscoverySeedSample(
-      seeds,
-      getLastfmFailureRatio(lastfmHealth),
-    );
+    const profileSample = provisionalSeeds.slice(0, profileSampleSeedCount);
 
     console.log(
       `Sampling tags/genres from ${profileSample.length} artists (${libraryArtists.length} library, ${historyArtists.length} history)...`,
     );
-    const { tagsFound, topTags, topGenres } = getLastfmApiKey()
+    const {
+      tagsFound,
+      topTags,
+      topGenres,
+      tagMap,
+      tagWeights,
+      genreWeights,
+    } = getLastfmApiKey()
       ? await collectSeedTagsAndGenres(
           profileSample,
           lastfmHealth,
           "building_genres",
         )
-      : { tagsFound: 0, topTags: [], topGenres: [] };
+      : {
+          tagsFound: 0,
+          topTags: [],
+          topGenres: [],
+          tagMap: new Map(),
+          tagWeights: new Map(),
+          genreWeights: new Map(),
+        };
+    const tasteProfile = buildTasteProfile({
+      recentLibraryArtists,
+      allLibraryArtists,
+      historyArtists,
+      tagMap,
+      tagWeights,
+      genreWeights,
+    });
+    const seeds = buildDiscoverySeedList({
+      libraryArtists: tasteProfile.librarySeeds,
+      historyArtists: tasteProfile.historySeeds,
+    });
     console.log(
       `Found tags for ${tagsFound} out of ${profileSample.length} artists`,
     );
-    discoveryCache.topTags = topTags;
-    discoveryCache.topGenres = topGenres;
+    discoveryCache.topTags = tasteProfile.topTags.length > 0 ? tasteProfile.topTags : topTags;
+    discoveryCache.topGenres =
+      tasteProfile.topGenres.length > 0 ? tasteProfile.topGenres : topGenres;
 
     console.log(
       `Identified Top Genres: ${discoveryCache.topGenres.join(", ")}`,
@@ -822,14 +1080,15 @@ export const updateDiscoveryCache = async () => {
       }
     }
 
-    const recSample = selectDiscoverySeedSample(
-      seeds,
-      getLastfmFailureRatio(lastfmHealth),
-    );
-    const profileTagSet = new Set(
-      (discoveryCache.topTags || [])
-        .map((tag) => String(tag || "").trim().toLowerCase())
-        .filter(Boolean),
+    const recSample = seeds.slice(
+      0,
+      Math.max(
+        18,
+        Math.min(
+          seeds.length,
+          getLastfmFailureRatio(lastfmHealth) >= 0.3 ? 20 : 32,
+        ),
+      ),
     );
 
     console.log(
@@ -847,7 +1106,8 @@ export const updateDiscoveryCache = async () => {
         seeds: recSample,
         existingArtistKeys,
         lastfmHealth,
-        profileTagSet,
+        profileTagWeights: tasteProfile.profileTagWeights,
+        discoveryMode: getDiscoveryMode(),
       });
       const recommendationFailureRatio = getLastfmFailureRatio(lastfmHealth);
       const maxResolve =
@@ -861,6 +1121,10 @@ export const updateDiscoveryCache = async () => {
         existingArtistKeys,
         maxResolve,
       );
+      recommendationsArray = rerankCachedRecommendations({
+        recommendations: recommendationsArray,
+        discoveryMode: getDiscoveryMode(),
+      });
     } else {
       console.warn("Last.fm API key required for similar artist discovery.");
     }
@@ -875,6 +1139,7 @@ export const updateDiscoveryCache = async () => {
         name: a.artistName,
         id: a.mbid,
         source: a.source || "library",
+        profileBucket: a.profileBucket || null,
       })),
       topTags: discoveryCache.topTags || [],
       topGenres: discoveryCache.topGenres || [],
@@ -915,10 +1180,13 @@ export const updateDiscoveryCache = async () => {
     );
     const blocklist = getStoredBlocklist();
     websocketService.emitDiscoveryUpdate({
-      recommendations: applyBlocklistToArtistCollection(
-        discoveryData.recommendations,
-        blocklist,
-      ),
+      recommendations: rerankCachedRecommendations({
+        recommendations: applyBlocklistToArtistCollection(
+          discoveryData.recommendations,
+          blocklist,
+        ),
+        discoveryMode: getDiscoveryMode(),
+      }),
       globalTop: applyBlocklistToArtistCollection(
         discoveryData.globalTop,
         blocklist,
@@ -976,7 +1244,13 @@ export const updateUserDiscoveryCache = async (listenHistoryProfile) => {
   );
 
   try {
-    const allLibraryArtistsRaw = await libraryManager.getAllArtists();
+    const [recentLibraryArtistsRaw, allLibraryArtistsRaw] = await Promise.all([
+      libraryManager.getRecentArtists(40),
+      libraryManager.getAllArtists(),
+    ]);
+    const recentLibraryArtists = Array.isArray(recentLibraryArtistsRaw)
+      ? recentLibraryArtistsRaw
+      : [];
     const allLibraryArtists = Array.isArray(allLibraryArtistsRaw)
       ? allLibraryArtistsRaw
       : [];
@@ -1012,43 +1286,64 @@ export const updateUserDiscoveryCache = async (listenHistoryProfile) => {
       }
     }
 
-    const librarySeedArtists = allLibraryArtists.slice(0, 25).map((a) => ({
+    const provisionalSeeds = buildDiscoverySeedList({
+      libraryArtists: recentLibraryArtists.map((a) => ({
         mbid: a.mbid,
         artistName: a.artistName,
         source: "library",
-    }));
-    const seeds = buildDiscoverySeedList({
-      libraryArtists: librarySeedArtists,
+      })),
       historyArtists,
     });
-    const profileSample = selectDiscoverySeedSample(
-      seeds,
-      getLastfmFailureRatio(lastfmHealth),
+    const profileSample = provisionalSeeds.slice(
+      0,
+      selectDiscoverySeedSample(
+        provisionalSeeds,
+        getLastfmFailureRatio(lastfmHealth),
+      ).length,
     );
-    const { topTags, topGenres } = await collectSeedTagsAndGenres(
+    const { topTags, topGenres, tagMap, tagWeights, genreWeights } =
+      await collectSeedTagsAndGenres(
       profileSample,
       lastfmHealth,
     );
-    const recSample = selectDiscoverySeedSample(
-      seeds,
-      getLastfmFailureRatio(lastfmHealth),
-    );
-    const profileTagSet = new Set(
-      topTags
-        .map((tag) => String(tag || "").trim().toLowerCase())
-        .filter(Boolean),
+    const tasteProfile = buildTasteProfile({
+      recentLibraryArtists,
+      allLibraryArtists,
+      historyArtists,
+      tagMap,
+      tagWeights,
+      genreWeights,
+    });
+    const seeds = buildDiscoverySeedList({
+      libraryArtists: tasteProfile.librarySeeds,
+      historyArtists: tasteProfile.historySeeds,
+    });
+    const recSample = seeds.slice(
+      0,
+      Math.max(
+        18,
+        Math.min(
+          seeds.length,
+          getLastfmFailureRatio(lastfmHealth) >= 0.3 ? 20 : 32,
+        ),
+      ),
     );
     const rawRecommendations = await buildRecommendationsFromSeeds({
       seeds: recSample,
       existingArtistKeys,
       lastfmHealth,
-      profileTagSet,
+      profileTagWeights: tasteProfile.profileTagWeights,
+      discoveryMode: getDiscoveryMode(),
     });
-    const recommendationsArray = await resolveRecommendationCandidates(
+    let recommendationsArray = await resolveRecommendationCandidates(
       rawRecommendations,
       existingArtistKeys,
       40,
     );
+    recommendationsArray = rerankCachedRecommendations({
+      recommendations: recommendationsArray,
+      discoveryMode: getDiscoveryMode(),
+    });
 
     await hydrateArtistImages(recommendationsArray, {
       limit: recommendationsArray.length,
@@ -1062,9 +1357,11 @@ export const updateUserDiscoveryCache = async (listenHistoryProfile) => {
         name: a.artistName,
         id: a.mbid,
         source: a.source || "library",
+        profileBucket: a.profileBucket || null,
       })),
-      topTags,
-      topGenres,
+      topTags: tasteProfile.topTags.length > 0 ? tasteProfile.topTags : topTags,
+      topGenres:
+        tasteProfile.topGenres.length > 0 ? tasteProfile.topGenres : topGenres,
     };
 
     dbOps.updateDiscoveryCache(userData, cacheNamespace);
