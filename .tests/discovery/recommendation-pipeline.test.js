@@ -6,6 +6,7 @@ import {
   buildDiscoverySeedList,
   finalizeRecommendationAccumulator,
   mergeResolvedRecommendations,
+  rerankRecommendations,
 } from "../../backend/services/discoveryRecommendations.js";
 
 test("buildDiscoverySeedList prefers listening-history weight when the same artist exists in library and history", () => {
@@ -43,7 +44,10 @@ test("buildDiscoverySeedList prefers listening-history weight when the same arti
 test("recommendation candidates aggregate across multiple seeds", () => {
   const accumulator = new Map();
   const existingArtistKeys = new Set();
-  const profileTagSet = new Set(["dream-pop", "shoegaze"]);
+  const profileTagWeights = new Map([
+    ["dream-pop", 3],
+    ["shoegaze", 4],
+  ]);
 
   addRecommendationCandidate(accumulator, {
     candidate: {
@@ -57,7 +61,7 @@ test("recommendation candidates aggregate across multiple seeds", () => {
       weight: 1.2,
     },
     sourceTags: ["Dream-Pop", "Indie"],
-    profileTagSet,
+    profileTagWeights,
     existingArtistKeys,
   });
 
@@ -73,7 +77,7 @@ test("recommendation candidates aggregate across multiple seeds", () => {
       weight: 1.5,
     },
     sourceTags: ["Shoegaze"],
-    profileTagSet,
+    profileTagWeights,
     existingArtistKeys,
   });
 
@@ -85,9 +89,12 @@ test("recommendation candidates aggregate across multiple seeds", () => {
     recommendation.sourceArtists.sort(),
     ["Seed One", "Seed Two"],
   );
-  assert.ok(recommendation.score > 200);
+  assert.ok(recommendation.scoreTotal > 150);
   assert.ok(recommendation.tags.includes("dream-pop"));
   assert.ok(recommendation.tags.includes("shoegaze"));
+  assert.ok(recommendation.matchedTags.includes("dream-pop"));
+  assert.ok(recommendation.matchedTags.includes("shoegaze"));
+  assert.ok(recommendation.reasonCodes.length > 0);
 });
 
 test("mergeResolvedRecommendations collapses name and mbid variants of the same artist", () => {
@@ -117,4 +124,55 @@ test("mergeResolvedRecommendations collapses name and mbid variants of the same 
     merged[0].tags.sort(),
     ["dream-pop", "shoegaze"],
   );
+});
+
+test("rerankRecommendations can hide items and favor deeper mode diversification", () => {
+  const recommendations = [
+    {
+      id: "55555555-5555-5555-5555-555555555555",
+      name: "Safe Pick",
+      matchedTags: ["shoegaze", "dream-pop"],
+      supportingSeeds: [{ artistName: "Slowdive", weight: 2 }],
+      scoreSimilarity: 110,
+      scoreTagAffinity: 30,
+      scoreSeedCoverage: 20,
+      scoreNovelty: 8,
+      scorePopularityPenalty: 12,
+      scoreTotal: 156,
+      seedCount: 3,
+      sourceType: "lastfm",
+    },
+    {
+      id: "66666666-6666-6666-6666-666666666666",
+      name: "Deeper Pick",
+      matchedTags: ["shoegaze", "ethereal"],
+      supportingSeeds: [{ artistName: "Curve", weight: 1.4 }],
+      scoreSimilarity: 80,
+      scoreTagAffinity: 26,
+      scoreSeedCoverage: 14,
+      scoreNovelty: 26,
+      scorePopularityPenalty: 4,
+      scoreTotal: 142,
+      seedCount: 1,
+      sourceType: "lastfm",
+    },
+  ];
+
+  const hidden = rerankRecommendations(recommendations, 10, {
+    discoveryMode: "balanced",
+    feedback: [
+      {
+        id: "hide-safe",
+        artistId: "55555555-5555-5555-5555-555555555555",
+        action: "hide_for_now",
+      },
+    ],
+  });
+  assert.equal(hidden.length, 1);
+  assert.equal(hidden[0].name, "Deeper Pick");
+
+  const deeper = rerankRecommendations(recommendations, 2, {
+    discoveryMode: "deeper",
+  });
+  assert.equal(deeper[0].name, "Deeper Pick");
 });
