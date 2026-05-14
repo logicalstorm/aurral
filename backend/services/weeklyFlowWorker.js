@@ -14,7 +14,7 @@ import {
   validateDownloadedTrack,
 } from "./weeklyFlowSoulseekMatcher.js";
 
-const DEFAULT_CONCURRENCY = 2;
+const DEFAULT_CONCURRENCY = 3;
 const MIN_CONCURRENCY = 1;
 const MAX_CONCURRENCY = 3;
 const DEFAULT_PREFERRED_FORMAT = "flac";
@@ -39,11 +39,11 @@ const FALLBACK_MP3_REGEX = /^[^/\\]+-[a-f0-9]{8}\.mp3$/i;
 const FALLBACK_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
 const MAX_RETRIES_PER_JOB = 1;
 const MAX_RETRIES_FOR_TIMEOUT_LOGIN = 1;
-const MAX_RETRIES_FOR_QUEUED_DOWNLOAD = 12;
+const MAX_RETRIES_FOR_QUEUED_DOWNLOAD = 2;
 const MAX_RETRIES_FOR_OFFLINE_SOURCE = 3;
-const MAX_BACKUP_REFILL_ROUNDS = 3;
-const QUEUED_RETRY_BASE_DELAY_MS = 2 * 60 * 1000;
-const QUEUED_RETRY_MAX_DELAY_MS = 30 * 60 * 1000;
+const QUEUED_RETRY_BASE_DELAY_MS = 15 * 1000;
+const QUEUED_RETRY_MAX_DELAY_MS = 45 * 1000;
+const FAST_FLAC_PRIMARY_ATTEMPTS = 2;
 const NON_RETRYABLE_ERRORS = new Set([
   "No search results found",
   "No candidate files returned",
@@ -79,6 +79,45 @@ export class WeeklyFlowWorker {
     this.activeJobs = new Map();
     this.blockedPlaylistTypes = new Set();
     this.runGeneration = 0;
+    this.downloadMetrics = {
+      queuedFailures: 0,
+      offlineFailures: 0,
+      validationRejects: 0,
+      mp3FallbackActivations: 0,
+      completedTracks: 0,
+      completedTrackAttempts: 0,
+      completedTrackLatencyMs: 0,
+    };
+  }
+
+  _recordFailureMetric(message) {
+    if (this._isQueuedError(message)) {
+      this.downloadMetrics.queuedFailures += 1;
+      return;
+    }
+    if (this._isOfflineSourceError(message)) {
+      this.downloadMetrics.offlineFailures += 1;
+      return;
+    }
+    if (String(message || "").toLowerCase().includes("validation failed")) {
+      this.downloadMetrics.validationRejects += 1;
+    }
+  }
+
+  _recordMp3FallbackActivation() {
+    this.downloadMetrics.mp3FallbackActivations += 1;
+  }
+
+  _recordCompletedTrack(elapsedMs, attempts) {
+    this.downloadMetrics.completedTracks += 1;
+    this.downloadMetrics.completedTrackLatencyMs += Math.max(
+      0,
+      Math.round(Number(elapsedMs) || 0),
+    );
+    this.downloadMetrics.completedTrackAttempts += Math.max(
+      1,
+      Math.round(Number(attempts) || 1),
+    );
   }
 
   _scheduleProcessIn(delayMs = JOB_COOLDOWN_MS) {
@@ -325,11 +364,9 @@ export class WeeklyFlowWorker {
 
   _getRetryDelayMs(attempt, message) {
     if (this._isQueuedError(message)) {
-      const exp = Math.max(0, Number(attempt) - 1);
-      return Math.min(
-        QUEUED_RETRY_MAX_DELAY_MS,
-        QUEUED_RETRY_BASE_DELAY_MS * 2 ** exp,
-      );
+      return Number(attempt) <= 1
+        ? QUEUED_RETRY_BASE_DELAY_MS
+        : QUEUED_RETRY_MAX_DELAY_MS;
     }
     if (this._isOfflineSourceError(message)) {
       return Math.min(
@@ -658,8 +695,13 @@ export class WeeklyFlowWorker {
     const target = this._getPlaylistTargetCount(playlistType);
     const flow = flowPlaylistConfig.getFlow(playlistType);
     if (!target || !flow || shortfall <= 0) return 0;
+    const rounds = Number(this.backupRefillRounds.get(playlistType) || 0);
+    const requestSize = Math.max(
+      shortfall,
+      Math.min(target * 2, shortfall * Math.max(3, rounds + 2)),
+    );
     const sourceTracks = await playlistSource
-      .getTracksForFlow({ ...flow, size: shortfall })
+      .getTracksForFlow({ ...flow, size: requestSize })
       .catch(() => []);
     if (!Array.isArray(sourceTracks) || sourceTracks.length === 0) return 0;
     const existingKeys = new Set(
@@ -677,7 +719,13 @@ export class WeeklyFlowWorker {
       if (unique.length >= shortfall) break;
     }
     if (unique.length === 0) return 0;
-    return downloadTracker.addJobs(unique, playlistType).length;
+    const added = downloadTracker.addJobs(unique, playlistType).length;
+    if (added > 0) {
+      console.log(
+        `[WeeklyFlowWorker] Enqueued ${added} replacement tracks for ${playlistType} (shortfall ${shortfall})`,
+      );
+    }
+    return added;
   }
 
   async moveFallbackMp3sToDir(force = false) {
@@ -954,9 +1002,11 @@ export class WeeklyFlowWorker {
       if (searchQueries.length === 0) {
         throw new Error("No search queries could be built");
       }
+      console.log(
+        `[WeeklyFlowWorker] Search plan for ${job.id}: ${searchQueries.join(" | ")}`,
+      );
       const { preferredFormat, preferredFormatStrict } =
         this.getWorkerSettings();
-      const preferredExt = preferredFormat === "mp3" ? ".mp3" : ".flac";
       const matchLimit = this._getAdaptiveMatchLimit(
         preferredFormatStrict,
         retryAttempt,
@@ -1007,11 +1057,16 @@ export class WeeklyFlowWorker {
       if (aggregatedResults.length === 0) {
         throw new Error("No search results found");
       }
+      console.log(
+        `[WeeklyFlowWorker] Search results for ${job.id}: ${aggregatedResults.length} files, ${rankedMatches.length} ranked candidates`,
+      );
 
       let selectedMatch = null;
       let selectedExt = ".mp3";
       let downloadedSourcePath = null;
       let lastError = null;
+      let attemptedCandidates = 0;
+      let mp3FallbackActivated = false;
 
       await new Promise((r) => setImmediate(r));
       await fs.mkdir(stagingDir, { recursive: true });
@@ -1029,7 +1084,65 @@ export class WeeklyFlowWorker {
         matchLimit,
         maxDownloadAttempts * 3,
       );
-      const candidates = rankedMatches.slice(0, candidatePoolSize);
+      const buildRankedPool = (format, strictFormat) =>
+        rankFlowSearchResults(aggregatedResults, resolvedTrack, {
+          preferredFormat: format,
+          strictFormat,
+          isUserBlacklisted: (user) => soulseekClient.isUserBlacklisted(user),
+          getUserQueuePenalty: (user) => soulseekClient.getUserQueuePenalty(user),
+        }).slice(0, candidatePoolSize);
+      const primaryRankedMatches = buildRankedPool(
+        preferredFormat,
+        preferredFormatStrict,
+      );
+      const mixedRankedMatches =
+        preferredFormat === "flac"
+          ? buildRankedPool("mp3", false)
+          : primaryRankedMatches;
+      const filteredPrimary = primaryRankedMatches.filter(
+        (candidate) => candidate.preDownloadValid !== false,
+      );
+      const filteredMixed = mixedRankedMatches.filter(
+        (candidate) => candidate.preDownloadValid !== false,
+      );
+      const rejectedForPreDownload = Math.max(
+        0,
+        primaryRankedMatches.length - filteredPrimary.length,
+      );
+      if (rejectedForPreDownload > 0) {
+        console.log(
+          `[WeeklyFlowWorker] Pre-download rejected ${rejectedForPreDownload} weak candidates for ${job.id}`,
+        );
+      }
+      const initialCandidates =
+        preferredFormat === "flac" && retryAttempt <= 0
+          ? selectRankedMatchAttempts(
+              filteredPrimary.filter((candidate) => candidate.ext === ".flac"),
+              Math.min(maxDownloadAttempts, FAST_FLAC_PRIMARY_ATTEMPTS),
+            )
+          : selectRankedMatchAttempts(
+              preferredFormat === "flac" ? filteredMixed : filteredPrimary,
+              maxDownloadAttempts,
+            );
+      const attemptedKeys = new Set(
+        initialCandidates.map(
+          (candidate) =>
+            `${String(candidate?.raw?.user || "").trim().toLowerCase()}\0${String(candidate?.raw?.file || "").trim().toLowerCase()}`,
+        ),
+      );
+      const fallbackCandidates =
+        preferredFormat === "flac"
+          ? selectRankedMatchAttempts(filteredMixed, maxDownloadAttempts).filter(
+              (candidate) => {
+                const key = `${String(candidate?.raw?.user || "").trim().toLowerCase()}\0${String(candidate?.raw?.file || "").trim().toLowerCase()}`;
+                if (!key || attemptedKeys.has(key)) return false;
+                attemptedKeys.add(key);
+                return true;
+              },
+            )
+          : [];
+      const candidates =
+        initialCandidates.length > 0 ? [...initialCandidates] : [...fallbackCandidates];
       if (candidates.length === 0) {
         if (preferredFormatStrict) {
           lastError = new Error(
@@ -1040,10 +1153,10 @@ export class WeeklyFlowWorker {
         }
         timingsMs.search += Number(process.hrtime.bigint() - phaseStart) / 1e6;
       } else {
-        const attemptCandidates = selectRankedMatchAttempts(
-          candidates,
-          maxDownloadAttempts,
-        );
+        const attemptCandidates =
+          preferredFormat === "flac" && retryAttempt <= 0
+            ? [...candidates, ...fallbackCandidates.filter((candidate) => !candidates.includes(candidate))]
+            : candidates;
         if (attemptCandidates.length === 0) {
           lastError = new Error(
             `No ${preferredFormat.toUpperCase()} candidate files returned`,
@@ -1056,15 +1169,31 @@ export class WeeklyFlowWorker {
         ) {
           this._assertJobCanContinue(job, runGeneration);
           const candidate = attemptCandidates[attemptIndex];
+          if (
+            preferredFormat === "flac" &&
+            retryAttempt <= 0 &&
+            !mp3FallbackActivated &&
+            (initialCandidates.length === 0 || attemptIndex >= initialCandidates.length)
+          ) {
+            mp3FallbackActivated = true;
+            this._recordMp3FallbackActivation();
+            console.log(
+              `[WeeklyFlowWorker] MP3 fallback activated for ${job.id} after ${attemptedCandidates} fast FLAC attempts`,
+            );
+          }
           if (soulseekClient.isUserBlacklisted(candidate.raw?.user)) {
             continue;
           }
+          attemptedCandidates += 1;
           const extFromSoulseek = path.extname(candidate.raw?.file || "");
           const ext =
             extFromSoulseek &&
             /^\.(flac|mp3|m4a|ogg|wav)$/i.test(extFromSoulseek)
               ? extFromSoulseek
               : ".mp3";
+          console.log(
+            `[WeeklyFlowWorker] Candidate ${attemptedCandidates}/${attemptCandidates.length} for ${job.id}: user=${String(candidate.raw?.user || "").trim()} ext=${ext} slots=${Number(candidate.raw?.slots || 0)} speed=${Number(candidate.raw?.speed || 0)} score=${Math.round(Number(candidate.score || 0))}`,
+          );
           try {
             const downloadStart = process.hrtime.bigint();
             downloadedSourcePath = await soulseekClient.download(
@@ -1099,6 +1228,10 @@ export class WeeklyFlowWorker {
               lastError = new Error(
                 `Downloaded track validation failed: ${validation.reason}`,
               );
+              this._recordFailureMetric(lastError.message);
+              console.warn(
+                `[WeeklyFlowWorker] Candidate rejected for ${job.id}: user=${String(candidate.raw?.user || "").trim()} file=${String(candidate.raw?.file || "").trim()} reason=${validation.reason}`,
+              );
               continue;
             }
             selectedMatch = candidate;
@@ -1107,6 +1240,10 @@ export class WeeklyFlowWorker {
             break;
           } catch (err) {
             lastError = err;
+            this._recordFailureMetric(err?.message || "");
+            console.warn(
+              `[WeeklyFlowWorker] Candidate failed for ${job.id}: user=${String(candidate.raw?.user || "").trim()} file=${String(candidate.raw?.file || "").trim()} reason=${String(err?.message || err || "unknown")}`,
+            );
           }
         }
         timingsMs.search += Number(process.hrtime.bigint() - phaseStart) / 1e6;
@@ -1162,6 +1299,10 @@ export class WeeklyFlowWorker {
       this.retryNotBefore.delete(job.id);
       this.backupRefillRounds.delete(job.playlistType);
       this._dropOverflowPendingJobs(job.playlistType);
+      this._recordCompletedTrack(
+        Number(process.hrtime.bigint() - perfStartHr) / 1e6,
+        attemptedCandidates,
+      );
       console.log(`[WeeklyFlowWorker] Job ${job.id} completed: ${finalPath}`);
       timingsMs.finalize += Number(process.hrtime.bigint() - phaseStart) / 1e6;
 
@@ -1232,20 +1373,15 @@ export class WeeklyFlowWorker {
     const target = this._getPlaylistTargetCount(playlistType);
     if (allSettled && target && done < target) {
       const shortfall = target - done;
-      const rounds = Number(this.backupRefillRounds.get(playlistType) || 0);
-      if (rounds < MAX_BACKUP_REFILL_ROUNDS) {
-        const enqueued = await this._enqueueBackupJobs(playlistType, shortfall);
-        this.backupRefillRounds.set(playlistType, rounds + 1);
-        if (enqueued > 0) {
-          this.wake();
-          return;
-        }
-      }
-      if (failed > 0 || flowPlaylistConfig.getFlow(playlistType)) {
-        this._scheduleIncompleteRetry(playlistType);
+      const rounds = Number(this.backupRefillRounds.get(playlistType) || 0) + 1;
+      this.backupRefillRounds.set(playlistType, rounds);
+      const enqueued = await this._enqueueBackupJobs(playlistType, shortfall);
+      if (enqueued > 0) {
+        this.wake();
         return;
       }
-      this.backupRefillRounds.delete(playlistType);
+      this._scheduleIncompleteRetry(playlistType);
+      return;
     }
 
     if (allSettled && hasDone) {
@@ -1296,6 +1432,7 @@ export class WeeklyFlowWorker {
 
   getStatus() {
     const settings = this.getWorkerSettings();
+    const completedTracks = Number(this.downloadMetrics.completedTracks || 0);
     return {
       running: this.running,
       processing: this.activeCount > 0,
@@ -1303,6 +1440,28 @@ export class WeeklyFlowWorker {
       stats: downloadTracker.getStats(),
       currentJob: this.currentJob,
       lastJobMetrics: this.lastJobMetrics,
+      downloadMetrics: {
+        queuedFailures: this.downloadMetrics.queuedFailures,
+        offlineFailures: this.downloadMetrics.offlineFailures,
+        validationRejects: this.downloadMetrics.validationRejects,
+        mp3FallbackActivations:
+          this.downloadMetrics.mp3FallbackActivations,
+        completedTracks,
+        avgAttemptsPerTrack:
+          completedTracks > 0
+            ? Number(
+                (
+                  this.downloadMetrics.completedTrackAttempts / completedTracks
+                ).toFixed(2),
+              )
+            : 0,
+        avgSuccessLatencyMs:
+          completedTracks > 0
+            ? Math.round(
+                this.downloadMetrics.completedTrackLatencyMs / completedTracks,
+              )
+            : 0,
+      },
       settings,
     };
   }

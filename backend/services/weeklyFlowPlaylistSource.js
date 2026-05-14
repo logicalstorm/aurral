@@ -507,9 +507,41 @@ export class WeeklyFlowPlaylistSource {
         if (b.score !== a.score) return b.score - a.score;
         if (a.rankSum !== b.rankSum) return a.rankSum - b.rankSum;
         return a.name.localeCompare(b.name);
-      })
-      .map((entry) => entry.name)
-      .filter(Boolean);
+      });
+  }
+
+  async _getTieredGroupTracks(groups, limit, options = {}) {
+    if (!Array.isArray(groups) || groups.length === 0 || limit <= 0) return [];
+    const rankedArtists = this._buildRankedArtistPool(groups);
+    if (rankedArtists.length === 0) return [];
+    const maxScore = rankedArtists.reduce(
+      (highest, entry) => Math.max(highest, Number(entry?.score || 0)),
+      0,
+    );
+    if (maxScore <= 0) return [];
+    const picked = [];
+    const used = new Set();
+    for (let score = maxScore; score >= 1 && picked.length < limit; score -= 1) {
+      const tierArtists = rankedArtists
+        .filter((entry) => Number(entry?.score || 0) === score)
+        .map((entry) => entry.name)
+        .filter(Boolean);
+      if (tierArtists.length === 0) continue;
+      const remaining = limit - picked.length;
+      const tierTracks = await this._getTracksForRankedArtists(
+        tierArtists,
+        remaining,
+        options,
+      ).catch(() => []);
+      for (const track of tierTracks) {
+        if (picked.length >= limit) break;
+        const key = this._trackArtistKey(track);
+        if (!key || used.has(key)) continue;
+        used.add(key);
+        picked.push(track);
+      }
+    }
+    return picked;
   }
 
   async getTagGroupTracks(tagsMap, limit, options = {}) {
@@ -518,16 +550,15 @@ export class WeeklyFlowPlaylistSource {
     if (tags.length === 1) {
       return this.getTagTracks(tags[0], limit, options);
     }
-    const requestedArtists = Math.max(limit * 4, 60);
+    const requestedArtists = Math.max(limit * 6, 100);
     const groups = await Promise.all(
       tags.map(async (tag) => ({
         tag,
         artists: await this._getTagArtists(tag, requestedArtists).catch(() => []),
       })),
     );
-    const rankedArtists = this._buildRankedArtistPool(groups);
-    const overlapTracks = await this._getTracksForRankedArtists(
-      rankedArtists,
+    return this._getTieredGroupTracks(
+      groups,
       limit,
       {
         deepDive: options?.deepDive === true,
@@ -536,24 +567,6 @@ export class WeeklyFlowPlaylistSource {
         excludeArtistKeys: options?.excludeArtistKeys,
       },
     ).catch(() => []);
-    if (overlapTracks.length >= limit) {
-      return overlapTracks.slice(0, limit);
-    }
-    const used = new Set(overlapTracks.map((track) => this._trackArtistKey(track)));
-    const fallback = [];
-    const perTagLimit = Math.max(Math.ceil(limit / tags.length), 1);
-    for (const tag of tags) {
-      if (fallback.length + overlapTracks.length >= limit) break;
-      const tracks = await this.getTagTracks(tag, perTagLimit, options).catch(() => []);
-      for (const track of tracks) {
-        if (fallback.length + overlapTracks.length >= limit) break;
-        const key = this._trackArtistKey(track);
-        if (!key || used.has(key)) continue;
-        used.add(key);
-        fallback.push(track);
-      }
-    }
-    return [...overlapTracks, ...fallback].slice(0, limit);
   }
 
   async getRelatedArtistGroupTracks(relatedArtistsMap, limit, options = {}) {
@@ -565,12 +578,11 @@ export class WeeklyFlowPlaylistSource {
     const groups = await Promise.all(
       artists.map(async (artist) => ({
         artist,
-        artists: await this._getSimilarArtists(artist, 50).catch(() => []),
+        artists: await this._getSimilarArtists(artist, 75).catch(() => []),
       })),
     );
-    const rankedArtists = this._buildRankedArtistPool(groups);
-    const overlapTracks = await this._getTracksForRankedArtists(
-      rankedArtists,
+    return this._getTieredGroupTracks(
+      groups,
       limit,
       {
         deepDive: options?.deepDive === true,
@@ -579,28 +591,6 @@ export class WeeklyFlowPlaylistSource {
         excludeArtistKeys: options?.excludeArtistKeys,
       },
     ).catch(() => []);
-    if (overlapTracks.length >= limit) {
-      return overlapTracks.slice(0, limit);
-    }
-    const used = new Set(overlapTracks.map((track) => this._trackArtistKey(track)));
-    const fallback = [];
-    const perArtistLimit = Math.max(Math.ceil(limit / artists.length), 1);
-    for (const artist of artists) {
-      if (fallback.length + overlapTracks.length >= limit) break;
-      const tracks = await this.getRelatedArtistTracks(
-        artist,
-        perArtistLimit,
-        options,
-      ).catch(() => []);
-      for (const track of tracks) {
-        if (fallback.length + overlapTracks.length >= limit) break;
-        const key = this._trackArtistKey(track);
-        if (!key || used.has(key)) continue;
-        used.add(key);
-        fallback.push(track);
-      }
-    }
-    return [...overlapTracks, ...fallback].slice(0, limit);
   }
 
   _buildWeightedSourceCounts(total, sources) {
