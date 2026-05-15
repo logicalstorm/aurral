@@ -39,12 +39,10 @@ export function SettingsIntegrationsTab({
   const [ticketmasterEditing, setTicketmasterEditing] = useState(false);
   const [navidromeEditing, setNavidromeEditing] = useState(false);
   const [lastfmEditing, setLastfmEditing] = useState(false);
-  const [musicbrainzContactEditing, setMusicbrainzContactEditing] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState({
     lidarr: false,
     lastfm: true,
     ticketmaster: true,
-    musicbrainzContact: true,
     navidrome: true,
   });
   const [lidarrTestLatencyMs, setLidarrTestLatencyMs] = useState(null);
@@ -1013,97 +1011,6 @@ export function SettingsIntegrationsTab({
                 }
               />
             </label>
-          </fieldset>
-          )}
-        </div>
-        <div
-          className="p-6 rounded-lg space-y-4"
-          style={{
-            backgroundColor: "#1a1a1e",
-            border: "1px solid #2a2a2e",
-          }}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <h3
-              className="text-lg font-medium flex items-center"
-              style={{ color: "#fff" }}
-            >
-              <button
-                type="button"
-                onClick={() => toggleSection("musicbrainzContact")}
-                className="flex items-center gap-2 text-left"
-                style={{ color: "#fff" }}
-                aria-expanded={!collapsedSections.musicbrainzContact}
-              >
-                <ChevronDown
-                  className={`w-4 h-4 transition-transform ${
-                    collapsedSections.musicbrainzContact ? "-rotate-90" : ""
-                  }`}
-                />
-                <span>Metadata Client</span>
-              </button>
-            </h3>
-            <div className="flex items-center gap-2">
-              {health?.musicbrainzConfigured && (
-                <span className="flex items-center text-sm text-green-400">
-                  <CheckCircle className="w-4 h-4 mr-1" />
-                  Configured
-                </span>
-              )}
-              <button
-                type="button"
-                className={`btn ${
-                  musicbrainzContactEditing ? "btn-primary" : "btn-secondary"
-                } px-2 py-1`}
-                onClick={() => setMusicbrainzContactEditing((value) => !value)}
-                aria-label={
-                  musicbrainzContactEditing
-                    ? "Lock metadata client settings"
-                    : "Edit metadata client settings"
-                }
-              >
-                <Pencil className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-          {!collapsedSections.musicbrainzContact && (
-          <fieldset
-            disabled={!musicbrainzContactEditing}
-            className={`space-y-4 ${
-              musicbrainzContactEditing ? "" : "opacity-60"
-            }`}
-          >
-            <div>
-              <label
-                className="block text-sm font-medium mb-1"
-                style={{ color: "#fff" }}
-              >
-                User-Agent Suffix
-              </label>
-              <input
-                type="text"
-                className="input"
-                placeholder="Aurral Local Test"
-                autoComplete="off"
-                value={settings.integrations?.metadata?.userAgentSuffix || ""}
-                onChange={(e) =>
-                  updateSettings({
-                    ...settings,
-                    integrations: {
-                      ...settings.integrations,
-                      metadata: {
-                        ...(settings.integrations?.metadata || {}),
-                        userAgentSuffix: e.target.value,
-                      },
-                    },
-                  })
-                }
-              />
-              <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
-                Optional text appended to the BrainzMash request user agent for
-                easier tracing during local testing.
-              </p>
-            </div>
           </fieldset>
           )}
         </div>
