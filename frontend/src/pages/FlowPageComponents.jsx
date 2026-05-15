@@ -40,19 +40,15 @@ const SOURCE_MIX_COLORS = {
   discover: TAG_COLORS[10],
   mix: TAG_COLORS[4],
   trending: TAG_COLORS[12],
+  focus: TAG_COLORS[2],
 };
 
 const SOURCE_MIX_OPTIONS = [
   { key: "discover", label: "Discover" },
   { key: "mix", label: "Library" },
   { key: "trending", label: "Trending" },
+  { key: "focus", label: "Focus" },
 ];
-
-const FOCUS_STRENGTH_COLORS = {
-  light: "#d6d6db",
-  medium: "#8f8f97",
-  heavy: "#4a4a52",
-};
 
 const WEEKDAY_OPTIONS = [
   { id: 0, short: "Su", full: "Sunday" },
@@ -129,7 +125,7 @@ const toggleSourceInMix = (mix, key, normalizeMixPercent) => {
   }
   const nextValue = Math.round(100 / nextKeys.length);
   const scale = (100 - nextValue) / 100;
-  const next = { discover: 0, mix: 0, trending: 0, [key]: nextValue };
+  const next = { discover: 0, mix: 0, trending: 0, focus: 0, [key]: nextValue };
   for (const activeKey of activeKeys) {
     next[activeKey] = Math.max(1, normalized[activeKey] * scale);
   }
@@ -149,75 +145,33 @@ export function MixSlider({
   const dragRef = useRef(null);
 
   const updateFromClientX = useCallback(
-    (clientX, handle) => {
+    (clientX, handleIndex) => {
       const rect = barRef.current?.getBoundingClientRect();
       if (!rect) return;
       const clampedX = Math.min(Math.max(clientX - rect.left, 0), rect.width);
       const percent = rect.width > 0 ? (clampedX / rect.width) * 100 : 0;
-
-      if (activeKeys.length === 2) {
-        if (activeKeys.includes("discover") && activeKeys.includes("mix")) {
-          const nextDiscover = Math.min(Math.max(percent, 0), 100);
-          onChange(
-            normalizeMixPercent({
-              discover: nextDiscover,
-              mix: 100 - nextDiscover,
-              trending: 0,
-            })
-          );
-          return;
-        }
-        if (activeKeys.includes("mix") && activeKeys.includes("trending")) {
-          const nextMix = Math.min(Math.max(percent, 0), 100);
-          onChange(
-            normalizeMixPercent({
-              discover: 0,
-              mix: nextMix,
-              trending: 100 - nextMix,
-            })
-          );
-          return;
-        }
-        if (activeKeys.includes("discover") && activeKeys.includes("trending")) {
-          const nextDiscover = Math.min(Math.max(percent, 0), 100);
-          onChange(
-            normalizeMixPercent({
-              discover: nextDiscover,
-              mix: 0,
-              trending: 100 - nextDiscover,
-            })
-          );
-        }
-        return;
-      }
-
-      if (activeKeys.length !== 3) return;
-      if (handle === "left") {
-        const totalLeft = 100 - normalized.trending;
-        const nextDiscover = Math.min(Math.max(percent, 0), totalLeft);
-        const nextMix = Math.max(0, totalLeft - nextDiscover);
-        onChange(
-          normalizeMixPercent({
-            discover: nextDiscover,
-            mix: nextMix,
-            trending: normalized.trending,
-          })
-        );
-        return;
-      }
-      const totalRight = 100 - normalized.discover;
-      const nextMix = Math.min(
-        Math.max(percent - normalized.discover, 0),
-        totalRight
+      if (activeKeys.length < 2) return;
+      const leftKey = activeKeys[handleIndex];
+      const rightKey = activeKeys[handleIndex + 1];
+      if (!leftKey || !rightKey) return;
+      const prefixStart = activeKeys
+        .slice(0, handleIndex)
+        .reduce((sum, key) => sum + Number(normalized[key] || 0), 0);
+      const pairTotal =
+        Number(normalized[leftKey] || 0) + Number(normalized[rightKey] || 0);
+      const nextLeft = Math.min(
+        Math.max(percent - prefixStart, 0),
+        pairTotal,
       );
-      const nextTrending = Math.max(0, totalRight - nextMix);
-      onChange(
-        normalizeMixPercent({
-          discover: normalized.discover,
-          mix: nextMix,
-          trending: nextTrending,
-        })
-      );
+      const next = {
+        discover: normalized.discover,
+        mix: normalized.mix,
+        trending: normalized.trending,
+        focus: normalized.focus,
+      };
+      next[leftKey] = nextLeft;
+      next[rightKey] = Math.max(0, pairTotal - nextLeft);
+      onChange(normalizeMixPercent(next));
     },
     [activeKeys, normalized, onChange, normalizeMixPercent]
   );
@@ -245,58 +199,21 @@ export function MixSlider({
     };
   }, [updateFromClientX]);
 
-  const leftPosition = normalized.discover;
-  const rightPosition = normalized.discover + normalized.mix;
-  const minHandleInset = 1.5;
-  const minHandleGap = 2.5;
   const labelMinPercent = 6;
-  const showDiscoverLabel = normalized.discover >= labelMinPercent;
-  const showMixLabel = normalized.mix >= labelMinPercent;
-  const showTrendingLabel = normalized.trending >= labelMinPercent;
-  const clampToInset = (value) =>
-    Math.min(Math.max(value, minHandleInset), 100 - minHandleInset);
-  let displayLeft = clampToInset(leftPosition);
-  let displayRight = clampToInset(rightPosition);
-  if (displayRight - displayLeft < minHandleGap) {
-    const midpoint = (displayLeft + displayRight) / 2;
-    displayLeft = clampToInset(midpoint - minHandleGap / 2);
-    displayRight = clampToInset(displayLeft + minHandleGap);
-    if (displayRight - displayLeft < minHandleGap) {
-      displayLeft = clampToInset(displayRight - minHandleGap);
-    }
+  const cumulativePositions = [];
+  let runningPosition = 0;
+  for (const key of activeKeys) {
+    runningPosition += Number(normalized[key] || 0);
+    cumulativePositions.push(runningPosition);
   }
-
-  const handles = [];
-  if (activeKeys.length === 3) {
-    handles.push({
-      key: "left",
-      position: displayLeft,
-      ariaLabel: "Adjust discover and library mix",
-    });
-    handles.push({
-      key: "right",
-      position: displayRight,
-      ariaLabel: "Adjust library and trending mix",
-    });
-  } else if (activeKeys.length === 2) {
-    const handlePosition =
-      activeKeys.includes("discover") && activeKeys.includes("mix")
-        ? displayLeft
-        : activeKeys.includes("mix") && activeKeys.includes("trending")
-          ? displayRight
-          : displayLeft;
-    const handleLabel =
-      activeKeys.includes("discover") && activeKeys.includes("mix")
-        ? "Adjust discover and library mix"
-        : activeKeys.includes("mix") && activeKeys.includes("trending")
-          ? "Adjust library and trending mix"
-          : "Adjust discover and trending mix";
-    handles.push({
-      key: "single",
-      position: handlePosition,
-      ariaLabel: handleLabel,
-    });
-  }
+  const handles = cumulativePositions
+    .slice(0, -1)
+    .map((position, index) => ({
+      key: `boundary-${index}`,
+      position: Math.min(Math.max(position, 1.5), 98.5),
+      handleIndex: index,
+      ariaLabel: `Adjust ${SOURCE_MIX_OPTIONS.find((option) => option.key === activeKeys[index])?.label || "source"} and ${SOURCE_MIX_OPTIONS.find((option) => option.key === activeKeys[index + 1])?.label || "source"} mix`,
+    }));
 
   return (
     <div className="grid gap-3">
@@ -348,39 +265,28 @@ export function MixSlider({
         style={{ touchAction: handles.length > 0 ? "none" : "auto" }}
       >
         <div className="absolute inset-0 flex overflow-hidden rounded-full">
-          <div
-            className="h-full text-[10px] font-semibold text-black/70 flex items-center justify-center"
-            style={{
-              width: `${normalized.discover}%`,
-              backgroundColor: SOURCE_MIX_COLORS.discover,
-            }}
-          >
-            {showDiscoverLabel ? `Discover (${trackCounts.discover ?? 0})` : ""}
-          </div>
-          <div
-            className="h-full text-[10px] font-semibold text-black/70 flex items-center justify-center"
-            style={{
-              width: `${normalized.mix}%`,
-              backgroundColor: SOURCE_MIX_COLORS.mix,
-            }}
-          >
-            {showMixLabel ? `Library (${trackCounts.mix ?? 0})` : ""}
-          </div>
-          <div
-            className="h-full text-[10px] font-semibold text-black/70 flex items-center justify-center"
-            style={{
-              width: `${normalized.trending}%`,
-              backgroundColor: SOURCE_MIX_COLORS.trending,
-            }}
-          >
-            {showTrendingLabel ? `Trending (${trackCounts.trending ?? 0})` : ""}
-          </div>
+          {SOURCE_MIX_OPTIONS.map((option) => {
+            const percent = Number(normalized[option.key] || 0);
+            const showLabel = percent >= labelMinPercent;
+            return (
+              <div
+                key={option.key}
+                className="h-full text-[10px] font-semibold text-black/70 flex items-center justify-center"
+                style={{
+                  width: `${percent}%`,
+                  backgroundColor: SOURCE_MIX_COLORS[option.key],
+                }}
+              >
+                {showLabel ? `${option.label} (${trackCounts[option.key] ?? 0})` : ""}
+              </div>
+            );
+          })}
         </div>
         {handles.map((handle) => (
           <button
             key={handle.key}
             type="button"
-            onPointerDown={(event) => startDrag(event, handle.key)}
+            onPointerDown={(event) => startDrag(event, handle.handleIndex)}
             className="absolute top-0 h-full w-4 -ml-2 cursor-ew-resize z-10"
             style={{ left: `${handle.position}%` }}
             aria-label={handle.ariaLabel}
@@ -440,6 +346,22 @@ function buildCommaTokenInputValue(committed, pending) {
   if (safeCommitted.length === 0) return rawPending.replace(/^\s+/, "");
   if (!normalizedPending) return `${safeCommitted.join(", ")}, `;
   return `${safeCommitted.join(", ")}, ${rawPending}`;
+}
+
+function getFocusDraftValidation(draft, normalizeMixPercent) {
+  const normalizedMix = normalizeMixPercent(draft?.mix);
+  const focusEnabled = Number(normalizedMix.focus || 0) > 0;
+  const hasFocusFilters =
+    getCommaTokenInputState(draft?.includeTags, { commitAll: true }).committed.length > 0 ||
+    getCommaTokenInputState(draft?.includeRelatedArtists, { commitAll: true }).committed.length > 0;
+  return {
+    focusEnabled,
+    hasFocusFilters,
+    focusValidationError:
+      focusEnabled && !hasFocusFilters
+        ? "Focus needs at least one genre tag or related artist."
+        : "",
+  };
 }
 
 function CommaTokenInput({
@@ -511,7 +433,6 @@ export function FlowFormFields({
   errorMessage,
   onDraftChange,
   onClearError,
-  focusOptions,
   normalizeMixPercent,
 }) {
   const updateDraft = (updater) => {
@@ -526,12 +447,17 @@ export function FlowFormFields({
       )
     : [];
   const scheduleTime = String(draft?.scheduleTime || "00:00");
+  const { focusEnabled, focusValidationError } = getFocusDraftValidation(
+    draft,
+    normalizeMixPercent,
+  );
   
   const mixScaled = (() => {
     const entries = [
       { key: "discover", value: normalizedMix.discover },
       { key: "mix", value: normalizedMix.mix },
       { key: "trending", value: normalizedMix.trending },
+      { key: "focus", value: normalizedMix.focus },
     ];
     const scaled = entries.map((e) => ({
       ...e,
@@ -693,15 +619,17 @@ export function FlowFormFields({
         </div>
       </div>
 
-      <div className="grid gap-4 rounded-lg border border-white/10 bg-white/5 p-4">
+      <div className={`grid gap-4 rounded-lg border border-white/10 bg-white/5 p-4 transition-opacity ${focusEnabled ? "" : "opacity-60"}`}>
         <div className="flex items-center justify-between">
           <div className="grid gap-1">
             <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] font-semibold">
               Focus Filters
             </div>
-            <div className="text-[11px] text-[#7e7e86]">
-              Separated by comma. Light = slight preference, Medium = strong preference, Heavy = strict before fallback.
-            </div>
+            {focusValidationError ? (
+              <div className="text-[11px] font-medium text-amber-300">
+                {focusValidationError}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -710,98 +638,34 @@ export function FlowFormFields({
             <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
               Genre Tags
             </label>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <div className="flex-1">
-                <CommaTokenInput
-                  value={draft.includeTags}
-                  placeholder="lofi, indie"
-                  chipClassName="rounded-full border border-[#90a07d]/35 bg-[#90a07d]/12 px-2.5 py-1 text-[11px] font-medium text-[#d7e0ce]"
-                  onChange={(nextValue) =>
-                    updateDraft((prev) => ({
-                      ...prev,
-                      includeTags: nextValue,
-                    }))
-                  }
-                />
-              </div>
-              <div className="flex bg-black/20 rounded p-1 gap-1 shrink-0">
-                {focusOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() =>
-                      updateDraft((prev) => ({
-                        ...prev,
-                        tagStrength: option.id,
-                      }))
-                    }
-                    className={`px-3 py-1 rounded text-xs transition-colors ${
-                      (draft.tagStrength ?? "medium") === option.id
-                        ? option.id === "light"
-                          ? "text-[#141414] font-medium"
-                          : "text-white font-medium"
-                        : "text-[#8b8b90] hover:text-white"
-                    }`}
-                    style={
-                      (draft.tagStrength ?? "medium") === option.id
-                        ? { backgroundColor: FOCUS_STRENGTH_COLORS[option.id] }
-                        : undefined
-                    }
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <CommaTokenInput
+              value={draft.includeTags}
+              placeholder="lofi, indie"
+              chipClassName="rounded-full border border-[#90a07d]/35 bg-[#90a07d]/12 px-2.5 py-1 text-[11px] font-medium text-[#d7e0ce]"
+              onChange={(nextValue) =>
+                updateDraft((prev) => ({
+                  ...prev,
+                  includeTags: nextValue,
+                }))
+              }
+            />
           </div>
 
           <div className="grid gap-1.5">
             <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
               Related Artists
             </label>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <div className="flex-1">
-                <CommaTokenInput
-                  value={draft.includeRelatedArtists}
-                  placeholder="Artist A, Artist B"
-                  chipClassName="rounded-full border border-[#7aa2f7]/35 bg-[#7aa2f7]/12 px-2.5 py-1 text-[11px] font-medium text-[#d8e4ff]"
-                  onChange={(nextValue) =>
-                    updateDraft((prev) => ({
-                      ...prev,
-                      includeRelatedArtists: nextValue,
-                    }))
-                  }
-                />
-              </div>
-              <div className="flex bg-black/20 rounded p-1 gap-1 shrink-0">
-                {focusOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() =>
-                      updateDraft((prev) => ({
-                        ...prev,
-                        relatedStrength: option.id,
-                      }))
-                    }
-                    className={`px-3 py-1 rounded text-xs transition-colors ${
-                      (draft.relatedStrength ?? "medium") === option.id
-                        ? option.id === "light"
-                          ? "text-[#141414] font-medium"
-                          : "text-white font-medium"
-                        : "text-[#8b8b90] hover:text-white"
-                    }`}
-                    style={
-                      (draft.relatedStrength ?? "medium") === option.id
-                        ? { backgroundColor: FOCUS_STRENGTH_COLORS[option.id] }
-                        : undefined
-                    }
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <CommaTokenInput
+              value={draft.includeRelatedArtists}
+              placeholder="artist a, artist b"
+              chipClassName="rounded-full border border-[#7aa2f7]/35 bg-[#7aa2f7]/12 px-2.5 py-1 text-[11px] font-medium text-[#d8e4ff]"
+              onChange={(nextValue) =>
+                updateDraft((prev) => ({
+                  ...prev,
+                  includeRelatedArtists: nextValue,
+                }))
+              }
+            />
           </div>
         </div>
       </div>
@@ -1579,9 +1443,14 @@ export function FlowCard({
   onApply,
   onDraftChange,
   onClearError,
-  focusOptions,
   normalizeMixPercent,
 }) {
+  const { focusValidationError } = getFocusDraftValidation(
+    simpleDraft,
+    normalizeMixPercent,
+  );
+  const saveDisabled = !hasChanges || Boolean(focusValidationError);
+  const showSavedState = !hasChanges;
   const processed = Number(stats?.done || 0);
   const total = Number(stats?.total || 0);
   const processedDisplay = total > 0 ? Math.min(processed, total) : processed;
@@ -1941,7 +1810,6 @@ export function FlowCard({
               errorMessage={simpleError}
               onDraftChange={onDraftChange}
               onClearError={onClearError}
-              focusOptions={focusOptions}
               normalizeMixPercent={normalizeMixPercent}
             />
             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1949,11 +1817,12 @@ export function FlowCard({
                 Cancel
               </button>
               <FlipSaveButton
-                disabled={!hasChanges}
+                disabled={saveDisabled}
                 saving={isApplying}
                 onClick={onApply}
                 label="Save"
                 savedLabel="Saved"
+                showSavedState={showSavedState}
               />
             </div>
           </div>

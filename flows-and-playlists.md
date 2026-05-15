@@ -16,9 +16,9 @@ Think of a flow as three layers:
 
 1. **Schedule**
 2. **Source Mix**
-3. **Focus Filters**
+3. **Focus Inputs**
 
-The flow first decides **when** to run, then **where artists should come from**, then **what those artists should try to match**.
+The flow first decides **when** to run, then **where tracks should come from**, then **what the dedicated Focus source should try to match**.
 
 ## Schedule
 
@@ -30,15 +30,16 @@ The flow first decides **when** to run, then **where artists should come from**,
 
 ## Source Mix
 
-Source Mix controls where the artists come from.
+Source Mix controls where tracks come from.
 
-- **Discover** uses Aurral's recommendation/discovery pool.
-- **Library** uses artists from your own library.
-- **Trending** uses trending artists from the broader cache.
+- **Discover** uses Aurral's recommendation/discovery pool and always excludes library artists.
+- **Library** uses artists from your own library and is the only source allowed to do that.
+- **Trending** uses trending artists from the broader cache and always excludes library artists.
+- **Focus** uses non-library artists that best match your genre tags and related artists.
 
 The mix slider is still one shared slider:
 
-- With all 3 sources on, it behaves like a 3-way mix.
+- With all 4 sources on, it behaves like a 4-way mix.
 - With 2 sources on, it collapses into a 2-way split.
 - With 1 source on, that source takes 100%.
 
@@ -51,16 +52,9 @@ The counts shown inside the slider are the current track targets for each source
 
 ### Important Library behavior
 
-The **Library** toggle does more than hide the direct library bucket.
-
-- If **Library is on**, library artists are allowed anywhere in the flow.
-- If **Library is off**, Aurral excludes library artists entirely, including from:
-  - Discover
-  - Trending
-  - Genre-tag matches
-  - Related-artist matches
-
-So `Library Off` means: do not use artists from my library anywhere in this flow.
+- **Library** is the only source allowed to use library artists.
+- **Discover**, **Trending**, and **Focus** always exclude library artists.
+- Turning **Library** off does not disable your saved focus inputs. It only removes the library-only source from the mix.
 
 ## Deep Dive
 
@@ -71,67 +65,32 @@ Deep Dive changes how far Aurral looks when pulling candidates for a source.
 
 It does not change the schedule or source percentages. It changes the breadth of candidate selection inside the active sources.
 
-## Focus Filters
+## Focus
 
-Focus Filters tell Aurral what the playlist should try to match.
+Focus is a dedicated fourth source. It does not bend Discover, Library, or Trending.
 
-- **Genre Tags** aims the flow toward artists with those tags.
-- **Related Artists** aims the flow toward artists similar to the artists you enter.
+- **Genre Tags** tell Focus which genres to target.
+- **Related Artists** tell Focus which similarity seeds to target.
+- If **Focus** is enabled in Source Mix, at least one genre tag or related artist is required.
+- If **Focus** is disabled, your tags and related artists can stay saved, but they are inactive.
 
-They do not allocate a fixed percentage of the playlist anymore.
+### Focus matching behavior
 
-Source Mix still decides where tracks come from. Focus Filters rerank candidates inside those enabled sources.
+When both Genre Tags and Related Artists are present, Focus broadens in this order:
 
-### Strength levels
+1. Artists related to all entered related artists and matching all tags
+2. Artists related to all entered related artists and matching at least one tag
+3. Artists related to any entered related artist and matching all tags
+4. Artists related to any entered related artist and matching at least one tag
+5. Artists related to all entered related artists only
+6. Artists related to any entered related artist only
+7. Tag-only artists matching all tags
+8. Tag-only artists matching at least one tag
 
-- **Light** gives a slight preference to matching candidates.
-- **Medium** gives a strong preference to matching candidates.
-- **Heavy** tries to exhaust matching candidates before broadening to looser fits.
+### Multiple tags or multiple related artists
 
-So if you set:
-
-- `rock` to **Heavy**
-
-Aurral will first try to fill each enabled source with the strongest `rock` matches it can find. If that source runs short, it broadens gradually inside the active sources instead of immediately behaving like an all-rock hard filter.
-
-That means it will try to fill:
-
-- the Discover share with rock-compatible discover artists
-- the Library share with rock-compatible library artists
-- the Trending share with rock-compatible trending artists
-
-## When both Genre Tags and Related Artists are used
-
-- Both groups contribute to the reranking score.
-- Their selected strength controls how much influence each group has.
-- If both are active, Aurral combines them instead of carving the playlist into separate tag and related-artist blocks.
-
-Examples:
-
-- `Genre Tags = Heavy`, `Related Artists = Off`:
-  - tag matches are ranked first and broad source candidates are used only after the focused pool runs thin
-- `Genre Tags = Heavy`, `Related Artists = Heavy`:
-  - candidates that satisfy both signals rise to the top first
-- `Genre Tags = Light`, `Related Artists = Heavy`:
-  - related-artist fit has more influence than tag fit, but both still contribute
-
-## Multiple tags or multiple related artists
-
-When you enter multiple values, Aurral tries the overlap first.
-
-### Multiple Genre Tags
-
-If you enter:
-
-- `indie, punk`
-
-Aurral first prefers artists that match **both** tags before falling back to artists that match only one of them.
-
-If there are still more tag-focused slots to fill after overlap candidates are used, it spreads the remaining target across the individual tags.
-
-### Multiple Related Artists
-
-If you enter multiple seed artists, Aurral first prefers artists that are similar to **more than one** of those seeds before falling back to per-seed matches.
+- Multiple tags prefer overlap first. `acoustic, sad` tries to find artists matching both before broadening to one-tag matches.
+- Multiple related artists prefer shared similarity first. If you enter two seeds, Focus first prefers artists similar to both before broadening to artists similar to only one.
 
 ## Fallback behavior
 
@@ -139,16 +98,16 @@ Aurral always tries the most specific matches first, then relaxes if it runs out
 
 The general order is:
 
-1. Match the focus request as closely as possible
-2. Keep the result aligned with the Source Mix
-3. Broaden within the same source before giving up on that source
-4. Redistribute shortfalls across the other enabled sources
+1. Fill each enabled source with its own quota
+2. For Focus, match the focus request as closely as possible before broadening
+3. Keep strict one-song-per-artist diversity across the whole run
+4. Redistribute source shortfalls across the other enabled sources
 5. Use reserve/replacement candidates if the run still comes up short
 
 That means:
 
-- `Heavy` does not mean “100% synthetic focus pool”
-- it means “be strict first, broaden later”
+- Focus does not secretly steer the other sources
+- users can make highly targeted playlists by weighting Focus heavily or using Focus alone
 - the fallback still stays inside the enabled sources whenever possible
 
 ## Focus input behavior
@@ -164,10 +123,11 @@ When a flow runs, Aurral:
 1. Calculates the track count target.
 2. Calculates source counts from the current Source Mix.
 3. Harvests oversized candidate pools inside each enabled source.
-4. Scores those candidates against your focus filters, taste context, and metadata confidence.
+4. Builds a dedicated Focus pool if Focus is enabled.
 5. Picks the primary playlist with a strict one-song-per-artist rule.
-6. Builds a reserve pool from the same run for fast replacements.
-7. Sends the primary playlist into the download worker.
+6. Redistributes any source shortfalls across the other enabled sources.
+7. Builds a reserve pool from the same run for fast replacements.
+8. Sends the primary playlist into the download worker.
 
 ## Imported playlists
 

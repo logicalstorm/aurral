@@ -59,14 +59,8 @@ function formatNextRun(nextRunAt, now = Date.now()) {
   return days === 1 ? "1 day" : `${days} days`;
 }
 
-const DEFAULT_MIX = { discover: 50, mix: 30, trending: 20 };
+const DEFAULT_MIX = { discover: 34, mix: 33, trending: 33, focus: 0 };
 const DEFAULT_SIZE = 30;
-
-const FOCUS_OPTIONS = [
-  { id: "light", label: "Light" },
-  { id: "medium", label: "Medium" },
-  { id: "heavy", label: "Heavy" },
-];
 
 const NEW_FLOW_TEMPLATE = {
   name: "Discover",
@@ -183,8 +177,9 @@ const normalizeMixPercent = (mix) => {
     discover: Number(mix?.discover ?? 0),
     mix: Number(mix?.mix ?? 0),
     trending: Number(mix?.trending ?? 0),
+    focus: Number(mix?.focus ?? 0),
   };
-  const sum = raw.discover + raw.mix + raw.trending;
+  const sum = raw.discover + raw.mix + raw.trending + raw.focus;
   if (!Number.isFinite(sum) || sum <= 0) {
     return { ...DEFAULT_MIX };
   }
@@ -192,6 +187,7 @@ const normalizeMixPercent = (mix) => {
     { key: "discover", value: raw.discover },
     { key: "mix", value: raw.mix },
     { key: "trending", value: raw.trending },
+    { key: "focus", value: raw.focus },
   ];
   const scaled = weights.map((w) => ({
     ...w,
@@ -232,10 +228,6 @@ const flowToForm = (flow) => {
       ? rawSize
       : DEFAULT_SIZE;
   const mix = normalizeMixPercent(flow?.mix || DEFAULT_MIX);
-  const flowFocus =
-    flow?.focus && typeof flow.focus === "object" && !Array.isArray(flow.focus)
-      ? flow.focus
-      : null;
   return {
     name: flow?.name || "",
     size: Number.isFinite(size) && size > 0 ? Math.round(size) : DEFAULT_SIZE,
@@ -243,10 +235,6 @@ const flowToForm = (flow) => {
     deepDive: flow?.deepDive === true,
     includeTags: tagsList.join(", "),
     includeRelatedArtists: relatedList.join(", "),
-    tagStrength:
-      flowFocus?.tagStrength ?? "medium",
-    relatedStrength:
-      flowFocus?.relatedStrength ?? "medium",
     scheduleDays:
       normalizeScheduleDays(flow?.scheduleDays).length > 0
         ? normalizeScheduleDays(flow?.scheduleDays)
@@ -273,20 +261,16 @@ const buildFlowFromForm = (draft) => {
   }
   const scheduleTime = normalizeScheduleTime(draft?.scheduleTime);
   const mix = normalizeMixPercent(draft?.mix);
+  const focusEnabled = Number(mix.focus || 0) > 0;
+  if (focusEnabled && includeTags.length === 0 && includeRelatedArtists.length === 0) {
+    throw new Error("Focus needs at least one genre tag or related artist");
+  }
   return {
     name,
     size,
     mix,
     tags: includeTags,
     relatedArtists: includeRelatedArtists,
-    focus: {
-      tagStrength:
-        includeTags.length > 0 ? (draft?.tagStrength ?? "medium") : null,
-      relatedStrength:
-        includeRelatedArtists.length > 0
-          ? (draft?.relatedStrength ?? "medium")
-          : null,
-    },
     deepDive: draft?.deepDive === true,
     scheduleDays,
     scheduleTime,
@@ -305,8 +289,6 @@ const normalizeDraftForCompare = (draft) => {
     mix: normalizeMixPercent(draft?.mix),
     includeTags: normalizeList(draft?.includeTags),
     includeRelatedArtists: normalizeList(draft?.includeRelatedArtists),
-    tagStrength: draft?.tagStrength ?? "medium",
-    relatedStrength: draft?.relatedStrength ?? "medium",
     deepDive: draft?.deepDive === true,
     scheduleDays: normalizeScheduleDays(draft?.scheduleDays),
     scheduleTime: normalizeScheduleTime(draft?.scheduleTime),
@@ -762,12 +744,9 @@ function FlowPage() {
           next[flow.id] = normalized;
           continue;
         }
-        const current = next[flow.id];
         next[flow.id] = {
           ...normalized,
-          ...current,
-          tagStrength: current.tagStrength ?? normalized.tagStrength,
-          relatedStrength: current.relatedStrength ?? normalized.relatedStrength,
+          ...next[flow.id],
         };
       }
       return next;
@@ -1915,7 +1894,6 @@ function FlowPage() {
                   });
                 }
               }}
-              focusOptions={FOCUS_OPTIONS}
               normalizeMixPercent={normalizeMixPercent}
             />
           );

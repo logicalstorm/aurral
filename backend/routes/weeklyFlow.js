@@ -32,6 +32,63 @@ const AUDIO_CONTENT_TYPES = {
   ".wav": "audio/wav",
 };
 
+const normalizeFlowStringArray = (value) => {
+  if (Array.isArray(value)) {
+    return [...new Set(value.map((entry) => String(entry || "").trim()).filter(Boolean))];
+  }
+  if (value && typeof value === "object") {
+    return [...new Set(Object.keys(value).map((entry) => String(entry || "").trim()).filter(Boolean))];
+  }
+  const single = String(value || "").trim();
+  return single ? [single] : [];
+};
+
+const normalizeFlowMixForValidation = (mix, recipe) => {
+  const source = mix && typeof mix === "object" && !Array.isArray(mix)
+    ? mix
+    : recipe && typeof recipe === "object" && !Array.isArray(recipe)
+      ? recipe
+      : {};
+  return {
+    discover: Math.max(0, Number(source?.discover || 0) || 0),
+    mix: Math.max(0, Number(source?.mix || 0) || 0),
+    trending: Math.max(0, Number(source?.trending || 0) || 0),
+    focus: Math.max(0, Number(source?.focus || 0) || 0),
+  };
+};
+
+const validateFlowPayload = ({
+  name,
+  mix,
+  recipe,
+  size,
+  tags,
+  relatedArtists,
+  scheduleDays,
+} = {}) => {
+  if (!name || !String(name).trim()) {
+    return "name is required";
+  }
+  const parsedSize = Number(size);
+  if (!Number.isFinite(parsedSize) || parsedSize <= 0) {
+    return "size must be a positive number";
+  }
+  const normalizedMix = normalizeFlowMixForValidation(mix, recipe);
+  const totalWeight = Object.values(normalizedMix).reduce((sum, value) => sum + value, 0);
+  if (totalWeight <= 0) {
+    return "at least one source must be enabled";
+  }
+  const normalizedTags = normalizeFlowStringArray(tags);
+  const normalizedRelated = normalizeFlowStringArray(relatedArtists);
+  if (normalizedMix.focus > 0 && normalizedTags.length === 0 && normalizedRelated.length === 0) {
+    return "Focus needs at least one genre tag or related artist";
+  }
+  if (!Array.isArray(scheduleDays) || scheduleDays.length === 0) {
+    return "scheduleDays must include at least one day";
+  }
+  return null;
+};
+
 const isPathInsideRoot = (candidatePath, rootPath) => {
   const relative = path.relative(rootPath, candidatePath);
   return (
@@ -579,22 +636,21 @@ router.post("/flows", async (req, res) => {
       mix,
       size,
       deepDive,
-      focus,
       recipe,
       tags,
       relatedArtists,
       scheduleDays,
       scheduleTime,
     } = req.body || {};
-    if (!name || !String(name).trim()) {
-      return res.status(400).json({ error: "name is required" });
+    const validationError = validateFlowPayload(req.body || {});
+    if (validationError) {
+      return res.status(400).json({ error: validationError, message: validationError });
     }
     const flow = flowPlaylistConfig.createFlow({
       name,
       mix,
       size,
       deepDive,
-      focus,
       recipe,
       tags,
       relatedArtists,
@@ -620,24 +676,33 @@ router.post("/flows", async (req, res) => {
 router.put("/flows/:flowId", async (req, res) => {
   try {
     const { flowId } = req.params;
+    const existingFlow = flowPlaylistConfig.getFlow(flowId);
+    if (!existingFlow) {
+      return res.status(404).json({ error: "Flow not found" });
+    }
     const {
       name,
       mix,
       size,
       deepDive,
-      focus,
       recipe,
       tags,
       relatedArtists,
       scheduleDays,
       scheduleTime,
     } = req.body || {};
+    const validationError = validateFlowPayload({
+      ...existingFlow,
+      ...req.body,
+    });
+    if (validationError) {
+      return res.status(400).json({ error: validationError, message: validationError });
+    }
     const updated = flowPlaylistConfig.updateFlow(flowId, {
       name,
       mix,
       size,
       deepDive,
-      focus,
       recipe,
       tags,
       relatedArtists,
