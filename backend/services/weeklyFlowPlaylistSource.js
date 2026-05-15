@@ -16,13 +16,14 @@ export class WeeklyFlowPlaylistSource {
       { key: "discover", value: Number(mix?.discover ?? 0) },
       { key: "mix", value: Number(mix?.mix ?? 0) },
       { key: "trending", value: Number(mix?.trending ?? 0) },
+      { key: "focus", value: Number(mix?.focus ?? 0) },
     ];
     const sum = weights.reduce(
       (acc, w) => acc + (Number.isFinite(w.value) ? w.value : 0),
       0,
     );
     if (sum <= 0 || !Number.isFinite(sum)) {
-      return { discover: 0, mix: 0, trending: 0 };
+      return { discover: 0, mix: 0, trending: 0, focus: 0 };
     }
     const scaled = weights.map((w) => ({
       ...w,
@@ -670,8 +671,25 @@ export class WeeklyFlowPlaylistSource {
 
   _pickRandomTrack(trackList) {
     if (!Array.isArray(trackList) || trackList.length === 0) return null;
-    const index = Math.floor(Math.random() * trackList.length);
-    return trackList[index] || null;
+    return trackList
+      .filter((track) => String(track?.name || "").trim().length > 0)
+      .sort((left, right) => {
+        const leftAlbum = String(
+          left?.album?.title || left?.album?.["#text"] || "",
+        ).trim();
+        const rightAlbum = String(
+          right?.album?.title || right?.album?.["#text"] || "",
+        ).trim();
+        if (Boolean(rightAlbum) !== Boolean(leftAlbum)) {
+          return Number(Boolean(rightAlbum)) - Number(Boolean(leftAlbum));
+        }
+        const leftPlaycount = Number(left?.playcount || left?.listeners || 0);
+        const rightPlaycount = Number(right?.playcount || right?.listeners || 0);
+        if (rightPlaycount !== leftPlaycount) {
+          return rightPlaycount - leftPlaycount;
+        }
+        return String(left?.name || "").localeCompare(String(right?.name || ""));
+      })[0] || null;
   }
 
   _pickTrackFromRanges(trackList, ranges) {
@@ -1011,136 +1029,377 @@ export class WeeklyFlowPlaylistSource {
     return resolved;
   }
 
-  _buildFocusTier(ratio) {
-    if (ratio >= 0.999) return "exact";
-    if (ratio >= 0.66) return "strong";
-    if (ratio > 0) return "partial";
-    return "none";
+  _buildBaseCandidate(track, source, sourceRank = 0, extra = {}) {
+    const artistKey = this._trackArtistKey(track);
+    const trackKey = `${artistKey || ""}::${String(track?.trackName || "")
+      .trim()
+      .toLowerCase()}`;
+    const metadataConfidence =
+      (track?.albumName ? 0.45 : 0) +
+      (track?.releaseYear ? 0.2 : 0) +
+      (track?.durationMs ? 0.25 : 0) +
+      (track?.trackMbid ? 0.1 : 0);
+    const sourceBaseScore = Math.max(0, 200 - sourceRank);
+    const downloadabilityHint =
+      metadataConfidence * 10 + (track?.artistMbid ? 4 : 0) + (track?.trackMbid ? 4 : 0);
+    return {
+      ...track,
+      source,
+      sourceRank,
+      trackKey,
+      artistTags: Array.isArray(extra.artistTags) ? extra.artistTags : [],
+      tagCoverage: Number(extra.tagCoverage || 0),
+      tagCoverageRatio: Number(extra.tagCoverageRatio || 0),
+      relatedCoverage: Number(extra.relatedCoverage || 0),
+      relatedCoverageRatio: Number(extra.relatedCoverageRatio || 0),
+      focusTier: extra.focusTier || "none",
+      focusPriority: Number(extra.focusPriority || 0),
+      metadataConfidence,
+      downloadabilityHint,
+      finalScore:
+        Number(extra.finalScore) ||
+        sourceBaseScore + metadataConfidence * 25 + downloadabilityHint,
+    };
   }
 
-  _getFocusTierPriority(tier) {
-    if (tier === "exact") return 4;
-    if (tier === "strong") return 3;
-    if (tier === "partial") return 2;
-    return 1;
-  }
-
-  async _enrichFlowCandidates(
-    tracks,
-    source,
-    focusContext,
-    options = {},
-  ) {
-    const focusTags = this._normalizeFocusEntries(focusContext?.tags).map((entry) =>
-      this._artistKey(entry),
-    );
-    const tagKeySet = new Set(focusTags);
-    const relatedSeeds = this._normalizeFocusEntries(focusContext?.relatedArtists);
-    const tagStrength = this._normalizeFocusStrength(focusContext?.focus?.tagStrength);
-    const relatedStrength = this._normalizeFocusStrength(
-      focusContext?.focus?.relatedStrength,
-    );
-    const tagWeight = this._getStrengthWeight(tagStrength);
-    const relatedWeight = this._getStrengthWeight(relatedStrength);
-    const totalWeight = tagWeight + relatedWeight;
-    const relatedMap =
-      relatedSeeds.length > 0
-        ? await this._buildRelatedArtistMatchMap(relatedSeeds)
-        : new Map();
-    const excludedArtistKeys = options?.excludeArtistKeys || new Set();
-    const excludedTrackKeys = options?.excludeTrackKeys || new Set();
-    const candidates = [];
-    for (let index = 0; index < (Array.isArray(tracks) ? tracks.length : 0); index += 1) {
-      const track = tracks[index];
-      const artistKey = this._trackArtistKey(track);
-      const trackKey = `${artistKey || ""}::${String(track?.trackName || "")
-        .trim()
-        .toLowerCase()}`;
-      if (!artistKey || excludedArtistKeys.has(artistKey) || excludedTrackKeys.has(trackKey)) {
-        continue;
-      }
-      const artistTags = await this._getArtistTopTags(
-        track?.artistName,
-        track?.artistMbid,
-      );
-      const artistTagKeys = artistTags.map((entry) => this._artistKey(entry)).filter(Boolean);
-      const matchingTags = artistTagKeys.filter((entry) => tagKeySet.has(entry));
-      const tagCoverage = matchingTags.length;
-      const tagCoverageRatio =
-        tagKeySet.size > 0 ? tagCoverage / tagKeySet.size : 0;
-      const relatedEntry = relatedMap.get(artistKey);
-      const relatedCoverage = Number(relatedEntry?.count || 0);
-      const relatedCoverageRatio =
-        relatedSeeds.length > 0 ? Math.min(1, relatedCoverage / relatedSeeds.length) : 0;
-      const combinedFocusScore =
-        totalWeight > 0
-          ? (tagCoverageRatio * tagWeight + relatedCoverageRatio * relatedWeight) /
-            totalWeight
-          : 0;
-      const focusTier = this._buildFocusTier(
-        totalWeight > 0 ? combinedFocusScore : 0,
-      );
-      const metadataConfidence =
-        (track?.albumName ? 0.5 : 0) +
-        (track?.releaseYear ? 0.2 : 0) +
-        (track?.durationMs ? 0.3 : 0);
-      const sourceBaseScore = Math.max(0, 100 - index);
-      const downloadabilityHint =
-        metadataConfidence * 10 + (track?.artistMbid ? 5 : 0) + (track?.trackMbid ? 5 : 0);
-      const finalScore =
-        sourceBaseScore +
-        combinedFocusScore * 120 +
-        metadataConfidence * 30 +
-        downloadabilityHint;
-      candidates.push({
-        ...track,
-        source,
-        sourceRank: index,
-        artistTags,
-        tagCoverage,
-        tagCoverageRatio,
-        relatedCoverage,
-        relatedCoverageRatio,
-        focusTier,
-        focusScore: combinedFocusScore,
-        metadataConfidence,
-        downloadabilityHint,
-        finalScore,
-        trackKey,
-      });
+  _getFocusTierDetails(tagCoverage, totalTags, relatedCoverage, totalRelated) {
+    const safeTagCoverage = Number(tagCoverage || 0);
+    const safeRelatedCoverage = Number(relatedCoverage || 0);
+    const hasTags = totalTags > 0;
+    const hasRelated = totalRelated > 0;
+    if (!hasTags && !hasRelated) {
+      return {
+        focusTier: "none",
+        focusPriority: 0,
+        tagCoverageRatio: 0,
+        relatedCoverageRatio: 0,
+      };
     }
-    return candidates;
+    const tagCoverageRatio = hasTags
+      ? Math.min(1, safeTagCoverage / totalTags)
+      : 0;
+    const relatedCoverageRatio = hasRelated
+      ? Math.min(1, safeRelatedCoverage / totalRelated)
+      : 0;
+
+    if (hasTags && hasRelated) {
+      if (safeRelatedCoverage >= totalRelated && safeTagCoverage >= totalTags) {
+        return {
+          focusTier: "both_all",
+          focusPriority: 8,
+          tagCoverageRatio,
+          relatedCoverageRatio,
+        };
+      }
+      if (safeRelatedCoverage >= totalRelated && safeTagCoverage > 0) {
+        return {
+          focusTier: "both_partial",
+          focusPriority: 7,
+          tagCoverageRatio,
+          relatedCoverageRatio,
+        };
+      }
+      if (safeRelatedCoverage > 0 && safeTagCoverage >= totalTags) {
+        return {
+          focusTier: "both_partial",
+          focusPriority: 6,
+          tagCoverageRatio,
+          relatedCoverageRatio,
+        };
+      }
+      if (safeRelatedCoverage > 0 && safeTagCoverage > 0) {
+        return {
+          focusTier: "both_partial",
+          focusPriority: 5,
+          tagCoverageRatio,
+          relatedCoverageRatio,
+        };
+      }
+      if (safeRelatedCoverage >= totalRelated) {
+        return {
+          focusTier: "related_all_only",
+          focusPriority: 4,
+          tagCoverageRatio,
+          relatedCoverageRatio,
+        };
+      }
+      if (safeRelatedCoverage > 0) {
+        return {
+          focusTier: "related_partial_only",
+          focusPriority: 3,
+          tagCoverageRatio,
+          relatedCoverageRatio,
+        };
+      }
+      if (safeTagCoverage >= totalTags) {
+        return {
+          focusTier: "tag_all_only",
+          focusPriority: 2,
+          tagCoverageRatio,
+          relatedCoverageRatio,
+        };
+      }
+      if (safeTagCoverage > 0) {
+        return {
+          focusTier: "tag_partial_only",
+          focusPriority: 1,
+          tagCoverageRatio,
+          relatedCoverageRatio,
+        };
+      }
+      return {
+        focusTier: "none",
+        focusPriority: 0,
+        tagCoverageRatio,
+        relatedCoverageRatio,
+      };
+    }
+
+    if (hasRelated) {
+      return {
+        focusTier:
+          safeRelatedCoverage >= totalRelated
+            ? "related_all_only"
+            : safeRelatedCoverage > 0
+              ? "related_partial_only"
+              : "none",
+        focusPriority:
+          safeRelatedCoverage >= totalRelated ? 4 : safeRelatedCoverage > 0 ? 3 : 0,
+        tagCoverageRatio,
+        relatedCoverageRatio,
+      };
+    }
+
+    return {
+      focusTier:
+        safeTagCoverage >= totalTags
+          ? "tag_all_only"
+          : safeTagCoverage > 0
+            ? "tag_partial_only"
+            : "none",
+      focusPriority:
+        safeTagCoverage >= totalTags ? 2 : safeTagCoverage > 0 ? 1 : 0,
+      tagCoverageRatio,
+      relatedCoverageRatio,
+    };
   }
 
-  _sortFlowCandidates(candidates, focus) {
-    const sourceCandidates = Array.isArray(candidates) ? [...candidates] : [];
-    const tagStrength = this._normalizeFocusStrength(focus?.tagStrength);
-    const relatedStrength = this._normalizeFocusStrength(focus?.relatedStrength);
-    const strength =
-      tagStrength === "heavy" || relatedStrength === "heavy"
-        ? "heavy"
-        : tagStrength === "medium" || relatedStrength === "medium"
-          ? "medium"
-          : tagStrength === "light" || relatedStrength === "light"
-            ? "light"
-            : null;
-    return sourceCandidates.sort((left, right) => {
-      if (strength === "heavy") {
-        const priorityDiff =
-          this._getFocusTierPriority(right.focusTier) -
-          this._getFocusTierPriority(left.focusTier);
-        if (priorityDiff !== 0) return priorityDiff;
+  async _buildFocusArtistPool(tags, relatedArtists, limit, options = {}) {
+    const normalizedTags = this._normalizeFocusEntries(tags);
+    const normalizedRelated = this._normalizeFocusEntries(relatedArtists);
+    const totalTags = normalizedTags.length;
+    const totalRelated = normalizedRelated.length;
+    if (limit <= 0 || (totalTags === 0 && totalRelated === 0)) {
+      return [];
+    }
+
+    const excludeArtistKeys = options?.excludeArtistKeys || new Set();
+    const requestedArtists = Math.min(150, Math.max(limit * 6, 60));
+    const candidateMap = new Map();
+    const ensureEntry = (artistName, mbid = null) => {
+      const name = String(artistName || "").trim();
+      const key = this._artistKey(name);
+      if (!name || !key || excludeArtistKeys.has(key)) return null;
+      let entry = candidateMap.get(key);
+      if (!entry) {
+        entry = {
+          key,
+          name,
+          artistMbid: String(mbid || "").trim() || null,
+          tagMatches: new Set(),
+          relatedSeeds: new Set(),
+          tagRankSum: 0,
+          relatedRankSum: 0,
+          popularityHint: 0,
+        };
+        candidateMap.set(key, entry);
+      } else if (!entry.artistMbid && mbid) {
+        entry.artistMbid = String(mbid || "").trim() || null;
       }
-      if (strength === "medium") {
-        const leftFocused = this._getFocusTierPriority(left.focusTier) >= 3 ? 1 : 0;
-        const rightFocused = this._getFocusTierPriority(right.focusTier) >= 3 ? 1 : 0;
-        if (rightFocused !== leftFocused) return rightFocused - leftFocused;
+      return entry;
+    };
+
+    const [tagGroups, relatedGroups] = await Promise.all([
+      Promise.all(
+        normalizedTags.map(async (tag) => ({
+          tag,
+          artists: await this._getTagArtists(tag, requestedArtists).catch(() => []),
+        })),
+      ),
+      Promise.all(
+        normalizedRelated.map(async (seed) => ({
+          seed,
+          artists: await this._getSimilarArtists(seed, requestedArtists).catch(() => []),
+        })),
+      ),
+    ]);
+
+    for (const group of tagGroups) {
+      const tagKey = this._artistKey(group.tag);
+      for (let index = 0; index < group.artists.length; index += 1) {
+        const entry = ensureEntry(group.artists[index], null);
+        if (!entry) continue;
+        entry.tagMatches.add(tagKey);
+        entry.tagRankSum += index + 1;
       }
+    }
+
+    for (const group of relatedGroups) {
+      const seedKey = this._artistKey(group.seed);
+      for (let index = 0; index < group.artists.length; index += 1) {
+        const artist = group.artists[index];
+        const artistName = String(artist?.name || artist?.artistName || "").trim();
+        const entry = ensureEntry(
+          artistName,
+          artist?.mbid || artist?.id || artist?.foreignArtistId || null,
+        );
+        if (!entry) continue;
+        entry.relatedSeeds.add(seedKey);
+        entry.relatedRankSum += index + 1;
+        entry.popularityHint = Math.max(
+          entry.popularityHint,
+          Math.log10(1 + Math.max(0, Number(artist?.listeners || 0))) +
+            Math.max(0, Number(artist?.match || 0)),
+        );
+      }
+    }
+
+    const preliminary = [...candidateMap.values()]
+      .sort((left, right) => {
+        const leftSignal = left.tagMatches.size + left.relatedSeeds.size;
+        const rightSignal = right.tagMatches.size + right.relatedSeeds.size;
+        if (rightSignal !== leftSignal) return rightSignal - leftSignal;
+        if (right.relatedSeeds.size !== left.relatedSeeds.size) {
+          return right.relatedSeeds.size - left.relatedSeeds.size;
+        }
+        if (right.tagMatches.size !== left.tagMatches.size) {
+          return right.tagMatches.size - left.tagMatches.size;
+        }
+        if (left.relatedRankSum !== right.relatedRankSum) {
+          return left.relatedRankSum - right.relatedRankSum;
+        }
+        if (left.tagRankSum !== right.tagRankSum) {
+          return left.tagRankSum - right.tagRankSum;
+        }
+        return left.name.localeCompare(right.name);
+      })
+      .slice(0, Math.max(limit * 2, 60));
+
+    const normalizedTagSet = new Set(normalizedTags.map((entry) => this._artistKey(entry)));
+    const enriched = await Promise.all(
+      preliminary.map(async (artist, index) => {
+        const topTags = await this._getArtistTopTags(artist.name, artist.artistMbid);
+        const tagMatches = new Set(artist.tagMatches);
+        for (const tag of topTags) {
+          const tagKey = this._artistKey(tag);
+          if (normalizedTagSet.has(tagKey)) {
+            tagMatches.add(tagKey);
+          }
+        }
+        const focusDetails = this._getFocusTierDetails(
+          tagMatches.size,
+          totalTags,
+          artist.relatedSeeds.size,
+          totalRelated,
+        );
+        return {
+          ...artist,
+          sourceRank: index,
+          artistTags: topTags,
+          tagCoverage: tagMatches.size,
+          relatedCoverage: artist.relatedSeeds.size,
+          ...focusDetails,
+        };
+      }),
+    );
+
+    return enriched
+      .filter((artist) => Number(artist.focusPriority || 0) > 0)
+      .sort((left, right) => {
+        if (right.focusPriority !== left.focusPriority) {
+          return right.focusPriority - left.focusPriority;
+        }
+        if (right.tagCoverage !== left.tagCoverage) {
+          return right.tagCoverage - left.tagCoverage;
+        }
+        if (right.relatedCoverage !== left.relatedCoverage) {
+          return right.relatedCoverage - left.relatedCoverage;
+        }
+        if (right.popularityHint !== left.popularityHint) {
+          return right.popularityHint - left.popularityHint;
+        }
+        if (left.relatedRankSum !== right.relatedRankSum) {
+          return left.relatedRankSum - right.relatedRankSum;
+        }
+        if (left.tagRankSum !== right.tagRankSum) {
+          return left.tagRankSum - right.tagRankSum;
+        }
+        return left.name.localeCompare(right.name);
+      })
+      .slice(0, Math.max(limit, 1));
+  }
+
+  async _getFocusCandidates(limit, options = {}) {
+    const tags = this._normalizeFocusEntries(options?.tags);
+    const relatedArtists = this._normalizeFocusEntries(options?.relatedArtists);
+    if (limit <= 0 || (tags.length === 0 && relatedArtists.length === 0)) {
+      return [];
+    }
+    const focusArtistPool = await this._buildFocusArtistPool(
+      tags,
+      relatedArtists,
+      Math.min(150, Math.max(limit * 4, 48)),
+      options,
+    );
+    if (focusArtistPool.length === 0) return [];
+    const tracks = await this._getTracksForRankedArtists(focusArtistPool, limit, {
+      deepDive: options?.deepDive === true,
+      reason: "From focus filters",
+      blocklist: options?.blocklist,
+      excludeArtistKeys: options?.excludeArtistKeys,
+    }).catch(() => []);
+    const focusArtistMap = new Map(
+      focusArtistPool.map((artist) => [this._artistKey(artist.name), artist]),
+    );
+    return tracks
+      .map((track, index) => {
+        const artist = focusArtistMap.get(this._trackArtistKey(track));
+        if (!artist) return null;
+        return this._buildBaseCandidate(track, "focus", index, {
+          artistTags: artist.artistTags,
+          tagCoverage: artist.tagCoverage,
+          tagCoverageRatio: artist.tagCoverageRatio,
+          relatedCoverage: artist.relatedCoverage,
+          relatedCoverageRatio: artist.relatedCoverageRatio,
+          focusTier: artist.focusTier,
+          focusPriority: artist.focusPriority,
+          finalScore:
+            artist.focusPriority * 1000 +
+            artist.tagCoverageRatio * 120 +
+            artist.relatedCoverageRatio * 140 +
+            (artist.popularityHint || 0),
+        });
+      })
+      .filter((candidate) => {
+        if (!candidate) return false;
+        if (!(options?.excludeTrackKeys instanceof Set)) return true;
+        return !options.excludeTrackKeys.has(candidate.trackKey);
+      })
+      .sort((left, right) => {
+        if (right.focusPriority !== left.focusPriority) {
+          return right.focusPriority - left.focusPriority;
+        }
+        if (right.finalScore !== left.finalScore) {
+          return right.finalScore - left.finalScore;
+        }
+        return left.sourceRank - right.sourceRank;
+      });
+  }
+
+  _sortSourceCandidates(candidates) {
+    return [...(Array.isArray(candidates) ? candidates : [])].sort((left, right) => {
       if (right.finalScore !== left.finalScore) {
         return right.finalScore - left.finalScore;
-      }
-      if (right.focusScore !== left.focusScore) {
-        return right.focusScore - left.focusScore;
       }
       return left.sourceRank - right.sourceRank;
     });
@@ -1170,17 +1429,17 @@ export class WeeklyFlowPlaylistSource {
       Number.isFinite(Number(options?.reserveSize)) && Number(options.reserveSize) >= 0
         ? Math.round(Number(options.reserveSize))
         : Math.max(Math.ceil(targetSize * 0.75), 8);
-    const mix = flow?.mix || { discover: 34, mix: 33, trending: 33 };
+    const mix = flow?.mix || { discover: 34, mix: 33, trending: 33, focus: 0 };
     const sourceTargets = this._buildSourceTargets(targetSize, mix);
     const reserveTargets = this._buildSourceTargets(reserveSize, mix);
     const combinedTargets = {
       discover: Number(sourceTargets.discover || 0) + Number(reserveTargets.discover || 0),
       mix: Number(sourceTargets.mix || 0) + Number(reserveTargets.mix || 0),
       trending: Number(sourceTargets.trending || 0) + Number(reserveTargets.trending || 0),
+      focus: Number(sourceTargets.focus || 0) + Number(reserveTargets.focus || 0),
     };
     const tags = this._normalizeFocusEntries(flow?.tags);
     const relatedArtists = this._normalizeFocusEntries(flow?.relatedArtists);
-    const focus = flow?.focus && typeof flow.focus === "object" ? flow.focus : {};
     const blocklist = this._getBlocklist();
     const excludeArtistKeys = new Set(
       Array.isArray(options?.excludeArtistKeys) ? options.excludeArtistKeys : options?.excludeArtistKeys || [],
@@ -1188,24 +1447,20 @@ export class WeeklyFlowPlaylistSource {
     const excludeTrackKeys = new Set(
       Array.isArray(options?.excludeTrackKeys) ? options.excludeTrackKeys : options?.excludeTrackKeys || [],
     );
-    const excludeLibraryArtists =
-      Number(combinedTargets.mix || 0) <= 0 && Number(flow?.mix?.mix || 0) <= 0;
-    const excludedLibraryArtistKeys = excludeLibraryArtists
-      ? await this._getLibraryArtistKeySet().catch(() => new Set())
-      : null;
-    const effectiveExcludeArtistKeys = new Set(excludeArtistKeys);
-    for (const entry of excludedLibraryArtistKeys || []) {
-      effectiveExcludeArtistKeys.add(entry);
+    const libraryArtistKeys = await this._getLibraryArtistKeySet().catch(() => new Set());
+    const nonLibraryExcludeArtistKeys = new Set(excludeArtistKeys);
+    for (const entry of libraryArtistKeys) {
+      nonLibraryExcludeArtistKeys.add(entry);
     }
     const harvestLimitFor = (count) =>
       Math.min(150, Math.max(Number(count || 0) * 6, 24));
-    const [discoverTracks, mixTracks, trendingTracks] = await Promise.all([
+    const [discoverTracks, mixTracks, trendingTracks, focusCandidates] = await Promise.all([
       combinedTargets.discover > 0
         ? this.getDiscoverTracks(harvestLimitFor(combinedTargets.discover), {
             deepDive: flow?.deepDive === true,
             reason: "From discovery recommendations",
             blocklist,
-            excludeArtistKeys: effectiveExcludeArtistKeys,
+            excludeArtistKeys: nonLibraryExcludeArtistKeys,
           }).catch(() => [])
         : [],
       combinedTargets.mix > 0
@@ -1220,31 +1475,56 @@ export class WeeklyFlowPlaylistSource {
             deepDive: flow?.deepDive === true,
             reason: "From trending artists",
             blocklist,
-            excludeArtistKeys: effectiveExcludeArtistKeys,
+            excludeArtistKeys: nonLibraryExcludeArtistKeys,
+          }).catch(() => [])
+        : [],
+      combinedTargets.focus > 0
+        ? this._getFocusCandidates(harvestLimitFor(combinedTargets.focus), {
+            tags,
+            relatedArtists,
+            deepDive: flow?.deepDive === true,
+            blocklist,
+            excludeArtistKeys: nonLibraryExcludeArtistKeys,
+            excludeTrackKeys,
           }).catch(() => [])
         : [],
     ]);
-    const focusContext = { tags, relatedArtists, focus };
-    const [discoverCandidates, mixCandidates, trendingCandidates] = await Promise.all([
-      this._enrichFlowCandidates(discoverTracks, "discover", focusContext, {
-        excludeArtistKeys: effectiveExcludeArtistKeys,
-        excludeTrackKeys,
-      }),
-      this._enrichFlowCandidates(mixTracks, "mix", focusContext, {
-        excludeArtistKeys,
-        excludeTrackKeys,
-      }),
-      this._enrichFlowCandidates(trendingTracks, "trending", focusContext, {
-        excludeArtistKeys: effectiveExcludeArtistKeys,
-        excludeTrackKeys,
-      }),
-    ]);
     const candidateMap = {
-      discover: this._sortFlowCandidates(discoverCandidates, focus),
-      mix: this._sortFlowCandidates(mixCandidates, focus),
-      trending: this._sortFlowCandidates(trendingCandidates, focus),
+      discover: this._sortSourceCandidates(
+        discoverTracks
+          .map((track, index) => this._buildBaseCandidate(track, "discover", index))
+          .filter((candidate) => {
+            const artistKey = this._trackArtistKey(candidate);
+            return (
+              artistKey &&
+              !nonLibraryExcludeArtistKeys.has(artistKey) &&
+              !excludeTrackKeys.has(candidate.trackKey)
+            );
+          }),
+      ),
+      mix: this._sortSourceCandidates(
+        mixTracks
+          .map((track, index) => this._buildBaseCandidate(track, "mix", index))
+          .filter((candidate) => {
+            const artistKey = this._trackArtistKey(candidate);
+            return artistKey && !excludeArtistKeys.has(artistKey) && !excludeTrackKeys.has(candidate.trackKey);
+          }),
+      ),
+      trending: this._sortSourceCandidates(
+        trendingTracks
+          .map((track, index) => this._buildBaseCandidate(track, "trending", index))
+          .filter((candidate) => {
+            const artistKey = this._trackArtistKey(candidate);
+            return (
+              artistKey &&
+              !nonLibraryExcludeArtistKeys.has(artistKey) &&
+              !excludeTrackKeys.has(candidate.trackKey)
+            );
+          }),
+      ),
+      focus: this._sortSourceCandidates(focusCandidates),
     };
-    const orderedSources = ["discover", "mix", "trending"];
+    const orderedSources = ["focus", "mix", "discover", "trending"];
     const usedArtistKeys = new Set(excludeArtistKeys);
     const primaryTracks = [];
     const primaryBySource = {};
@@ -1266,11 +1546,7 @@ export class WeeklyFlowPlaylistSource {
     }
     const reserveTracks = [];
     for (const source of orderedSources) {
-      const existingCount = Number(primaryBySource[source]?.length || 0);
-      const needed = Math.max(
-        0,
-        Number(combinedTargets[source] || 0) - existingCount,
-      );
+      const needed = Math.max(0, Number(reserveTargets[source] || 0));
       reserveTracks.push(
         ...this._selectFromCandidates(candidateMap[source], needed, usedArtistKeys),
       );
@@ -1292,12 +1568,17 @@ export class WeeklyFlowPlaylistSource {
           size: targetSize,
           reserveSize,
           sources: sourceTargets,
+          reserveSources: reserveTargets,
         },
         achieved: {
           primary: finalPrimary.length,
           reserve: finalReserve.length,
           sourceCounts: orderedSources.reduce((acc, source) => {
             acc[source] = finalPrimary.filter((track) => track.source === source).length;
+            return acc;
+          }, {}),
+          reserveSourceCounts: orderedSources.reduce((acc, source) => {
+            acc[source] = finalReserve.filter((track) => track.source === source).length;
             return acc;
           }, {}),
           focusTiers: [...finalPrimary, ...finalReserve].reduce((acc, track) => {

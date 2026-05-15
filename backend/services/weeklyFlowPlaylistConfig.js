@@ -3,11 +3,10 @@ import { dbOps } from "../config/db-helpers.js";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 
 const LEGACY_TYPES = ["discover", "mix", "trending"];
-const DEFAULT_MIX = { discover: 34, mix: 33, trending: 33 };
+const DEFAULT_MIX = { discover: 34, mix: 33, trending: 33, focus: 0 };
 const DEFAULT_SIZE = 30;
 const DEFAULT_SCHEDULE_TIME = "00:00";
 const DAY_MS = 24 * 60 * 60 * 1000;
-const FOCUS_STRENGTH_IDS = new Set(["light", "medium", "heavy"]);
 let cachedFlows = null;
 let cachedSharedPlaylists = null;
 
@@ -67,7 +66,7 @@ const sumWeightMap = (value) => {
 
 const normalizeRecipeCounts = (value, fallback) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return fallback ?? { discover: 0, mix: 0, trending: 0 };
+    return fallback ?? { discover: 0, mix: 0, trending: 0, focus: 0 };
   }
   const parseField = (entry) => {
     const parsed = Number(entry);
@@ -78,6 +77,7 @@ const normalizeRecipeCounts = (value, fallback) => {
     discover: parseField(value?.discover ?? 0),
     mix: parseField(value?.mix ?? 0),
     trending: parseField(value?.trending ?? 0),
+    focus: parseField(value?.focus ?? 0),
   };
 };
 
@@ -130,23 +130,6 @@ const normalizeScheduleTime = (value) => {
   return `${String(hours).padStart(2, "0")}:00`;
 };
 
-const normalizeFocus = (value) => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return {
-      tagStrength: null,
-      relatedStrength: null,
-    };
-  }
-  const normalizeStrength = (entry) => {
-    const strength = String(entry || "").trim().toLowerCase();
-    return FOCUS_STRENGTH_IDS.has(strength) ? strength : null;
-  };
-  return {
-    tagStrength: normalizeStrength(value?.tagStrength),
-    relatedStrength: normalizeStrength(value?.relatedStrength),
-  };
-};
-
 const buildScheduledTime = (baseTimeMs, scheduleTime) => {
   const [hoursText, minutesText] = normalizeScheduleTime(scheduleTime).split(":");
   const candidate = new Date(baseTimeMs);
@@ -190,7 +173,7 @@ const distributeCount = (total, values) => {
 
 const extractFromBlocks = (value) => {
   if (!Array.isArray(value)) return null;
-  const recipe = { discover: 0, mix: 0, trending: 0 };
+  const recipe = { discover: 0, mix: 0, trending: 0, focus: 0 };
   const tags = {};
   const relatedArtists = {};
   let deepDive = false;
@@ -240,13 +223,14 @@ const buildCountsFromMix = (size, mix) => {
     { key: "discover", value: Number(mix?.discover ?? 0) },
     { key: "mix", value: Number(mix?.mix ?? 0) },
     { key: "trending", value: Number(mix?.trending ?? 0) },
+    { key: "focus", value: Number(mix?.focus ?? 0) },
   ];
   const sum = weights.reduce(
     (acc, w) => acc + (Number.isFinite(w.value) ? w.value : 0),
     0,
   );
   if (sum <= 0 || !Number.isFinite(sum) || size <= 0) {
-    return { discover: 0, mix: 0, trending: 0 };
+    return { discover: 0, mix: 0, trending: 0, focus: 0 };
   }
   const scaled = weights.map((w) => ({
     ...w,
@@ -275,8 +259,9 @@ const normalizeMix = (mix) => {
     discover: Number(mix?.discover ?? 0),
     mix: Number(mix?.mix ?? 0),
     trending: Number(mix?.trending ?? 0),
+    focus: Number(mix?.focus ?? 0),
   };
-  const sum = raw.discover + raw.mix + raw.trending;
+  const sum = raw.discover + raw.mix + raw.trending + raw.focus;
   if (!Number.isFinite(sum) || sum <= 0) {
     return { ...DEFAULT_MIX };
   }
@@ -284,6 +269,7 @@ const normalizeMix = (mix) => {
     { key: "discover", value: raw.discover },
     { key: "mix", value: raw.mix },
     { key: "trending", value: raw.trending },
+    { key: "focus", value: raw.focus },
   ];
   const scaled = weights.map((w) => ({
     ...w,
@@ -333,7 +319,6 @@ const normalizeFlow = (flow) => {
           Object.keys(normalizeWeightMap(blocksData?.relatedArtists)),
         );
   const baseSize = blocksData?.size > 0 ? blocksData.size : size;
-  const focus = normalizeFocus(flow?.focus);
   return {
     id: flow?.id || randomUUID(),
     name: name || "Flow",
@@ -349,7 +334,6 @@ const normalizeFlow = (flow) => {
     mix,
     tags,
     relatedArtists,
-    focus,
     createdAt:
       flow?.createdAt != null && Number.isFinite(Number(flow.createdAt))
         ? Number(flow.createdAt)
@@ -486,7 +470,7 @@ const buildLegacyFlows = (settings) => {
         ? { discover: 0, mix: 100, trending: 0 }
         : type === "trending"
           ? { discover: 0, mix: 0, trending: 100 }
-          : { discover: 100, mix: 0, trending: 0 };
+          : { discover: 100, mix: 0, trending: 0, focus: 0 };
     return normalizeFlow({
       id: randomUUID(),
       name: titleCase(type),
@@ -497,7 +481,6 @@ const buildLegacyFlows = (settings) => {
       deepDive: false,
       tags: {},
       relatedArtists: {},
-      focus: { tagStrength: null, relatedStrength: null },
     });
   });
 };
@@ -663,7 +646,6 @@ export const flowPlaylistConfig = {
     mix,
     size,
     deepDive,
-    focus,
     recipe,
     tags,
     relatedArtists,
@@ -678,7 +660,6 @@ export const flowPlaylistConfig = {
       mix,
       size,
       deepDive,
-      focus,
       recipe,
       tags,
       relatedArtists,
@@ -709,7 +690,6 @@ export const flowPlaylistConfig = {
       recipe: updates?.recipe ?? current.recipe,
       tags: updates?.tags ?? current.tags,
       relatedArtists: updates?.relatedArtists ?? current.relatedArtists,
-      focus: updates?.focus ?? current.focus,
       scheduleDays: updates?.scheduleDays ?? current.scheduleDays,
       scheduleTime: updates?.scheduleTime ?? current.scheduleTime,
       deepDive:
