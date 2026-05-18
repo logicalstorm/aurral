@@ -32,14 +32,47 @@ const AUDIO_CONTENT_TYPES = {
   ".wav": "audio/wav",
 };
 
+const getFlowEntryName = (value) => {
+  if (typeof value === "string" || typeof value === "number") {
+    const text = String(value).trim();
+    return text || null;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const candidates = [
+    value.name,
+    value.artistName,
+    value.artist,
+    value.tag,
+    value.label,
+    value.value,
+  ];
+  for (const candidate of candidates) {
+    const text = String(candidate || "").trim();
+    if (text) return text;
+  }
+  return null;
+};
+
 const normalizeFlowStringArray = (value) => {
   if (Array.isArray(value)) {
-    return [...new Set(value.map((entry) => String(entry || "").trim()).filter(Boolean))];
+    return [
+      ...new Set(
+        value.map((entry) => getFlowEntryName(entry)).filter(Boolean),
+      ),
+    ];
   }
   if (value && typeof value === "object") {
-    return [...new Set(Object.keys(value).map((entry) => String(entry || "").trim()).filter(Boolean))];
+    return [
+      ...new Set(
+        Object.keys(value)
+          .map((entry) => String(entry || "").trim())
+          .filter(Boolean),
+      ),
+    ];
   }
-  const single = String(value || "").trim();
+  const single = getFlowEntryName(value);
   return single ? [single] : [];
 };
 
