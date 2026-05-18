@@ -144,6 +144,50 @@ const parseListInput = (value) =>
     .map((entry) => entry.trim())
     .filter(Boolean);
 
+const getFlowEntryName = (value) => {
+  if (typeof value === "string" || typeof value === "number") {
+    const text = String(value).trim();
+    return text || null;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const candidates = [
+    value.name,
+    value.artistName,
+    value.artist,
+    value.tag,
+    value.label,
+    value.value,
+  ];
+  for (const candidate of candidates) {
+    const text = String(candidate || "").trim();
+    if (text) return text;
+  }
+  return null;
+};
+
+const normalizeFlowEntryList = (value) => {
+  const raw = Array.isArray(value)
+    ? value
+    : value && typeof value === "object"
+      ? Object.keys(value)
+      : value == null
+        ? []
+        : [value];
+  const seen = new Set();
+  const out = [];
+  for (const entry of raw) {
+    const text = getFlowEntryName(entry);
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+  }
+  return out;
+};
+
 const normalizeScheduleDays = (value) => {
   if (!Array.isArray(value)) return [];
   const unique = new Set();
@@ -212,16 +256,8 @@ const normalizeMixPercent = (mix) => {
 };
 
 const flowToForm = (flow) => {
-  const tagsList = Array.isArray(flow?.tags)
-    ? flow.tags
-    : flow?.tags && typeof flow.tags === "object"
-      ? Object.keys(flow.tags)
-      : [];
-  const relatedList = Array.isArray(flow?.relatedArtists)
-    ? flow.relatedArtists
-    : flow?.relatedArtists && typeof flow.relatedArtists === "object"
-      ? Object.keys(flow.relatedArtists)
-      : [];
+  const tagsList = normalizeFlowEntryList(flow?.tags);
+  const relatedList = normalizeFlowEntryList(flow?.relatedArtists);
   const rawSize = Number(flow?.size || 0);
   const size =
     Number.isFinite(rawSize) && rawSize > 0
