@@ -38,6 +38,29 @@ const normalizeWeightMap = (value) => {
   return out;
 };
 
+const getFlowEntryName = (value) => {
+  if (typeof value === "string" || typeof value === "number") {
+    const text = String(value).trim();
+    return text || null;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const candidates = [
+    value.name,
+    value.artistName,
+    value.artist,
+    value.tag,
+    value.label,
+    value.value,
+  ];
+  for (const candidate of candidates) {
+    const text = String(candidate || "").trim();
+    if (text) return text;
+  }
+  return null;
+};
+
 const normalizeStringArray = (value) => {
   const raw = Array.isArray(value)
     ? value
@@ -47,9 +70,10 @@ const normalizeStringArray = (value) => {
   const seen = new Set();
   const out = [];
   for (const entry of raw) {
-    const text = String(entry || "").trim();
+    const text = getFlowEntryName(entry);
+    if (!text) continue;
     const key = text.toLowerCase();
-    if (!text || seen.has(key)) continue;
+    if (seen.has(key)) continue;
     seen.add(key);
     out.push(text);
   }
@@ -90,13 +114,10 @@ const clampCount = (value, min = 1, max = 100) => {
 const normalizeStringList = (value) => {
   if (value == null) return [];
   if (Array.isArray(value)) {
-    return value.map((item) => String(item || "").trim()).filter(Boolean);
+    return value.map((item) => getFlowEntryName(item)).filter(Boolean);
   }
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed ? [trimmed] : [];
-  }
-  return [];
+  const single = getFlowEntryName(value);
+  return single ? [single] : [];
 };
 
 const normalizeScheduleDays = (value) => {

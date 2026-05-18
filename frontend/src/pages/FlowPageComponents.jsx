@@ -371,57 +371,68 @@ function CommaTokenInput({
   chipClassName,
 }) {
   const [isFocused, setIsFocused] = useState(false);
+  const inputRef = useRef(null);
   const { committed, pending } = getCommaTokenInputState(value, {
     commitAll: !isFocused,
   });
+  const rawValue = String(value ?? "");
+
+  const commitNormalizedValue = useCallback(() => {
+    const nextCommitted = getCommaTokenInputState(rawValue, {
+      commitAll: true,
+    }).committed;
+    onChange(buildCommaTokenInputValue(nextCommitted, ""));
+  }, [onChange, rawValue]);
+
+  useEffect(() => {
+    if (!isFocused) return;
+    inputRef.current?.focus();
+  }, [isFocused]);
+
   return (
-    <div className="min-h-10 w-full rounded-md border border-white/10 bg-[#1f1f24] px-3 py-2 text-sm text-white transition focus-within:border-[#90a07d] focus-within:ring-1 focus-within:ring-[#90a07d]">
-      <div className="flex flex-wrap items-center gap-1.5">
-        {committed.map((entry) => (
-          <span
-            key={`${placeholder}-${entry}`}
-            className={chipClassName}
-          >
-            {entry}
-          </span>
-        ))}
+    <div
+      className="min-h-10 w-full rounded-md border border-white/10 bg-[#1f1f24] px-3 py-2 text-sm text-white transition focus-within:border-[#90a07d] focus-within:ring-1 focus-within:ring-[#90a07d]"
+      onClick={() => setIsFocused(true)}
+    >
+      {isFocused ? (
         <input
+          ref={inputRef}
           type="text"
-          className="min-w-[120px] flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#6f6f76]"
-          placeholder={committed.length === 0 ? placeholder : ""}
-          value={pending}
+          className="w-full bg-transparent text-sm text-white outline-none placeholder:text-[#6f6f76]"
+          placeholder={placeholder}
+          value={rawValue}
           onFocus={() => setIsFocused(true)}
-          onChange={(event) =>
-            onChange(buildCommaTokenInputValue(committed, event.target.value))
-          }
+          onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
-            if (
-              event.key === "Backspace" &&
-              pending.trim().length === 0 &&
-              committed.length > 0
-            ) {
+            if (event.key === "Enter") {
               event.preventDefault();
-              onChange(
-                buildCommaTokenInputValue(
-                  committed.slice(0, -1),
-                  committed[committed.length - 1] ?? "",
-                ),
-              );
+              commitNormalizedValue();
+              inputRef.current?.blur();
             }
           }}
           onBlur={() => {
             setIsFocused(false);
-            const normalizedPending = String(pending || "").trim();
-            if (!normalizedPending) return;
-            onChange(
-              buildCommaTokenInputValue(
-                [...committed, normalizedPending],
-                "",
-              ),
-            );
+            commitNormalizedValue();
           }}
         />
-      </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {committed.map((entry) => (
+            <span
+              key={`${placeholder}-${entry}`}
+              className={chipClassName}
+            >
+              {entry}
+            </span>
+          ))}
+          {committed.length === 0 ? (
+            <span className="text-sm text-[#6f6f76]">{placeholder}</span>
+          ) : null}
+          {pending ? (
+            <span className="text-sm text-[#c9c9cf]">{pending}</span>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }
