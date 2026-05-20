@@ -27,6 +27,7 @@ import {
   addArtistToLibrary,
   addDiscoveryFeedback,
   getBlocklist,
+  getBootstrapStatus,
   getDiscovery,
   getNearbyShows,
   getMyDiscoverLayout,
@@ -144,6 +145,14 @@ const normalizeDiscoveryData = (value) => {
     basedOn: Array.isArray(value.basedOn) ? value.basedOn : [],
     topTags: Array.isArray(value.topTags) ? value.topTags : [],
     topGenres: Array.isArray(value.topGenres) ? value.topGenres : [],
+    fallbackGenres: Array.isArray(value.fallbackGenres)
+      ? value.fallbackGenres
+      : [],
+    provider: value.provider || "lastfm",
+    capabilities:
+      value.capabilities && typeof value.capabilities === "object"
+        ? value.capabilities
+        : null,
     lastUpdated: value.lastUpdated || null,
     isUpdating: !!value.isUpdating,
     stale: !!value.stale,
@@ -275,6 +284,12 @@ const filterDiscoveryDataByBlockedArtists = (value, blockedArtists) => {
     globalTop: normalized.globalTop.filter(
       (artist) => !isArtistInEntries(artist, entries),
     ),
+    fallbackGenres: normalized.fallbackGenres.map((section) => ({
+      ...section,
+      artists: (Array.isArray(section?.artists) ? section.artists : []).filter(
+        (artist) => !isArtistInEntries(artist, entries),
+      ),
+    })),
   };
 };
 
@@ -1105,6 +1120,7 @@ function DiscoverPage() {
   const [libraryLookup, setLibraryLookup] = useState({});
   const [blockedArtists, setBlockedArtists] = useState([]);
   const [nearbyShowsData, setNearbyShowsData] = useState(null);
+  const [ticketmasterConfigured, setTicketmasterConfigured] = useState(true);
   const [nearbyShowsLoading, setNearbyShowsLoading] = useState(false);
   const [nearbyShowsError, setNearbyShowsError] = useState(null);
   const [nearbyLocationMode, setNearbyLocationMode] = useState("ip");
@@ -1131,6 +1147,9 @@ function DiscoverPage() {
           basedOn: msg.basedOn || [],
           topTags: msg.topTags || [],
           topGenres: msg.topGenres || [],
+          fallbackGenres: msg.fallbackGenres || [],
+          provider: msg.provider || "lastfm",
+          capabilities: msg.capabilities || null,
           lastUpdated: msg.lastUpdated || null,
           isUpdating: false,
           stale: false,
@@ -1236,6 +1255,9 @@ function DiscoverPage() {
           basedOn: [],
           topTags: [],
           topGenres: [],
+          fallbackGenres: [],
+          provider: "lastfm",
+          capabilities: null,
           lastUpdated: null,
           isUpdating: false,
           stale: false,
@@ -1253,6 +1275,26 @@ function DiscoverPage() {
       .catch(() => {});
 
   }, [authUser?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadBootstrapStatus = async () => {
+      try {
+        const bootstrap = await getBootstrapStatus();
+        if (!cancelled) {
+          setTicketmasterConfigured(!!bootstrap.ticketmasterConfigured);
+        }
+      } catch {
+        if (!cancelled) {
+          setTicketmasterConfigured(true);
+        }
+      }
+    };
+    loadBootstrapStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1288,6 +1330,12 @@ function DiscoverPage() {
   }, [authUser?.id]);
 
   useEffect(() => {
+    if (!ticketmasterConfigured) {
+      setNearbyShowsData(null);
+      setNearbyShowsError(null);
+      setNearbyShowsLoading(false);
+      return;
+    }
     const shouldUseZip = nearbyLocationMode === "zip";
     if (shouldUseZip && !appliedNearbyZip.trim()) {
       setNearbyShowsData(null);
@@ -1318,7 +1366,7 @@ function DiscoverPage() {
     return () => {
       cancelled = true;
     };
-  }, [nearbyLocationMode, appliedNearbyZip]);
+  }, [nearbyLocationMode, appliedNearbyZip, ticketmasterConfigured]);
 
   useEffect(() => {
     const stored = readStoredDiscoverLayout(authUser?.id);
@@ -1438,6 +1486,17 @@ function DiscoverPage() {
   };
 
   const genreSections = useMemo(() => {
+    if (Array.isArray(data?.fallbackGenres) && data.fallbackGenres.length > 0) {
+      return data.fallbackGenres
+        .map((section) => ({
+          genre: section.name,
+          artists: Array.isArray(section.artists) ? section.artists : [],
+          fallback: true,
+        }))
+        .filter((section) => section.genre && section.artists.length > 0)
+        .slice(0, 6);
+    }
+
     if (!data?.topGenres || !data?.recommendations) return [];
 
     const sections = [];
@@ -1493,7 +1552,8 @@ function DiscoverPage() {
     data &&
     ((data.recommendations && data.recommendations.length > 0) ||
       (data.globalTop && data.globalTop.length > 0) ||
-      (data.topGenres && data.topGenres.length > 0));
+      (data.topGenres && data.topGenres.length > 0) ||
+      (data.fallbackGenres && data.fallbackGenres.length > 0));
   const isActuallyUpdating = data?.isUpdating && !hasData;
 
   const {
@@ -1502,10 +1562,13 @@ function DiscoverPage() {
     topGenres = [],
     topTags = [],
     basedOn = [],
+    provider = "lastfm",
+    capabilities,
     lastUpdated,
     isUpdating,
     configured = true,
   } = data || {};
+  const isListenBrainzFallback = provider === "listenbrainz-fallback";
 
   const nearbyShows = nearbyShowsData?.shows || [];
   const nearbyLocationLabel =
@@ -1516,13 +1579,26 @@ function DiscoverPage() {
     () => ({
       recentlyAdded: recentlyAdded.length > 0,
       recentReleases: recentReleases.length > 0,
-      recommended: true,
-      recommendedShows: true,
+      recommended:
+        !isListenBrainzFallback &&
+        (recommendations.length > 0 ||
+          capabilities?.personalizedRecommendations !== false),
+      recommendedShows: ticketmasterConfigured,
       globalTop: globalTop.length > 0,
       genreSections: genreSections.length > 0,
       topTags: topTags.length > 0,
     }),
-    [recentlyAdded, recentReleases, globalTop, genreSections, topTags],
+    [
+      recentlyAdded,
+      recentReleases,
+      globalTop,
+      genreSections,
+      topTags,
+      recommendations,
+      capabilities,
+      isListenBrainzFallback,
+      ticketmasterConfigured,
+    ],
   );
 
   const heroBasedOn = useMemo(() => {
@@ -1864,6 +1940,7 @@ function DiscoverPage() {
     }
 
     if (id === "recommended") {
+      if (!sectionAvailability.recommended) return null;
       return (
         <DiscoverRail
           key="recommended"
@@ -1915,6 +1992,7 @@ function DiscoverPage() {
     }
 
     if (id === "recommendedShows") {
+      if (!sectionAvailability.recommendedShows) return null;
       const zipModeActive = nearbyLocationMode === "zip";
       return (
         <section key="recommendedShows">
@@ -2138,7 +2216,11 @@ function DiscoverPage() {
           {genreSections.map((section) => (
             <DiscoverRail
               key={section.genre}
-              title={`Because You Like ${section.genre}`}
+              title={
+                section.fallback
+                  ? `${section.genre} Artists`
+                  : `Because You Like ${section.genre}`
+              }
               mobileTitle={section.genre}
               onViewAll={() =>
                 navigate(
@@ -2265,12 +2347,14 @@ function DiscoverPage() {
           style={{ color: "#c1c1c3" }}
         />
         <h2 className="text-xl font-semibold mb-2" style={{ color: "#fff" }}>
-          Building your recommendations...
+          {isListenBrainzFallback
+            ? "Loading ListenBrainz discovery..."
+            : "Building your recommendations..."}
         </h2>
         <p className="text-sm" style={{ color: "#c1c1c3" }}>
-          The app is scanning your library and Last.fm data. Please wait — this
-          can take up to 10 minutes when Last.fm is configured. The page will
-          update when ready.
+          {isListenBrainzFallback
+            ? "The app is loading trending artists and default genre shelves."
+            : "The app is scanning your library and Last.fm data. Please wait. This can take up to 10 minutes when Last.fm is configured. The page will update when ready."}
         </p>
       </div>
     );
