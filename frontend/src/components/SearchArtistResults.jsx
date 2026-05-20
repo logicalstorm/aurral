@@ -257,6 +257,10 @@ function SearchArtistResults({
         ]
           .filter(Boolean)
           .join(" • ");
+        const feedbackHandler =
+          type === "tag" && artist.tagResultSource !== "recommended"
+            ? undefined
+            : onArtistFeedback;
 
         return (
           <div
@@ -341,7 +345,7 @@ function SearchArtistResults({
                   canAddArtist={canAddArtist}
                   onAddToLibrary={onAddArtistToLibrary}
                   onAddToBlocklist={onAddArtistToBlocklist}
-                  onFeedback={onArtistFeedback}
+                  onFeedback={feedbackHandler}
                 />
               )}
             </div>

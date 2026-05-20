@@ -24,7 +24,6 @@ import {
   searchCatalog,
   updateBlocklist,
 } from "../utils/api";
-import PillToggle from "../components/PillToggle";
 import SearchAlbumResults from "../components/SearchAlbumResults";
 import SearchArtistResults from "../components/SearchArtistResults";
 import { useAuth } from "../contexts/AuthContext";
@@ -155,11 +154,9 @@ function SearchResultsPage() {
   }, [type, trimmedQuery]);
   const isTagSearch = normalizedType === "tag";
   const isAlbumSearch = normalizedType === "album";
-  const tagScope = searchParams.get("scope") || "all";
   const albumSort = searchParams.get("sort") || DEFAULT_ALBUM_SORT;
-  const showAllTagResults = isTagSearch && tagScope === "all";
   const supportsDiscoveryFeedback =
-    normalizedType === "recommended" || (isTagSearch && !showAllTagResults);
+    normalizedType === "recommended" || isTagSearch;
   const canAddArtist = hasPermission("addArtist");
   const canAddAlbum = hasPermission("addAlbum");
   const hasActiveReleaseTypeFilters = useMemo(() => {
@@ -174,15 +171,6 @@ function SearchResultsPage() {
         (typeName) => !selectedReleaseTypes.includes(typeName),
       ).length,
     [allReleaseTypes, selectedReleaseTypes],
-  );
-
-  const updateTagScope = useCallback(
-    (nextScope) => {
-      const params = new URLSearchParams(searchParams);
-      params.set("scope", nextScope === "all" ? "all" : "recommended");
-      setSearchParams(params);
-    },
-    [searchParams, setSearchParams],
   );
 
   const updateAlbumSort = useCallback(
@@ -286,7 +274,6 @@ function SearchResultsPage() {
         const data = await searchCatalog(searchQuery, normalizedType, {
           limit: PAGE_SIZE,
           offset: 0,
-          tagScope,
           releaseTypes: isAlbumSearch ? selectedReleaseTypes : [],
         });
         const nextResults = isAlbumSearch
@@ -328,7 +315,6 @@ function SearchResultsPage() {
   }, [
     trimmedQuery,
     normalizedType,
-    tagScope,
     isAlbumSearch,
     isTagSearch,
     selectedReleaseTypes,
@@ -573,7 +559,6 @@ function SearchResultsPage() {
       const data = await searchCatalog(searchQuery, normalizedType, {
         limit: PAGE_SIZE,
         offset: results.length,
-        tagScope,
         releaseTypes: isAlbumSearch ? selectedReleaseTypes : [],
       });
       const newItems = data.items || [];
@@ -610,7 +595,6 @@ function SearchResultsPage() {
     results,
     searchTotalCount,
     selectedReleaseTypes,
-    tagScope,
     trimmedQuery,
     visibleCount,
   ]);
@@ -821,9 +805,7 @@ function SearchResultsPage() {
       : isAlbumSearch
         ? `We couldn't find any albums matching "${trimmedQuery}"`
         : isTagSearch
-          ? `We couldn't find any ${
-              showAllTagResults ? "artists" : "recommended artists"
-            } for tag "${trimmedQuery.replace(/^#/, "")}"`
+          ? `We couldn't find any artists for tag "${trimmedQuery.replace(/^#/, "")}"`
           : `We couldn't find any artists matching "${trimmedQuery}"`;
 
   return (
@@ -846,36 +828,15 @@ function SearchResultsPage() {
                       : "Search Results"}
           </h1>
 
-          {isTagSearch && (
-            <div className="ml-auto inline-flex items-center gap-3">
-              <span
-                className="text-sm"
-                style={{ color: showAllTagResults ? "#8a8a8f" : "#fff" }}
-              >
-                Recommended
-              </span>
-              <PillToggle
-                checked={showAllTagResults}
-                onChange={(event) =>
-                  updateTagScope(event.target.checked ? "all" : "recommended")
-                }
-              />
-              <span
-                className="text-sm"
-                style={{ color: showAllTagResults ? "#fff" : "#8a8a8f" }}
-              >
-                All
-              </span>
-            </div>
-          )}
         </div>
 
-        {isTagSearch && !showAllTagResults && lastfmConfigured === false && (
+        {isTagSearch && lastfmConfigured === false && (
           <div className="mt-4 bg-yellow-500/20 p-4">
             <div className="flex flex-wrap items-center gap-3">
               <p className="text-sm text-yellow-300">
-                Recommended tag results use the hydrated Last.fm discovery
-                cache. Add an API key to enable that path.
+                Tag results are currently limited to the hydrated discovery
+                cache. Add a Last.fm API key to pull broader top-artist matches
+                for this tag.
               </p>
               <button
                 type="button"
@@ -899,7 +860,7 @@ function SearchResultsPage() {
         )}
         {isTagSearch && trimmedQuery && (
           <p style={{ color: "#c1c1c3" }}>
-            {`${showAllTagResults ? "Top artists" : "Recommended artists"} for tag "${trimmedQuery.replace(/^#/, "")}"`}
+            {`Artists for tag "${trimmedQuery.replace(/^#/, "")}"`}
           </p>
         )}
         {isAlbumSearch && trimmedQuery && (
@@ -1124,15 +1085,6 @@ function SearchResultsPage() {
                 No Results Found
               </h3>
               <p style={{ color: "#c1c1c3" }}>{emptyMessage}</p>
-              {isTagSearch && !showAllTagResults && (
-                <button
-                  type="button"
-                  className="btn btn-primary mt-6"
-                  onClick={() => updateTagScope("all")}
-                >
-                  Try searching all
-                </button>
-              )}
             </div>
           ) : (
             <>
