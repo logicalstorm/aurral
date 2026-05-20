@@ -9,6 +9,7 @@ import {
   FileMusic,
   Loader,
   Music,
+  Star,
 } from "lucide-react";
 import {
   addArtistToLibrary,
@@ -859,9 +860,19 @@ function SearchResultsPage() {
           <p style={{ color: "#c1c1c3" }}>Trending artists right now</p>
         )}
         {isTagSearch && trimmedQuery && (
-          <p style={{ color: "#c1c1c3" }}>
-            {`Artists for tag "${trimmedQuery.replace(/^#/, "")}"`}
-          </p>
+          <div
+            className="flex flex-wrap items-center gap-x-3 gap-y-2"
+            style={{ color: "#c1c1c3" }}
+          >
+            <p>{`Artists for tag "${trimmedQuery.replace(/^#/, "")}"`}</p>
+            <div className="ml-auto flex items-center gap-1.5 text-sm">
+              <Star
+                className="h-3.5 w-3.5"
+                style={{ color: "#f4c430", fill: "#f4c430" }}
+              />
+              <span>= recommended</span>
+            </div>
+          </div>
         )}
         {isAlbumSearch && trimmedQuery && (
           <div className="space-y-3">
