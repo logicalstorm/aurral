@@ -19,6 +19,11 @@ import { dbOps } from "../config/db-helpers.js";
 import { websocketService } from "../services/websocketService.js";
 import { noCache } from "../middleware/cache.js";
 import { requireAuth } from "../middleware/requirePermission.js";
+import {
+  DISCOVERY_PROVIDER_LASTFM,
+  DISCOVERY_PROVIDER_LISTENBRAINZ_FALLBACK,
+  getDiscoveryCapabilities,
+} from "../services/listenbrainzDiscoveryFallback.js";
 
 const router = express.Router();
 
@@ -101,6 +106,10 @@ router.get("/", noCache, async (req, res) => {
         lastScan: null,
       };
       payload.discovery = {
+        provider: getLastfmApiKey()
+          ? DISCOVERY_PROVIDER_LASTFM
+          : DISCOVERY_PROVIDER_LISTENBRAINZ_FALLBACK,
+        capabilities: getDiscoveryCapabilities(!!getLastfmApiKey()),
         lastUpdated: discoveryCache?.lastUpdated || null,
         isUpdating: !!discoveryCache?.isUpdating,
         recommendationsCount: discoveryCache?.recommendations?.length || 0,

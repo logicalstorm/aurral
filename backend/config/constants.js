@@ -141,6 +141,8 @@ export const defaultData = {
     basedOn: [],
     topTags: [],
     topGenres: [],
+    fallbackGenres: [],
+    provider: "lastfm",
     lastUpdated: null,
   },
   images: {},
