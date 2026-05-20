@@ -156,8 +156,10 @@ function SearchResultsPage() {
   const isTagSearch = normalizedType === "tag";
   const isAlbumSearch = normalizedType === "album";
   const tagScope = searchParams.get("scope") || "all";
+  const effectiveTagScope =
+    isTagSearch && lastfmConfigured === false ? "all" : tagScope;
   const albumSort = searchParams.get("sort") || DEFAULT_ALBUM_SORT;
-  const showAllTagResults = isTagSearch && tagScope === "all";
+  const showAllTagResults = isTagSearch && effectiveTagScope === "all";
   const supportsDiscoveryFeedback =
     normalizedType === "recommended" || (isTagSearch && !showAllTagResults);
   const canAddArtist = hasPermission("addArtist");
@@ -286,7 +288,7 @@ function SearchResultsPage() {
         const data = await searchCatalog(searchQuery, normalizedType, {
           limit: PAGE_SIZE,
           offset: 0,
-          tagScope,
+          tagScope: effectiveTagScope,
           releaseTypes: isAlbumSearch ? selectedReleaseTypes : [],
         });
         const nextResults = isAlbumSearch
@@ -328,7 +330,7 @@ function SearchResultsPage() {
   }, [
     trimmedQuery,
     normalizedType,
-    tagScope,
+    effectiveTagScope,
     isAlbumSearch,
     isTagSearch,
     selectedReleaseTypes,
@@ -573,7 +575,7 @@ function SearchResultsPage() {
       const data = await searchCatalog(searchQuery, normalizedType, {
         limit: PAGE_SIZE,
         offset: results.length,
-        tagScope,
+        tagScope: effectiveTagScope,
         releaseTypes: isAlbumSearch ? selectedReleaseTypes : [],
       });
       const newItems = data.items || [];
@@ -610,7 +612,7 @@ function SearchResultsPage() {
     results,
     searchTotalCount,
     selectedReleaseTypes,
-    tagScope,
+    effectiveTagScope,
     trimmedQuery,
     visibleCount,
   ]);
@@ -846,7 +848,7 @@ function SearchResultsPage() {
                       : "Search Results"}
           </h1>
 
-          {isTagSearch && (
+          {isTagSearch && lastfmConfigured !== false && (
             <div className="ml-auto inline-flex items-center gap-3">
               <span
                 className="text-sm"
@@ -870,24 +872,6 @@ function SearchResultsPage() {
           )}
         </div>
 
-        {isTagSearch && !showAllTagResults && lastfmConfigured === false && (
-          <div className="mt-4 bg-yellow-500/20 p-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <p className="text-sm text-yellow-300">
-                Recommended tag results use the hydrated Last.fm discovery
-                cache. Add an API key to enable that path.
-              </p>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => navigate("/settings")}
-              >
-                Open Settings
-              </button>
-            </div>
-          </div>
-        )}
-
         {normalizedType === "recommended" && (
           <p style={{ color: "#c1c1c3" }}>
             {results.length} artist{results.length !== 1 ? "s" : ""} we think
@@ -899,7 +883,7 @@ function SearchResultsPage() {
         )}
         {isTagSearch && trimmedQuery && (
           <p style={{ color: "#c1c1c3" }}>
-            {`${showAllTagResults ? "Top artists" : "Recommended artists"} for tag "${trimmedQuery.replace(/^#/, "")}"`}
+            {`${lastfmConfigured === false || showAllTagResults ? "Top artists" : "Recommended artists"} for tag "${trimmedQuery.replace(/^#/, "")}"`}
           </p>
         )}
         {isAlbumSearch && trimmedQuery && (

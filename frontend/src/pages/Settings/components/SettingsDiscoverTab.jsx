@@ -32,6 +32,10 @@ export function SettingsDiscoverTab({
     settings.integrations?.lastfm?.discoveryAutoRefreshHours || 168;
   const discoveryMode =
     settings.integrations?.lastfm?.discoveryMode || "balanced";
+  const discoveryProvider =
+    health?.discovery?.provider === "listenbrainz-fallback"
+      ? "ListenBrainz fallback"
+      : "Last.fm";
 
   return (
     <div className="card animate-fade-in">
@@ -184,6 +188,10 @@ export function SettingsDiscoverTab({
           <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-6 items-start">
             <div className="space-y-3 min-w-0">
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div>
+                  <dt style={{ color: "#c1c1c3" }}>Provider</dt>
+                  <dd style={{ color: "#fff" }}>{discoveryProvider}</dd>
+                </div>
                 <div>
                   <dt style={{ color: "#c1c1c3" }}>Last updated</dt>
                   <dd style={{ color: "#fff" }}>
