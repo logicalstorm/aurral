@@ -12,10 +12,13 @@ import api, {
 } from "../../../utils/api";
 import { useWebSocketChannel } from "../../../hooks/useWebSocket";
 import { allReleaseTypes } from "../constants";
-import { normalizeSettings, checkForChanges } from "../utils";
+import {
+  DEFAULT_METADATA_BASE_URL,
+  checkForChanges,
+  normalizeSettings,
+} from "../utils";
 
 const DISCOVERY_MANUAL_REFRESH_KEY = "aurral.discovery.manualRefreshPending";
-const DEFAULT_METADATA_BASE_URL = "https://brainzmash.kell.ly";
 
 const defaultSettings = {
   rootFolderPath: "",

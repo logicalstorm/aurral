@@ -5,6 +5,7 @@ import {
   APP_NAME,
   APP_VERSION,
   DEFAULT_METADATA_BASE_URL,
+  LEGACY_METADATA_BASE_URL,
   MUSICBRAINZ_API,
 } from "../../config/constants.js";
 import {
@@ -70,7 +71,11 @@ export function getMetadataBaseUrl() {
     parsed.pathname = parsed.pathname.replace(/\/+$/, "") || "/";
     parsed.search = "";
     parsed.hash = "";
-    return parsed.toString().replace(/\/+$/, "");
+    const normalized = parsed.toString().replace(/\/+$/, "");
+    if (normalized === LEGACY_METADATA_BASE_URL) {
+      return DEFAULT_METADATA_BASE_URL;
+    }
+    return normalized;
   } catch {
     return DEFAULT_METADATA_BASE_URL;
   }
@@ -81,10 +86,7 @@ export function getMetadataProvider() {
 }
 
 function getUserAgent() {
-  const metadata = getSettingsMetadata();
-  const suffix = String(metadata.userAgentSuffix || "").trim();
-  const base = `Lidarr/2.0 Tubifarry/1.0 Aurral/${APP_VERSION}`;
-  return suffix ? `${base} ${suffix}` : base;
+  return `${APP_NAME}/${APP_VERSION}`;
 }
 
 async function request(path, params = {}) {

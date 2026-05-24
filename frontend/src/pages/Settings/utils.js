@@ -1,6 +1,12 @@
 import { allReleaseTypes } from "./constants";
 
-const DEFAULT_METADATA_BASE_URL = "https://brainzmash.kell.ly";
+export const LEGACY_METADATA_BASE_URL = "https://brainzmash.kell.ly";
+export const DEFAULT_METADATA_BASE_URL = "https://lidarrapi.brainzmash.cc";
+
+export const normalizeMetadataBaseUrl = (baseUrl) => {
+  const trimmed = String(baseUrl || "").trim().replace(/\/+$/, "");
+  return trimmed === LEGACY_METADATA_BASE_URL ? DEFAULT_METADATA_BASE_URL : trimmed;
+};
 
 export const normalizeSettings = (savedSettings) => {
   const lidarr = savedSettings.integrations?.lidarr || {};
@@ -74,12 +80,13 @@ export const normalizeSettings = (savedSettings) => {
       },
       metadata: {
         provider: "brainzmash",
-        baseUrl:
+        baseUrl: normalizeMetadataBaseUrl(
           metadata.baseUrl ||
-          String(legacyMusicbrainz.customUrl || "")
-            .trim()
-            .replace(/\/ws\/2\/?$/, "") ||
-          DEFAULT_METADATA_BASE_URL,
+            String(legacyMusicbrainz.customUrl || "")
+              .trim()
+              .replace(/\/ws\/2\/?$/, "") ||
+            DEFAULT_METADATA_BASE_URL,
+        ),
         userAgentSuffix: "",
         enableNarrowFallbacks: true,
         ...metadata,
