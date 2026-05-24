@@ -1,11 +1,20 @@
 import express from "express";
 import bcrypt from "bcrypt";
 import { dbOps, userOps } from "../config/db-helpers.js";
-import { DEFAULT_METADATA_BASE_URL, defaultData } from "../config/constants.js";
+import {
+  DEFAULT_METADATA_BASE_URL,
+  LEGACY_METADATA_BASE_URL,
+  defaultData,
+} from "../config/constants.js";
 import { validateExternalUrl } from "../middleware/urlValidator.js";
 import { requirePasswordStrength } from "../middleware/validation.js";
 
 const router = express.Router();
+
+function normalizeMetadataBaseUrl(baseUrl) {
+  const trimmed = String(baseUrl || "").trim().replace(/\/+$/, "");
+  return trimmed === LEGACY_METADATA_BASE_URL ? DEFAULT_METADATA_BASE_URL : trimmed;
+}
 
 router.use((req, res, next) => {
   const settings = dbOps.getSettings();
@@ -115,11 +124,12 @@ router.post("/complete", async (req, res) => {
           ? {
               ...(current.integrations?.metadata || {}),
               provider: "brainzmash",
-              baseUrl:
+              baseUrl: normalizeMetadataBaseUrl(
                 metadata.baseUrl != null
                   ? String(metadata.baseUrl).trim().replace(/\/+$/, "")
                   : current.integrations?.metadata?.baseUrl ||
                     DEFAULT_METADATA_BASE_URL,
+              ),
               userAgentSuffix:
                 metadata.userAgentSuffix != null
                   ? String(metadata.userAgentSuffix).trim()
