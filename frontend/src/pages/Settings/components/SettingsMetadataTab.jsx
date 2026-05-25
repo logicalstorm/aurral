@@ -1,7 +1,6 @@
 import { CheckCircle } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
-
-const DEFAULT_METADATA_BASE_URL = "https://brainzmash.kell.ly";
+import { DEFAULT_METADATA_BASE_URL } from "../utils";
 
 export function SettingsMetadataTab({
   settings,

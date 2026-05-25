@@ -1,6 +1,10 @@
 import express from "express";
 import { dbOps } from "../config/db-helpers.js";
-import { DEFAULT_METADATA_BASE_URL, defaultData } from "../config/constants.js";
+import {
+  DEFAULT_METADATA_BASE_URL,
+  LEGACY_METADATA_BASE_URL,
+  defaultData,
+} from "../config/constants.js";
 import { reconcileLocalNetworkBypassSetting } from "../middleware/auth.js";
 import { noCache } from "../middleware/cache.js";
 import { requireAuth, requireAdmin } from "../middleware/requirePermission.js";
@@ -10,6 +14,11 @@ import { websocketService } from "../services/websocketService.js";
 const router = express.Router();
 router.use(requireAuth);
 router.use(requireAdmin);
+
+function normalizeMetadataBaseUrl(baseUrl) {
+  const trimmed = String(baseUrl || "").trim().replace(/\/+$/, "");
+  return trimmed === LEGACY_METADATA_BASE_URL ? DEFAULT_METADATA_BASE_URL : trimmed;
+}
 
 router.get("/", noCache, (req, res) => {
   try {
@@ -24,11 +33,19 @@ router.get("/", noCache, (req, res) => {
       const legacyMusicbrainz = dbOps.getSettings()?.integrations?.musicbrainz || {};
       settings.integrations.metadata = {
         provider: "brainzmash",
-        baseUrl:
+        baseUrl: normalizeMetadataBaseUrl(
           String(legacyMusicbrainz.customUrl || "").trim().replace(/\/ws\/2\/?$/, "") ||
-          DEFAULT_METADATA_BASE_URL,
+            DEFAULT_METADATA_BASE_URL,
+        ),
         userAgentSuffix: "",
         enableNarrowFallbacks: true,
+      };
+    } else {
+      settings.integrations.metadata = {
+        ...settings.integrations.metadata,
+        baseUrl: normalizeMetadataBaseUrl(
+          settings.integrations.metadata.baseUrl || DEFAULT_METADATA_BASE_URL,
+        ),
       };
     }
     settings.security = {
@@ -80,7 +97,7 @@ router.post("/", async (req, res) => {
           error: `Invalid metadata base URL: ${baseUrlValidation.error}`,
         });
       }
-      nextMetadata.baseUrl = baseUrlValidation.url.replace(/\/+$/, "");
+      nextMetadata.baseUrl = normalizeMetadataBaseUrl(baseUrlValidation.url);
       nextMetadata.userAgentSuffix =
         typeof nextMetadata.userAgentSuffix === "string"
           ? nextMetadata.userAgentSuffix.trim()
