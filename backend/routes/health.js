@@ -19,6 +19,7 @@ import { dbOps } from "../config/db-helpers.js";
 import { websocketService } from "../services/websocketService.js";
 import { noCache } from "../middleware/cache.js";
 import { requireAuth } from "../middleware/requirePermission.js";
+import { getImageProxyCacheSizeBytes } from "../services/imageProxyService.js";
 import {
   DISCOVERY_PROVIDER_LASTFM,
   DISCOVERY_PROVIDER_LISTENBRAINZ_FALLBACK,
@@ -115,6 +116,7 @@ router.get("/", noCache, async (req, res) => {
         recommendationsCount: discoveryCache?.recommendations?.length || 0,
         globalTopCount: discoveryCache?.globalTop?.length || 0,
         cachedImagesCount: dbOps.countImages(),
+        cachedImagesSizeBytes: getImageProxyCacheSizeBytes(),
       };
       payload.websocket = {
         clients: wsStats.totalClients,

@@ -97,6 +97,16 @@ const DEFAULT_DISCOVER_SECTIONS = [
   { id: "topTags", label: "Explore by Tag", enabled: true },
 ];
 
+const FALLBACK_GENRE_SECTION_PREFIX = "fallbackGenre:";
+
+const getFallbackGenreSectionId = (genre) =>
+  `${FALLBACK_GENRE_SECTION_PREFIX}${String(genre || "").trim()}`;
+
+const getFallbackGenreFromSectionId = (id) =>
+  String(id || "").startsWith(FALLBACK_GENRE_SECTION_PREFIX)
+    ? String(id).slice(FALLBACK_GENRE_SECTION_PREFIX.length)
+    : null;
+
 const DISCOVER_NEARBY_MODE_KEY = "discoverNearbyMode";
 const DISCOVER_NEARBY_ZIP_KEY = "discoverNearbyZip";
 const DISCOVER_SHELF_CARD_CLASS =
@@ -197,14 +207,29 @@ const normalizeDiscoverLayout = (value) => {
   const defaultsById = new Map(
     DEFAULT_DISCOVER_SECTIONS.map((item) => [item.id, item]),
   );
+  const seenDynamicIds = new Set();
   const normalized = [];
   value.forEach((item) => {
     const id = String(item?.id || "").trim();
-    if (!id || !defaultsById.has(id)) return;
+    if (!id) return;
+    const enabled =
+      typeof item?.enabled === "boolean" ? item.enabled : undefined;
+    const fallbackGenre = getFallbackGenreFromSectionId(id);
+    if (fallbackGenre) {
+      if (seenDynamicIds.has(id)) return;
+      seenDynamicIds.add(id);
+      normalized.push({
+        id,
+        label: `Top ${fallbackGenre} Artists`,
+        enabled: enabled ?? true,
+      });
+      return;
+    }
+    if (!defaultsById.has(id)) return;
     const base = defaultsById.get(id);
     normalized.push({
       ...base,
-      enabled: typeof item?.enabled === "boolean" ? item.enabled : base.enabled,
+      enabled: enabled ?? base.enabled,
     });
     defaultsById.delete(id);
   });
@@ -1601,6 +1626,80 @@ function DiscoverPage() {
     ],
   );
 
+  const fallbackGenreSections = useMemo(
+    () =>
+      isListenBrainzFallback
+        ? genreSections.map((section) => ({
+            id: getFallbackGenreSectionId(section.genre),
+            label: `Top ${section.genre} Artists`,
+            enabled: true,
+          }))
+        : [],
+    [genreSections, isListenBrainzFallback],
+  );
+
+  const displayDiscoverSections = useMemo(() => {
+    const sectionsById = new Map(discoverSections.map((item) => [item.id, item]));
+    if (!isListenBrainzFallback) {
+      return discoverSections.filter(
+        (item) => !getFallbackGenreFromSectionId(item.id),
+      );
+    }
+
+    const dynamicGenresById = new Map(
+      fallbackGenreSections.map((section) => [section.id, section]),
+    );
+    const nextSections = [];
+    const seenGenreIds = new Set();
+    let lastGenreIndex = -1;
+
+    for (const item of discoverSections) {
+      if (
+        item.id === "recommended" ||
+        item.id === "recommendedShows" ||
+        item.id === "genreSections"
+      ) {
+        continue;
+      }
+
+      const fallbackGenre = getFallbackGenreFromSectionId(item.id);
+      if (fallbackGenre) {
+        const dynamicSection = dynamicGenresById.get(item.id);
+        if (!dynamicSection || seenGenreIds.has(item.id)) continue;
+        seenGenreIds.add(item.id);
+        lastGenreIndex = nextSections.length;
+        nextSections.push({
+          ...dynamicSection,
+          enabled: item.enabled,
+        });
+        continue;
+      }
+
+      nextSections.push(item);
+    }
+
+    const missingGenreSections = fallbackGenreSections
+      .filter((section) => !seenGenreIds.has(section.id))
+      .map((section) => ({
+        ...section,
+        enabled:
+          sectionsById.get("genreSections")?.enabled ??
+          sectionsById.get(section.id)?.enabled ??
+          section.enabled,
+      }));
+
+    const insertionIndex =
+      lastGenreIndex >= 0
+        ? lastGenreIndex + 1
+        : nextSections.findIndex((item) => item.id === "topTags");
+    nextSections.splice(
+      insertionIndex === -1 ? nextSections.length : insertionIndex,
+      0,
+      ...missingGenreSections,
+    );
+    return nextSections;
+  }, [discoverSections, fallbackGenreSections, isListenBrainzFallback]);
+
   const heroBasedOn = useMemo(() => {
     if (basedOn && basedOn.length > 0) return basedOn;
     const seen = new Set();
@@ -1665,7 +1764,7 @@ function DiscoverPage() {
   }, [discoverArtistIdsKey]);
 
   const openDiscoverModal = () => {
-    setDraftSections(discoverSections.map((item) => ({ ...item })));
+    setDraftSections(displayDiscoverSections.map((item) => ({ ...item })));
     setShowDiscoverModal(true);
   };
 
@@ -1702,7 +1801,12 @@ function DiscoverPage() {
   };
 
   const handleDiscoverReset = () => {
-    setDraftSections(DEFAULT_DISCOVER_SECTIONS.map((item) => ({ ...item })));
+    setDraftSections(
+      (isListenBrainzFallback
+        ? displayDiscoverSections.map((item) => ({ ...item, enabled: true }))
+        : DEFAULT_DISCOVER_SECTIONS.map((item) => ({ ...item }))
+      ),
+    );
   };
 
   const handleToggleSection = useCallback(
@@ -1864,11 +1968,58 @@ function DiscoverPage() {
     [showError, showSuccess],
   );
 
-  const orderedSectionIds = discoverSections
+  const orderedSectionIds = displayDiscoverSections
     .filter((item) => item.enabled)
     .map((item) => item.id);
 
   const renderSection = (id) => {
+    const fallbackGenre = getFallbackGenreFromSectionId(id);
+    if (fallbackGenre) {
+      const section = genreSections.find((item) => item.genre === fallbackGenre);
+      if (!section || section.artists.length === 0) return null;
+      return (
+        <DiscoverRail
+          key={id}
+          title={`Top ${section.genre} Artists`}
+          mobileTitle={section.genre}
+          onViewAll={() =>
+            navigate(
+              `/search?q=${encodeURIComponent(`#${section.genre}`)}&type=tag`,
+            )
+          }
+        >
+          <>
+            {section.artists.slice(0, 6).map((artist) => (
+              <div
+                key={`${section.genre}-${artist.id}`}
+                className={DISCOVER_SHELF_CARD_CLASS}
+              >
+                <ArtistCard
+                  artist={artist}
+                  isInLibrary={!!libraryLookup[getArtistId(artist)]}
+                  isBlocked={isArtistInEntries(artist, blockedArtists)}
+                  canAddArtist={canAddArtist}
+                  onNavigate={navigate}
+                  onAddToLibrary={handleAddArtistToLibrary}
+                  onAddToBlocklist={handleAddArtistToBlocklist}
+                  onFeedback={handleDiscoveryFeedback}
+                />
+              </div>
+            ))}
+            <div className={DISCOVER_SHELF_CARD_CLASS}>
+              <ViewAllCard
+                onClick={() =>
+                  navigate(
+                    `/search?q=${encodeURIComponent(`#${section.genre}`)}&type=tag`,
+                  )
+                }
+              />
+            </div>
+          </>
+        </DiscoverRail>
+      );
+    }
+
     if (id === "recentlyAdded") {
       if (!sectionAvailability.recentlyAdded) return null;
       return (
@@ -2218,7 +2369,7 @@ function DiscoverPage() {
               key={section.genre}
               title={
                 section.fallback
-                  ? `${section.genre} Artists`
+                  ? `Top ${section.genre} Artists`
                   : `Because You Like ${section.genre}`
               }
               mobileTitle={section.genre}
@@ -2591,7 +2742,8 @@ function DiscoverPage() {
                     >
                       {item.label}
                     </span>
-                    {!sectionAvailability[item.id] && (
+                    {!getFallbackGenreFromSectionId(item.id) &&
+                      !sectionAvailability[item.id] && (
                       <span className="text-xs" style={{ color: "#8a8a8f" }}>
                         Not enough data yet
                       </span>
