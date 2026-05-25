@@ -9,6 +9,7 @@ import {
   FileMusic,
   Loader,
   Music,
+  Star,
 } from "lucide-react";
 import {
   addArtistToLibrary,
@@ -161,7 +162,7 @@ function SearchResultsPage() {
   const albumSort = searchParams.get("sort") || DEFAULT_ALBUM_SORT;
   const showAllTagResults = isTagSearch && effectiveTagScope === "all";
   const supportsDiscoveryFeedback =
-    normalizedType === "recommended" || (isTagSearch && !showAllTagResults);
+    normalizedType === "recommended" || isTagSearch;
   const canAddArtist = hasPermission("addArtist");
   const canAddAlbum = hasPermission("addAlbum");
   const hasActiveReleaseTypeFilters = useMemo(() => {
@@ -823,9 +824,7 @@ function SearchResultsPage() {
       : isAlbumSearch
         ? `We couldn't find any albums matching "${trimmedQuery}"`
         : isTagSearch
-          ? `We couldn't find any ${
-              showAllTagResults ? "artists" : "recommended artists"
-            } for tag "${trimmedQuery.replace(/^#/, "")}"`
+          ? `We couldn't find any artists for tag "${trimmedQuery.replace(/^#/, "")}"`
           : `We couldn't find any artists matching "${trimmedQuery}"`;
 
   return (
@@ -872,6 +871,25 @@ function SearchResultsPage() {
           )}
         </div>
 
+        {isTagSearch && lastfmConfigured === false && (
+          <div className="mt-4 bg-yellow-500/20 p-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-sm text-yellow-300">
+                Tag results are currently limited to the hydrated discovery
+                cache. Add a Last.fm API key to pull broader top-artist matches
+                for this tag.
+              </p>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => navigate("/settings")}
+              >
+                Open Settings
+              </button>
+            </div>
+          </div>
+        )}
+
         {normalizedType === "recommended" && (
           <p style={{ color: "#c1c1c3" }}>
             {results.length} artist{results.length !== 1 ? "s" : ""} we think
@@ -882,9 +900,23 @@ function SearchResultsPage() {
           <p style={{ color: "#c1c1c3" }}>Trending artists right now</p>
         )}
         {isTagSearch && trimmedQuery && (
-          <p style={{ color: "#c1c1c3" }}>
-            {`${lastfmConfigured === false || showAllTagResults ? "Top artists" : "Recommended artists"} for tag "${trimmedQuery.replace(/^#/, "")}"`}
-          </p>
+          <div
+            className="flex flex-wrap items-center gap-x-3 gap-y-2"
+            style={{ color: "#c1c1c3" }}
+          >
+            <p>
+              {`${lastfmConfigured === false || showAllTagResults ? "Top artists" : "Recommended artists"} for tag "${trimmedQuery.replace(/^#/, "")}"`}
+            </p>
+            {showAllTagResults && (
+            <div className="ml-auto flex items-center gap-1.5 text-sm">
+              <Star
+                className="h-3.5 w-3.5"
+                style={{ color: "#f4c430", fill: "#f4c430" }}
+              />
+              <span>= recommended</span>
+            </div>
+            )}
+          </div>
         )}
         {isAlbumSearch && trimmedQuery && (
           <div className="space-y-3">
@@ -1108,15 +1140,6 @@ function SearchResultsPage() {
                 No Results Found
               </h3>
               <p style={{ color: "#c1c1c3" }}>{emptyMessage}</p>
-              {isTagSearch && !showAllTagResults && (
-                <button
-                  type="button"
-                  className="btn btn-primary mt-6"
-                  onClick={() => updateTagScope("all")}
-                >
-                  Try searching all
-                </button>
-              )}
             </div>
           ) : (
             <>
