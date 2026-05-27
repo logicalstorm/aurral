@@ -9,7 +9,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const IMAGE_PROXY_ROUTE = "/api/image-proxy";
-const IMAGE_PROXY_DIR = path.join(__dirname, "..", "data", "image-proxy");
+const DEFAULT_DATA_DIR = path.join(__dirname, "..", "data");
+const DATA_DIR = process.env.AURRAL_DATA_DIR
+  ? path.resolve(process.env.AURRAL_DATA_DIR)
+  : DEFAULT_DATA_DIR;
+const IMAGE_PROXY_DIR = path.join(DATA_DIR, "image-proxy");
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 25000;
 const OPTIMIZED_IMAGE_MAX_BYTES = 1024 * 1024;
@@ -101,6 +105,21 @@ export const clearImageProxyCache = () => {
   cacheKeysBySourceUrl.clear();
   inflightRequests.clear();
   cacheIndexInitialized = false;
+};
+
+export const getImageProxyCacheSizeBytes = () => {
+  ensureCacheDir();
+
+  let total = 0;
+  for (const file of fs.readdirSync(IMAGE_PROXY_DIR)) {
+    try {
+      const stat = fs.statSync(path.join(IMAGE_PROXY_DIR, file));
+      if (stat.isFile()) {
+        total += stat.size;
+      }
+    } catch {}
+  }
+  return total;
 };
 
 const isPrivateHostname = (hostname) => {
