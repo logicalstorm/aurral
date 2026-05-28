@@ -15,6 +15,34 @@ const pendingImageRequests = new Map();
 const LEGACY_COVER_HOST_PATTERN =
   /https?:\/\/(?:caa\.lkly\.net|coverartarchive\.org|archive\.org|[\w-]+\.ca\.archive\.org)\//i;
 
+const ARTIST_IMAGE_KIND_RANK = {
+  poster: 0,
+  artist: 1,
+  thumb: 2,
+  fanart: 3,
+  background: 4,
+  banner: 8,
+  logo: 9,
+  clearlogo: 9,
+};
+
+const getArtistImageKindRank = (image) => {
+  const kind = String(image?.kind || image?.CoverType || "").trim().toLowerCase();
+  return ARTIST_IMAGE_KIND_RANK[kind] ?? 5;
+};
+
+export const selectBestArtistImage = (images = []) => {
+  if (!Array.isArray(images)) return null;
+  return images
+    .filter((image) => image?.url)
+    .map((image, index) => ({ image, index }))
+    .sort((a, b) => {
+      const rankDiff = getArtistImageKindRank(a.image) - getArtistImageKindRank(b.image);
+      if (rankDiff !== 0) return rankDiff;
+      return a.index - b.index;
+    })[0]?.image || null;
+};
+
 const addToNegativeCache = (mbid) => {
   if (negativeImageCache.size >= MAX_NEGATIVE_CACHE) {
     const firstKey = negativeImageCache.keys().next().value;
@@ -170,9 +198,7 @@ export const getArtistImage = async (
       const override = dbOps.getArtistOverride(mbid);
       const resolvedMbid = override?.musicbrainzId || mbid;
       const metadataArtist = await getArtistByMbid(resolvedMbid).catch(() => null);
-      const directArtistImage = Array.isArray(metadataArtist?.images)
-        ? metadataArtist.images.find((image) => image?.url)
-        : null;
+      const directArtistImage = selectBestArtistImage(metadataArtist?.images);
 
       if (directArtistImage?.url) {
         const cachedImage = await warmImageProxy(directArtistImage.url);
