@@ -2,6 +2,7 @@ import NodeCache from "node-cache";
 import { getDiscoveryCache } from "./discoveryService.js";
 import { getLastfmApiKey, lastfmRequest } from "./apiClients.js";
 import { buildImageProxyUrl } from "./imageProxyService.js";
+import { selectBestArtistImage } from "./imageService.js";
 import { lidarrClient } from "./lidarrClient.js";
 import {
   searchAlbums as providerSearchAlbums,
@@ -111,13 +112,14 @@ export function normalizeAlbumSearchSort(value) {
 }
 
 function normalizeArtistItem(item) {
+  const image = selectBestArtistImage(item.images);
   return {
     type: "artist",
     id: item.id,
     name: item.name,
     sortName: item.sortName || item.name,
-    image: item.images?.[0]?.url || null,
-    imageUrl: item.images?.[0]?.url || null,
+    image: image?.url || null,
+    imageUrl: image?.url || null,
     artistType: item.type || null,
     country: null,
     area: null,
