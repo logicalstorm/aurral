@@ -21,6 +21,7 @@ import {
   resolveAlbumByArtistAndTitle,
   resolveArtistByName as resolveMetadataArtistByName,
 } from "./metadataProvider.js";
+import { selectBestAlbumImage } from "./imageService.js";
 
 const mbCache = new NodeCache({ stdTTL: 300, checkperiod: 60, maxKeys: 500 });
 const lastfmCache = new NodeCache({
@@ -539,7 +540,7 @@ export async function fetchCoverArtArchiveReleaseGroup(releaseGroupMbid) {
   if (!releaseGroupMbid) return null;
   try {
     const album = await getMetadataAlbumByMbid(releaseGroupMbid);
-    const image = Array.isArray(album?.images) ? album.images[0] : null;
+    const image = selectBestAlbumImage(album?.images);
     if (image?.url) {
       return {
         imageUrl: image.url,
