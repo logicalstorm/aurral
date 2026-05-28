@@ -23,6 +23,7 @@ import {
   toNormalizedArtist,
   toNormalizedArtistAlbum,
 } from "./brainzmashMappers.js";
+import { selectBestAlbumImage } from "../imageService.js";
 
 const providerCache = new NodeCache({
   stdTTL: 300,
@@ -216,6 +217,7 @@ export async function searchAlbums(
     items = source.map((entry, index) => {
       const artists = Array.isArray(entry?.artists) ? entry.artists : [];
       const primaryArtist = artists[0] ? toNormalizedArtist(artists[0]) : null;
+      const coverImage = selectBestAlbumImage(entry?.images);
       return {
         id: entry?.id,
         title: entry?.title || "Untitled Release",
@@ -224,10 +226,7 @@ export async function searchAlbums(
         type: entry?.type || "Album",
         secondaryTypes: Array.isArray(entry?.secondarytypes) ? entry.secondarytypes : [],
         releaseDate: entry?.releasedate || null,
-        coverUrl:
-          Array.isArray(entry?.images) && entry.images[0]?.Url
-            ? String(entry.images[0].Url).trim()
-            : null,
+        coverUrl: coverImage?.Url ? String(coverImage.Url).trim() : null,
         images: Array.isArray(entry?.images) ? entry.images : [],
         inLibrary: false,
         score: Math.max(0, 100 - index),
