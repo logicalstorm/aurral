@@ -26,21 +26,49 @@ const ARTIST_IMAGE_KIND_RANK = {
   clearlogo: 9,
 };
 
+const ALBUM_IMAGE_KIND_RANK = {
+  front: 0,
+  cover: 0,
+  albumcover: 0,
+  back: 4,
+  booklet: 5,
+  medium: 6,
+  tray: 6,
+  spine: 7,
+  disc: 8,
+  logo: 9,
+};
+
 const getArtistImageKindRank = (image) => {
   const kind = String(image?.kind || image?.CoverType || "").trim().toLowerCase();
   return ARTIST_IMAGE_KIND_RANK[kind] ?? 5;
 };
 
-export const selectBestArtistImage = (images = []) => {
+const getAlbumImageKindRank = (image) => {
+  const kind = String(image?.kind || image?.CoverType || "").trim().toLowerCase();
+  return ALBUM_IMAGE_KIND_RANK[kind] ?? 3;
+};
+
+const getImageUrl = (image) => image?.url || image?.Url || null;
+
+const selectBestImageByKind = (images = [], getKindRank) => {
   if (!Array.isArray(images)) return null;
   return images
-    .filter((image) => image?.url)
+    .filter((image) => getImageUrl(image))
     .map((image, index) => ({ image, index }))
     .sort((a, b) => {
-      const rankDiff = getArtistImageKindRank(a.image) - getArtistImageKindRank(b.image);
+      const rankDiff = getKindRank(a.image) - getKindRank(b.image);
       if (rankDiff !== 0) return rankDiff;
       return a.index - b.index;
     })[0]?.image || null;
+};
+
+export const selectBestArtistImage = (images = []) => {
+  return selectBestImageByKind(images, getArtistImageKindRank);
+};
+
+export const selectBestAlbumImage = (images = []) => {
+  return selectBestImageByKind(images, getAlbumImageKindRank);
 };
 
 const addToNegativeCache = (mbid) => {
@@ -101,7 +129,7 @@ export const fetchReleaseGroupCoverUrl = async (
   }
   try {
     const album = await getAlbumByMbid(releaseGroupMbid);
-    const image = Array.isArray(album?.images) ? album.images[0] : null;
+    const image = selectBestAlbumImage(album?.images);
     if (image?.url) {
       const cachedImage = await warmImageProxy(image.url);
       dbOps.setImage(cacheKey, cachedImage.localUrl);

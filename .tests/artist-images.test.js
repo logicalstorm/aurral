@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { selectBestArtistImage } from "../backend/services/imageService.js";
+import {
+  selectBestAlbumImage,
+  selectBestArtistImage,
+} from "../backend/services/imageService.js";
 
 test("artist image selection prefers poster art over banners for square displays", () => {
   const selected = selectBestArtistImage([
@@ -36,4 +39,22 @@ test("artist image selection keeps source order when image types tie", () => {
   ]);
 
   assert.equal(selected?.url, "https://example.test/first.jpg");
+});
+
+test("album image selection prefers cover art over disc art", () => {
+  const selected = selectBestAlbumImage([
+    { kind: "Disc", url: "https://example.test/disc.png" },
+    { kind: "Cover", url: "https://example.test/cover.jpg" },
+  ]);
+
+  assert.equal(selected?.url, "https://example.test/cover.jpg");
+});
+
+test("album image selection accepts raw BrainzMash image casing", () => {
+  const selected = selectBestAlbumImage([
+    { CoverType: "Disc", Url: "https://example.test/disc.png" },
+    { CoverType: "Cover", Url: "https://example.test/cover.jpg" },
+  ]);
+
+  assert.equal(selected?.Url, "https://example.test/cover.jpg");
 });
