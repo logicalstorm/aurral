@@ -2,6 +2,7 @@ import { UUID_REGEX } from "../../../config/constants.js";
 import { dbOps } from "../../../config/db-helpers.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
 import { warmImageProxy } from "../../../services/imageProxyService.js";
+import { selectBestAlbumImage } from "../../../services/imageService.js";
 import {
   getAlbumByMbid,
   getAlbumTracksByAlbumMbid,
@@ -67,7 +68,7 @@ export default function registerReleaseGroup(router) {
 
       try {
         const album = await getAlbumByMbid(mbid);
-        const image = Array.isArray(album?.images) ? album.images[0] : null;
+        const image = selectBestAlbumImage(album?.images);
         if (image?.url) {
           const cachedImage = await warmImageProxy(image.url);
           dbOps.setImage(cacheKey, cachedImage.localUrl);
