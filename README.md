@@ -5,7 +5,7 @@
 # Aurral
 
 [![Docker](https://img.shields.io/badge/docker-ghcr.io%2Flklynet%2Faurral-blue?logo=docker&logoColor=white)](https://ghcr.io/lklynet/aurral) ![GitHub Release](https://img.shields.io/github/v/release/lklynet/aurral) ![GitHub License](https://img.shields.io/github/license/lklynet/aurral)
-[![Build](https://img.shields.io/github/actions/workflow/status/lklynet/aurral/release.yml?branch=main)](https://github.com/lklynet/aurral/actions/workflows/release.yml) ![Discord](https://img.shields.io/discord/1457052417580339285?style=flat) [![Discussions](https://img.shields.io/github/discussions/lklynet/aurral)](https://github.com/lklynet/aurral/discussions) ![GitHub Sponsors](https://img.shields.io/github/sponsors/lklynet)
+[![Build](https://img.shields.io/github/actions/workflow/status/lklynet/aurral/release.yml?branch=main)](https://github.com/lklynet/aurral/actions/workflows/release.yml) ![Discord](https://img.shields.io/discord/1457052417580339285?style=flat)
 
 Self-hosted music discovery, request management, flows, and playlist importing for Lidarr with library-aware recommendations and Navidrome integration.
 
@@ -262,6 +262,7 @@ Most configuration is handled in the web UI, but these environment variables are
 | `PORT` | HTTP port | `3001` |
 | `TRUST_PROXY` | Express trust proxy setting (`true`, `false`, or number) | `1` |
 | `DOWNLOAD_FOLDER` | Flow root folder path used for Navidrome library creation | `${DL_FOLDER:-./data/downloads}` in the compose example |
+| `AURRAL_VERBOSE_LOGS` | Print full diagnostic console logs from the server when set to `true` | unset |
 | `PUID` / `PGID` | Run container as this UID and GID when starting as root | `1001` / `1001` |
 | `LIDARR_INSECURE` | Allow invalid TLS certificates | unset |
 | `LIDARR_TIMEOUT_MS` | Lidarr request timeout | `8000` |
@@ -302,6 +303,7 @@ Event triggers such as Discover updated and Weekly Flow done apply to all config
 <summary><strong>Troubleshooting</strong></summary>
 
 - Lidarr connection fails: confirm the Lidarr URL is reachable and the API key is correct in `Settings -> Integrations -> Lidarr`
+- Need detailed server logs: set `AURRAL_VERBOSE_LOGS=true` and restart Aurral
 - Discovery looks empty: add artists to Lidarr and configure Last.fm, then give the first recommendation refresh a little time
 - MusicBrainz is slow: MusicBrainz is rate-limited and first runs can take longer
 - Flows do not show in Navidrome: verify `DOWNLOAD_FOLDER` matches your host path mapping and Navidrome purge settings
