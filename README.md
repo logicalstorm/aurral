@@ -44,8 +44,12 @@ It is built for people who love discovering music and want that discovery loop t
 </p>
 
 <p align="center">
-  <img src="frontend/images/recommended.webp" width="440" alt="Aurral recommendations" />
+  <img src="frontend/images/discover2.webp" width="440" alt="Aurral personalized discovery recommendations" />
   <img src="frontend/images/artist.webp" width="440" alt="Aurral artist details" />
+</p>
+
+<p align="center">
+  <img src="frontend/images/flows.webp" width="900" alt="Aurral flows and playlists" />
 </p>
 
 ## Recommended Stack
