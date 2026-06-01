@@ -76,7 +76,9 @@
 
     <main class="guide-container">
       <header class="guide-hero">
-        <p class="guide-kicker">Self-hosted music, without the library sprawl</p>
+        <p class="guide-kicker">
+          Self-hosted music, without the library sprawl
+        </p>
         <h1>A practical guide to self-hosting music</h1>
         <p>
           A friendly starting point for homelabbers and developers who want a
@@ -137,7 +139,9 @@
                 <img src="icons/lidarr.svg" alt="" />
                 <div>
                   <h3>Lidarr nightly</h3>
-                  <p>Artists, albums, metadata, imports, and plugin downloads.</p>
+                  <p>
+                    Artists, albums, metadata, imports, and plugin downloads.
+                  </p>
                 </div>
               </article>
               <article class="guide-stack-item">
@@ -154,14 +158,18 @@
                 <img src="icons/navidrome.svg" alt="" />
                 <div>
                   <h3>Navidrome</h3>
-                  <p>Main library and Aurral-generated playback over Subsonic.</p>
+                  <p>
+                    Main library and Aurral-generated playback over Subsonic.
+                  </p>
                 </div>
               </article>
               <article class="guide-stack-item">
-                <span class="guide-text-mark">sl</span>
+                <img src="icons/slskd.svg" alt="" />
                 <div>
                   <h3>Tubifarry and slskd</h3>
-                  <p>Lidarr nightly search and downloads through Soulseek/slskd.</p>
+                  <p>
+                    Lidarr nightly search and downloads through Soulseek/slskd.
+                  </p>
                 </div>
               </article>
               <article class="guide-stack-item">
@@ -172,10 +180,12 @@
                 </div>
               </article>
               <article class="guide-stack-item">
-                <span class="guide-text-mark">ts</span>
+                <img src="icons/tailscale.svg" alt="" />
                 <div>
                   <h3>Tailscale</h3>
-                  <p>Private access without putting admin tools on the internet.</p>
+                  <p>
+                    Private access without putting admin tools on the internet.
+                  </p>
                 </div>
               </article>
             </div>
@@ -223,7 +233,9 @@
                 <tbody>
                   <tr>
                     <td>Artist monitoring</td>
-                    <td>Enable when you want the artist in your library graph.</td>
+                    <td>
+                      Enable when you want the artist in your library graph.
+                    </td>
                   </tr>
                   <tr>
                     <td>Album monitoring</td>
@@ -231,7 +243,9 @@
                   </tr>
                   <tr>
                     <td>Search on add</td>
-                    <td>Search for albums you know you want, not every artist.</td>
+                    <td>
+                      Search for albums you know you want, not every artist.
+                    </td>
                   </tr>
                   <tr>
                     <td>Tags</td>
@@ -274,9 +288,13 @@
                 from its GitHub plugin URL.
               </li>
               <li>Run slskd as the Soulseek client.</li>
-              <li>Add slskd in Lidarr as both an indexer and download client.</li>
+              <li>
+                Add slskd in Lidarr as both an indexer and download client.
+              </li>
               <li>Align download paths or configure remote path mapping.</li>
-              <li>Keep Aurral flow downloads separate from Lidarr album downloads.</li>
+              <li>
+                Keep Aurral flow downloads separate from Lidarr album downloads.
+              </li>
             </ol>
 
             <div class="guide-note">
@@ -303,17 +321,25 @@
                 <h3>Use Aurral for</h3>
                 <ul>
                   <li>Discovering related artists.</li>
-                  <li>Searching artists and albums before sending them to Lidarr.</li>
+                  <li>
+                    Searching artists and albums before sending them to Lidarr.
+                  </li>
                   <li>Building scheduled flows that rotate and stay fresh.</li>
-                  <li>Importing outside playlists into a self-hosted format.</li>
-                  <li>Publishing generated libraries and playlists to Navidrome.</li>
+                  <li>
+                    Importing outside playlists into a self-hosted format.
+                  </li>
+                  <li>
+                    Publishing generated libraries and playlists to Navidrome.
+                  </li>
                 </ul>
               </div>
               <div>
                 <h3>Use Lidarr for</h3>
                 <ul>
                   <li>Long-term artist and album state.</li>
-                  <li>Metadata, quality profiles, root folders, and imports.</li>
+                  <li>
+                    Metadata, quality profiles, root folders, and imports.
+                  </li>
                   <li>Album searches for releases you want to keep.</li>
                 </ul>
               </div>
@@ -345,7 +371,9 @@
               </article>
               <article>
                 <h3>Library Adjacent</h3>
-                <p>Related picks connected to artists already in your library.</p>
+                <p>
+                  Related picks connected to artists already in your library.
+                </p>
               </article>
               <article>
                 <h3>Deep Cuts</h3>
@@ -426,7 +454,9 @@
               </article>
               <article>
                 <h3>Copy</h3>
-                <p>Useful for cross-disk or permission-constrained deployments.</p>
+                <p>
+                  Useful for cross-disk or permission-constrained deployments.
+                </p>
               </article>
             </div>
           </section>
@@ -442,7 +472,10 @@
             <p>
               For Aurral discovery on iOS, use the beta Aurral iOS app. Users
               can get into testing through the
-              <a href="https://discord.gg/cpPYfgVURJ" target="_blank" rel="noopener noreferrer"
+              <a
+                href="https://discord.gg/cpPYfgVURJ"
+                target="_blank"
+                rel="noopener noreferrer"
                 >Aurral Discord</a
               >.
             </p>
@@ -459,9 +492,9 @@
           <section id="maintenance" class="guide-section">
             <h2>Maintenance rhythm</h2>
             <p>
-              A self-hosted music setup stays healthy when the routine is
-              light. The goal is a smaller, better library with a discovery
-              system around it.
+              A self-hosted music setup stays healthy when the routine is light.
+              The goal is a smaller, better library with a discovery system
+              around it.
             </p>
 
             <div class="guide-split">
@@ -501,8 +534,18 @@
         <a href="docs.html">Docs</a>
         <a href="flows-and-playlists.html">Flows</a>
         <a href="aurral-convert.html">Spotify Import</a>
-        <a href="https://github.com/lklynet/aurral" target="_blank" rel="noopener noreferrer">GitHub</a>
-        <a href="https://discord.gg/cpPYfgVURJ" target="_blank" rel="noopener noreferrer">Discord</a>
+        <a
+          href="https://github.com/lklynet/aurral"
+          target="_blank"
+          rel="noopener noreferrer"
+          >GitHub</a
+        >
+        <a
+          href="https://discord.gg/cpPYfgVURJ"
+          target="_blank"
+          rel="noopener noreferrer"
+          >Discord</a
+        >
       </div>
     </footer>
 
