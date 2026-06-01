@@ -52,14 +52,14 @@ It is built for people who love discovering music and want that discovery loop t
 
 Aurral only needs Lidarr to get started, but it shines with a fuller music stack:
 
-| App or service | What it unlocks |
-|---|---|
-| Lidarr | Library management, artist and album adds, queue/history status, monitoring, and imports. |
-| Last.fm | Personalized recommendations, artist similarity, tags, genre search, and richer flows. |
-| ListenBrainz | Optional listening-history source for users. |
-| Soulseek | Downloads for flows and imported playlists. |
-| Navidrome | Streaming and a separate Aurral flow library. |
-| Ticketmaster | Local shows from artists Aurral thinks you may care about. |
+| App or service | What it unlocks                                                                           |
+| -------------- | ----------------------------------------------------------------------------------------- |
+| Lidarr         | Library management, artist and album adds, queue/history status, monitoring, and imports. |
+| Last.fm        | Personalized recommendations, artist similarity, tags, genre search, and richer flows.    |
+| ListenBrainz   | Optional listening-history source for users.                                              |
+| Soulseek       | Downloads for flows and imported playlists.                                               |
+| Navidrome      | Streaming and a separate Aurral flow library.                                             |
+| Ticketmaster   | Local shows from artists Aurral thinks you may care about.                                |
 
 Last.fm is recommended, not required. Without it, Aurral still has fallback discovery, but personalized recommendations and tag exploration are much stronger with a Last.fm API key.
 
@@ -135,11 +135,11 @@ Discovery is library-aware: Aurral tries to recommend artists you do not already
 
 Discovery modes:
 
-| Mode | Best for |
-|---|---|
-| Safer | Familiar, high-confidence recommendations. |
-| Balanced | A mix of familiar picks and exploration. |
-| Deeper | More adventurous recommendations. |
+| Mode     | Best for                                   |
+| -------- | ------------------------------------------ |
+| Safer    | Familiar, high-confidence recommendations. |
+| Balanced | A mix of familiar picks and exploration.   |
+| Deeper   | More adventurous recommendations.          |
 
 ### Search And Artist Pages
 
@@ -193,12 +193,12 @@ Each flow can control:
 
 Flow sources:
 
-| Source | What it uses |
-|---|---|
+| Source   | What it uses                                       |
+| -------- | -------------------------------------------------- |
 | Discover | Aurral recommendations, excluding library artists. |
-| Library | Artists already in your library. |
+| Library  | Artists already in your library.                   |
 | Trending | Broader trending pools, excluding library artists. |
-| Focus | Tags and related artists you choose. |
+| Focus    | Tags and related artists you choose.               |
 
 ### Imported Playlists
 
@@ -238,11 +238,11 @@ Aurral can avoid redownloading tracks it already has or tracks Lidarr already ha
 
 Worker setting:
 
-| Mode | Meaning |
-|---|---|
-| Download | Always download a fresh copy into the Aurral flow library. |
+| Mode     | Meaning                                                                       |
+| -------- | ----------------------------------------------------------------------------- |
+| Download | Always download a fresh copy into the Aurral flow library.                    |
 | Hardlink | Reuse a matching Aurral or Lidarr file with a hardlink, falling back to copy. |
-| Copy | Copy a matching Aurral or Lidarr file into the playlist folder. |
+| Copy     | Copy a matching Aurral or Lidarr file into the playlist folder.               |
 
 To reuse Lidarr files, Aurral must see Lidarr's root directory the same way Lidarr sees it. In Lidarr, find this at `Settings -> Media Management -> Root Folders -> Path`. If your Lidarr root folder is `/data`, mount that same host library path into Aurral as `/data`:
 
@@ -287,14 +287,14 @@ npm run auth:reset-admin-password -- --generate
 
 Most setup happens in the web UI. These are the deployment variables regular users are most likely to need:
 
-| Variable | Why you might set it |
-|---|---|
-| `DOWNLOAD_FOLDER` | Host path Navidrome should use for the Aurral flow library. |
-| `PUID` / `PGID` | Run the container as the same user/group that owns your mounted folders. |
-| `TRUST_PROXY` | Set when Aurral is behind a reverse proxy and needs correct client IPs. |
-| `AUTH_PROXY_*` | Use only if your reverse proxy handles login for Aurral. |
-| `SOULSEEK_USERNAME` / `SOULSEEK_PASSWORD` | Optional fixed Soulseek credentials instead of generated/rotated ones. |
-| `AURRAL_VERBOSE_LOGS` | Turn on fuller server logs while troubleshooting. |
+| Variable                                  | Why you might set it                                                     |
+| ----------------------------------------- | ------------------------------------------------------------------------ |
+| `DOWNLOAD_FOLDER`                         | Host path Navidrome should use for the Aurral flow library.              |
+| `PUID` / `PGID`                           | Run the container as the same user/group that owns your mounted folders. |
+| `TRUST_PROXY`                             | Set when Aurral is behind a reverse proxy and needs correct client IPs.  |
+| `AUTH_PROXY_*`                            | Use only if your reverse proxy handles login for Aurral.                 |
+| `SOULSEEK_USERNAME` / `SOULSEEK_PASSWORD` | Optional fixed Soulseek credentials instead of generated/rotated ones.   |
+| `AURRAL_VERBOSE_LOGS`                     | Turn on fuller server logs while troubleshooting.                        |
 
 Example:
 
