@@ -391,7 +391,7 @@ export function reconcileLocalNetworkBypassSetting() {
   };
 }
 
-function resolveProxyUser(req) {
+export function resolveProxyUser(req) {
   if (!isProxyAuthEnabled()) return null;
   if (!isTrustedProxy(req)) return null;
   const headerName = getProxyHeaderName();

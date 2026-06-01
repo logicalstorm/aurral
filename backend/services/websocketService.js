@@ -5,6 +5,7 @@ import {
   isProxyAuthEnabled,
   resolveLocalNetworkBypassUser,
   resolveSessionUserFromToken,
+  resolveProxyUser,
 } from "../middleware/auth.js";
 
 const isAuthRequired = () => {
@@ -45,6 +46,9 @@ class WebSocketService {
       const requestUrl = new URL(req.url || "", "http://localhost");
       const token = requestUrl.searchParams.get("token");
       sessionUser = resolveSessionUserFromToken(token);
+      if (!sessionUser) {
+        sessionUser = resolveProxyUser(req);
+      }
       if (sessionUser) {
         authSource = "session";
       } else {
