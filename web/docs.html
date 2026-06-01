@@ -27,6 +27,7 @@
         Aurral
       </a>
       <div class="nav-links">
+        <a href="self-hosting-music.html">Guide</a>
         <a href="docs.html" class="nav-strong">Docs</a>
         <a href="flows-and-playlists.html">Flows</a>
         <a href="aurral-convert.html">Spotify Import</a>
@@ -86,21 +87,25 @@
         </p>
       </section>
 
-      <section class="doc-toc" aria-label="Guide contents">
-        <a href="#before-you-start">Before You Start</a>
-        <a href="#docker-setup">Docker Setup</a>
-        <a href="#first-run">First Run</a>
-        <a href="#app-sections">App Sections</a>
-        <a href="#discovery">Discovery</a>
-        <a href="#flows">Flows</a>
-        <a href="#playlists">Imported Playlists</a>
-        <a href="#navidrome">Navidrome</a>
-        <a href="#users">Users</a>
-        <a href="#storage">Storage</a>
-        <a href="#troubleshooting">Troubleshooting</a>
-      </section>
+      <div class="guide-layout docs-guide-layout">
+        <aside class="guide-rail" aria-label="Guide contents">
+          <a href="#before-you-start">Before you start</a>
+          <a href="#docker-setup">Docker setup</a>
+          <a href="#first-run">First run</a>
+          <a href="#app-sections">App sections</a>
+          <a href="#discovery">Discovery</a>
+          <a href="#flows">Flows</a>
+          <a href="#playlists">Imported playlists</a>
+          <a href="#navidrome">Navidrome</a>
+          <a href="#file-reuse">File reuse</a>
+          <a href="#users">Users</a>
+          <a href="#storage">Storage</a>
+          <a href="#environment">Environment</a>
+          <a href="#troubleshooting">Troubleshooting</a>
+        </aside>
 
-      <section id="before-you-start" class="content-section">
+        <article class="guide-article">
+          <section id="before-you-start" class="content-section">
         <h2>Before You Start</h2>
         <p>
           You can start Aurral with only Lidarr connected. The other services
@@ -656,27 +661,32 @@ STORAGE=/srv/aurral/data</code></pre>
         </ul>
       </section>
 
-      <section class="content-section">
-        <h2>Special Thanks</h2>
-        <p>
-          Special thanks to the BrainzMash team for the metadata work that
-          helps make Aurral's artist and album discovery feel rich. Their
-          open-source work is available at
-          <a
-            href="https://github.com/statichum/brainzmash-hearring-aid"
-            target="_blank"
-            rel="noopener noreferrer"
-          >statichum/brainzmash-hearring-aid</a>.
-        </p>
-      </section>
+          <section class="content-section">
+            <h2>Special Thanks</h2>
+            <p>
+              Special thanks to the BrainzMash team for the metadata work that
+              helps make Aurral's artist and album discovery feel rich. Their
+              open-source work is available at
+              <a
+                href="https://github.com/statichum/brainzmash-hearring-aid"
+                target="_blank"
+                rel="noopener noreferrer"
+              >statichum/brainzmash-hearring-aid</a>.
+            </p>
+          </section>
+        </article>
+      </div>
     </main>
 
     <footer>
       <p>Aurral is open source software released under the MIT License.</p>
       <div class="footer-links">
+        <a href="self-hosting-music.html">Guide</a>
+        <a href="docs.html">Docs</a>
+        <a href="flows-and-playlists.html">Flows</a>
+        <a href="aurral-convert.html">Spotify Import</a>
         <a href="https://github.com/lklynet/aurral" target="_blank" rel="noopener noreferrer">GitHub</a>
         <a href="https://discord.gg/cpPYfgVURJ" target="_blank" rel="noopener noreferrer">Discord</a>
-        <a href="aurral-convert.html">Spotify Import</a>
       </div>
     </footer>
     <script src="main.js"></script>
