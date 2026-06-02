@@ -25,6 +25,7 @@ export function ArtistDetailsLibraryAlbums({
   reSearchingAlbum,
   reSearchingMissingAlbums,
   albumCovers,
+  artistCoverImage,
   expandedLibraryAlbum,
   albumTracks,
   loadingTracks,
@@ -399,7 +400,7 @@ export function ArtistDetailsLibraryAlbums({
           const isExpanded = expandedLibraryAlbum === rgId;
           const { downloadStatus, isComplete, canReSearch } =
             getAlbumState(libraryAlbum);
-          const coverUrl = albumCovers[rgId];
+          const coverUrl = albumCovers[rgId] || artistCoverImage;
           const hasDownloadedStatus =
             isComplete ||
             downloadStatus?.status === "added" ||
@@ -743,6 +744,7 @@ ArtistDetailsLibraryAlbums.propTypes = {
   reSearchingAlbum: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   reSearchingMissingAlbums: PropTypes.bool,
   albumCovers: PropTypes.object,
+  artistCoverImage: PropTypes.string,
   expandedLibraryAlbum: PropTypes.string,
   albumTracks: PropTypes.object,
   loadingTracks: PropTypes.object,

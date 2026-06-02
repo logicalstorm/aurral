@@ -31,7 +31,7 @@ import {
   getBlocklist,
   updateBlocklist,
 } from "../../utils/api";
-import { buildDownloadTargets } from "./utils";
+import { buildDownloadTargets, getArtistHeroImage } from "./utils";
 
 const MBID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -572,6 +572,8 @@ function ArtistDetailsPage() {
     return null;
   }
 
+  const artistCoverImage = getArtistHeroImage(coverImages);
+
   return (
     <div className="artist-details-page animate-fade-in">
       {previewTracks.length > 0 && <audio ref={previewAudioRef} />}
@@ -635,6 +637,7 @@ function ArtistDetailsPage() {
       <ArtistDetailsDownloadTargets
         targets={downloadTargets}
         albumCovers={albumCovers}
+        artistCoverImage={artistCoverImage}
         canAddAlbum={canAddAlbum}
         requestingAlbum={library.requestingAlbum}
         handleRequestAlbum={library.handleRequestAlbum}
@@ -649,6 +652,7 @@ function ArtistDetailsPage() {
           reSearchingAlbum={library.reSearchingAlbum}
           reSearchingMissingAlbums={library.reSearchingMissingAlbums}
           albumCovers={albumCovers}
+          artistCoverImage={artistCoverImage}
           expandedLibraryAlbum={library.expandedLibraryAlbum}
           albumTracks={library.albumTracks}
           loadingTracks={library.loadingTracks}
@@ -677,6 +681,7 @@ function ArtistDetailsPage() {
           artist={artist}
           loadingReleases={loadingReleases}
           albumCovers={albumCovers}
+          artistCoverImage={artistCoverImage}
           expandedReleaseGroup={library.expandedReleaseGroup}
           albumTracks={library.albumTracks}
           loadingTracks={library.loadingTracks}
