@@ -1113,6 +1113,11 @@ const deezerPreviewMatchCache = new NodeCache({
   checkperiod: 600,
   maxKeys: 2000,
 });
+const youtubeVideoCache = new NodeCache({
+  stdTTL: 24 * 3600,
+  checkperiod: 600,
+  maxKeys: 2000,
+});
 
 function normalizeTitle(title) {
   return String(title || "")
@@ -1762,6 +1767,45 @@ export async function resolveDeezerAlbumToMbid(
   }
 }
 
+export async function youtubeFindTopSongVideo(artistName, trackTitle) {
+  const artist = String(artistName || "").trim();
+  const title = String(trackTitle || "").trim();
+  if (!artist || !title) return null;
+
+  const cacheKey = `${artist.toLowerCase()}\0${title.toLowerCase()}`;
+  const cached = youtubeVideoCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  try {
+    const query = `${artist} ${title} official video`;
+    const response = await axios.get("https://www.youtube.com/results", {
+      params: { search_query: query },
+      timeout: 5000,
+      headers: {
+        "Accept-Language": "en-US,en;q=0.9",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+      },
+    });
+    const matches = [
+      ...String(response.data || "").matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g),
+    ];
+    const videoId = [...new Set(matches.map((match) => match[1]))][0] || null;
+    const result = videoId
+      ? {
+          videoId,
+          embedUrl: `https://www.youtube-nocookie.com/embed/${videoId}`,
+          query,
+        }
+      : null;
+    youtubeVideoCache.set(cacheKey, result);
+    return result;
+  } catch (e) {
+    youtubeVideoCache.set(cacheKey, null, 300);
+    return null;
+  }
+}
+
 export function clearApiCaches() {
   mbCache.flushAll();
   lastfmCache.flushAll();
@@ -1771,4 +1815,5 @@ export function clearApiCaches() {
   musicbrainzReleaseGroupsCache.flushAll();
   deezerAlbumCache.flushAll();
   deezerBioCache.flushAll();
+  youtubeVideoCache.flushAll();
 }
