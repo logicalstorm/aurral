@@ -619,6 +619,8 @@ function ArtistDetailsPage() {
       />
 
       <ArtistDetailsPreviewTracks
+        mbid={mbid}
+        artistName={artist?.name || artistNameFromNav || ""}
         loadingPreview={loadingPreview}
         previewTracks={previewTracks}
         playingPreviewId={playingPreviewId}
@@ -636,11 +638,20 @@ function ArtistDetailsPage() {
 
       <ArtistDetailsDownloadTargets
         targets={downloadTargets}
+        artist={artist}
         albumCovers={albumCovers}
         artistCoverImage={artistCoverImage}
         canAddAlbum={canAddAlbum}
         requestingAlbum={library.requestingAlbum}
         handleRequestAlbum={library.handleRequestAlbum}
+        previewVolume={previewVolume}
+        onAddTrackToPlaylist={handleReleaseTrackAdd}
+        playlists={sharedPlaylists}
+        playlistsLoading={playlistModalLoading}
+        playlistSavingKey={playlistMenuSavingKey}
+        playlistError={playlistModalError}
+        getDefaultPlaylistName={getDefaultTrackPlaylistName}
+        onLoadPlaylists={loadSharedPlaylists}
       />
 
       {existsInLibrary && libraryAlbums && libraryAlbums.length > 0 && (

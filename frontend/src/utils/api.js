@@ -373,6 +373,19 @@ export const getArtistPreview = async (mbid, artistName) => {
   return response.data;
 };
 
+export const getArtistTopSongVideo = async (
+  mbid,
+  artistName,
+  trackTitle,
+  options = {},
+) => {
+  const response = await api.get(`/artists/${mbid}/video`, {
+    params: { artistName, trackTitle },
+    signal: options.signal,
+  });
+  return response.data;
+};
+
 export const getArtistOverrides = async (mbid) => {
   const response = await api.get(`/artists/${mbid}/overrides`);
   return response.data;
