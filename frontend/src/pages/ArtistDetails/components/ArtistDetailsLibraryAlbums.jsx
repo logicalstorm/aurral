@@ -250,10 +250,10 @@ export function ArtistDetailsLibraryAlbums({
   if (downloadedAlbums.length === 0) return null;
 
   return (
-    <div className="mb-6">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold" style={{ color: "#fff" }}>
-          In your library
+    <section className="mb-10">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-2xl font-bold" style={{ color: "#fff" }}>
+          Your Library
         </h2>
         <div className="flex shrink-0 items-center gap-2">
           <div
@@ -362,12 +362,12 @@ export function ArtistDetailsLibraryAlbums({
           return (
             <article
               key={libraryAlbum.id}
-              className="group flex w-[170px] min-w-[170px] flex-shrink-0 flex-col items-center"
+              className="group flex w-[150px] min-w-[150px] flex-shrink-0 flex-col sm:w-[176px] sm:min-w-[176px]"
               data-cover-id={rgId}
             >
               <div
                 onClick={() => handleLibraryAlbumClick(rgId, libraryAlbum.id)}
-                className="relative aspect-square w-full cursor-pointer overflow-hidden rounded-full border border-white/10 shadow-sm transition-all duration-300 group-hover:shadow-md"
+                className="relative aspect-square w-full cursor-pointer overflow-hidden bg-[#101012] shadow-sm transition-all duration-300 group-hover:bg-white/[0.08] group-hover:shadow-md"
                 style={{
                   backgroundColor: "#211f27",
                   boxShadow: isExpanded
@@ -499,10 +499,10 @@ export function ArtistDetailsLibraryAlbums({
                   </div>
                 </div>
 
-                <div className="absolute inset-x-0 bottom-0 p-4">
+                <div className="absolute inset-x-0 bottom-0 p-3">
                   <div className="min-w-0">
                     <h3
-                      className="line-clamp-2 text-center text-base font-semibold leading-tight"
+                      className="line-clamp-2 text-sm font-bold leading-tight"
                       style={{ color: "#fff" }}
                     >
                       {libraryAlbum.albumName}
@@ -514,7 +514,7 @@ export function ArtistDetailsLibraryAlbums({
               <button
                 type="button"
                 onClick={() => handleLibraryAlbumClick(rgId, libraryAlbum.id)}
-                className="mt-3 flex items-center justify-center gap-2 text-center transition-colors hover:text-white"
+                className="mt-2 flex items-center gap-2 text-left transition-colors hover:text-white"
                 style={{ color: isExpanded ? "#fff" : "#c1c1c3" }}
               >
                 {isExpanded ? (
@@ -683,7 +683,7 @@ export function ArtistDetailsLibraryAlbums({
           </div>
         );
       })}
-    </div>
+    </section>
   );
 }
 

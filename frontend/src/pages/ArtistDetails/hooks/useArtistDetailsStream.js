@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   getArtistDetails,
   getArtistCover,
@@ -34,6 +34,8 @@ const normalizeReleaseTypesSelection = (selectedReleaseTypes = []) =>
     ),
   ].sort();
 
+const EMPTY_ARRAY = [];
+
 const isReleaseTypeSelectionCovered = (
   selectedReleaseTypes = [],
   fetchedReleaseTypes = [],
@@ -48,18 +50,33 @@ export function useArtistDetailsStream(
   mbid,
   artistNameFromNav,
   selectedReleaseTypes = [],
-  { visibleCoverIds = [], initialLibraryHint = null } = {},
+  { visibleCoverIds = EMPTY_ARRAY, initialLibraryHint = null } = {},
 ) {
   const initialArtist = buildInitialArtist(mbid, artistNameFromNav);
+  const selectedReleaseTypesKey = normalizeReleaseTypesSelection(
+    selectedReleaseTypes,
+  ).join("\0");
+  const visibleCoverIdsKey = Array.isArray(visibleCoverIds)
+    ? visibleCoverIds.filter(Boolean).join("\0")
+    : "";
+  const initialLibraryExists = initialLibraryHint?.existsInLibrary;
+  const initialLibraryArtist = initialLibraryHint?.libraryArtist || null;
+  const stableInitialLibraryHint = useMemo(
+    () => ({
+      existsInLibrary: initialLibraryExists,
+      libraryArtist: initialLibraryArtist,
+    }),
+    [initialLibraryExists, initialLibraryArtist],
+  );
   const cachedLookupMap = mbid ? readLibraryLookupCache([mbid]) : {};
   const cachedLookup = cachedLookupMap?.[mbid];
   const seededExistsInLibrary =
-    initialLibraryHint?.existsInLibrary === true || cachedLookup === true
+    stableInitialLibraryHint.existsInLibrary === true || cachedLookup === true
       ? true
       : undefined;
   const seededLibraryArtist =
-    seededExistsInLibrary && initialLibraryHint?.libraryArtist
-      ? initialLibraryHint.libraryArtist
+    seededExistsInLibrary && stableInitialLibraryHint.libraryArtist
+      ? stableInitialLibraryHint.libraryArtist
       : null;
 
   const [artist, setArtist] = useState(initialArtist);
@@ -105,7 +122,7 @@ export function useArtistDetailsStream(
 
   useEffect(() => {
     selectedReleaseTypesRef.current = selectedReleaseTypes;
-  }, [selectedReleaseTypes]);
+  }, [selectedReleaseTypes, selectedReleaseTypesKey]);
 
   useEffect(() => {
     if (!mbid) return;
@@ -113,12 +130,13 @@ export function useArtistDetailsStream(
     const isCurrentRequest = () => streamRequestRef.current === requestId;
     const nextCachedLookup = readLibraryLookupCache([mbid])?.[mbid];
     const nextSeededExistsInLibrary =
-      initialLibraryHint?.existsInLibrary === true || nextCachedLookup === true
+      stableInitialLibraryHint.existsInLibrary === true ||
+      nextCachedLookup === true
         ? true
         : undefined;
     const nextSeededLibraryArtist =
-      nextSeededExistsInLibrary && initialLibraryHint?.libraryArtist
-        ? initialLibraryHint.libraryArtist
+      nextSeededExistsInLibrary && stableInitialLibraryHint.libraryArtist
+        ? stableInitialLibraryHint.libraryArtist
         : null;
     setArtist(buildInitialArtist(mbid, artistNameFromNav));
     setCoverImages([]);
@@ -425,7 +443,7 @@ export function useArtistDetailsStream(
       clearTimeout(fallbackTimeout);
       eventSource.close();
     };
-  }, [mbid, artistNameFromNav, initialLibraryHint]);
+  }, [mbid, artistNameFromNav, stableInitialLibraryHint]);
 
   useEffect(() => {
     if (!mbid || !artist?.id) return;
@@ -490,7 +508,13 @@ export function useArtistDetailsStream(
         setLoadingReleases(false);
       }
     };
-  }, [mbid, artist?.id, artist?.name, artistNameFromNav, selectedReleaseTypes]);
+  }, [
+    mbid,
+    artist?.id,
+    artist?.name,
+    artistNameFromNav,
+    selectedReleaseTypesKey,
+  ]);
 
   useEffect(() => {
     if (!mbid) return;
@@ -573,8 +597,8 @@ export function useArtistDetailsStream(
     artist,
     libraryAlbums,
     albumCovers,
-    selectedReleaseTypes,
-    visibleCoverIds,
+    selectedReleaseTypesKey,
+    visibleCoverIdsKey,
   ]);
 
   return {
