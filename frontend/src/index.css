@@ -438,3 +438,18 @@
     padding-bottom: calc(2rem + env(safe-area-inset-bottom));
   }
 }
+
+.artist-details-page button.artist-round-button {
+  width: 3rem !important;
+  min-width: 3rem !important;
+  height: 3rem !important;
+  min-height: 3rem !important;
+  padding: 0 !important;
+  border-radius: 9999px !important;
+  clip-path: circle(50% at 50% 50%);
+  overflow: hidden;
+}
+
+.artist-details-page .artist-similar-avatar {
+  border-radius: 9999px !important;
+}

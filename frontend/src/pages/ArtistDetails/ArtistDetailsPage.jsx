@@ -8,8 +8,12 @@ import { useReleaseTypeFilter } from "./hooks/useReleaseTypeFilter";
 import { usePreviewPlayer } from "./hooks/usePreviewPlayer";
 import { useArtistDetailsLibrary } from "./hooks/useArtistDetailsLibrary";
 import { ArtistDetailsHero } from "./components/ArtistDetailsHero";
+import { ArtistDetailsActionBar } from "./components/ArtistDetailsActionBar";
+import { ArtistDetailsDownloadTargets } from "./components/ArtistDetailsDownloadTargets";
 import { ArtistDetailsLibraryAlbums } from "./components/ArtistDetailsLibraryAlbums";
 import { ArtistDetailsReleaseGroups } from "./components/ArtistDetailsReleaseGroups";
+import { ArtistDetailsPreviewTracks } from "./components/ArtistDetailsPreviewTracks";
+import { ArtistDetailsAbout } from "./components/ArtistDetailsAbout";
 import { ArtistDetailsSimilar } from "./components/ArtistDetailsSimilar";
 import { DeleteArtistModal } from "./components/DeleteArtistModal";
 import { DeleteAlbumModal } from "./components/DeleteAlbumModal";
@@ -27,6 +31,7 @@ import {
   getBlocklist,
   updateBlocklist,
 } from "../../utils/api";
+import { buildDownloadTargets } from "./utils";
 
 const MBID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -75,7 +80,6 @@ function ArtistDetailsPage() {
   const { showSuccess, showError } = useToast();
   const { hasPermission } = useAuth();
   const similarArtistsScrollRef = useRef(null);
-  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [showEditIdsModal, setShowEditIdsModal] = useState(false);
   const [idsLoading, setIdsLoading] = useState(false);
   const [idsSaving, setIdsSaving] = useState(false);
@@ -98,9 +102,6 @@ function ArtistDetailsPage() {
   const filter = useReleaseTypeFilter();
   const {
     selectedReleaseTypes,
-    setSelectedReleaseTypes,
-    primaryReleaseTypes,
-    secondaryReleaseTypes,
   } = filter;
 
   const stream = useArtistDetailsStream(
@@ -120,7 +121,6 @@ function ArtistDetailsPage() {
   const canChangeMonitoring = hasPermission("changeMonitoring");
   const canDeleteArtist = hasPermission("deleteArtist");
   const canDeleteAlbum = hasPermission("deleteAlbum");
-  const canBulkAddAlbums = canAddAlbum && canChangeMonitoring;
   const {
     artist,
     coverImages,
@@ -156,7 +156,6 @@ function ArtistDetailsPage() {
     previewProgress,
     previewSnappingBack,
     previewVolume,
-    setPreviewVolume,
     previewAudioRef,
     handlePreviewPlay,
     setPreviewTracks,
@@ -279,6 +278,17 @@ function ArtistDetailsPage() {
     selectedReleaseTypes,
   });
 
+  const downloadTargets = useMemo(
+    () =>
+      buildDownloadTargets({
+        artist,
+        libraryAlbums,
+        downloadStatuses: library.downloadStatuses || {},
+        releaseGroups: artist?.["release-groups"] || [],
+      }),
+    [artist, library.downloadStatuses, libraryAlbums],
+  );
+
   const handleOpenEditIds = async () => {
     if (!mbid) return;
     setShowEditIdsModal(true);
@@ -400,27 +410,6 @@ function ArtistDetailsPage() {
       `${artist?.name || artistNameFromNav || track?.artistName || "Artist"} Picks`,
     );
 
-  const buildReleaseTrackPayload = (track, releaseGroup) => {
-    const year = String(
-      releaseGroup?.["first-release-date"] || "",
-    ).slice(0, 4);
-    return {
-      artistName: artist?.name || artistNameFromNav || "",
-      trackName: track?.trackName || track?.title || "",
-      albumName: releaseGroup?.title || "",
-      artistMbid: mbid || "",
-      albumMbid: releaseGroup?.id || "",
-      trackMbid: track?.mbid || track?.id || "",
-      releaseYear: year || null,
-      durationMs:
-        track?.length != null && Number.isFinite(Number(track.length))
-          ? Number(track.length)
-          : null,
-      reason: null,
-      artistAliases: [],
-    };
-  };
-
   const buildLibraryTrackPayload = (track, libraryAlbum, releaseGroupId) => {
     const year = String(libraryAlbum?.releaseDate || "").slice(0, 4);
     return {
@@ -439,6 +428,41 @@ function ArtistDetailsPage() {
       artistAliases: [],
     };
   };
+
+  const buildReleaseTrackPayload = (track, releaseGroup) => {
+    const year = String(releaseGroup?.["first-release-date"] || "").slice(0, 4);
+    return {
+      artistName: artist?.name || artistNameFromNav || "",
+      trackName: track?.trackName || track?.title || "",
+      albumName: releaseGroup?.title || "",
+      artistMbid: mbid || "",
+      albumMbid: releaseGroup?.id || "",
+      trackMbid: track?.mbid || track?.id || "",
+      releaseYear: year || null,
+      durationMs:
+        track?.length != null && Number.isFinite(Number(track.length))
+          ? Number(track.length)
+          : null,
+      reason: null,
+      artistAliases: [],
+    };
+  };
+
+  const buildPreviewTrackPayload = (track) => ({
+    artistName: artist?.name || artistNameFromNav || "",
+    trackName: track?.title || track?.trackName || "",
+    albumName: track?.album || "",
+    artistMbid: mbid || "",
+    albumMbid: "",
+    trackMbid: track?.mbid || track?.id || "",
+    releaseYear: null,
+    durationMs:
+      track?.duration_ms != null && Number.isFinite(Number(track.duration_ms))
+        ? Number(track.duration_ms)
+        : null,
+    reason: "Artist preview",
+    artistAliases: [],
+  });
 
   const saveTrackToPlaylist = async (trackPayload, target, savingKey) => {
     if (!trackPayload?.artistName || !trackPayload?.trackName) {
@@ -490,15 +514,21 @@ function ArtistDetailsPage() {
     }
   };
 
+  const handleLibraryTrackAdd = (track, libraryAlbum, releaseGroupId, target) => {
+    const payload = buildLibraryTrackPayload(track, libraryAlbum, releaseGroupId);
+    const savingKey = String(track?.id ?? track?.mbid ?? track?.title ?? "");
+    return saveTrackToPlaylist(payload, target, savingKey);
+  };
+
   const handleReleaseTrackAdd = (track, releaseGroup, target) => {
     const payload = buildReleaseTrackPayload(track, releaseGroup);
     const savingKey = String(track?.id ?? track?.mbid ?? "");
     return saveTrackToPlaylist(payload, target, savingKey);
   };
 
-  const handleLibraryTrackAdd = (track, libraryAlbum, releaseGroupId, target) => {
-    const payload = buildLibraryTrackPayload(track, libraryAlbum, releaseGroupId);
-    const savingKey = String(track?.id ?? track?.mbid ?? track?.title ?? "");
+  const handlePreviewTrackAdd = (track, target) => {
+    const payload = buildPreviewTrackPayload(track);
+    const savingKey = String(track?.id ?? track?.title ?? "");
     return saveTrackToPlaylist(payload, target, savingKey);
   };
 
@@ -543,15 +573,21 @@ function ArtistDetailsPage() {
   }
 
   return (
-    <div className="animate-fade-in">
+    <div className="artist-details-page animate-fade-in">
+      {previewTracks.length > 0 && <audio ref={previewAudioRef} />}
       <ArtistDetailsHero
         artist={artist}
-        libraryArtist={libraryArtist}
-        appSettings={appSettings}
         coverImages={coverImages}
         loadingCover={loadingCover}
         loadingLibrary={loadingLibrary}
         existsInLibrary={existsInLibrary}
+        onCoverError={handleCoverError}
+        onNavigate={(path) => navigate(path)}
+      />
+
+      <ArtistDetailsActionBar
+        existsInLibrary={existsInLibrary}
+        loadingLibrary={loadingLibrary}
         showRemoveDropdown={library.showRemoveDropdown}
         setShowRemoveDropdown={library.setShowRemoveDropdown}
         showMonitorOptionMenu={library.showMonitorOptionMenu}
@@ -569,21 +605,39 @@ function ArtistDetailsPage() {
         canRefreshArtist={canChangeMonitoring}
         handleRefreshArtist={library.handleRefreshArtist}
         refreshingArtist={library.refreshingArtist}
-        onCoverError={handleCoverError}
-        onNavigate={(path) => navigate(path)}
         loadingPreview={loadingPreview}
         previewTracks={previewTracks}
-        previewAudioRef={previewAudioRef}
         playingPreviewId={playingPreviewId}
-        previewProgress={previewProgress}
         previewSnappingBack={previewSnappingBack}
-        previewVolume={previewVolume}
-        setPreviewVolume={setPreviewVolume}
         handlePreviewPlay={handlePreviewPlay}
         onEditIds={handleOpenEditIds}
         onToggleBlockArtist={handleToggleBlockArtist}
         blockingArtist={blockingArtist}
         artistBlocked={artistBlocked}
+      />
+
+      <ArtistDetailsPreviewTracks
+        loadingPreview={loadingPreview}
+        previewTracks={previewTracks}
+        playingPreviewId={playingPreviewId}
+        previewProgress={previewProgress}
+        previewSnappingBack={previewSnappingBack}
+        handlePreviewPlay={handlePreviewPlay}
+        onAddTrackToPlaylist={handlePreviewTrackAdd}
+        playlists={sharedPlaylists}
+        playlistsLoading={playlistModalLoading}
+        playlistSavingKey={playlistMenuSavingKey}
+        playlistError={playlistModalError}
+        getDefaultPlaylistName={getDefaultTrackPlaylistName}
+        onLoadPlaylists={loadSharedPlaylists}
+      />
+
+      <ArtistDetailsDownloadTargets
+        targets={downloadTargets}
+        albumCovers={albumCovers}
+        canAddAlbum={canAddAlbum}
+        requestingAlbum={library.requestingAlbum}
+        handleRequestAlbum={library.handleRequestAlbum}
       />
 
       {existsInLibrary && libraryAlbums && libraryAlbums.length > 0 && (
@@ -620,38 +674,17 @@ function ArtistDetailsPage() {
       {artist["release-groups"] && artist["release-groups"].length > 0 && (
         <ArtistDetailsReleaseGroups
           artist={artist}
-          selectedReleaseTypes={selectedReleaseTypes}
-          setSelectedReleaseTypes={setSelectedReleaseTypes}
-          primaryReleaseTypes={primaryReleaseTypes}
-          secondaryReleaseTypes={secondaryReleaseTypes}
-          showFilterDropdown={showFilterDropdown}
-          setShowFilterDropdown={setShowFilterDropdown}
           loadingReleases={loadingReleases}
-          existsInLibrary={existsInLibrary}
-          canBulkAddAlbums={canBulkAddAlbums}
-          handleMonitorAll={library.handleMonitorAll}
-          processingBulk={library.processingBulk}
           albumCovers={albumCovers}
           expandedReleaseGroup={library.expandedReleaseGroup}
           albumTracks={library.albumTracks}
           loadingTracks={library.loadingTracks}
           getAlbumStatus={library.getAlbumStatus}
-          albumDropdownOpen={library.albumDropdownOpen}
-          setAlbumDropdownOpen={library.setAlbumDropdownOpen}
           handleReleaseGroupAlbumClick={library.handleReleaseGroupAlbumClick}
           canAddAlbum={canAddAlbum}
           handleRequestAlbum={library.handleRequestAlbum}
-          canDeleteAlbum={canDeleteAlbum}
-          handleDeleteAlbumClick={library.handleDeleteAlbumClick}
           requestingAlbum={library.requestingAlbum}
-          reSearchingAlbum={library.reSearchingAlbum}
-          canReSearchAlbum={canAddAlbum}
-          handleReSearchAlbum={library.handleReSearchAlbum}
           previewVolume={previewVolume}
-          setPreviewVolume={setPreviewVolume}
-          isReleaseGroupDownloadedInLibrary={
-            library.isReleaseGroupDownloadedInLibrary
-          }
           onAddTrackToPlaylist={handleReleaseTrackAdd}
           playlists={sharedPlaylists}
           playlistsLoading={playlistModalLoading}
@@ -660,8 +693,20 @@ function ArtistDetailsPage() {
           getDefaultPlaylistName={getDefaultTrackPlaylistName}
           onLoadPlaylists={loadSharedPlaylists}
           onVisibleCoverIdsChange={setVisibleReleaseGroupCoverIds}
+          onViewAll={() =>
+            navigate(`/artist/${artist.id}/albums`, {
+              state: { artistName: artist.name, inLibrary: existsInLibrary },
+            })
+          }
         />
       )}
+
+      <ArtistDetailsAbout
+        artist={artist}
+        libraryArtist={libraryArtist}
+        appSettings={appSettings}
+        existsInLibrary={existsInLibrary}
+      />
 
       {(loadingSimilar || similarArtists.length > 0) && (
         <ArtistDetailsSimilar

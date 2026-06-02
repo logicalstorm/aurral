@@ -26,6 +26,7 @@ const MetadataProvidersPage = lazy(
   () => import("./pages/Settings/MetadataProvidersPage")
 );
 const ArtistDetailsPage = lazy(() => import("./pages/ArtistDetailsPage"));
+const ArtistAlbumsPage = lazy(() => import("./pages/ArtistAlbumsPage"));
 const RequestsPage = lazy(() => import("./pages/RequestsPage"));
 const FlowPage = lazy(() => import("./pages/FlowPage"));
 const BlocklistPage = lazy(() => import("./pages/BlocklistPage"));
@@ -241,6 +242,7 @@ function AppContent() {
               />
               <Route path="/requests" element={<RequestsPage />} />
               <Route path="/blocklist" element={<BlocklistPage />} />
+              <Route path="/artist/:mbid/albums" element={<ArtistAlbumsPage />} />
               <Route path="/artist/:mbid" element={<ArtistDetailsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route
