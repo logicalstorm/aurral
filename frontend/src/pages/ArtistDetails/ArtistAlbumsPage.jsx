@@ -1,11 +1,15 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
-import { useLocation, useParams } from "react-router-dom";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useParams } from "react-router-dom";
 import {
+  ArrowDown,
+  ArrowUp,
   CheckCircle,
+  CornerUpLeft,
   Grid3X3,
   List,
   Loader,
   Music,
+  SlidersHorizontal,
   Star,
 } from "lucide-react";
 import AddAlbumButton from "../../components/AddAlbumButton";
@@ -24,9 +28,9 @@ import {
 import { getArtistHeroImage, getReleaseMetric, getReleaseYear } from "./utils";
 
 const sortOptions = [
-  { value: "latest", label: "Latest" },
-  { value: "oldest", label: "Oldest" },
-  { value: "popular", label: "Most popular" },
+  { value: "date", label: "Date", defaultDirection: "desc" },
+  { value: "name", label: "Name", defaultDirection: "asc" },
+  { value: "popularity", label: "Popularity", defaultDirection: "desc" },
 ];
 
 const releaseTabs = [
@@ -89,17 +93,20 @@ const getReleaseTypeLabel = (releaseGroup) => {
   return types.length ? types.join(" · ") : "Release";
 };
 
-const sortReleaseGroups = (items, sortMode) =>
+const sortReleaseGroups = (items, sortKey, sortDirection) =>
   [...items].sort((a, b) => {
-    if (sortMode === "popular") {
-      const diff = getReleaseMetric(b).sortValue - getReleaseMetric(a).sortValue;
-      if (diff !== 0) return diff;
+    let diff;
+    if (sortKey === "popularity") {
+      diff = getReleaseMetric(a).sortValue - getReleaseMetric(b).sortValue;
+    } else if (sortKey === "name") {
+      diff = String(a?.title || "").localeCompare(String(b?.title || ""));
+    } else {
+      diff = String(a["first-release-date"] || "").localeCompare(
+        String(b["first-release-date"] || ""),
+      );
     }
-    const dateA = String(a["first-release-date"] || "");
-    const dateB = String(b["first-release-date"] || "");
-    return sortMode === "oldest"
-      ? dateA.localeCompare(dateB)
-      : dateB.localeCompare(dateA);
+    if (diff !== 0) return sortDirection === "asc" ? diff : -diff;
+    return String(a?.title || "").localeCompare(String(b?.title || ""));
   });
 
 const getGridColumnCount = () => {
@@ -117,14 +124,17 @@ function ArtistAlbumsPage() {
   const { hasPermission } = useAuth();
   const [previewVolume] = useSharedVolume();
   const [selectedTab, setSelectedTab] = useState("all");
-  const [sortMode, setSortMode] = useState("latest");
+  const [sortKey, setSortKey] = useState("date");
+  const [sortDirection, setSortDirection] = useState("desc");
   const [viewMode, setViewMode] = useState("grid");
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [gridColumnCount, setGridColumnCount] = useState(getGridColumnCount);
   const [visibleCoverIds, setVisibleCoverIds] = useState([]);
   const [sharedPlaylists, setSharedPlaylists] = useState([]);
   const [playlistModalLoading, setPlaylistModalLoading] = useState(false);
   const [playlistModalError, setPlaylistModalError] = useState("");
   const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
+  const optionsMenuRef = useRef(null);
   const artistNameFromNav = state?.artistName || "";
   const canAddAlbum = hasPermission("addAlbum");
 
@@ -178,9 +188,10 @@ function ArtistAlbumsPage() {
         releaseGroups.filter((releaseGroup) =>
           matchesReleaseTab(releaseGroup, selectedTab),
         ),
-        sortMode,
+        sortKey,
+        sortDirection,
       ),
-    [releaseGroups, selectedTab, sortMode],
+    [releaseGroups, selectedTab, sortDirection, sortKey],
   );
 
   useEffect(() => {
@@ -193,6 +204,24 @@ function ArtistAlbumsPage() {
     window.addEventListener("resize", updateGridColumnCount);
     return () => window.removeEventListener("resize", updateGridColumnCount);
   }, []);
+
+  useEffect(() => {
+    if (!optionsOpen) return undefined;
+    const handlePointerDown = (event) => {
+      if (optionsMenuRef.current?.contains(event.target)) return;
+      setOptionsOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [optionsOpen]);
+
+  const handleSortOptionClick = (option) => {
+    if (sortKey === option.value) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(option.value);
+  };
 
   const loadSharedPlaylists = async () => {
     setPlaylistModalLoading(true);
@@ -469,7 +498,14 @@ function ArtistAlbumsPage() {
     <div className="artist-details-page">
       <div className="mb-7 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-4xl font-black text-white">{artist.name}</h1>
+          <Link
+            to={`/artist/${artist.id}`}
+            state={{ artistName: artist.name, inLibrary: existsInLibrary }}
+            className="inline-flex items-center gap-2 text-4xl font-black text-white transition-colors hover:text-white/75"
+          >
+            <span>{artist.name}</span>
+            <CornerUpLeft className="mt-1 h-6 w-6 text-white/55" />
+          </Link>
           {loadingReleases && (
             <p className="mt-2 inline-flex items-center gap-2 text-sm text-white/55">
               <Loader className="h-4 w-4 animate-spin" />
@@ -479,9 +515,8 @@ function ArtistAlbumsPage() {
         </div>
       </div>
 
-      <div className="mb-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-start">
-        <div>
-          <h2 className="mb-3 text-sm font-bold text-white">Release Type</h2>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <div className="flex flex-wrap gap-2">
             {releaseTabs.map((tab) => {
               const active = selectedTab === tab.value;
@@ -503,43 +538,69 @@ function ArtistAlbumsPage() {
           </div>
         </div>
 
-        <label className="block">
-          <span className="mb-3 block text-sm font-bold text-white">Sort</span>
-          <select
-            value={sortMode}
-            onChange={(event) => setSortMode(event.target.value)}
-            className="h-10 bg-white/[0.08] px-3 text-sm font-bold text-white outline-none"
+        <div className="relative self-start sm:self-auto" ref={optionsMenuRef}>
+          <button
+            type="button"
+            onClick={() => setOptionsOpen((current) => !current)}
+            className="flex h-10 w-10 items-center justify-center bg-white/[0.08] text-white transition-colors hover:bg-white/10"
+            aria-label="Album display options"
+            title="Album display options"
+            aria-expanded={optionsOpen}
           >
-            {sortOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div>
-          <span className="mb-3 block text-sm font-bold text-white">View</span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setViewMode("grid")}
-              className="flex h-10 w-10 items-center justify-center bg-white/[0.08] text-white"
-              aria-label="Grid view"
-              title="Grid view"
-            >
-              <Grid3X3 className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("list")}
-              className="flex h-10 w-10 items-center justify-center bg-white/[0.08] text-white"
-              aria-label="List view"
-              title="List view"
-            >
-              <List className="h-4 w-4" />
-            </button>
-          </div>
+            <SlidersHorizontal className="h-4 w-4" />
+          </button>
+          {optionsOpen && (
+            <div className="absolute right-0 top-12 z-40 w-56 overflow-hidden border border-white/10 bg-[#15151a] py-1 shadow-xl">
+              {sortOptions.map((option) => {
+                const active = sortKey === option.value;
+                const DirectionIcon = sortDirection === "asc" ? ArrowUp : ArrowDown;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handleSortOptionClick(option)}
+                    className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-white/[0.06] ${
+                      active ? "text-green-400" : "text-white"
+                    }`}
+                  >
+                    <span>{option.label}</span>
+                    <span className={active ? "text-green-400" : "text-white/65"}>
+                      {active && <DirectionIcon className="h-3.5 w-3.5" />}
+                    </span>
+                  </button>
+                );
+              })}
+              <div className="my-1 h-px bg-white/10" />
+              <div className="grid grid-cols-2 gap-1 px-1">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("grid")}
+                  className={`flex h-9 items-center justify-center transition-colors hover:bg-white/10 ${
+                    viewMode === "grid"
+                      ? "bg-white/[0.06] text-green-400"
+                      : "bg-white/[0.06] text-white"
+                  }`}
+                  aria-label="Grid view"
+                  title="Grid view"
+                >
+                  <Grid3X3 className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("list")}
+                  className={`flex h-9 items-center justify-center transition-colors hover:bg-white/10 ${
+                    viewMode === "list"
+                      ? "bg-white/[0.06] text-green-400"
+                      : "bg-white/[0.06] text-white"
+                  }`}
+                  aria-label="List view"
+                  title="List view"
+                >
+                  <List className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
