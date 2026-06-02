@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import PropTypes from "prop-types";
-import { Loader, MapPin, Music } from "lucide-react";
+import { MapPin } from "lucide-react";
 import {
   formatLifeSpan,
   getArtistHeroImage,
@@ -31,7 +31,6 @@ const buildTags = (artist) => {
 export function ArtistDetailsHero({
   artist,
   coverImages,
-  loadingCover,
   existsInLibrary,
   loadingLibrary,
   onCoverError,
@@ -55,7 +54,7 @@ export function ArtistDetailsHero({
             <img
               src={heroImage}
               alt=""
-              className="absolute inset-0 h-full w-full object-cover"
+              className="absolute inset-0 h-full w-full object-cover object-[center_25%]"
               loading="eager"
               decoding="async"
               onError={() => {
@@ -71,15 +70,6 @@ export function ArtistDetailsHero({
         )}
 
         <div className="relative z-10 flex min-h-[250px] flex-col justify-end">
-          <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white/80">
-            {loadingCover && !showImage ? (
-              <Loader className="h-4 w-4 animate-spin" />
-            ) : (
-              <Music className="h-4 w-4" />
-            )}
-            <span>Artist</span>
-          </div>
-
           <h1 className="max-w-[1100px] break-words text-5xl font-black leading-[0.95] text-white sm:text-7xl lg:text-8xl">
             {artist.name}
           </h1>

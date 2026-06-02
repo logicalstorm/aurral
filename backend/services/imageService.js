@@ -71,6 +71,71 @@ export const selectBestAlbumImage = (images = []) => {
   return selectBestImageByKind(images, getAlbumImageKindRank);
 };
 
+const sortArtistImages = (images = []) => {
+  if (!Array.isArray(images)) return [];
+  return images
+    .filter((image) => getImageUrl(image))
+    .map((image, index) => ({ image, index }))
+    .sort((a, b) => {
+      const rankDiff = getArtistImageKindRank(a.image) - getArtistImageKindRank(b.image);
+      if (rankDiff !== 0) return rankDiff;
+      return a.index - b.index;
+    })
+    .map((entry) => entry.image);
+};
+
+const buildCachedArtistImagePayload = async (
+  cachedImageUrl,
+  metadataArtist = null,
+) => {
+  const images = [
+    {
+      image: cachedImageUrl,
+      front: true,
+      types: ["Artist"],
+    },
+  ];
+  const seen = new Set([cachedImageUrl]);
+  const directImages = sortArtistImages(metadataArtist?.images);
+
+  for (const image of directImages) {
+    try {
+      const cached = await warmImageProxy(getImageUrl(image));
+      if (!cached?.localUrl || seen.has(cached.localUrl)) continue;
+      seen.add(cached.localUrl);
+      images.push({
+        image: cached.localUrl,
+        front: false,
+        types: [image.kind || image.CoverType || "Artist"],
+      });
+    } catch {}
+  }
+
+  return images;
+};
+
+const buildDirectArtistImagePayload = async (directImages = []) => {
+  const sorted = sortArtistImages(directImages);
+  const best = sorted[0] || null;
+  const images = [];
+  const seen = new Set();
+
+  for (const image of sorted) {
+    try {
+      const cached = await warmImageProxy(getImageUrl(image));
+      if (!cached?.localUrl || seen.has(cached.localUrl)) continue;
+      seen.add(cached.localUrl);
+      images.push({
+        image: cached.localUrl,
+        front: image === best,
+        types: [image.kind || image.CoverType || "Artist"],
+      });
+    } catch {}
+  }
+
+  return images;
+};
+
 const addToNegativeCache = (mbid) => {
   if (negativeImageCache.size >= MAX_NEGATIVE_CACHE) {
     const firstKey = negativeImageCache.keys().next().value;
@@ -197,15 +262,15 @@ export const getArtistImage = async (
     cachedImage.imageUrl !== "NOT_FOUND" &&
     !LEGACY_COVER_HOST_PATTERN.test(cachedImage.imageUrl)
   ) {
+    const override = dbOps.getArtistOverride(mbid);
+    const resolvedMbid = override?.musicbrainzId || mbid;
+    const metadataArtist = await getArtistByMbid(resolvedMbid).catch(() => null);
     return {
       url: cachedImage.imageUrl,
-      images: [
-        {
-          image: cachedImage.imageUrl,
-          front: true,
-          types: ["Front"],
-        },
-      ],
+      images: await buildCachedArtistImagePayload(
+        cachedImage.imageUrl,
+        metadataArtist,
+      ),
     };
   }
 
@@ -226,21 +291,20 @@ export const getArtistImage = async (
       const override = dbOps.getArtistOverride(mbid);
       const resolvedMbid = override?.musicbrainzId || mbid;
       const metadataArtist = await getArtistByMbid(resolvedMbid).catch(() => null);
-      const directArtistImage = selectBestArtistImage(metadataArtist?.images);
+      const directArtistImages = sortArtistImages(metadataArtist?.images);
+      const directArtistImage = directArtistImages[0] || null;
 
       if (directArtistImage?.url) {
-        const cachedImage = await warmImageProxy(directArtistImage.url);
+        const images = await buildDirectArtistImagePayload(directArtistImages);
+        const primaryImage = images.find((image) => image.front) || images[0];
+        if (!primaryImage?.image) {
+          throw new Error("Artist images could not be proxied");
+        }
         negativeImageCache.delete(mbid);
-        dbOps.setImage(mbid, cachedImage.localUrl);
+        dbOps.setImage(mbid, primaryImage.image);
         return {
-          url: cachedImage.localUrl,
-          images: [
-            {
-              image: cachedImage.localUrl,
-              front: true,
-              types: [directArtistImage.kind || "Artist"],
-            },
-          ],
+          url: primaryImage.image,
+          images,
         };
       }
 

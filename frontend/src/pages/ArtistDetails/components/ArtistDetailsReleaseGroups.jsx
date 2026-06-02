@@ -196,22 +196,22 @@ export function ArtistDetailsReleaseGroups({
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 lg:grid-cols-6 lg:gap-x-5">
         {visibleReleaseGroups.map((releaseGroup) => {
           const status = getAlbumStatus(releaseGroup.id);
           const metric = getReleaseMetric(releaseGroup);
           return (
             <article
               key={releaseGroup.id}
-              className="group min-w-0 cursor-pointer bg-[#101012] p-3 transition-colors hover:bg-white/[0.08]"
+              className="group min-w-0 cursor-pointer"
               onClick={() => handleReleaseGroupAlbumClick(releaseGroup, status?.libraryId)}
             >
-              <div className="relative mb-3 aspect-square bg-white/[0.06]">
+              <div className="relative mb-2 aspect-square overflow-hidden bg-white/[0.06] shadow-lg shadow-black/20">
                 {albumCovers[releaseGroup.id] ? (
                   <img
                     src={albumCovers[releaseGroup.id]}
                     alt=""
-                    className="h-full w-full object-cover"
+                    className="h-full w-full object-cover transition-opacity group-hover:opacity-90"
                     loading="lazy"
                     decoding="async"
                   />
@@ -235,7 +235,6 @@ export function ArtistDetailsReleaseGroups({
                         }}
                         isLoading={requestingAlbum === releaseGroup.id}
                         disabled={requestingAlbum === releaseGroup.id}
-                        style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
                       />
                     </div>
                   ) : null}
@@ -297,7 +296,7 @@ export function ArtistDetailsReleaseGroups({
                 return (
                   <div
                     key={trackId}
-                    className="grid grid-cols-[32px_32px_minmax(0,1fr)_auto_auto] items-center gap-3 px-2 py-2 text-sm transition-colors hover:bg-white/[0.06]"
+                    className="grid grid-cols-[28px_28px_minmax(0,1fr)_auto_auto] items-center gap-2 px-2 py-2 text-sm transition-colors hover:bg-white/[0.06]"
                   >
                     <span className="text-right text-xs tabular-nums text-white/45">
                       {track.trackNumber || track.position || index + 1}
@@ -305,17 +304,17 @@ export function ArtistDetailsReleaseGroups({
                     {track.preview_url ? (
                       <button
                         type="button"
-                        className="artist-round-button flex h-8 w-8 items-center justify-center bg-white/[0.06] text-white transition-colors hover:bg-white/10"
+                        className="flex h-7 w-7 items-center justify-center bg-white/[0.06] text-white transition-colors hover:bg-white/10"
                         onClick={(event) => handleTrackPreviewPlay(track, event)}
                         aria-label={isPlaying ? "Pause preview" : "Play preview"}
                         title={isPlaying ? "Pause preview" : "Play preview"}
                       >
                         {isLoadingPreview ? (
-                          <Loader className="h-3.5 w-3.5 animate-spin" />
+                          <Loader className="h-3 w-3 animate-spin" />
                         ) : isPlaying ? (
-                          <Pause className="h-3.5 w-3.5" />
+                          <Pause className="h-3 w-3" />
                         ) : (
-                          <Play className="ml-0.5 h-3.5 w-3.5" />
+                          <Play className="ml-0.5 h-3 w-3" />
                         )}
                       </button>
                     ) : (
