@@ -1,17 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PropTypes from "prop-types";
 import {
   ArrowRight,
   CheckCircle,
   Loader,
   Music,
-  Pause,
-  Play,
   Star,
 } from "lucide-react";
 import AddAlbumButton from "../../../components/AddAlbumButton";
 import { getReleaseMetric, getReleaseYear } from "../utils";
-import { TrackPlaylistMenu } from "./TrackPlaylistMenu";
+import { ArtistDetailsReleaseTrackList } from "./ArtistDetailsReleaseTrackList";
 
 const viewModes = [
   { value: "popular", label: "Popular Releases" },
@@ -84,9 +82,6 @@ export function ArtistDetailsReleaseGroups({
   onViewAll,
 }) {
   const [viewMode, setViewMode] = useState("popular");
-  const [playingTrackId, setPlayingTrackId] = useState(null);
-  const [loadingTrackId, setLoadingTrackId] = useState(null);
-  const previewAudioRef = useRef(null);
   const releaseGroups = useMemo(
     () => artist["release-groups"] || [],
     [artist],
@@ -100,55 +95,6 @@ export function ArtistDetailsReleaseGroups({
     onVisibleCoverIdsChange?.(visibleReleaseGroups.map((item) => item.id).filter(Boolean));
   }, [onVisibleCoverIdsChange, visibleReleaseGroups]);
 
-  useEffect(() => {
-    const audio = previewAudioRef.current;
-    if (!audio) return;
-    audio.volume = previewVolume;
-  }, [previewVolume]);
-
-  useEffect(() => {
-    const audio = previewAudioRef.current;
-    if (!audio) return;
-    const resetPlayback = () => {
-      setPlayingTrackId(null);
-      setLoadingTrackId(null);
-    };
-    audio.addEventListener("ended", resetPlayback);
-    audio.addEventListener("error", resetPlayback);
-    return () => {
-      audio.removeEventListener("ended", resetPlayback);
-      audio.removeEventListener("error", resetPlayback);
-      audio.pause();
-      audio.src = "";
-    };
-  }, []);
-
-  const handleTrackPreviewPlay = async (track, event) => {
-    event.stopPropagation();
-    const previewUrl = track?.preview_url;
-    const trackId = String(track?.id ?? track?.mbid ?? "");
-    const audio = previewAudioRef.current;
-    if (!audio || !previewUrl || !trackId) return;
-    try {
-      if (playingTrackId === trackId) {
-        audio.pause();
-        setPlayingTrackId(null);
-        return;
-      }
-      setLoadingTrackId(trackId);
-      if (audio.src !== previewUrl) {
-        audio.src = previewUrl;
-      }
-      audio.volume = previewVolume;
-      await audio.play();
-      setPlayingTrackId(trackId);
-    } catch {
-      setPlayingTrackId(null);
-    } finally {
-      setLoadingTrackId(null);
-    }
-  };
-
   const expandedRelease = visibleReleaseGroups.find(
     (releaseGroup) => releaseGroup.id === expandedReleaseGroup,
   );
@@ -161,7 +107,6 @@ export function ArtistDetailsReleaseGroups({
 
   return (
     <section className="mb-10">
-      <audio ref={previewAudioRef} preload="none" />
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -222,9 +167,12 @@ export function ArtistDetailsReleaseGroups({
                 )}
                 <div className="absolute bottom-2 right-2">
                   {status?.status === "available" || status?.status === "added" ? (
-                    <span className="inline-flex items-center gap-1 bg-green-500/20 px-2 py-1 text-xs font-bold text-green-300">
-                      <CheckCircle className="h-3.5 w-3.5" />
-                      Complete
+                    <span
+                      className="inline-flex h-8 min-w-12 items-center justify-center rounded-full bg-green-500 text-white shadow-lg shadow-black/30 ring-1 ring-white/15"
+                      title="Complete"
+                    >
+                      <CheckCircle className="h-4 w-4" />
+                      <span className="sr-only">Complete</span>
                     </span>
                   ) : canAddAlbum ? (
                     <div onClick={(event) => event.stopPropagation()}>
@@ -260,96 +208,20 @@ export function ArtistDetailsReleaseGroups({
       </div>
 
       {expandedRelease && (
-        <div className="mt-4 bg-[#101012] p-4">
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <h3 className="truncate text-lg font-bold text-white">
-                {expandedRelease.title}
-              </h3>
-              <p className="text-xs text-white/50">
-                {[getReleaseYear(expandedRelease), expandedRelease["primary-type"]]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-            </div>
-          </div>
-
-          {expandedLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader className="h-6 w-6 animate-spin text-white/65" />
-            </div>
-          ) : expandedTracks?.length ? (
-            <div className="space-y-1">
-              {expandedTracks.map((track, index) => {
-                const trackId = String(
-                  track.id ?? track.mbid ?? `${expandedTrackKey}-${index}`,
-                );
-                const isPlaying = playingTrackId === trackId;
-                const isLoadingPreview = loadingTrackId === trackId;
-                const durationLabel = track.length
-                  ? `${Math.floor(track.length / 60000)}:${Math.floor(
-                      (track.length % 60000) / 1000,
-                    )
-                      .toString()
-                      .padStart(2, "0")}`
-                  : "";
-                return (
-                  <div
-                    key={trackId}
-                    className="grid grid-cols-[28px_28px_minmax(0,1fr)_auto_auto] items-center gap-2 px-2 py-2 text-sm transition-colors hover:bg-white/[0.06]"
-                  >
-                    <span className="text-right text-xs tabular-nums text-white/45">
-                      {track.trackNumber || track.position || index + 1}
-                    </span>
-                    {track.preview_url ? (
-                      <button
-                        type="button"
-                        className="flex h-7 w-7 items-center justify-center bg-white/[0.06] text-white transition-colors hover:bg-white/10"
-                        onClick={(event) => handleTrackPreviewPlay(track, event)}
-                        aria-label={isPlaying ? "Pause preview" : "Play preview"}
-                        title={isPlaying ? "Pause preview" : "Play preview"}
-                      >
-                        {isLoadingPreview ? (
-                          <Loader className="h-3 w-3 animate-spin" />
-                        ) : isPlaying ? (
-                          <Pause className="h-3 w-3" />
-                        ) : (
-                          <Play className="ml-0.5 h-3 w-3" />
-                        )}
-                      </button>
-                    ) : (
-                      <span />
-                    )}
-                    <span className="truncate text-white">
-                      {track.title || track.trackName || "Unknown Track"}
-                    </span>
-                    {onAddTrackToPlaylist ? (
-                      <TrackPlaylistMenu
-                        playlists={playlists}
-                        loading={playlistsLoading}
-                        saving={playlistSavingKey === trackId}
-                        error={playlistError}
-                        defaultNewPlaylistName={getDefaultPlaylistName?.(
-                          track,
-                          expandedRelease,
-                        )}
-                        onLoadPlaylists={onLoadPlaylists}
-                        onSelect={(target) =>
-                          onAddTrackToPlaylist(track, expandedRelease, target)
-                        }
-                      />
-                    ) : null}
-                    <span className="w-11 text-right text-xs tabular-nums text-white/45">
-                      {durationLabel}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="py-6 text-sm italic text-white/50">No tracks available</p>
-          )}
-        </div>
+        <ArtistDetailsReleaseTrackList
+          release={expandedRelease}
+          trackKey={expandedTrackKey}
+          tracks={expandedTracks}
+          loading={expandedLoading}
+          previewVolume={previewVolume}
+          onAddTrackToPlaylist={onAddTrackToPlaylist}
+          playlists={playlists}
+          playlistsLoading={playlistsLoading}
+          playlistSavingKey={playlistSavingKey}
+          playlistError={playlistError}
+          getDefaultPlaylistName={getDefaultPlaylistName}
+          onLoadPlaylists={onLoadPlaylists}
+        />
       )}
     </section>
   );
