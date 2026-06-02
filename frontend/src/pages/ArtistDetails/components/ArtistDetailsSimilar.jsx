@@ -84,13 +84,13 @@ export function ArtistDetailsSimilar({
   if (!loadingSimilar && similarArtists.length === 0) return null;
 
   return (
-    <div className="mt-12">
+    <section className="mb-10">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2
           className="flex items-center text-2xl font-bold"
           style={{ color: "#fff" }}
         >
-          Similar Artists
+          Fans Also Like
           {loadingSimilar && (
             <Loader
               className="ml-2 h-4 w-4 animate-spin"
@@ -143,7 +143,7 @@ export function ArtistDetailsSimilar({
               return (
                 <div
                   key={similar.id}
-                  className="group w-[148px] shrink-0 cursor-pointer sm:w-[164px]"
+                  className="group w-[132px] shrink-0 cursor-pointer sm:w-[152px]"
                   onClick={() =>
                     onArtistClick(
                       similar.id,
@@ -155,7 +155,7 @@ export function ArtistDetailsSimilar({
                   }
                 >
                   <div
-                    className="relative aspect-square overflow-hidden  mb-2 shadow-sm group-hover:shadow-md transition-all"
+                    className="artist-similar-avatar relative mb-3 aspect-square overflow-hidden shadow-sm transition-all group-hover:shadow-md"
                     style={{ backgroundColor: "#211f27" }}
                   >
                     <ArtistImage
@@ -163,10 +163,10 @@ export function ArtistDetailsSimilar({
                       mbid={similar.id}
                       artistName={similar.name}
                       alt={similar.name}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
                     />
 
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"></div>
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover:opacity-100"></div>
 
                     {similar.match && (
                       <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm text-white text-[10px] px-1.5 py-0.5 font-medium">
@@ -191,7 +191,7 @@ export function ArtistDetailsSimilar({
           </div>
         </div>
       ) : null}
-    </div>
+    </section>
   );
 }
 
