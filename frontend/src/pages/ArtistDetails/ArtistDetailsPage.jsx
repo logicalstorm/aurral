@@ -668,6 +668,7 @@ function ArtistDetailsPage() {
           getDefaultPlaylistName={getDefaultTrackPlaylistName}
           onLoadPlaylists={loadSharedPlaylists}
           onVisibleCoverIdsChange={setVisibleLibraryCoverIds}
+          previewVolume={previewVolume}
         />
       )}
 
@@ -706,6 +707,7 @@ function ArtistDetailsPage() {
         libraryArtist={libraryArtist}
         appSettings={appSettings}
         existsInLibrary={existsInLibrary}
+        coverImages={coverImages}
       />
 
       {(loadingSimilar || similarArtists.length > 0) && (

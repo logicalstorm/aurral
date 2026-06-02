@@ -122,6 +122,7 @@ export default function registerStream(router) {
         genres: Array.isArray(metadataArtist?.genres) ? metadataArtist.genres : [],
         links: Array.isArray(metadataArtist?.links) ? metadataArtist.links : [],
         relations: toLegacyRelations(metadataArtist),
+        rating: metadataArtist?.rating || null,
         ...(metadataArtist?.overview ? { bio: metadataArtist.overview } : {}),
       });
       const sendArtist = (payload) => {
@@ -329,14 +330,21 @@ export default function registerStream(router) {
               cachedImage.imageUrl &&
               cachedImage.imageUrl !== "NOT_FOUND"
             ) {
+              const artistName =
+                (await namePromise.catch(() => null)) || streamArtistName || null;
+              const cachedCover = await getArtistImage(mbid, {
+                artistName,
+              }).catch(() => null);
               sendSSE(res, "cover", {
-                images: [
-                  {
-                    image: cachedImage.imageUrl,
-                    front: true,
-                    types: ["Front"],
-                  },
-                ],
+                images: cachedCover?.images?.length
+                  ? cachedCover.images
+                  : [
+                      {
+                        image: cachedImage.imageUrl,
+                        front: true,
+                        types: ["Front"],
+                      },
+                    ],
               });
               return;
             }

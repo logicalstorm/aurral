@@ -191,7 +191,6 @@ function ArtistAlbumsPage() {
                 }
                 isLoading={library.requestingAlbum === releaseGroup.id}
                 disabled={library.requestingAlbum === releaseGroup.id}
-                style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
               />
             ) : null}
           </div>
@@ -222,7 +221,6 @@ function ArtistAlbumsPage() {
                 }
                 isLoading={library.requestingAlbum === releaseGroup.id}
                 disabled={library.requestingAlbum === releaseGroup.id}
-                style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
               />
             ) : null}
           </div>

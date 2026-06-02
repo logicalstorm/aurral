@@ -11,6 +11,8 @@ import {
   ExternalLink,
   Trash2,
   RefreshCw,
+  Pause,
+  Play,
 } from "lucide-react";
 import { getPopularityScale } from "../utils";
 import { TrackPlaylistMenu } from "./TrackPlaylistMenu";
@@ -42,13 +44,17 @@ export function ArtistDetailsLibraryAlbums({
   getDefaultPlaylistName,
   onLoadPlaylists,
   onVisibleCoverIdsChange,
+  previewVolume,
 }) {
   const railRef = useRef(null);
   const visibleCoverIdsRef = useRef(new Set());
+  const previewAudioRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
   const [completionFilter, setCompletionFilter] = useState("all");
   const [activePlaylistTrackKey, setActivePlaylistTrackKey] = useState(null);
+  const [playingTrackId, setPlayingTrackId] = useState(null);
+  const [loadingTrackId, setLoadingTrackId] = useState(null);
   const downloadedAlbums = libraryAlbums.filter((album) => {
     if (String(album.id ?? "").startsWith("pending-")) return false;
     return (
@@ -188,6 +194,55 @@ export function ArtistDetailsLibraryAlbums({
   }, []);
 
   useEffect(() => {
+    const audio = previewAudioRef.current;
+    if (!audio) return;
+    audio.volume = previewVolume;
+  }, [previewVolume]);
+
+  useEffect(() => {
+    const audio = previewAudioRef.current;
+    if (!audio) return;
+    const resetPlayback = () => {
+      setPlayingTrackId(null);
+      setLoadingTrackId(null);
+    };
+    audio.addEventListener("ended", resetPlayback);
+    audio.addEventListener("error", resetPlayback);
+    return () => {
+      audio.removeEventListener("ended", resetPlayback);
+      audio.removeEventListener("error", resetPlayback);
+      audio.pause();
+      audio.src = "";
+    };
+  }, []);
+
+  const handleTrackPreviewPlay = async (track, event) => {
+    event.stopPropagation();
+    const previewUrl = track?.preview_url;
+    const trackId = String(track?.id ?? track?.mbid ?? "");
+    const audio = previewAudioRef.current;
+    if (!audio || !previewUrl || !trackId) return;
+    try {
+      if (playingTrackId === trackId) {
+        audio.pause();
+        setPlayingTrackId(null);
+        return;
+      }
+      setLoadingTrackId(trackId);
+      if (audio.src !== previewUrl) {
+        audio.src = previewUrl;
+      }
+      audio.volume = previewVolume;
+      await audio.play();
+      setPlayingTrackId(trackId);
+    } catch {
+      setPlayingTrackId(null);
+    } finally {
+      setLoadingTrackId(null);
+    }
+  };
+
+  useEffect(() => {
     const node = railRef.current;
     if (!node) return;
     updateScrollState();
@@ -251,6 +306,7 @@ export function ArtistDetailsLibraryAlbums({
 
   return (
     <section className="mb-10">
+      <audio ref={previewAudioRef} preload="none" />
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-2xl font-bold" style={{ color: "#fff" }}>
           Your Library
@@ -541,93 +597,93 @@ export function ArtistDetailsLibraryAlbums({
         </div>
       )}
 
-      {visibleAlbums.map((libraryAlbum, libraryAlbumIdx) => {
+      {visibleAlbums.map((libraryAlbum) => {
         const rgId = libraryAlbum.mbid || libraryAlbum.foreignAlbumId;
         if (expandedLibraryAlbum !== rgId) return null;
         const trackKey = libraryAlbum.id;
         const tracks = albumTracks[trackKey] || null;
         const isLoadingTracks = loadingTracks[trackKey] || false;
+        const statistics = libraryAlbum.statistics;
+        const detailItems = [
+          statistics?.trackCount ? `${statistics.trackCount} tracks` : null,
+          statistics?.sizeOnDisk
+            ? `${(statistics.sizeOnDisk / 1024 / 1024).toFixed(2)} MB`
+            : null,
+          statistics?.percentOfTracks != null
+            ? `${statistics.percentOfTracks}% complete`
+            : null,
+        ].filter(Boolean);
 
         return (
           <div
             key={`expanded-${libraryAlbum.id}`}
-            className="mt-4 overflow-hidden rounded-2xl border border-white/10"
-            style={{
-              backgroundColor: libraryAlbumIdx % 2 === 0 ? "#1c1a22" : "#211f27",
-            }}
+            className="mt-4 bg-[#101012] p-4"
           >
-            <div className="px-4 py-4">
-              <div className="mb-3 border-b border-white/10 pb-3">
-                <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
-                  {libraryAlbum.statistics && (
-                    <>
-                      <div>
-                        <span style={{ color: "#c1c1c3" }}>Tracks:</span>
-                        <span className="ml-2 font-medium" style={{ color: "#fff" }}>
-                          {libraryAlbum.statistics.trackCount || 0}
-                        </span>
-                      </div>
-                      <div>
-                        <span style={{ color: "#c1c1c3" }}>Size:</span>
-                        <span className="ml-2 font-medium" style={{ color: "#fff" }}>
-                          {libraryAlbum.statistics.sizeOnDisk
-                            ? `${(libraryAlbum.statistics.sizeOnDisk / 1024 / 1024).toFixed(2)} MB`
-                            : "N/A"}
-                        </span>
-                      </div>
-                      <div>
-                        <span style={{ color: "#c1c1c3" }}>Completion:</span>
-                        <span className="ml-2 font-medium" style={{ color: "#fff" }}>
-                          {libraryAlbum.statistics.percentOfTracks || 0}%
-                        </span>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
+            <div className="mb-4 min-w-0">
+              <h3 className="truncate text-lg font-bold text-white">
+                {libraryAlbum.albumName}
+              </h3>
+              {detailItems.length > 0 && (
+                <p className="text-xs text-white/50">
+                  {detailItems.join(" · ")}
+                </p>
+              )}
+            </div>
 
-              {isLoadingTracks ? (
-                <div className="flex items-center justify-center py-4">
-                  <Loader className="h-5 w-5 animate-spin" style={{ color: "#c1c1c3" }} />
-                </div>
-              ) : tracks && tracks.length > 0 ? (
-                <div className="space-y-1">
-                  {tracks.map((track, idx) => {
-                    const trackMenuKey = String(
-                      track.id || track.mbid || track.title || idx,
-                    );
-                    const isPlaylistMenuOpen =
-                      activePlaylistTrackKey === trackMenuKey;
-                    return (
-                      <div
-                        key={trackMenuKey}
-                        className="flex items-center gap-3 rounded-lg px-2 py-2.5 text-sm transition-colors"
-                        style={{
-                          backgroundColor: isPlaylistMenuOpen
-                            ? "rgba(255, 255, 255, 0.06)"
-                            : "transparent",
-                        }}
-                        onMouseEnter={(event) => {
-                          event.currentTarget.style.backgroundColor =
-                            "rgba(255, 255, 255, 0.06)";
-                        }}
-                        onMouseLeave={(event) => {
-                          event.currentTarget.style.backgroundColor =
-                            isPlaylistMenuOpen
-                              ? "rgba(255, 255, 255, 0.06)"
-                              : "transparent";
-                        }}
+            {isLoadingTracks ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader className="h-6 w-6 animate-spin text-white/65" />
+              </div>
+            ) : tracks && tracks.length > 0 ? (
+              <div className="space-y-1">
+                {tracks.map((track, idx) => {
+                  const trackMenuKey = String(
+                    track.id || track.mbid || track.title || idx,
+                  );
+                  const isPlaylistMenuOpen =
+                    activePlaylistTrackKey === trackMenuKey;
+                  const isPlaying = playingTrackId === trackMenuKey;
+                  const isLoadingPreview = loadingTrackId === trackMenuKey;
+                  const durationLabel = track.length
+                    ? `${Math.floor(track.length / 60000)}:${Math.floor(
+                        (track.length % 60000) / 1000
+                      )
+                        .toString()
+                        .padStart(2, "0")}`
+                    : "";
+                  return (
+                    <div
+                      key={trackMenuKey}
+                      className="grid grid-cols-[28px_28px_minmax(0,1fr)_auto_auto] items-center gap-2 px-2 py-2 text-sm transition-colors hover:bg-white/[0.06]"
+                      style={{
+                        backgroundColor: isPlaylistMenuOpen
+                          ? "rgba(255, 255, 255, 0.06)"
+                          : "transparent",
+                      }}
                       >
-                      <span
-                        className="w-7 flex-shrink-0 text-xs tabular-nums"
-                        style={{ color: "#c1c1c3" }}
-                      >
+                      <span className="text-right text-xs tabular-nums text-white/45">
                         {track.trackNumber || track.position || idx + 1}
                       </span>
-                      <span
-                        className="min-w-0 flex-1 truncate text-sm"
-                        style={{ color: "#fff" }}
-                      >
+                      {track.preview_url ? (
+                        <button
+                          type="button"
+                          className="flex h-7 w-7 items-center justify-center bg-white/[0.06] text-white transition-colors hover:bg-white/10"
+                          onClick={(event) => handleTrackPreviewPlay(track, event)}
+                          aria-label={isPlaying ? "Pause preview" : "Play preview"}
+                          title={isPlaying ? "Pause preview" : "Play preview"}
+                        >
+                          {isLoadingPreview ? (
+                            <Loader className="h-3 w-3 animate-spin" />
+                          ) : isPlaying ? (
+                            <Pause className="h-3 w-3" />
+                          ) : (
+                            <Play className="ml-0.5 h-3 w-3" />
+                          )}
+                        </button>
+                      ) : (
+                        <span />
+                      )}
+                      <span className="min-w-0 truncate text-white">
                         {track.title || track.trackName || "Unknown Track"}
                       </span>
                       {onAddTrackToPlaylist ? (
@@ -659,27 +715,19 @@ export function ArtistDetailsLibraryAlbums({
                         />
                       ) : null}
                       <span
-                        className="w-11 flex-shrink-0 text-right text-xs tabular-nums"
-                        style={{ color: "#c1c1c3" }}
+                        className="w-11 text-right text-xs tabular-nums text-white/45"
                       >
-                        {track.length
-                          ? `${Math.floor(track.length / 60000)}:${Math.floor(
-                              (track.length % 60000) / 1000
-                            )
-                              .toString()
-                              .padStart(2, "0")}`
-                          : ""}
+                        {durationLabel}
                       </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="py-4 text-sm italic" style={{ color: "#c1c1c3" }}>
-                  No tracks available
-                </p>
-              )}
-            </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="py-6 text-sm italic text-white/50">
+                No tracks available
+              </p>
+            )}
           </div>
         );
       })}
@@ -714,4 +762,5 @@ ArtistDetailsLibraryAlbums.propTypes = {
   getDefaultPlaylistName: PropTypes.func,
   onLoadPlaylists: PropTypes.func,
   onVisibleCoverIdsChange: PropTypes.func,
+  previewVolume: PropTypes.number,
 };

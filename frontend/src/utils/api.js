@@ -544,13 +544,32 @@ export const requestAlbumFromSearch = async (payload) => {
   return response.data;
 };
 
-export const getLibraryTracks = async (albumId, releaseGroupMbid = null) => {
+export const getLibraryTracks = async (
+  albumId,
+  releaseGroupMbid = null,
+  context = {},
+) => {
   const params = { albumId };
   if (releaseGroupMbid) {
     params.releaseGroupMbid = releaseGroupMbid;
   }
+  if (context.artistName) params.artistName = context.artistName;
+  if (context.albumTitle) params.albumTitle = context.albumTitle;
+  if (context.releaseType) params.releaseType = context.releaseType;
+  if (context.releaseDate) params.releaseDate = context.releaseDate;
+  if (context.deezerAlbumId) params.deezerAlbumId = context.deezerAlbumId;
   const response = await api.get("/library/tracks", { params });
-  return response.data;
+  const tracks = Array.isArray(response.data) ? response.data : [];
+  return Promise.all(
+    tracks.map(async (track) => {
+      if (!track?.streamPath) return track;
+      return {
+        ...track,
+        preview_url: await buildStreamUrl(track.streamPath),
+        previewProvider: "lidarr",
+      };
+    }),
+  );
 };
 
 export const updateLibraryAlbum = async (id, data) => {

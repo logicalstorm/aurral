@@ -1,5 +1,5 @@
 import PropTypes from "prop-types";
-import { Music, Sparkles, Star } from "lucide-react";
+import { Music, Star } from "lucide-react";
 import AddAlbumButton from "../../../components/AddAlbumButton";
 import { buildAurralPick, getReleaseMetric } from "../utils";
 
@@ -52,8 +52,7 @@ export function ArtistDetailsDownloadTargets({
           </div>
           <div className="flex min-w-0 flex-col justify-between gap-5">
             <div className="min-w-0">
-              <div className="mb-3 inline-flex items-center gap-2 bg-[#707e61]/25 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.16em] text-[#dfe8d2]">
-                <Sparkles className="h-3.5 w-3.5" />
+              <div className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-white">
                 Aurral Pick
               </div>
               <h2 className="max-w-4xl break-words text-3xl font-black leading-tight text-white sm:text-4xl">
@@ -82,10 +81,6 @@ export function ArtistDetailsDownloadTargets({
                   }}
                   isLoading={requestingAlbum === missingReleasePick.releaseGroupId}
                   disabled={requestingAlbum === missingReleasePick.releaseGroupId}
-                  style={{
-                    backgroundColor: "#707e61",
-                    color: "#fff",
-                  }}
                 />
               </div>
             )}

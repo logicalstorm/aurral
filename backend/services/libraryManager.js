@@ -1433,10 +1433,22 @@ export class LibraryManager {
     trackNumber = 0,
     albumIsComplete = false,
   ) {
-    const path = lidarrTrack.path || null;
-    const size = lidarrTrack.sizeOnDisk || lidarrTrack.size || 0;
+    const trackFile = lidarrTrack.trackFile || lidarrTrack.file || null;
+    const filePath =
+      lidarrTrack.path ||
+      trackFile?.path ||
+      (trackFile?.relativePath && lidarrAlbum.path
+        ? path.join(lidarrAlbum.path, trackFile.relativePath)
+        : null) ||
+      null;
+    const size =
+      lidarrTrack.sizeOnDisk ||
+      lidarrTrack.size ||
+      trackFile?.size ||
+      trackFile?.sizeOnDisk ||
+      0;
     const hasFileExplicit = lidarrTrack.hasFile;
-    const hasFileFromPathOrSize = !!(path || size > 0);
+    const hasFileFromPathOrSize = !!(filePath || size > 0);
     const albumSizeOnDisk = lidarrAlbum.statistics?.sizeOnDisk || 0;
 
     let hasFile = false;
@@ -1462,14 +1474,16 @@ export class LibraryManager {
       mbid: lidarrTrack.foreignRecordingId || lidarrTrack.foreignTrackId,
       trackName: lidarrTrack.title || lidarrTrack.trackTitle,
       trackNumber: trackNumber || lidarrTrack.trackNumber || 0,
-      path: path,
+      path: filePath,
       hasFile: hasFile,
       size: size,
       quality:
         lidarrTrack.mediaInfo?.audioFormat ||
+        trackFile?.mediaInfo?.audioFormat ||
         lidarrTrack.quality?.quality?.name ||
+        trackFile?.quality?.quality?.name ||
         null,
-      addedAt: lidarrTrack.added || new Date().toISOString(),
+      addedAt: lidarrTrack.added || trackFile?.dateAdded || new Date().toISOString(),
     };
   }
 
