@@ -250,6 +250,7 @@ export default function registerDetails(router) {
           links: Array.isArray(metadataArtist?.links) ? metadataArtist.links : [],
           "release-groups": releaseGroups,
           relations: toLegacyRelations(metadataArtist),
+          rating: metadataArtist?.rating || null,
           "release-group-count": releaseGroups.length,
           "release-count": releaseGroups.length,
           _lidarrData: {
@@ -296,6 +297,7 @@ export default function registerDetails(router) {
           links: Array.isArray(metadataArtist?.links) ? metadataArtist.links : [],
           "release-groups": releaseGroups,
           relations: toLegacyRelations(metadataArtist),
+          rating: metadataArtist?.rating || null,
           "release-group-count": releaseGroups.length,
           "release-count": releaseGroups.length,
           bio: metadataArtist?.overview || undefined,
