@@ -62,6 +62,7 @@ export function ArtistDetailsReleaseGroups({
   artist,
   loadingReleases,
   albumCovers,
+  artistCoverImage,
   expandedReleaseGroup,
   albumTracks,
   loadingTracks,
@@ -152,9 +153,9 @@ export function ArtistDetailsReleaseGroups({
               onClick={() => handleReleaseGroupAlbumClick(releaseGroup, status?.libraryId)}
             >
               <div className="relative mb-2 aspect-square overflow-hidden bg-white/[0.06] shadow-lg shadow-black/20">
-                {albumCovers[releaseGroup.id] ? (
+                {albumCovers[releaseGroup.id] || artistCoverImage ? (
                   <img
-                    src={albumCovers[releaseGroup.id]}
+                    src={albumCovers[releaseGroup.id] || artistCoverImage}
                     alt=""
                     className="h-full w-full object-cover transition-opacity group-hover:opacity-90"
                     loading="lazy"
@@ -231,6 +232,7 @@ ArtistDetailsReleaseGroups.propTypes = {
   artist: PropTypes.object.isRequired,
   loadingReleases: PropTypes.bool,
   albumCovers: PropTypes.object,
+  artistCoverImage: PropTypes.string,
   expandedReleaseGroup: PropTypes.string,
   albumTracks: PropTypes.object,
   loadingTracks: PropTypes.object,

@@ -3,8 +3,8 @@ import { Music, Star } from "lucide-react";
 import AddAlbumButton from "../../../components/AddAlbumButton";
 import { buildAurralPick, getReleaseMetric } from "../utils";
 
-function PickCover({ pick, albumCovers }) {
-  const cover = albumCovers?.[pick.releaseGroupId];
+function PickCover({ pick, albumCovers, artistCoverImage }) {
+  const cover = albumCovers?.[pick.releaseGroupId] || artistCoverImage;
   if (cover) {
     return (
       <img
@@ -26,11 +26,13 @@ function PickCover({ pick, albumCovers }) {
 PickCover.propTypes = {
   pick: PropTypes.object.isRequired,
   albumCovers: PropTypes.object,
+  artistCoverImage: PropTypes.string,
 };
 
 export function ArtistDetailsDownloadTargets({
   targets,
   albumCovers,
+  artistCoverImage,
   canAddAlbum,
   requestingAlbum,
   handleRequestAlbum,
@@ -48,7 +50,11 @@ export function ArtistDetailsDownloadTargets({
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_18%,rgba(112,126,97,0.32),transparent_28%),linear-gradient(135deg,rgba(255,255,255,0.08),transparent_38%)]" />
         <div className="relative grid gap-5 p-5 sm:grid-cols-[180px_minmax(0,1fr)] md:p-6">
           <div className="aspect-square overflow-hidden bg-white/[0.06] shadow-2xl shadow-black/30">
-            <PickCover pick={missingReleasePick} albumCovers={albumCovers} />
+            <PickCover
+              pick={missingReleasePick}
+              albumCovers={albumCovers}
+              artistCoverImage={artistCoverImage}
+            />
           </div>
           <div className="flex min-w-0 flex-col justify-between gap-5">
             <div className="min-w-0">
@@ -94,6 +100,7 @@ export function ArtistDetailsDownloadTargets({
 ArtistDetailsDownloadTargets.propTypes = {
   targets: PropTypes.arrayOf(PropTypes.object).isRequired,
   albumCovers: PropTypes.object,
+  artistCoverImage: PropTypes.string,
   canAddAlbum: PropTypes.bool,
   requestingAlbum: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   handleRequestAlbum: PropTypes.func.isRequired,

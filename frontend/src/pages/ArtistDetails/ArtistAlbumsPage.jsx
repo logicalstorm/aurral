@@ -21,16 +21,16 @@ import {
   createSharedPlaylist,
   getFlowStatus,
 } from "../../utils/api";
-import { getReleaseMetric, getReleaseYear } from "./utils";
+import { getArtistHeroImage, getReleaseMetric, getReleaseYear } from "./utils";
 
 const sortOptions = [
   { value: "latest", label: "Latest" },
   { value: "oldest", label: "Oldest" },
   { value: "popular", label: "Most popular" },
-  { value: "rating", label: "Highest rated" },
 ];
 
 const releaseTabs = [
+  { value: "all", label: "All" },
   { value: "albums", label: "Albums" },
   { value: "singles", label: "EP & Singles" },
   { value: "compilations", label: "Compilations" },
@@ -71,6 +71,7 @@ const isSingleOrEp = (releaseGroup) =>
   releaseGroup?.["primary-type"] === "EP";
 
 const matchesReleaseTab = (releaseGroup, tab) => {
+  if (tab === "all") return true;
   if (tab === "compilations") return isCompilation(releaseGroup);
   if (tab === "singles") {
     return isSingleOrEp(releaseGroup) && !isCompilation(releaseGroup);
@@ -94,12 +95,6 @@ const sortReleaseGroups = (items, sortMode) =>
       const diff = getReleaseMetric(b).sortValue - getReleaseMetric(a).sortValue;
       if (diff !== 0) return diff;
     }
-    if (sortMode === "rating") {
-      const ratingA = Number(a?.rating?.value || 0);
-      const ratingB = Number(b?.rating?.value || 0);
-      const diff = ratingB - ratingA;
-      if (diff !== 0) return diff;
-    }
     const dateA = String(a["first-release-date"] || "");
     const dateB = String(b["first-release-date"] || "");
     return sortMode === "oldest"
@@ -110,7 +105,7 @@ const sortReleaseGroups = (items, sortMode) =>
 const getGridColumnCount = () => {
   if (typeof window === "undefined") return 2;
   if (window.matchMedia("(min-width: 1280px)").matches) return 6;
-  if (window.matchMedia("(min-width: 1024px)").matches) return 5;
+  if (window.matchMedia("(min-width: 1024px)").matches) return 6;
   if (window.matchMedia("(min-width: 640px)").matches) return 3;
   return 2;
 };
@@ -121,7 +116,7 @@ function ArtistAlbumsPage() {
   const { showSuccess, showError } = useToast();
   const { hasPermission } = useAuth();
   const [previewVolume] = useSharedVolume();
-  const [selectedTab, setSelectedTab] = useState("albums");
+  const [selectedTab, setSelectedTab] = useState("all");
   const [sortMode, setSortMode] = useState("latest");
   const [viewMode, setViewMode] = useState("grid");
   const [gridColumnCount, setGridColumnCount] = useState(getGridColumnCount);
@@ -155,7 +150,9 @@ function ArtistAlbumsPage() {
     setExistsInLibrary,
     appSettings,
     albumCovers,
+    coverImages,
   } = stream;
+  const artistCoverImage = getArtistHeroImage(coverImages);
 
   const library = useArtistDetailsLibrary({
     artist,
@@ -316,7 +313,7 @@ function ArtistAlbumsPage() {
   const renderReleaseCard = (releaseGroup) => {
     const status = library.getAlbumStatus(releaseGroup.id);
     const metric = getReleaseMetric(releaseGroup);
-    const cover = albumCovers[releaseGroup.id];
+    const cover = albumCovers[releaseGroup.id] || artistCoverImage;
     const isComplete = status?.status === "available" || status?.status === "added";
     const releaseTypeLabel = getReleaseTypeLabel(releaseGroup);
 
@@ -324,7 +321,7 @@ function ArtistAlbumsPage() {
       return (
         <div
           key={releaseGroup.id}
-          className="grid cursor-pointer grid-cols-[56px_minmax(0,1fr)_auto] items-center gap-3 bg-[#101012] p-2 transition-colors hover:bg-white/[0.06]"
+          className="grid cursor-pointer grid-cols-[56px_minmax(0,1fr)_auto] items-center gap-3 p-2 transition-colors hover:bg-white/[0.06]"
           onClick={() =>
             library.handleReleaseGroupAlbumClick(releaseGroup, status?.libraryId)
           }
@@ -381,14 +378,20 @@ function ArtistAlbumsPage() {
     return (
       <article
         key={releaseGroup.id}
-        className="cursor-pointer bg-[#101012] p-3 transition-colors hover:bg-white/[0.06]"
+        className="group min-w-0 cursor-pointer"
         onClick={() =>
           library.handleReleaseGroupAlbumClick(releaseGroup, status?.libraryId)
         }
       >
-        <div className="relative mb-3 aspect-square bg-white/[0.06]">
+        <div className="relative mb-2 aspect-square overflow-hidden bg-white/[0.06] shadow-lg shadow-black/20">
           {cover ? (
-            <img src={cover} alt="" className="h-full w-full object-cover" loading="lazy" />
+            <img
+              src={cover}
+              alt=""
+              className="h-full w-full object-cover transition-opacity group-hover:opacity-90"
+              loading="lazy"
+              decoding="async"
+            />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
               <Music className="h-10 w-10 text-white/35" />
@@ -476,7 +479,7 @@ function ArtistAlbumsPage() {
         </div>
       </div>
 
-      <div className="mb-6 grid gap-4 bg-[#101012] p-4 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-start">
+      <div className="mb-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-start">
         <div>
           <h2 className="mb-3 text-sm font-bold text-white">Release Type</h2>
           <div className="flex flex-wrap gap-2">
@@ -548,8 +551,8 @@ function ArtistAlbumsPage() {
       <div
         className={
           viewMode === "grid"
-            ? "grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6"
-            : "space-y-2"
+            ? "grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 lg:grid-cols-6 lg:gap-x-5"
+            : "space-y-1"
         }
       >
         {filteredReleaseGroups.map((releaseGroup, index) => (
