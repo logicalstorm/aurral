@@ -101,6 +101,7 @@ export function useArtistDetailsStream(
   const artistMbidRef = useRef(mbid);
   const artistNameRef = useRef(artistNameFromNav || "");
   const selectedReleaseTypesRef = useRef(selectedReleaseTypes);
+  const visibleCoverIdsRef = useRef(visibleCoverIds);
   const fetchedReleaseTypesRef = useRef(
     normalizeReleaseTypesSelection(selectedReleaseTypes),
   );
@@ -123,6 +124,10 @@ export function useArtistDetailsStream(
   useEffect(() => {
     selectedReleaseTypesRef.current = selectedReleaseTypes;
   }, [selectedReleaseTypes, selectedReleaseTypesKey]);
+
+  useEffect(() => {
+    visibleCoverIdsRef.current = visibleCoverIds;
+  }, [visibleCoverIds, visibleCoverIdsKey]);
 
   useEffect(() => {
     if (!mbid) return;
@@ -449,7 +454,7 @@ export function useArtistDetailsStream(
     if (!mbid || !artist?.id) return;
 
     const requestedReleaseTypes = normalizeReleaseTypesSelection(
-      selectedReleaseTypes,
+      selectedReleaseTypesRef.current,
     );
     const fetchedReleaseTypes = fetchedReleaseTypesRef.current;
 
@@ -521,7 +526,9 @@ export function useArtistDetailsStream(
 
     const releaseGroupIds =
       artist?.["release-groups"]
-        ?.filter((rg) => matchesReleaseTypeFilter(rg, selectedReleaseTypes))
+        ?.filter((rg) =>
+          matchesReleaseTypeFilter(rg, selectedReleaseTypesRef.current),
+        )
         .map((rg) => rg.id)
         .filter(Boolean) || [];
     const libraryMbids = (libraryAlbums || [])
@@ -530,8 +537,11 @@ export function useArtistDetailsStream(
     const needed = [...new Set([...releaseGroupIds, ...libraryMbids])];
     if (!needed.length) return;
 
-    const prioritized = visibleCoverIds.length
-      ? visibleCoverIds.filter((id) => needed.includes(id))
+    const nextVisibleCoverIds = Array.isArray(visibleCoverIdsRef.current)
+      ? visibleCoverIdsRef.current
+      : [];
+    const prioritized = nextVisibleCoverIds.length
+      ? nextVisibleCoverIds.filter((id) => needed.includes(id))
       : needed.slice(0, 8);
     const missing = prioritized.filter(
       (id) => !albumCovers[id] && !requestedAlbumCoversRef.current.has(id),
