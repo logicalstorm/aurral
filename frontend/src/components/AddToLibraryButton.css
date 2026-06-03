@@ -2,24 +2,21 @@
   display: inline-flex;
   align-items: stretch;
   overflow: hidden;
-  border-radius: 6px;
-  background: linear-gradient(180deg, #302d38 0%, #2a2830 100%);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  border-radius: var(--aurral-radius);
+  background: var(--aurral-gray);
 }
 
 .add-to-library-button {
   display: block;
-  background-color: #2a2830;
+  background-color: var(--aurral-gray);
   width: 192px;
   height: 40px;
   line-height: 40px;
-  color: #fff;
+  color: var(--aurral-white);
   position: relative;
   cursor: pointer;
   overflow: hidden;
-  border-radius: 5px;
-  box-shadow: 0 0 20px 0 rgba(0, 0, 0, 0.3);
+  border-radius: var(--aurral-radius);
   transition: all 0.25s cubic-bezier(0.310, -0.105, 0.430, 1.400);
   border: none;
   padding: 0;
@@ -79,7 +76,8 @@
 
 .add-to-library-button.success,
 .add-to-library-button:hover {
-  background-color: #3a3840; /* Hover color */
+  background-color: var(--aurral-gray-light);
+  color: var(--aurral-black);
 }
 
 .add-to-library-button.success span,
@@ -100,7 +98,8 @@
 }
 
 .add-to-library-button.success {
-  background-color: #27ae60;
+  background-color: var(--aurral-green);
+  color: var(--aurral-black);
 }
 
 .add-to-library-button.success .icon .plus-icon {
@@ -128,7 +127,7 @@
   border: none;
   position: relative;
   background: transparent;
-  color: #fff;
+  color: var(--aurral-white);
   transition: background-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
 }
 
@@ -139,7 +138,7 @@
   top: 22%;
   bottom: 22%;
   width: 1px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--aurral-surface);
 }
 
 .add-to-library-button-group .add-to-library-button {
@@ -149,11 +148,13 @@
 
 .add-to-library-button-group .add-to-library-button:hover,
 .add-to-library-button-group .add-to-library-button.success {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--aurral-gray-light);
+  color: var(--aurral-black);
 }
 
 .add-to-library-button-split-trigger:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--aurral-gray-light);
+  color: var(--aurral-black);
 }
 
 .add-to-library-button-split-trigger:disabled {

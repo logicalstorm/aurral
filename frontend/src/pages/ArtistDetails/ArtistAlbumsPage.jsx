@@ -325,16 +325,16 @@ function ArtistAlbumsPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-20">
-        <Loader className="h-10 w-10 animate-spin text-white/65" />
+      <div className="artist-loading">
+        <Loader className="artist-spinner animate-spin" />
       </div>
     );
   }
 
   if (error || !artist) {
     return (
-      <div className="bg-[#101012] p-6">
-        <p className="text-white/75">{error || "Artist not found"}</p>
+      <div className="artist-empty-panel">
+        <p className="artist-modal__subcopy">{error || "Artist not found"}</p>
       </div>
     );
   }
@@ -350,41 +350,41 @@ function ArtistAlbumsPage() {
       return (
         <div
           key={releaseGroup.id}
-          className="grid cursor-pointer grid-cols-[56px_minmax(0,1fr)_auto] items-center gap-3 p-2 transition-colors hover:bg-white/[0.06]"
+          className="artist-release-list-item"
           onClick={() =>
             library.handleReleaseGroupAlbumClick(releaseGroup, status?.libraryId)
           }
         >
-          <div className="h-14 w-14 bg-white/[0.06]">
+          <div className="artist-media-cell artist-list-cover">
             {cover ? (
-              <img src={cover} alt="" className="h-full w-full object-cover" loading="lazy" />
+              <img src={cover} alt="" loading="lazy" />
             ) : (
-              <div className="flex h-full w-full items-center justify-center">
-                <Music className="h-5 w-5 text-white/35" />
+              <div className="artist-media-placeholder">
+                <Music className="artist-icon-md" />
               </div>
             )}
           </div>
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-bold text-white">{releaseGroup.title}</h2>
-            <p className="mt-1 truncate text-xs text-white/50">
+          <div className="artist-min-0">
+            <h2 className="artist-release-card__title artist-truncate">{releaseGroup.title}</h2>
+            <p className="artist-release-card__meta artist-truncate">
               {[getReleaseYear(releaseGroup), releaseTypeLabel]
                 .filter(Boolean)
                 .join(" · ")}
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="artist-row-actions">
             {metric.label && (
-              <span className="hidden items-center gap-1 text-xs text-white/50 sm:inline-flex">
-                <Star className="h-3.5 w-3.5 text-yellow-400" />
+              <span className="artist-release-card__metric artist-hidden-mobile">
+                <Star className="artist-star-icon" />
                 {metric.label}
               </span>
             )}
             {isComplete ? (
               <span
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#2a2a2f] text-white shadow-lg shadow-black/30 ring-1 ring-white/20"
+                className="artist-release-card__status"
                 title="Complete"
               >
-                <CheckCircle className="h-4 w-4" />
+                <CheckCircle className="artist-icon-sm" />
                 <span className="sr-only">Complete</span>
               </span>
             ) : canAddAlbum ? (
@@ -407,32 +407,31 @@ function ArtistAlbumsPage() {
     return (
       <article
         key={releaseGroup.id}
-        className="group min-w-0 cursor-pointer"
+        className="artist-release-card"
         onClick={() =>
           library.handleReleaseGroupAlbumClick(releaseGroup, status?.libraryId)
         }
       >
-        <div className="relative mb-2 aspect-square overflow-hidden bg-white/[0.06] shadow-lg shadow-black/20">
+        <div className="artist-release-card__cover">
           {cover ? (
             <img
               src={cover}
               alt=""
-              className="h-full w-full object-cover transition-opacity group-hover:opacity-90"
               loading="lazy"
               decoding="async"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center">
-              <Music className="h-10 w-10 text-white/35" />
+            <div className="artist-release-card__placeholder">
+              <Music className="artist-icon-lg" />
             </div>
           )}
-          <div className="absolute bottom-2 right-2">
+          <div className="artist-release-card__action">
             {isComplete ? (
               <span
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#2a2a2f] text-white shadow-lg shadow-black/30 ring-1 ring-white/20"
+                className="artist-release-card__status"
                 title="Complete"
               >
-                <CheckCircle className="h-4 w-4" />
+                <CheckCircle className="artist-icon-sm" />
                 <span className="sr-only">Complete</span>
               </span>
             ) : canAddAlbum ? (
@@ -449,17 +448,17 @@ function ArtistAlbumsPage() {
             ) : null}
           </div>
         </div>
-        <h2 className="line-clamp-2 text-sm font-bold leading-5 text-white">
+        <h2 className="artist-release-card__title artist-clamp-2">
           {releaseGroup.title}
         </h2>
-        <p className="mt-1 truncate text-xs text-white/50">
+        <p className="artist-release-card__meta artist-truncate">
           {[getReleaseYear(releaseGroup), releaseTypeLabel]
             .filter(Boolean)
             .join(" · ")}
         </p>
         {metric.label && (
-          <p className="mt-2 inline-flex items-center gap-1 text-xs text-white/50">
-            <Star className="h-3.5 w-3.5 text-yellow-400" />
+          <p className="artist-release-card__metric">
+            <Star className="artist-star-icon" />
             {metric.label}
           </p>
         )}
@@ -496,28 +495,28 @@ function ArtistAlbumsPage() {
 
   return (
     <div className="artist-details-page">
-      <div className="mb-7 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div className="artist-page-header">
         <div>
           <Link
             to={`/artist/${artist.id}`}
             state={{ artistName: artist.name, inLibrary: existsInLibrary }}
-            className="inline-flex items-center gap-2 text-4xl font-black text-white transition-colors hover:text-white/75"
+            className="artist-title-link"
           >
             <span>{artist.name}</span>
-            <CornerUpLeft className="mt-1 h-6 w-6 text-white/55" />
+            <CornerUpLeft className="artist-icon-lg" />
           </Link>
           {loadingReleases && (
-            <p className="mt-2 inline-flex items-center gap-2 text-sm text-white/55">
-              <Loader className="h-4 w-4 animate-spin" />
+            <p className="artist-meta-line">
+              <Loader className="artist-icon-sm animate-spin" />
               Loading releases
             </p>
           )}
         </div>
       </div>
 
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap gap-2">
+      <div className="artist-heading-row artist-page-header">
+        <div className="artist-min-0">
+          <div className="artist-tabs">
             {releaseTabs.map((tab) => {
               const active = selectedTab === tab.value;
               return (
@@ -525,11 +524,7 @@ function ArtistAlbumsPage() {
                   key={tab.value}
                   type="button"
                   onClick={() => setSelectedTab(tab.value)}
-                  className="px-3 py-1.5 text-xs font-bold transition-colors"
-                  style={{
-                    backgroundColor: active ? "#fff" : "rgba(255,255,255,0.08)",
-                    color: active ? "#050505" : "#fff",
-                  }}
+                  className={`artist-tab${active ? " is-active" : ""}`}
                 >
                   {tab.label}
                 </button>
@@ -538,19 +533,19 @@ function ArtistAlbumsPage() {
           </div>
         </div>
 
-        <div className="relative self-start sm:self-auto" ref={optionsMenuRef}>
+        <div className="artist-options" ref={optionsMenuRef}>
           <button
             type="button"
             onClick={() => setOptionsOpen((current) => !current)}
-            className="flex h-10 w-10 items-center justify-center bg-white/[0.08] text-white transition-colors hover:bg-white/10"
+            className="artist-icon-button"
             aria-label="Album display options"
             title="Album display options"
             aria-expanded={optionsOpen}
           >
-            <SlidersHorizontal className="h-4 w-4" />
+            <SlidersHorizontal className="artist-icon-sm" />
           </button>
           {optionsOpen && (
-            <div className="absolute right-0 top-12 z-40 w-56 overflow-hidden border border-white/10 bg-[#15151a] py-1 shadow-xl">
+            <div className="artist-options-menu">
               {sortOptions.map((option) => {
                 const active = sortKey === option.value;
                 const DirectionIcon = sortDirection === "asc" ? ArrowUp : ArrowDown;
@@ -559,44 +554,34 @@ function ArtistAlbumsPage() {
                     key={option.value}
                     type="button"
                     onClick={() => handleSortOptionClick(option)}
-                    className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-white/[0.06] ${
-                      active ? "text-green-400" : "text-white"
-                    }`}
+                    className={`artist-menu-item${active ? " is-active" : ""}`}
                   >
                     <span>{option.label}</span>
-                    <span className={active ? "text-green-400" : "text-white/65"}>
-                      {active && <DirectionIcon className="h-3.5 w-3.5" />}
+                    <span>
+                      {active && <DirectionIcon className="artist-icon-xs" />}
                     </span>
                   </button>
                 );
               })}
-              <div className="my-1 h-px bg-white/10" />
-              <div className="grid grid-cols-2 gap-1 px-1">
+              <div className="artist-menu-section" />
+              <div className="artist-options-view-grid">
                 <button
                   type="button"
                   onClick={() => setViewMode("grid")}
-                  className={`flex h-9 items-center justify-center transition-colors hover:bg-white/10 ${
-                    viewMode === "grid"
-                      ? "bg-white/[0.06] text-green-400"
-                      : "bg-white/[0.06] text-white"
-                  }`}
+                  className={`artist-options-view-button${viewMode === "grid" ? " is-active" : ""}`}
                   aria-label="Grid view"
                   title="Grid view"
                 >
-                  <Grid3X3 className="h-4 w-4" />
+                  <Grid3X3 className="artist-icon-sm" />
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode("list")}
-                  className={`flex h-9 items-center justify-center transition-colors hover:bg-white/10 ${
-                    viewMode === "list"
-                      ? "bg-white/[0.06] text-green-400"
-                      : "bg-white/[0.06] text-white"
-                  }`}
+                  className={`artist-options-view-button${viewMode === "list" ? " is-active" : ""}`}
                   aria-label="List view"
                   title="List view"
                 >
-                  <List className="h-4 w-4" />
+                  <List className="artist-icon-sm" />
                 </button>
               </div>
             </div>
@@ -604,7 +589,7 @@ function ArtistAlbumsPage() {
         </div>
       </div>
 
-      <div className="mb-4 text-sm font-bold text-white/55">
+      <div className="artist-count">
         {filteredReleaseGroups.length.toLocaleString()} release
         {filteredReleaseGroups.length === 1 ? "" : "s"}
       </div>
@@ -612,15 +597,15 @@ function ArtistAlbumsPage() {
       <div
         className={
           viewMode === "grid"
-            ? "grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 lg:grid-cols-6 lg:gap-x-5"
-            : "space-y-1"
+            ? "artist-albums-grid"
+            : "artist-release-list"
         }
       >
         {filteredReleaseGroups.map((releaseGroup, index) => (
           <Fragment key={releaseGroup.id}>
             {renderReleaseCard(releaseGroup)}
             {expandedRelease && expandedRenderAfterIndex === index && (
-              <div className={viewMode === "grid" ? "col-span-full" : ""}>
+              <div className={viewMode === "grid" ? "artist-grid-full" : ""}>
                 <ArtistDetailsReleaseTrackList
                   release={expandedRelease}
                   trackKey={expandedTrackKey}

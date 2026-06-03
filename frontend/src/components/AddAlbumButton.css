@@ -4,9 +4,8 @@
   height: 32px;
   width: 32px;
   min-width: 32px;
-  background-color: #22c55e;
-  border: 1px solid #22c55e;
-  color: #fff;
+  background-color: var(--aurral-green);
+  color: var(--aurral-black);
   border-radius: 9999px;
   cursor: pointer;
   overflow: hidden;
@@ -15,19 +14,17 @@
     min-width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
     background-color 0.2s ease,
     border-color 0.2s ease,
-    box-shadow 0.2s ease;
+    color 0.2s ease;
   padding: 0;
   white-space: nowrap;
   position: relative;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.34);
 }
 
 .add-album-btn:hover:not(:disabled) {
   width: 126px;
   min-width: 126px;
-  background-color: #16a34a;
-  border-color: #16a34a;
-  color: #fff;
+  background-color: var(--aurral-gray-light);
+  color: var(--aurral-black);
 }
 
 .add-album-btn.add-album-btn--expanded {

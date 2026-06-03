@@ -193,35 +193,31 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
     <>
       {isOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden"
+          className="app-mobile-backdrop md:hidden"
           onClick={onClose}
         />
       )}
 
       <aside
         ref={asideRef}
-        className={`fixed inset-y-0 left-0 z-50 flex flex-col transition-all duration-300 ease-in-out pl-safe pt-safe pb-safe ${translateClass}`}
+        className={`sidebar-shell ${translateClass}`}
         style={{
-          backgroundColor: "#18181c",
           width: isIcons ? "56px" : "208px",
         }}
       >
-        <div className="h-16 relative flex items-center justify-center px-4">
-          <Link to="/" className="flex items-center space-x-2 group">
+        <div className="sidebar-logo-row">
+          <Link to="/" className="sidebar-logo-link">
             <img
               src="/arralogo.svg"
               alt="Aurral Logo"
-              className="w-7 h-7 transition-transform group-hover:scale-110 flex-shrink-0"
+              className="sidebar-logo"
               style={{
                 filter:
                   "brightness(0) saturate(100%) invert(45%) sepia(8%) saturate(800%) hue-rotate(60deg) brightness(95%) contrast(85%)",
               }}
             />
             {!isIcons && (
-              <span
-                className="text-lg font-bold tracking-tight transition-colors"
-                style={{ color: "#fff" }}
-              >
+              <span className="sidebar-title">
                 Aurral
               </span>
             )}
@@ -229,56 +225,49 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
           {!isIcons && (
             <button
               onClick={() => onSetMode("icons")}
-              className="hidden md:flex absolute right-2 p-1.5 rounded-md transition-colors hover:bg-white/10"
-              style={{ color: "#c1c1c3" }}
+              className="sidebar-pin-button"
               aria-label="Collapse to icons"
               title="Collapse to icons"
             >
-              <Pin className="w-3.5 h-3.5" />
+              <Pin className="artist-icon-xs" />
             </button>
           )}
         </div>
         {isIcons && (
-          <div className="hidden md:flex justify-center pb-2">
+          <div className="sidebar-pin-row">
             <button
               onClick={() => onSetMode("full")}
-              className="p-1.5 rounded-md transition-colors hover:bg-white/10"
-              style={{ color: "#c1c1c3" }}
+              className="sidebar-pin-button"
               aria-label="Expand sidebar"
               title="Expand sidebar"
             >
-              <PinOff className="w-3.5 h-3.5" />
+              <PinOff className="artist-icon-xs" />
             </button>
           </div>
         )}
 
-        <div className={`flex-1 ${isIcons ? "px-1" : "px-3"} py-6 overflow-y-auto flex items-start justify-center`}>
+        <div className={`sidebar-body${isIcons ? " sidebar-body--icons" : ""}`}>
           <div
             ref={navRef}
-            className={`relative ${isIcons ? "p-1.5" : "p-3"} w-full`}
-            style={{ backgroundColor: "#0f0f12" }}
+            className={`sidebar-nav-wrap${isIcons ? " sidebar-nav-wrap--icons" : ""}`}
           >
             <div
               ref={activeBubbleRef}
-              className="absolute transition-all duration-300 ease-out z-10 opacity-0"
-              style={{ backgroundColor: "#707e61", opacity: "0.2" }}
+              className="sidebar-bubble sidebar-bubble--active"
             />
 
             <div
               ref={hoverBubbleRef}
-              className="absolute transition-all duration-200 ease-out z-0"
-              style={{ backgroundColor: "#1a1a1e" }}
+              className="sidebar-bubble sidebar-bubble--hover"
             />
 
             <nav
-              className="relative flex flex-col space-y-2"
+              className="sidebar-nav"
               onMouseLeave={() => setHoveredIndex(null)}
             >
               {navItems.map((item, index) => {
                 const Icon = item.icon;
                 const active = isActive(item.path);
-                const highlighted = active || hoveredIndex === index;
-                const linkColor = highlighted ? "#fff" : "#c1c1c3";
 
                 return (
                   <Link
@@ -288,29 +277,18 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
                     }}
                     to={item.path}
                     onMouseEnter={() => setHoveredIndex(index)}
-                    className={`group relative z-20 flex items-center ${
-                      isIcons
-                        ? "justify-center px-2 py-3"
-                        : "space-x-3 px-4 py-3.5"
-                    } font-medium transition-all duration-200 text-base`}
-                    style={{ color: linkColor }}
+                    className={`sidebar-link ${
+                      isIcons ? "sidebar-link--icons" : "sidebar-link--full"
+                    }${active ? " is-active" : ""}`}
                   >
                     <Icon
-                      className="w-5 h-5 flex-shrink-0"
-                      style={{ color: linkColor }}
+                      className="sidebar-link__icon"
                     />
                     {!isIcons && (
-                      <span className="truncate">{item.label}</span>
+                      <span className="sidebar-link__label">{item.label}</span>
                     )}
                     {isIcons && (
-                      <span
-                        className="absolute left-full ml-2 px-2.5 py-1.5 text-xs font-medium rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-[100]"
-                        style={{
-                          backgroundColor: "#2a2a2e",
-                          color: "#fff",
-                          boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
-                        }}
-                      >
+                      <span className="sidebar-tooltip">
                         {item.label}
                       </span>
                     )}
@@ -321,13 +299,13 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
           </div>
         </div>
 
-        <div className={`flex flex-col items-center gap-2 ${isIcons ? "p-1.5" : "p-3"} mt-auto border-t`} style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+        <div className={`sidebar-footer${isIcons ? " sidebar-footer--icons" : ""}`}>
           {authRequired && (
             <LogoutButton onClick={logout} collapsed={isIcons} />
           )}
 
           {!isIcons && (
-            <div className="text-[10px] font-mono opacity-30 select-none" style={{ color: "#c1c1c3" }}>
+            <div className="sidebar-version">
               v{resolvedVersion}
             </div>
           )}
