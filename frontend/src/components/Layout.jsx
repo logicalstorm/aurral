@@ -22,7 +22,6 @@ import { useAuth } from "../contexts/AuthContext";
 const VALID_SIDEBAR_MODES = ["full", "icons", "hidden"];
 
 function Layout({ children, appVersion }) {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [scrollbar, setScrollbar] = useState({
     visible: false,
@@ -147,7 +146,6 @@ function Layout({ children, appVersion }) {
   }, [handleSetSidebarMode, sidebarMode]);
 
   useEffect(() => {
-    setIsSidebarOpen(false);
     setIsMobileMenuOpen(false);
   }, [location.pathname]);
 
@@ -187,12 +185,7 @@ function Layout({ children, appVersion }) {
 
   return (
     <div className="app-shell">
-      <Sidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        appVersion={appVersion}
-        mode={sidebarMode}
-      />
+      <Sidebar appVersion={appVersion} mode={sidebarMode} />
 
       <div
         className={`app-content ${
@@ -207,7 +200,7 @@ function Layout({ children, appVersion }) {
           <button
             type="button"
             onClick={toggleSidebarPin}
-            className="app-nav-toggle hidden md:inline-flex"
+            className="app-nav-toggle"
             aria-label={
               sidebarMode === "icons" ? "Expand sidebar" : "Collapse to icons"
             }
