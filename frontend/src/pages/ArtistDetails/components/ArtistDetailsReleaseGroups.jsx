@@ -169,7 +169,7 @@ export function ArtistDetailsReleaseGroups({
                 <div className="absolute bottom-2 right-2">
                   {status?.status === "available" || status?.status === "added" ? (
                     <span
-                      className="inline-flex h-8 min-w-12 items-center justify-center rounded-full bg-green-500 text-white shadow-lg shadow-black/30 ring-1 ring-white/15"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#2a2a2f] text-white shadow-lg shadow-black/30 ring-1 ring-white/20"
                       title="Complete"
                     >
                       <CheckCircle className="h-4 w-4" />
@@ -189,7 +189,7 @@ export function ArtistDetailsReleaseGroups({
                   ) : null}
                 </div>
               </div>
-              <h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-bold leading-5 text-white">
+              <h3 className="line-clamp-2 text-sm font-bold leading-5 text-white">
                 {releaseGroup.title}
               </h3>
               <p className="mt-1 truncate text-xs text-white/50">
