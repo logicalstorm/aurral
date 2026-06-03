@@ -136,27 +136,33 @@ export function SettingsIntegrationsTab({
     });
 
   const loadPlexServers = async (token) => {
-    try {
-      const { servers } = await getPlexResources(token);
-      setPlexServers(Array.isArray(servers) ? servers : []);
-      return servers;
-    } catch {
-      setPlexServers([]);
-      return [];
-    }
+    const { servers } = await getPlexResources(token);
+    const list = Array.isArray(servers) ? servers : [];
+    setPlexServers(list);
+    return list;
   };
 
   const handleChoosePlexServer = async () => {
-    const servers = await loadPlexServers(settings.integrations?.plex?.token);
-    if (!servers || servers.length === 0) {
-      showError("No Plex servers found for this account.");
+    try {
+      const servers = await loadPlexServers(settings.integrations?.plex?.token);
+      if (servers.length === 0) {
+        showError(
+          "Plex returned no servers for this account. Make sure your server is signed in to the same Plex account."
+        );
+      } else {
+        showInfo(`Found ${servers.length} Plex server(s).`);
+      }
+    } catch (err) {
+      const msg =
+        err.response?.data?.message || err.response?.data?.error || err.message;
+      showError(`Failed to load Plex servers: ${msg}`);
     }
   };
 
   const handleConnectPlex = async () => {
     setPlexConnecting(true);
     try {
-      const { pinId, code, authUrl } = await startPlexAuth();
+      const { pinId, code, authUrl, clientId } = await startPlexAuth();
       const popup = window.open(
         authUrl,
         "plex-auth",
@@ -179,13 +185,22 @@ export function SettingsIntegrationsTab({
         showError("Plex authentication timed out. Please try again.");
         return;
       }
-      updatePlex({ token });
-      showSuccess("Signed in to Plex. Select your server below.");
       const servers = await loadPlexServers(token);
       const owned = (servers || []).filter((s) => s.owned);
+      const patch = { token, ...(clientId ? { clientId } : {}) };
       if (owned.length === 1) {
-        handleSelectPlexServer(owned[0], token);
+        const best = pickBestConnection(owned[0]);
+        if (best?.uri) {
+          patch.url = best.uri;
+          patch.machineIdentifier = owned[0].clientIdentifier;
+        }
       }
+      updatePlex(patch);
+      showSuccess(
+        owned.length === 1 && patch.url
+          ? `Signed in and selected "${owned[0].name}". Remember to Save settings.`
+          : "Signed in to Plex. Select your server below.",
+      );
     } catch (err) {
       const errorMsg =
         err.response?.data?.message || err.response?.data?.error || err.message;
@@ -195,26 +210,18 @@ export function SettingsIntegrationsTab({
     }
   };
 
-  const handleSelectPlexServer = (server, tokenOverride) => {
+  const pickBestConnection = (server) => {
     const conns = server.connections || [];
-    const best =
-      conns.find((c) => c.local) || conns.find((c) => c.uri) || conns[0];
+    return conns.find((c) => c.local) || conns.find((c) => c.uri) || conns[0];
+  };
+
+  const handleSelectPlexServer = (server) => {
+    const best = pickBestConnection(server);
     if (!best?.uri) {
       showError("Selected Plex server has no usable connection.");
       return;
     }
-    updateSettings({
-      ...settings,
-      integrations: {
-        ...settings.integrations,
-        plex: {
-          ...(settings.integrations?.plex || {}),
-          ...(tokenOverride ? { token: tokenOverride } : {}),
-          url: best.uri,
-          machineIdentifier: server.clientIdentifier,
-        },
-      },
-    });
+    updatePlex({ url: best.uri, machineIdentifier: server.clientIdentifier });
     showInfo(`Selected "${server.name}". Remember to Save settings.`);
   };
 
