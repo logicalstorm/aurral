@@ -22,8 +22,10 @@ const DiscoverPage = lazy(() => import("./pages/DiscoverPage"));
 const ShowsPage = lazy(() => import("./pages/ShowsPage"));
 const LibraryPage = lazy(() => import("./pages/LibraryPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const DonatePage = lazy(() => import("./pages/DonatePage"));
 const MetadataProvidersPage = lazy(
-  () => import("./pages/Settings/MetadataProvidersPage")
+  () => import("./pages/Settings/MetadataProvidersPage"),
 );
 const ArtistDetailsPage = lazy(() => import("./pages/ArtistDetailsPage"));
 const ArtistAlbumsPage = lazy(() => import("./pages/ArtistAlbumsPage"));
@@ -95,7 +97,7 @@ ProtectedRoute.propTypes = {
 
 function AppContent() {
   const basePath = normalizeBasePath(
-    import.meta.env.VITE_BASE_PATH || import.meta.env.BASE_URL
+    import.meta.env.VITE_BASE_PATH || import.meta.env.BASE_URL,
   );
   const [isHealthy, setIsHealthy] = useState(null);
   const [rootFolderConfigured, setRootFolderConfigured] = useState(false);
@@ -126,7 +128,9 @@ function AppContent() {
       if (discoveryToastShownRef.current) return;
       discoveryToastShownRef.current = true;
       localStorage.removeItem(DISCOVERY_MANUAL_REFRESH_KEY);
-      showSuccess("Discovery refresh completed. Recommendations are now updated.");
+      showSuccess(
+        "Discovery refresh completed. Recommendations are now updated.",
+      );
       setTimeout(() => {
         discoveryToastShownRef.current = false;
       }, 1000);
@@ -242,13 +246,29 @@ function AppContent() {
               />
               <Route path="/requests" element={<RequestsPage />} />
               <Route path="/blocklist" element={<BlocklistPage />} />
-              <Route path="/artist/:mbid/albums" element={<ArtistAlbumsPage />} />
+              <Route
+                path="/artist/:mbid/albums"
+                element={<ArtistAlbumsPage />}
+              />
               <Route path="/artist/:mbid" element={<ArtistDetailsPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
+              <Route
+                path="/settings"
+                element={
+                  <PermissionRoute permission="accessSettings">
+                    <SettingsPage />
+                  </PermissionRoute>
+                }
+              />
               <Route
                 path="/settings/metadata"
-                element={<MetadataProvidersPage />}
+                element={
+                  <PermissionRoute permission="accessSettings">
+                    <MetadataProvidersPage />
+                  </PermissionRoute>
+                }
               />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/donate" element={<DonatePage />} />
             </Routes>
           </Suspense>
         </Layout>
