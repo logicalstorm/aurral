@@ -17,9 +17,8 @@
   --aurral-black: #000000;
   --aurral-surface: #121212;
   --aurral-surface-mid: #212121;
-  --aurral-overlay: #535353;
+  --aurral-overlay: #000000;
   --aurral-overlay-hover: #212121;
-  --aurral-overlay-border: rgba(255, 255, 255, 0.12);
   --aurral-gray: #535353;
   --aurral-gray-light: #b3b3b3;
   --aurral-white: #ffffff;
@@ -1431,7 +1430,6 @@
   z-index: 30;
   margin-top: 0.5rem;
   overflow: hidden;
-  border: 1px solid var(--aurral-overlay-border);
   background: var(--aurral-overlay);
   border-radius: var(--aurral-radius-sm);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
@@ -1486,8 +1484,6 @@
 .artist-menu-section {
   margin: 0.25rem 0;
   padding: 0.25rem 0;
-  border-top: 1px solid var(--aurral-overlay-border);
-  border-bottom: 1px solid var(--aurral-overlay-border);
 }
 
 .artist-chevron--open {
@@ -1974,7 +1970,6 @@
   z-index: 50;
   width: 12rem;
   padding: 0.25rem;
-  border: 1px solid var(--aurral-overlay-border);
   background: var(--aurral-overlay);
   border-radius: var(--aurral-radius-sm);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
@@ -2248,7 +2243,6 @@
   width: 14rem;
   overflow: hidden;
   padding: 0.25rem;
-  border: 1px solid var(--aurral-overlay-border);
   background: var(--aurral-overlay);
   border-radius: var(--aurral-radius-sm);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
@@ -2292,7 +2286,6 @@
   width: 100%;
   max-width: 28rem;
   padding: 1.5rem;
-  border: 1px solid var(--aurral-overlay-border);
   background: var(--aurral-overlay);
   border-radius: var(--aurral-radius);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
@@ -2451,7 +2444,6 @@
   max-height: 16rem;
   overflow-y: auto;
   padding-top: 0.25rem;
-  border-top: 1px solid var(--aurral-overlay-border);
 }
 
 .artist-playlist-menu__sub {
