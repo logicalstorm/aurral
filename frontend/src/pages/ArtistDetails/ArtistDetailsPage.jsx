@@ -12,7 +12,6 @@ import { ArtistDetailsActionBar } from "./components/ArtistDetailsActionBar";
 import { ArtistDetailsDownloadTargets } from "./components/ArtistDetailsDownloadTargets";
 import { ArtistDetailsLibraryAlbums } from "./components/ArtistDetailsLibraryAlbums";
 import { ArtistDetailsReleaseGroups } from "./components/ArtistDetailsReleaseGroups";
-import { ArtistDetailsAppearsOn } from "./components/ArtistDetailsAppearsOn";
 import { ArtistDetailsPreviewTracks } from "./components/ArtistDetailsPreviewTracks";
 import { ArtistDetailsAbout } from "./components/ArtistDetailsAbout";
 import { ArtistDetailsSimilar } from "./components/ArtistDetailsSimilar";
@@ -98,7 +97,6 @@ function ArtistDetailsPage() {
   const [visibleReleaseGroupCoverIds, setVisibleReleaseGroupCoverIds] = useState(
     [],
   );
-  const [visibleAppearsOnCoverIds, setVisibleAppearsOnCoverIds] = useState([]);
   const [visibleLibraryCoverIds, setVisibleLibraryCoverIds] = useState([]);
 
   const selectedReleaseTypes = allReleaseTypes;
@@ -110,7 +108,6 @@ function ArtistDetailsPage() {
     {
       visibleCoverIds: [
         ...visibleReleaseGroupCoverIds,
-        ...visibleAppearsOnCoverIds,
         ...visibleLibraryCoverIds,
       ],
       initialLibraryHint,
@@ -711,32 +708,6 @@ function ArtistDetailsPage() {
           }
         />
       )}
-
-      {artist["appears-on-release-groups"] &&
-        artist["appears-on-release-groups"].length > 0 && (
-          <ArtistDetailsAppearsOn
-            artist={artist}
-            albumCovers={albumCovers}
-            artistCoverImage={artistCoverImage}
-            expandedReleaseGroup={library.expandedReleaseGroup}
-            albumTracks={library.albumTracks}
-            loadingTracks={library.loadingTracks}
-            getAlbumStatus={library.getAlbumStatus}
-            handleReleaseGroupAlbumClick={library.handleReleaseGroupAlbumClick}
-            canAddAlbum={canAddAlbum}
-            handleRequestAlbum={library.handleRequestAlbum}
-            requestingAlbum={library.requestingAlbum}
-            previewVolume={previewVolume}
-            onAddTrackToPlaylist={handleReleaseTrackAdd}
-            playlists={sharedPlaylists}
-            playlistsLoading={playlistModalLoading}
-            playlistSavingKey={playlistMenuSavingKey}
-            playlistError={playlistModalError}
-            getDefaultPlaylistName={getDefaultTrackPlaylistName}
-            onLoadPlaylists={loadSharedPlaylists}
-            onVisibleCoverIdsChange={setVisibleAppearsOnCoverIds}
-          />
-        )}
 
       <ArtistDetailsAbout
         artist={artist}
