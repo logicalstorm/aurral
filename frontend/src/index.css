@@ -716,30 +716,6 @@
   font-weight: 800;
 }
 
-.sidebar-pin-button {
-  position: absolute;
-  right: 0.5rem;
-  display: none;
-  padding: 0.375rem;
-  border-radius: var(--aurral-radius-round);
-  color: var(--aurral-gray-light);
-}
-
-.sidebar-pin-button:hover {
-  background: var(--aurral-surface-mid);
-  color: var(--aurral-white);
-}
-
-.sidebar-pin-row {
-  display: none;
-  justify-content: center;
-  padding-bottom: 0.5rem;
-}
-
-.sidebar-pin-row .sidebar-pin-button {
-  position: static;
-}
-
 .sidebar-body {
   display: flex;
   flex: 1;
@@ -1091,11 +1067,6 @@
   }
 
   .app-header-actions {
-    display: flex;
-  }
-
-  .sidebar-pin-button,
-  .sidebar-pin-row {
     display: flex;
   }
 }

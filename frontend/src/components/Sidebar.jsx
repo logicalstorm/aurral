@@ -7,8 +7,6 @@ import {
   Sparkles,
   History,
   AudioWaveform,
-  Pin,
-  PinOff,
   Ticket,
   Ban,
 } from "lucide-react";
@@ -16,7 +14,7 @@ import { useAuth } from "../contexts/AuthContext";
 import LogoutButton from "./LogoutButton";
 import { getBootstrapStatus } from "../utils/api";
 
-function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
+function Sidebar({ isOpen, onClose, appVersion, mode }) {
   const location = useLocation();
   const { authRequired, logout, user } = useAuth();
   const resolvedVersion =
@@ -34,16 +32,7 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
   );
   const [ticketmasterConfigured, setTicketmasterConfigured] = useState(true);
 
-  const prevModeRef = useRef(mode);
-  useEffect(() => {
-    if (mode !== "hidden") {
-      prevModeRef.current = mode;
-    }
-  }, [mode]);
-  const isIcons =
-    (mode === "icons" ||
-      (mode === "hidden" && prevModeRef.current === "icons")) &&
-    isDesktop;
+  const isIcons = mode === "icons" && isDesktop;
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -214,29 +203,7 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
             />
             {!isIcons && <span className="sidebar-title">Aurral</span>}
           </Link>
-          {!isIcons && (
-            <button
-              onClick={() => onSetMode("icons")}
-              className="sidebar-pin-button"
-              aria-label="Collapse to icons"
-              title="Collapse to icons"
-            >
-              <Pin className="artist-icon-xs" />
-            </button>
-          )}
         </div>
-        {isIcons && (
-          <div className="sidebar-pin-row">
-            <button
-              onClick={() => onSetMode("full")}
-              className="sidebar-pin-button"
-              aria-label="Expand sidebar"
-              title="Expand sidebar"
-            >
-              <PinOff className="artist-icon-xs" />
-            </button>
-          </div>
-        )}
 
         <div className={`sidebar-body${isIcons ? " sidebar-body--icons" : ""}`}>
           <div
@@ -308,7 +275,6 @@ Sidebar.propTypes = {
   onClose: PropTypes.func.isRequired,
   appVersion: PropTypes.string,
   mode: PropTypes.oneOf(["full", "icons", "hidden"]).isRequired,
-  onSetMode: PropTypes.func.isRequired,
 };
 
 export default Sidebar;
