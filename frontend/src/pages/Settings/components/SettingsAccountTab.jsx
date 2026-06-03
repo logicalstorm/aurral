@@ -32,7 +32,7 @@ export function SettingsAccountTab({
           className="text-2xl font-bold flex items-center"
           style={{ color: "#fff" }}
         >
-          My Account
+          Profile
         </h2>
         <FlipSaveButton
           saving={saving}

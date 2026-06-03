@@ -3,7 +3,6 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import PropTypes from "prop-types";
 import {
   Library,
-  Settings,
   Sparkles,
   History,
   AudioWaveform,
@@ -11,12 +10,11 @@ import {
   Ban,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
-import LogoutButton from "./LogoutButton";
 import { getBootstrapStatus } from "../utils/api";
 
 function Sidebar({ isOpen, onClose, appVersion, mode }) {
   const location = useLocation();
-  const { authRequired, logout, user } = useAuth();
+  const { user } = useAuth();
   const resolvedVersion =
     appVersion || import.meta.env.VITE_APP_VERSION || "unknown";
   const navRef = useRef(null);
@@ -33,6 +31,16 @@ function Sidebar({ isOpen, onClose, appVersion, mode }) {
   const [ticketmasterConfigured, setTicketmasterConfigured] = useState(true);
 
   const isIcons = mode === "icons" && isDesktop;
+
+  const positionSidebarTooltip = useCallback((event) => {
+    const link = event.currentTarget;
+    const rect = link.getBoundingClientRect();
+    link.style.setProperty(
+      "--sidebar-tooltip-top",
+      `${rect.top + rect.height / 2}px`,
+    );
+    link.style.setProperty("--sidebar-tooltip-left", `${rect.right + 8}px`);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -90,11 +98,6 @@ function Sidebar({ isOpen, onClose, appVersion, mode }) {
       },
       { path: "/blocklist", label: "Blocklist", icon: Ban },
       { path: "/requests", label: "Requests", icon: History },
-      {
-        path: "/settings",
-        label: "Settings",
-        icon: Settings,
-      },
     ];
     return items.filter(
       (item) =>
@@ -235,7 +238,10 @@ function Sidebar({ isOpen, onClose, appVersion, mode }) {
                       if (el) linkRefs.current[index] = el;
                     }}
                     to={item.path}
-                    onMouseEnter={() => setHoveredIndex(index)}
+                    onMouseEnter={(event) => {
+                      if (isIcons) positionSidebarTooltip(event);
+                      setHoveredIndex(index);
+                    }}
                     className={`sidebar-link ${
                       isIcons ? "sidebar-link--icons" : "sidebar-link--full"
                     }${active ? " is-active" : ""}`}
@@ -254,17 +260,11 @@ function Sidebar({ isOpen, onClose, appVersion, mode }) {
           </div>
         </div>
 
-        <div
-          className={`sidebar-footer${isIcons ? " sidebar-footer--icons" : ""}`}
-        >
-          {authRequired && (
-            <LogoutButton onClick={logout} collapsed={isIcons} />
-          )}
-
-          {!isIcons && (
+        {!isIcons && (
+          <div className="sidebar-footer">
             <div className="sidebar-version">v{resolvedVersion}</div>
-          )}
-        </div>
+          </div>
+        )}
       </aside>
     </>
   );

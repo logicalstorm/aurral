@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Navigate } from "react-router-dom";
 import { ChevronDown } from "lucide-react";
 import { useToast } from "../../contexts/ToastContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -12,29 +13,29 @@ import { SettingsIntegrationsTab } from "./components/SettingsIntegrationsTab";
 import { SettingsDiscoverTab } from "./components/SettingsDiscoverTab";
 import { SettingsNotificationsTab } from "./components/SettingsNotificationsTab";
 import { SettingsUsersTab } from "./components/SettingsUsersTab";
-import { SettingsAccountTab } from "./components/SettingsAccountTab";
-import { useAccountSettings } from "./hooks/useAccountSettings";
 
 function SettingsPage() {
   const { showSuccess, showError, showInfo } = useToast();
   const { user: authUser } = useAuth();
 
   const data = useSettingsData(showSuccess, showError, showInfo);
-  const account = useAccountSettings(authUser, showSuccess, showError);
-  const guard = useUnsavedGuard(data.hasUnsavedChanges, data.setHasUnsavedChanges);
+  const guard = useUnsavedGuard(
+    data.hasUnsavedChanges,
+    data.setHasUnsavedChanges,
+  );
   const tabs = useSettingsTabs(authUser);
   const users = useSettingsUsers(
     authUser,
     showSuccess,
     showError,
-    tabs.activeTab
+    tabs.activeTab,
   );
 
   useEffect(() => {
     if (tabs.activeTab === "discover") {
       data.refreshHealth();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- only run when switching to discover tab
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only run when switching to discover tab
   }, [tabs.activeTab]);
 
   const renderTabContent = () => {
@@ -102,26 +103,6 @@ function SettingsPage() {
             showError={showError}
           />
         );
-      case "account":
-        return (
-          <SettingsAccountTab
-            listenHistoryProvider={account.listenHistoryProvider}
-            setListenHistoryProvider={account.setListenHistoryProvider}
-            listenHistoryUsername={account.listenHistoryUsername}
-            setListenHistoryUsername={account.setListenHistoryUsername}
-            lidarrConfigured={account.lidarrConfigured}
-            lidarrRootFolders={account.lidarrRootFolders}
-            lidarrQualityProfiles={account.lidarrQualityProfiles}
-            lidarrRootFolderPath={account.lidarrRootFolderPath}
-            setLidarrRootFolderPath={account.setLidarrRootFolderPath}
-            lidarrQualityProfileId={account.lidarrQualityProfileId}
-            setLidarrQualityProfileId={account.setLidarrQualityProfileId}
-            hasUnsavedChanges={account.hasUnsavedChanges}
-            loading={account.loading}
-            saving={account.saving}
-            handleSave={account.handleSave}
-          />
-        );
       case "users":
         return (
           <SettingsUsersTab
@@ -178,6 +159,10 @@ function SettingsPage() {
         return null;
     }
   };
+
+  if (tabs.tabs.length === 0) {
+    return <Navigate to="/profile" replace />;
+  }
 
   return (
     <>
