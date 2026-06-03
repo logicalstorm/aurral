@@ -109,7 +109,30 @@ export const getCoverImage = (coverImages) => {
   return front?.image || coverImages[0]?.image;
 };
 
-export const getArtistHeroImage = (coverImages) => getCoverImage(coverImages);
+const getImageKinds = (image) => {
+  const kinds = [
+    image?.coverType,
+    image?.kind,
+    image?.CoverType,
+    ...(Array.isArray(image?.types) ? image.types : []),
+  ];
+  return kinds.map((kind) => String(kind || "").trim().toLowerCase());
+};
+
+const imageMatchesKinds = (image, kinds) => {
+  const imageKinds = getImageKinds(image);
+  return imageKinds.some((kind) => kinds.includes(kind));
+};
+
+export const getArtistPosterImage = (coverImages) => getCoverImage(coverImages);
+
+export const getArtistHeroImage = (coverImages) => {
+  if (!coverImages?.length) return null;
+  const fanart = coverImages.find((image) =>
+    imageMatchesKinds(image, ["fanart", "background", "banner"]),
+  );
+  return fanart?.image || getArtistPosterImage(coverImages);
+};
 
 export const getReleaseYear = (releaseGroupOrAlbum) => {
   const value =

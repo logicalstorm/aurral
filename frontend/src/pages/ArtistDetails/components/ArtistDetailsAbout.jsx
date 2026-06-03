@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import PropTypes from "prop-types";
 import { ExternalLink } from "lucide-react";
-import { getArtistType, getTagColor } from "../utils";
+import { getArtistHeroImage, getArtistType, getTagColor } from "../utils";
 import lidarrLogo from "../../../../images/logos/lidarr.svg?raw";
 import lastFmLogo from "../../../../images/logos/last-fm.svg?raw";
 import musicBrainzLogo from "../../../../images/logos/musicbrainz.svg?raw";
@@ -159,13 +159,7 @@ export function ArtistDetailsAbout({
     return [...primary, ...secondary];
   }, [appSettings, artist, existsInLibrary, libraryArtist]);
   const aboutImage = useMemo(() => {
-    const images = Array.isArray(coverImages) ? coverImages : [];
-    const heroImage =
-      images.find((image) => image?.front)?.image || images[0]?.image;
-    const secondary = images.find(
-      (image) => image?.image && image.image !== heroImage,
-    );
-    return secondary?.image || heroImage || null;
+    return getArtistHeroImage(coverImages);
   }, [coverImages]);
 
   if (!artist?.bio && tags.length === 0 && links.length === 0) return null;
