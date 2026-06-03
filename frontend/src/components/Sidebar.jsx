@@ -12,7 +12,7 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import { getBootstrapStatus } from "../utils/api";
 
-function Sidebar({ isOpen, onClose, appVersion, mode }) {
+function Sidebar({ appVersion, mode }) {
   const location = useLocation();
   const { user } = useAuth();
   const resolvedVersion =
@@ -147,7 +147,7 @@ function Sidebar({ isOpen, onClose, appVersion, mode }) {
       window.removeEventListener("resize", updateBubblePosition);
       aside?.removeEventListener("transitionend", onTransitionEnd);
     };
-  }, [location.pathname, navItems, isOpen, isActive, mode]);
+  }, [location.pathname, navItems, isActive, mode]);
 
   useEffect(() => {
     const updateHoverBubble = () => {
@@ -178,18 +178,11 @@ function Sidebar({ isOpen, onClose, appVersion, mode }) {
     updateHoverBubble();
   }, [hoveredIndex]);
 
-  const translateClass = isOpen
-    ? "translate-x-0"
-    : mode === "hidden"
-      ? "-translate-x-full"
-      : "-translate-x-full md:translate-x-0";
+  const translateClass =
+    mode === "hidden" ? "-translate-x-full" : "translate-x-0";
 
   return (
     <>
-      {isOpen && (
-        <div className="app-mobile-backdrop md:hidden" onClick={onClose} />
-      )}
-
       <aside
         ref={asideRef}
         className={`sidebar-shell ${translateClass}`}
@@ -271,8 +264,6 @@ function Sidebar({ isOpen, onClose, appVersion, mode }) {
 }
 
 Sidebar.propTypes = {
-  isOpen: PropTypes.bool.isRequired,
-  onClose: PropTypes.func.isRequired,
   appVersion: PropTypes.string,
   mode: PropTypes.oneOf(["full", "icons", "hidden"]).isRequired,
 };
