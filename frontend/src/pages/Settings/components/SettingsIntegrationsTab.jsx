@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { CheckCircle, ChevronDown, RefreshCw } from "lucide-react";
+import {
+  CheckCircle,
+  ChevronDown,
+  RefreshCw,
+  Folder,
+  CornerLeftUp,
+} from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
 import { LidarrLibraryAccessCheck } from "./LidarrLibraryAccessCheck";
@@ -15,6 +21,7 @@ import {
   getPlexResources,
   testPlexConnection,
   syncPlexNow,
+  browsePaths,
 } from "../../../utils/api";
 
 export function SettingsIntegrationsTab({
@@ -63,6 +70,13 @@ export function SettingsIntegrationsTab({
   const [testingPlex, setTestingPlex] = useState(false);
   const [syncingPlex, setSyncingPlex] = useState(false);
   const [plexServers, setPlexServers] = useState([]);
+  const [browseOpen, setBrowseOpen] = useState(false);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const [browseState, setBrowseState] = useState({
+    path: "/",
+    parent: null,
+    directories: [],
+  });
   const safeLidarrProfiles = Array.isArray(lidarrProfiles)
     ? lidarrProfiles
     : [];
@@ -265,6 +279,34 @@ export function SettingsIntegrationsTab({
     } finally {
       setSyncingPlex(false);
     }
+  };
+
+  const loadBrowse = async (path) => {
+    setBrowseLoading(true);
+    try {
+      const result = await browsePaths(path);
+      setBrowseState(result);
+    } catch (err) {
+      const errorMsg =
+        err.response?.data?.message || err.response?.data?.error || err.message;
+      showError(`Cannot read path: ${errorMsg}`);
+    } finally {
+      setBrowseLoading(false);
+    }
+  };
+
+  const handleToggleBrowse = () => {
+    if (browseOpen) {
+      setBrowseOpen(false);
+      return;
+    }
+    setBrowseOpen(true);
+    loadBrowse(settings.integrations?.plex?.downloadsPath || "/");
+  };
+
+  const handleUseBrowsedFolder = () => {
+    updatePlex({ downloadsPath: browseState.path });
+    setBrowseOpen(false);
   };
 
   const handleTestLidarr = async () => {
@@ -1546,20 +1588,97 @@ export function SettingsIntegrationsTab({
                 <label className="artist-field-label">
                   Plex downloads path (optional)
                 </label>
-                <SettingsInput
-                  type="text"
-                  placeholder="/data/aurral_downloads"
-                  autoComplete="off"
-                  value={settings.integrations?.plex?.downloadsPath || ""}
-                  onChange={(e) => updatePlex({ downloadsPath: e.target.value })}
-                />
+                <div className="settings-page__field-row">
+                  <SettingsInput
+                    wrapperClassName="settings-page__field-grow"
+                    type="text"
+                    placeholder="/data/aurral_downloads"
+                    autoComplete="off"
+                    value={settings.integrations?.plex?.downloadsPath || ""}
+                    onChange={(e) =>
+                      updatePlex({ downloadsPath: e.target.value })
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={handleToggleBrowse}
+                  >
+                    <span className="settings-page__inline-row">
+                      <Folder className="settings-page__status-icon" />
+                      {browseOpen ? "Close" : "Browse"}
+                    </span>
+                  </button>
+                </div>
                 <p className="settings-page__hint">
                   Only needed if Plex runs in a different container/host than
                   Aurral. Enter the downloads folder path as the{" "}
                   <strong>Plex server</strong> sees it — Aurral appends{" "}
                   <code>/aurral-weekly-flow</code>. Leave blank to use
-                  Aurral&apos;s own download path.
+                  Aurral&apos;s own download path. Browse shows the filesystem
+                  as Aurral sees it; type manually if Plex&apos;s mount path
+                  differs.
                 </p>
+
+                {browseOpen && (
+                  <div className="settings-page__browse-panel">
+                    <div className="settings-page__inline-row settings-page__browse-header">
+                      <code
+                        className="settings-page__browse-path"
+                        title={browseState.path}
+                      >
+                        {browseState.path}
+                      </code>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        onClick={handleUseBrowsedFolder}
+                      >
+                        Use this folder
+                      </button>
+                    </div>
+                    <div className="settings-page__browse-list">
+                      {browseLoading ? (
+                        <div className="settings-page__browse-loading">
+                          <RefreshCw className="settings-page__status-icon animate-spin" />
+                          Loading…
+                        </div>
+                      ) : (
+                        <ul className="settings-page__browse-items">
+                          {browseState.parent && (
+                            <li>
+                              <button
+                                type="button"
+                                className="settings-page__browse-item"
+                                onClick={() => loadBrowse(browseState.parent)}
+                              >
+                                <CornerLeftUp className="settings-page__status-icon" />
+                                <span>..</span>
+                              </button>
+                            </li>
+                          )}
+                          {browseState.directories.length === 0 && (
+                            <li className="settings-page__browse-empty">
+                              No subfolders here.
+                            </li>
+                          )}
+                          {browseState.directories.map((dir) => (
+                            <li key={dir.path}>
+                              <button
+                                type="button"
+                                className="settings-page__browse-item"
+                                onClick={() => loadBrowse(dir.path)}
+                              >
+                                <Folder className="settings-page__status-icon" />
+                                <span className="truncate">{dir.name}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="settings-page__inline-row">

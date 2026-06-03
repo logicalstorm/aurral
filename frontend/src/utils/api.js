@@ -283,6 +283,13 @@ export const syncPlexNow = async () => {
   return response.data;
 };
 
+export const browsePaths = async (path) => {
+  const response = await api.get("/settings/browse", {
+    params: path ? { path } : {},
+  });
+  return response.data;
+};
+
 export const searchUnified = async (
   query,
   { mode = "suggest", limit } = {},
