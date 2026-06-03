@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CheckCircle, ChevronDown, RefreshCw } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
@@ -15,6 +15,7 @@ import {
   getPlexResources,
   testPlexConnection,
   syncPlexNow,
+  browsePaths,
 } from "../../../utils/api";
 
 export function SettingsIntegrationsTab({
@@ -63,6 +64,13 @@ export function SettingsIntegrationsTab({
   const [testingPlex, setTestingPlex] = useState(false);
   const [syncingPlex, setSyncingPlex] = useState(false);
   const [plexServers, setPlexServers] = useState([]);
+  const [browseOpen, setBrowseOpen] = useState(false);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const [browseState, setBrowseState] = useState({
+    path: "/",
+    parent: null,
+    directories: [],
+  });
   const safeLidarrProfiles = Array.isArray(lidarrProfiles)
     ? lidarrProfiles
     : [];
@@ -142,21 +150,51 @@ export function SettingsIntegrationsTab({
     return list;
   };
 
-  const handleChoosePlexServer = async () => {
-    try {
-      const servers = await loadPlexServers(settings.integrations?.plex?.token);
-      if (servers.length === 0) {
-        showError(
-          "Plex returned no servers for this account. Make sure your server is signed in to the same Plex account."
-        );
-      } else {
-        showInfo(`Found ${servers.length} Plex server(s).`);
-      }
-    } catch (err) {
-      const msg =
-        err.response?.data?.message || err.response?.data?.error || err.message;
-      showError(`Failed to load Plex servers: ${msg}`);
+  // Auto-load the account's servers whenever we have a token, so the dropdown
+  // is always populated (e.g. on page load) without a manual "choose" step.
+  const plexToken = settings.integrations?.plex?.token;
+  useEffect(() => {
+    if (!plexToken) {
+      setPlexServers([]);
+      return;
     }
+    let cancelled = false;
+    getPlexResources(plexToken)
+      .then(({ servers }) => {
+        if (!cancelled) setPlexServers(Array.isArray(servers) ? servers : []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [plexToken]);
+
+  const loadBrowse = async (path) => {
+    setBrowseLoading(true);
+    try {
+      const result = await browsePaths(path);
+      setBrowseState(result);
+    } catch (err) {
+      const errorMsg =
+        err.response?.data?.message || err.response?.data?.error || err.message;
+      showError(`Cannot read path: ${errorMsg}`);
+    } finally {
+      setBrowseLoading(false);
+    }
+  };
+
+  const handleToggleBrowse = () => {
+    if (browseOpen) {
+      setBrowseOpen(false);
+      return;
+    }
+    setBrowseOpen(true);
+    loadBrowse(settings.integrations?.plex?.downloadsPath || "/");
+  };
+
+  const handleUseBrowsedFolder = () => {
+    updatePlex({ downloadsPath: browseState.path });
+    setBrowseOpen(false);
   };
 
   const handleConnectPlex = async () => {
@@ -1505,19 +1543,10 @@ export function SettingsIntegrationsTab({
                       : "Connect Plex account"}
                 </button>
                 {settings.integrations?.plex?.token && (
-                  <>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={handleChoosePlexServer}
-                    >
-                      Choose server
-                    </button>
-                    <span className="settings-page__status">
-                      <CheckCircle className="settings-page__status-icon" />
-                      Signed in
-                    </span>
-                  </>
+                  <span className="settings-page__status">
+                    <CheckCircle className="settings-page__status-icon" />
+                    Signed in
+                  </span>
                 )}
               </div>
 
@@ -1585,10 +1614,7 @@ export function SettingsIntegrationsTab({
                     className="btn btn-secondary"
                     onClick={handleToggleBrowse}
                   >
-                    <span className="settings-page__inline-row">
-                      <Folder className="settings-page__status-icon" />
-                      {browseOpen ? "Close" : "Browse"}
-                    </span>
+                    {browseOpen ? "Close" : "Browse"}
                   </button>
                 </div>
                 <p className="settings-page__hint">
@@ -1602,14 +1628,12 @@ export function SettingsIntegrationsTab({
                 </p>
 
                 {browseOpen && (
-                  <div className="settings-page__browse-panel">
-                    <div className="settings-page__inline-row settings-page__browse-header">
-                      <code
-                        className="settings-page__browse-path"
-                        title={browseState.path}
-                      >
-                        {browseState.path}
-                      </code>
+                  <div
+                    className="settings-page__section"
+                    style={{ marginTop: "0.75rem" }}
+                  >
+                    <div className="settings-page__inline-row">
+                      <code className="settings-page__hint">{browseState.path}</code>
                       <button
                         type="button"
                         className="btn btn-primary btn-sm"
@@ -1618,28 +1642,30 @@ export function SettingsIntegrationsTab({
                         Use this folder
                       </button>
                     </div>
-                    <div className="settings-page__browse-list">
+                    <div
+                      style={{
+                        maxHeight: "14rem",
+                        overflowY: "auto",
+                        marginTop: "0.5rem",
+                      }}
+                    >
                       {browseLoading ? (
-                        <div className="settings-page__browse-loading">
-                          <RefreshCw className="settings-page__status-icon animate-spin" />
-                          Loading…
-                        </div>
+                        <p className="settings-page__hint">Loading…</p>
                       ) : (
-                        <ul className="settings-page__browse-items">
+                        <ul className="settings-page__fields">
                           {browseState.parent && (
                             <li>
                               <button
                                 type="button"
-                                className="settings-page__browse-item"
+                                className="btn btn-secondary btn-sm"
                                 onClick={() => loadBrowse(browseState.parent)}
                               >
-                                <CornerLeftUp className="settings-page__status-icon" />
-                                <span>..</span>
+                                ..
                               </button>
                             </li>
                           )}
                           {browseState.directories.length === 0 && (
-                            <li className="settings-page__browse-empty">
+                            <li className="settings-page__hint">
                               No subfolders here.
                             </li>
                           )}
@@ -1647,11 +1673,10 @@ export function SettingsIntegrationsTab({
                             <li key={dir.path}>
                               <button
                                 type="button"
-                                className="settings-page__browse-item"
+                                className="btn btn-secondary btn-sm"
                                 onClick={() => loadBrowse(dir.path)}
                               >
-                                <Folder className="settings-page__status-icon" />
-                                <span className="truncate">{dir.name}</span>
+                                {dir.name}
                               </button>
                             </li>
                           ))}
