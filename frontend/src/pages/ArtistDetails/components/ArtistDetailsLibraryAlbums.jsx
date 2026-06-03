@@ -5,8 +5,6 @@ import {
   Music,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
-  ChevronUp,
   MoreVertical,
   ExternalLink,
   Trash2,
@@ -56,6 +54,7 @@ export function ArtistDetailsLibraryAlbums({
   const [activePlaylistTrackKey, setActivePlaylistTrackKey] = useState(null);
   const [playingTrackId, setPlayingTrackId] = useState(null);
   const [loadingTrackId, setLoadingTrackId] = useState(null);
+  const [dropdownPosition, setDropdownPosition] = useState(null);
   const downloadedAlbums = libraryAlbums.filter((album) => {
     if (String(album.id ?? "").startsWith("pending-")) return false;
     return (
@@ -410,70 +409,82 @@ export function ArtistDetailsLibraryAlbums({
             (canReSearch ||
               downloadStatus?.status === "failed" ||
               libraryAlbum.statistics?.percentOfTracks > 0);
-          const statusDotColor = hasDownloadedStatus
-            ? "#22c55e"
-            : showIncompleteStatus
-              ? "#eab308"
-              : null;
+          const releaseYear = String(libraryAlbum.releaseDate || "").slice(0, 4);
+          const metaItems = [
+            /^\d{4}$/.test(releaseYear) ? releaseYear : null,
+            libraryAlbum.albumType || null,
+            showIncompleteStatus ? "Incomplete" : null,
+          ].filter(Boolean);
 
           return (
             <article
               key={libraryAlbum.id}
-              className="group flex w-[150px] min-w-[150px] flex-shrink-0 flex-col sm:w-[176px] sm:min-w-[176px]"
+              className="group w-[150px] min-w-[150px] flex-shrink-0 cursor-pointer sm:w-[176px] sm:min-w-[176px]"
               data-cover-id={rgId}
+              onClick={() => handleLibraryAlbumClick(rgId, libraryAlbum.id)}
             >
               <div
-                onClick={() => handleLibraryAlbumClick(rgId, libraryAlbum.id)}
-                className="relative aspect-square w-full cursor-pointer overflow-hidden bg-[#101012] shadow-sm transition-all duration-300 group-hover:bg-white/[0.08] group-hover:shadow-md"
+                className="relative mb-2 aspect-square w-full bg-white/[0.06] shadow-lg shadow-black/20 transition-all duration-300"
                 style={{
-                  backgroundColor: "#211f27",
                   boxShadow: isExpanded
-                    ? "0 0 0 1px rgba(255,255,255,0.08), 0 18px 40px rgba(0,0,0,0.28)"
+                    ? "0 0 0 1px rgba(255,255,255,0.16), 0 18px 40px rgba(0,0,0,0.28)"
                     : undefined,
                 }}
               >
-                {coverUrl ? (
-                  <img
-                    src={coverUrl}
-                    alt={libraryAlbum.albumName}
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center">
-                    <Music className="h-12 w-12" style={{ color: "#c1c1c3" }} />
-                  </div>
-                )}
+                <div className="absolute inset-0 overflow-hidden">
+                  {coverUrl ? (
+                    <img
+                      src={coverUrl}
+                      alt={libraryAlbum.albumName}
+                      className="h-full w-full object-cover transition-opacity group-hover:opacity-90"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center">
+                      <Music className="h-9 w-9 text-white/35" />
+                    </div>
+                  )}
+                </div>
 
-                <div
-                  className="absolute inset-0"
-                  style={{
-                    background:
-                      "linear-gradient(180deg, rgba(11,12,14,0.18) 0%, rgba(11,12,14,0.02) 28%, rgba(11,12,14,0.72) 100%)",
-                  }}
-                />
+                <div className="absolute left-2 top-2 flex h-8 w-8 items-center justify-center">
+                  {requestingAlbum === rgId || reSearchingAlbum === libraryAlbum.id ? (
+                    <Loader className="h-3.5 w-3.5 animate-spin text-white" />
+                  ) : hasDownloadedStatus ? (
+                    <span
+                      className="h-2.5 w-2.5 rounded-full bg-green-500 shadow-[0_0_10px_rgba(0,0,0,0.25)]"
+                      title="Downloaded"
+                    />
+                  ) : showIncompleteStatus ? (
+                    <span
+                      className="h-2.5 w-2.5 rounded-full bg-yellow-500 shadow-[0_0_10px_rgba(0,0,0,0.25)]"
+                      title="Incomplete"
+                    />
+                  ) : null}
+                </div>
 
-                <div className="absolute left-3 right-3 top-3 flex items-start justify-between gap-2">
-                  <span className="flex h-8 w-8 items-center justify-center">
-                    {requestingAlbum === rgId || reSearchingAlbum === libraryAlbum.id ? (
-                      <Loader className="h-3.5 w-3.5 animate-spin" style={{ color: "#fff" }} />
-                    ) : statusDotColor ? (
-                      <span
-                        className="h-2.5 w-2.5 rounded-full shadow-[0_0_10px_rgba(0,0,0,0.25)]"
-                        style={{ backgroundColor: statusDotColor }}
-                        title={hasDownloadedStatus ? "Downloaded" : "Incomplete"}
-                      />
-                    ) : (
-                      <span />
-                    )}
-                  </span>
+                <div className="absolute right-2 top-2">
                   <div className="relative overflow-visible">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setAlbumDropdownOpen(albumDropdownOpen === rgId ? null : rgId);
+                        if (albumDropdownOpen === rgId) {
+                          setAlbumDropdownOpen(null);
+                          setDropdownPosition(null);
+                          return;
+                        }
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const menuWidth = 192;
+                        const viewportPadding = 12;
+                        setDropdownPosition({
+                          top: rect.bottom + 8,
+                          left: Math.min(
+                            Math.max(viewportPadding, rect.right - menuWidth),
+                            window.innerWidth - menuWidth - viewportPadding,
+                          ),
+                        });
+                        setAlbumDropdownOpen(rgId);
                       }}
                       className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 backdrop-blur-sm transition-colors hover:bg-white/10"
                       style={{ backgroundColor: "rgba(24,23,29,0.72)", color: "#fff" }}
@@ -485,15 +496,18 @@ export function ArtistDetailsLibraryAlbums({
                     {albumDropdownOpen === rgId && (
                       <>
                         <div
-                          className="fixed inset-0 z-10"
+                          className="fixed inset-0 z-40"
                           onClick={(e) => {
                             e.stopPropagation();
                             setAlbumDropdownOpen(null);
+                            setDropdownPosition(null);
                           }}
                         />
                         <div
-                          className="absolute right-0 top-full z-20 mt-2 w-48 rounded-md border border-white/10 py-1 shadow-xl"
+                          className="fixed z-50 w-48 rounded-md border border-white/10 py-1 shadow-xl"
                           style={{
+                            top: dropdownPosition?.top ?? 0,
+                            left: dropdownPosition?.left ?? 0,
                             backgroundColor: "#2d2b35",
                             boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
                           }}
@@ -506,7 +520,10 @@ export function ArtistDetailsLibraryAlbums({
                             rel="noopener noreferrer"
                             className="flex w-full items-center px-4 py-2 text-left text-sm transition-colors hover:bg-white/10"
                             style={{ color: "#fff" }}
-                            onClick={() => setAlbumDropdownOpen(null)}
+                            onClick={() => {
+                              setAlbumDropdownOpen(null);
+                              setDropdownPosition(null);
+                            }}
                           >
                             <ExternalLink className="mr-2 h-4 w-4" />
                             View on Last.fm
@@ -520,6 +537,7 @@ export function ArtistDetailsLibraryAlbums({
                                   e.stopPropagation();
                                   handleReSearchAlbum(libraryAlbum.id, libraryAlbum.albumName);
                                   setAlbumDropdownOpen(null);
+                                  setDropdownPosition(null);
                                 }}
                                 className="flex w-full items-center px-4 py-2 text-left text-sm transition-colors hover:bg-white/10"
                                 style={{ color: "#fff" }}
@@ -542,6 +560,7 @@ export function ArtistDetailsLibraryAlbums({
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleDeleteAlbumClick(rgId, libraryAlbum.albumName);
+                                  setDropdownPosition(null);
                                 }}
                                 className="flex w-full items-center px-4 py-2 text-left text-sm text-red-400 transition-colors hover:bg-red-500/20"
                               >
@@ -555,29 +574,25 @@ export function ArtistDetailsLibraryAlbums({
                     )}
                   </div>
                 </div>
-
-                <div className="absolute inset-x-0 bottom-0 p-3">
-                  <div className="min-w-0">
-                    <h3
-                      className="line-clamp-2 text-sm font-bold leading-tight"
-                      style={{ color: "#fff" }}
-                    >
-                      {libraryAlbum.albumName}
-                    </h3>
-                  </div>
-                </div>
               </div>
 
               <button
                 type="button"
-                onClick={() => handleLibraryAlbumClick(rgId, libraryAlbum.id)}
-                className="mt-2 flex items-center gap-2 text-left transition-colors hover:text-white"
-                style={{ color: isExpanded ? "#fff" : "#c1c1c3" }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleLibraryAlbumClick(rgId, libraryAlbum.id);
+                }}
+                className="w-full min-w-0 text-left"
               >
-                {isExpanded ? (
-                  <ChevronUp className="h-4 w-4 flex-shrink-0" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 flex-shrink-0" />
+                <span className="flex min-w-0 items-start gap-1.5">
+                  <span className="line-clamp-2 min-w-0 flex-1 text-sm font-bold leading-5 text-white">
+                    {libraryAlbum.albumName}
+                  </span>
+                </span>
+                {metaItems.length > 0 && (
+                  <span className="mt-1 block truncate text-xs text-white/50">
+                    {metaItems.join(" · ")}
+                  </span>
                 )}
               </button>
             </article>

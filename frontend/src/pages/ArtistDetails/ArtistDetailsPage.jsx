@@ -4,9 +4,9 @@ import { Loader, Music, X } from "lucide-react";
 import { useToast } from "../../contexts/ToastContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { useArtistDetailsStream } from "./hooks/useArtistDetailsStream";
-import { useReleaseTypeFilter } from "./hooks/useReleaseTypeFilter";
 import { usePreviewPlayer } from "./hooks/usePreviewPlayer";
 import { useArtistDetailsLibrary } from "./hooks/useArtistDetailsLibrary";
+import { allReleaseTypes } from "./constants";
 import { ArtistDetailsHero } from "./components/ArtistDetailsHero";
 import { ArtistDetailsActionBar } from "./components/ArtistDetailsActionBar";
 import { ArtistDetailsDownloadTargets } from "./components/ArtistDetailsDownloadTargets";
@@ -31,7 +31,7 @@ import {
   getBlocklist,
   updateBlocklist,
 } from "../../utils/api";
-import { buildDownloadTargets, getArtistHeroImage } from "./utils";
+import { buildDownloadTargets, getArtistPosterImage } from "./utils";
 
 const MBID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -99,10 +99,7 @@ function ArtistDetailsPage() {
   );
   const [visibleLibraryCoverIds, setVisibleLibraryCoverIds] = useState([]);
 
-  const filter = useReleaseTypeFilter();
-  const {
-    selectedReleaseTypes,
-  } = filter;
+  const selectedReleaseTypes = allReleaseTypes;
 
   const stream = useArtistDetailsStream(
     mbid,
@@ -572,7 +569,7 @@ function ArtistDetailsPage() {
     return null;
   }
 
-  const artistCoverImage = getArtistHeroImage(coverImages);
+  const artistCoverImage = getArtistPosterImage(coverImages);
 
   return (
     <div className="artist-details-page animate-fade-in">

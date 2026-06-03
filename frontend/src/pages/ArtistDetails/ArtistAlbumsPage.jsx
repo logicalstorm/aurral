@@ -25,7 +25,7 @@ import {
   createSharedPlaylist,
   getFlowStatus,
 } from "../../utils/api";
-import { getArtistHeroImage, getReleaseMetric, getReleaseYear } from "./utils";
+import { getArtistPosterImage, getReleaseMetric, getReleaseYear } from "./utils";
 
 const sortOptions = [
   { value: "date", label: "Date", defaultDirection: "desc" },
@@ -162,7 +162,7 @@ function ArtistAlbumsPage() {
     albumCovers,
     coverImages,
   } = stream;
-  const artistCoverImage = getArtistHeroImage(coverImages);
+  const artistCoverImage = getArtistPosterImage(coverImages);
 
   const library = useArtistDetailsLibrary({
     artist,
@@ -381,7 +381,7 @@ function ArtistAlbumsPage() {
             )}
             {isComplete ? (
               <span
-                className="inline-flex h-8 min-w-12 items-center justify-center rounded-full bg-green-500 text-white shadow-lg shadow-black/30 ring-1 ring-white/15"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#2a2a2f] text-white shadow-lg shadow-black/30 ring-1 ring-white/20"
                 title="Complete"
               >
                 <CheckCircle className="h-4 w-4" />
@@ -429,7 +429,7 @@ function ArtistAlbumsPage() {
           <div className="absolute bottom-2 right-2">
             {isComplete ? (
               <span
-                className="inline-flex h-8 min-w-12 items-center justify-center rounded-full bg-green-500 text-white shadow-lg shadow-black/30 ring-1 ring-white/15"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#2a2a2f] text-white shadow-lg shadow-black/30 ring-1 ring-white/20"
                 title="Complete"
               >
                 <CheckCircle className="h-4 w-4" />
@@ -449,7 +449,7 @@ function ArtistAlbumsPage() {
             ) : null}
           </div>
         </div>
-        <h2 className="line-clamp-2 min-h-[2.5rem] text-sm font-bold leading-5 text-white">
+        <h2 className="line-clamp-2 text-sm font-bold leading-5 text-white">
           {releaseGroup.title}
         </h2>
         <p className="mt-1 truncate text-xs text-white/50">
