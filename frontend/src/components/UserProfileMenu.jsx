@@ -22,9 +22,6 @@ function UserProfileMenu() {
   const { authRequired, logout, user } = useAuth();
   const canAccessSettings =
     user?.role === "admin" || !!user?.permissions?.accessSettings;
-  const profileLabel = user?.username
-    ? user.username.slice(0, 1).toUpperCase()
-    : null;
 
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -58,11 +55,9 @@ function UserProfileMenu() {
         aria-expanded={menuOpen}
         aria-label="User menu"
       >
-        {profileLabel ? (
-          <span className="app-profile-menu__initial">{profileLabel}</span>
-        ) : (
-          <User className="w-5 h-5" />
-        )}
+        <span className="app-profile-menu__icon" aria-hidden="true">
+          <User />
+        </span>
       </button>
 
       {menuOpen && (
