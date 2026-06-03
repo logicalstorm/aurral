@@ -531,32 +531,26 @@ function ArtistDetailsPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center py-20">
-        <Loader
-          className="w-12 h-12 animate-spin"
-          style={{ color: "#c1c1c3" }}
-        />
+      <div className="artist-loading">
+        <Loader className="artist-spinner artist-spinner--large animate-spin" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="card">
-        <div className="text-center py-12">
-          <Music
-            className="w-16 h-16 mx-auto mb-4"
-            style={{ color: "#c1c1c3" }}
-          />
-          <h3 className="text-xl font-semibold mb-2" style={{ color: "#fff" }}>
+      <div className="artist-error-panel">
+        <div>
+          <Music className="artist-error-icon" />
+          <h3 className="artist-error-title">
             Error Loading Artist
           </h3>
-          <p className="mb-6" style={{ color: "#c1c1c3" }}>
+          <p className="artist-error-copy">
             {error}
           </p>
           <button
             onClick={() => navigate("/search")}
-            className="btn btn-primary hidden sm:inline-flex"
+            className="btn btn-primary artist-hidden-mobile"
           >
             Back to Search
           </button>
@@ -572,7 +566,7 @@ function ArtistDetailsPage() {
   const artistCoverImage = getArtistPosterImage(coverImages);
 
   return (
-    <div className="artist-details-page animate-fade-in">
+    <div className="artist-details-page">
       {previewTracks.length > 0 && <audio ref={previewAudioRef} />}
       <ArtistDetailsHero
         artist={artist}
@@ -808,38 +802,33 @@ function EditArtistIdsModal({
   if (!show) return null;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
+      className="artist-modal-backdrop"
       onClick={onClose}
     >
       <div
-        className="card max-w-md w-full mx-4"
+        className="artist-modal"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold" style={{ color: "#fff" }}>
+        <div className="artist-modal__header">
+          <h3 className="artist-modal__title">
             Edit Artist IDs
           </h3>
           <button
             type="button"
-            className="p-2 rounded transition-colors hover:bg-[#2a2a2e]"
-            style={{ color: "#c1c1c3" }}
+            className="artist-icon-button"
             onClick={onClose}
             aria-label="Close"
           >
-            <X className="w-5 h-5" />
+            <X className="artist-icon-md" />
           </button>
         </div>
-        <p className="text-sm mb-5" style={{ color: "#c1c1c3" }}>
+        <p className="artist-modal__subcopy">
           {artistName ? `${artistName}: ` : ""}
           Update the MusicBrainz or Deezer ID to fix metadata and cover art.
         </p>
-        <div className="space-y-4">
+        <div className="artist-modal__fields">
           <div>
-            <label
-              className="block text-sm font-medium mb-2"
-              style={{ color: "#fff" }}
-            >
+            <label className="artist-field-label">
               MusicBrainz ID
             </label>
             <input
@@ -853,15 +842,11 @@ function EditArtistIdsModal({
                 }))
               }
               placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-              className="w-full px-3 py-2 rounded border border-white/10 focus:outline-none"
-              style={{ backgroundColor: "#1a1a1e", color: "#fff" }}
+              className="artist-input"
             />
           </div>
           <div>
-            <label
-              className="block text-sm font-medium mb-2"
-              style={{ color: "#fff" }}
-            >
+            <label className="artist-field-label">
               Deezer Artist ID
             </label>
             <input
@@ -875,20 +860,19 @@ function EditArtistIdsModal({
                 }))
               }
               placeholder="Numeric Deezer ID"
-              className="w-full px-3 py-2 rounded border border-white/10 focus:outline-none"
-              style={{ backgroundColor: "#1a1a1e", color: "#fff" }}
+              className="artist-input"
             />
           </div>
-          <p className="text-xs" style={{ color: "#c1c1c3" }}>
+          <p className="artist-subtext">
             Leave both fields blank to clear overrides.
           </p>
           {error && (
-            <div className="text-sm" style={{ color: "#ff6b6b" }}>
+            <div className="artist-error-text">
               {error}
             </div>
           )}
         </div>
-        <div className="flex gap-3 justify-end mt-6">
+        <div className="artist-modal__actions">
           <button
             type="button"
             className="btn btn-secondary"

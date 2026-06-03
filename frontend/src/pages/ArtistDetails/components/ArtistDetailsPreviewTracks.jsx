@@ -77,32 +77,32 @@ export function ArtistDetailsPreviewTracks({
     : "";
 
   return (
-    <section className="mb-10">
-      <h2 className="mb-4 text-2xl font-bold text-white">Popular</h2>
+    <section className="artist-section">
+      <h2 className="artist-section-title">Popular</h2>
       {loadingPreview ? (
-        <div className="flex items-center justify-center py-10">
-          <Loader className="h-7 w-7 animate-spin text-white/65" />
+        <div className="artist-loading">
+          <Loader className="artist-spinner animate-spin" />
         </div>
       ) : (
         <div
           className={
             showVideoPanel
-              ? "grid w-full max-w-[92rem] items-start gap-6 xl:grid-cols-[minmax(520px,0.9fr)_minmax(420px,1.1fr)]"
-              : "max-w-4xl"
+              ? "artist-preview-layout artist-preview-layout--with-video"
+              : "artist-preview-layout"
           }
         >
-          <div className="space-y-1">
+          <div className="artist-preview-list">
             {previewTracks.map((track, index) => {
               const isPlaying =
                 playingPreviewId === track.id && !previewSnappingBack;
               return (
                 <div
                   key={track.id || `${track.title}-${index}`}
-                  className="group relative grid grid-cols-[32px_40px_minmax(0,1fr)_auto_auto] items-center gap-3 overflow-hidden px-2 py-2 transition-colors hover:bg-white/[0.06]"
+                  className="artist-track-row artist-track-row--preview"
                 >
                   {playingPreviewId === track.id && (
                     <div
-                      className="absolute inset-y-0 left-0 pointer-events-none bg-[#707e61]/25"
+                      className="artist-track-progress"
                       style={{
                         width: `${previewProgress * 100}%`,
                         transition: previewSnappingBack
@@ -111,33 +111,33 @@ export function ArtistDetailsPreviewTracks({
                       }}
                     />
                   )}
-                  <span className="relative text-right text-sm tabular-nums text-white/45">
+                  <span className="artist-track-number">
                     {index + 1}
                   </span>
                   <button
                     type="button"
                     onClick={() => handlePreviewPlay(track)}
                     disabled={!track.preview_url}
-                    className="relative flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.06] text-white transition-colors hover:bg-white/10 disabled:opacity-40"
+                    className="artist-track-play-button artist-track-play-button--large"
                     aria-label={isPlaying ? "Pause preview" : "Play preview"}
                     title={isPlaying ? "Pause preview" : "Play preview"}
                   >
                     {isPlaying ? (
-                      <Pause className="h-4 w-4" />
+                      <Pause className="artist-icon-sm" />
                     ) : (
-                      <Play className="ml-0.5 h-4 w-4" />
+                      <Play className="artist-icon-sm" />
                     )}
                   </button>
-                  <div className="relative min-w-0">
-                    <p className="truncate text-sm font-semibold text-white">
+                  <div className="artist-track-cell">
+                    <p className="artist-track-title">
                       {track.title}
                     </p>
-                    <p className="truncate text-xs text-white/50">
+                    <p className="artist-track-subtitle">
                       {track.album || "Preview available"}
                     </p>
                   </div>
                   {onAddTrackToPlaylist ? (
-                    <div className="relative">
+                    <div className="artist-relative">
                       <TrackPlaylistMenu
                         playlists={playlists}
                         loading={playlistsLoading}
@@ -151,7 +151,7 @@ export function ArtistDetailsPreviewTracks({
                       />
                     </div>
                   ) : null}
-                  <span className="relative w-10 text-right text-xs tabular-nums text-white/45">
+                  <span className="artist-track-duration">
                     {previewDurationLabel(track)}
                   </span>
                 </div>
@@ -159,11 +159,10 @@ export function ArtistDetailsPreviewTracks({
             })}
           </div>
           {showVideoPanel ? (
-            <div className="flex min-w-0 justify-center">
-              <div className="aspect-video h-auto w-full max-w-[560px] overflow-hidden bg-black/35 sm:h-[260px] sm:w-auto sm:max-w-full">
+            <div className="artist-video-wrap">
+              <div className="artist-video">
                 {embedSrc ? (
                   <iframe
-                    className="h-full w-full"
                     src={embedSrc}
                     title={`${artistName} ${topTrack?.title || ""}`}
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -171,8 +170,8 @@ export function ArtistDetailsPreviewTracks({
                     allowFullScreen
                   />
                 ) : (
-                  <div className="flex h-full items-center justify-center">
-                    <Loader className="h-7 w-7 animate-spin text-white/65" />
+                  <div className="artist-loading">
+                    <Loader className="artist-spinner animate-spin" />
                   </div>
                 )}
               </div>

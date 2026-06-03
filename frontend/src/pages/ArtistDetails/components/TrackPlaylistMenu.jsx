@@ -66,64 +66,52 @@ export function TrackPlaylistMenu({
   };
 
   return (
-    <div className="relative flex-shrink-0" ref={menuRef}>
+    <div className="artist-relative" ref={menuRef}>
       <button
         ref={buttonRef}
         type="button"
-        className={`group inline-flex h-7 flex-shrink-0 items-center overflow-hidden rounded-full transition-all duration-200 ease-out hover:w-[118px] ${
-          open ? "w-[118px]" : "w-7"
-        }`}
-        style={{
-          backgroundColor: "rgba(255,255,255,0.06)",
-          color: "#fff",
-        }}
+        className={`artist-playlist-trigger${open ? " is-open" : ""}`}
         onClick={handleOpen}
         title="Add to playlist"
         aria-label="Add to playlist"
         aria-expanded={open}
         disabled={saving}
       >
-        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center">
+        <span className="artist-playlist-trigger__icon">
           {saving ? (
-            <Loader className="h-3.5 w-3.5 animate-spin" />
+            <Loader className="artist-icon-xs animate-spin" />
           ) : (
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="artist-icon-xs" />
           )}
         </span>
-        <span
-          className={`pr-3 text-xs font-medium whitespace-nowrap transition-all duration-150 ease-out ${
-            open
-              ? "translate-x-0 opacity-100"
-              : "-translate-x-2 opacity-0 group-hover:translate-x-0 group-hover:opacity-100"
-          }`}
-        >
+        <span className="artist-playlist-trigger__label">
           Add to playlist
         </span>
       </button>
 
       {open ? (
         <div
-          className="fixed z-50 w-64 overflow-hidden rounded-xl border border-white/10 bg-[#15151a] py-1 shadow-xl"
+          className="artist-playlist-menu"
           style={{
             top: menuPosition.top,
             left: menuPosition.left,
           }}
           onClick={(event) => event.stopPropagation()}
         >
-          <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2 text-xs font-medium uppercase tracking-[0.14em] text-[#9ea0a8]">
-            <ListMusic className="h-3.5 w-3.5" />
+          <div className="artist-playlist-menu__header">
+            <ListMusic className="artist-icon-xs" />
             Playlists
           </div>
           {loading ? (
-            <div className="flex items-center gap-2 px-3 py-3 text-sm text-[#c1c1c3]">
-              <Loader className="h-4 w-4 animate-spin" />
+            <div className="artist-menu-item">
+              <Loader className="artist-icon-sm animate-spin" />
               Loading playlists
             </div>
           ) : (
             <>
               <button
                 type="button"
-                className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/5"
+                className="artist-menu-item"
                 onClick={() =>
                   handleSelect({
                     mode: "new",
@@ -132,21 +120,21 @@ export function TrackPlaylistMenu({
                 }
                 disabled={saving}
               >
-                <Plus className="h-4 w-4 flex-shrink-0 text-[#dfe8d2]" />
-                <span className="min-w-0">
-                  <span className="block truncate font-medium">New playlist</span>
-                  <span className="block truncate text-xs text-[#aeb0b7]">
+                <Plus className="artist-icon-sm" />
+                <span className="artist-min-0">
+                  <span className="artist-track-title">New playlist</span>
+                  <span className="artist-playlist-menu__sub">
                     {defaultNewPlaylistName}
                   </span>
                 </span>
               </button>
               {Array.isArray(playlists) && playlists.length > 0 ? (
-                <div className="max-h-64 overflow-y-auto border-t border-white/10 py-1">
+                <div className="artist-playlist-menu__scroll">
                   {playlists.map((playlist) => (
                     <button
                       key={playlist.id}
                       type="button"
-                      className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/5"
+                      className="artist-menu-item"
                       onClick={() =>
                         handleSelect({
                           mode: "existing",
@@ -155,21 +143,21 @@ export function TrackPlaylistMenu({
                       }
                       disabled={saving}
                     >
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium">
+                      <span className="artist-min-0">
+                        <span className="artist-track-title">
                           {playlist.name}
                         </span>
-                        <span className="block text-xs text-[#aeb0b7]">
+                        <span className="artist-playlist-menu__sub">
                           {playlist.trackCount || 0} tracks
                         </span>
                       </span>
-                      <Check className="h-4 w-4 flex-shrink-0 opacity-0" />
+                      <Check className="artist-icon-sm" aria-hidden="true" />
                     </button>
                   ))}
                 </div>
               ) : null}
               {error ? (
-                <div className="border-t border-white/10 px-3 py-2 text-xs text-red-400">
+                <div className="artist-error-text">
                   {error}
                 </div>
               ) : null}

@@ -5,7 +5,7 @@ import {
 } from "./constants";
 
 export const getTagColor = (name) => {
-  if (!name) return "#211f27";
+  if (!name) return "#121212";
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);

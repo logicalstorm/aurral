@@ -40,6 +40,14 @@ GitHubIcon.propTypes = {
 function Layout({ children, appVersion }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [scrollbar, setScrollbar] = useState({
+    visible: false,
+    active: false,
+    top: 0,
+    height: 0,
+  });
+  const mainScrollRef = useRef(null);
+  const scrollbarFadeTimeoutRef = useRef(null);
   const [sidebarMode, setSidebarMode] = useState(() => {
     try {
       const stored = localStorage.getItem("sidebarMode");
@@ -55,6 +63,50 @@ function Layout({ children, appVersion }) {
   );
   const location = useLocation();
   const { authRequired, logout, user } = useAuth();
+  const isArtistDetailsRoute = /^\/artist\/[^/]+$/.test(location.pathname);
+
+  const updateMainScrollbar = useCallback(() => {
+    const node = mainScrollRef.current;
+    if (!node) return;
+    const { scrollTop, scrollHeight, clientHeight } = node;
+    const scrollable = scrollHeight > clientHeight + 1;
+    if (!scrollable) {
+      setScrollbar((current) =>
+        current.visible
+          ? { visible: false, active: false, top: 0, height: 0 }
+          : current,
+      );
+      return;
+    }
+    const minThumbHeight = 48;
+    const thumbHeight = Math.max(
+      minThumbHeight,
+      (clientHeight / scrollHeight) * clientHeight,
+    );
+    const maxTop = Math.max(clientHeight - thumbHeight, 0);
+    const top =
+      scrollHeight === clientHeight
+        ? 0
+        : (scrollTop / (scrollHeight - clientHeight)) * maxTop;
+    setScrollbar((current) => ({
+      visible: true,
+      active: current.active,
+      top,
+      height: thumbHeight,
+    }));
+  }, []);
+
+  const showScrollbarTemporarily = useCallback(() => {
+    setScrollbar((current) =>
+      current.visible ? { ...current, active: true } : current,
+    );
+    if (scrollbarFadeTimeoutRef.current) {
+      clearTimeout(scrollbarFadeTimeoutRef.current);
+    }
+    scrollbarFadeTimeoutRef.current = window.setTimeout(() => {
+      setScrollbar((current) => ({ ...current, active: false }));
+    }, 900);
+  }, []);
 
   const isActive = useCallback(
     (path) => {
@@ -115,10 +167,42 @@ function Layout({ children, appVersion }) {
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  }, [location.pathname, location.search]);
+    mainScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    window.requestAnimationFrame(updateMainScrollbar);
+  }, [location.pathname, location.search, updateMainScrollbar]);
+
+  useEffect(() => {
+    const update = () => updateMainScrollbar();
+    update();
+    window.addEventListener("resize", update);
+    const node = mainScrollRef.current;
+    const observer =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(update)
+        : null;
+    if (node && observer) {
+      observer.observe(node);
+      if (node.firstElementChild) {
+        observer.observe(node.firstElementChild);
+      }
+    }
+    return () => {
+      window.removeEventListener("resize", update);
+      observer?.disconnect();
+    };
+  }, [children, updateMainScrollbar]);
+
+  useEffect(
+    () => () => {
+      if (scrollbarFadeTimeoutRef.current) {
+        clearTimeout(scrollbarFadeTimeoutRef.current);
+      }
+    },
+    [],
+  );
 
   return (
-    <div className="min-h-screen font-sans antialiased transition-colors duration-200">
+    <div className="app-shell">
       <Sidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
@@ -128,18 +212,15 @@ function Layout({ children, appVersion }) {
       />
 
       <div
-        className={`flex flex-col min-h-screen transition-all duration-300 ease-in-out ${
+        className={`app-content ${
           sidebarMode === "full"
-            ? "md:ml-[208px]"
+            ? "app-content--sidebar-full"
             : sidebarMode === "icons"
-              ? "md:ml-[56px]"
+              ? "app-content--sidebar-icons"
               : ""
         }`}
       >
-        <header
-          className="sticky top-0 z-30 flex h-16 items-center gap-4 px-4 py-3 backdrop-blur-md md:px-6"
-          style={{ backgroundColor: "rgba(5, 5, 5, 0.8)" }}
-        >
+        <header className="app-topbar">
           <button
             onClick={() => {
               const isDesktop = window.matchMedia("(min-width: 768px)").matches;
@@ -149,8 +230,7 @@ function Layout({ children, appVersion }) {
                 setIsMobileMenuOpen((open) => !open);
               }
             }}
-            className="hidden p-2 -ml-2 transition-colors hover:bg-gray-900/50 md:inline-flex"
-            style={{ color: "#c1c1c3" }}
+            className="app-nav-toggle"
             aria-label="Toggle navigation"
           >
             <Menu className="w-5 h-5" />
@@ -158,47 +238,65 @@ function Layout({ children, appVersion }) {
 
           <GlobalSearch />
 
-          <div className="hidden items-center space-x-2 md:flex">
+          <div className="app-header-actions">
             <a
               href="https://github.com/lklynet/aurral"
               target="_blank"
               rel="noopener noreferrer"
-              className="p-2 transition-colors rounded-md hover:bg-white/5 group"
-              style={{ color: "#c1c1c3" }}
+              className="app-header-link"
               aria-label="GitHub Repository"
             >
-              <GitHubIcon className="w-5 h-5 transition-colors group-hover:text-white" />
+              <GitHubIcon className="w-5 h-5" />
             </a>
             <a
               href="https://github.com/sponsors/lklynet/"
               target="_blank"
               rel="noopener noreferrer"
-              className="p-2 transition-colors rounded-md hover:bg-white/5 group"
-              style={{ color: "#c1c1c3" }}
+              className="app-header-link"
               aria-label="GitHub Sponsors"
             >
-              <Heart className="w-5 h-5 transition-colors group-hover:text-pink-500" />
+              <Heart className="w-5 h-5" />
             </a>
           </div>
         </header>
 
-        <main className="mx-auto flex-1 w-full max-w-[1600px] p-4 pb-24 md:p-8 md:pb-8 lg:p-10">
-          <div className="animate-fade-in">{children}</div>
-        </main>
+        <div className="app-main-wrap">
+          <main
+            className={`app-main${isArtistDetailsRoute ? " app-main--artist-details" : ""}`}
+            ref={mainScrollRef}
+            onScroll={() => {
+              updateMainScrollbar();
+              showScrollbarTemporarily();
+            }}
+          >
+            <div className="app-main__content">{children}</div>
+          </main>
+          <div
+            className={`app-main-scrollbar${scrollbar.visible ? " is-visible" : ""}${
+              scrollbar.active ? " is-active" : ""
+            }`}
+            aria-hidden="true"
+          >
+            <div
+              className="app-main-scrollbar__thumb"
+              style={{
+                height: `${scrollbar.height}px`,
+                transform: `translateY(${scrollbar.top}px)`,
+              }}
+            />
+          </div>
+        </div>
 
         {isMobileMenuOpen && (
           <>
             <button
               type="button"
-              className="fixed inset-0 z-40 bg-black/50 md:hidden"
+              className="app-mobile-backdrop md:hidden"
               onClick={() => setIsMobileMenuOpen(false)}
               aria-label="Close navigation menu"
             />
-            <div
-              className="fixed inset-x-0 bottom-20 z-50 mx-4 border border-white/10 p-2 shadow-2xl md:hidden"
-              style={{ backgroundColor: "#14141a" }}
-            >
-              <nav className="flex flex-col">
+            <div className="app-mobile-menu md:hidden">
+              <nav className="app-mobile-menu__nav">
                 {mobileOverflowItems.map((item) => {
                   const Icon = item.icon;
                   const active = isActive(item.path);
@@ -206,8 +304,7 @@ function Layout({ children, appVersion }) {
                     <Link
                       key={item.path}
                       to={item.path}
-                      className="flex items-center gap-3 px-3 py-3 text-sm font-medium transition-colors"
-                      style={{ color: active ? "#fff" : "#c1c1c3" }}
+                      className={`app-mobile-menu__item${active ? " is-active" : ""}`}
                     >
                       <Icon className="h-4 w-4" />
                       <span>{item.label}</span>
@@ -221,8 +318,7 @@ function Layout({ children, appVersion }) {
                       setIsMobileMenuOpen(false);
                       logout();
                     }}
-                    className="flex items-center gap-3 px-3 py-3 text-left text-sm font-medium"
-                    style={{ color: "#c1c1c3" }}
+                    className="app-mobile-menu__item"
                   >
                     <LogOut className="h-4 w-4" />
                     <span>Log out</span>
@@ -234,10 +330,10 @@ function Layout({ children, appVersion }) {
         )}
 
         <nav
-          className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#0f0f12] md:hidden"
+          className="app-mobile-nav md:hidden"
           aria-label="Mobile navigation"
         >
-          <div className="grid min-h-[88px] grid-cols-4">
+          <div className="app-mobile-nav__grid">
             {mobilePrimaryItems.map((item) => {
               const Icon = item.icon;
               const active = isActive(item.path);
@@ -245,8 +341,7 @@ function Layout({ children, appVersion }) {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className="flex flex-col items-center justify-start gap-1.5 px-2 pt-3 pb-4 text-xs font-medium"
-                  style={{ color: active ? "#fff" : "#8f9097" }}
+                  className={`app-mobile-nav__item${active ? " is-active" : ""}`}
                 >
                   <Icon className="h-6 w-6" />
                   <span>{item.label}</span>
@@ -256,14 +351,12 @@ function Layout({ children, appVersion }) {
             <button
               type="button"
               onClick={() => setIsMobileMenuOpen((open) => !open)}
-              className="flex flex-col items-center justify-start gap-1.5 px-2 pt-3 pb-4 text-xs font-medium"
-              style={{
-                color:
-                  isMobileMenuOpen ||
-                  mobileOverflowItems.some((item) => isActive(item.path))
-                    ? "#fff"
-                    : "#8f9097",
-              }}
+              className={`app-mobile-nav__item${
+                isMobileMenuOpen ||
+                mobileOverflowItems.some((item) => isActive(item.path))
+                  ? " is-active"
+                  : ""
+              }`}
               aria-label="More navigation options"
               aria-expanded={isMobileMenuOpen}
             >

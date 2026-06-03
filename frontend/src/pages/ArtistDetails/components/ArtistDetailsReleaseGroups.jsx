@@ -107,25 +107,20 @@ export function ArtistDetailsReleaseGroups({
   if (releaseGroups.length === 0) return null;
 
   return (
-    <section className="mb-10">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-bold text-white">Discography</h2>
-            {loadingReleases && <Loader className="h-4 w-4 animate-spin text-white/65" />}
+    <section className="artist-section">
+      <div className="artist-heading-row">
+        <div className="artist-min-0">
+          <div className="artist-controls-row">
+            <h2 className="artist-section-title">Discography</h2>
+            {loadingReleases && <Loader className="artist-icon-sm animate-spin" />}
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="artist-tabs">
             {viewModes.map((mode) => (
               <button
                 key={mode.value}
                 type="button"
                 onClick={() => setViewMode(mode.value)}
-                className="px-3 py-1.5 text-xs font-bold transition-colors"
-                style={{
-                  backgroundColor:
-                    viewMode === mode.value ? "#fff" : "rgba(255,255,255,0.08)",
-                  color: viewMode === mode.value ? "#050505" : "#fff",
-                }}
+                className={`artist-tab${viewMode === mode.value ? " is-active" : ""}`}
               >
                 {mode.label}
               </button>
@@ -135,44 +130,43 @@ export function ArtistDetailsReleaseGroups({
         <button
           type="button"
           onClick={onViewAll}
-          className="inline-flex items-center gap-2 text-sm font-bold text-white/70 transition-colors hover:text-white"
+          className="artist-link-button"
         >
           View All
-          <ArrowRight className="h-4 w-4" />
+          <ArrowRight className="artist-icon-sm" />
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 lg:grid-cols-6 lg:gap-x-5">
+      <div className="artist-release-grid">
         {visibleReleaseGroups.map((releaseGroup) => {
           const status = getAlbumStatus(releaseGroup.id);
           const metric = getReleaseMetric(releaseGroup);
           return (
             <article
               key={releaseGroup.id}
-              className="group min-w-0 cursor-pointer"
+              className="artist-release-card"
               onClick={() => handleReleaseGroupAlbumClick(releaseGroup, status?.libraryId)}
             >
-              <div className="relative mb-2 aspect-square overflow-hidden bg-white/[0.06] shadow-lg shadow-black/20">
+              <div className="artist-release-card__cover">
                 {albumCovers[releaseGroup.id] || artistCoverImage ? (
                   <img
                     src={albumCovers[releaseGroup.id] || artistCoverImage}
                     alt=""
-                    className="h-full w-full object-cover transition-opacity group-hover:opacity-90"
                     loading="lazy"
                     decoding="async"
                   />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center">
-                    <Music className="h-9 w-9 text-white/35" />
+                  <div className="artist-release-card__placeholder">
+                    <Music className="artist-icon-lg" />
                   </div>
                 )}
-                <div className="absolute bottom-2 right-2">
+                <div className="artist-release-card__action">
                   {status?.status === "available" || status?.status === "added" ? (
                     <span
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#2a2a2f] text-white shadow-lg shadow-black/30 ring-1 ring-white/20"
+                      className="artist-release-card__status"
                       title="Complete"
                     >
-                      <CheckCircle className="h-4 w-4" />
+                      <CheckCircle className="artist-icon-sm" />
                       <span className="sr-only">Complete</span>
                     </span>
                   ) : canAddAlbum ? (
@@ -189,17 +183,17 @@ export function ArtistDetailsReleaseGroups({
                   ) : null}
                 </div>
               </div>
-              <h3 className="line-clamp-2 text-sm font-bold leading-5 text-white">
+              <h3 className="artist-release-card__title artist-clamp-2">
                 {releaseGroup.title}
               </h3>
-              <p className="mt-1 truncate text-xs text-white/50">
+              <p className="artist-release-card__meta artist-truncate">
                 {[getReleaseYear(releaseGroup), releaseGroup["primary-type"]]
                   .filter(Boolean)
                   .join(" · ")}
               </p>
               {metric.label && (
-                <p className="mt-2 inline-flex items-center gap-1 text-xs text-white/50">
-                  <Star className="h-3.5 w-3.5 text-yellow-400" />
+                <p className="artist-release-card__metric">
+                  <Star className="artist-star-icon" />
                   {metric.label}
                 </p>
               )}
