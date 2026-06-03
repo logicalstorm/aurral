@@ -30,7 +30,7 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
   const [isDesktop, setIsDesktop] = useState(() =>
     typeof window !== "undefined"
       ? window.matchMedia("(min-width: 768px)").matches
-      : true
+      : true,
   );
   const [ticketmasterConfigured, setTicketmasterConfigured] = useState(true);
 
@@ -40,7 +40,10 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
       prevModeRef.current = mode;
     }
   }, [mode]);
-  const isIcons = (mode === "icons" || (mode === "hidden" && prevModeRef.current === "icons")) && isDesktop;
+  const isIcons =
+    (mode === "icons" ||
+      (mode === "hidden" && prevModeRef.current === "icons")) &&
+    isDesktop;
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -80,7 +83,7 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
       if (path === "/discover" && location.pathname === "/") return true;
       return location.pathname === path;
     },
-    [location.pathname]
+    [location.pathname],
   );
 
   const navItems = useMemo(() => {
@@ -108,7 +111,7 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
       (item) =>
         !item.permission ||
         user?.role === "admin" ||
-        !!user?.permissions?.[item.permission]
+        !!user?.permissions?.[item.permission],
     );
   }, [ticketmasterConfigured, user]);
 
@@ -192,10 +195,7 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
   return (
     <>
       {isOpen && (
-        <div
-          className="app-mobile-backdrop md:hidden"
-          onClick={onClose}
-        />
+        <div className="app-mobile-backdrop md:hidden" onClick={onClose} />
       )}
 
       <aside
@@ -211,16 +211,8 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
               src="/arralogo.svg"
               alt="Aurral Logo"
               className="sidebar-logo"
-              style={{
-                filter:
-                  "brightness(0) saturate(100%) invert(45%) sepia(8%) saturate(800%) hue-rotate(60deg) brightness(95%) contrast(85%)",
-              }}
             />
-            {!isIcons && (
-              <span className="sidebar-title">
-                Aurral
-              </span>
-            )}
+            {!isIcons && <span className="sidebar-title">Aurral</span>}
           </Link>
           {!isIcons && (
             <button
@@ -281,16 +273,12 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
                       isIcons ? "sidebar-link--icons" : "sidebar-link--full"
                     }${active ? " is-active" : ""}`}
                   >
-                    <Icon
-                      className="sidebar-link__icon"
-                    />
+                    <Icon className="sidebar-link__icon" />
                     {!isIcons && (
                       <span className="sidebar-link__label">{item.label}</span>
                     )}
                     {isIcons && (
-                      <span className="sidebar-tooltip">
-                        {item.label}
-                      </span>
+                      <span className="sidebar-tooltip">{item.label}</span>
                     )}
                   </Link>
                 );
@@ -299,15 +287,15 @@ function Sidebar({ isOpen, onClose, appVersion, mode, onSetMode }) {
           </div>
         </div>
 
-        <div className={`sidebar-footer${isIcons ? " sidebar-footer--icons" : ""}`}>
+        <div
+          className={`sidebar-footer${isIcons ? " sidebar-footer--icons" : ""}`}
+        >
           {authRequired && (
             <LogoutButton onClick={logout} collapsed={isIcons} />
           )}
 
           {!isIcons && (
-            <div className="sidebar-version">
-              v{resolvedVersion}
-            </div>
+            <div className="sidebar-version">v{resolvedVersion}</div>
           )}
         </div>
       </aside>
