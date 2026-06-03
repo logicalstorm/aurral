@@ -85,7 +85,12 @@
 
   * {
     border: none !important;
-    border-radius: var(--aurral-radius);
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+  select,
+  textarea {
+    border-radius: 0 !important;
   }
 
   .card-separator {
@@ -178,7 +183,7 @@
     color: var(--aurral-white);
     --tw-ring-color: var(--aurral-gray-light);
     --tw-ring-offset-color: var(--aurral-surface);
-    border-radius: var(--aurral-radius);
+    border-radius: 0 !important;
     box-sizing: border-box;
   }
 
@@ -191,7 +196,7 @@
     box-shadow: 0 0 0 1000px var(--aurral-surface) inset !important;
     background-color: var(--aurral-surface) !important;
     caret-color: #fff !important;
-    border-radius: var(--aurral-radius);
+    border-radius: 0 !important;
     outline: none;
     transition: background-color 5000s ease-in-out 0s;
   }
@@ -967,6 +972,7 @@
   color: var(--aurral-white);
   font-size: 0.875rem;
   outline: none;
+  border-radius: 0 !important;
 }
 
 .global-search__placeholder {
@@ -1309,6 +1315,10 @@
 .artist-action-bar__inner,
 .artist-heading-row {
   justify-content: space-between;
+}
+
+.artist-heading-row {
+  margin-bottom: 1.25rem;
 }
 
 .artist-action-button,
@@ -2266,6 +2276,7 @@
   background: var(--aurral-black);
   color: var(--aurral-white);
   outline: none;
+  border-radius: 0 !important;
 }
 
 .artist-input:focus {
