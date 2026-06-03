@@ -51,16 +51,15 @@ function Layout({ children, appVersion }) {
   const [sidebarMode, setSidebarMode] = useState(() => {
     try {
       const stored = localStorage.getItem("sidebarMode");
+      if (stored === "hidden") {
+        const visible = localStorage.getItem("sidebarVisibleMode");
+        return visible === "full" || visible === "icons" ? visible : "icons";
+      }
       return VALID_SIDEBAR_MODES.includes(stored) ? stored : "full";
     } catch {
       return "full";
     }
   });
-  const prevVisibleMode = useRef(
-    sidebarMode !== "hidden"
-      ? sidebarMode
-      : (() => { try { const s = localStorage.getItem("sidebarVisibleMode"); return s === "full" || s === "icons" ? s : "full"; } catch { return "full"; } })()
-  );
   const location = useLocation();
   const { authRequired, logout, user } = useAuth();
   const isArtistDetailsRoute = /^\/artist\/[^/]+$/.test(location.pathname);
@@ -146,19 +145,17 @@ function Layout({ children, appVersion }) {
   }, [user]);
 
   const handleSetSidebarMode = useCallback((newMode) => {
-    if (newMode !== "hidden") {
-      prevVisibleMode.current = newMode;
-    }
     setSidebarMode(newMode);
     try {
       localStorage.setItem("sidebarMode", newMode);
-      if (newMode !== "hidden") {
-        localStorage.setItem("sidebarVisibleMode", newMode);
-      }
+      localStorage.setItem("sidebarVisibleMode", newMode);
     } catch {
-      // localStorage unavailable
     }
   }, []);
+
+  const toggleSidebarPin = useCallback(() => {
+    handleSetSidebarMode(sidebarMode === "icons" ? "full" : "icons");
+  }, [handleSetSidebarMode, sidebarMode]);
 
   useEffect(() => {
     setIsSidebarOpen(false);
@@ -177,9 +174,7 @@ function Layout({ children, appVersion }) {
     window.addEventListener("resize", update);
     const node = mainScrollRef.current;
     const observer =
-      typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(update)
-        : null;
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null;
     if (node && observer) {
       observer.observe(node);
       if (node.firstElementChild) {
@@ -208,7 +203,6 @@ function Layout({ children, appVersion }) {
         onClose={() => setIsSidebarOpen(false)}
         appVersion={appVersion}
         mode={sidebarMode}
-        onSetMode={handleSetSidebarMode}
       />
 
       <div
@@ -222,16 +216,15 @@ function Layout({ children, appVersion }) {
       >
         <header className="app-topbar">
           <button
-            onClick={() => {
-              const isDesktop = window.matchMedia("(min-width: 768px)").matches;
-              if (isDesktop) {
-                handleSetSidebarMode(sidebarMode === "hidden" ? prevVisibleMode.current : "hidden");
-              } else {
-                setIsMobileMenuOpen((open) => !open);
-              }
-            }}
-            className="app-nav-toggle"
-            aria-label="Toggle navigation"
+            type="button"
+            onClick={toggleSidebarPin}
+            className="app-nav-toggle hidden md:inline-flex"
+            aria-label={
+              sidebarMode === "icons" ? "Expand sidebar" : "Collapse to icons"
+            }
+            title={
+              sidebarMode === "icons" ? "Expand sidebar" : "Collapse to icons"
+            }
           >
             <Menu className="w-5 h-5" />
           </button>
