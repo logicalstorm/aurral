@@ -37,7 +37,6 @@ export const emptyArtistShape = {
   tags: [],
   genres: [],
   relations: [],
-  "appears-on-release-groups": [],
   "release-group-count": 0,
   "release-count": 0,
 };
