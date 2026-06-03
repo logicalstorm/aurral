@@ -1459,6 +1459,25 @@ const getReleaseGroupArtistId = (releaseGroup) => {
   return String(artistCredit[0]?.artist?.id || "").trim() || null;
 };
 
+const officialMusicbrainzRecordingSearch = async (mbid) => {
+  const contact =
+    (getMusicBrainzContact() || "").trim() || "https://github.com/aurral";
+  const userAgent = `${APP_NAME}/${APP_VERSION} ( ${contact} )`;
+  return mbLimiter.schedule(async () => {
+    const response = await axios.get(`${MUSICBRAINZ_API}/recording`, {
+      params: {
+        fmt: "json",
+        query: `arid:${mbid}`,
+        inc: "artist-credits+releases",
+        limit: 100,
+      },
+      headers: { "User-Agent": userAgent },
+      timeout: 8000,
+    });
+    return response.data;
+  });
+};
+
 const mapAppearsOnReleaseGroup = (releaseGroup, release, recording, mbid) => {
   const artistCredit = Array.isArray(releaseGroup?.["artist-credit"])
     ? releaseGroup["artist-credit"]
@@ -1513,11 +1532,7 @@ export async function musicbrainzGetArtistAppearsOnReleaseGroups(
   );
 
   try {
-    const data = await musicbrainzRequestWithRetry("/recording", {
-      artist: mbid,
-      inc: "artist-credits+releases+release-groups",
-      limit: 100,
-    });
+    const data = await officialMusicbrainzRecordingSearch(mbid);
     const recordings = Array.isArray(data?.recordings) ? data.recordings : [];
     const byReleaseGroupId = new Map();
 
