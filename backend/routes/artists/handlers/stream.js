@@ -2,7 +2,6 @@ import { UUID_REGEX } from "../../../config/constants.js";
 import {
   getLastfmApiKey,
   lastfmRequest,
-  musicbrainzGetArtistAppearsOnReleaseGroups,
   musicbrainzGetArtistReleaseGroups,
   musicbrainzGetArtistNameByMbid,
 } from "../../../services/apiClients.js";
@@ -290,12 +289,6 @@ export default function registerStream(router) {
             namePromise,
             releaseGroupsPromise,
           ]).then(async ([metadataArtist, name, releaseGroups]) => {
-            const appearsOnReleaseGroups =
-              await musicbrainzGetArtistAppearsOnReleaseGroups(
-                resolvedMbid,
-                releaseGroups,
-                { artistName: metadataArtist?.name || name },
-              ).catch(() => []);
             const tagPayload = await getArtistTagPayload(
               resolvedMbid,
               name,
@@ -306,7 +299,6 @@ export default function registerStream(router) {
               tags: tagPayload.tags,
               genres: tagPayload.genres,
               "release-groups": releaseGroups,
-              "appears-on-release-groups": appearsOnReleaseGroups,
               "release-group-count": releaseGroups.length,
               "release-count": releaseGroups.length,
             };

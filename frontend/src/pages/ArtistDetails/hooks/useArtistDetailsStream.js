@@ -22,7 +22,6 @@ const buildInitialArtist = (mbid, artistNameFromNav) =>
         "sort-name": artistNameFromNav || "Loading artist",
         ...emptyArtistShape,
         "release-groups": [],
-        "appears-on-release-groups": [],
       }
     : null;
 
@@ -331,9 +330,6 @@ export function useArtistDetailsStream(
           if (!("release-groups" in artistData)) {
             next["release-groups"] = prev["release-groups"];
           }
-          if (!("appears-on-release-groups" in artistData)) {
-            next["appears-on-release-groups"] = prev["appears-on-release-groups"];
-          }
           if (!("release-group-count" in artistData)) {
             next["release-group-count"] = prev["release-group-count"];
           }
@@ -495,10 +491,6 @@ export function useArtistDetailsStream(
           return {
             ...prev,
             "release-groups": artistData["release-groups"] || [],
-            "appears-on-release-groups":
-              artistData["appears-on-release-groups"] ||
-              prev["appears-on-release-groups"] ||
-              [],
             "release-group-count":
               artistData["release-group-count"] ??
               prev["release-group-count"] ??
@@ -533,10 +525,7 @@ export function useArtistDetailsStream(
     if (!mbid) return;
 
     const releaseGroupIds =
-      [
-        ...(artist?.["release-groups"] || []),
-        ...(artist?.["appears-on-release-groups"] || []),
-      ]
+      artist?.["release-groups"]
         ?.filter((rg) =>
           matchesReleaseTypeFilter(rg, selectedReleaseTypesRef.current),
         )
@@ -571,8 +560,6 @@ export function useArtistDetailsStream(
             requestedAlbumCoversRef.current.add(rgId);
             try {
               const releaseGroup = artist?.["release-groups"]?.find(
-                (item) => item?.id === rgId,
-              ) || artist?.["appears-on-release-groups"]?.find(
                 (item) => item?.id === rgId,
               );
               const data = await getReleaseGroupCover(rgId, {

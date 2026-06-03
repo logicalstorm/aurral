@@ -2,7 +2,6 @@ import { UUID_REGEX } from "../../../config/constants.js";
 import {
   getLastfmApiKey,
   lastfmRequest,
-  musicbrainzGetArtistAppearsOnReleaseGroups,
   musicbrainzGetArtistReleaseGroups,
   musicbrainzGetArtistNameByMbid,
 } from "../../../services/apiClients.js";
@@ -225,13 +224,6 @@ export default function registerDetails(router) {
           ? null
           : await getArtistByMbid(artistMbid).catch(() => null);
         const releaseGroups = await musicbrainzGetArtistReleaseGroups(artistMbid, selectedReleaseTypes);
-        const appearsOnReleaseGroups = coreOnly
-          ? []
-          : await musicbrainzGetArtistAppearsOnReleaseGroups(
-              artistMbid,
-              releaseGroups,
-              { artistName: metadataArtist?.name || lidarrArtist.artistName },
-            );
         const tagPayload = coreOnly
           ? { tags: [], genres: [] }
           : await getArtistTagPayload(
@@ -257,7 +249,6 @@ export default function registerDetails(router) {
           genres: tagPayload.genres,
           links: Array.isArray(metadataArtist?.links) ? metadataArtist.links : [],
           "release-groups": releaseGroups,
-          "appears-on-release-groups": appearsOnReleaseGroups,
           relations: toLegacyRelations(metadataArtist),
           rating: metadataArtist?.rating || null,
           "release-group-count": releaseGroups.length,
@@ -292,13 +283,6 @@ export default function registerDetails(router) {
             resolvedMbid,
             selectedReleaseTypes,
           );
-        const appearsOnReleaseGroups = coreOnly
-          ? []
-          : await musicbrainzGetArtistAppearsOnReleaseGroups(
-              resolvedMbid,
-              releaseGroups,
-              { artistName: name },
-            );
         return {
           id: resolvedMbid,
           name,
@@ -312,7 +296,6 @@ export default function registerDetails(router) {
           genres: tagPayload.genres,
           links: Array.isArray(metadataArtist?.links) ? metadataArtist.links : [],
           "release-groups": releaseGroups,
-          "appears-on-release-groups": appearsOnReleaseGroups,
           relations: toLegacyRelations(metadataArtist),
           rating: metadataArtist?.rating || null,
           "release-group-count": releaseGroups.length,
@@ -342,7 +325,6 @@ export default function registerDetails(router) {
           genres: [],
           links: [],
           "release-groups": [],
-          "appears-on-release-groups": [],
           relations: [],
           "release-group-count": 0,
           "release-count": 0,
