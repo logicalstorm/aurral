@@ -851,7 +851,6 @@ function getPlexConfig() {
   return dbOps.getSettings()?.integrations?.plex || {};
 }
 
-// Start the PIN OAuth flow: returns the PIN id + the app.plex.tv URL to visit.
 router.post("/plex/auth/pin", async (req, res) => {
   try {
     const { PlexClient } = await import("../services/plex.js");
@@ -885,7 +884,6 @@ router.post("/plex/auth/pin", async (req, res) => {
   }
 });
 
-// Poll a PIN. Returns { token } once the user authorizes, else { pending: true }.
 router.post("/plex/auth/check", async (req, res) => {
   try {
     const { PlexClient } = await import("../services/plex.js");
@@ -909,7 +907,6 @@ router.post("/plex/auth/check", async (req, res) => {
   }
 });
 
-// List Plex servers available to the authenticated account.
 router.post("/plex/resources", async (req, res) => {
   try {
     const { PlexClient } = await import("../services/plex.js");
@@ -940,7 +937,6 @@ router.post("/plex/resources", async (req, res) => {
   }
 });
 
-// Test connectivity to a Plex Media Server and capture its machineIdentifier.
 router.post("/plex/test", async (req, res) => {
   try {
     const { PlexClient } = await import("../services/plex.js");
@@ -972,7 +968,6 @@ router.post("/plex/test", async (req, res) => {
   }
 });
 
-// Build the Aurral library + flow playlists on the configured Plex server now.
 router.post("/plex/sync", async (req, res) => {
   try {
     const plex = getPlexConfig();

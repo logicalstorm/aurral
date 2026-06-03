@@ -150,8 +150,7 @@ export function SettingsIntegrationsTab({
     return list;
   };
 
-  // Auto-load the account's servers whenever we have a token, so the dropdown
-  // is always populated (e.g. on page load) without a manual "choose" step.
+  // Auto-load servers when we have a token so the dropdown is always populated.
   const plexToken = settings.integrations?.plex?.token;
   useEffect(() => {
     if (!plexToken) {
