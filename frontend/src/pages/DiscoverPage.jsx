@@ -171,8 +171,7 @@ const normalizeDiscoveryData = (value) => {
       value.discoveryMode === "safer" || value.discoveryMode === "deeper"
         ? value.discoveryMode
         : "balanced",
-    configured:
-      typeof value.configured === "boolean" ? value.configured : true,
+    configured: typeof value.configured === "boolean" ? value.configured : true,
   };
 };
 
@@ -272,8 +271,12 @@ const isArtistInEntries = (artist, entries) => {
     .trim()
     .toLowerCase();
   return list.some((entry) => {
-    const entryMbid = String(entry?.mbid || "").trim().toLowerCase();
-    const entryName = String(entry?.name || "").trim().toLowerCase();
+    const entryMbid = String(entry?.mbid || "")
+      .trim()
+      .toLowerCase();
+    const entryName = String(entry?.name || "")
+      .trim()
+      .toLowerCase();
     if (artistMbid && entryMbid && artistMbid === entryMbid) return true;
     if (artistName && entryName && artistName === entryName) return true;
     return false;
@@ -293,8 +296,10 @@ const matchesBlockedArtist = (target, artist) => {
   const artistName = String(artist?.name || artist?.artistName || "")
     .trim()
     .toLowerCase();
-  return (targetId && artistId && targetId === artistId) ||
-    (targetName && artistName && targetName === artistName);
+  return (
+    (targetId && artistId && targetId === artistId) ||
+    (targetName && artistName && targetName === artistName)
+  );
 };
 
 const filterDiscoveryDataByBlockedArtists = (value, blockedArtists) => {
@@ -402,107 +407,106 @@ const getRecommendationReason = (artist) => {
 };
 
 const ArtistCard = memo(
-    ({
-      artist,
-      status,
-      isInLibrary,
-      isBlocked,
-      canAddArtist,
-      onNavigate,
-      onAddToLibrary,
-      onAddToBlocklist,
-      onFeedback,
-    }) => {
-      const [showMenu, setShowMenu] = useState(false);
-      const [pendingAction, setPendingAction] = useState(null);
-      const menuRef = useRef(null);
-      const menuButtonRef = useRef(null);
-      const [menuPosition, setMenuPosition] = useState(null);
-      const navigateTo = artist.navigateTo || artist.id;
-      const hasValidMbid =
-        navigateTo && navigateTo !== "null" && navigateTo !== "undefined";
-      const artistMetaText = getRecommendationReason(artist);
-      const handleClick = useCallback(() => {
-        if (hasValidMbid) {
-          onNavigate(`/artist/${navigateTo}`, {
-            state: {
-              artistName: artist.name,
-              inLibrary: isInLibrary,
-            },
-          });
+  ({
+    artist,
+    isInLibrary,
+    isBlocked,
+    canAddArtist,
+    onNavigate,
+    onAddToLibrary,
+    onAddToBlocklist,
+    onFeedback,
+  }) => {
+    const [showMenu, setShowMenu] = useState(false);
+    const [pendingAction, setPendingAction] = useState(null);
+    const menuRef = useRef(null);
+    const menuButtonRef = useRef(null);
+    const [menuPosition, setMenuPosition] = useState(null);
+    const navigateTo = artist.navigateTo || artist.id;
+    const hasValidMbid =
+      navigateTo && navigateTo !== "null" && navigateTo !== "undefined";
+    const artistMetaText = getRecommendationReason(artist);
+    const handleClick = useCallback(() => {
+      if (hasValidMbid) {
+        onNavigate(`/artist/${navigateTo}`, {
+          state: {
+            artistName: artist.name,
+            inLibrary: isInLibrary,
+          },
+        });
+      }
+    }, [navigateTo, hasValidMbid, artist.name, isInLibrary, onNavigate]);
+
+    useEffect(() => {
+      if (!showMenu) return;
+      const handleClickOutside = (event) => {
+        const clickedMenu = menuRef.current?.contains(event.target);
+        const clickedButton = menuButtonRef.current?.contains(event.target);
+        if (!clickedMenu && !clickedButton) {
+          setShowMenu(false);
         }
-      }, [navigateTo, hasValidMbid, artist.name, isInLibrary, onNavigate]);
-
-      useEffect(() => {
-        if (!showMenu) return;
-        const handleClickOutside = (event) => {
-          const clickedMenu = menuRef.current?.contains(event.target);
-          const clickedButton = menuButtonRef.current?.contains(event.target);
-          if (!clickedMenu && !clickedButton) {
-            setShowMenu(false);
-          }
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => {
-          document.removeEventListener("mousedown", handleClickOutside);
-        };
-      }, [showMenu]);
-
-      useEffect(() => {
-        if (!showMenu) {
-          setMenuPosition(null);
-          return;
-        }
-        const updateMenuPosition = () => {
-          const button = menuButtonRef.current;
-          if (!button) return;
-          const rect = button.getBoundingClientRect();
-          setMenuPosition({
-            top: rect.top - 8,
-            left: Math.max(rect.right - 176, 12),
-          });
-        };
-        updateMenuPosition();
-        window.addEventListener("resize", updateMenuPosition);
-        window.addEventListener("scroll", updateMenuPosition, true);
-        return () => {
-          window.removeEventListener("resize", updateMenuPosition);
-          window.removeEventListener("scroll", updateMenuPosition, true);
-        };
-      }, [showMenu]);
-
-      const handleAddToLibraryClick = async (event) => {
-        event.stopPropagation();
-        if (isInLibrary || !canAddArtist || pendingAction) return;
-        setPendingAction("library");
-        const added = await onAddToLibrary(artist);
-        if (added) setShowMenu(false);
-        setPendingAction(null);
       };
-
-      const handleBlocklistClick = async (event) => {
-        event.stopPropagation();
-        if (isBlocked || pendingAction) return;
-        setPendingAction("blocklist");
-        const blocked = await onAddToBlocklist(artist);
-        if (blocked) setShowMenu(false);
-        setPendingAction(null);
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
       };
+    }, [showMenu]);
 
-      const handleFeedbackClick = async (event, action) => {
-        event.stopPropagation();
-        if (!onFeedback || pendingAction) return;
-        setPendingAction(action);
-        const saved = await onFeedback(artist, action);
-        if (saved) setShowMenu(false);
-        setPendingAction(null);
+    useEffect(() => {
+      if (!showMenu) {
+        setMenuPosition(null);
+        return;
+      }
+      const updateMenuPosition = () => {
+        const button = menuButtonRef.current;
+        if (!button) return;
+        const rect = button.getBoundingClientRect();
+        setMenuPosition({
+          top: rect.top - 8,
+          left: Math.max(rect.right - 176, 12),
+        });
       };
+      updateMenuPosition();
+      window.addEventListener("resize", updateMenuPosition);
+      window.addEventListener("scroll", updateMenuPosition, true);
+      return () => {
+        window.removeEventListener("resize", updateMenuPosition);
+        window.removeEventListener("scroll", updateMenuPosition, true);
+      };
+    }, [showMenu]);
+
+    const handleAddToLibraryClick = async (event) => {
+      event.stopPropagation();
+      if (isInLibrary || !canAddArtist || pendingAction) return;
+      setPendingAction("library");
+      const added = await onAddToLibrary(artist);
+      if (added) setShowMenu(false);
+      setPendingAction(null);
+    };
+
+    const handleBlocklistClick = async (event) => {
+      event.stopPropagation();
+      if (isBlocked || pendingAction) return;
+      setPendingAction("blocklist");
+      const blocked = await onAddToBlocklist(artist);
+      if (blocked) setShowMenu(false);
+      setPendingAction(null);
+    };
+
+    const handleFeedbackClick = async (event, action) => {
+      event.stopPropagation();
+      if (!onFeedback || pendingAction) return;
+      setPendingAction(action);
+      const saved = await onFeedback(artist, action);
+      if (saved) setShowMenu(false);
+      setPendingAction(null);
+    };
 
     return (
       <div className="group relative flex flex-col w-full min-w-0">
         <div
           onClick={handleClick}
-          className={`relative aspect-square mb-3 overflow-hidden shadow-sm group-hover:shadow-md transition-all ${hasValidMbid ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
+          className={`relative aspect-square mb-3 overflow-hidden transition-all ${hasValidMbid ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
           style={{ backgroundColor: "#211f27" }}
         >
           <ArtistImage
@@ -513,20 +517,6 @@ const ArtistCard = memo(
             className="h-full w-full group-hover:scale-105 transition-transform duration-300"
             showLoading={false}
           />
-
-          {status && (
-            <div
-              className={`absolute bottom-2 left-2 right-2 py-1 px-2 rounded text-[10px] font-bold uppercase text-center backdrop-blur-md shadow-lg ${
-                status === "available"
-                  ? "bg-green-500/90 text-white"
-                  : status === "processing"
-                    ? "bg-gray-700/90 text-white"
-                    : "bg-yellow-500/90 text-white"
-              }`}
-            >
-              {status}
-            </div>
-          )}
         </div>
 
         <div className="flex items-start gap-2 min-w-0">
@@ -695,10 +685,10 @@ const ArtistCard = memo(
       prevProps.isInLibrary === nextProps.isInLibrary &&
       prevProps.isBlocked === nextProps.isBlocked &&
       prevProps.canAddArtist === nextProps.canAddArtist &&
-      prevProps.onNavigate === nextProps.onNavigate
-      && prevProps.onAddToLibrary === nextProps.onAddToLibrary
-      && prevProps.onAddToBlocklist === nextProps.onAddToBlocklist
-      && prevProps.onFeedback === nextProps.onFeedback
+      prevProps.onNavigate === nextProps.onNavigate &&
+      prevProps.onAddToLibrary === nextProps.onAddToLibrary &&
+      prevProps.onAddToBlocklist === nextProps.onAddToBlocklist &&
+      prevProps.onFeedback === nextProps.onFeedback
     );
   },
 );
@@ -881,7 +871,10 @@ const ShowCard = memo(({ show }) => {
         className="group relative overflow-hidden rounded-[28px] border border-white/10 sm:hidden"
         style={{ backgroundColor: "#191820" }}
       >
-        <div className="relative aspect-[1.7/1] overflow-hidden" style={{ backgroundColor: "#211f27" }}>
+        <div
+          className="relative aspect-[1.7/1] overflow-hidden"
+          style={{ backgroundColor: "#211f27" }}
+        >
           {show.image ? (
             <img
               src={show.image}
@@ -905,13 +898,19 @@ const ShowCard = memo(({ show }) => {
           <div className="absolute inset-0 flex flex-col justify-between p-5">
             <div />
             <div className="max-w-[74%]">
-              <p className="truncate text-xs font-medium" style={{ color: "#b8bbc7" }}>
+              <p
+                className="truncate text-xs font-medium"
+                style={{ color: "#b8bbc7" }}
+              >
                 {show.artistName}
               </p>
               <h3 className="mt-1 truncate text-[1.65rem] font-bold leading-[0.98] tracking-tight text-white">
                 {show.eventName}
               </h3>
-              <div className="mt-3 space-y-1.5 text-xs" style={{ color: "#d7dae4" }}>
+              <div
+                className="mt-3 space-y-1.5 text-xs"
+                style={{ color: "#d7dae4" }}
+              >
                 {showDate && (
                   <p className="flex items-center gap-2">
                     <Clock className="h-3.5 w-3.5 shrink-0" />
@@ -935,7 +934,10 @@ const ShowCard = memo(({ show }) => {
         style={{ backgroundColor: "#191820" }}
       >
         <a href={show.url || "#"} target="_blank" rel="noopener noreferrer">
-          <div className="relative aspect-[16/9] overflow-hidden" style={{ backgroundColor: "#211f27" }}>
+          <div
+            className="relative aspect-[16/9] overflow-hidden"
+            style={{ backgroundColor: "#211f27" }}
+          >
             {show.image ? (
               <img
                 src={show.image}
@@ -953,7 +955,10 @@ const ShowCard = memo(({ show }) => {
               {Number.isFinite(show.distance) && (
                 <span
                   className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide"
-                  style={{ backgroundColor: "rgba(20,20,26,0.82)", color: "#fff" }}
+                  style={{
+                    backgroundColor: "rgba(20,20,26,0.82)",
+                    color: "#fff",
+                  }}
                 >
                   {Math.round(show.distance)} mi
                 </span>
@@ -963,7 +968,10 @@ const ShowCard = memo(({ show }) => {
         </a>
         <div className="flex flex-1 flex-col gap-3 p-4">
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-[0.22em]" style={{ color: "#8a8a8f" }}>
+            <p
+              className="text-xs uppercase tracking-[0.22em]"
+              style={{ color: "#8a8a8f" }}
+            >
               {show.artistName}
             </p>
             <h3 className="mt-1 truncate text-lg font-semibold leading-tight">
@@ -1167,7 +1175,6 @@ function DiscoverPage() {
   const { showSuccess, showError } = useToast();
   const canAddArtist = hasPermission("addArtist");
 
-
   const { isConnected: isDiscoverySocketConnected } = useWebSocketChannel(
     "discovery",
     (msg) => {
@@ -1305,7 +1312,6 @@ function DiscoverPage() {
     getRecentReleases()
       .then(setRecentReleases)
       .catch(() => {});
-
   }, [authUser?.id]);
 
   useEffect(() => {
@@ -1448,15 +1454,13 @@ function DiscoverPage() {
       );
       getReleaseGroupCover(id, {
         artistName:
-          release?.artistName ||
-          release?.artist ||
-          release?.artistCredit ||
-          "",
+          release?.artistName || release?.artist || release?.artistCredit || "",
         albumTitle: release?.title || release?.albumName || "",
       })
         .then((data) => {
           if (data?.images?.length > 0) {
-            const front = data.images.find((img) => img.front) || data.images[0];
+            const front =
+              data.images.find((img) => img.front) || data.images[0];
             const url = front?.image;
             if (url) {
               setReleaseCovers((prev) => ({ ...prev, [id]: url }));
@@ -1488,7 +1492,8 @@ function DiscoverPage() {
       getArtistCover(artistId, album.artistName)
         .then((data) => {
           if (data?.images?.length > 0) {
-            const front = data.images.find((img) => img.front) || data.images[0];
+            const front =
+              data.images.find((img) => img.front) || data.images[0];
             const url = front?.image;
             if (url) {
               setArtistCovers((prev) => ({ ...prev, [artistId]: url }));
@@ -1561,7 +1566,9 @@ function DiscoverPage() {
             const leftScore = Number(left.scoreTotal || left.score || 0);
             const rightScore = Number(right.scoreTotal || right.score || 0);
             if (rightScore !== leftScore) return rightScore - leftScore;
-            return String(left.name || "").localeCompare(String(right.name || ""));
+            return String(left.name || "").localeCompare(
+              String(right.name || ""),
+            );
           })
           .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT);
 
@@ -1646,7 +1653,9 @@ function DiscoverPage() {
   );
 
   const displayDiscoverSections = useMemo(() => {
-    const sectionsById = new Map(discoverSections.map((item) => [item.id, item]));
+    const sectionsById = new Map(
+      discoverSections.map((item) => [item.id, item]),
+    );
     if (!isListenBrainzFallback) {
       return discoverSections.filter(
         (item) => !getFallbackGenreFromSectionId(item.id),
@@ -1791,7 +1800,8 @@ function DiscoverPage() {
     setIsSavingDiscoverLayout(true);
     updateMyDiscoverLayout(nextLayout)
       .then((response) => {
-        const savedLayout = normalizeDiscoverLayout(response?.layout) || nextLayout;
+        const savedLayout =
+          normalizeDiscoverLayout(response?.layout) || nextLayout;
         setDiscoverSections(savedLayout);
         writeStoredDiscoverLayout(savedLayout, authUser?.id);
         showSuccess("Discover layout saved");
@@ -1809,10 +1819,9 @@ function DiscoverPage() {
 
   const handleDiscoverReset = () => {
     setDraftSections(
-      (isListenBrainzFallback
+      isListenBrainzFallback
         ? displayDiscoverSections.map((item) => ({ ...item, enabled: true }))
-        : DEFAULT_DISCOVER_SECTIONS.map((item) => ({ ...item }))
-      ),
+        : DEFAULT_DISCOVER_SECTIONS.map((item) => ({ ...item })),
     );
   };
 
@@ -1821,7 +1830,9 @@ function DiscoverPage() {
       if (draggingId) return;
       setDraftSections((prev) =>
         prev.map((section) =>
-          section.id === id ? { ...section, enabled: !section.enabled } : section,
+          section.id === id
+            ? { ...section, enabled: !section.enabled }
+            : section,
         ),
       );
     },
@@ -1921,9 +1932,7 @@ function DiscoverPage() {
         showSuccess("Artist added to blocklist");
         return true;
       } catch (err) {
-        showError(
-          err.response?.data?.message || "Failed to update blocklist",
-        );
+        showError(err.response?.data?.message || "Failed to update blocklist");
         return false;
       }
     },
@@ -1940,7 +1949,9 @@ function DiscoverPage() {
           sourceContext: artist.sourceType || artist.discoveryTier || null,
           tagContext: artist.matchedTags || artist.tags || [],
           seedContext: Array.isArray(artist.supportingSeeds)
-            ? artist.supportingSeeds.map((seed) => seed?.artistName).filter(Boolean)
+            ? artist.supportingSeeds
+                .map((seed) => seed?.artistName)
+                .filter(Boolean)
             : artist.sourceArtists || [],
         });
         if (action === "hide_for_now") {
@@ -1982,7 +1993,9 @@ function DiscoverPage() {
   const renderSection = (id) => {
     const fallbackGenre = getFallbackGenreFromSectionId(id);
     if (fallbackGenre) {
-      const section = genreSections.find((item) => item.genre === fallbackGenre);
+      const section = genreSections.find(
+        (item) => item.genre === fallbackGenre,
+      );
       if (!section || section.artists.length === 0) return null;
       return (
         <DiscoverRail
@@ -1996,23 +2009,25 @@ function DiscoverPage() {
           }
         >
           <>
-            {section.artists.slice(0, DISCOVER_PREVIEW_ITEM_LIMIT).map((artist) => (
-              <div
-                key={`${section.genre}-${artist.id}`}
-                className={DISCOVER_SHELF_CARD_CLASS}
-              >
-                <ArtistCard
-                  artist={artist}
-                  isInLibrary={!!libraryLookup[getArtistId(artist)]}
-                  isBlocked={isArtistInEntries(artist, blockedArtists)}
-                  canAddArtist={canAddArtist}
-                  onNavigate={navigate}
-                  onAddToLibrary={handleAddArtistToLibrary}
-                  onAddToBlocklist={handleAddArtistToBlocklist}
-                  onFeedback={handleDiscoveryFeedback}
-                />
-              </div>
-            ))}
+            {section.artists
+              .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT)
+              .map((artist) => (
+                <div
+                  key={`${section.genre}-${artist.id}`}
+                  className={DISCOVER_SHELF_CARD_CLASS}
+                >
+                  <ArtistCard
+                    artist={artist}
+                    isInLibrary={!!libraryLookup[getArtistId(artist)]}
+                    isBlocked={isArtistInEntries(artist, blockedArtists)}
+                    canAddArtist={canAddArtist}
+                    onNavigate={navigate}
+                    onAddToLibrary={handleAddArtistToLibrary}
+                    onAddToBlocklist={handleAddArtistToBlocklist}
+                    onFeedback={handleDiscoveryFeedback}
+                  />
+                </div>
+              ))}
             <div className={DISCOVER_SHELF_CARD_CLASS}>
               <ViewAllCard
                 onClick={() =>
@@ -2037,33 +2052,39 @@ function DiscoverPage() {
           style={{ animationDelay: "0.1s" }}
         >
           <>
-            {recentlyAdded.slice(0, DISCOVER_PREVIEW_ITEM_LIMIT).map((artist) => {
-              const artistId = artist.foreignArtistId || artist.mbid || artist.id;
-              return (
-                <div key={`artist-${artist.id}`} className={DISCOVER_SHELF_CARD_CLASS}>
-                  <ArtistCard
-                    status="available"
-                    isInLibrary={!!libraryLookup[artistId]}
-                    isBlocked={isArtistInEntries(
-                      { id: artistId, name: artist.artistName },
-                      blockedArtists,
-                    )}
-                    canAddArtist={false}
-                    onNavigate={navigate}
-                    artist={{
-                      id: artistId,
-                      name: artist.artistName,
-                      image: getLibraryArtistImage(artist),
-                      type: "Artist",
-                      metaText: "",
-                      subtitle: `Added ${new Date(
-                        artist.added || artist.addedAt,
-                      ).toLocaleDateString()}`,
-                    }}
-                  />
-                </div>
-              );
-            })}
+            {recentlyAdded
+              .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT)
+              .map((artist) => {
+                const artistId =
+                  artist.foreignArtistId || artist.mbid || artist.id;
+                return (
+                  <div
+                    key={`artist-${artist.id}`}
+                    className={DISCOVER_SHELF_CARD_CLASS}
+                  >
+                    <ArtistCard
+                      status="available"
+                      isInLibrary={!!libraryLookup[artistId]}
+                      isBlocked={isArtistInEntries(
+                        { id: artistId, name: artist.artistName },
+                        blockedArtists,
+                      )}
+                      canAddArtist={false}
+                      onNavigate={navigate}
+                      artist={{
+                        id: artistId,
+                        name: artist.artistName,
+                        image: getLibraryArtistImage(artist),
+                        type: "Artist",
+                        metaText: "",
+                        subtitle: `Added ${new Date(
+                          artist.added || artist.addedAt,
+                        ).toLocaleDateString()}`,
+                      }}
+                    />
+                  </div>
+                );
+              })}
           </>
         </DiscoverRail>
       );
@@ -2079,19 +2100,21 @@ function DiscoverPage() {
           style={{ animationDelay: "0.15s" }}
         >
           <>
-            {recentReleases.slice(0, DISCOVER_PREVIEW_ITEM_LIMIT).map((album) => (
-              <div
-                key={album.id || album.mbid || album.foreignAlbumId}
-                className={DISCOVER_SHELF_CARD_CLASS}
-              >
-                <AlbumCard
-                  album={album}
-                  releaseCovers={releaseCovers}
-                  artistCovers={artistCovers}
-                  onNavigate={navigate}
-                />
-              </div>
-            ))}
+            {recentReleases
+              .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT)
+              .map((album) => (
+                <div
+                  key={album.id || album.mbid || album.foreignAlbumId}
+                  className={DISCOVER_SHELF_CARD_CLASS}
+                >
+                  <AlbumCard
+                    album={album}
+                    releaseCovers={releaseCovers}
+                    artistCovers={artistCovers}
+                    onNavigate={navigate}
+                  />
+                </div>
+              ))}
           </>
         </DiscoverRail>
       );
@@ -2107,20 +2130,22 @@ function DiscoverPage() {
         >
           {recommendations.length > 0 ? (
             <>
-              {recommendations.slice(0, DISCOVER_PREVIEW_ITEM_LIMIT).map((artist) => (
-                <div key={artist.id} className={DISCOVER_SHELF_CARD_CLASS}>
-                  <ArtistCard
-                    artist={artist}
-                    isInLibrary={!!libraryLookup[getArtistId(artist)]}
-                    isBlocked={isArtistInEntries(artist, blockedArtists)}
-                    canAddArtist={canAddArtist}
-                    onNavigate={navigate}
-                    onAddToLibrary={handleAddArtistToLibrary}
-                    onAddToBlocklist={handleAddArtistToBlocklist}
-                    onFeedback={handleDiscoveryFeedback}
-                  />
-                </div>
-              ))}
+              {recommendations
+                .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT)
+                .map((artist) => (
+                  <div key={artist.id} className={DISCOVER_SHELF_CARD_CLASS}>
+                    <ArtistCard
+                      artist={artist}
+                      isInLibrary={!!libraryLookup[getArtistId(artist)]}
+                      isBlocked={isArtistInEntries(artist, blockedArtists)}
+                      canAddArtist={canAddArtist}
+                      onNavigate={navigate}
+                      onAddToLibrary={handleAddArtistToLibrary}
+                      onAddToBlocklist={handleAddArtistToBlocklist}
+                      onFeedback={handleDiscoveryFeedback}
+                    />
+                  </div>
+                ))}
               <div className={DISCOVER_SHELF_CARD_CLASS}>
                 <ViewAllCard
                   onClick={() => navigate("/search?type=recommended")}
@@ -2249,7 +2274,10 @@ function DiscoverPage() {
                         setShowNearbyZipEditor(false);
                         try {
                           localStorage.setItem(DISCOVER_NEARBY_MODE_KEY, "zip");
-                          localStorage.setItem(DISCOVER_NEARBY_ZIP_KEY, sanitized);
+                          localStorage.setItem(
+                            DISCOVER_NEARBY_ZIP_KEY,
+                            sanitized,
+                          );
                         } catch {}
                       }}
                       className="px-2 py-1 text-xs"
@@ -2284,11 +2312,17 @@ function DiscoverPage() {
           </div>
 
           {nearbyShowsData?.configured === false ? (
-            <div className="border border-white/10 p-6" style={{ backgroundColor: "#191820" }}>
+            <div
+              className="border border-white/10 p-6"
+              style={{ backgroundColor: "#191820" }}
+            >
               <h3 className="text-lg font-semibold" style={{ color: "#fff" }}>
                 Ticketmaster not configured
               </h3>
-              <p className="mt-2 max-w-2xl text-sm" style={{ color: "#c1c1c3" }}>
+              <p
+                className="mt-2 max-w-2xl text-sm"
+                style={{ color: "#c1c1c3" }}
+              >
                 Add a Ticketmaster Consumer Key in Settings to enable local show
                 discovery on this page.
               </p>
@@ -2301,11 +2335,20 @@ function DiscoverPage() {
               </button>
             </div>
           ) : nearbyShowsLoading ? (
-            <div className="flex items-center justify-center py-20" style={{ backgroundColor: "#191820" }}>
-              <Loader className="h-8 w-8 animate-spin" style={{ color: "#c1c1c3" }} />
+            <div
+              className="flex items-center justify-center py-20"
+              style={{ backgroundColor: "#191820" }}
+            >
+              <Loader
+                className="h-8 w-8 animate-spin"
+                style={{ color: "#c1c1c3" }}
+              />
             </div>
           ) : nearbyShowsError ? (
-            <div className="border border-white/10 p-6" style={{ backgroundColor: "#191820" }}>
+            <div
+              className="border border-white/10 p-6"
+              style={{ backgroundColor: "#191820" }}
+            >
               <h3 className="text-lg font-semibold" style={{ color: "#fff" }}>
                 Unable to load nearby shows
               </h3>
@@ -2314,12 +2357,19 @@ function DiscoverPage() {
               </p>
             </div>
           ) : zipModeActive && !appliedNearbyZip.trim() ? (
-            <div className="border border-white/10 p-6" style={{ backgroundColor: "#191820" }}>
+            <div
+              className="border border-white/10 p-6"
+              style={{ backgroundColor: "#191820" }}
+            >
               <h3 className="text-lg font-semibold" style={{ color: "#fff" }}>
                 ZIP not set
               </h3>
-              <p className="mt-2 max-w-2xl text-sm" style={{ color: "#c1c1c3" }}>
-                Set a ZIP code from the Shows page area settings to use ZIP mode here.
+              <p
+                className="mt-2 max-w-2xl text-sm"
+                style={{ color: "#c1c1c3" }}
+              >
+                Set a ZIP code from the Shows page area settings to use ZIP mode
+                here.
               </p>
             </div>
           ) : nearbyShows.length > 0 ? (
@@ -2330,21 +2380,32 @@ function DiscoverPage() {
               headerActions={nearbyHeaderActions}
             >
               <>
-                {nearbyShows.slice(0, DISCOVER_PREVIEW_ITEM_LIMIT).map((show) => (
-                  <div key={`${show.id}-${show.artistName}-${show.sourceType || show.matchType || "show"}`} className="w-[288px] shrink-0">
-                    <ShowCard show={show} />
-                  </div>
-                ))}
+                {nearbyShows
+                  .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT)
+                  .map((show) => (
+                    <div
+                      key={`${show.id}-${show.artistName}-${show.sourceType || show.matchType || "show"}`}
+                      className="w-[288px] shrink-0"
+                    >
+                      <ShowCard show={show} />
+                    </div>
+                  ))}
               </>
             </DiscoverRail>
           ) : (
-            <div className="border border-white/10 p-6" style={{ backgroundColor: "#191820" }}>
+            <div
+              className="border border-white/10 p-6"
+              style={{ backgroundColor: "#191820" }}
+            >
               <h3 className="text-lg font-semibold" style={{ color: "#fff" }}>
                 No upcoming nearby matches
               </h3>
-              <p className="mt-2 max-w-2xl text-sm" style={{ color: "#c1c1c3" }}>
-                We could not find local Ticketmaster shows tied to your library or
-                current recommendations around {nearbyLocationLabel}.
+              <p
+                className="mt-2 max-w-2xl text-sm"
+                style={{ color: "#c1c1c3" }}
+              >
+                We could not find local Ticketmaster shows tied to your library
+                or current recommendations around {nearbyLocationLabel}.
               </p>
             </div>
           )}
@@ -2405,23 +2466,25 @@ function DiscoverPage() {
               }
             >
               <>
-                {section.artists.slice(0, DISCOVER_PREVIEW_ITEM_LIMIT).map((artist) => (
-                  <div
-                    key={`${section.genre}-${artist.id}`}
-                    className={DISCOVER_SHELF_CARD_CLASS}
-                  >
-                    <ArtistCard
-                      artist={artist}
-                      isInLibrary={!!libraryLookup[getArtistId(artist)]}
-                      isBlocked={isArtistInEntries(artist, blockedArtists)}
-                      canAddArtist={canAddArtist}
-                      onNavigate={navigate}
-                      onAddToLibrary={handleAddArtistToLibrary}
-                      onAddToBlocklist={handleAddArtistToBlocklist}
-                      onFeedback={handleDiscoveryFeedback}
-                    />
-                  </div>
-                ))}
+                {section.artists
+                  .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT)
+                  .map((artist) => (
+                    <div
+                      key={`${section.genre}-${artist.id}`}
+                      className={DISCOVER_SHELF_CARD_CLASS}
+                    >
+                      <ArtistCard
+                        artist={artist}
+                        isInLibrary={!!libraryLookup[getArtistId(artist)]}
+                        isBlocked={isArtistInEntries(artist, blockedArtists)}
+                        canAddArtist={canAddArtist}
+                        onNavigate={navigate}
+                        onAddToLibrary={handleAddArtistToLibrary}
+                        onAddToBlocklist={handleAddArtistToBlocklist}
+                        onFeedback={handleDiscoveryFeedback}
+                      />
+                    </div>
+                  ))}
                 <div className={DISCOVER_SHELF_CARD_CLASS}>
                   <ViewAllCard
                     onClick={() =>
@@ -2441,12 +2504,7 @@ function DiscoverPage() {
     if (id === "topTags") {
       if (!sectionAvailability.topTags) return null;
       return (
-        <DiscoverRail
-          key="topTags"
-          className="px-4 py-6 sm:px-6"
-          title="Explore by Tag"
-          style={{ backgroundColor: "#211f27" }}
-        >
+        <DiscoverRail key="topTags" title="Explore by Tag">
           <>
             {topTags.map((tag, i) => (
               <div key={i} className="shrink-0">
@@ -2456,7 +2514,7 @@ function DiscoverPage() {
                       `/search?q=${encodeURIComponent(`#${tag}`)}&type=tag`,
                     )
                   }
-                  className="relative h-[128px] w-[248px] overflow-hidden rounded-3xl border border-white/10 text-left sm:hidden"
+                  className="relative h-[128px] w-[248px] overflow-hidden rounded-3xl text-left sm:hidden"
                   style={{
                     ...getTagCardBackground(tag),
                     color: "#fff",
@@ -2605,26 +2663,30 @@ function DiscoverPage() {
   return (
     <div className="space-y-4 pb-12 sm:space-y-10">
       <LastfmBanner />
-      <section
-        className="relative hidden overflow-hidden border border-white/10 md:block"
-        style={{
-          color: "#fff",
-          background:
-            "linear-gradient(180deg, rgba(24,23,30,0.96), rgba(16,16,21,0.96))",
-        }}
-      >
-        <div className="relative flex flex-col gap-5 p-5 md:p-6">
-          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
-            <div className="flex max-w-2xl flex-col gap-2">
+      <section className="relative hidden overflow-hidden md:block">
+        <div className="relative flex flex-col gap-1">
+          <div className="flex flex-col justify-between gap-1 md:flex-row md:items-start">
+            <div className="flex max-w-2xl flex-col gap-1">
               <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-3xl font-bold md:text-4xl" style={{ color: "#fff" }}>
+                <h1
+                  className="text-3xl font-bold md:text-4xl"
+                  style={{ color: "#fff" }}
+                >
                   Discover
                 </h1>
                 {lastUpdated && (
-                  <span className="flex items-center rounded-full px-2 py-1 text-xs font-medium" style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "#8a8a8f" }}>
+                  <span
+                    className="flex items-center rounded-full px-2 py-1 text-xs font-medium"
+                    style={{
+                      backgroundColor: "rgba(255,255,255,0.05)",
+                      color: "#8a8a8f",
+                    }}
+                  >
                     <Clock className="mr-1.5 h-3 w-3" />
                     Updated {new Date(lastUpdated).toLocaleDateString()}
-                    {isUpdating && <Loader className="ml-2 h-3 w-3 animate-spin" />}
+                    {isUpdating && (
+                      <Loader className="ml-2 h-3 w-3 animate-spin" />
+                    )}
                   </span>
                 )}
               </div>
@@ -2641,8 +2703,7 @@ function DiscoverPage() {
                       : heroBasedOn
                           .slice(0, 2)
                           .map((a) => a.name)
-                          .join(", ") +
-                        ` and ${heroBasedOn.length - 2} more`}
+                          .join(", ") + ` and ${heroBasedOn.length - 2} more`}
                 </p>
               )}
             </div>
@@ -2661,16 +2722,26 @@ function DiscoverPage() {
           <div className="flex flex-col gap-3 border-t border-white/5 pt-4">
             {topGenres.length > 0 && (
               <div className="flex flex-col gap-2">
-                <h3 className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: "#8a8a8f" }}>
+                <h3
+                  className="text-[11px] font-semibold uppercase tracking-[0.22em]"
+                  style={{ color: "#8a8a8f" }}
+                >
                   Top Tags
                 </h3>
-                <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {topGenres.map((genre, i) => (
+                <div className="flex flex-wrap gap-1 max-h-[4rem] overflow-y-hidden">
+                  {topGenres.slice(0, 30).map((genre, i) => (
                     <button
                       key={i}
-                      onClick={() => navigate(`/search?q=${encodeURIComponent(`#${genre}`)}&type=tag`)}
-                      className="genre-tag-pill shrink-0 px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-90"
-                      style={{ backgroundColor: getTagColor(genre), color: "#fff" }}
+                      onClick={() =>
+                        navigate(
+                          `/search?q=${encodeURIComponent(`#${genre}`)}&type=tag`,
+                        )
+                      }
+                      className="genre-tag-pill px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-70"
+                      style={{
+                        backgroundColor: getTagColor(genre),
+                        color: "#fff",
+                      }}
                     >
                       #{genre}
                     </button>
@@ -2678,7 +2749,6 @@ function DiscoverPage() {
                 </div>
               </div>
             )}
-
           </div>
         </div>
       </section>
@@ -2700,124 +2770,127 @@ function DiscoverPage() {
               }}
               onClick={(e) => e.stopPropagation()}
             >
-            <div
-              className="flex items-center justify-between px-5 py-4 border-b border-white/10"
-              style={{
-                background:
-                  "linear-gradient(135deg, rgba(40,38,49,0.9), rgba(20,20,26,0.8))",
-              }}
-            >
-              <div>
-                <h3 className="text-xl font-bold" style={{ color: "#fff" }}>
-                  Customize Discover
-                </h3>
-                <p className="text-sm mt-1" style={{ color: "#c1c1c3" }}>
-                  Choose what shows up and arrange sections in your order.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="p-2 rounded transition-colors hover:bg-[#2a2a2e]"
-                style={{ color: "#c1c1c3" }}
-                onClick={() => setShowDiscoverModal(false)}
-                aria-label="Close"
+              <div
+                className="flex items-center justify-between px-5 py-4 border-b border-white/10"
+                style={{
+                  background:
+                    "linear-gradient(135deg, rgba(40,38,49,0.9), rgba(20,20,26,0.8))",
+                }}
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="px-5 py-4 space-y-2 flex-1 overflow-y-auto">
-              {draftSections.map((item) => (
-                <div
-                  key={item.id}
-                  draggable
-                  onClick={() => handleToggleSection(item.id)}
-                  onDragStart={() => handleDragStart(item.id)}
-                  onDragOver={(event) => handleDragOver(event, item.id)}
-                  onDrop={(event) => handleDrop(event)}
-                  onDragEnd={() => {
-                    setDraggingId(null);
-                    setDragOverId(null);
-                  }}
-                  className={`flex items-center gap-4 px-4 py-3 border transition-all duration-200 ease-out cursor-grab select-none bg-[#1a191f] ${
-                    item.enabled ? "text-white" : "text-[#8a8a8f] opacity-70"
-                  } ${
-                    draggingId === item.id
-                      ? "opacity-80 scale-[0.98] cursor-grabbing"
-                      : dragOverId === item.id
-                        ? "border-[#707e61] bg-[#1b1c21] -translate-y-0.5"
-                        : "border-transparent hover:border-[#5a6070] hover:bg-[#20222a]"
-                  }`}
-                  style={{
-                    willChange: "transform",
-                  }}
-                >
-                  <div
-                    className="flex items-center justify-center w-9 h-9"
-                    style={{
-                      color: item.enabled ? "#c1c1c3" : "#6f6f78",
-                    }}
-                  >
-                    <GripVertical className="w-4 h-4" />
-                  </div>
-                  <div className="flex flex-col items-start flex-1">
-                    <span
-                      className="text-sm font-semibold"
-                      style={{ color: item.enabled ? "#fff" : "#8a8a8f" }}
-                    >
-                      {item.label}
-                    </span>
-                    {!getFallbackGenreFromSectionId(item.id) &&
-                      !sectionAvailability[item.id] && (
-                      <span className="text-xs" style={{ color: "#8a8a8f" }}>
-                        Not enough data yet
-                      </span>
-                    )}
-                  </div>
-                  <span
-                    className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide"
-                    style={{
-                      backgroundColor: item.enabled ? "#707e61" : "#2d2c32",
-                      color: item.enabled ? "#0b0b0c" : "#c1c1c3",
-                    }}
-                  >
-                    {item.enabled ? "Active" : "Hidden"}
-                  </span>
+                <div>
+                  <h3 className="text-xl font-bold" style={{ color: "#fff" }}>
+                    Customize Discover
+                  </h3>
+                  <p className="text-sm mt-1" style={{ color: "#c1c1c3" }}>
+                    Choose what shows up and arrange sections in your order.
+                  </p>
                 </div>
-              ))}
-            </div>
-
-            <div
-              className="flex flex-wrap gap-3 justify-between items-center px-5 py-4 border-t border-white/10"
-              style={{ backgroundColor: "#111117" }}
-            >
-              <button
-                type="button"
-                onClick={handleDiscoverReset}
-                className="btn btn-secondary"
-              >
-                Reset to Default
-              </button>
-              <div className="flex gap-3">
                 <button
                   type="button"
+                  className="p-2 rounded transition-colors hover:bg-[#2a2a2e]"
+                  style={{ color: "#c1c1c3" }}
                   onClick={() => setShowDiscoverModal(false)}
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="px-5 py-4 space-y-2 flex-1 overflow-y-auto">
+                {draftSections.map((item) => (
+                  <div
+                    key={item.id}
+                    draggable
+                    onClick={() => handleToggleSection(item.id)}
+                    onDragStart={() => handleDragStart(item.id)}
+                    onDragOver={(event) => handleDragOver(event, item.id)}
+                    onDrop={(event) => handleDrop(event)}
+                    onDragEnd={() => {
+                      setDraggingId(null);
+                      setDragOverId(null);
+                    }}
+                    className={`flex items-center gap-4 px-4 py-3 border transition-all duration-200 ease-out cursor-grab select-none bg-[#1a191f] ${
+                      item.enabled ? "text-white" : "text-[#8a8a8f] opacity-70"
+                    } ${
+                      draggingId === item.id
+                        ? "opacity-80 scale-[0.98] cursor-grabbing"
+                        : dragOverId === item.id
+                          ? "border-[#707e61] bg-[#1b1c21] -translate-y-0.5"
+                          : "border-transparent hover:border-[#5a6070] hover:bg-[#20222a]"
+                    }`}
+                    style={{
+                      willChange: "transform",
+                    }}
+                  >
+                    <div
+                      className="flex items-center justify-center w-9 h-9"
+                      style={{
+                        color: item.enabled ? "#c1c1c3" : "#6f6f78",
+                      }}
+                    >
+                      <GripVertical className="w-4 h-4" />
+                    </div>
+                    <div className="flex flex-col items-start flex-1">
+                      <span
+                        className="text-sm font-semibold"
+                        style={{ color: item.enabled ? "#fff" : "#8a8a8f" }}
+                      >
+                        {item.label}
+                      </span>
+                      {!getFallbackGenreFromSectionId(item.id) &&
+                        !sectionAvailability[item.id] && (
+                          <span
+                            className="text-xs"
+                            style={{ color: "#8a8a8f" }}
+                          >
+                            Not enough data yet
+                          </span>
+                        )}
+                    </div>
+                    <span
+                      className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide"
+                      style={{
+                        backgroundColor: item.enabled ? "#707e61" : "#2d2c32",
+                        color: item.enabled ? "#0b0b0c" : "#c1c1c3",
+                      }}
+                    >
+                      {item.enabled ? "Active" : "Hidden"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div
+                className="flex flex-wrap gap-3 justify-between items-center px-5 py-4 border-t border-white/10"
+                style={{ backgroundColor: "#111117" }}
+              >
+                <button
+                  type="button"
+                  onClick={handleDiscoverReset}
                   className="btn btn-secondary"
                 >
-                  Cancel
+                  Reset to Default
                 </button>
-                <button
-                  type="button"
-                  onClick={handleDiscoverSave}
-                  className="btn btn-primary"
-                  disabled={isSavingDiscoverLayout}
-                >
-                  {isSavingDiscoverLayout ? "Saving..." : "Save Layout"}
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowDiscoverModal(false)}
+                    className="btn btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDiscoverSave}
+                    className="btn btn-primary"
+                    disabled={isSavingDiscoverLayout}
+                  >
+                    {isSavingDiscoverLayout ? "Saving..." : "Save Layout"}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        </div>,
+          </div>,
           document.body,
         )}
     </div>
