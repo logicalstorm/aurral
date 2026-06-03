@@ -802,8 +802,6 @@ router.post("/lidarr/apply-community-guide", async (req, res) => {
   }
 });
 
-});
-
 router.get("/browse", async (req, res) => {
   try {
     const fs = await import("fs/promises");

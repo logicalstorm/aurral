@@ -1,11 +1,5 @@
 import { useState } from "react";
-import {
-  CheckCircle,
-  ChevronDown,
-  RefreshCw,
-  Folder,
-  CornerLeftUp,
-} from "lucide-react";
+import { CheckCircle, ChevronDown, RefreshCw } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
 import { LidarrLibraryAccessCheck } from "./LidarrLibraryAccessCheck";
@@ -21,7 +15,6 @@ import {
   getPlexResources,
   testPlexConnection,
   syncPlexNow,
-  browsePaths,
 } from "../../../utils/api";
 
 export function SettingsIntegrationsTab({
@@ -70,13 +63,6 @@ export function SettingsIntegrationsTab({
   const [testingPlex, setTestingPlex] = useState(false);
   const [syncingPlex, setSyncingPlex] = useState(false);
   const [plexServers, setPlexServers] = useState([]);
-  const [browseOpen, setBrowseOpen] = useState(false);
-  const [browseLoading, setBrowseLoading] = useState(false);
-  const [browseState, setBrowseState] = useState({
-    path: "/",
-    parent: null,
-    directories: [],
-  });
   const safeLidarrProfiles = Array.isArray(lidarrProfiles)
     ? lidarrProfiles
     : [];
@@ -157,6 +143,13 @@ export function SettingsIntegrationsTab({
     } catch {
       setPlexServers([]);
       return [];
+    }
+  };
+
+  const handleChoosePlexServer = async () => {
+    const servers = await loadPlexServers(settings.integrations?.plex?.token);
+    if (!servers || servers.length === 0) {
+      showError("No Plex servers found for this account.");
     }
   };
 
@@ -279,34 +272,6 @@ export function SettingsIntegrationsTab({
     } finally {
       setSyncingPlex(false);
     }
-  };
-
-  const loadBrowse = async (path) => {
-    setBrowseLoading(true);
-    try {
-      const result = await browsePaths(path);
-      setBrowseState(result);
-    } catch (err) {
-      const errorMsg =
-        err.response?.data?.message || err.response?.data?.error || err.message;
-      showError(`Cannot read path: ${errorMsg}`);
-    } finally {
-      setBrowseLoading(false);
-    }
-  };
-
-  const handleToggleBrowse = () => {
-    if (browseOpen) {
-      setBrowseOpen(false);
-      return;
-    }
-    setBrowseOpen(true);
-    loadBrowse(settings.integrations?.plex?.downloadsPath || "/");
-  };
-
-  const handleUseBrowsedFolder = () => {
-    updatePlex({ downloadsPath: browseState.path });
-    setBrowseOpen(false);
   };
 
   const handleTestLidarr = async () => {
@@ -1533,10 +1498,19 @@ export function SettingsIntegrationsTab({
                       : "Connect Plex account"}
                 </button>
                 {settings.integrations?.plex?.token && (
-                  <span className="settings-page__status">
-                    <CheckCircle className="settings-page__status-icon" />
-                    Signed in
-                  </span>
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={handleChoosePlexServer}
+                    >
+                      Choose server
+                    </button>
+                    <span className="settings-page__status">
+                      <CheckCircle className="settings-page__status-icon" />
+                      Signed in
+                    </span>
+                  </>
                 )}
               </div>
 
