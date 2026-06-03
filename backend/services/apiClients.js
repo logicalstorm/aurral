@@ -1443,6 +1443,145 @@ export async function musicbrainzGetArtistReleaseGroups(
   }
 }
 
+const getReleaseGroupArtistId = (releaseGroup) => {
+  const artistCredit = Array.isArray(releaseGroup?.["artist-credit"])
+    ? releaseGroup["artist-credit"]
+    : [];
+  return String(artistCredit[0]?.artist?.id || "").trim() || null;
+};
+
+const artistCreditIncludesMbid = (artistCredit, mbid) => {
+  const normalizedMbid = String(mbid || "").trim().toLowerCase();
+  if (!normalizedMbid || !Array.isArray(artistCredit)) return false;
+  return artistCredit.some(
+    (credit) =>
+      String(credit?.artist?.id || "").trim().toLowerCase() === normalizedMbid,
+  );
+};
+
+const mapAppearsOnReleaseGroup = (releaseGroup, release, recording, mbid) => {
+  const artistCredit = Array.isArray(releaseGroup?.["artist-credit"])
+    ? releaseGroup["artist-credit"]
+    : Array.isArray(release?.["artist-credit"])
+      ? release["artist-credit"]
+      : [];
+  return {
+    id: releaseGroup?.id,
+    title: releaseGroup?.title || release?.title || "Untitled release",
+    "first-release-date":
+      releaseGroup?.["first-release-date"] || release?.date || null,
+    "primary-type": releaseGroup?.["primary-type"] || "Album",
+    "secondary-types": Array.isArray(releaseGroup?.["secondary-types"])
+      ? releaseGroup["secondary-types"]
+      : [],
+    rating: null,
+    "artist-credit": artistCredit,
+    _appearsOn: true,
+    _appearsOnTrack: recording?.title || null,
+    _appearsOnArtistMbid: mbid,
+    releases: release?.id
+      ? [
+          {
+            id: release.id,
+            status: release.status || null,
+            date: release.date || null,
+            title: release.title || releaseGroup?.title || "Untitled release",
+          },
+        ]
+      : [],
+  };
+};
+
+const officialMusicbrainzAppearsOnSearch = async (mbid, offset = 0) => {
+  const contact =
+    (getMusicBrainzContact() || "").trim() || "https://github.com/aurral";
+  const userAgent = `${APP_NAME}/${APP_VERSION} ( ${contact} )`;
+  return mbLimiter.schedule(async () => {
+    const response = await axios.get(`${MUSICBRAINZ_API}/recording`, {
+      params: {
+        fmt: "json",
+        query: `arid:${mbid}`,
+        inc: "artist-credits+releases",
+        limit: 100,
+        offset,
+      },
+      headers: { "User-Agent": userAgent },
+      timeout: 8000,
+    });
+    return response.data;
+  });
+};
+
+export async function musicbrainzGetArtistAppearsOnReleaseGroups(
+  mbid,
+  directReleaseGroups = [],
+  { limit = 24, artistName = "", maxPages = 5 } = {},
+) {
+  const normalizedArtistName = String(artistName || "").trim();
+  if (!mbid) return [];
+  const safeLimit = Math.min(
+    50,
+    Math.max(1, Number.parseInt(limit, 10) || 24),
+  );
+  const cacheKey = `appears-on:${mbid}:${normalizedArtistName.toLowerCase()}:${safeLimit}`;
+  const cached = musicbrainzReleaseGroupsCache.get(cacheKey);
+  if (cached) return cached;
+
+  const directIds = new Set(
+    (Array.isArray(directReleaseGroups) ? directReleaseGroups : [])
+      .map((item) => String(item?.id || "").trim())
+      .filter(Boolean),
+  );
+
+  try {
+    const byReleaseGroupId = new Map();
+    const pageCount = Math.min(
+      8,
+      Math.max(1, Number.parseInt(maxPages, 10) || 5),
+    );
+
+    for (let page = 0; page < pageCount; page += 1) {
+      const data = await officialMusicbrainzAppearsOnSearch(mbid, page * 100);
+      const recordings = Array.isArray(data?.recordings) ? data.recordings : [];
+      if (recordings.length === 0) break;
+
+      for (const recording of recordings) {
+        if (!artistCreditIncludesMbid(recording?.["artist-credit"], mbid)) {
+          continue;
+        }
+        for (const release of Array.isArray(recording?.releases)
+          ? recording.releases
+          : []) {
+          const releaseGroup = release?.["release-group"];
+          const releaseGroupId = String(releaseGroup?.id || "").trim();
+          if (!releaseGroupId || directIds.has(releaseGroupId)) continue;
+          if (getReleaseGroupArtistId(releaseGroup) === mbid) continue;
+          if (!byReleaseGroupId.has(releaseGroupId)) {
+            byReleaseGroupId.set(
+              releaseGroupId,
+              mapAppearsOnReleaseGroup(releaseGroup, release, recording, mbid),
+            );
+          }
+        }
+      }
+
+      if (byReleaseGroupId.size >= safeLimit || recordings.length < 100) break;
+    }
+
+    const mapped = [...byReleaseGroupId.values()]
+      .sort((left, right) =>
+        String(right["first-release-date"] || "").localeCompare(
+          String(left["first-release-date"] || ""),
+        ),
+      )
+      .slice(0, safeLimit);
+    musicbrainzReleaseGroupsCache.set(cacheKey, mapped);
+    return mapped;
+  } catch {
+    return [];
+  }
+}
+
 export async function musicbrainzGetArtistReleaseGroupsPreview(mbid, limit = 50) {
   if (!mbid) return [];
   const parsedLimit = Number.parseInt(limit, 10);
