@@ -84,55 +84,46 @@ export function ArtistDetailsSimilar({
   if (!loadingSimilar && similarArtists.length === 0) return null;
 
   return (
-    <section className="mb-10">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h2
-          className="flex items-center text-2xl font-bold"
-          style={{ color: "#fff" }}
-        >
+    <section className="artist-section">
+      <div className="artist-similar-header">
+        <h2 className="artist-section-title">
           Fans Also Like
           {loadingSimilar && (
             <Loader
-              className="ml-2 h-4 w-4 animate-spin"
-              style={{ color: "#c1c1c3" }}
+              className="artist-icon-sm animate-spin"
             />
           )}
         </h2>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="artist-scroll-controls">
           <button
             type="button"
             onClick={() => scrollByAmount(-1)}
-            className="flex h-10 w-10 items-center justify-center transition-colors disabled:cursor-default"
-            style={{ color: canScrollLeft ? "#6f7685" : "#2d3442" }}
+            className="artist-scroll-button"
             aria-label="Scroll similar artists left"
             disabled={!canScrollLeft}
           >
-            <ChevronLeft className="h-7 w-7 stroke-[1.5]" />
+            <ChevronLeft className="artist-icon-lg" />
           </button>
           <button
             type="button"
             onClick={() => scrollByAmount(1)}
-            className="flex h-10 w-10 items-center justify-center transition-colors disabled:cursor-default"
-            style={{ color: canScrollRight ? "#d1d5df" : "#2d3442" }}
+            className="artist-scroll-button"
             aria-label="Scroll similar artists right"
             disabled={!canScrollRight}
           >
-            <ChevronRight className="h-7 w-7 stroke-[1.5]" />
+            <ChevronRight className="artist-icon-lg" />
           </button>
         </div>
       </div>
       {loadingSimilar ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader
-            className="w-8 h-8 animate-spin"
-            style={{ color: "#c1c1c3" }}
-          />
+        <div className="artist-loading">
+          <Loader className="artist-spinner animate-spin" />
         </div>
       ) : similarArtists.length > 0 ? (
         <div>
           <div
             ref={similarArtistsScrollRef}
-            className="flex overflow-x-auto pb-4 gap-4 scroll-smooth similar-artists-scroll flex-1"
+            className="artist-similar-rail similar-artists-scroll"
             style={{
               scrollbarWidth: "none",
               msOverflowStyle: "none",
@@ -143,7 +134,7 @@ export function ArtistDetailsSimilar({
               return (
                 <div
                   key={similar.id}
-                  className="group w-[132px] shrink-0 cursor-pointer sm:w-[152px]"
+                  className="artist-similar-card"
                   onClick={() =>
                     onArtistClick(
                       similar.id,
@@ -155,34 +146,28 @@ export function ArtistDetailsSimilar({
                   }
                 >
                   <div
-                    className="artist-similar-avatar relative mb-3 aspect-square overflow-hidden shadow-sm transition-all group-hover:shadow-md"
-                    style={{ backgroundColor: "#211f27" }}
+                    className="artist-similar-avatar"
                   >
                     <ArtistImage
                       src={similar.image}
                       mbid={similar.id}
                       artistName={similar.name}
                       alt={similar.name}
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
+                      className=""
                     />
 
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover:opacity-100"></div>
-
                     {similar.match && (
-                      <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm text-white text-[10px] px-1.5 py-0.5 font-medium">
+                      <div className="artist-similar-match">
                         {similar.match}% Match
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 min-w-0">
-                    <h3
-                      className="font-medium text-sm truncate transition-colors min-w-0"
-                      style={{ color: "#fff" }}
-                    >
+                  <div className="artist-similar-name-row">
+                    <h3 className="artist-similar-name">
                       {similar.name}
                     </h3>
                     {artistId && libraryLookup[artistId] && (
-                      <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                      <CheckCircle2 className="artist-library-check" />
                     )}
                   </div>
                 </div>

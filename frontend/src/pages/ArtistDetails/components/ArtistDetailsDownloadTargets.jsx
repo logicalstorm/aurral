@@ -13,15 +13,14 @@ function PickCover({ pick, albumCovers, artistCoverImage }) {
       <img
         src={cover}
         alt=""
-        className="h-full w-full object-cover"
         loading="lazy"
         decoding="async"
       />
     );
   }
   return (
-    <div className="flex h-full w-full items-center justify-center bg-white/[0.06]">
-      <Music className="h-14 w-14 text-white/35" />
+    <div className="artist-media-placeholder">
+      <Music className="artist-icon-lg" />
     </div>
   );
 }
@@ -159,32 +158,31 @@ export function ArtistDetailsDownloadTargets({
   };
 
   return (
-    <section className="mb-10">
-      <div className="relative overflow-hidden bg-[#101012]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_18%,rgba(112,126,97,0.32),transparent_28%),linear-gradient(135deg,rgba(255,255,255,0.08),transparent_38%)]" />
-        <div className="relative grid gap-5 p-5 sm:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(250px,0.55fr)_minmax(420px,1fr)] md:p-6">
+    <section className="artist-section">
+      <div className="artist-pick-panel">
+        <div className="artist-pick-panel__grid">
           <audio ref={previewAudioRef} preload="none" />
-          <div className="aspect-square overflow-hidden bg-white/[0.06] shadow-2xl shadow-black/30">
+          <div className="artist-media-cell">
             <PickCover
               pick={missingReleasePick}
               albumCovers={albumCovers}
               artistCoverImage={artistCoverImage}
             />
           </div>
-          <div className="flex min-w-0 flex-col justify-between gap-5 sm:min-h-[260px] sm:self-start">
-            <div className="min-w-0">
-              <div className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-white">
+          <div className="artist-pick-panel__content">
+            <div className="artist-min-0">
+              <div className="artist-eyebrow">
                 Aurral Pick
               </div>
-              <h2 className="max-w-4xl break-words text-3xl font-black leading-tight text-white xl:text-[2rem] 2xl:text-4xl">
+              <h2 className="artist-pick-title">
                 {missingReleasePick.title}
               </h2>
-              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-white/60">
+              <div className="artist-meta-line">
                 {missingReleasePick.year && <span>{missingReleasePick.year}</span>}
                 {missingReleasePick.type && <span>{missingReleasePick.type}</span>}
                 {metric?.label && (
-                  <span className="inline-flex items-center gap-1">
-                    <Star className="h-4 w-4 text-yellow-400" />
+                  <span className="artist-meta-line__item">
+                    <Star className="artist-star-icon" />
                     {metric.label}
                   </span>
                 )}
@@ -207,13 +205,13 @@ export function ArtistDetailsDownloadTargets({
               </div>
             )}
           </div>
-          <div className="min-w-0 xl:pl-2">
+          <div className="artist-pick-panel__tracks artist-min-0">
             {loadingTracks ? (
-              <div className="flex h-full min-h-[180px] items-center justify-center">
-                <Loader className="h-6 w-6 animate-spin text-white/65" />
+              <div className="artist-loading">
+                <Loader className="artist-spinner animate-spin" />
               </div>
             ) : tracks.length ? (
-              <div className="grid gap-x-4 gap-y-1 xl:grid-cols-2">
+              <div className="artist-pick-panel__track-grid">
                 {tracks.map((track, index) => {
                   const currentTrackId = String(
                     track.id ??
@@ -225,31 +223,31 @@ export function ArtistDetailsDownloadTargets({
                   return (
                     <div
                       key={currentTrackId}
-                      className="grid grid-cols-[24px_28px_minmax(0,1fr)_auto_auto] items-center gap-2 px-2 py-1.5 text-sm transition-colors hover:bg-white/[0.06]"
+                      className="artist-track-row artist-track-row--compact"
                     >
-                      <span className="text-right text-xs tabular-nums text-white/45">
+                      <span className="artist-track-number">
                         {track.trackNumber || track.position || index + 1}
                       </span>
                       {track.preview_url ? (
                         <button
                           type="button"
-                          className="flex h-7 w-7 items-center justify-center bg-white/[0.06] text-white transition-colors hover:bg-white/10"
+                          className="artist-track-play-button"
                           onClick={(event) => handleTrackPreviewPlay(track, event)}
                           aria-label={isPlaying ? "Pause preview" : "Play preview"}
                           title={isPlaying ? "Pause preview" : "Play preview"}
                         >
                           {isLoadingPreview ? (
-                            <Loader className="h-3 w-3 animate-spin" />
+                            <Loader className="artist-icon-xs animate-spin" />
                           ) : isPlaying ? (
-                            <Pause className="h-3 w-3" />
+                            <Pause className="artist-icon-xs" />
                           ) : (
-                            <Play className="ml-0.5 h-3 w-3" />
+                            <Play className="artist-icon-xs" />
                           )}
                         </button>
                       ) : (
                         <span />
                       )}
-                      <span className="truncate text-white">
+                      <span className="artist-track-title">
                         {track.title || track.trackName || "Unknown Track"}
                       </span>
                       {onAddTrackToPlaylist ? (
@@ -272,7 +270,7 @@ export function ArtistDetailsDownloadTargets({
                           }
                         />
                       ) : null}
-                      <span className="w-9 text-right text-xs tabular-nums text-white/45">
+                      <span className="artist-track-duration">
                         {formatDuration(track)}
                       </span>
                     </div>

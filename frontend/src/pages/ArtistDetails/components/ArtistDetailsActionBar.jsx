@@ -63,8 +63,8 @@ export function ArtistDetailsActionBar({
   const renderLibraryAction = () => {
     if (loadingLibrary) {
       return (
-        <div className="inline-flex h-10 items-center gap-2 bg-white/[0.06] px-4 text-sm font-semibold text-white/75">
-          <Loader className="h-4 w-4 animate-spin" />
+        <div className="artist-action-button">
+          <Loader className="artist-icon-sm animate-spin" />
           {existsInLibrary ? "Loading library" : "Checking Lidarr"}
         </div>
       );
@@ -72,19 +72,17 @@ export function ArtistDetailsActionBar({
 
     if (existsInLibrary) {
       return (
-        <div className="relative inline-flex">
+        <div className="artist-relative">
           <button
             type="button"
             onClick={() => setShowRemoveDropdown(!showRemoveDropdown)}
-            className="inline-flex h-10 items-center gap-2 bg-green-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-green-500"
+            className="artist-action-button artist-action-button--active"
           >
-            <CheckCircle className="h-4 w-4" />
+            <CheckCircle className="artist-icon-sm" />
             In Library
             {(canChangeMonitoring || canDeleteArtist) && (
               <ChevronDown
-                className={`h-4 w-4 transition-transform ${
-                  showRemoveDropdown ? "rotate-180" : ""
-                }`}
+                className={`artist-icon-sm${showRemoveDropdown ? " artist-chevron--open" : ""}`}
               />
             )}
           </button>
@@ -92,11 +90,11 @@ export function ArtistDetailsActionBar({
             <>
               <button
                 type="button"
-                className="fixed inset-0 z-20 cursor-default"
+                className="artist-backdrop-button"
                 onClick={() => setShowRemoveDropdown(false)}
                 aria-label="Close library actions"
               />
-              <div className="absolute left-0 top-full z-30 mt-2 w-60 border border-white/10 bg-[#18181c] py-1 shadow-2xl">
+              <div className="artist-dropdown artist-dropdown--left">
                 {canChangeMonitoring && (
                   <button
                     type="button"
@@ -105,18 +103,16 @@ export function ArtistDetailsActionBar({
                       setShowMonitorOptionMenu(!showMonitorOptionMenu);
                     }}
                     disabled={updatingMonitor}
-                    className="flex w-full items-center justify-between px-4 py-2 text-left text-sm text-white transition-colors hover:bg-white/10 disabled:opacity-60"
+                    className="artist-menu-item"
                   >
                     <span>Monitor: {getCurrentMonitorOption()}</span>
                     <ChevronDown
-                      className={`h-4 w-4 transition-transform ${
-                        showMonitorOptionMenu ? "rotate-180" : ""
-                      }`}
+                      className={`artist-icon-sm${showMonitorOptionMenu ? " artist-chevron--open" : ""}`}
                     />
                   </button>
                 )}
                 {canChangeMonitoring && showMonitorOptionMenu && (
-                  <div className="border-y border-white/10 py-1">
+                  <div className="artist-menu-section">
                     {MONITOR_OPTIONS.map((option) => (
                       <button
                         key={option.value}
@@ -128,7 +124,7 @@ export function ArtistDetailsActionBar({
                           setShowRemoveDropdown(false);
                         }}
                         disabled={updatingMonitor}
-                        className="w-full px-4 py-2 text-left text-sm text-white/85 transition-colors hover:bg-white/10 disabled:opacity-60"
+                        className="artist-menu-item"
                       >
                         {option.label}
                       </button>
@@ -142,9 +138,9 @@ export function ArtistDetailsActionBar({
                       handleDeleteClick();
                       setShowRemoveDropdown(false);
                     }}
-                    className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-300 transition-colors hover:bg-red-500/20"
+                    className="artist-menu-item artist-menu-item--danger"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="artist-icon-sm" />
                     Remove from Library
                   </button>
                 )}
@@ -172,73 +168,72 @@ export function ArtistDetailsActionBar({
           aria-label="Customize add options"
           title="Customize add options"
         >
-          <SlidersHorizontal className="h-4 w-4" />
+          <SlidersHorizontal className="artist-icon-sm" />
         </button>
       </div>
     );
   };
 
   return (
-    <div className="relative z-20 -mx-4 -mt-1 mb-7 border-b border-white/5 bg-[#050505]/95 px-4 py-4 backdrop-blur md:sticky md:top-16 md:-mx-8 md:px-8 lg:-mx-10 lg:px-10">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
+    <div className="artist-action-bar">
+      <div className="artist-action-bar__inner">
+        <div className="artist-action-bar__group">
           {firstPreview && (
             <button
               type="button"
               onClick={() => handlePreviewPlay(firstPreview)}
               disabled={loadingPreview}
-              className="artist-round-button flex h-12 w-12 items-center justify-center bg-[#707e61] text-white shadow-lg shadow-black/30 transition-transform hover:scale-105 disabled:opacity-60"
-              style={{ borderRadius: "9999px" }}
+              className="artist-round-button"
               aria-label={isPreviewPlaying ? "Pause preview" : "Play preview"}
               title={isPreviewPlaying ? "Pause preview" : "Play preview"}
             >
               {loadingPreview ? (
-                <Loader className="h-5 w-5 animate-spin" />
+                <Loader className="artist-icon-md animate-spin" />
               ) : isPreviewPlaying ? (
-                <Pause className="h-5 w-5" />
+                <Pause className="artist-icon-md" />
               ) : (
-                <Play className="ml-0.5 h-5 w-5" />
+                <Play className="artist-icon-md" />
               )}
             </button>
           )}
           {renderLibraryAction()}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="artist-row-actions">
           {existsInLibrary && canRefreshArtist && (
             <button
               type="button"
               onClick={handleRefreshArtist}
               disabled={refreshingArtist}
-              className="inline-flex h-10 items-center gap-2 bg-white/[0.06] px-3 text-sm font-semibold text-white/85 transition-colors hover:bg-white/10 disabled:opacity-60"
+              className="artist-action-button"
             >
               {refreshingArtist ? (
-                <Loader className="h-4 w-4 animate-spin" />
+                <Loader className="artist-icon-sm animate-spin" />
               ) : (
-                <RefreshCw className="h-4 w-4" />
+                <RefreshCw className="artist-icon-sm" />
               )}
               Refresh
             </button>
           )}
-          <div className="relative">
+          <div className="artist-relative">
             <button
               type="button"
               onClick={() => setShowMoreMenu((value) => !value)}
-              className="flex h-10 w-10 items-center justify-center bg-white/[0.06] text-white/85 transition-colors hover:bg-white/10"
+              className="artist-icon-button"
               aria-label="More artist actions"
               title="More artist actions"
             >
-              <MoreHorizontal className="h-5 w-5" />
+              <MoreHorizontal className="artist-icon-md" />
             </button>
             {showMoreMenu && (
               <>
                 <button
                   type="button"
-                  className="fixed inset-0 z-20 cursor-default"
+                  className="artist-backdrop-button"
                   onClick={() => setShowMoreMenu(false)}
                   aria-label="Close artist actions"
                 />
-                <div className="absolute right-0 top-full z-30 mt-2 w-56 border border-white/10 bg-[#18181c] py-1 shadow-2xl">
+                <div className="artist-dropdown artist-dropdown--right">
                   {onEditIds && (
                     <button
                       type="button"
@@ -246,10 +241,12 @@ export function ArtistDetailsActionBar({
                         onEditIds();
                         setShowMoreMenu(false);
                       }}
-                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-white transition-colors hover:bg-white/10"
+                      className="artist-menu-item"
                     >
-                      <Pencil className="h-4 w-4" />
-                      Edit IDs
+                      <span className="artist-menu-item__main">
+                        <Pencil className="artist-icon-sm" />
+                        Edit IDs
+                      </span>
                     </button>
                   )}
                   {onToggleBlockArtist && (
@@ -260,15 +257,16 @@ export function ArtistDetailsActionBar({
                         setShowMoreMenu(false);
                       }}
                       disabled={blockingArtist}
-                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition-colors hover:bg-white/10 disabled:opacity-60"
-                      style={{ color: artistBlocked ? "#fca5a5" : "#fff" }}
+                      className={`artist-menu-item${artistBlocked ? " artist-menu-item--danger" : ""}`}
                     >
-                      {blockingArtist ? (
-                        <Loader className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Ban className="h-4 w-4" />
-                      )}
-                      {artistBlocked ? "Remove from Blocklist" : "Add to Blocklist"}
+                      <span className="artist-menu-item__main">
+                        {blockingArtist ? (
+                          <Loader className="artist-icon-sm animate-spin" />
+                        ) : (
+                          <Ban className="artist-icon-sm" />
+                        )}
+                        {artistBlocked ? "Remove from Blocklist" : "Add to Blocklist"}
+                      </span>
                     </button>
                   )}
                 </div>

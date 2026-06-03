@@ -29,38 +29,33 @@ export function AddArtistCustomizeModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
+      className="artist-modal-backdrop"
       onClick={confirming ? undefined : onClose}
     >
       <div
-        className="card max-w-md w-full mx-4"
+        className="artist-modal"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-4">
-          <h3 className="text-xl font-bold mb-2" style={{ color: "#fff" }}>
+        <div>
+          <h3 className="artist-modal__title">
             Customize Add
           </h3>
-          <p style={{ color: "#c1c1c3" }}>
+          <p className="artist-modal__subcopy">
             Choose where <strong>{artistName}</strong> should go for this add
             only.
           </p>
         </div>
 
         {loading ? (
-          <div className="py-10 flex items-center justify-center">
+          <div className="artist-loading">
             <Loader
-              className="w-8 h-8 animate-spin"
-              style={{ color: "#c1c1c3" }}
+              className="artist-spinner animate-spin"
             />
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="artist-modal__fields">
             <div>
-              <label
-                className="block text-sm font-medium mb-1"
-                style={{ color: "#fff" }}
-              >
+              <label className="artist-field-label">
                 Root Folder
               </label>
               <select
@@ -83,10 +78,7 @@ export function AddArtistCustomizeModal({
             </div>
 
             <div>
-              <label
-                className="block text-sm font-medium mb-1"
-                style={{ color: "#fff" }}
-              >
+              <label className="artist-field-label">
                 Quality Profile
               </label>
               <select
@@ -109,10 +101,7 @@ export function AddArtistCustomizeModal({
             </div>
 
             <div>
-              <label
-                className="block text-sm font-medium mb-1"
-                style={{ color: "#fff" }}
-              >
+              <label className="artist-field-label">
                 Tag
               </label>
               <select
@@ -134,7 +123,7 @@ export function AddArtistCustomizeModal({
               </select>
             </div>
 
-            <p className="text-xs" style={{ color: "#c1c1c3" }}>
+            <p className="artist-subtext">
               Leaving a field on automatic uses your saved Library Defaults, or
               the global Lidarr fallback when you do not have a saved default.
               Leaving tag on automatic uses the global Lidarr tag setting.
@@ -142,7 +131,7 @@ export function AddArtistCustomizeModal({
           </div>
         )}
 
-        <div className="flex gap-3 justify-end mt-6">
+        <div className="artist-modal__actions">
           <button
             type="button"
             onClick={onClose}

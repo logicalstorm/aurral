@@ -74,12 +74,12 @@ export function ArtistDetailsReleaseTrackList({
   if (!release) return null;
 
   return (
-    <div className="mt-4 bg-[#101012] p-4">
+    <div className="artist-expanded-panel">
       <audio ref={previewAudioRef} preload="none" />
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h3 className="truncate text-lg font-bold text-white">{release.title}</h3>
-          <p className="text-xs text-white/50">
+      <div className="artist-expanded-panel__header">
+        <div className="artist-min-0">
+          <h3 className="artist-card-title artist-truncate">{release.title}</h3>
+          <p className="artist-card-meta">
             {[getReleaseYear(release), release["primary-type"]]
               .filter(Boolean)
               .join(" · ")}
@@ -88,11 +88,11 @@ export function ArtistDetailsReleaseTrackList({
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-8">
-          <Loader className="h-6 w-6 animate-spin text-white/65" />
+        <div className="artist-loading">
+          <Loader className="artist-spinner animate-spin" />
         </div>
       ) : tracks?.length ? (
-        <div className="space-y-1">
+        <div className="artist-track-list__rows">
           {tracks.map((track, index) => {
             const currentTrackId = String(
               track.id ?? track.mbid ?? `${trackKey}-${index}`,
@@ -109,31 +109,31 @@ export function ArtistDetailsReleaseTrackList({
             return (
               <div
                 key={currentTrackId}
-                className="grid grid-cols-[28px_28px_minmax(0,1fr)_auto_auto] items-center gap-2 px-2 py-2 text-sm transition-colors hover:bg-white/[0.06]"
+                className="artist-track-row"
               >
-                <span className="text-right text-xs tabular-nums text-white/45">
+                <span className="artist-track-number">
                   {track.trackNumber || track.position || index + 1}
                 </span>
                 {track.preview_url ? (
                   <button
                     type="button"
-                    className="flex h-7 w-7 items-center justify-center bg-white/[0.06] text-white transition-colors hover:bg-white/10"
+                    className="artist-track-play-button"
                     onClick={(event) => handleTrackPreviewPlay(track, event)}
                     aria-label={isPlaying ? "Pause preview" : "Play preview"}
                     title={isPlaying ? "Pause preview" : "Play preview"}
                   >
                     {isLoadingPreview ? (
-                      <Loader className="h-3 w-3 animate-spin" />
+                      <Loader className="artist-icon-xs animate-spin" />
                     ) : isPlaying ? (
-                      <Pause className="h-3 w-3" />
+                      <Pause className="artist-icon-xs" />
                     ) : (
-                      <Play className="ml-0.5 h-3 w-3" />
+                      <Play className="artist-icon-xs" />
                     )}
                   </button>
                 ) : (
                   <span />
                 )}
-                <span className="truncate text-white">
+                <span className="artist-track-title">
                   {track.title || track.trackName || "Unknown Track"}
                 </span>
                 {onAddTrackToPlaylist ? (
@@ -152,7 +152,7 @@ export function ArtistDetailsReleaseTrackList({
                     }
                   />
                 ) : null}
-                <span className="w-11 text-right text-xs tabular-nums text-white/45">
+                <span className="artist-track-duration">
                   {durationLabel}
                 </span>
               </div>
@@ -160,7 +160,7 @@ export function ArtistDetailsReleaseTrackList({
           })}
         </div>
       ) : (
-        <p className="py-6 text-sm italic text-white/50">No tracks available</p>
+        <p className="artist-empty-message">No tracks available</p>
       )}
     </div>
   );
