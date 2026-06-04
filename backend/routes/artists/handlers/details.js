@@ -9,7 +9,7 @@ import {
 import { dbOps } from "../../../config/db-helpers.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
 import { requireAuth } from "../../../middleware/requirePermission.js";
-import { pendingArtistRequests } from "../utils.js";
+import { buildArtistRequestKey, pendingArtistRequests } from "../utils.js";
 import { getArtistByMbid } from "../../../services/metadataProvider.js";
 
 export default function registerDetails(router) {
@@ -68,6 +68,11 @@ export default function registerDetails(router) {
           .map((entry) => entry.trim())
           .filter(Boolean)
       : null;
+
+  const parseAppearsOnLimit = (value) => {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  };
 
   router.get("/", async (req, res) => {
     res.status(404).json({
@@ -157,6 +162,13 @@ export default function registerDetails(router) {
       const selectedReleaseTypes = parseSelectedReleaseTypes(
         req.query.releaseTypes,
       );
+      const appearsOnLimit = parseAppearsOnLimit(req.query.appearsOnLimit);
+      const requestKey = buildArtistRequestKey({
+        mbid,
+        mode: responseMode,
+        selectedReleaseTypes,
+        appearsOnLimit,
+      });
 
       if (!UUID_REGEX.test(mbid)) {
         console.log(`[Artists Route] Invalid MBID format: ${mbid}`);
@@ -166,12 +178,12 @@ export default function registerDetails(router) {
         });
       }
 
-      if (pendingArtistRequests.has(mbid)) {
+      if (pendingArtistRequests.has(requestKey)) {
         console.log(
-          `[Artists Route] Request for ${mbid} already in progress, waiting...`,
+          `[Artists Route] Request for ${requestKey} already in progress, waiting...`,
         );
         try {
-          const data = await pendingArtistRequests.get(mbid);
+          const data = await pendingArtistRequests.get(requestKey);
           res.setHeader("Content-Type", "application/json");
           return res.json(data);
         } catch (error) {
@@ -230,6 +242,7 @@ export default function registerDetails(router) {
           : await musicbrainzGetArtistAppearsOnReleaseGroups(
               artistMbid,
               releaseGroups,
+              { limit: appearsOnLimit },
             );
         const tagPayload = coreOnly
           ? { tags: [], genres: [] }
@@ -296,6 +309,7 @@ export default function registerDetails(router) {
           : await musicbrainzGetArtistAppearsOnReleaseGroups(
               resolvedMbid,
               releaseGroups,
+              { limit: appearsOnLimit },
             );
         return {
           id: resolvedMbid,
@@ -319,7 +333,7 @@ export default function registerDetails(router) {
         };
       })();
 
-      pendingArtistRequests.set(mbid, fetchPromise);
+      pendingArtistRequests.set(requestKey, fetchPromise);
 
       try {
         data = await fetchPromise;
@@ -348,7 +362,7 @@ export default function registerDetails(router) {
         res.setHeader("Content-Type", "application/json");
         res.json(fallback);
       } finally {
-        pendingArtistRequests.delete(mbid);
+        pendingArtistRequests.delete(requestKey);
       }
     } catch (error) {
       console.error(

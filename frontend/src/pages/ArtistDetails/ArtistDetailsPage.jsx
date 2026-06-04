@@ -147,6 +147,13 @@ function ArtistDetailsPage() {
     setArtist,
   } = stream;
 
+  useEffect(() => {
+    const artistDisplayName = artist?.name || artistNameFromNav || "";
+    document.title = artistDisplayName
+      ? `${artistDisplayName} - Aurral`
+      : "Aurral";
+  }, [artist?.name, artistNameFromNav]);
+
   const preview = usePreviewPlayer(mbid, artistNameFromNav, artist);
   const {
     previewTracks,
@@ -735,6 +742,11 @@ function ArtistDetailsPage() {
             getDefaultPlaylistName={getDefaultTrackPlaylistName}
             onLoadPlaylists={loadSharedPlaylists}
             onVisibleCoverIdsChange={setVisibleAppearsOnCoverIds}
+            onViewAll={() =>
+              navigate(`/artist/${artist.id}/appears-on`, {
+                state: { artistName: artist.name, inLibrary: existsInLibrary },
+              })
+            }
           />
         )}
 

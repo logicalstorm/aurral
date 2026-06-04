@@ -276,7 +276,7 @@ export const searchCatalog = async (
 export const getArtistDetails = async (
   mbid,
   artistName,
-  { mode = "", releaseTypes = [] } = {},
+  { mode = "", releaseTypes = [], appearsOnLimit = null } = {},
 ) => {
   const params = {};
   if (artistName) {
@@ -287,6 +287,9 @@ export const getArtistDetails = async (
   }
   if (Array.isArray(releaseTypes) && releaseTypes.length > 0) {
     params.releaseTypes = releaseTypes.join(",");
+  }
+  if (Number.isFinite(Number(appearsOnLimit)) && Number(appearsOnLimit) > 0) {
+    params.appearsOnLimit = Number.parseInt(appearsOnLimit, 10);
   }
   const response = await api.get(`/artists/${mbid}`, {
     params,
@@ -334,24 +337,40 @@ export const getReleaseGroupCover = async (
   mbid,
   { artistName = "", albumTitle = "", bypassCache = false } = {},
 ) => {
-  const cacheKey = `release-group:${mbid}`;
-  return fetchCoverWithMemo(
-    cacheKey,
-    async () => {
-      const params = {};
-      if (typeof artistName === "string" && artistName.trim()) {
-        params.artistName = artistName.trim();
-      }
-      if (typeof albumTitle === "string" && albumTitle.trim()) {
-        params.albumTitle = albumTitle.trim();
-      }
-      const response = await api.get(`/artists/release-group/${mbid}/cover`, {
-        params,
-      });
-      return response.data;
-    },
-    { bypassCache },
-  );
+  const normalizedArtistName =
+    typeof artistName === "string" ? artistName.trim().toLowerCase() : "";
+  const normalizedAlbumTitle =
+    typeof albumTitle === "string" ? albumTitle.trim().toLowerCase() : "";
+  const cacheKey = `release-group:${mbid}:${normalizedArtistName}:${normalizedAlbumTitle}`;
+  if (!bypassCache) {
+    const cached = getCoverCacheEntry(cacheKey);
+    if (cached) {
+      return cached;
+    }
+  }
+  if (coverInflightRequests.has(cacheKey)) {
+    return coverInflightRequests.get(cacheKey);
+  }
+  const request = (async () => {
+    const params = {};
+    if (typeof artistName === "string" && artistName.trim()) {
+      params.artistName = artistName.trim();
+    }
+    if (typeof albumTitle === "string" && albumTitle.trim()) {
+      params.albumTitle = albumTitle.trim();
+    }
+    const response = await api.get(`/artists/release-group/${mbid}/cover`, {
+      params,
+    });
+    if (!response.data?.transientError) {
+      setCoverCacheEntry(cacheKey, response.data);
+    }
+    return response.data;
+  })().finally(() => {
+    coverInflightRequests.delete(cacheKey);
+  });
+  coverInflightRequests.set(cacheKey, request);
+  return request;
 };
 
 export const getSimilarArtistsForArtist = async (

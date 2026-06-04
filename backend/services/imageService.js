@@ -4,7 +4,11 @@ import {
   musicbrainzGetArtistReleaseGroupsPreview,
 } from "./apiClients.js";
 import { warmImageProxy } from "./imageProxyService.js";
-import { getAlbumByMbid, getArtistByMbid } from "./metadataProvider.js";
+import {
+  getAlbumByMbid,
+  getArtistByMbid,
+  resolveAlbumByArtistAndTitle,
+} from "./metadataProvider.js";
 
 const MAX_NEGATIVE_CACHE = 1000;
 const MAX_PENDING_REQUESTS = 100;
@@ -181,34 +185,67 @@ const getCachedUrl = (cacheKey) => {
   return undefined;
 };
 
+const buildReleaseGroupCoverResult = async (cacheKey, album) => {
+  const image = selectBestAlbumImage(album?.images);
+  const imageUrl = getImageUrl(image);
+  if (!imageUrl) {
+    return { imageUrl: null, types: [], notFound: true, transientError: false };
+  }
+  const cachedImage = await warmImageProxy(imageUrl);
+  dbOps.setImage(cacheKey, cachedImage.localUrl);
+  return {
+    imageUrl: cachedImage.localUrl,
+    types: [image?.kind || image?.CoverType || "Front"],
+    notFound: false,
+    transientError: false,
+  };
+};
+
 export const fetchReleaseGroupCoverUrl = async (
   releaseGroupMbid,
   { artistName = "", albumTitle = "" } = {},
 ) => {
-  const _artistName = artistName;
-  const _albumTitle = albumTitle;
   const cacheKey = `rg:${releaseGroupMbid}`;
   const cached = getCachedUrl(cacheKey);
   if (cached !== undefined) {
     return { imageUrl: cached, notFound: cached === null, transientError: false };
   }
+  const normalizedArtistName =
+    typeof artistName === "string" ? artistName.trim() : "";
+  const normalizedAlbumTitle =
+    typeof albumTitle === "string" ? albumTitle.trim() : "";
+  let sawTransientError = false;
   try {
     const album = await getAlbumByMbid(releaseGroupMbid);
-    const image = selectBestAlbumImage(album?.images);
-    if (image?.url) {
-      const cachedImage = await warmImageProxy(image.url);
-      dbOps.setImage(cacheKey, cachedImage.localUrl);
-      return {
-        imageUrl: cachedImage.localUrl,
-        types: [image.kind || "Front"],
-        notFound: false,
-        transientError: false,
-      };
+    const result = await buildReleaseGroupCoverResult(cacheKey, album);
+    if (result.imageUrl) {
+      return result;
     }
-    dbOps.setImage(cacheKey, "NOT_FOUND");
-    return { imageUrl: null, types: [], notFound: true, transientError: false };
-  } catch (e) {}
-  return { imageUrl: null, types: [], notFound: false, transientError: true };
+  } catch {
+    sawTransientError = true;
+  }
+  if (normalizedAlbumTitle) {
+    try {
+      const resolvedAlbumMbid = await resolveAlbumByArtistAndTitle({
+        artistName: normalizedArtistName,
+        albumTitle: normalizedAlbumTitle,
+      });
+      if (resolvedAlbumMbid && resolvedAlbumMbid !== releaseGroupMbid) {
+        const resolvedAlbum = await getAlbumByMbid(resolvedAlbumMbid);
+        const result = await buildReleaseGroupCoverResult(cacheKey, resolvedAlbum);
+        if (result.imageUrl) {
+          return result;
+        }
+      }
+    } catch {
+      sawTransientError = true;
+    }
+  }
+  if (sawTransientError) {
+    return { imageUrl: null, types: [], notFound: false, transientError: true };
+  }
+  dbOps.setImage(cacheKey, "NOT_FOUND");
+  return { imageUrl: null, types: [], notFound: true, transientError: false };
 };
 
 const typeRank = (primaryType) => {
