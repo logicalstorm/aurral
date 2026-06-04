@@ -9,7 +9,11 @@ import {
 import { dbOps } from "../../../config/db-helpers.js";
 import { noCache } from "../../../middleware/cache.js";
 import { verifyTokenAuth } from "../../../middleware/auth.js";
-import { sendSSE, pendingArtistRequests } from "../utils.js";
+import {
+  buildArtistRequestKey,
+  sendSSE,
+  pendingArtistRequests,
+} from "../utils.js";
 import { getArtistImage } from "../../../services/imageService.js";
 import { buildImageProxyUrl } from "../../../services/imageProxyService.js";
 import { getArtistByMbid } from "../../../services/metadataProvider.js";
@@ -26,6 +30,11 @@ export default function registerStream(router) {
               .split(",")
               .map((value) => value.trim())
               .filter(Boolean)
+          : null;
+      const parsedAppearsOnLimit = Number.parseInt(req.query.appearsOnLimit, 10);
+      const appearsOnLimit =
+        Number.isFinite(parsedAppearsOnLimit) && parsedAppearsOnLimit > 0
+          ? parsedAppearsOnLimit
           : null;
 
       if (!UUID_REGEX.test(mbid)) {
@@ -59,6 +68,12 @@ export default function registerStream(router) {
 
       const override = dbOps.getArtistOverride(mbid);
       const resolvedMbid = override?.musicbrainzId || mbid;
+      const requestKey = buildArtistRequestKey({
+        mbid,
+        mode: "full",
+        selectedReleaseTypes,
+        appearsOnLimit,
+      });
       const toLegacyRelations = (metadataArtist) =>
         Array.isArray(metadataArtist?.links)
           ? metadataArtist.links
@@ -143,8 +158,8 @@ export default function registerStream(router) {
       try {
         const tasks = [];
         let fullArtistPromise = null;
-        const pendingPromise = pendingArtistRequests.has(mbid)
-          ? pendingArtistRequests.get(mbid)
+        const pendingPromise = pendingArtistRequests.has(requestKey)
+          ? pendingArtistRequests.get(requestKey)
           : null;
         const metadataArtistPromise = getArtistByMbid(resolvedMbid).catch(() => null);
         const namePromise = pendingPromise
@@ -265,7 +280,7 @@ export default function registerStream(router) {
 
         if (pendingPromise) {
           console.log(
-            `[Artists Stream] Request for ${mbid} already in progress, waiting...`,
+            `[Artists Stream] Request for ${requestKey} already in progress, waiting...`,
           );
           pendingPromise
             .then((data) => {
@@ -294,6 +309,7 @@ export default function registerStream(router) {
               await musicbrainzGetArtistAppearsOnReleaseGroups(
                 resolvedMbid,
                 releaseGroups,
+                { limit: appearsOnLimit },
               ).catch(() => []);
             const tagPayload = await getArtistTagPayload(
               resolvedMbid,
@@ -322,9 +338,9 @@ export default function registerStream(router) {
             .then((artistPayload) => artistPayload)
             .catch(() => null);
 
-          pendingArtistRequests.set(mbid, fullArtistPromise);
+          pendingArtistRequests.set(requestKey, fullArtistPromise);
           fullArtistPromise.finally(() => {
-            pendingArtistRequests.delete(mbid);
+            pendingArtistRequests.delete(requestKey);
           });
 
         }

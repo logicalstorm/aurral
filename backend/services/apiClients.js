@@ -1459,17 +1459,26 @@ const getReleaseGroupArtistId = (releaseGroup) => {
   return String(artistCredit[0]?.artist?.id || "").trim() || null;
 };
 
-const officialMusicbrainzRecordingSearch = async (mbid) => {
+const officialMusicbrainzRecordingSearch = async (
+  mbid,
+  { limit = 100, offset = 0 } = {},
+) => {
   const contact =
     (getMusicBrainzContact() || "").trim() || "https://github.com/aurral";
   const userAgent = `${APP_NAME}/${APP_VERSION} ( ${contact} )`;
+  const safeLimit = Math.min(
+    100,
+    Math.max(1, Number.parseInt(limit, 10) || 100),
+  );
+  const safeOffset = Math.max(0, Number.parseInt(offset, 10) || 0);
   return mbLimiter.schedule(async () => {
     const response = await axios.get(`${MUSICBRAINZ_API}/recording`, {
       params: {
         fmt: "json",
         query: `arid:${mbid}`,
         inc: "artist-credits+releases",
-        limit: 100,
+        limit: safeLimit,
+        offset: safeOffset,
       },
       headers: { "User-Agent": userAgent },
       timeout: 8000,
@@ -1518,7 +1527,7 @@ export async function musicbrainzGetArtistAppearsOnReleaseGroups(
 ) {
   if (!mbid) return [];
   const safeLimit = Math.min(
-    50,
+    250,
     Math.max(1, Number.parseInt(limit, 10) || 24),
   );
   const cacheKey = `appears-on:${mbid}:${safeLimit}`;
@@ -1532,27 +1541,39 @@ export async function musicbrainzGetArtistAppearsOnReleaseGroups(
   );
 
   try {
-    const data = await officialMusicbrainzRecordingSearch(mbid);
-    const recordings = Array.isArray(data?.recordings) ? data.recordings : [];
     const byReleaseGroupId = new Map();
+    const pageSize = 100;
+    const maxRecordingCount = Math.min(1000, Math.max(pageSize, safeLimit * 4));
 
-    for (const recording of recordings) {
-      if (!artistCreditIncludesMbid(recording?.["artist-credit"], mbid)) {
-        continue;
-      }
-      for (const release of Array.isArray(recording?.releases)
-        ? recording.releases
-        : []) {
-        const releaseGroup = release?.["release-group"];
-        const releaseGroupId = String(releaseGroup?.id || "").trim();
-        if (!releaseGroupId || directIds.has(releaseGroupId)) continue;
-        if (getReleaseGroupArtistId(releaseGroup) === mbid) continue;
-        if (!byReleaseGroupId.has(releaseGroupId)) {
-          byReleaseGroupId.set(
-            releaseGroupId,
-            mapAppearsOnReleaseGroup(releaseGroup, release, recording, mbid),
-          );
+    for (let offset = 0; offset < maxRecordingCount; offset += pageSize) {
+      const data = await officialMusicbrainzRecordingSearch(mbid, {
+        limit: pageSize,
+        offset,
+      });
+      const recordings = Array.isArray(data?.recordings) ? data.recordings : [];
+
+      for (const recording of recordings) {
+        if (!artistCreditIncludesMbid(recording?.["artist-credit"], mbid)) {
+          continue;
         }
+        for (const release of Array.isArray(recording?.releases)
+          ? recording.releases
+          : []) {
+          const releaseGroup = release?.["release-group"];
+          const releaseGroupId = String(releaseGroup?.id || "").trim();
+          if (!releaseGroupId || directIds.has(releaseGroupId)) continue;
+          if (getReleaseGroupArtistId(releaseGroup) === mbid) continue;
+          if (!byReleaseGroupId.has(releaseGroupId)) {
+            byReleaseGroupId.set(
+              releaseGroupId,
+              mapAppearsOnReleaseGroup(releaseGroup, release, recording, mbid),
+            );
+          }
+        }
+      }
+
+      if (byReleaseGroupId.size >= safeLimit || recordings.length < pageSize) {
+        break;
       }
     }
 
