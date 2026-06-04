@@ -23,7 +23,6 @@ const ShowsPage = lazy(() => import("./pages/ShowsPage"));
 const LibraryPage = lazy(() => import("./pages/LibraryPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
-const DonatePage = lazy(() => import("./pages/DonatePage"));
 const MetadataProvidersPage = lazy(
   () => import("./pages/Settings/MetadataProvidersPage"),
 );
@@ -273,7 +272,6 @@ function AppContent() {
                 }
               />
               <Route path="/profile" element={<ProfilePage />} />
-              <Route path="/donate" element={<DonatePage />} />
             </Routes>
           </Suspense>
         </Layout>
