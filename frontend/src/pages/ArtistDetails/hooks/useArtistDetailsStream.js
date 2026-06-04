@@ -37,6 +37,11 @@ const normalizeReleaseTypesSelection = (selectedReleaseTypes = []) =>
 
 const EMPTY_ARRAY = [];
 
+const normalizePositiveLimit = (value) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
 const isReleaseTypeSelectionCovered = (
   selectedReleaseTypes = [],
   fetchedReleaseTypes = [],
@@ -51,12 +56,20 @@ export function useArtistDetailsStream(
   mbid,
   artistNameFromNav,
   selectedReleaseTypes = [],
-  { visibleCoverIds = EMPTY_ARRAY, initialLibraryHint = null } = {},
+  {
+    visibleCoverIds = EMPTY_ARRAY,
+    initialLibraryHint = null,
+    appearsOnLimit = null,
+  } = {},
 ) {
   const initialArtist = buildInitialArtist(mbid, artistNameFromNav);
   const selectedReleaseTypesKey = normalizeReleaseTypesSelection(
     selectedReleaseTypes,
   ).join("\0");
+  const normalizedAppearsOnLimit = normalizePositiveLimit(appearsOnLimit);
+  const appearsOnLimitKey = normalizedAppearsOnLimit
+    ? String(normalizedAppearsOnLimit)
+    : "";
   const visibleCoverIdsKey = Array.isArray(visibleCoverIds)
     ? visibleCoverIds.filter(Boolean).join("\0")
     : "";
@@ -181,6 +194,9 @@ export function useArtistDetailsStream(
     if (artistNameFromNav) {
       streamParams.push(`artistName=${encodeURIComponent(artistNameFromNav)}`);
     }
+    if (normalizedAppearsOnLimit) {
+      streamParams.push(`appearsOnLimit=${encodeURIComponent(normalizedAppearsOnLimit)}`);
+    }
     if (streamParams.length) streamUrl += `?${streamParams.join("&")}`;
     if (
       Array.isArray(selectedReleaseTypesRef.current) &&
@@ -190,6 +206,8 @@ export function useArtistDetailsStream(
         selectedReleaseTypesRef.current.join(","),
       )}`;
     }
+
+    const detailsMode = normalizedAppearsOnLimit ? "full" : "core";
 
     const eventSource = new EventSource(streamUrl);
     let artistReceived = false;
@@ -279,8 +297,9 @@ export function useArtistDetailsStream(
 
       try {
         const artistData = await getArtistDetails(mbid, artistNameFromNav, {
-          mode: "core",
+          mode: detailsMode,
           releaseTypes: selectedReleaseTypesRef.current,
+          appearsOnLimit: normalizedAppearsOnLimit,
         });
         if (!artistData || !artistData.id) {
           throw new Error("Invalid artist data received");
@@ -452,7 +471,7 @@ export function useArtistDetailsStream(
       clearTimeout(fallbackTimeout);
       eventSource.close();
     };
-  }, [mbid, artistNameFromNav, stableInitialLibraryHint]);
+  }, [mbid, artistNameFromNav, stableInitialLibraryHint, appearsOnLimitKey]);
 
   useEffect(() => {
     if (!mbid || !artist?.id) return;
@@ -477,8 +496,9 @@ export function useArtistDetailsStream(
       mbid,
       artistNameRef.current || artist?.name || artistNameFromNav || "",
       {
-        mode: "core",
+        mode: normalizedAppearsOnLimit ? "full" : "core",
         releaseTypes: requestedReleaseTypes,
+        appearsOnLimit: normalizedAppearsOnLimit,
       },
     )
       .then((artistData) => {
@@ -527,6 +547,7 @@ export function useArtistDetailsStream(
     artist?.name,
     artistNameFromNav,
     selectedReleaseTypesKey,
+    appearsOnLimitKey,
   ]);
 
   useEffect(() => {

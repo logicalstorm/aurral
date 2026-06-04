@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import PropTypes from "prop-types";
-import { CheckCircle, Music, Star } from "lucide-react";
+import { ArrowRight, CheckCircle, Music, Star } from "lucide-react";
 import AddAlbumButton from "../../../components/AddAlbumButton";
 import { getReleaseMetric, getReleaseYear } from "../utils";
 import { ArtistDetailsReleaseTrackList } from "./ArtistDetailsReleaseTrackList";
@@ -33,6 +33,7 @@ export function ArtistDetailsAppearsOn({
   getDefaultPlaylistName,
   onLoadPlaylists,
   onVisibleCoverIdsChange,
+  onViewAll,
 }) {
   const releaseGroups = useMemo(
     () => artist["appears-on-release-groups"] || [],
@@ -63,6 +64,16 @@ export function ArtistDetailsAppearsOn({
         <div className="artist-min-0">
           <h2 className="artist-section-title">Appears On</h2>
         </div>
+        {onViewAll ? (
+          <button
+            type="button"
+            onClick={onViewAll}
+            className="artist-link-button"
+          >
+            View All
+            <ArrowRight className="artist-icon-sm" />
+          </button>
+        ) : null}
       </div>
 
       <div className="artist-release-grid">
@@ -174,4 +185,5 @@ ArtistDetailsAppearsOn.propTypes = {
   getDefaultPlaylistName: PropTypes.func,
   onLoadPlaylists: PropTypes.func,
   onVisibleCoverIdsChange: PropTypes.func,
+  onViewAll: PropTypes.func,
 };
