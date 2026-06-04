@@ -23,8 +23,6 @@
 .add-album-btn:hover:not(:disabled) {
   width: 126px;
   min-width: 126px;
-  background-color: var(--aurral-gray-light);
-  color: var(--aurral-black);
 }
 
 .add-album-btn.add-album-btn--expanded {
@@ -47,6 +45,7 @@
 }
 
 .add-album-btn .label {
+  color: var(--aurral-black);
   max-width: 0;
   opacity: 0;
   transform: translateX(-4px);
