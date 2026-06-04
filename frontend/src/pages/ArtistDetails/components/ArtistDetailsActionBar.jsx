@@ -56,6 +56,7 @@ export function ArtistDetailsActionBar({
   artistBlocked,
 }) {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const currentMonitorOption = getCurrentMonitorOption?.();
   const firstPreview = previewTracks?.find((track) => track?.preview_url);
   const isPreviewPlaying =
     firstPreview && playingPreviewId === firstPreview.id && !previewSnappingBack;
@@ -113,22 +114,25 @@ export function ArtistDetailsActionBar({
                 )}
                 {canChangeMonitoring && showMonitorOptionMenu && (
                   <div className="artist-menu-section">
-                    {MONITOR_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleUpdateMonitorOption(option.value);
-                          setShowMonitorOptionMenu(false);
-                          setShowRemoveDropdown(false);
-                        }}
-                        disabled={updatingMonitor}
-                        className="artist-menu-item"
-                      >
-                        {option.label}
-                      </button>
-                    ))}
+                    {MONITOR_OPTIONS.map((option) => {
+                      const isActive = option.value === currentMonitorOption;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleUpdateMonitorOption(option.value);
+                            setShowMonitorOptionMenu(false);
+                            setShowRemoveDropdown(false);
+                          }}
+                          disabled={updatingMonitor}
+                          className={`artist-menu-item${isActive ? " is-active" : ""}`}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
                 {canDeleteArtist && (

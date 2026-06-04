@@ -18,9 +18,9 @@ All colors must be referenced through CSS custom properties (defined in `fronten
   - **`--aurral-black` `#000000`**: App background and gutters. Use on `body`, `app-shell`, and mobile nav background.
 - **Surfaces**
   - **`--aurral-surface` `#121212`**: Primary content surface (e.g. `app-main`, primary cards, large panels).
-  - **`--aurral-surface-mid` `#212121`**: Elevated content and emphasis surfaces (hero strips, sticky action bars, nested panels, rails).
-  - **`--aurral-overlay` `#000000`**: Overlays behind menus and modals.
-  - **`--aurral-overlay-hover` `#212121`**: Hover and active backgrounds for items on overlay surfaces.
+  - **`--aurral-surface-mid` `#212121`**: Elevated content and emphasis surfaces (hero strips, sticky action bars, nested panels, rails, modals, menus).
+  - **`--aurral-overlay` `#000000`**: Overlays behind full-screen elements (e.g. page-level backdrops).
+  - **`--aurral-overlay-hover` `#212121`**: Legacy hover color for overlay items (avoid in new work; prefer `--aurral-gray`).
 - **Text**
   - **`--aurral-white` `#ffffff`**: Primary text on dark backgrounds.
   - **`--aurral-gray-light` `#b3b3b3`**: Secondary text, metadata, helper copy, and icons.
@@ -105,11 +105,11 @@ Use the radius tokens consistently:
 
 ### Visual constraints
 
-- **No gradients**: Backgrounds are always solid colors. Overlays use solid rgba blacks (e.g. hero washes, modals).
+- **No gradients**: Backgrounds are always solid colors. Overlays use solid rgba blacks (e.g. hero washes, modals backdrops).
 - **No borders**: Do not introduce borders for separation or emphasis. Use spacing, background changes, and typography instead.
   - Existing one-off borders (e.g. outlines around selected items) are considered legacy and should be migrated to borderless patterns over time.
 - **No shadows**: Avoid `box-shadow` for elevation. Use:
-  - Darker/lighter surface tokens (`--aurral-surface` vs `--aurral-surface-mid` vs `--aurral-overlay`).
+  - Darker/lighter surface tokens (`--aurral-surface` vs `--aurral-surface-mid`).
   - Slight opacity changes on hover.
 - **Minimal color usage**
   - Pages should read as almost monochrome; reserve `--aurral-green` for the main action and key status indicators only.
@@ -205,13 +205,16 @@ Use the radius tokens consistently:
 - **Backdrop (`artist-modal-backdrop`)**
   - Full-screen `rgba(0,0,0,0.75)` overlay with no border radius.
 - **Modal (`artist-modal`)**
-  - Background: `--aurral-overlay`.
+  - Background: `--aurral-surface-mid`.
   - Radius: `--aurral-radius`.
-  - No borders or shadows; elevation is implied solely by the darkened backdrop.
-- **Menus (`artist-dropdown`, `artist-playlist-menu`, floating menus)**
-  - Background: `--aurral-overlay`.
-  - Radius: `--aurral-radius-sm`.
-  - Use tight padding and `artist-menu-item` rows for actions.
+  - No borders or shadows; separation comes from the backdrop and surface color.
+- **Context menus & popovers (`artist-dropdown`, `artist-options-menu`, `artist-floating-menu`, `artist-playlist-menu`)**
+  - Base style matches `app-profile-menu__dropdown`: background `--aurral-surface-mid`, radius `--aurral-radius-sm`, no shadows.
+  - Menu items (`artist-menu-item`, `app-profile-menu__item`):
+    - Default text: `--aurral-gray-light`.
+    - Hover background: `--aurral-gray`, hover text: `--aurral-white`.
+    - Selected/active text (`.is-active`): `--aurral-green` on the same `--aurral-surface-mid` / `--aurral-gray` background.
+  - Use tight padding, clear hit areas, and avoid gradients or borders for separation.
 
 #### Media and playback
 

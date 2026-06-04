@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import PropTypes from "prop-types";
-import { Check, ListMusic, Loader, Plus } from "lucide-react";
+import { Check, Loader, Plus } from "lucide-react";
 
 export function TrackPlaylistMenu({
   playlists = [],
@@ -98,10 +98,6 @@ export function TrackPlaylistMenu({
           }}
           onClick={(event) => event.stopPropagation()}
         >
-          <div className="artist-playlist-menu__header">
-            <ListMusic className="artist-icon-xs" />
-            Playlists
-          </div>
           {loading ? (
             <div className="artist-menu-item">
               <Loader className="artist-icon-sm animate-spin" />
@@ -121,12 +117,7 @@ export function TrackPlaylistMenu({
                 disabled={saving}
               >
                 <Plus className="artist-icon-sm" />
-                <span className="artist-min-0">
-                  <span className="artist-track-title">New playlist</span>
-                  <span className="artist-playlist-menu__sub">
-                    {defaultNewPlaylistName}
-                  </span>
-                </span>
+                <span className="artist-track-title">New playlist</span>
               </button>
               {Array.isArray(playlists) && playlists.length > 0 ? (
                 <div className="artist-playlist-menu__scroll">
@@ -143,13 +134,8 @@ export function TrackPlaylistMenu({
                       }
                       disabled={saving}
                     >
-                      <span className="artist-min-0">
-                        <span className="artist-track-title">
-                          {playlist.name}
-                        </span>
-                        <span className="artist-playlist-menu__sub">
-                          {playlist.trackCount || 0} tracks
-                        </span>
+                      <span className="artist-track-title">
+                        {playlist.name}
                       </span>
                       <Check className="artist-icon-sm" aria-hidden="true" />
                     </button>
