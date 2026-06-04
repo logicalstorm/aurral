@@ -10,8 +10,6 @@ import {
   ChevronLeft,
   ChevronRight,
   LayoutTemplate,
-  GripVertical,
-  X,
   CheckCircle2,
   MapPin,
   Pencil,
@@ -45,6 +43,7 @@ import { useAuth } from "../contexts/AuthContext";
 import ArtistImage from "../components/ArtistImage";
 import LastfmBanner from "../components/LastfmBanner";
 import { useToast } from "../contexts/ToastContext";
+import { DiscoverLayoutModal } from "./DiscoverLayoutModal";
 
 const TAG_COLORS = [
   "#845336",
@@ -1154,8 +1153,6 @@ function DiscoverPage() {
   );
   const [showDiscoverModal, setShowDiscoverModal] = useState(false);
   const [isSavingDiscoverLayout, setIsSavingDiscoverLayout] = useState(false);
-  const [draggingId, setDraggingId] = useState(null);
-  const [dragOverId, setDragOverId] = useState(null);
   const [error, setError] = useState(null);
   const [libraryLookup, setLibraryLookup] = useState({});
   const [blockedArtists, setBlockedArtists] = useState([]);
@@ -1784,15 +1781,6 @@ function DiscoverPage() {
     setShowDiscoverModal(true);
   };
 
-  useEffect(() => {
-    if (!showDiscoverModal) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [showDiscoverModal]);
-
   const handleDiscoverSave = () => {
     const nextLayout = draftSections.map((item) => ({ ...item }));
     setDiscoverSections(nextLayout);
@@ -1823,47 +1811,6 @@ function DiscoverPage() {
         ? displayDiscoverSections.map((item) => ({ ...item, enabled: true }))
         : DEFAULT_DISCOVER_SECTIONS.map((item) => ({ ...item })),
     );
-  };
-
-  const handleToggleSection = useCallback(
-    (id) => {
-      if (draggingId) return;
-      setDraftSections((prev) =>
-        prev.map((section) =>
-          section.id === id
-            ? { ...section, enabled: !section.enabled }
-            : section,
-        ),
-      );
-    },
-    [draggingId],
-  );
-
-  const handleDragStart = (id) => {
-    setDraggingId(id);
-  };
-
-  const handleDragOver = (event, id) => {
-    event.preventDefault();
-    if (!draggingId || id === draggingId) return;
-    setDragOverId(id);
-    setDraftSections((prev) => {
-      const next = [...prev];
-      const fromIndex = next.findIndex((item) => item.id === draggingId);
-      const toIndex = next.findIndex((item) => item.id === id);
-      if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) {
-        return prev;
-      }
-      const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
-      return next;
-    });
-  };
-
-  const handleDrop = (event) => {
-    event.preventDefault();
-    setDraggingId(null);
-    setDragOverId(null);
   };
 
   const handleAddArtistToLibrary = useCallback(
@@ -2755,144 +2702,16 @@ function DiscoverPage() {
 
       {orderedSectionIds.map((id) => renderSection(id))}
 
-      {showDiscoverModal &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center px-4"
-            style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
-            onClick={() => setShowDiscoverModal(false)}
-          >
-            <div
-              className="w-full max-w-2xl border border-white/10 shadow-2xl flex flex-col"
-              style={{
-                backgroundColor: "#14141a",
-                height: "min(600px, 90vh)",
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div
-                className="flex items-center justify-between px-5 py-4 border-b border-white/10"
-                style={{
-                  background:
-                    "linear-gradient(135deg, rgba(40,38,49,0.9), rgba(20,20,26,0.8))",
-                }}
-              >
-                <div>
-                  <h3 className="text-xl font-bold" style={{ color: "#fff" }}>
-                    Customize Discover
-                  </h3>
-                  <p className="text-sm mt-1" style={{ color: "#c1c1c3" }}>
-                    Choose what shows up and arrange sections in your order.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="p-2 rounded transition-colors hover:bg-[#2a2a2e]"
-                  style={{ color: "#c1c1c3" }}
-                  onClick={() => setShowDiscoverModal(false)}
-                  aria-label="Close"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="px-5 py-4 space-y-2 flex-1 overflow-y-auto">
-                {draftSections.map((item) => (
-                  <div
-                    key={item.id}
-                    draggable
-                    onClick={() => handleToggleSection(item.id)}
-                    onDragStart={() => handleDragStart(item.id)}
-                    onDragOver={(event) => handleDragOver(event, item.id)}
-                    onDrop={(event) => handleDrop(event)}
-                    onDragEnd={() => {
-                      setDraggingId(null);
-                      setDragOverId(null);
-                    }}
-                    className={`flex items-center gap-4 px-4 py-3 border transition-all duration-200 ease-out cursor-grab select-none bg-[#1a191f] ${
-                      item.enabled ? "text-white" : "text-[#8a8a8f] opacity-70"
-                    } ${
-                      draggingId === item.id
-                        ? "opacity-80 scale-[0.98] cursor-grabbing"
-                        : dragOverId === item.id
-                          ? "border-[#707e61] bg-[#1b1c21] -translate-y-0.5"
-                          : "border-transparent hover:border-[#5a6070] hover:bg-[#20222a]"
-                    }`}
-                    style={{
-                      willChange: "transform",
-                    }}
-                  >
-                    <div
-                      className="flex items-center justify-center w-9 h-9"
-                      style={{
-                        color: item.enabled ? "#c1c1c3" : "#6f6f78",
-                      }}
-                    >
-                      <GripVertical className="w-4 h-4" />
-                    </div>
-                    <div className="flex flex-col items-start flex-1">
-                      <span
-                        className="text-sm font-semibold"
-                        style={{ color: item.enabled ? "#fff" : "#8a8a8f" }}
-                      >
-                        {item.label}
-                      </span>
-                      {!getFallbackGenreFromSectionId(item.id) &&
-                        !sectionAvailability[item.id] && (
-                          <span
-                            className="text-xs"
-                            style={{ color: "#8a8a8f" }}
-                          >
-                            Not enough data yet
-                          </span>
-                        )}
-                    </div>
-                    <span
-                      className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide"
-                      style={{
-                        backgroundColor: item.enabled ? "#707e61" : "#2d2c32",
-                        color: item.enabled ? "#0b0b0c" : "#c1c1c3",
-                      }}
-                    >
-                      {item.enabled ? "Active" : "Hidden"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div
-                className="flex flex-wrap gap-3 justify-between items-center px-5 py-4 border-t border-white/10"
-                style={{ backgroundColor: "#111117" }}
-              >
-                <button
-                  type="button"
-                  onClick={handleDiscoverReset}
-                  className="btn btn-secondary"
-                >
-                  Reset to Default
-                </button>
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowDiscoverModal(false)}
-                    className="btn btn-secondary"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDiscoverSave}
-                    className="btn btn-primary"
-                    disabled={isSavingDiscoverLayout}
-                  >
-                    {isSavingDiscoverLayout ? "Saving..." : "Save Layout"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+      <DiscoverLayoutModal
+        open={showDiscoverModal}
+        sections={draftSections}
+        onSectionsChange={setDraftSections}
+        sectionAvailability={sectionAvailability}
+        isSaving={isSavingDiscoverLayout}
+        onClose={() => setShowDiscoverModal(false)}
+        onSave={handleDiscoverSave}
+        onReset={handleDiscoverReset}
+      />
     </div>
   );
 }
