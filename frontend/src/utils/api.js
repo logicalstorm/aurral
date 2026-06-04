@@ -260,11 +260,17 @@ export const searchCatalog = async (
     limit = 24,
     offset = 0,
     releaseTypes = [],
+    sort,
   } = {},
 ) => {
   const params = { q: query, scope, limit, offset };
-  if (scope === "album" && Array.isArray(releaseTypes) && releaseTypes.length) {
-    params.releaseTypes = releaseTypes.join(",");
+  if (scope === "album") {
+    if (Array.isArray(releaseTypes) && releaseTypes.length) {
+      params.releaseTypes = releaseTypes.join(",");
+    }
+    if (sort) {
+      params.sort = sort;
+    }
   }
   const key = `search:${JSON.stringify(params)}`;
   return fetchInflightOnce(searchInflightRequests, key, async () => {

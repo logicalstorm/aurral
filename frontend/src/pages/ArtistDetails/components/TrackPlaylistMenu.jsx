@@ -11,6 +11,7 @@ export function TrackPlaylistMenu({
   onLoadPlaylists,
   onSelect,
   onOpenChange,
+  menuVariant,
 }) {
   const [open, setOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
@@ -91,7 +92,7 @@ export function TrackPlaylistMenu({
 
       {open ? (
         <div
-          className="artist-playlist-menu"
+          className={`artist-playlist-menu${menuVariant === "preview-tracks" ? " artist-playlist-menu--preview-tracks" : ""}`}
           style={{
             top: menuPosition.top,
             left: menuPosition.left,
@@ -164,4 +165,5 @@ TrackPlaylistMenu.propTypes = {
   onLoadPlaylists: PropTypes.func,
   onSelect: PropTypes.func,
   onOpenChange: PropTypes.func,
+  menuVariant: PropTypes.oneOf(["preview-tracks"]),
 };
