@@ -50,34 +50,32 @@ function SortableSectionRow({ item, onToggle, showUnavailable }) {
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-4 px-4 py-3 border bg-[#1a191f] ${
-        item.enabled ? "text-white" : "text-[#8a8a8f] opacity-70"
+      className={`artist-customize-section-row ${
+        item.enabled ? "artist-customize-section-row--enabled" : "artist-customize-section-row--disabled"
       } ${
         isDragging
-          ? "z-10 border-[#707e61] bg-[#1b1c21] shadow-lg opacity-95"
-          : "border-transparent"
-      }`}
+          ? "artist-customize-section-row--dragging"
+          : ""
+      } ${!item.available ? "artist-customize-section-row--unavailable" : ""}`}
     >
       <button
         type="button"
         ref={setActivatorNodeRef}
-        className="flex h-9 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded text-[#c1c1c3] hover:bg-white/5 active:cursor-grabbing"
-        style={{ color: item.enabled ? "#c1c1c3" : "#6f6f78" }}
+        className="artist-customize-drag-handle"
         aria-label={`Reorder ${item.label}`}
         {...attributes}
         {...listeners}
       >
         <GripVertical className="h-4 w-4" />
       </button>
-      <div className="flex min-w-0 flex-1 flex-col items-start">
+      <div className="artist-customize-section-content">
         <span
-          className="text-sm font-semibold"
-          style={{ color: item.enabled ? "#fff" : "#8a8a8f" }}
+          className="artist-customize-section-title"
         >
           {item.label}
         </span>
         {showUnavailable && (
-          <span className="text-xs" style={{ color: "#8a8a8f" }}>
+          <span className="artist-customize-section-subtitle">
             Not enough data yet
           </span>
         )}
@@ -85,11 +83,11 @@ function SortableSectionRow({ item, onToggle, showUnavailable }) {
       <button
         type="button"
         onClick={() => onToggle(item.id)}
-        className="shrink-0 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition-opacity hover:opacity-90"
-        style={{
-          backgroundColor: item.enabled ? "#707e61" : "#2d2c32",
-          color: item.enabled ? "#0b0b0c" : "#c1c1c3",
-        }}
+        className={`artist-customize-section-toggle ${
+          item.enabled 
+            ? "artist-customize-section-toggle--active" 
+            : "artist-customize-section-toggle--inactive"
+        }`}
         aria-pressed={item.enabled}
         aria-label={`${item.enabled ? "Hide" : "Show"} ${item.label}`}
       >
@@ -170,39 +168,27 @@ export function DiscoverLayoutModal({
       role="presentation"
     >
       <div
-        className="flex w-full max-w-2xl flex-col overflow-hidden border border-white/10 shadow-2xl"
-        style={{
-          backgroundColor: "#14141a",
-          height: "min(600px, 90vh)",
-        }}
+        className="artist-customize-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="discover-layout-modal-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <div
-          className="flex items-center justify-between border-b border-white/10 px-5 py-4"
-          style={{
-            background:
-              "linear-gradient(135deg, rgba(40,38,49,0.9), rgba(20,20,26,0.8))",
-          }}
-        >
+        <div className="artist-customize-modal__header">
           <div>
             <h3
               id="discover-layout-modal-title"
-              className="text-xl font-bold"
-              style={{ color: "#fff" }}
+              className="artist-customize-modal__title"
             >
               Customize Discover
             </h3>
-            <p className="mt-1 text-sm" style={{ color: "#c1c1c3" }}>
+            <p className="artist-customize-modal__subtitle">
               Drag to reorder. Use Active/Hidden to choose what appears.
             </p>
           </div>
           <button
             type="button"
-            className="rounded p-2 transition-colors hover:bg-[#2a2a2e]"
-            style={{ color: "#c1c1c3" }}
+            className="artist-customize-modal__close"
             onClick={onClose}
             disabled={isSaving}
             aria-label="Close"
@@ -217,12 +203,12 @@ export function DiscoverLayoutModal({
           modifiers={[restrictToVerticalAxis, restrictToParentElement]}
           onDragEnd={handleDragEnd}
         >
-          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-4">
+          <div className="artist-customize-modal__body">
             <SortableContext
               items={sectionIds}
               strategy={verticalListSortingStrategy}
             >
-              <div className="space-y-2">
+              <div className="artist-customize-sections-list">
                 {sections.map((item) => (
                   <SortableSectionRow
                     key={item.id}
@@ -247,23 +233,20 @@ export function DiscoverLayoutModal({
           </div>
         </DndContext>
 
-        <div
-          className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4"
-          style={{ backgroundColor: "#111117" }}
-        >
+        <div className="artist-customize-modal__footer">
           <button
             type="button"
             onClick={onReset}
-            className="btn btn-secondary"
+            className="artist-customize-modal__reset-btn"
             disabled={isSaving}
           >
             Reset to Default
           </button>
-          <div className="flex gap-3">
+          <div className="artist-customize-modal__actions">
             <button
               type="button"
               onClick={onClose}
-              className="btn btn-secondary"
+              className="artist-customize-modal__cancel-btn"
               disabled={isSaving}
             >
               Cancel
@@ -271,7 +254,7 @@ export function DiscoverLayoutModal({
             <button
               type="button"
               onClick={onSave}
-              className="btn btn-primary"
+              className="artist-customize-modal__save-btn"
               disabled={isSaving}
             >
               {isSaving ? "Saving..." : "Save Layout"}
