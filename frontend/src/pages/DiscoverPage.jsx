@@ -93,7 +93,6 @@ const DEFAULT_DISCOVER_SECTIONS = [
   { id: "recommended", label: "Recommended for You", enabled: true },
   { id: "globalTop", label: "Global Trending", enabled: true },
   { id: "genreSections", label: "Because You Like", enabled: true },
-  { id: "topTags", label: "Explore by Tag", enabled: true },
 ];
 
 const FALLBACK_GENRE_SECTION_PREFIX = "fallbackGenre:";
@@ -109,8 +108,6 @@ const getFallbackGenreFromSectionId = (id) =>
 const DISCOVER_NEARBY_MODE_KEY = "discoverNearbyMode";
 const DISCOVER_NEARBY_ZIP_KEY = "discoverNearbyZip";
 const DISCOVER_PREVIEW_ITEM_LIMIT = 12;
-const DISCOVER_SHELF_CARD_CLASS =
-  "w-[148px] shrink-0 sm:w-[calc((100%-1rem*2)/3)] md:w-[calc((100%-1rem*3)/4)] lg:w-[calc((100%-1rem*5)/6)]";
 
 const getArtistId = (artist) =>
   artist?.id || artist?.mbid || artist?.foreignArtistId;
@@ -502,60 +499,54 @@ const ArtistCard = memo(
     };
 
     return (
-      <div className="group relative flex flex-col w-full min-w-0">
+      <div className="artist-discover-card">
         <div
           onClick={handleClick}
-          className={`relative aspect-square mb-3 overflow-hidden transition-all ${hasValidMbid ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
-          style={{ backgroundColor: "#211f27" }}
+          className={`artist-discover-card__cover ${hasValidMbid ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
         >
           <ArtistImage
             src={artist.image || artist.imageUrl}
             mbid={artist.id}
             artistName={artist.name}
             alt={artist.name}
-            className="h-full w-full group-hover:scale-105 transition-transform duration-300"
+            className="artist-discover-card__image"
             showLoading={false}
           />
         </div>
 
-        <div className="flex items-start gap-2 min-w-0">
-          <div className="flex flex-col min-w-0 flex-1">
-            <div className="flex items-center gap-2 min-w-0">
+        <div className="artist-discover-card__content">
+          <div className="artist-discover-card__text">
+            <div className="artist-card-title-row--discover">
               <h3
                 onClick={handleClick}
-                className={`font-semibold truncate ${hasValidMbid ? "hover:underline cursor-pointer" : "cursor-not-allowed opacity-75"}`}
-                style={{ color: "#fff" }}
+                className={`artist-card-title--discover ${hasValidMbid ? "" : "cursor-not-allowed opacity-75"}`}
                 title={artist.name}
               >
                 {artist.name}
               </h3>
               {isInLibrary && (
-                <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                <CheckCircle2 className="artist-library-check--discover" />
               )}
             </div>
-            <div className="flex flex-col min-w-0">
-              {artistMetaText ? (
-                <p
-                  className="text-sm truncate"
-                  style={{ color: "#c1c1c3" }}
-                  title={artistMetaText || undefined}
-                >
-                  {artistMetaText}
-                </p>
-              ) : null}
-              {artist.subtitle && (
-                <p
-                  className="text-xs truncate"
-                  style={{ color: "#c1c1c3" }}
-                  title={artist.subtitle}
-                >
-                  {artist.subtitle}
-                </p>
-              )}
-            </div>
+            {artistMetaText ? (
+              <p
+                className="artist-card-meta--discover"
+                title={artistMetaText || undefined}
+              >
+                {artistMetaText}
+              </p>
+            ) : null}
+            {artist.subtitle && (
+              <p
+                className="artist-card-meta--discover"
+                title={artist.subtitle}
+              >
+                {artist.subtitle}
+              </p>
+            )}
           </div>
           {(canAddArtist || onAddToBlocklist || onFeedback) && (
-            <div className="relative shrink-0">
+            <div style={{ position: "relative", flexShrink: 0 }}>
               <button
                 ref={menuButtonRef}
                 type="button"
@@ -563,11 +554,10 @@ const ArtistCard = memo(
                   event.stopPropagation();
                   setShowMenu((prev) => !prev);
                 }}
-                className="w-8 h-8 flex items-center justify-center hover:bg-white/10"
-                style={{ color: "#c1c1c3" }}
+                className="artist-menu-button--discover"
                 aria-label={`Artist options for ${artist.name}`}
               >
-                <MoreVertical className="w-4 h-4" />
+                <MoreVertical className="artist-icon-sm" />
               </button>
             </div>
           )}
@@ -576,12 +566,10 @@ const ArtistCard = memo(
           ? createPortal(
               <div
                 ref={menuRef}
-                className="fixed z-20 w-44 py-1 border border-white/10 shadow-xl"
+                className="artist-options-menu--discover"
                 style={{
                   top: menuPosition.top,
                   left: menuPosition.left,
-                  backgroundColor: "#2a2830",
-                  transform: "translateY(-100%)",
                 }}
                 onClick={(event) => event.stopPropagation()}
               >
@@ -590,30 +578,32 @@ const ArtistCard = memo(
                     type="button"
                     onClick={handleAddToLibraryClick}
                     disabled={isInLibrary || !!pendingAction}
-                    className="w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                    style={{ color: "#fff" }}
+                    className="artist-menu-item--discover"
                   >
-                    {pendingAction === "library" ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Library className="w-4 h-4" />
-                    )}
-                    {isInLibrary ? "In Library" : "Add to Library"}
+                    <div className="artist-menu-item__main--discover">
+                      {pendingAction === "library" ? (
+                        <Loader2 className="artist-icon-sm animate-spin" />
+                      ) : (
+                        <Library className="artist-icon-sm" />
+                      )}
+                      {isInLibrary ? "In Library" : "Add to Library"}
+                    </div>
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={handleBlocklistClick}
                   disabled={isBlocked || !!pendingAction}
-                  className="w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  style={{ color: isBlocked ? "#c1c1c3" : "#fca5a5" }}
+                  className={`artist-menu-item--discover ${isBlocked ? "" : "artist-menu-item--danger"}`}
                 >
-                  {pendingAction === "blocklist" ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Ban className="w-4 h-4" />
-                  )}
-                  {isBlocked ? "In Blocklist" : "Blocklist Artist"}
+                  <div className="artist-menu-item__main--discover">
+                    {pendingAction === "blocklist" ? (
+                      <Loader2 className="artist-icon-sm animate-spin" />
+                    ) : (
+                      <Ban className="artist-icon-sm" />
+                    )}
+                    {isBlocked ? "In Blocklist" : "Blocklist Artist"}
+                  </div>
                 </button>
                 {onFeedback && (
                   <>
@@ -623,11 +613,12 @@ const ArtistCard = memo(
                         handleFeedbackClick(event, "more_like_this")
                       }
                       disabled={!!pendingAction}
-                      className="w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                      style={{ color: "#fff" }}
+                      className="artist-menu-item--discover"
                     >
-                      <ThumbsUp className="w-4 h-4" />
-                      More like this
+                      <div className="artist-menu-item__main--discover">
+                        <ThumbsUp className="artist-icon-sm" />
+                        More like this
+                      </div>
                     </button>
                     <button
                       type="button"
@@ -635,11 +626,12 @@ const ArtistCard = memo(
                         handleFeedbackClick(event, "less_like_this")
                       }
                       disabled={!!pendingAction}
-                      className="w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                      style={{ color: "#fff" }}
+                      className="artist-menu-item--discover"
                     >
-                      <ThumbsDown className="w-4 h-4" />
-                      Less like this
+                      <div className="artist-menu-item__main--discover">
+                        <ThumbsDown className="artist-icon-sm" />
+                        Less like this
+                      </div>
                     </button>
                     <button
                       type="button"
@@ -647,11 +639,12 @@ const ArtistCard = memo(
                         handleFeedbackClick(event, "already_known")
                       }
                       disabled={!!pendingAction}
-                      className="w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                      style={{ color: "#fff" }}
+                      className="artist-menu-item--discover"
                     >
-                      <CheckCircle2 className="w-4 h-4" />
-                      Already know this
+                      <div className="artist-menu-item__main--discover">
+                        <CheckCircle2 className="artist-icon-sm" />
+                        Already know this
+                      </div>
                     </button>
                     <button
                       type="button"
@@ -659,11 +652,12 @@ const ArtistCard = memo(
                         handleFeedbackClick(event, "hide_for_now")
                       }
                       disabled={!!pendingAction}
-                      className="w-full px-3 py-2 text-left text-sm transition-colors hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                      style={{ color: "#fca5a5" }}
+                      className="artist-menu-item--discover artist-menu-item--danger"
                     >
-                      <EyeOff className="w-4 h-4" />
-                      Hide for now
+                      <div className="artist-menu-item__main--discover">
+                        <EyeOff className="artist-icon-sm" />
+                        Hide for now
+                      </div>
                     </button>
                   </>
                 )}
@@ -744,48 +738,46 @@ const AlbumCard = memo(
     }, [navigateTo, hasValidMbid, album.artistName, onNavigate]);
 
     return (
-      <div className="group relative flex flex-col w-full min-w-0">
+      <div className="artist-discover-card">
         <div
           onClick={handleClick}
-          className={`relative aspect-square mb-3 overflow-hidden shadow-sm group-hover:shadow-md transition-all ${hasValidMbid ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
-          style={{ backgroundColor: "#211f27" }}
+          className={`artist-discover-card__cover ${hasValidMbid ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
         >
           {coverUrl ? (
             <img
               src={coverUrl}
               alt={album.albumName}
-              className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+              className="artist-discover-card__image"
               loading="lazy"
               decoding="async"
             />
           ) : (
-            <div className="h-full w-full flex items-center justify-center">
-              <Music className="w-10 h-10" style={{ color: "#c1c1c3" }} />
+            <div className="artist-media-placeholder--discover">
+              <Music className="artist-icon-lg" />
             </div>
           )}
         </div>
 
-        <div className="flex flex-col min-w-0">
-          <h3
-            onClick={handleClick}
-            className={`font-semibold truncate ${hasValidMbid ? "hover:underline cursor-pointer" : "cursor-not-allowed opacity-75"}`}
-            style={{ color: "#fff" }}
-            title={album.albumName}
-          >
-            {album.albumName}
-          </h3>
-          <div className="flex flex-col min-w-0">
+        <div className="artist-discover-card__content">
+          <div className="artist-discover-card__text">
+            <div className="artist-card-title-row--discover">
+              <h3
+                onClick={handleClick}
+                className={`artist-card-title--discover ${hasValidMbid ? "" : "cursor-not-allowed opacity-75"}`}
+                title={album.albumName}
+              >
+                {album.albumName}
+              </h3>
+            </div>
             <p
-              className="text-sm truncate"
-              style={{ color: "#c1c1c3" }}
+              className="artist-card-meta--discover"
               title={albumArtistText}
             >
               {albumArtistText}
             </p>
             {albumReleaseText && (
               <p
-                className="text-xs truncate"
-                style={{ color: "#c1c1c3" }}
+                className="artist-card-meta--discover"
                 title={albumReleaseText}
               >
                 {albumReleaseText}
@@ -835,16 +827,10 @@ const ViewAllCard = memo(({ onClick, label = "View All" }) => {
     <button
       type="button"
       onClick={onClick}
-      className="group relative flex w-full min-w-0 flex-col text-left"
+      className="artist-view-all-card--discover"
     >
-      <div
-        className="relative flex aspect-square items-center justify-center overflow-hidden border border-dashed border-white/15 transition-colors group-hover:border-white/30"
-        style={{
-          background:
-            "linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01)), #191820",
-        }}
-      >
-        <span className="px-4 text-center text-2xl font-semibold text-white">
+      <div className="artist-media-cell">
+        <span className="artist-card-title">
           {label}
         </span>
       </div>
@@ -867,59 +853,50 @@ const ShowCard = memo(({ show }) => {
         href={show.url || "#"}
         target="_blank"
         rel="noopener noreferrer"
-        className="group relative overflow-hidden rounded-[28px] border border-white/10 sm:hidden"
-        style={{ backgroundColor: "#191820" }}
+        className="artist-show-card--discover-mobile"
       >
-        <div
-          className="relative aspect-[1.7/1] overflow-hidden"
-          style={{ backgroundColor: "#211f27" }}
-        >
+        <div className="artist-show-card__image-wrap--discover artist-show-card__image-wrap--discover-mobile">
           {show.image ? (
             <img
               src={show.image}
               alt={show.eventName || show.artistName}
-              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              className="artist-show-card__image--discover"
               loading="lazy"
               decoding="async"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center">
-              <Music className="h-10 w-10" style={{ color: "#c1c1c3" }} />
+            <div className="artist-media-placeholder--discover">
+              <Music className="artist-media-placeholder--discover-icon" />
             </div>
           )}
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                "linear-gradient(90deg, rgba(12,15,24,0.84) 0%, rgba(12,15,24,0.66) 42%, rgba(12,15,24,0.18) 100%)",
-            }}
-          />
-          <div className="absolute inset-0 flex flex-col justify-between p-5">
+          <div className="artist-show-card__image--discover-overlay" />
+          <div className="artist-show-card__distance--discover">
+            {Number.isFinite(show.distance) && (
+              <span className="artist-show-card__distance-badge--discover">
+                {Math.round(show.distance)} mi
+              </span>
+            )}
+          </div>
+          <div className="artist-show-card__image--discover-content">
             <div />
-            <div className="max-w-[74%]">
-              <p
-                className="truncate text-xs font-medium"
-                style={{ color: "#b8bbc7" }}
-              >
+            <div className="artist-show-card__image--discover-bottom">
+              <p className="artist-show-card__artist--discover">
                 {show.artistName}
               </p>
-              <h3 className="mt-1 truncate text-[1.65rem] font-bold leading-[0.98] tracking-tight text-white">
+              <h3 className="artist-show-card__title--discover">
                 {show.eventName}
               </h3>
-              <div
-                className="mt-3 space-y-1.5 text-xs"
-                style={{ color: "#d7dae4" }}
-              >
+              <div className="artist-show-card__details--discover">
                 {showDate && (
-                  <p className="flex items-center gap-2">
-                    <Clock className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">{showDate}</span>
+                  <p className="artist-show-card__detail--discover">
+                    <Clock className="artist-show-card__detail-icon--discover" />
+                    <span className="artist-show-card__detail-text--discover">{showDate}</span>
                   </p>
                 )}
                 {showLocation && (
-                  <p className="flex items-start gap-2">
-                    <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">{showLocation}</span>
+                  <p className="artist-show-card__detail--discover artist-show-card__detail--discover-location">
+                    <MapPin className="artist-show-card__detail-icon--discover artist-show-card__detail-icon--discover-location" />
+                    <span className="artist-show-card__detail-text--discover">{showLocation}</span>
                   </p>
                 )}
               </div>
@@ -928,74 +905,58 @@ const ShowCard = memo(({ show }) => {
         </div>
       </a>
 
-      <article
-        className="group hidden flex-col overflow-hidden border border-white/10 sm:flex"
-        style={{ backgroundColor: "#191820" }}
-      >
+      <article className="artist-show-card--discover-desktop">
         <a href={show.url || "#"} target="_blank" rel="noopener noreferrer">
-          <div
-            className="relative aspect-[16/9] overflow-hidden"
-            style={{ backgroundColor: "#211f27" }}
-          >
+          <div className="artist-show-card__image-wrap--discover artist-show-card__image-wrap--discover-desktop">
             {show.image ? (
               <img
                 src={show.image}
                 alt={show.eventName || show.artistName}
-                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                className="artist-show-card__image--discover"
                 loading="lazy"
                 decoding="async"
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center">
-                <Music className="w-10 h-10" style={{ color: "#c1c1c3" }} />
+              <div className="artist-media-placeholder--discover">
+                <Music className="artist-media-placeholder--discover-icon" />
               </div>
             )}
-            <div className="absolute left-3 top-3 flex gap-2">
+            <div className="artist-show-card__distance--discover">
               {Number.isFinite(show.distance) && (
-                <span
-                  className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide"
-                  style={{
-                    backgroundColor: "rgba(20,20,26,0.82)",
-                    color: "#fff",
-                  }}
-                >
+                <span className="artist-show-card__distance-badge--discover">
                   {Math.round(show.distance)} mi
                 </span>
               )}
             </div>
           </div>
         </a>
-        <div className="flex flex-1 flex-col gap-3 p-4">
-          <div className="min-w-0">
-            <p
-              className="text-xs uppercase tracking-[0.22em]"
-              style={{ color: "#8a8a8f" }}
-            >
+        <div className="artist-show-card__body--discover">
+          <div style={{ minWidth: 0 }}>
+            <p className="artist-show-card__body-artist--discover">
               {show.artistName}
             </p>
-            <h3 className="mt-1 truncate text-lg font-semibold leading-tight">
+            <h3 className="artist-show-card__body-title--discover">
               <a
                 href={show.url || "#"}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block truncate transition-opacity hover:opacity-80"
-                style={{ color: "#fff" }}
+                className="artist-show-card__body-title-link--discover"
               >
                 {show.eventName}
               </a>
             </h3>
           </div>
-          <div className="space-y-2 text-sm" style={{ color: "#c1c1c3" }}>
+          <div className="artist-show-card__body-details--discover">
             {showDate && (
-              <p className="flex items-center gap-2">
-                <Clock className="w-4 h-4 shrink-0" />
+              <p className="artist-show-card__body-detail--discover">
+                <Clock className="artist-show-card__body-detail-icon--discover" />
                 <span>{showDate}</span>
               </p>
             )}
             {showLocation && (
-              <p className="flex items-start gap-2">
-                <MapPin className="w-4 h-4 shrink-0 mt-0.5" />
-                <span className="truncate">{showLocation}</span>
+              <p className="artist-show-card__body-detail--discover artist-show-card__body-detail--discover-location">
+                <MapPin className="artist-show-card__body-detail-icon--discover artist-show-card__body-detail-icon--discover-location" />
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{showLocation}</span>
               </p>
             )}
           </div>
@@ -1071,20 +1032,18 @@ function DiscoverRail({
   }, [children, updateScrollState]);
 
   return (
-    <section className={className} style={style}>
-      <div
-        className={`mb-4 flex items-center justify-between gap-3 ${headerClassName}`}
-      >
-        <div className="flex min-w-0 items-center gap-2">
-          <h2 className="truncate text-2xl font-bold text-white">
-            <span className="sm:hidden">{mobileTitle || title}</span>
-            <span className="hidden sm:inline">{title}</span>
+    <section className={`artist-discover-rail ${className}`} style={style}>
+      <div className={`artist-discover-rail__header ${headerClassName}`}>
+        <div className="artist-discover-rail__title-group">
+          <h2 className="artist-section-title--discover">
+            <span className="artist-section-title--discover-mobile">{mobileTitle || title}</span>
+            <span className="artist-section-title--discover-desktop">{title}</span>
           </h2>
           {onViewAll && (
             <button
               type="button"
               onClick={onViewAll}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-base font-medium text-white/70 transition-colors hover:text-white"
+              className="artist-link-button--discover"
               aria-label={`Open ${title}`}
             >
               →
@@ -1092,33 +1051,33 @@ function DiscoverRail({
           )}
           {afterTitle}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="artist-discover-rail__actions">
           {headerActions}
           <button
             type="button"
             onClick={() => scrollByAmount(-1)}
-            className="flex h-10 w-10 items-center justify-center transition-colors disabled:cursor-default"
+            className="artist-scroll-button--discover"
             style={{ color: canScrollLeft ? "#6f7685" : "#2d3442" }}
             aria-label={`Scroll ${title} left`}
             disabled={!canScrollLeft}
           >
-            <ChevronLeft className="h-7 w-7 stroke-[1.5]" />
+            <ChevronLeft className="artist-icon-lg" />
           </button>
           <button
             type="button"
             onClick={() => scrollByAmount(1)}
-            className="flex h-10 w-10 items-center justify-center transition-colors disabled:cursor-default"
+            className="artist-scroll-button--discover"
             style={{ color: canScrollRight ? "#d1d5df" : "#2d3442" }}
             aria-label={`Scroll ${title} right`}
             disabled={!canScrollRight}
           >
-            <ChevronRight className="h-7 w-7 stroke-[1.5]" />
+            <ChevronRight className="artist-icon-lg" />
           </button>
         </div>
       </div>
       <div
         ref={scrollRef}
-        className="flex gap-4 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="artist-discover-rail__content"
       >
         {children}
       </div>
@@ -1164,6 +1123,7 @@ function DiscoverPage() {
   const [appliedNearbyZip, setAppliedNearbyZip] = useState("");
   const [showNearbyZipEditor, setShowNearbyZipEditor] = useState(false);
   const [nearbyZipDraft, setNearbyZipDraft] = useState("");
+  const [showFullBasedOnList, setShowFullBasedOnList] = useState(false);
   const requestedReleaseCoversRef = useRef(new Set());
   const requestedArtistCoversRef = useRef(new Set());
   const lastDiscoveryWsMessageAtRef = useRef(0);
@@ -1961,7 +1921,7 @@ function DiscoverPage() {
               .map((artist) => (
                 <div
                   key={`${section.genre}-${artist.id}`}
-                  className={DISCOVER_SHELF_CARD_CLASS}
+                  className="artist-discover-shelf-card"
                 >
                   <ArtistCard
                     artist={artist}
@@ -1975,7 +1935,7 @@ function DiscoverPage() {
                   />
                 </div>
               ))}
-            <div className={DISCOVER_SHELF_CARD_CLASS}>
+            <div className="artist-discover-shelf-card">
               <ViewAllCard
                 onClick={() =>
                   navigate(
@@ -1994,9 +1954,7 @@ function DiscoverPage() {
       return (
         <DiscoverRail
           key="recentlyAdded"
-          className="animate-slide-up"
           title="Recently Added"
-          style={{ animationDelay: "0.1s" }}
         >
           <>
             {recentlyAdded
@@ -2007,7 +1965,7 @@ function DiscoverPage() {
                 return (
                   <div
                     key={`artist-${artist.id}`}
-                    className={DISCOVER_SHELF_CARD_CLASS}
+                    className="artist-discover-shelf-card"
                   >
                     <ArtistCard
                       status="available"
@@ -2042,9 +2000,7 @@ function DiscoverPage() {
       return (
         <DiscoverRail
           key="recentReleases"
-          className="animate-slide-up"
           title="Recent & Upcoming Releases"
-          style={{ animationDelay: "0.15s" }}
         >
           <>
             {recentReleases
@@ -2052,7 +2008,7 @@ function DiscoverPage() {
               .map((album) => (
                 <div
                   key={album.id || album.mbid || album.foreignAlbumId}
-                  className={DISCOVER_SHELF_CARD_CLASS}
+                  className="artist-discover-shelf-card"
                 >
                   <AlbumCard
                     album={album}
@@ -2080,7 +2036,7 @@ function DiscoverPage() {
               {recommendations
                 .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT)
                 .map((artist) => (
-                  <div key={artist.id} className={DISCOVER_SHELF_CARD_CLASS}>
+                  <div key={artist.id} className="artist-discover-shelf-card">
                     <ArtistCard
                       artist={artist}
                       isInLibrary={!!libraryLookup[getArtistId(artist)]}
@@ -2093,25 +2049,19 @@ function DiscoverPage() {
                     />
                   </div>
                 ))}
-              <div className={DISCOVER_SHELF_CARD_CLASS}>
+              <div className="artist-discover-shelf-card">
                 <ViewAllCard
                   onClick={() => navigate("/search?type=recommended")}
                 />
               </div>
             </>
           ) : (
-            <div
-              className="w-full py-12 px-4 text-center"
-              style={{ backgroundColor: "#211f27" }}
-            >
-              <Music
-                className="mx-auto mb-3 h-12 w-12"
-                style={{ color: "#c1c1c3" }}
-              />
-              <p className="mb-1" style={{ color: "#c1c1c3" }}>
+            <div className="artist-nearby-status artist-nearby-status--loading">
+              <Music className="artist-media-placeholder--discover-icon" />
+              <p className="discover-not-configured__text">
                 Not enough data to generate recommendations yet.
               </p>
-              <p className="text-sm" style={{ color: "#8a8a8f" }}>
+              <p className="discover-loading__text">
                 If you just set up Last.fm, the first scan may take up to 10
                 minutes.
               </p>
@@ -2131,16 +2081,13 @@ function DiscoverPage() {
         !(zipModeActive && !appliedNearbyZip.trim()) &&
         nearbyShows.length > 0;
       const nearbyLocationBadge = nearbyShowsData?.configured !== false && (
-        <span className="hidden rounded-full bg-white/5 px-2.5 py-1 text-xs font-medium text-white/60 sm:inline-block">
+        <span className="artist-nearby-badge">
           {nearbyLocationLabel}
         </span>
       );
       const nearbyHeaderActions = (
         <>
-          <div
-            className="inline-flex border border-white/10 p-1"
-            style={{ backgroundColor: "#17161d" }}
-          >
+          <div className="artist-nearby-config">
             <button
               type="button"
               onClick={() => {
@@ -2150,11 +2097,7 @@ function DiscoverPage() {
                   localStorage.setItem(DISCOVER_NEARBY_MODE_KEY, "ip");
                 } catch {}
               }}
-              className="px-3 py-1.5 text-xs font-medium transition-colors"
-              style={{
-                backgroundColor: !zipModeActive ? "#5a5a5f" : "transparent",
-                color: !zipModeActive ? "#0b0b0c" : "#c1c1c3",
-              }}
+              className={`artist-nearby-config__button ${!zipModeActive ? "artist-nearby-config__button--active" : ""}`}
             >
               Your Area
             </button>
@@ -2166,11 +2109,7 @@ function DiscoverPage() {
                   localStorage.setItem(DISCOVER_NEARBY_MODE_KEY, "zip");
                 } catch {}
               }}
-              className="px-3 py-1.5 text-xs font-medium transition-colors"
-              style={{
-                backgroundColor: zipModeActive ? "#5a5a5f" : "transparent",
-                color: zipModeActive ? "#0b0b0c" : "#c1c1c3",
-              }}
+              className={`artist-nearby-config__button ${zipModeActive ? "artist-nearby-config__button--active" : ""}`}
             >
               ZIP
             </button>
@@ -2183,31 +2122,26 @@ function DiscoverPage() {
                   setNearbyZipDraft(appliedNearbyZip);
                   setShowNearbyZipEditor((value) => !value);
                 }}
-                className="inline-flex h-8 w-8 items-center justify-center border border-white/10 transition-colors"
-                style={{ backgroundColor: "#17161d", color: "#c1c1c3" }}
+                className="artist-nearby-edit-button"
                 aria-label="Edit ZIP"
                 title="Edit ZIP"
               >
-                <Pencil className="h-3.5 w-3.5" />
+                <Pencil className="artist-icon-sm" />
               </button>
               {showNearbyZipEditor && (
-                <div
-                  className="absolute right-0 top-10 z-20 w-52 border border-white/10 p-2"
-                  style={{ backgroundColor: "#17161d" }}
-                >
+                <div className="artist-nearby-zip-editor">
                   <input
                     type="text"
                     value={nearbyZipDraft}
                     onChange={(event) => setNearbyZipDraft(event.target.value)}
-                    className="input mb-2 w-full"
+                    className="artist-nearby-zip-editor__input"
                     placeholder="ZIP or postal code"
                   />
-                  <div className="flex justify-end gap-2">
+                  <div className="artist-nearby-zip-editor__actions">
                     <button
                       type="button"
                       onClick={() => setShowNearbyZipEditor(false)}
-                      className="border border-white/10 px-2 py-1 text-xs"
-                      style={{ color: "#c1c1c3" }}
+                      className="artist-nearby-zip-editor__cancel"
                     >
                       Cancel
                     </button>
@@ -2227,12 +2161,7 @@ function DiscoverPage() {
                           );
                         } catch {}
                       }}
-                      className="px-2 py-1 text-xs"
-                      style={{
-                        backgroundColor: "#707e61",
-                        color: "#0b0b0c",
-                        opacity: nearbyZipDraft.trim() ? 1 : 0.5,
-                      }}
+                      className="artist-nearby-zip-editor__save"
                       disabled={!nearbyZipDraft.trim()}
                     >
                       Save
@@ -2244,118 +2173,107 @@ function DiscoverPage() {
           )}
         </>
       );
-      return (
-        <section key="recommendedShows">
-          <div
-            className={`mb-6 items-center justify-between ${
-              showNearbyShowsRail ? "hidden" : "flex"
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-bold text-white">Shows Near You</h2>
-              {nearbyLocationBadge}
-            </div>
-            <div className="flex items-center gap-2">{nearbyHeaderActions}</div>
-          </div>
-
-          {nearbyShowsData?.configured === false ? (
-            <div
-              className="border border-white/10 p-6"
-              style={{ backgroundColor: "#191820" }}
-            >
-              <h3 className="text-lg font-semibold" style={{ color: "#fff" }}>
+      if (nearbyShowsData?.configured === false) {
+        return (
+          <section key="recommendedShows" className="artist-discover-section">
+            <div className="artist-nearby-status">
+              <h3 className="artist-nearby-status__title">
                 Ticketmaster not configured
               </h3>
-              <p
-                className="mt-2 max-w-2xl text-sm"
-                style={{ color: "#c1c1c3" }}
-              >
+              <p className="artist-nearby-status__text">
                 Add a Ticketmaster Consumer Key in Settings to enable local show
                 discovery on this page.
               </p>
               <button
                 type="button"
                 onClick={() => navigate("/settings")}
-                className="btn btn-primary mt-4"
+                className="btn btn-primary"
+                style={{ marginTop: "1rem" }}
               >
                 Open Settings
               </button>
             </div>
-          ) : nearbyShowsLoading ? (
-            <div
-              className="flex items-center justify-center py-20"
-              style={{ backgroundColor: "#191820" }}
-            >
-              <Loader
-                className="h-8 w-8 animate-spin"
-                style={{ color: "#c1c1c3" }}
-              />
+          </section>
+        );
+      }
+
+      if (nearbyShowsLoading) {
+        return (
+          <section key="recommendedShows" className="artist-discover-section">
+            <div className="artist-nearby-status artist-nearby-status--loading">
+              <Loader className="artist-nearby-status__spinner animate-spin" />
             </div>
-          ) : nearbyShowsError ? (
-            <div
-              className="border border-white/10 p-6"
-              style={{ backgroundColor: "#191820" }}
-            >
-              <h3 className="text-lg font-semibold" style={{ color: "#fff" }}>
+          </section>
+        );
+      }
+
+      if (nearbyShowsError) {
+        return (
+          <section key="recommendedShows" className="artist-discover-section">
+            <div className="artist-nearby-status">
+              <h3 className="artist-nearby-status__title">
                 Unable to load nearby shows
               </h3>
-              <p className="mt-2 text-sm" style={{ color: "#c1c1c3" }}>
+              <p className="artist-nearby-status__text">
                 {nearbyShowsError}
               </p>
             </div>
-          ) : zipModeActive && !appliedNearbyZip.trim() ? (
-            <div
-              className="border border-white/10 p-6"
-              style={{ backgroundColor: "#191820" }}
-            >
-              <h3 className="text-lg font-semibold" style={{ color: "#fff" }}>
+          </section>
+        );
+      }
+
+      if (zipModeActive && !appliedNearbyZip.trim()) {
+        return (
+          <section key="recommendedShows" className="artist-discover-section">
+            <div className="artist-nearby-status">
+              <h3 className="artist-nearby-status__title">
                 ZIP not set
               </h3>
-              <p
-                className="mt-2 max-w-2xl text-sm"
-                style={{ color: "#c1c1c3" }}
-              >
+              <p className="artist-nearby-status__text">
                 Set a ZIP code from the Shows page area settings to use ZIP mode
                 here.
               </p>
             </div>
-          ) : nearbyShows.length > 0 ? (
-            <DiscoverRail
-              title="Shows Near You"
-              onViewAll={() => navigate("/shows")}
-              afterTitle={nearbyLocationBadge}
-              headerActions={nearbyHeaderActions}
-            >
-              <>
-                {nearbyShows
-                  .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT)
-                  .map((show) => (
-                    <div
-                      key={`${show.id}-${show.artistName}-${show.sourceType || show.matchType || "show"}`}
-                      className="w-[288px] shrink-0"
-                    >
-                      <ShowCard show={show} />
-                    </div>
-                  ))}
-              </>
-            </DiscoverRail>
-          ) : (
-            <div
-              className="border border-white/10 p-6"
-              style={{ backgroundColor: "#191820" }}
-            >
-              <h3 className="text-lg font-semibold" style={{ color: "#fff" }}>
-                No upcoming nearby matches
-              </h3>
-              <p
-                className="mt-2 max-w-2xl text-sm"
-                style={{ color: "#c1c1c3" }}
-              >
-                We could not find local Ticketmaster shows tied to your library
-                or current recommendations around {nearbyLocationLabel}.
-              </p>
-            </div>
-          )}
+          </section>
+        );
+      }
+
+      if (nearbyShows.length > 0) {
+        return (
+          <DiscoverRail
+            key="recommendedShows"
+            title="Shows Near You"
+            onViewAll={() => navigate("/shows")}
+            afterTitle={nearbyLocationBadge}
+            headerActions={nearbyHeaderActions}
+          >
+            <>
+              {nearbyShows
+                .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT)
+                .map((show) => (
+                  <div
+                    key={`${show.id}-${show.artistName}-${show.sourceType || show.matchType || "show"}`}
+                    className="artist-discover-show-rail-card"
+                  >
+                    <ShowCard show={show} />
+                  </div>
+                ))}
+            </>
+          </DiscoverRail>
+        );
+      }
+
+      return (
+        <section key="recommendedShows" className="artist-discover-section">
+          <div className="artist-nearby-status">
+            <h3 className="artist-nearby-status__title">
+              No upcoming nearby matches
+            </h3>
+            <p className="artist-nearby-status__text">
+              We could not find local Ticketmaster shows tied to your library
+              or current recommendations around {nearbyLocationLabel}.
+            </p>
+          </div>
         </section>
       );
     }
@@ -2370,7 +2288,7 @@ function DiscoverPage() {
         >
           <>
             {globalTop.slice(0, DISCOVER_PREVIEW_ITEM_LIMIT).map((artist) => (
-              <div key={artist.id} className={DISCOVER_SHELF_CARD_CLASS}>
+              <div key={artist.id} className="artist-discover-shelf-card">
                 <ArtistCard
                   artist={{
                     ...artist,
@@ -2385,7 +2303,7 @@ function DiscoverPage() {
                 />
               </div>
             ))}
-            <div className={DISCOVER_SHELF_CARD_CLASS}>
+            <div className="artist-discover-shelf-card">
               <ViewAllCard onClick={() => navigate("/search?type=trending")} />
             </div>
           </>
@@ -2396,7 +2314,7 @@ function DiscoverPage() {
     if (id === "genreSections") {
       if (!sectionAvailability.genreSections) return null;
       return (
-        <div key="genreSections" className="space-y-10">
+        <div key="genreSections">
           {genreSections.map((section) => (
             <DiscoverRail
               key={section.genre}
@@ -2418,7 +2336,7 @@ function DiscoverPage() {
                   .map((artist) => (
                     <div
                       key={`${section.genre}-${artist.id}`}
-                      className={DISCOVER_SHELF_CARD_CLASS}
+                      className="artist-discover-shelf-card"
                     >
                       <ArtistCard
                         artist={artist}
@@ -2432,7 +2350,7 @@ function DiscoverPage() {
                       />
                     </div>
                   ))}
-                <div className={DISCOVER_SHELF_CARD_CLASS}>
+                <div className="artist-discover-shelf-card">
                   <ViewAllCard
                     onClick={() =>
                       navigate(
@@ -2449,55 +2367,8 @@ function DiscoverPage() {
     }
 
     if (id === "topTags") {
-      if (!sectionAvailability.topTags) return null;
-      return (
-        <DiscoverRail key="topTags" title="Explore by Tag">
-          <>
-            {topTags.map((tag, i) => (
-              <div key={i} className="shrink-0">
-                <button
-                  onClick={() =>
-                    navigate(
-                      `/search?q=${encodeURIComponent(`#${tag}`)}&type=tag`,
-                    )
-                  }
-                  className="relative h-[128px] w-[248px] overflow-hidden rounded-3xl text-left sm:hidden"
-                  style={{
-                    ...getTagCardBackground(tag),
-                    color: "#fff",
-                  }}
-                >
-                  <div className="absolute inset-0 opacity-30 mix-blend-screen">
-                    <div
-                      className="h-full w-full"
-                      style={{
-                        background:
-                          "repeating-linear-gradient(135deg, rgba(255,255,255,0.22) 0 2px, transparent 2px 18px)",
-                      }}
-                    />
-                  </div>
-                  <div className="absolute inset-0 flex items-center justify-center px-6">
-                    <span className="text-4xl font-bold tracking-tight text-white">
-                      {tag}
-                    </span>
-                  </div>
-                </button>
-                <button
-                  onClick={() =>
-                    navigate(
-                      `/search?q=${encodeURIComponent(`#${tag}`)}&type=tag`,
-                    )
-                  }
-                  className="genre-tag-pill hidden px-3 py-1.5 text-sm sm:block"
-                  style={{ backgroundColor: getTagColor(tag), color: "#fff" }}
-                >
-                  #{tag}
-                </button>
-              </div>
-            ))}
-          </>
-        </DiscoverRail>
-      );
+      // Disabled since all tags are now shown in the hero section
+      return null;
     }
 
     return null;
@@ -2505,15 +2376,12 @@ function DiscoverPage() {
 
   if (data === null && !error) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 px-4 max-w-md mx-auto text-center">
-        <Loader
-          className="w-12 h-12 animate-spin mb-4"
-          style={{ color: "#c1c1c3" }}
-        />
-        <h2 className="text-xl font-semibold mb-2" style={{ color: "#fff" }}>
+      <div className="artist-loading--discover">
+        <Loader className="artist-spinner--discover animate-spin" />
+        <h2 className="artist-error-title--discover">
           Loading recommendations...
         </h2>
-        <p className="text-sm" style={{ color: "#c1c1c3" }}>
+        <p className="artist-error-copy--discover">
           Recommendations will appear as they load.
         </p>
       </div>
@@ -2522,17 +2390,14 @@ function DiscoverPage() {
 
   if (isActuallyUpdating) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 px-4 max-w-md mx-auto text-center">
-        <Loader
-          className="w-12 h-12 animate-spin mb-4"
-          style={{ color: "#c1c1c3" }}
-        />
-        <h2 className="text-xl font-semibold mb-2" style={{ color: "#fff" }}>
+      <div className="artist-loading--discover">
+        <Loader className="artist-spinner--discover animate-spin" />
+        <h2 className="artist-error-title--discover">
           {isListenBrainzFallback
             ? "Loading ListenBrainz discovery..."
             : "Building your recommendations..."}
         </h2>
-        <p className="text-sm" style={{ color: "#c1c1c3" }}>
+        <p className="artist-error-copy--discover">
           {isListenBrainzFallback
             ? "The app is loading trending artists and default genre shelves."
             : "The app is scanning your library and Last.fm data. Please wait. This can take up to 10 minutes when Last.fm is configured. The page will update when ready."}
@@ -2543,14 +2408,12 @@ function DiscoverPage() {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="bg-red-500/20 p-4 mb-4">
-          <Sparkles className="w-8 h-8 text-red-400" />
-        </div>
-        <h2 className="text-xl font-bold mb-2" style={{ color: "#fff" }}>
+      <div className="artist-error-panel--discover">
+        <Sparkles className="artist-error-icon--discover" />
+        <h2 className="artist-error-title--discover">
           Unable to load discovery
         </h2>
-        <p className="max-w-md mx-auto mb-6" style={{ color: "#c1c1c3" }}>
+        <p className="artist-empty-message--discover">
           {error}
         </p>
         <button
@@ -2570,30 +2433,23 @@ function DiscoverPage() {
     !topGenres.length
   ) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 text-center">
-        <div className="p-4 mb-4" style={{ backgroundColor: "#211f27" }}>
-          <Sparkles className="w-12 h-12" style={{ color: "#c1c1c3" }} />
+      <div className="artist-empty-panel--discover-not-configured">
+        <div className="artist-error-icon">
+          <Sparkles className="artist-icon-lg" />
         </div>
-        <h2 className="text-2xl font-bold mb-2" style={{ color: "#fff" }}>
+        <h2 className="artist-error-title">
           Discovery Not Configured
         </h2>
-        <p className="max-w-md mx-auto mb-6" style={{ color: "#c1c1c3" }}>
+        <p className="artist-empty-message">
           To see music recommendations, you need at least one of:
         </p>
-        <ul
-          className="text-left max-w-md mx-auto mb-6 space-y-2"
-          style={{ color: "#c1c1c3" }}
-        >
-          <li className="flex items-start gap-2">
-            <span style={{ color: "#c1c1c3" }} className="mt-1">
-              •
-            </span>
+        <ul>
+          <li>
+            <span>•</span>
             <span>Add artists to your library, or</span>
           </li>
-          <li className="flex items-start gap-2">
-            <span style={{ color: "#c1c1c3" }} className="mt-1">
-              •
-            </span>
+          <li>
+            <span>•</span>
             <span>Configure Last.fm (API key and username) in Settings</span>
           </li>
         </ul>
@@ -2608,74 +2464,139 @@ function DiscoverPage() {
   }
 
   return (
-    <div className="space-y-4 pb-12 sm:space-y-10">
+    <div className="artist-discover-page">
       <LastfmBanner />
-      <section className="relative hidden overflow-hidden md:block">
-        <div className="relative flex flex-col gap-1">
-          <div className="flex flex-col justify-between gap-1 md:flex-row md:items-start">
-            <div className="flex max-w-2xl flex-col gap-1">
-              <div className="flex flex-wrap items-center gap-3">
-                <h1
-                  className="text-3xl font-bold md:text-4xl"
-                  style={{ color: "#fff" }}
-                >
-                  Discover
-                </h1>
+      <section className="artist-discover-hero">
+        <div className="artist-discover-hero__content">
+          <div className="artist-discover-hero__header">
+            <div className="artist-discover-hero__title-wrap">
+              <div className="artist-discover-hero__title-row">
+                <h1 className="artist-discover-hero__title">Discover</h1>
                 {lastUpdated && (
-                  <span
-                    className="flex items-center rounded-full px-2 py-1 text-xs font-medium"
-                    style={{
-                      backgroundColor: "rgba(255,255,255,0.05)",
-                      color: "#8a8a8f",
-                    }}
-                  >
-                    <Clock className="mr-1.5 h-3 w-3" />
+                  <span className="artist-discover-hero__updated">
+                    <Clock className="artist-discover-hero__updated-icon" />
                     Updated {new Date(lastUpdated).toLocaleDateString()}
                     {isUpdating && (
-                      <Loader className="ml-2 h-3 w-3 animate-spin" />
+                      <Loader className="artist-discover-hero__updated-spinner animate-spin" />
                     )}
                   </span>
                 )}
               </div>
-              <p className="text-sm md:text-base" style={{ color: "#c1c1c3" }}>
+              <p className="artist-discover-hero__description">
                 Your daily mix, curated from your library.
               </p>
               {heroBasedOn.length > 0 && (
-                <p className="text-xs md:text-sm" style={{ color: "#8a8a8f" }}>
-                  Based on{" "}
-                  {heroBasedOn.length === 1
-                    ? heroBasedOn[0].name
-                    : heroBasedOn.length === 2
-                      ? `${heroBasedOn[0].name} and ${heroBasedOn[1].name}`
-                      : heroBasedOn
-                          .slice(0, 2)
-                          .map((a) => a.name)
-                          .join(", ") + ` and ${heroBasedOn.length - 2} more`}
-                </p>
+                <div className="artist-discover-hero__based-on">
+                  <div className="artist-discover-hero__based-on-intro">Based on:</div>
+                  {showFullBasedOnList ? (
+                    <div className="artist-discover-hero__artists-expanded">
+                      {heroBasedOn.map((artist, index) => (
+                        <button
+                          key={index}
+                          onClick={() =>
+                            navigate(
+                              `/artist/${artist.id || artist.mbid || encodeURIComponent(artist.name)}`,
+                            )
+                          }
+                          className="artist-discover-hero__artist-tag"
+                        >
+                          {artist.name}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setShowFullBasedOnList(false)}
+                        className="artist-discover-hero__view-toggle-badge"
+                      >
+                        view less
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="artist-discover-hero__artists-collapsed">
+                      {heroBasedOn.length === 1 ? (
+                        <button
+                          onClick={() =>
+                            navigate(
+                              `/artist/${heroBasedOn[0].id || heroBasedOn[0].mbid || encodeURIComponent(heroBasedOn[0].name)}`,
+                            )
+                          }
+                          className="artist-discover-hero__artist-tag"
+                        >
+                          {heroBasedOn[0].name}
+                        </button>
+                      ) : heroBasedOn.length === 2 ? (
+                        <>
+                          <button
+                            onClick={() =>
+                              navigate(
+                                `/artist/${heroBasedOn[0].id || heroBasedOn[0].mbid || encodeURIComponent(heroBasedOn[0].name)}`,
+                              )
+                            }
+                            className="artist-discover-hero__artist-tag"
+                          >
+                            {heroBasedOn[0].name}
+                          </button>
+                          <button
+                            onClick={() =>
+                              navigate(
+                                `/artist/${heroBasedOn[1].id || heroBasedOn[1].mbid || encodeURIComponent(heroBasedOn[1].name)}`,
+                              )
+                            }
+                            className="artist-discover-hero__artist-tag"
+                          >
+                            {heroBasedOn[1].name}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() =>
+                              navigate(
+                                `/artist/${heroBasedOn[0].id || heroBasedOn[0].mbid || encodeURIComponent(heroBasedOn[0].name)}`,
+                              )
+                            }
+                            className="artist-discover-hero__artist-tag"
+                          >
+                            {heroBasedOn[0].name}
+                          </button>
+                          <button
+                            onClick={() =>
+                              navigate(
+                                `/artist/${heroBasedOn[1].id || heroBasedOn[1].mbid || encodeURIComponent(heroBasedOn[1].name)}`,
+                              )
+                            }
+                            className="artist-discover-hero__artist-tag"
+                          >
+                            {heroBasedOn[1].name}
+                          </button>
+                          <button
+                            onClick={() => setShowFullBasedOnList(true)}
+                            className="artist-discover-hero__view-toggle-badge"
+                          >
+                            +{heroBasedOn.length - 2} more
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
             <button
               type="button"
               onClick={openDiscoverModal}
-              className="mt-1 inline-flex shrink-0 items-center gap-2 rounded-md border border-white/10 px-3 py-2 transition-colors hover:bg-white/5"
-              style={{ color: "#c1c1c3" }}
+              className="artist-action-button--customize"
             >
-              <LayoutTemplate className="w-4 h-4" />
-              <span className="text-sm font-medium">Customize</span>
+              <LayoutTemplate className="artist-discover-hero__customize-icon" />
+              <span>Customize</span>
             </button>
           </div>
 
-          <div className="flex flex-col gap-3 border-t border-white/5 pt-4">
+          <div className="artist-discover-hero__tags-section">
             {topGenres.length > 0 && (
-              <div className="flex flex-col gap-2">
-                <h3
-                  className="text-[11px] font-semibold uppercase tracking-[0.22em]"
-                  style={{ color: "#8a8a8f" }}
-                >
-                  Top Tags
-                </h3>
-                <div className="flex flex-wrap gap-1 max-h-[4rem] overflow-y-hidden">
+              <div>
+                <h3 className="artist-discover-hero__tags-section-title">Top Tags</h3>
+                <div className="artist-tag-list--discover">
                   {topGenres.slice(0, 30).map((genre, i) => (
                     <button
                       key={i}
@@ -2684,10 +2605,9 @@ function DiscoverPage() {
                           `/search?q=${encodeURIComponent(`#${genre}`)}&type=tag`,
                         )
                       }
-                      className="genre-tag-pill px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-70"
+                      className="artist-tag--discover"
                       style={{
                         backgroundColor: getTagColor(genre),
-                        color: "#fff",
                       }}
                     >
                       #{genre}
@@ -2700,7 +2620,9 @@ function DiscoverPage() {
         </div>
       </section>
 
-      {orderedSectionIds.map((id) => renderSection(id))}
+      {discoverSections
+        .filter(section => section.enabled)
+        .map(section => renderSection(section.id))}
 
       <DiscoverLayoutModal
         open={showDiscoverModal}
