@@ -88,18 +88,6 @@ const getTagColor = (name) => {
   return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
 };
 
-const getTagCardBackground = (tag) => {
-  const base = getTagColor(tag);
-  return {
-    background: `
-      linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0.02)),
-      linear-gradient(0deg, rgba(0,0,0,0.28), rgba(0,0,0,0.28)),
-      radial-gradient(circle at top right, rgba(255,255,255,0.16), transparent 35%),
-      linear-gradient(135deg, ${base}, #121723)
-    `,
-  };
-};
-
 const DISCOVER_LAYOUT_KEY = "discoverLayout";
 const DISCOVERY_CACHE_KEY = "discoverData";
 const DISCOVER_RECENTLY_ADDED_KEY = "discoverRecentlyAdded";
@@ -189,7 +177,8 @@ const readStoredNearbyLocation = () => {
   try {
     const storedMode = localStorage.getItem(DISCOVER_NEARBY_MODE_KEY);
     const storedZip = localStorage.getItem(DISCOVER_NEARBY_ZIP_KEY) || "";
-    const mode = storedMode === "zip" || storedMode === "ip" ? storedMode : "ip";
+    const mode =
+      storedMode === "zip" || storedMode === "ip" ? storedMode : "ip";
     return { mode, zip: storedZip };
   } catch {
     return { mode: "ip", zip: "" };
@@ -264,11 +253,7 @@ const readStoredNearbyShows = (userId, locationMode, zip) => {
     );
     if (primary) return primary;
     if (!userId) return null;
-    const legacyKey = getDiscoverNearbyShowsStorageKey(
-      null,
-      locationMode,
-      zip,
-    );
+    const legacyKey = getDiscoverNearbyShowsStorageKey(null, locationMode, zip);
     return normalizeNearbyShowsData(
       JSON.parse(localStorage.getItem(legacyKey) || "null"),
     );
@@ -645,7 +630,9 @@ const ArtistCard = memo(
       updateMenuPosition();
       const scrollRoot = document.querySelector(".app-main");
       window.addEventListener("resize", updateMenuPosition);
-      scrollRoot?.addEventListener("scroll", updateMenuPosition, { passive: true });
+      scrollRoot?.addEventListener("scroll", updateMenuPosition, {
+        passive: true,
+      });
       window.addEventListener("scroll", updateMenuPosition, true);
       return () => {
         window.removeEventListener("resize", updateMenuPosition);
@@ -727,10 +714,7 @@ const ArtistCard = memo(
               </p>
             ) : null}
             {artist.subtitle && (
-              <p
-                className="artist-card-meta--discover"
-                title={artist.subtitle}
-              >
+              <p className="artist-card-meta--discover" title={artist.subtitle}>
                 {artist.subtitle}
               </p>
             )}
@@ -982,10 +966,7 @@ const AlbumCard = memo(
                 {album.albumName}
               </h3>
             </div>
-            <p
-              className="artist-card-meta--discover"
-              title={albumArtistText}
-            >
+            <p className="artist-card-meta--discover" title={albumArtistText}>
               {albumArtistText}
             </p>
             {albumReleaseText && (
@@ -1043,9 +1024,7 @@ const ViewAllCard = memo(({ onClick, label = "View All" }) => {
       className="artist-view-all-card--discover"
     >
       <div className="artist-media-cell">
-        <span className="artist-card-title">
-          {label}
-        </span>
+        <span className="artist-card-title">{label}</span>
       </div>
     </button>
   );
@@ -1103,13 +1082,17 @@ const ShowCard = memo(({ show }) => {
                 {showDate && (
                   <p className="artist-show-card__detail--discover">
                     <Clock className="artist-show-card__detail-icon--discover" />
-                    <span className="artist-show-card__detail-text--discover">{showDate}</span>
+                    <span className="artist-show-card__detail-text--discover">
+                      {showDate}
+                    </span>
                   </p>
                 )}
                 {showLocation && (
                   <p className="artist-show-card__detail--discover artist-show-card__detail--discover-location">
                     <MapPin className="artist-show-card__detail-icon--discover artist-show-card__detail-icon--discover-location" />
-                    <span className="artist-show-card__detail-text--discover">{showLocation}</span>
+                    <span className="artist-show-card__detail-text--discover">
+                      {showLocation}
+                    </span>
                   </p>
                 )}
               </div>
@@ -1169,7 +1152,15 @@ const ShowCard = memo(({ show }) => {
             {showLocation && (
               <p className="artist-show-card__body-detail--discover artist-show-card__body-detail--discover-location">
                 <MapPin className="artist-show-card__body-detail-icon--discover artist-show-card__body-detail-icon--discover-location" />
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{showLocation}</span>
+                <span
+                  style={{
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {showLocation}
+                </span>
               </p>
             )}
           </div>
@@ -1249,8 +1240,12 @@ function DiscoverRail({
       <div className={`artist-discover-rail__header ${headerClassName}`}>
         <div className="artist-discover-rail__title-group">
           <h2 className="artist-section-title--discover">
-            <span className="artist-section-title--discover-mobile">{mobileTitle || title}</span>
-            <span className="artist-section-title--discover-desktop">{title}</span>
+            <span className="artist-section-title--discover-mobile">
+              {mobileTitle || title}
+            </span>
+            <span className="artist-section-title--discover-desktop">
+              {title}
+            </span>
           </h2>
           {onViewAll && (
             <button
@@ -1288,10 +1283,7 @@ function DiscoverRail({
           </button>
         </div>
       </div>
-      <div
-        ref={scrollRef}
-        className="artist-discover-rail__content"
-      >
+      <div ref={scrollRef} className="artist-discover-rail__content">
         {children}
       </div>
     </section>
@@ -1358,7 +1350,9 @@ function DiscoverPage() {
     initialNearbyLocation.zip,
   );
   const [showNearbyZipEditor, setShowNearbyZipEditor] = useState(false);
-  const [nearbyZipDraft, setNearbyZipDraft] = useState(initialNearbyLocation.zip);
+  const [nearbyZipDraft, setNearbyZipDraft] = useState(
+    initialNearbyLocation.zip,
+  );
   const [showFullBasedOnList, setShowFullBasedOnList] = useState(false);
   const requestedReleaseCoversRef = useRef(new Set());
   const requestedArtistCoversRef = useRef(new Set());
@@ -2196,10 +2190,6 @@ function DiscoverPage() {
     [discoveryFeedback, showError, showSuccess],
   );
 
-  const orderedSectionIds = displayDiscoverSections
-    .filter((item) => item.enabled)
-    .map((item) => item.id);
-
   const renderSection = (id) => {
     const fallbackGenre = getFallbackGenreFromSectionId(id);
     if (fallbackGenre) {
@@ -2259,10 +2249,7 @@ function DiscoverPage() {
     if (id === "recentlyAdded") {
       if (!sectionAvailability.recentlyAdded) return null;
       return (
-        <DiscoverRail
-          key="recentlyAdded"
-          title="Recently Added"
-        >
+        <DiscoverRail key="recentlyAdded" title="Recently Added">
           <>
             {recentlyAdded
               .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT)
@@ -2305,10 +2292,7 @@ function DiscoverPage() {
     if (id === "recentReleases") {
       if (!sectionAvailability.recentReleases) return null;
       return (
-        <DiscoverRail
-          key="recentReleases"
-          title="Recent & Upcoming Releases"
-        >
+        <DiscoverRail key="recentReleases" title="Recent & Upcoming Releases">
           <>
             {recentReleases
               .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT)
@@ -2385,16 +2369,8 @@ function DiscoverPage() {
     if (id === "recommendedShows") {
       if (!sectionAvailability.recommendedShows) return null;
       const zipModeActive = nearbyLocationMode === "zip";
-      const showNearbyShowsRail =
-        nearbyShowsData?.configured !== false &&
-        !nearbyShowsLoading &&
-        !nearbyShowsError &&
-        !(zipModeActive && !appliedNearbyZip.trim()) &&
-        nearbyShows.length > 0;
       const nearbyLocationBadge = nearbyShowsData?.configured !== false && (
-        <span className="artist-nearby-badge">
-          {nearbyLocationLabel}
-        </span>
+        <span className="artist-nearby-badge">{nearbyLocationLabel}</span>
       );
       const nearbyHeaderActions = (
         <>
@@ -2525,9 +2501,7 @@ function DiscoverPage() {
               <h3 className="artist-nearby-status__title">
                 Unable to load nearby shows
               </h3>
-              <p className="artist-nearby-status__text">
-                {nearbyShowsError}
-              </p>
+              <p className="artist-nearby-status__text">{nearbyShowsError}</p>
             </div>
           </section>
         );
@@ -2537,9 +2511,7 @@ function DiscoverPage() {
         return (
           <section key="recommendedShows" className="artist-discover-section">
             <div className="artist-nearby-status">
-              <h3 className="artist-nearby-status__title">
-                ZIP not set
-              </h3>
+              <h3 className="artist-nearby-status__title">ZIP not set</h3>
               <p className="artist-nearby-status__text">
                 Set a ZIP code from the Shows page area settings to use ZIP mode
                 here.
@@ -2559,16 +2531,14 @@ function DiscoverPage() {
             headerActions={nearbyHeaderActions}
           >
             <>
-              {nearbyShows
-                .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT)
-                .map((show) => (
-                  <div
-                    key={`${show.id}-${show.artistName}-${show.sourceType || show.matchType || "show"}`}
-                    className="artist-discover-show-rail-card"
-                  >
-                    <ShowCard show={show} />
-                  </div>
-                ))}
+              {nearbyShows.slice(0, DISCOVER_PREVIEW_ITEM_LIMIT).map((show) => (
+                <div
+                  key={`${show.id}-${show.artistName}-${show.sourceType || show.matchType || "show"}`}
+                  className="artist-discover-show-rail-card"
+                >
+                  <ShowCard show={show} />
+                </div>
+              ))}
             </>
           </DiscoverRail>
         );
@@ -2581,8 +2551,8 @@ function DiscoverPage() {
               No upcoming nearby matches
             </h3>
             <p className="artist-nearby-status__text">
-              We could not find local Ticketmaster shows tied to your library
-              or current recommendations around {nearbyLocationLabel}.
+              We could not find local Ticketmaster shows tied to your library or
+              current recommendations around {nearbyLocationLabel}.
             </p>
           </div>
         </section>
@@ -2728,9 +2698,7 @@ function DiscoverPage() {
         <h2 className="artist-error-title--discover">
           Unable to load discovery
         </h2>
-        <p className="artist-empty-message--discover">
-          {error}
-        </p>
+        <p className="artist-empty-message--discover">{error}</p>
         <button
           onClick={() => window.location.reload()}
           className="btn btn-primary"
@@ -2752,9 +2720,7 @@ function DiscoverPage() {
         <div className="artist-error-icon">
           <Sparkles className="artist-icon-lg" />
         </div>
-        <h2 className="artist-error-title">
-          Discovery Not Configured
-        </h2>
+        <h2 className="artist-error-title">Discovery Not Configured</h2>
         <p className="artist-empty-message">
           To see music recommendations, you need at least one of:
         </p>
@@ -2802,7 +2768,9 @@ function DiscoverPage() {
               </p>
               {heroBasedOn.length > 0 && (
                 <div className="artist-discover-hero__based-on">
-                  <div className="artist-discover-hero__based-on-intro">Based on:</div>
+                  <div className="artist-discover-hero__based-on-intro">
+                    Based on:
+                  </div>
                   {showFullBasedOnList ? (
                     <div className="artist-discover-hero__artists-expanded">
                       {heroBasedOn.map((artist, index) => (
@@ -2825,45 +2793,87 @@ function DiscoverPage() {
                     <div className="artist-discover-hero__artists-collapsed">
                       {heroBasedOn.length === 1 ? (
                         <button
-                          onClick={() => navigateToBasedOnArtist(heroBasedOn[0])}
+                          onClick={() =>
+                            navigateToBasedOnArtist(heroBasedOn[0])
+                          }
                           className="artist-discover-hero__artist-tag"
                         >
                           {heroBasedOn[0].name}
                         </button>
-                      ) : heroBasedOn.length === 2 ? (
+                      ) : heroBasedOn.length === 4 ? (
                         <>
                           <button
-                            onClick={() => navigateToBasedOnArtist(heroBasedOn[0])}
+                            onClick={() =>
+                              navigateToBasedOnArtist(heroBasedOn[0])
+                            }
                             className="artist-discover-hero__artist-tag"
                           >
                             {heroBasedOn[0].name}
                           </button>
                           <button
-                            onClick={() => navigateToBasedOnArtist(heroBasedOn[1])}
+                            onClick={() =>
+                              navigateToBasedOnArtist(heroBasedOn[1])
+                            }
                             className="artist-discover-hero__artist-tag"
                           >
                             {heroBasedOn[1].name}
+                          </button>
+                          <button
+                            onClick={() =>
+                              navigateToBasedOnArtist(heroBasedOn[1])
+                            }
+                            className="artist-discover-hero__artist-tag"
+                          >
+                            {heroBasedOn[2].name}
+                          </button>
+                          <button
+                            onClick={() =>
+                              navigateToBasedOnArtist(heroBasedOn[1])
+                            }
+                            className="artist-discover-hero__artist-tag"
+                          >
+                            {heroBasedOn[3].name}
                           </button>
                         </>
                       ) : (
                         <>
                           <button
-                            onClick={() => navigateToBasedOnArtist(heroBasedOn[0])}
+                            onClick={() =>
+                              navigateToBasedOnArtist(heroBasedOn[0])
+                            }
                             className="artist-discover-hero__artist-tag"
                           >
                             {heroBasedOn[0].name}
                           </button>
                           <button
-                            onClick={() => navigateToBasedOnArtist(heroBasedOn[1])}
+                            onClick={() =>
+                              navigateToBasedOnArtist(heroBasedOn[1])
+                            }
                             className="artist-discover-hero__artist-tag"
                           >
                             {heroBasedOn[1].name}
                           </button>
                           <button
+                            onClick={() =>
+                              navigateToBasedOnArtist(heroBasedOn[1])
+                            }
+                            className="artist-discover-hero__artist-tag"
+                          >
+                            {heroBasedOn[2].name}
+                          </button>
+                          <button
+                            onClick={() =>
+                              navigateToBasedOnArtist(heroBasedOn[1])
+                            }
+                            className="artist-discover-hero__artist-tag"
+                          >
+                            {heroBasedOn[3].name}
+                          </button>
+                          <button
                             onClick={() => setShowFullBasedOnList(true)}
                             className="artist-discover-hero__view-toggle-badge"
                           >
-                            +{heroBasedOn.length - 2} more
+                            +{heroBasedOn.length - 4} more
                           </button>
                         </>
                       )}
@@ -2886,7 +2896,9 @@ function DiscoverPage() {
           <div className="artist-discover-hero__tags-section">
             {topGenres.length > 0 && (
               <div>
-                <h3 className="artist-discover-hero__tags-section-title">Top Tags</h3>
+                <h3 className="artist-discover-hero__tags-section-title">
+                  Top Tags
+                </h3>
                 <div className="artist-tag-list--discover">
                   {topGenres.slice(0, 30).map((genre, i) => (
                     <button
@@ -2912,8 +2924,8 @@ function DiscoverPage() {
       </section>
 
       {discoverSections
-        .filter(section => section.enabled)
-        .map(section => renderSection(section.id))}
+        .filter((section) => section.enabled)
+        .map((section) => renderSection(section.id))}
 
       <DiscoverLayoutModal
         open={showDiscoverModal}
