@@ -139,6 +139,7 @@ export function ArtistDetailsPreviewTracks({
                   {onAddTrackToPlaylist ? (
                     <div className="artist-relative">
                       <TrackPlaylistMenu
+                        menuVariant="preview-tracks"
                         playlists={playlists}
                         loading={playlistsLoading}
                         saving={playlistSavingKey === String(track.id || "")}

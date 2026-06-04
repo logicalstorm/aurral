@@ -1,4 +1,12 @@
-import { useState, useEffect, useMemo, memo, useCallback, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  memo,
+  useCallback,
+  useRef,
+} from "react";
 import { createPortal } from "react-dom";
 import PropTypes from "prop-types";
 import { useNavigate } from "react-router-dom";
@@ -24,6 +32,8 @@ import {
 import {
   addArtistToLibrary,
   addDiscoveryFeedback,
+  getDiscoveryFeedback,
+  removeDiscoveryFeedback,
   getBlocklist,
   getBootstrapStatus,
   getDiscovery,
@@ -40,6 +50,13 @@ import {
 } from "../utils/api";
 import { useWebSocketChannel } from "../hooks/useWebSocket";
 import { useAuth } from "../contexts/AuthContext";
+import {
+  applyArtistDiscoveryFeedback,
+  buildArtistFeedbackLookup,
+  getArtistFeedbackFlags,
+  getDiscoveryFeedbackLabel,
+  normalizeDiscoveryFeedbackList,
+} from "../utils/discoveryFeedback";
 import ArtistImage from "../components/ArtistImage";
 import LastfmBanner from "../components/LastfmBanner";
 import { useToast } from "../contexts/ToastContext";
@@ -85,6 +102,9 @@ const getTagCardBackground = (tag) => {
 
 const DISCOVER_LAYOUT_KEY = "discoverLayout";
 const DISCOVERY_CACHE_KEY = "discoverData";
+const DISCOVER_RECENTLY_ADDED_KEY = "discoverRecentlyAdded";
+const DISCOVER_RECENT_RELEASES_KEY = "discoverRecentReleases";
+const DISCOVER_NEARBY_SHOWS_KEY = "discoverNearbyShows";
 
 const DEFAULT_DISCOVER_SECTIONS = [
   { id: "recentlyAdded", label: "Recently Added", enabled: true },
@@ -108,6 +128,10 @@ const getFallbackGenreFromSectionId = (id) =>
 const DISCOVER_NEARBY_MODE_KEY = "discoverNearbyMode";
 const DISCOVER_NEARBY_ZIP_KEY = "discoverNearbyZip";
 const DISCOVER_PREVIEW_ITEM_LIMIT = 12;
+const MAIN_CONTENT_PORTAL_SELECTOR = ".app-main-wrap";
+
+const getMainContentPortalRoot = () =>
+  document.querySelector(MAIN_CONTENT_PORTAL_SELECTOR);
 
 const getArtistId = (artist) =>
   artist?.id || artist?.mbid || artist?.foreignArtistId;
@@ -141,6 +165,128 @@ const getDiscoverLayoutStorageKey = (userId) =>
 
 const getDiscoveryCacheStorageKey = (userId) =>
   userId ? `${DISCOVERY_CACHE_KEY}:${userId}` : DISCOVERY_CACHE_KEY;
+
+const getDiscoverRecentlyAddedStorageKey = (userId) =>
+  userId
+    ? `${DISCOVER_RECENTLY_ADDED_KEY}:${userId}`
+    : DISCOVER_RECENTLY_ADDED_KEY;
+
+const getDiscoverRecentReleasesStorageKey = (userId) =>
+  userId
+    ? `${DISCOVER_RECENT_RELEASES_KEY}:${userId}`
+    : DISCOVER_RECENT_RELEASES_KEY;
+
+const getDiscoverNearbyShowsStorageKey = (userId, locationMode, zip) => {
+  const base = userId
+    ? `${DISCOVER_NEARBY_SHOWS_KEY}:${userId}`
+    : DISCOVER_NEARBY_SHOWS_KEY;
+  const locationKey =
+    locationMode === "zip" ? `zip:${String(zip || "").trim()}` : "ip";
+  return `${base}:${locationKey}`;
+};
+
+const readStoredNearbyLocation = () => {
+  try {
+    const storedMode = localStorage.getItem(DISCOVER_NEARBY_MODE_KEY);
+    const storedZip = localStorage.getItem(DISCOVER_NEARBY_ZIP_KEY) || "";
+    const mode = storedMode === "zip" || storedMode === "ip" ? storedMode : "ip";
+    return { mode, zip: storedZip };
+  } catch {
+    return { mode: "ip", zip: "" };
+  }
+};
+
+const readStoredRecentlyAdded = (userId) => {
+  try {
+    const primaryKey = getDiscoverRecentlyAddedStorageKey(userId);
+    const primary = JSON.parse(localStorage.getItem(primaryKey) || "null");
+    if (Array.isArray(primary)) return primary;
+    if (primaryKey === DISCOVER_RECENTLY_ADDED_KEY) return null;
+    const fallback = JSON.parse(
+      localStorage.getItem(DISCOVER_RECENTLY_ADDED_KEY) || "null",
+    );
+    return Array.isArray(fallback) ? fallback : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredRecentlyAdded = (value, userId) => {
+  if (!Array.isArray(value)) return;
+  try {
+    localStorage.setItem(
+      getDiscoverRecentlyAddedStorageKey(userId),
+      JSON.stringify(value),
+    );
+  } catch {}
+};
+
+const readStoredRecentReleases = (userId) => {
+  try {
+    const primaryKey = getDiscoverRecentReleasesStorageKey(userId);
+    const primary = JSON.parse(localStorage.getItem(primaryKey) || "null");
+    if (Array.isArray(primary)) return primary;
+    if (primaryKey === DISCOVER_RECENT_RELEASES_KEY) return null;
+    const fallback = JSON.parse(
+      localStorage.getItem(DISCOVER_RECENT_RELEASES_KEY) || "null",
+    );
+    return Array.isArray(fallback) ? fallback : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredRecentReleases = (value, userId) => {
+  if (!Array.isArray(value)) return;
+  try {
+    localStorage.setItem(
+      getDiscoverRecentReleasesStorageKey(userId),
+      JSON.stringify(value),
+    );
+  } catch {}
+};
+
+const normalizeNearbyShowsData = (value) => {
+  if (!value || typeof value !== "object") return null;
+  if (!Array.isArray(value.shows)) return null;
+  return value;
+};
+
+const readStoredNearbyShows = (userId, locationMode, zip) => {
+  try {
+    const primaryKey = getDiscoverNearbyShowsStorageKey(
+      userId,
+      locationMode,
+      zip,
+    );
+    const primary = normalizeNearbyShowsData(
+      JSON.parse(localStorage.getItem(primaryKey) || "null"),
+    );
+    if (primary) return primary;
+    if (!userId) return null;
+    const legacyKey = getDiscoverNearbyShowsStorageKey(
+      null,
+      locationMode,
+      zip,
+    );
+    return normalizeNearbyShowsData(
+      JSON.parse(localStorage.getItem(legacyKey) || "null"),
+    );
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredNearbyShows = (value, userId, locationMode, zip) => {
+  const normalized = normalizeNearbyShowsData(value);
+  if (!normalized) return;
+  try {
+    localStorage.setItem(
+      getDiscoverNearbyShowsStorageKey(userId, locationMode, zip),
+      JSON.stringify(normalized),
+    );
+  } catch {}
+};
 
 const normalizeDiscoveryData = (value) => {
   if (!value || typeof value !== "object") return null;
@@ -412,6 +558,7 @@ const ArtistCard = memo(
     onAddToLibrary,
     onAddToBlocklist,
     onFeedback,
+    feedbackUsed = {},
   }) => {
     const [showMenu, setShowMenu] = useState(false);
     const [pendingAction, setPendingAction] = useState(null);
@@ -448,28 +595,69 @@ const ArtistCard = memo(
       };
     }, [showMenu]);
 
+    const estimateDiscoverMenuHeight = useCallback(() => {
+      let items = 1;
+      if (canAddArtist) items += 1;
+      if (onFeedback) items += 4;
+      return items * 42 + 8;
+    }, [canAddArtist, onFeedback]);
+
+    const updateMenuPosition = useCallback(() => {
+      const button = menuButtonRef.current;
+      const portalRoot = getMainContentPortalRoot();
+      if (!button || !portalRoot) return;
+      const wrapRect = portalRoot.getBoundingClientRect();
+      const rect = button.getBoundingClientRect();
+      const gap = 8;
+      const menuHeight =
+        menuRef.current?.offsetHeight || estimateDiscoverMenuHeight();
+      const spaceAbove = rect.top - wrapRect.top - gap;
+      const spaceBelow = wrapRect.bottom - rect.bottom - gap;
+      let placement = "above";
+      if (spaceAbove < menuHeight && spaceBelow >= menuHeight) {
+        placement = "below";
+      } else if (spaceAbove < menuHeight && spaceBelow < menuHeight) {
+        placement = spaceBelow > spaceAbove ? "below" : "above";
+      }
+      const top =
+        placement === "below"
+          ? rect.bottom - wrapRect.top + gap
+          : rect.top - wrapRect.top - gap;
+      const left = Math.max(rect.right - wrapRect.left - 176, 12);
+      setMenuPosition((prev) => {
+        if (
+          prev &&
+          prev.top === top &&
+          prev.left === left &&
+          prev.placement === placement
+        ) {
+          return prev;
+        }
+        return { top, left, placement };
+      });
+    }, [estimateDiscoverMenuHeight]);
+
     useEffect(() => {
       if (!showMenu) {
         setMenuPosition(null);
         return;
       }
-      const updateMenuPosition = () => {
-        const button = menuButtonRef.current;
-        if (!button) return;
-        const rect = button.getBoundingClientRect();
-        setMenuPosition({
-          top: rect.top - 8,
-          left: Math.max(rect.right - 176, 12),
-        });
-      };
       updateMenuPosition();
+      const scrollRoot = document.querySelector(".app-main");
       window.addEventListener("resize", updateMenuPosition);
+      scrollRoot?.addEventListener("scroll", updateMenuPosition, { passive: true });
       window.addEventListener("scroll", updateMenuPosition, true);
       return () => {
         window.removeEventListener("resize", updateMenuPosition);
+        scrollRoot?.removeEventListener("scroll", updateMenuPosition);
         window.removeEventListener("scroll", updateMenuPosition, true);
       };
-    }, [showMenu]);
+    }, [showMenu, updateMenuPosition]);
+
+    useLayoutEffect(() => {
+      if (!showMenu) return;
+      updateMenuPosition();
+    }, [showMenu, updateMenuPosition]);
 
     const handleAddToLibraryClick = async (event) => {
       event.stopPropagation();
@@ -493,8 +681,10 @@ const ArtistCard = memo(
       event.stopPropagation();
       if (!onFeedback || pendingAction) return;
       setPendingAction(action);
-      const saved = await onFeedback(artist, action);
-      if (saved) setShowMenu(false);
+      const saved = await onFeedback(artist, action, {
+        isSelected: !!feedbackUsed[action],
+      });
+      if (saved && action === "hide_for_now") setShowMenu(false);
       setPendingAction(null);
     };
 
@@ -562,11 +752,11 @@ const ArtistCard = memo(
             </div>
           )}
         </div>
-        {showMenu && menuPosition
+        {showMenu && menuPosition && getMainContentPortalRoot()
           ? createPortal(
               <div
                 ref={menuRef}
-                className="artist-options-menu--discover"
+                className={`artist-options-menu--discover${menuPosition.placement === "below" ? " is-below" : ""}`}
                 style={{
                   top: menuPosition.top,
                   left: menuPosition.left,
@@ -613,11 +803,15 @@ const ArtistCard = memo(
                         handleFeedbackClick(event, "more_like_this")
                       }
                       disabled={!!pendingAction}
-                      className="artist-menu-item--discover"
+                      className={`artist-menu-item--discover${feedbackUsed.more_like_this ? " is-selected" : ""}`}
                     >
                       <div className="artist-menu-item__main--discover">
-                        <ThumbsUp className="artist-icon-sm" />
-                        More like this
+                        {pendingAction === "more_like_this" ? (
+                          <Loader2 className="artist-icon-sm animate-spin" />
+                        ) : (
+                          <ThumbsUp className="artist-icon-sm" />
+                        )}
+                        {getDiscoveryFeedbackLabel("more_like_this")}
                       </div>
                     </button>
                     <button
@@ -626,11 +820,15 @@ const ArtistCard = memo(
                         handleFeedbackClick(event, "less_like_this")
                       }
                       disabled={!!pendingAction}
-                      className="artist-menu-item--discover"
+                      className={`artist-menu-item--discover${feedbackUsed.less_like_this ? " is-selected" : ""}`}
                     >
                       <div className="artist-menu-item__main--discover">
-                        <ThumbsDown className="artist-icon-sm" />
-                        Less like this
+                        {pendingAction === "less_like_this" ? (
+                          <Loader2 className="artist-icon-sm animate-spin" />
+                        ) : (
+                          <ThumbsDown className="artist-icon-sm" />
+                        )}
+                        {getDiscoveryFeedbackLabel("less_like_this")}
                       </div>
                     </button>
                     <button
@@ -639,11 +837,15 @@ const ArtistCard = memo(
                         handleFeedbackClick(event, "already_known")
                       }
                       disabled={!!pendingAction}
-                      className="artist-menu-item--discover"
+                      className={`artist-menu-item--discover${feedbackUsed.already_known ? " is-selected" : ""}`}
                     >
                       <div className="artist-menu-item__main--discover">
-                        <CheckCircle2 className="artist-icon-sm" />
-                        Already know this
+                        {pendingAction === "already_known" ? (
+                          <Loader2 className="artist-icon-sm animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="artist-icon-sm" />
+                        )}
+                        {getDiscoveryFeedbackLabel("already_known")}
                       </div>
                     </button>
                     <button
@@ -662,7 +864,7 @@ const ArtistCard = memo(
                   </>
                 )}
               </div>,
-              document.body,
+              getMainContentPortalRoot(),
             )
           : null}
       </div>
@@ -678,6 +880,12 @@ const ArtistCard = memo(
       prevProps.isInLibrary === nextProps.isInLibrary &&
       prevProps.isBlocked === nextProps.isBlocked &&
       prevProps.canAddArtist === nextProps.canAddArtist &&
+      prevProps.feedbackUsed?.more_like_this ===
+        nextProps.feedbackUsed?.more_like_this &&
+      prevProps.feedbackUsed?.less_like_this ===
+        nextProps.feedbackUsed?.less_like_this &&
+      prevProps.feedbackUsed?.already_known ===
+        nextProps.feedbackUsed?.already_known &&
       prevProps.onNavigate === nextProps.onNavigate &&
       prevProps.onAddToLibrary === nextProps.onAddToLibrary &&
       prevProps.onAddToBlocklist === nextProps.onAddToBlocklist &&
@@ -715,6 +923,11 @@ ArtistCard.propTypes = {
   onAddToLibrary: PropTypes.func,
   onAddToBlocklist: PropTypes.func,
   onFeedback: PropTypes.func,
+  feedbackUsed: PropTypes.shape({
+    more_like_this: PropTypes.bool,
+    less_like_this: PropTypes.bool,
+    already_known: PropTypes.bool,
+  }),
 };
 
 const AlbumCard = memo(
@@ -1099,9 +1312,14 @@ DiscoverRail.propTypes = {
 
 function DiscoverPage() {
   const { user: authUser, hasPermission } = useAuth();
+  const initialNearbyLocation = useMemo(() => readStoredNearbyLocation(), []);
   const [data, setData] = useState(() => readStoredDiscoveryData(authUser?.id));
-  const [recentlyAdded, setRecentlyAdded] = useState([]);
-  const [recentReleases, setRecentReleases] = useState([]);
+  const [recentlyAdded, setRecentlyAdded] = useState(
+    () => readStoredRecentlyAdded(authUser?.id) || [],
+  );
+  const [recentReleases, setRecentReleases] = useState(
+    () => readStoredRecentReleases(authUser?.id) || [],
+  );
   const [releaseCovers, setReleaseCovers] = useState({});
   const [artistCovers, setArtistCovers] = useState({});
   const [discoverSections, setDiscoverSections] = useState(
@@ -1115,14 +1333,32 @@ function DiscoverPage() {
   const [error, setError] = useState(null);
   const [libraryLookup, setLibraryLookup] = useState({});
   const [blockedArtists, setBlockedArtists] = useState([]);
-  const [nearbyShowsData, setNearbyShowsData] = useState(null);
+  const [discoveryFeedback, setDiscoveryFeedback] = useState([]);
+  const [nearbyShowsData, setNearbyShowsData] = useState(() =>
+    readStoredNearbyShows(
+      authUser?.id,
+      initialNearbyLocation.mode,
+      initialNearbyLocation.zip,
+    ),
+  );
   const [ticketmasterConfigured, setTicketmasterConfigured] = useState(true);
-  const [nearbyShowsLoading, setNearbyShowsLoading] = useState(false);
+  const [nearbyShowsLoading, setNearbyShowsLoading] = useState(
+    () =>
+      !readStoredNearbyShows(
+        authUser?.id,
+        initialNearbyLocation.mode,
+        initialNearbyLocation.zip,
+      ),
+  );
   const [nearbyShowsError, setNearbyShowsError] = useState(null);
-  const [nearbyLocationMode, setNearbyLocationMode] = useState("ip");
-  const [appliedNearbyZip, setAppliedNearbyZip] = useState("");
+  const [nearbyLocationMode, setNearbyLocationMode] = useState(
+    initialNearbyLocation.mode,
+  );
+  const [appliedNearbyZip, setAppliedNearbyZip] = useState(
+    initialNearbyLocation.zip,
+  );
   const [showNearbyZipEditor, setShowNearbyZipEditor] = useState(false);
-  const [nearbyZipDraft, setNearbyZipDraft] = useState("");
+  const [nearbyZipDraft, setNearbyZipDraft] = useState(initialNearbyLocation.zip);
   const [showFullBasedOnList, setShowFullBasedOnList] = useState(false);
   const requestedReleaseCoversRef = useRef(new Set());
   const requestedArtistCoversRef = useRef(new Set());
@@ -1131,6 +1367,18 @@ function DiscoverPage() {
   const navigate = useNavigate();
   const { showSuccess, showError } = useToast();
   const canAddArtist = hasPermission("addArtist");
+  const artistFeedbackLookup = useMemo(
+    () => buildArtistFeedbackLookup(discoveryFeedback),
+    [discoveryFeedback],
+  );
+
+  useEffect(() => {
+    getDiscoveryFeedback()
+      .then((payload) =>
+        setDiscoveryFeedback(normalizeDiscoveryFeedbackList(payload)),
+      )
+      .catch(() => {});
+  }, [authUser?.id]);
 
   const { isConnected: isDiscoverySocketConnected } = useWebSocketChannel(
     "discovery",
@@ -1263,11 +1511,17 @@ function DiscoverPage() {
       });
 
     getRecentlyAdded()
-      .then(setRecentlyAdded)
+      .then((items) => {
+        setRecentlyAdded(items);
+        writeStoredRecentlyAdded(items, authUser?.id);
+      })
       .catch(() => {});
 
     getRecentReleases()
-      .then(setRecentReleases)
+      .then((items) => {
+        setRecentReleases(items);
+        writeStoredRecentReleases(items, authUser?.id);
+      })
       .catch(() => {});
   }, [authUser?.id]);
 
@@ -1338,20 +1592,38 @@ function DiscoverPage() {
       setNearbyShowsLoading(false);
       return;
     }
+    const locationMode = shouldUseZip ? "zip" : "ip";
+    const locationZip = shouldUseZip ? appliedNearbyZip : "";
+    const cachedNearbyShows = readStoredNearbyShows(
+      authUser?.id,
+      locationMode,
+      locationZip,
+    );
+    if (cachedNearbyShows) {
+      setNearbyShowsData(cachedNearbyShows);
+    }
     let cancelled = false;
-    setNearbyShowsLoading(true);
+    setNearbyShowsLoading(!cachedNearbyShows);
     setNearbyShowsError(null);
-    getNearbyShows(shouldUseZip ? appliedNearbyZip : "")
+    getNearbyShows(locationZip)
       .then((response) => {
         if (cancelled) return;
         setNearbyShowsData(response);
+        writeStoredNearbyShows(
+          response,
+          authUser?.id,
+          locationMode,
+          locationZip,
+        );
         setNearbyShowsError(null);
       })
       .catch((err) => {
         if (cancelled) return;
-        setNearbyShowsError(
-          err.response?.data?.message || "Failed to load nearby shows",
-        );
+        if (!cachedNearbyShows) {
+          setNearbyShowsError(
+            err.response?.data?.message || "Failed to load nearby shows",
+          );
+        }
       })
       .finally(() => {
         if (!cancelled) {
@@ -1361,7 +1633,12 @@ function DiscoverPage() {
     return () => {
       cancelled = true;
     };
-  }, [nearbyLocationMode, appliedNearbyZip, ticketmasterConfigured]);
+  }, [
+    authUser?.id,
+    nearbyLocationMode,
+    appliedNearbyZip,
+    ticketmasterConfigured,
+  ]);
 
   useEffect(() => {
     const stored = readStoredDiscoverLayout(authUser?.id);
@@ -1687,6 +1964,20 @@ function DiscoverPage() {
     return names;
   }, [basedOn, recommendations]);
 
+  const navigateToBasedOnArtist = useCallback(
+    (artist) => {
+      const routeId =
+        artist?.id ||
+        artist?.mbid ||
+        (artist?.name ? encodeURIComponent(artist.name) : "");
+      if (!routeId) return;
+      navigate(`/artist/${routeId}`, {
+        state: { artistName: artist.name },
+      });
+    },
+    [navigate],
+  );
+
   const discoverArtistIds = useMemo(() => {
     const ids = new Set();
     for (const artist of data?.recommendations || []) {
@@ -1847,9 +2138,9 @@ function DiscoverPage() {
   );
 
   const handleDiscoveryFeedback = useCallback(
-    async (artist, action) => {
+    async (artist, action, { isSelected = false } = {}) => {
       try {
-        await addDiscoveryFeedback({
+        const payload = {
           artistId: getArtistId(artist),
           artistName: artist.name || null,
           action,
@@ -1860,8 +2151,18 @@ function DiscoverPage() {
                 .map((seed) => seed?.artistName)
                 .filter(Boolean)
             : artist.sourceArtists || [],
+        };
+        const { feedbackList } = await applyArtistDiscoveryFeedback({
+          feedbackList: discoveryFeedback,
+          artist,
+          action,
+          isSelected,
+          payload,
+          addDiscoveryFeedback,
+          removeDiscoveryFeedback,
         });
-        if (action === "hide_for_now") {
+        setDiscoveryFeedback(feedbackList);
+        if (action === "hide_for_now" && !isSelected) {
           setData((prev) =>
             prev
               ? {
@@ -1873,15 +2174,17 @@ function DiscoverPage() {
               : prev,
           );
         }
-        showSuccess(
-          action === "more_like_this"
-            ? "We’ll bias future picks toward this taste"
-            : action === "less_like_this"
-              ? "We’ll show less like this"
-              : action === "already_known"
-                ? "We’ll avoid obvious repeats like this"
-                : "Hidden from Discover for now",
-        );
+        if (!isSelected) {
+          showSuccess(
+            action === "more_like_this"
+              ? "We’ll bias future picks toward this taste"
+              : action === "less_like_this"
+                ? "We’ll show less like this"
+                : action === "already_known"
+                  ? "We’ll avoid obvious repeats like this"
+                  : "Hidden from Discover for now",
+          );
+        }
         return true;
       } catch (err) {
         showError(
@@ -1890,7 +2193,7 @@ function DiscoverPage() {
         return false;
       }
     },
-    [showError, showSuccess],
+    [discoveryFeedback, showError, showSuccess],
   );
 
   const orderedSectionIds = displayDiscoverSections
@@ -1932,6 +2235,10 @@ function DiscoverPage() {
                     onAddToLibrary={handleAddArtistToLibrary}
                     onAddToBlocklist={handleAddArtistToBlocklist}
                     onFeedback={handleDiscoveryFeedback}
+                    feedbackUsed={getArtistFeedbackFlags(
+                      artistFeedbackLookup,
+                      artist,
+                    )}
                   />
                 </div>
               ))}
@@ -2046,6 +2353,10 @@ function DiscoverPage() {
                       onAddToLibrary={handleAddArtistToLibrary}
                       onAddToBlocklist={handleAddArtistToBlocklist}
                       onFeedback={handleDiscoveryFeedback}
+                      feedbackUsed={getArtistFeedbackFlags(
+                        artistFeedbackLookup,
+                        artist,
+                      )}
                     />
                   </div>
                 ))}
@@ -2197,7 +2508,7 @@ function DiscoverPage() {
         );
       }
 
-      if (nearbyShowsLoading) {
+      if (nearbyShowsLoading && !nearbyShowsData) {
         return (
           <section key="recommendedShows" className="artist-discover-section">
             <div className="artist-nearby-status artist-nearby-status--loading">
@@ -2347,6 +2658,10 @@ function DiscoverPage() {
                         onAddToLibrary={handleAddArtistToLibrary}
                         onAddToBlocklist={handleAddArtistToBlocklist}
                         onFeedback={handleDiscoveryFeedback}
+                        feedbackUsed={getArtistFeedbackFlags(
+                          artistFeedbackLookup,
+                          artist,
+                        )}
                       />
                     </div>
                   ))}
@@ -2493,11 +2808,7 @@ function DiscoverPage() {
                       {heroBasedOn.map((artist, index) => (
                         <button
                           key={index}
-                          onClick={() =>
-                            navigate(
-                              `/artist/${artist.id || artist.mbid || encodeURIComponent(artist.name)}`,
-                            )
-                          }
+                          onClick={() => navigateToBasedOnArtist(artist)}
                           className="artist-discover-hero__artist-tag"
                         >
                           {artist.name}
@@ -2514,11 +2825,7 @@ function DiscoverPage() {
                     <div className="artist-discover-hero__artists-collapsed">
                       {heroBasedOn.length === 1 ? (
                         <button
-                          onClick={() =>
-                            navigate(
-                              `/artist/${heroBasedOn[0].id || heroBasedOn[0].mbid || encodeURIComponent(heroBasedOn[0].name)}`,
-                            )
-                          }
+                          onClick={() => navigateToBasedOnArtist(heroBasedOn[0])}
                           className="artist-discover-hero__artist-tag"
                         >
                           {heroBasedOn[0].name}
@@ -2526,21 +2833,13 @@ function DiscoverPage() {
                       ) : heroBasedOn.length === 2 ? (
                         <>
                           <button
-                            onClick={() =>
-                              navigate(
-                                `/artist/${heroBasedOn[0].id || heroBasedOn[0].mbid || encodeURIComponent(heroBasedOn[0].name)}`,
-                              )
-                            }
+                            onClick={() => navigateToBasedOnArtist(heroBasedOn[0])}
                             className="artist-discover-hero__artist-tag"
                           >
                             {heroBasedOn[0].name}
                           </button>
                           <button
-                            onClick={() =>
-                              navigate(
-                                `/artist/${heroBasedOn[1].id || heroBasedOn[1].mbid || encodeURIComponent(heroBasedOn[1].name)}`,
-                              )
-                            }
+                            onClick={() => navigateToBasedOnArtist(heroBasedOn[1])}
                             className="artist-discover-hero__artist-tag"
                           >
                             {heroBasedOn[1].name}
@@ -2549,21 +2848,13 @@ function DiscoverPage() {
                       ) : (
                         <>
                           <button
-                            onClick={() =>
-                              navigate(
-                                `/artist/${heroBasedOn[0].id || heroBasedOn[0].mbid || encodeURIComponent(heroBasedOn[0].name)}`,
-                              )
-                            }
+                            onClick={() => navigateToBasedOnArtist(heroBasedOn[0])}
                             className="artist-discover-hero__artist-tag"
                           >
                             {heroBasedOn[0].name}
                           </button>
                           <button
-                            onClick={() =>
-                              navigate(
-                                `/artist/${heroBasedOn[1].id || heroBasedOn[1].mbid || encodeURIComponent(heroBasedOn[1].name)}`,
-                              )
-                            }
+                            onClick={() => navigateToBasedOnArtist(heroBasedOn[1])}
                             className="artist-discover-hero__artist-tag"
                           >
                             {heroBasedOn[1].name}
