@@ -1,14 +1,23 @@
-import { useState, useMemo, useCallback } from "react";
-import { Link } from "react-router-dom";
-import { Loader2, Settings, Play, Pause } from "lucide-react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import {
+  Loader2,
+  Settings,
+  Check,
+  Clock,
+  AlertCircle,
+  Download,
+  Sparkles,
+  Trash2,
+  RotateCcw,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import {
   updateFlowWorkerSettings,
   rotateFlowWorkerSoulseekCredentials,
-  setPlaylistRetryCyclePaused,
-  getFlowArtworkUrl,
+  getFlowStatus,
 } from "../utils/api";
 import { useFlowStatus } from "./flows/useFlowStatus";
 import {
@@ -17,136 +26,416 @@ import {
   normalizeRetryCycleMinutes,
   normalizeExistingFileMode,
 } from "./flows/flowWorkerSettings";
-import {
-  FlowStatusCards,
-  FlowWorkerSettingsModal,
-  PlaylistArtworkThumb,
-} from "./FlowPageComponents";
+import { getCombinedActivityStats } from "./flows/flowStats";
+import { FlowWorkerSettingsModal } from "./FlowPageComponents";
 
-function DownloadsQueueRow({
-  entry,
-  stats,
-  artworkUrl,
-  currentJob,
-  retryCyclePaused,
-  retryCycleScheduled,
-  retryActionInFlight,
-  onSetRetryCyclePaused,
-}) {
-  const pending = Number(stats?.pending || 0);
-  const downloading = Number(stats?.downloading || 0);
-  const done = Number(stats?.done || 0);
-  const failed = Number(stats?.failed || 0);
-  const total = Math.max(
-    entry.kind === "flow"
-      ? Number(entry.size || 0)
-      : Number(entry.trackCount || 0),
-    pending + downloading + done,
+function getPlaylistName(playlistId, flows, sharedPlaylists) {
+  const flow = flows.find((item) => item.id === playlistId);
+  if (flow?.name) return flow.name;
+  const playlist = sharedPlaylists.find((item) => item.id === playlistId);
+  return playlist?.name || "Playlist";
+}
+
+function parseQueueOperation(operationQueue) {
+  const label = String(operationQueue?.currentLabel || "").trim();
+  if (!label) return null;
+  const colonIndex = label.indexOf(":");
+  const action = colonIndex >= 0 ? label.slice(0, colonIndex) : label;
+  const targetId = colonIndex >= 0 ? label.slice(colonIndex + 1) : "";
+  let verb = "Working";
+  let icon = Sparkles;
+  if (action === "enable" || action === "scheduled") {
+    verb = "Generating playlist";
+    icon = Sparkles;
+  } else if (action === "disable" || action === "delete") {
+    verb = "Cleaning up";
+    icon = Trash2;
+  } else if (action === "reset") {
+    verb = "Resetting";
+    icon = RotateCcw;
+  }
+  return { action, targetId, verb, icon };
+}
+
+function categorizeJobs(jobs) {
+  const downloading = [];
+  const pending = [];
+  const recent = [];
+  const failed = [];
+  for (const job of jobs) {
+    if (job.status === "downloading") downloading.push(job);
+    else if (job.status === "pending") pending.push(job);
+    else if (job.status === "done") recent.push(job);
+    else if (job.status === "failed") failed.push(job);
+  }
+  recent.sort(
+    (a, b) =>
+      Number(b.completedAt || b.startedAt || 0) -
+      Number(a.completedAt || a.startedAt || 0),
   );
+  return {
+    downloading,
+    pending,
+    recent: recent.slice(0, 25),
+    failed,
+  };
+}
+
+function WorkerStatusBar({ status, soulseekConnected }) {
+  const workerRunning = status?.worker?.running === true;
+  const queueProcessing = status?.operationQueue?.processing === true;
+  const activityStats = getCombinedActivityStats(status);
+  const pending = activityStats.pending;
+  const downloading = activityStats.downloading;
+  const done = activityStats.done;
+  const failed = activityStats.failed;
+  const total = pending + downloading + done;
   const progressPct =
     total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
-  const isCurrentJob =
-    currentJob?.playlistType === entry.id &&
-    currentJob?.artistName &&
-    currentJob?.trackName;
-  const waitingForRetry =
-    entry.kind === "shared" &&
-    retryCycleScheduled === true &&
-    pending === 0 &&
-    downloading === 0 &&
-    done < Number(entry.trackCount || 0);
+  const hintMessage = String(status?.hint?.message || "").trim();
+  const hasCurrentJob =
+    status?.worker?.currentJob?.artistName &&
+    status?.worker?.currentJob?.trackName;
+
+  let phaseLabel = "Idle";
+  let badgeClass = "badge-neutral";
+  if (workerRunning) {
+    phaseLabel = "Running";
+    badgeClass = "badge-success";
+  } else if (queueProcessing) {
+    phaseLabel = "Preparing";
+    badgeClass = "badge-warning";
+  }
+
+  let summary = hintMessage || "No active work";
+  if (hasCurrentJob && workerRunning) {
+    summary = "Downloading tracks from Soulseek";
+  } else if (queueProcessing && !hintMessage) {
+    summary = "Preparing playlists";
+  }
 
   return (
-    <article className="downloads-page__row">
-      <PlaylistArtworkThumb
-        artworkUrl={artworkUrl}
-        name={entry.name}
-        className="downloads-page__row-artwork"
-      />
-      <div className="downloads-page__row-body">
-        <div className="downloads-page__row-header">
-          <div className="downloads-page__row-copy">
-            <span className="downloads-page__row-type">
-              {entry.kind === "flow" ? "Flow" : "Playlist"}
-            </span>
-            <Link to="/playlists" className="downloads-page__row-title">
-              {entry.name}
-            </Link>
-          </div>
-          {entry.kind === "shared" ? (
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              disabled={retryActionInFlight}
-              onClick={() => onSetRetryCyclePaused(entry.id, !retryCyclePaused)}
-            >
-              {retryActionInFlight ? (
-                <Loader2 className="artist-icon-xs animate-spin" />
-              ) : retryCyclePaused ? (
-                <Play className="artist-icon-xs" />
-              ) : (
-                <Pause className="artist-icon-xs" />
-              )}
-              {retryCyclePaused ? "Resume retries" : "Pause retries"}
-            </button>
-          ) : null}
+    <div className="downloads-page__status-bar">
+      <div className="downloads-page__status-bar-top">
+        <div className="downloads-page__status-bar-phase">
+          {workerRunning ? (
+            <Loader2 className="downloads-page__status-bar-icon downloads-page__status-bar-icon--active animate-spin" />
+          ) : (
+            <span
+              className={`downloads-page__status-dot${workerRunning || queueProcessing ? " downloads-page__status-dot--active" : ""}`}
+            />
+          )}
+          <span className={`badge ${badgeClass}`}>{phaseLabel}</span>
+          <span className="downloads-page__status-bar-message">{summary}</span>
         </div>
-        {isCurrentJob ? (
-          <p className="downloads-page__row-status">
-            Downloading {currentJob.trackName}
-          </p>
-        ) : null}
-        {waitingForRetry ? (
-          <p className="downloads-page__row-warning">
-            Waiting for next retry cycle
-          </p>
-        ) : null}
-        {total > 0 ? (
-          <div className="flow-page__progress downloads-page__row-progress">
+        <div className="downloads-page__status-bar-meta">
+          <span
+            className={`downloads-page__soulseek${soulseekConnected ? " downloads-page__soulseek--connected" : ""}`}
+          >
+            <span className="downloads-page__soulseek-dot" />
+            Soulseek {soulseekConnected ? "connected" : "offline"}
+          </span>
+        </div>
+      </div>
+      {total > 0 ? (
+        <>
+          <div className="flow-page__progress downloads-page__status-bar-progress">
             <div className="flow-page__progress-bar">
               <div
                 className="flow-page__progress-fill"
                 style={{ width: `${progressPct}%` }}
               />
             </div>
-            <div className="downloads-page__row-stats">
-              <span>{progressPct}%</span>
-              <span>Pending {pending}</span>
-              <span>Downloading {downloading}</span>
-              <span>Done {done}</span>
-              {failed > 0 ? (
-                <span className="downloads-page__row-stats-stalled">
-                  Stalled {failed}
+          </div>
+          <div className="downloads-page__status-bar-stats">
+            <span>
+              Pending{" "}
+              <strong className="downloads-page__stat-value">{pending}</strong>
+            </span>
+            <span className="downloads-page__stat-sep">·</span>
+            <span>
+              Downloading{" "}
+              <strong className="downloads-page__stat-value">
+                {downloading}
+              </strong>
+            </span>
+            <span className="downloads-page__stat-sep">·</span>
+            <span>
+              Done{" "}
+              <strong className="downloads-page__stat-value">{done}</strong>
+            </span>
+            {failed > 0 ? (
+              <>
+                <span className="downloads-page__stat-sep">·</span>
+                <span className="downloads-page__stat-failed">
+                  Stalled{" "}
+                  <strong className="downloads-page__stat-value">
+                    {failed}
+                  </strong>
                 </span>
-              ) : null}
+              </>
+            ) : null}
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function NowPanel({
+  status,
+  flows,
+  sharedPlaylists,
+}) {
+  const operationQueue = status?.operationQueue;
+  const queueOp = operationQueue?.processing
+    ? parseQueueOperation(operationQueue)
+    : null;
+  const currentJob = status?.worker?.currentJob;
+  const hasCurrentJob =
+    currentJob?.artistName && currentJob?.trackName;
+  const jobProgressPct = Math.max(
+    0,
+    Math.min(100, Math.round(Number(currentJob?.progressPct || 0))),
+  );
+
+  if (!queueOp && !hasCurrentJob) return null;
+
+  return (
+    <section className="artist-section downloads-page__section">
+      <h2 className="artist-section-title">Now</h2>
+      <div className="downloads-page__now-panel">
+        {queueOp ? (
+          <div className="downloads-page__now-item">
+            <div className="downloads-page__now-icon-wrap">
+              <queueOp.icon className="downloads-page__now-icon" />
+            </div>
+            <div className="downloads-page__now-copy">
+              <span className="downloads-page__now-label">{queueOp.verb}</span>
+              <span className="downloads-page__now-title">
+                {getPlaylistName(queueOp.targetId, flows, sharedPlaylists)}
+              </span>
+            </div>
+            <Loader2 className="downloads-page__now-spinner animate-spin" />
+          </div>
+        ) : null}
+        {hasCurrentJob ? (
+          <div className="downloads-page__now-item downloads-page__now-item--download">
+            <div className="downloads-page__now-icon-wrap downloads-page__now-icon-wrap--download">
+              <Download className="downloads-page__now-icon" />
+            </div>
+            <div className="downloads-page__now-copy">
+              <span className="downloads-page__now-label">
+                {currentJob.artistName}
+              </span>
+              <span className="downloads-page__now-title">
+                {currentJob.trackName}
+              </span>
+              <span className="downloads-page__now-playlist">
+                {getPlaylistName(
+                  currentJob.playlistType,
+                  flows,
+                  sharedPlaylists,
+                )}
+              </span>
+              <div className="flow-page__progress downloads-page__now-progress">
+                <div className="flow-page__progress-bar">
+                  <div
+                    className="flow-page__progress-fill"
+                    style={{ width: `${jobProgressPct}%` }}
+                  />
+                </div>
+                <span className="downloads-page__now-progress-label">
+                  {jobProgressPct}%
+                </span>
+              </div>
             </div>
           </div>
-        ) : (
-          <p className="artist-subtext downloads-page__row-empty">
-            No download activity yet
-          </p>
-        )}
+        ) : null}
       </div>
-    </article>
+    </section>
+  );
+}
+
+function QueueTrackRow({
+  job,
+  playlistName,
+  currentJob,
+  variant,
+  onOpenPlaylist,
+}) {
+  const isActive =
+    variant === "downloading" &&
+    currentJob?.id === job.id;
+  const progressPct = isActive
+    ? Math.max(
+        0,
+        Math.min(100, Math.round(Number(currentJob?.progressPct || 0))),
+      )
+    : 0;
+
+  let StatusIcon = Clock;
+  let statusClass = "downloads-page__queue-status--pending";
+  if (variant === "downloading") {
+    StatusIcon = Download;
+    statusClass = "downloads-page__queue-status--downloading";
+  } else if (variant === "done") {
+    StatusIcon = Check;
+    statusClass = "downloads-page__queue-status--done";
+  } else if (variant === "failed") {
+    StatusIcon = AlertCircle;
+    statusClass = "downloads-page__queue-status--failed";
+  }
+
+  const canOpenPlaylist =
+    variant === "done" && job.playlistType && onOpenPlaylist;
+  const rowClassName = `downloads-page__queue-row${
+    isActive ? " downloads-page__queue-row--active" : ""
+  }${canOpenPlaylist ? " downloads-page__queue-row--clickable" : ""}`;
+  const rowContent = (
+    <>
+      <div className={`downloads-page__queue-status ${statusClass}`}>
+        <StatusIcon className="downloads-page__queue-status-icon" />
+      </div>
+      <div className="downloads-page__queue-track">
+        <span className="downloads-page__queue-artist">{job.artistName}</span>
+        <span className="downloads-page__queue-title">{job.trackName}</span>
+      </div>
+      <span className="downloads-page__queue-playlist">{playlistName}</span>
+      {isActive ? (
+        <div className="downloads-page__queue-progress">
+          <div className="flow-page__progress-bar">
+            <div
+              className="flow-page__progress-fill"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          <span className="downloads-page__queue-progress-label">
+            {progressPct}%
+          </span>
+        </div>
+      ) : null}
+    </>
+  );
+
+  if (canOpenPlaylist) {
+    return (
+      <button
+        type="button"
+        className={rowClassName}
+        onClick={() => onOpenPlaylist(job.playlistType)}
+        aria-label={`Open ${playlistName} playlist for ${job.trackName}`}
+      >
+        {rowContent}
+      </button>
+    );
+  }
+
+  return <div className={rowClassName}>{rowContent}</div>;
+}
+
+function TrackQueueSection({
+  jobs,
+  currentJob,
+  flows,
+  sharedPlaylists,
+  onOpenPlaylist,
+}) {
+  const { downloading, pending, recent, failed } = useMemo(
+    () => categorizeJobs(jobs),
+    [jobs],
+  );
+  const activeCount = downloading.length + pending.length;
+  const hasQueue = activeCount > 0 || recent.length > 0 || failed.length > 0;
+
+  if (!hasQueue) {
+    return (
+      <section className="artist-section downloads-page__section">
+        <h2 className="artist-section-title">Queue</h2>
+        <div className="artist-empty-panel">
+          <p className="artist-empty-message">
+            No tracks in the download queue. Tracks appear here when a flow or
+            playlist is being filled.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  const renderRows = (items, variant) =>
+    items.map((job) => (
+      <QueueTrackRow
+        key={job.id}
+        job={job}
+        variant={variant}
+        currentJob={currentJob}
+        playlistName={getPlaylistName(
+          job.playlistType,
+          flows,
+          sharedPlaylists,
+        )}
+        onOpenPlaylist={variant === "done" ? onOpenPlaylist : null}
+      />
+    ));
+
+  return (
+    <>
+      {activeCount > 0 ? (
+        <section className="artist-section downloads-page__section">
+          <div className="downloads-page__section-header">
+            <h2 className="artist-section-title">Active</h2>
+            <span className="artist-count">
+              {downloading.length} downloading · {pending.length} queued
+            </span>
+          </div>
+          <div className="downloads-page__queue">
+            {renderRows(downloading, "downloading")}
+            {renderRows(pending.slice(0, 40), "pending")}
+            {pending.length > 40 ? (
+              <p className="artist-subtext downloads-page__queue-overflow">
+                +{pending.length - 40} more queued
+              </p>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {recent.length > 0 ? (
+        <section className="artist-section downloads-page__section">
+          <div className="downloads-page__section-header">
+            <h2 className="artist-section-title">Recent</h2>
+            <span className="artist-count">Last {recent.length} completed</span>
+          </div>
+          <div className="downloads-page__queue downloads-page__queue--recent">
+            {renderRows(recent, "done")}
+          </div>
+        </section>
+      ) : null}
+
+      {failed.length > 0 ? (
+        <section className="artist-section downloads-page__section">
+          <div className="downloads-page__section-header">
+            <h2 className="artist-section-title">Stalled</h2>
+            <span className="artist-count">{failed.length} tracks</span>
+          </div>
+          <div className="downloads-page__queue downloads-page__queue--failed">
+            {renderRows(failed.slice(0, 20), "failed")}
+          </div>
+        </section>
+      ) : null}
+    </>
   );
 }
 
 function DownloadsPage() {
-  useDocumentTitle("Downloads");
+  useDocumentTitle("Activity");
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { showSuccess, showError } = useToast();
-  const {
-    status,
-    loading,
-    fetchStatus,
-    getPlaylistStats,
-    sharedPlaylists,
-    flows,
-    enabledFlowCount,
-    runningCount,
-    completedCount,
-  } = useFlowStatus();
+  const { status, loading, fetchStatus, sharedPlaylists, flows } =
+    useFlowStatus();
 
+  const [jobs, setJobs] = useState([]);
   const [isWorkerSettingsOpen, setIsWorkerSettingsOpen] = useState(false);
   const [workerSettingsDraft, setWorkerSettingsDraft] = useState(
     DEFAULT_WORKER_SETTINGS,
@@ -157,23 +446,40 @@ function DownloadsPage() {
   const [savingWorkerSettings, setSavingWorkerSettings] = useState(false);
   const [rotatingSoulseekCredential, setRotatingSoulseekCredential] =
     useState(false);
-  const [retryActionPlaylistId, setRetryActionPlaylistId] = useState(null);
 
-  const retryCyclePausedByPlaylist = status?.retryCyclePausedByPlaylist || {};
-  const retryCycleScheduledByPlaylist =
-    status?.retryCycleScheduledByPlaylist || {};
+  const fetchJobs = useCallback(async () => {
+    try {
+      const data = await getFlowStatus({ includeJobs: true, jobsLimit: 200 });
+      setJobs(Array.isArray(data?.jobs) ? data.jobs : []);
+    } catch {
+      setJobs([]);
+    }
+  }, []);
 
-  const queueEntries = useMemo(() => {
-    const shared = (sharedPlaylists || []).map((playlist) => ({
-      ...playlist,
-      kind: "shared",
-    }));
-    const generated = (flows || []).map((flow) => ({
-      ...flow,
-      kind: "flow",
-    }));
-    return [...shared, ...generated];
-  }, [sharedPlaylists, flows]);
+  useEffect(() => {
+    fetchJobs();
+  }, [fetchJobs]);
+
+  useEffect(() => {
+    const workerRunning = status?.worker?.running === true;
+    const queueProcessing = status?.operationQueue?.processing === true;
+    const activityStats = getCombinedActivityStats(status);
+    const hasActive =
+      activityStats.pending > 0 || activityStats.downloading > 0;
+    if (!workerRunning && !queueProcessing && !hasActive) return;
+    const interval = setInterval(fetchJobs, 5000);
+    return () => clearInterval(interval);
+  }, [status, fetchJobs]);
+
+  const soulseekConnected = status?.soulseek?.connected === true;
+
+  const handleOpenPlaylist = useCallback(
+    (playlistId) => {
+      if (!playlistId) return;
+      navigate("/playlists", { state: { selectedPlaylistId: playlistId } });
+    },
+    [navigate],
+  );
 
   const handleOpenWorkerSettings = () => {
     if (user?.role !== "admin") return;
@@ -266,27 +572,6 @@ function DownloadsPage() {
     }
   };
 
-  const handleSetRetryCyclePaused = useCallback(
-    async (playlistId, paused) => {
-      if (!playlistId || retryActionPlaylistId) return;
-      setRetryActionPlaylistId(playlistId);
-      try {
-        await setPlaylistRetryCyclePaused(playlistId, paused);
-        showSuccess(paused ? "Retry cycle paused" : "Retry cycle resumed");
-        await fetchStatus();
-      } catch (err) {
-        showError(
-          err.response?.data?.message ||
-            err.message ||
-            "Failed to update retry cycle state",
-        );
-      } finally {
-        setRetryActionPlaylistId(null);
-      }
-    },
-    [retryActionPlaylistId, fetchStatus, showSuccess, showError],
-  );
-
   const currentWorkerSettings = workerSettingsBaseline;
   const hasWorkerSettingsChanges =
     Number(workerSettingsDraft.concurrency) !==
@@ -304,10 +589,10 @@ function DownloadsPage() {
     return (
       <div className="downloads-page">
         <header className="downloads-page__header">
-          <h1 className="downloads-page__title">Downloads</h1>
+          <h1 className="downloads-page__title">Activity</h1>
           <p className="downloads-page__subtitle">
-            Worker queue, download progress, and retry orchestration for your
-            playlists and flows.
+            Background worker status for playlist generation and track
+            downloads.
           </p>
         </header>
         <div className="artist-loading">
@@ -321,10 +606,10 @@ function DownloadsPage() {
     <div className="downloads-page">
       <header className="downloads-page__header">
         <div className="downloads-page__header-copy">
-          <h1 className="downloads-page__title">Downloads</h1>
+          <h1 className="downloads-page__title">Activity</h1>
           <p className="downloads-page__subtitle">
-            Worker queue, download progress, and retry orchestration for your
-            playlists and flows.
+            Background worker status for playlist generation and track
+            downloads.
           </p>
         </div>
         {user?.role === "admin" ? (
@@ -341,48 +626,20 @@ function DownloadsPage() {
         ) : null}
       </header>
 
-      <div className="downloads-page__overview">
-        <FlowStatusCards
-          status={status}
-          enabledCount={enabledFlowCount}
-          flowCount={flows.length}
-          runningCount={runningCount}
-          completedCount={completedCount}
-        />
-      </div>
+      <WorkerStatusBar
+        status={status}
+        soulseekConnected={soulseekConnected}
+      />
 
-      <section className="artist-section downloads-page__section">
-        <h2 className="artist-section-title">Queue by playlist</h2>
-        {queueEntries.length === 0 ? (
-          <div className="artist-empty-panel">
-            <p className="artist-empty-message">
-              No playlists or flows yet. Create them on the Playlists page.
-            </p>
-          </div>
-        ) : (
-          <div className="downloads-page__list">
-            {queueEntries.map((entry) => (
-              <DownloadsQueueRow
-                key={entry.id}
-                entry={entry}
-                stats={getPlaylistStats(entry.id)}
-                artworkUrl={getFlowArtworkUrl(entry.id)}
-                currentJob={status?.worker?.currentJob}
-                retryCyclePaused={
-                  retryCyclePausedByPlaylist[entry.id] === true
-                }
-                retryCycleScheduled={
-                  retryCycleScheduledByPlaylist[entry.id] === true
-                }
-                retryActionInFlight={retryActionPlaylistId === entry.id}
-                onSetRetryCyclePaused={(paused) =>
-                  handleSetRetryCyclePaused(entry.id, paused)
-                }
-              />
-            ))}
-          </div>
-        )}
-      </section>
+      <NowPanel status={status} flows={flows} sharedPlaylists={sharedPlaylists} />
+
+      <TrackQueueSection
+        jobs={jobs}
+        currentJob={status?.worker?.currentJob}
+        flows={flows}
+        sharedPlaylists={sharedPlaylists}
+        onOpenPlaylist={handleOpenPlaylist}
+      />
 
       {user?.role === "admin" && (
         <FlowWorkerSettingsModal
