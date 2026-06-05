@@ -3,6 +3,8 @@ import {
   buildTrackFileIndex,
   enrichLidarrTrackWithFiles,
 } from "./libraryManager.js";
+import { pathsShareDevice } from "./weeklyFlowFileReuse.js";
+import { resolveWeeklyFlowRoot } from "./weeklyFlowPaths.js";
 
 function step(id, status, label, extra = {}) {
   return { id, status, label, ...extra };
@@ -69,7 +71,8 @@ async function findSampleTrackFile(lidarrClient) {
   return null;
 }
 
-export async function runLidarrLibraryAccessTest(lidarrClient) {
+export async function runLidarrLibraryAccessTest(lidarrClient, options = {}) {
+  const shareDevice = options.pathsShareDevice || pathsShareDevice;
   const steps = [];
 
   const connection = await lidarrClient.testConnection(true);
@@ -169,11 +172,27 @@ export async function runLidarrLibraryAccessTest(lidarrClient) {
   }
 
   steps.push(step("file", "pass", "Aurral can read a downloaded track file"));
+
+  const flowLibraryRoot = resolveWeeklyFlowRoot();
+  const hardlinksAvailable = await shareDevice(sample.path, flowLibraryRoot);
+  if (hardlinksAvailable) {
+    steps.push(
+      step("hardlink", "pass", "Hardlinks are possible between Lidarr and flow files"),
+    );
+  } else {
+    steps.push(
+      step("hardlink", "warn", "Hardlinks are not possible with the current mounts", {
+        detail: `Lidarr files are under ${sample.path}, but Aurral writes flows under ${flowLibraryRoot}.`,
+        fix: "Mount /data into the container and set DOWNLOAD_FOLDER to the absolute in-container path for your downloads folder (for example /data/downloads/tmp). Aurral writes flows there instead of /app/downloads so hardlinks to Lidarr files can work.",
+      }),
+    );
+  }
+
   steps.push(
     step("ready", "pass", "Ready for library playback and playlist reuse", {
       detail: `${sample.artistName} — ${sample.trackTitle}`,
     }),
   );
 
-  return { ok: true, steps, sample, partial: false };
+  return { ok: true, steps, sample, partial: !hardlinksAvailable };
 }

@@ -3,6 +3,7 @@ import path from "path";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { buildSharedTrackIdentity } from "./weeklyFlowPlaylistConfig.js";
 import { libraryManager } from "./libraryManager.js";
+import { resolveWeeklyFlowRoot } from "./weeklyFlowPaths.js";
 
 export const EXISTING_FILE_MODES = new Set(["download", "hardlink", "copy"]);
 const DEFAULT_EXISTING_FILE_MODE = "hardlink";
@@ -13,6 +14,7 @@ const LINK_FALLBACK_CODES = new Set([
   "ENOTSUP",
   "EOPNOTSUPP",
 ]);
+let crossDeviceReuseHintLogged = false;
 const AUDIO_EXTENSIONS = new Set([
   ".flac",
   ".mp3",
@@ -79,6 +81,26 @@ async function fileExists(filePath) {
   }
 }
 
+function logCrossDeviceReuseHint() {
+  if (crossDeviceReuseHintLogged) return;
+  crossDeviceReuseHintLogged = true;
+  console.warn(
+    "[WeeklyFlowReuse] Lidarr and the flow library are on different mount points, so hardlinks are unavailable and copies will be used instead. Mount /data into the container and set DOWNLOAD_FOLDER to the absolute in-container path (for example /data/downloads/tmp) so flow files are written on the same mount as Lidarr.",
+  );
+}
+
+export async function pathsShareDevice(leftPath, rightPath) {
+  try {
+    const [leftStat, rightStat] = await Promise.all([
+      fs.stat(path.dirname(path.resolve(leftPath))),
+      fs.stat(path.dirname(path.resolve(rightPath))),
+    ]);
+    return leftStat.dev === rightStat.dev;
+  } catch {
+    return false;
+  }
+}
+
 async function getUniqueTargetPath(targetPath) {
   let candidate = path.resolve(targetPath);
   const parsed = path.parse(candidate);
@@ -100,7 +122,9 @@ function sortReusableJobs(jobs) {
 }
 
 async function findAurralSource(track, options = {}) {
-  const weeklyFlowRoot = path.resolve(options.weeklyFlowRoot || "/app/downloads");
+  const weeklyFlowRoot = path.resolve(
+    options.weeklyFlowRoot || resolveWeeklyFlowRoot(),
+  );
   const targetPlaylistType = String(options.targetPlaylistType || "").trim();
   const identity = buildSharedTrackIdentity(track);
   const excludeJobIds = new Set(
@@ -268,16 +292,25 @@ export async function createPlaylistFileEntry(sourcePath, targetPath, mode = "ha
   await fs.mkdir(path.dirname(safeTargetPath), { recursive: true });
 
   if (normalizedMode === "hardlink") {
-    try {
-      await fs.link(safeSourcePath, safeTargetPath);
-      return { linked: true, linkType: "hardlink" };
-    } catch (error) {
-      if (!LINK_FALLBACK_CODES.has(error?.code)) {
-        return { linked: false, reason: error.message };
+    const sharedDevice = await pathsShareDevice(safeSourcePath, safeTargetPath);
+    if (!sharedDevice) {
+      logCrossDeviceReuseHint();
+    } else {
+      try {
+        await fs.link(safeSourcePath, safeTargetPath);
+        return { linked: true, linkType: "hardlink" };
+      } catch (error) {
+        if (!LINK_FALLBACK_CODES.has(error?.code)) {
+          return { linked: false, reason: error.message };
+        }
+        if (error?.code === "EXDEV") {
+          logCrossDeviceReuseHint();
+        } else {
+          console.warn(
+            `[WeeklyFlowReuse] Hardlink failed, copying file instead: ${error.code} ${error.message}`,
+          );
+        }
       }
-      console.warn(
-        `[WeeklyFlowReuse] Hardlink failed, copying file instead: ${error.code} ${error.message}`,
-      );
     }
   }
 
@@ -364,6 +397,14 @@ export async function repairCompletedTrackLink(job, options = {}) {
     return { repaired: false, reason: "Already linked to reusable source" };
   }
 
+  const deviceCheck = options.deviceCheck || pathsShareDevice;
+  if (mode === "hardlink" && !(await deviceCheck(sourcePath, finalPath))) {
+    return {
+      repaired: false,
+      reason: "Hardlink unavailable across filesystems",
+    };
+  }
+
   try {
     await fs.unlink(finalPath);
   } catch (error) {
@@ -413,7 +454,9 @@ export async function repairReusableTrackLinks(options = {}) {
     };
   }
 
-  const weeklyFlowRoot = path.resolve(options.weeklyFlowRoot || "/app/downloads");
+  const weeklyFlowRoot = path.resolve(
+    options.weeklyFlowRoot || resolveWeeklyFlowRoot(),
+  );
   const jobs = downloadTracker
     .getAll()
     .filter((job) => job?.status === "done" && typeof job?.finalPath === "string");
@@ -474,7 +517,9 @@ export async function repairReusableTrackLinks(options = {}) {
 
 export async function reuseTrackForPlaylist(track, playlistType, options = {}) {
   const mode = normalizeExistingFileMode(options.existingFileMode);
-  const weeklyFlowRoot = path.resolve(options.weeklyFlowRoot || "/app/downloads");
+  const weeklyFlowRoot = path.resolve(
+    options.weeklyFlowRoot || resolveWeeklyFlowRoot(),
+  );
   if (mode === "download") {
     return { reused: false, reason: "Existing file reuse is disabled" };
   }
