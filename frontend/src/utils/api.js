@@ -994,6 +994,30 @@ export const testLidarrConnection = async (url, apiKey) => {
   return response.data;
 };
 
+export const testLidarrLibraryAccess = async (url, apiKey) => {
+  const params = new URLSearchParams();
+  if (url) params.append("url", url);
+  if (apiKey) params.append("apiKey", apiKey);
+  const queryString = params.toString();
+  const endpoint = `/settings/lidarr/test-library-access${
+    queryString ? `?${queryString}` : ""
+  }`;
+  const response = await api.get(endpoint);
+  return response.data;
+};
+
+export const testLidarrLibraryAccessOnboarding = async (url, apiKey) => {
+  const params = new URLSearchParams();
+  if (url) params.append("url", url);
+  if (apiKey) params.append("apiKey", apiKey);
+  const queryString = params.toString();
+  const endpoint = `/onboarding/lidarr/test-library-access${
+    queryString ? `?${queryString}` : ""
+  }`;
+  const response = await api.get(endpoint);
+  return response.data;
+};
+
 export const testGotifyConnection = async (url, token) => {
   const response = await api.post("/settings/gotify/test", { url, token });
   return response.data;

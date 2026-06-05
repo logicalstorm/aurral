@@ -3,11 +3,13 @@ import { ChevronRight, ChevronLeft, CheckCircle2 } from "lucide-react";
 import {
   completeOnboarding,
   testLidarrOnboarding,
+  testLidarrLibraryAccessOnboarding,
   testNavidromeOnboarding,
 } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { LidarrLibraryAccessCheck } from "./Settings/components/LidarrLibraryAccessCheck";
 
 const getApiErrorMessage = (error, fallback) =>
   error?.response?.data?.message ||
@@ -39,6 +41,10 @@ function Onboarding() {
   const [lastfmApiKey, setLastfmApiKey] = useState("");
   const [lidarrTestSuccess, setLidarrTestSuccess] = useState(false);
   const [testingLidarr, setTestingLidarr] = useState(false);
+  const [testingLidarrLibraryAccess, setTestingLidarrLibraryAccess] =
+    useState(false);
+  const [lidarrLibraryAccessResult, setLidarrLibraryAccessResult] =
+    useState(null);
   const [navidromeTestSuccess, setNavidromeTestSuccess] = useState(false);
   const [testingNavidrome, setTestingNavidrome] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -142,6 +148,30 @@ function Onboarding() {
       setError(getApiErrorMessage(e, "Connection failed"));
     } finally {
       setTestingLidarr(false);
+    }
+  };
+
+  const handleTestLidarrLibraryAccess = async () => {
+    if (!lidarrUrl.trim() || !lidarrApiKey.trim()) {
+      setError("Enter Lidarr URL and API key first");
+      return;
+    }
+    setTestingLidarrLibraryAccess(true);
+    setLidarrLibraryAccessResult(null);
+    setError("");
+    try {
+      const result = await testLidarrLibraryAccessOnboarding(
+        lidarrUrl.trim(),
+        lidarrApiKey.trim(),
+      );
+      setLidarrLibraryAccessResult(result);
+      if (!result.ok) {
+        setError("Library access check failed. See the results below.");
+      }
+    } catch (e) {
+      setError(getApiErrorMessage(e, "Library access check failed"));
+    } finally {
+      setTestingLidarrLibraryAccess(false);
     }
   };
 
@@ -287,6 +317,7 @@ function Onboarding() {
                 onChange={(e) => {
                   setLidarrUrl(e.target.value);
                   setLidarrTestSuccess(false);
+                  setLidarrLibraryAccessResult(null);
                 }}
               />
               <input
@@ -298,8 +329,25 @@ function Onboarding() {
                 onChange={(e) => {
                   setLidarrApiKey(e.target.value);
                   setLidarrTestSuccess(false);
+                  setLidarrLibraryAccessResult(null);
                 }}
               />
+              <button
+                type="button"
+                className="btn btn-secondary onboarding-library-access-btn"
+                onClick={handleTestLidarrLibraryAccess}
+                disabled={
+                  testingLidarrLibraryAccess ||
+                  testingLidarr ||
+                  !lidarrUrl.trim() ||
+                  !lidarrApiKey.trim()
+                }
+              >
+                {testingLidarrLibraryAccess
+                  ? "Checking library access..."
+                  : "Test library access (optional)"}
+              </button>
+              <LidarrLibraryAccessCheck result={lidarrLibraryAccessResult} />
             </div>
           </>
         )}
