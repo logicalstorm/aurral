@@ -20,6 +20,51 @@ let _retryTimeoutId = null;
 let _lastFullArtistFetchAt = 0;
 const _tracksCache = new Map();
 
+function buildTrackFileIndex(trackFiles) {
+  const index = new Map();
+  if (!Array.isArray(trackFiles)) return index;
+  for (const file of trackFiles) {
+    const fileId = Number(file?.id);
+    if (Number.isFinite(fileId)) {
+      index.set(fileId, file);
+    }
+    const trackIds = Array.isArray(file?.trackIds) ? file.trackIds : [];
+    for (const trackId of trackIds) {
+      const normalizedTrackId = Number(trackId);
+      if (Number.isFinite(normalizedTrackId)) {
+        index.set(`track:${normalizedTrackId}`, file);
+      }
+    }
+  }
+  return index;
+}
+
+function enrichLidarrTrackWithFiles(track, trackFileById) {
+  if (!track || typeof track !== "object") return track;
+  if (track.path || track.trackFile?.path) return track;
+
+  const fileId = Number(track.trackFileId);
+  if (Number.isFinite(fileId) && trackFileById.has(fileId)) {
+    return { ...track, trackFile: trackFileById.get(fileId) };
+  }
+
+  const trackId = Number(track.id);
+  if (Number.isFinite(trackId) && trackFileById.has(`track:${trackId}`)) {
+    return { ...track, trackFile: trackFileById.get(`track:${trackId}`) };
+  }
+
+  return track;
+}
+
+function albumNeedsTrackFiles({ albumSizeOnDisk, isAlbumComplete, tracks }) {
+  if (albumSizeOnDisk > 0 || isAlbumComplete) return true;
+  if (!Array.isArray(tracks)) return false;
+  return tracks.some(
+    (track) =>
+      track?.hasFile === true || Number.isFinite(Number(track?.trackFileId)),
+  );
+}
+
 function findCachedArtistByMbid(mbid) {
   if (!mbid || !Array.isArray(_cachedArtists) || _cachedArtists.length === 0) {
     return null;
@@ -99,6 +144,8 @@ function getMetadataProfileTypeName(item) {
   if (typeof item.albumType?.name === "string") return item.albumType.name;
   return "";
 }
+
+export { buildTrackFileIndex, enrichLidarrTrackWithFiles, albumNeedsTrackFiles };
 
 export class LibraryManager {
   async addArtist(mbid, artistName, options = {}) {
@@ -1354,16 +1401,14 @@ export class LibraryManager {
 
       const isAlbumComplete = normalizedPercent >= 100 || albumSizeOnDisk > 0;
 
-      let result = [];
+      let rawTracks = [];
 
       if (
         lidarrAlbum.tracks &&
         Array.isArray(lidarrAlbum.tracks) &&
         lidarrAlbum.tracks.length > 0
       ) {
-        result = lidarrAlbum.tracks.map((t, index) =>
-          this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete),
-        );
+        rawTracks = lidarrAlbum.tracks;
       } else if (
         lidarrAlbum.albumReleases &&
         lidarrAlbum.albumReleases.length > 0
@@ -1374,9 +1419,7 @@ export class LibraryManager {
             Array.isArray(release.tracks) &&
             release.tracks.length > 0
           ) {
-            result = release.tracks.map((t, index) =>
-              this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete),
-            );
+            rawTracks = release.tracks;
             break;
           }
         }
@@ -1392,20 +1435,37 @@ export class LibraryManager {
           }
         }
         if (allTracks.length > 0) {
-          result = allTracks.map((t, index) =>
-            this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete),
-          );
+          rawTracks = allTracks;
         }
       }
 
-      if (result.length === 0) {
+      if (rawTracks.length === 0) {
         const lidarrTracks = await lidarr.getTracksByAlbumId(albumId);
         if (lidarrTracks && lidarrTracks.length > 0) {
-          result = lidarrTracks.map((t, index) =>
-            this.mapLidarrTrack(t, lidarrAlbum, index + 1, isAlbumComplete),
-          );
+          rawTracks = lidarrTracks;
         }
       }
+
+      let trackFileById = new Map();
+      if (
+        albumNeedsTrackFiles({
+          albumSizeOnDisk,
+          isAlbumComplete,
+          tracks: rawTracks,
+        })
+      ) {
+        const trackFiles = await lidarr.getTrackFilesByAlbumId(albumId);
+        trackFileById = buildTrackFileIndex(trackFiles);
+      }
+
+      const result = rawTracks.map((track, index) =>
+        this.mapLidarrTrack(
+          enrichLidarrTrackWithFiles(track, trackFileById),
+          lidarrAlbum,
+          index + 1,
+          isAlbumComplete,
+        ),
+      );
 
       if (_tracksCache.size >= TRACKS_CACHE_MAX) {
         const firstKey = _tracksCache.keys().next().value;
@@ -1447,22 +1507,6 @@ export class LibraryManager {
       trackFile?.size ||
       trackFile?.sizeOnDisk ||
       0;
-    const hasFileExplicit = lidarrTrack.hasFile;
-    const hasFileFromPathOrSize = !!(filePath || size > 0);
-    const albumSizeOnDisk = lidarrAlbum.statistics?.sizeOnDisk || 0;
-
-    let hasFile = false;
-
-    if (albumIsComplete || albumSizeOnDisk > 0) {
-      hasFile = true;
-    } else if (hasFileExplicit === true) {
-      hasFile = true;
-    } else if (hasFileFromPathOrSize) {
-      hasFile = true;
-    } else if (hasFileExplicit === false) {
-      hasFile = false;
-    }
-
     return {
       id:
         lidarrTrack.id?.toString() ||
@@ -1475,7 +1519,7 @@ export class LibraryManager {
       trackName: lidarrTrack.title || lidarrTrack.trackTitle,
       trackNumber: trackNumber || lidarrTrack.trackNumber || 0,
       path: filePath,
-      hasFile: hasFile,
+      hasFile: !!filePath,
       size: size,
       quality:
         lidarrTrack.mediaInfo?.audioFormat ||
