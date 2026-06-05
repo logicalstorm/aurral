@@ -131,6 +131,10 @@ export default function registerTracks(router) {
         formatted.map(async (track) => {
           const readable = track.hasFile && (await canReadAudioFile(track.path));
           const canStream = readable && track.id != null;
+          const streamFormat =
+            canStream && track.path
+              ? path.extname(track.path).replace(/^\./, "").toLowerCase()
+              : null;
           return {
             ...track,
             streamPath: canStream
@@ -138,6 +142,7 @@ export default function registerTracks(router) {
                   track.albumId || albumId,
                 )}/${encodeURIComponent(track.id)}`
               : null,
+            streamFormat,
             path: undefined,
           };
         }),

@@ -17,8 +17,10 @@ import {
 } from "lucide-react";
 import Sidebar from "./Sidebar";
 import GlobalSearch from "./GlobalSearch";
+import GlobalPlayerBar from "./GlobalPlayerBar";
 import UserProfileMenu from "./UserProfileMenu";
 import { useAuth } from "../contexts/AuthContext";
+import { useAudioQueue } from "../hooks/useAudioQueue";
 
 const VALID_SIDEBAR_MODES = ["full", "icons", "hidden"];
 
@@ -46,6 +48,7 @@ function Layout({ children, appVersion }) {
   });
   const location = useLocation();
   const { authRequired, logout, user } = useAuth();
+  const { isActive: isPlayerActive } = useAudioQueue();
   const isArtistDetailsRoute = /^\/artist\/[^/]+$/.test(location.pathname);
 
   const updateMainScrollbar = useCallback(() => {
@@ -195,13 +198,13 @@ function Layout({ children, appVersion }) {
       <Sidebar appVersion={appVersion} mode={sidebarMode} />
 
       <div
-        className={`app-content ${
+        className={`app-content${
           sidebarMode === "full"
-            ? "app-content--sidebar-full"
+            ? " app-content--sidebar-full"
             : sidebarMode === "icons"
-              ? "app-content--sidebar-icons"
+              ? " app-content--sidebar-icons"
               : ""
-        }`}
+        }${isPlayerActive ? " app-content--player-active" : ""}`}
       >
         <header className="app-topbar">
           <button
@@ -251,6 +254,8 @@ function Layout({ children, appVersion }) {
             />
           </div>
         </div>
+
+        <GlobalPlayerBar />
 
         {isMobileMenuOpen && (
           <>

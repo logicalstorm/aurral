@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import PropTypes from "prop-types";
 import { Loader, Music, Star } from "lucide-react";
 import AddAlbumButton from "../../../components/AddAlbumButton";
@@ -6,6 +6,10 @@ import { getReleaseGroupTracks } from "../../../utils/api";
 import { buildAurralPick, getReleaseMetric } from "../utils";
 import { TrackPlaylistMenu } from "./TrackPlaylistMenu";
 import { TrackPlayButton } from "./TrackPlayButton";
+import { ArtistTrackListToolbar } from "./ArtistTrackListToolbar";
+import { useAlbumTrackListToolbar } from "../../../hooks/useAlbumTrackListToolbar";
+import { useGlobalTrackPlayback } from "../../../hooks/useGlobalTrackPlayback";
+import { normalizePreviewTrack } from "../../../utils/audioQueue";
 
 function PickCover({ pick, albumCovers, artistCoverImage }) {
   const cover = albumCovers?.[pick.releaseGroupId] || artistCoverImage;
@@ -47,7 +51,8 @@ export function ArtistDetailsDownloadTargets({
   canAddAlbum,
   requestingAlbum,
   handleRequestAlbum,
-  previewVolume = 0.75,
+  artistName = "",
+  playbackSource = null,
   onAddTrackToPlaylist,
   playlists,
   playlistsLoading,
@@ -61,32 +66,6 @@ export function ArtistDetailsDownloadTargets({
     buildAurralPick(targets);
   const [tracks, setTracks] = useState([]);
   const [loadingTracks, setLoadingTracks] = useState(false);
-  const [playingTrackId, setPlayingTrackId] = useState(null);
-  const [loadingTrackId, setLoadingTrackId] = useState(null);
-  const previewAudioRef = useRef(null);
-
-  useEffect(() => {
-    const audio = previewAudioRef.current;
-    if (audio) audio.volume = previewVolume;
-  }, [previewVolume]);
-
-  useEffect(() => {
-    const audio = previewAudioRef.current;
-    if (!audio) return undefined;
-    const resetPlayback = () => {
-      setPlayingTrackId(null);
-      setLoadingTrackId(null);
-    };
-    audio.addEventListener("ended", resetPlayback);
-    audio.addEventListener("error", resetPlayback);
-    return () => {
-      audio.removeEventListener("ended", resetPlayback);
-      audio.removeEventListener("error", resetPlayback);
-      audio.pause();
-      audio.src = "";
-    };
-  }, []);
-
   useEffect(() => {
     const releaseGroupId = missingReleasePick?.releaseGroupId;
     const releaseGroup = missingReleasePick?.releaseGroup;
@@ -129,40 +108,61 @@ export function ArtistDetailsDownloadTargets({
     missingReleasePick?.type,
   ]);
 
+  const normalizeTrack = useCallback(
+    (track, index) =>
+      normalizePreviewTrack(
+        {
+          id: track?.id ?? track?.mbid ?? `pick-${index}`,
+          title: track?.title || track?.trackName,
+          preview_url: track?.preview_url,
+        },
+        artistName || artist?.name || "",
+        { album: missingReleasePick?.title || "" },
+      ),
+    [artist?.name, artistName, missingReleasePick?.title],
+  );
+
+  const { isTrackPlaying, isTrackLoading, handlePlay } = useGlobalTrackPlayback(
+    normalizeTrack,
+  );
+
+  const getQueueTracks = useCallback(
+    () =>
+      tracks
+        .filter((entry) => entry?.preview_url)
+        .map((entry, entryIndex) => normalizeTrack(entry, entryIndex)),
+    [tracks, normalizeTrack],
+  );
+
+  const {
+    disabled: toolbarDisabled,
+    isListPlaying,
+    isShuffleEnabled,
+    handlePlayAll,
+    handleShufflePlay,
+  } = useAlbumTrackListToolbar({
+    getQueueTracks,
+    playbackSource,
+  });
+
+  const handleTrackPreviewPlay = (track, index, event) => {
+    event.stopPropagation();
+    if (!track?.preview_url) return;
+    const queue = tracks
+      .filter((entry) => entry?.preview_url)
+      .map((entry, entryIndex) => normalizeTrack(entry, entryIndex));
+    handlePlay(track, { source: playbackSource, queue }, index);
+  };
+
   if (!missingReleasePick) return null;
 
   const metric =
     missingReleasePick.metric || getReleaseMetric(missingReleasePick.releaseGroup);
 
-  const handleTrackPreviewPlay = async (track, event) => {
-    event.stopPropagation();
-    const previewUrl = track?.preview_url;
-    const currentTrackId = String(track?.id ?? track?.mbid ?? "");
-    const audio = previewAudioRef.current;
-    if (!audio || !previewUrl || !currentTrackId) return;
-    try {
-      if (playingTrackId === currentTrackId) {
-        audio.pause();
-        setPlayingTrackId(null);
-        return;
-      }
-      setLoadingTrackId(currentTrackId);
-      if (audio.src !== previewUrl) audio.src = previewUrl;
-      audio.volume = previewVolume;
-      await audio.play();
-      setPlayingTrackId(currentTrackId);
-    } catch {
-      setPlayingTrackId(null);
-    } finally {
-      setLoadingTrackId(null);
-    }
-  };
-
   return (
     <section className="artist-section">
       <div className="artist-pick-panel">
         <div className="artist-pick-panel__grid">
-          <audio ref={previewAudioRef} preload="none" />
           <div className="artist-media-cell">
             <PickCover
               pick={missingReleasePick}
@@ -212,15 +212,23 @@ export function ArtistDetailsDownloadTargets({
                 <Loader className="artist-spinner animate-spin" />
               </div>
             ) : tracks.length ? (
-              <div className="artist-pick-panel__track-grid">
+              <>
+                <ArtistTrackListToolbar
+                  disabled={toolbarDisabled}
+                  isPlaying={isListPlaying}
+                  isShuffleEnabled={isShuffleEnabled}
+                  onPlayAll={handlePlayAll}
+                  onShufflePlay={handleShufflePlay}
+                />
+                <div className="artist-pick-panel__track-grid">
                 {tracks.map((track, index) => {
                   const currentTrackId = String(
                     track.id ??
                       track.mbid ??
                       `${missingReleasePick.releaseGroupId}-${index}`,
                   );
-                  const isPlaying = playingTrackId === currentTrackId;
-                  const isLoadingPreview = loadingTrackId === currentTrackId;
+                  const isPlaying = isTrackPlaying(currentTrackId);
+                  const isLoadingPreview = isTrackLoading(currentTrackId);
                   return (
                     <div
                       key={currentTrackId}
@@ -234,7 +242,9 @@ export function ArtistDetailsDownloadTargets({
                           track={track}
                           isPlaying={isPlaying}
                           isLoading={isLoadingPreview}
-                          onClick={(event) => handleTrackPreviewPlay(track, event)}
+                          onClick={(event) =>
+                            handleTrackPreviewPlay(track, index, event)
+                          }
                         />
                       ) : (
                         <span />
@@ -268,7 +278,8 @@ export function ArtistDetailsDownloadTargets({
                     </div>
                   );
                 })}
-              </div>
+                </div>
+              </>
             ) : null}
           </div>
         </div>
@@ -285,7 +296,12 @@ ArtistDetailsDownloadTargets.propTypes = {
   canAddAlbum: PropTypes.bool,
   requestingAlbum: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   handleRequestAlbum: PropTypes.func.isRequired,
-  previewVolume: PropTypes.number,
+  artistName: PropTypes.string,
+  playbackSource: PropTypes.shape({
+    type: PropTypes.string,
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    label: PropTypes.string,
+  }),
   onAddTrackToPlaylist: PropTypes.func,
   playlists: PropTypes.array,
   playlistsLoading: PropTypes.bool,
