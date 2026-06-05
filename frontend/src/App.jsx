@@ -228,13 +228,14 @@ function AppContent() {
               <Route path="/discover" element={<Navigate to="/" replace />} />
               <Route path="/library" element={<LibraryPage />} />
               <Route
-                path="/flow"
+                path="/playlists"
                 element={
                   <PermissionRoute permission="accessFlow">
                     <FlowPage />
                   </PermissionRoute>
                 }
               />
+              <Route path="/flow" element={<Navigate to="/playlists" replace />} />
               <Route
                 path="/downloads"
                 element={

@@ -1688,7 +1688,7 @@ function FlowPage() {
           className={`flow-page__library${mobileShowDetail ? " flow-page__library--hidden" : ""}`}
         >
           <div className="flow-page__library-head">
-            <h1 className="flow-page__library-title">Your Library</h1>
+            <h1 className="flow-page__library-title">Playlists</h1>
             <FlowLibraryCreateMenu
               onImport={handleOpenImportPicker}
               onNewPlaylist={handleOpenCreatePlaylist}

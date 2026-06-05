@@ -702,7 +702,7 @@ export function FlowPageHeader({ onNewFlow }) {
   return (
     <div className="flow-page__page-header">
       <div className="flow-page__page-header-row">
-        <h1 className="flow-page__page-title">Flow</h1>
+        <h1 className="flow-page__page-title">Playlists</h1>
       </div>
       <div className="flow-page__header-actions">
         <button
