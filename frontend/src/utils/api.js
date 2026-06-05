@@ -463,14 +463,49 @@ export const getFlowTrackStreamUrl = (jobId) => {
   return url;
 };
 
-export const getFlowArtworkUrl = (playlistId) => {
+export const getFlowArtworkUrl = (playlistId, version) => {
   const base = import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
   const { token } = getStoredAuth();
-  let url = `${base}/weekly-flow/artwork/${encodeURIComponent(playlistId)}`;
+  const params = new URLSearchParams();
   if (token) {
-    url += `?token=${encodeURIComponent(token)}`;
+    params.set("token", token);
+  }
+  if (version != null && version !== "") {
+    params.set("v", String(version));
+  }
+  const query = params.toString();
+  let url = `${base}/weekly-flow/artwork/${encodeURIComponent(playlistId)}`;
+  if (query) {
+    url += `?${query}`;
   }
   return url;
+};
+
+export const uploadFlowArtwork = async (playlistId, file) => {
+  const response = await api.put(
+    `/weekly-flow/artwork/${encodeURIComponent(playlistId)}`,
+    file,
+    {
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+      },
+    },
+  );
+  return response.data;
+};
+
+export const deleteFlowArtwork = async (playlistId) => {
+  const response = await api.delete(
+    `/weekly-flow/artwork/${encodeURIComponent(playlistId)}`,
+  );
+  return response.data;
+};
+
+export const generateFlowArtwork = async (playlistId) => {
+  const response = await api.post(
+    `/weekly-flow/artwork/${encodeURIComponent(playlistId)}/generate`,
+  );
+  return response.data;
 };
 
 export const getLibraryArtists = async () => {
@@ -699,9 +734,26 @@ export const getDiscovery = async (cacheBust = false) => {
   return response.data;
 };
 
+let blocklistInflight = null;
+let blocklistCache = null;
+
+const invalidateBlocklistCache = () => {
+  blocklistCache = null;
+};
+
 export const getBlocklist = async () => {
-  const response = await api.get("/discover/blocklist");
-  return response.data;
+  if (blocklistCache) return blocklistCache;
+  if (blocklistInflight) return blocklistInflight;
+  blocklistInflight = api
+    .get("/discover/blocklist")
+    .then((response) => {
+      blocklistCache = response.data;
+      return blocklistCache;
+    })
+    .finally(() => {
+      blocklistInflight = null;
+    });
+  return blocklistInflight;
 };
 
 export const updateBlocklist = async ({ artists, tags }) => {
@@ -709,10 +761,12 @@ export const updateBlocklist = async ({ artists, tags }) => {
     artists,
     tags,
   });
+  blocklistCache = response.data;
   return response.data;
 };
 
 export const addArtistToBlocklist = async ({ mbid = null, name = null } = {}) => {
+  invalidateBlocklistCache();
   const current = await getBlocklist();
   const nextArtists = Array.isArray(current.artists) ? [...current.artists] : [];
   nextArtists.push({ mbid, name });
@@ -720,18 +774,21 @@ export const addArtistToBlocklist = async ({ mbid = null, name = null } = {}) =>
     artists: nextArtists,
     tags: current.tags || [],
   });
+  blocklistCache = response.data;
   return response.data;
 };
 
 export const addTagToBlocklist = async (tag) => {
   const normalized = String(tag || "").trim();
   if (!normalized) return null;
+  invalidateBlocklistCache();
   const current = await getBlocklist();
   const nextTags = Array.isArray(current.tags) ? [...current.tags, normalized] : [normalized];
   const response = await api.put("/discover/blocklist", {
     artists: current.artists || [],
     tags: nextTags,
   });
+  blocklistCache = response.data;
   return response.data;
 };
 

@@ -31,6 +31,7 @@ const ArtistAlbumsPage = lazy(() => import("./pages/ArtistAlbumsPage"));
 const ArtistAppearsOnPage = lazy(() => import("./pages/ArtistAppearsOnPage"));
 const RequestsPage = lazy(() => import("./pages/RequestsPage"));
 const FlowPage = lazy(() => import("./pages/FlowPage"));
+const DownloadsPage = lazy(() => import("./pages/DownloadsPage"));
 const BlocklistPage = lazy(() => import("./pages/BlocklistPage"));
 const DISCOVERY_MANUAL_REFRESH_KEY = "aurral.discovery.manualRefreshPending";
 
@@ -231,6 +232,14 @@ function AppContent() {
                 element={
                   <PermissionRoute permission="accessFlow">
                     <FlowPage />
+                  </PermissionRoute>
+                }
+              />
+              <Route
+                path="/downloads"
+                element={
+                  <PermissionRoute permission="accessFlow">
+                    <DownloadsPage />
                   </PermissionRoute>
                 }
               />
