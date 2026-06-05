@@ -1976,7 +1976,6 @@ function FlowPage() {
                       error={selectedTracksError}
                       emptyMessage="No tracks in this playlist yet."
                       hideFailedTracks
-                      showFailedDetails={false}
                       useTrackContextMenu
                       playlists={sharedPlaylists}
                       playlistsLoading={playlistsLoading}
