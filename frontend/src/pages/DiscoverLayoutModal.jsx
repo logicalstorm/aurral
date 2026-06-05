@@ -66,7 +66,7 @@ function SortableSectionRow({ item, onToggle, showUnavailable }) {
         {...attributes}
         {...listeners}
       >
-        <GripVertical className="h-4 w-4" />
+        <GripVertical className="artist-icon-sm" />
       </button>
       <div className="artist-customize-section-content">
         <span
@@ -189,7 +189,7 @@ export function DiscoverLayoutModal({
             disabled={isSaving}
             aria-label="Close"
           >
-            <X className="h-5 w-5" />
+            <X className="artist-icon-md" />
           </button>
         </div>
 

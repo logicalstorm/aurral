@@ -1,3 +1,4 @@
+import FlipSaveButton from "../components/FlipSaveButton";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -11,17 +12,25 @@ function ProfilePage() {
   const account = useAccountSettings(authUser, showSuccess, showError);
 
   return (
-    <div className="animate-fade-in max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-2" style={{ color: "#fff" }}>
-          Profile
-        </h1>
-        <p style={{ color: "#c1c1c3" }}>
-          Personal listening history and library defaults
-        </p>
+    <div className="profile-page">
+      <div className="profile-page__header">
+        <div>
+          <h1 className="profile-page__title">Profile</h1>
+          <p className="profile-page__subtitle">
+            Personal listening history and library defaults
+          </p>
+        </div>
+        {!account.loading && (
+          <FlipSaveButton
+            saving={account.saving}
+            disabled={!account.hasUnsavedChanges}
+            onClick={account.handleSave}
+          />
+        )}
       </div>
 
       <SettingsAccountTab
+        hidePanelHeader
         listenHistoryProvider={account.listenHistoryProvider}
         setListenHistoryProvider={account.setListenHistoryProvider}
         listenHistoryUsername={account.listenHistoryUsername}

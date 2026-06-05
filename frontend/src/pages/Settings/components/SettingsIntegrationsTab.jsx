@@ -240,7 +240,7 @@ export function SettingsIntegrationsTab({
                 />
                 <span>Lidarr</span>
               </button>
-            <div className="flex items-center gap-2">
+            <div className="settings-page__inline-row">
               {health?.lidarrConfigured && (
                 <span className="settings-page__status">
                   <CheckCircle className="settings-page__status-icon" />
@@ -409,8 +409,8 @@ export function SettingsIntegrationsTab({
                     className="btn btn-secondary"
                   >
                     <RefreshCw
-                      className={`w-4 h-4 ${
-                        loadingLidarrProfiles ? "animate-spin" : ""
+                      className={`artist-icon-sm${
+                        loadingLidarrProfiles ? " animate-spin" : ""
                       }`}
                     />
                   </button>
@@ -473,8 +473,8 @@ export function SettingsIntegrationsTab({
                     className="btn btn-secondary"
                   >
                     <RefreshCw
-                      className={`w-4 h-4 ${
-                        loadingLidarrMetadataProfiles ? "animate-spin" : ""
+                      className={`artist-icon-sm${
+                        loadingLidarrMetadataProfiles ? " animate-spin" : ""
                       }`}
                     />
                   </button>
@@ -537,8 +537,8 @@ export function SettingsIntegrationsTab({
                     className="btn btn-secondary"
                   >
                     <RefreshCw
-                      className={`w-4 h-4 ${
-                        loadingLidarrTags ? "animate-spin" : ""
+                      className={`artist-icon-sm${
+                        loadingLidarrTags ? " animate-spin" : ""
                       }`}
                     />
                   </button>
@@ -584,7 +584,7 @@ export function SettingsIntegrationsTab({
                 </p>
               </div>
               <div>
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label className="artist-checkbox-label">
                   <input
                     type="checkbox"
                     className="artist-checkbox"
@@ -667,7 +667,7 @@ export function SettingsIntegrationsTab({
                 />
                 <span>Last.fm</span>
               </button>
-            <div className="flex items-center gap-2">
+            <div className="settings-page__inline-row">
               {health?.lastfmConfigured && (
                 <span className="settings-page__status">
                   <CheckCircle className="settings-page__status-icon" />
@@ -750,7 +750,7 @@ export function SettingsIntegrationsTab({
                 />
                 <span>Ticketmaster</span>
               </button>
-            <div className="flex items-center gap-2">
+            <div className="settings-page__inline-row">
               {health?.ticketmasterConfigured && (
                 <span className="settings-page__status">
                   <CheckCircle className="settings-page__status-icon" />
@@ -845,7 +845,7 @@ export function SettingsIntegrationsTab({
                   are searched.
                 </p>
               </div>
-              <label className="flex items-center justify-between gap-4">
+              <label className="settings-page__toggle-row">
                 <span >
                   Include recommended artists in local shows
                 </span>
@@ -868,7 +868,7 @@ export function SettingsIntegrationsTab({
                   }
                 />
               </label>
-              <label className="flex items-center justify-between gap-4">
+              <label className="settings-page__toggle-row">
                 <span >
                   Include trending artists in local shows
                 </span>
@@ -908,7 +908,7 @@ export function SettingsIntegrationsTab({
                 />
                 <span>Subsonic / Navidrome</span>
               </button>
-            <div className="flex items-center gap-2">
+            <div className="settings-page__inline-row">
               {settings.integrations?.navidrome?.url && (
                 <span className="settings-page__status">
                   <CheckCircle className="settings-page__status-icon" />
@@ -944,7 +944,7 @@ export function SettingsIntegrationsTab({
                   }
                 />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="settings-page__two-col-grid">
                 <div>
                   <label
                     className="artist-field-label"

@@ -44,11 +44,8 @@ const normalizeBasePath = (baseUrl) => {
 };
 
 const PageLoader = () => (
-  <div className="flex items-center justify-center min-h-[200px]">
-    <div
-      className="animate-spin h-8 w-8"
-      style={{ borderBottom: "2px solid #707e61" }}
-    ></div>
+  <div className="app-loading">
+    <div className="app-loading__spinner" />
   </div>
 );
 
@@ -58,11 +55,8 @@ const ProtectedRoute = ({ children }) => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div
-          className="animate-spin h-12 w-12"
-          style={{ borderBottom: "2px solid #707e61" }}
-        ></div>
+      <div className="app-loading app-loading--screen">
+        <div className="app-loading__spinner app-loading__spinner--lg" />
       </div>
     );
   }
@@ -186,46 +180,42 @@ function AppContent() {
             visible={!user || user.role === "admin"}
           />
           {isHealthy === false && (
-            <div className="mb-6 bg-red-500/20 border border-red-500/30 p-4">
-              <div className="flex items-center">
-                <svg
-                  className="w-5 h-5 text-red-400 mr-3"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <p className="text-red-400 font-medium">
-                  Unable to connect to the backend API. Please check your
-                  configuration.
-                </p>
-              </div>
+            <div className="app-status-banner app-status-banner--error">
+              <svg
+                className="app-status-banner__icon app-status-banner__icon--error"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <p className="app-status-banner__text app-status-banner__text--error">
+                Unable to connect to the backend API. Please check your
+                configuration.
+              </p>
             </div>
           )}
 
           {isHealthy && !rootFolderConfigured && (
-            <div className="mb-6 bg-yellow-500/20 p-4">
-              <div className="flex items-center">
-                <svg
-                  className="w-5 h-5 text-yellow-400 mr-3"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <p className="text-yellow-400 font-medium">
-                  Root folder is not configured. Please configure your music
-                  library root folder in settings.
-                </p>
-              </div>
+            <div className="app-status-banner app-status-banner--warning">
+              <svg
+                className="app-status-banner__icon app-status-banner__icon--warning"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <p className="app-status-banner__text app-status-banner__text--warning">
+                Root folder is not configured. Please configure your music
+                library root folder in settings.
+              </p>
             </div>
           )}
 

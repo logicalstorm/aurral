@@ -449,7 +449,7 @@ function RequestsPage() {
                       mbid={artistMbid}
                       artistName={isAlbum ? artistName : displayName}
                       alt={displayName}
-                      className="w-full h-full"
+                      className="artist-image-fill"
                     />
                   </div>
 

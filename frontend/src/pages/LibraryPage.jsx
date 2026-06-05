@@ -285,7 +285,7 @@ function LibraryPage() {
                       mbid={artist.foreignArtistId}
                       artistName={artist.artistName}
                       alt={artist.artistName}
-                      className="w-full h-full"
+                      className="artist-image-fill"
                       showLoading={false}
                     />
                     {isMonitored && (
