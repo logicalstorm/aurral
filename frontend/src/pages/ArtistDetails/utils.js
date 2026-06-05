@@ -324,3 +324,14 @@ export const getExpandedReleaseRenderAfterIndex = (
     itemCount - 1,
   );
 };
+
+export const isLibraryPlaybackTrack = (track) =>
+  track?.previewProvider === "lidarr" || !!track?.streamPath;
+
+export const getTrackPlayAccessibilityLabel = (track, isPlaying) => {
+  const fromLibrary = isLibraryPlaybackTrack(track);
+  if (isPlaying) {
+    return fromLibrary ? "Pause library playback" : "Pause preview";
+  }
+  return fromLibrary ? "Play from library" : "Play preview";
+};
