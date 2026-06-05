@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import PropTypes from "prop-types";
-import { Loader, Pause, Play } from "lucide-react";
+import { TrackPlayButton } from "./TrackPlayButton";
 import { getReleaseYear } from "../utils";
 import { TrackPlaylistMenu } from "./TrackPlaylistMenu";
 
@@ -115,21 +115,12 @@ export function ArtistDetailsReleaseTrackList({
                   {track.trackNumber || track.position || index + 1}
                 </span>
                 {track.preview_url ? (
-                  <button
-                    type="button"
-                    className="btn btn-surface btn-track-play"
+                  <TrackPlayButton
+                    track={track}
+                    isPlaying={isPlaying}
+                    isLoading={isLoadingPreview}
                     onClick={(event) => handleTrackPreviewPlay(track, event)}
-                    aria-label={isPlaying ? "Pause preview" : "Play preview"}
-                    title={isPlaying ? "Pause preview" : "Play preview"}
-                  >
-                    {isLoadingPreview ? (
-                      <Loader className="artist-icon-xs animate-spin" />
-                    ) : isPlaying ? (
-                      <Pause className="artist-icon-xs" />
-                    ) : (
-                      <Play className="artist-icon-xs" />
-                    )}
-                  </button>
+                  />
                 ) : (
                   <span />
                 )}
