@@ -462,6 +462,19 @@ textarea {
   height: 0.875rem;
 }
 
+.btn-track-play--library {
+  color: var(--aurral-green);
+}
+
+.btn-track-play--library:hover:not(:disabled),
+.btn-track-play--library:focus-visible {
+  color: var(--aurral-green);
+}
+
+.btn-track-play--library svg {
+  color: currentColor;
+}
+
 .btn-track-play-lg {
   width: 2.25rem;
   height: 2.25rem;
