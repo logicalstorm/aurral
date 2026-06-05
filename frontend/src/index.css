@@ -8463,6 +8463,56 @@ textarea {
   text-align: center;
 }
 
+.flow-page__tracks-table-status-head,
+.flow-page__tracks-table-status-cell {
+  width: 1.5rem;
+  padding: 0.5rem 0.25rem;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.flow-page__track-status-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--aurral-radius-round);
+  background: var(--aurral-gray);
+}
+
+.flow-page__track-status-dot--done {
+  background: var(--aurral-green);
+}
+
+.flow-page__track-status-dot--pending {
+  background: var(--aurral-warning);
+}
+
+.flow-page__track-status-dot--downloading {
+  background: var(--aurral-gray-light);
+}
+
+.flow-page__track-status-dot--failed {
+  background: var(--aurral-danger);
+}
+
+.flow-page__track-status-dot--link {
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+
+.flow-page__track-status-dot--link:hover {
+  opacity: 0.85;
+  transform: scale(1.2);
+}
+
+.flow-page__track-status-dot--link:focus-visible {
+  outline: 2px solid var(--aurral-green);
+  outline-offset: 2px;
+}
+
 .flow-page__tracks-table-actions-head {
   width: 3.5rem;
   padding: 0.5rem 0.5rem 0.5rem 0;
@@ -9190,7 +9240,11 @@ textarea {
   }
 
   .flow-page__shell--library-collapsed {
-    grid-template-columns: 5.75rem minmax(0, 1fr);
+    grid-template-columns: 4.25rem minmax(0, 1fr);
+  }
+
+  .flow-page__shell--library-collapsed .flow-page__library--collapsed {
+    margin-left: -0.5rem;
   }
 
   .flow-page__library-collapse {
@@ -9213,7 +9267,7 @@ textarea {
     align-items: center;
     gap: 0.75rem;
     width: 100%;
-    padding-inline: 0.625rem;
+    padding-inline: 0.125rem;
   }
 
   .flow-page__library--collapsed
@@ -9251,7 +9305,7 @@ textarea {
   .flow-page__library--collapsed .flow-page__library-list {
     align-items: center;
     width: 100%;
-    padding: 0.125rem 0.625rem 0;
+    padding: 0.125rem 0.125rem 0;
     background: transparent;
     gap: 0.75rem;
     overflow-x: hidden;

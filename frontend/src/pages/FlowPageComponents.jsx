@@ -33,6 +33,7 @@ import {
   Save,
   X,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import PillToggle from "../components/PillToggle";
 import FlipSaveButton from "../components/FlipSaveButton";
 import {
@@ -1136,6 +1137,47 @@ function buildEditableTrackRows(tracks) {
   }));
 }
 
+function getTrackStatusMeta(status) {
+  switch (String(status || "").toLowerCase()) {
+    case "done":
+      return { label: "Downloaded", className: "flow-page__track-status-dot--done" };
+    case "downloading":
+      return {
+        label: "Downloading",
+        className: "flow-page__track-status-dot--downloading",
+      };
+    case "failed":
+      return { label: "Failed", className: "flow-page__track-status-dot--failed" };
+    case "pending":
+    default:
+      return { label: "Queued", className: "flow-page__track-status-dot--pending" };
+  }
+}
+
+function TrackStatusDot({ status }) {
+  const meta = getTrackStatusMeta(status);
+  const normalized = String(status || "").toLowerCase();
+  const isLinkable = normalized !== "done";
+  if (isLinkable) {
+    return (
+      <Link
+        to="/downloads"
+        className={`flow-page__track-status-dot flow-page__track-status-dot--link ${meta.className}`}
+        title={`${meta.label} — view activity`}
+        aria-label={`${meta.label}, view activity`}
+      />
+    );
+  }
+  return (
+    <span
+      className={`flow-page__track-status-dot ${meta.className}`}
+      title={meta.label}
+      aria-label={meta.label}
+      role="img"
+    />
+  );
+}
+
 function TrackStatusBadge({ status, pendingDelete = false, compact = false }) {
   const isDownloaded = status === "done";
   const label = pendingDelete
@@ -2192,7 +2234,6 @@ export function FlowTracksPanel({
   emptyMessage = "No tracks generated for this flow yet.",
   editable = false,
   hideFailedTracks = false,
-  showFailedDetails = true,
   headerActions = null,
   deletingTrackId = null,
   reSearchingTrackIds = {},
@@ -2497,6 +2538,10 @@ export function FlowTracksPanel({
                 <th>Artist</th>
                 <th>Album</th>
                 <th
+                  className="flow-page__tracks-table-status-head"
+                  aria-hidden="true"
+                />
+                <th
                   className="flow-page__tracks-table-actions-head"
                   aria-hidden="true"
                 />
@@ -2557,15 +2602,9 @@ export function FlowTracksPanel({
                         track.artistName
                       )}
                     </td>
-                    <td>
-                      <div className="flow-page__editor-field-stack">
-                        <span>{track.albumName || "Unknown Album"}</span>
-                        {showFailedDetails && track.status === "failed" && track.error ? (
-                          <span className="flow-page__editor-track-error">
-                            {track.error}
-                          </span>
-                        ) : null}
-                      </div>
+                    <td>{track.albumName || "Unknown Album"}</td>
+                    <td className="flow-page__tracks-table-status-cell">
+                      <TrackStatusDot status={track.status} />
                     </td>
                     <td className="flow-page__tracks-table-actions-cell">
                       <div className="flow-page__tracks-actions">
@@ -3015,7 +3054,6 @@ export function SharedPlaylistCard({
               emptyMessage="No tracks in this static playlist yet."
               editable={false}
               hideFailedTracks={true}
-              showFailedDetails={false}
               headerActions={
                 <button
                   type="button"
