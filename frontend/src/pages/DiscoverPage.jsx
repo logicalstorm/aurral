@@ -19,8 +19,6 @@ import {
   ChevronRight,
   LayoutTemplate,
   CheckCircle2,
-  MapPin,
-  Pencil,
   MoreVertical,
   Ban,
   Loader2,
@@ -59,6 +57,8 @@ import {
   normalizeDiscoveryFeedbackList,
 } from "../utils/discoveryFeedback";
 import ArtistImage from "../components/ArtistImage";
+import NearbyLocationControl from "../components/NearbyLocationControl";
+import ShowCard from "../components/ShowCard";
 import LastfmBanner from "../components/LastfmBanner";
 import { useToast } from "../contexts/ToastContext";
 import { DiscoverLayoutModal } from "./DiscoverLayoutModal";
@@ -482,26 +482,6 @@ const formatReleaseStatus = (releaseDate) => {
   }
   return `Releasing ${formattedDate}`;
 };
-
-const formatShowDate = (show) => {
-  if (!show?.date && !show?.dateTime) return null;
-  const raw = show.dateTime || show.date;
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) {
-    return show.date || null;
-  }
-  const dateLabel = parsed.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-  return dateLabel;
-};
-
-const formatShowLocation = (show) =>
-  [show?.venueName, [show?.city, show?.region].filter(Boolean).join(", ")]
-    .filter(Boolean)
-    .join(" - ");
 
 const getRecommendationReason = (artist) => {
   if (artist?.metaText !== undefined) return artist.metaText;
@@ -1037,159 +1017,6 @@ ViewAllCard.propTypes = {
   label: PropTypes.string,
 };
 
-const ShowCard = memo(({ show }) => {
-  const showDate = formatShowDate(show);
-  const showLocation = formatShowLocation(show);
-  return (
-    <>
-      <a
-        href={show.url || "#"}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="artist-show-card--discover-mobile"
-      >
-        <div className="artist-show-card__image-wrap--discover artist-show-card__image-wrap--discover-mobile">
-          {show.image ? (
-            <img
-              src={show.image}
-              alt={show.eventName || show.artistName}
-              className="artist-show-card__image--discover"
-              loading="lazy"
-              decoding="async"
-            />
-          ) : (
-            <div className="artist-media-placeholder--discover">
-              <Music className="artist-media-placeholder--discover-icon" />
-            </div>
-          )}
-          <div className="artist-show-card__image--discover-overlay" />
-          <div className="artist-show-card__distance--discover">
-            {Number.isFinite(show.distance) && (
-              <span className="artist-show-card__distance-badge--discover">
-                {Math.round(show.distance)} mi
-              </span>
-            )}
-          </div>
-          <div className="artist-show-card__image--discover-content">
-            <div />
-            <div className="artist-show-card__image--discover-bottom">
-              <p className="artist-show-card__artist--discover">
-                {show.artistName}
-              </p>
-              <h3 className="artist-show-card__title--discover">
-                {show.eventName}
-              </h3>
-              <div className="artist-show-card__details--discover">
-                {showDate && (
-                  <p className="artist-show-card__detail--discover">
-                    <Clock className="artist-show-card__detail-icon--discover" />
-                    <span className="artist-show-card__detail-text--discover">
-                      {showDate}
-                    </span>
-                  </p>
-                )}
-                {showLocation && (
-                  <p className="artist-show-card__detail--discover artist-show-card__detail--discover-location">
-                    <MapPin className="artist-show-card__detail-icon--discover artist-show-card__detail-icon--discover-location" />
-                    <span className="artist-show-card__detail-text--discover">
-                      {showLocation}
-                    </span>
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </a>
-
-      <article className="artist-show-card--discover-desktop">
-        <a href={show.url || "#"} target="_blank" rel="noopener noreferrer">
-          <div className="artist-show-card__image-wrap--discover artist-show-card__image-wrap--discover-desktop">
-            {show.image ? (
-              <img
-                src={show.image}
-                alt={show.eventName || show.artistName}
-                className="artist-show-card__image--discover"
-                loading="lazy"
-                decoding="async"
-              />
-            ) : (
-              <div className="artist-media-placeholder--discover">
-                <Music className="artist-media-placeholder--discover-icon" />
-              </div>
-            )}
-            <div className="artist-show-card__distance--discover">
-              {Number.isFinite(show.distance) && (
-                <span className="artist-show-card__distance-badge--discover">
-                  {Math.round(show.distance)} mi
-                </span>
-              )}
-            </div>
-          </div>
-        </a>
-        <div className="artist-show-card__body--discover">
-          <div style={{ minWidth: 0 }}>
-            <p className="artist-show-card__body-artist--discover">
-              {show.artistName}
-            </p>
-            <h3 className="artist-show-card__body-title--discover">
-              <a
-                href={show.url || "#"}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="artist-show-card__body-title-link--discover"
-              >
-                {show.eventName}
-              </a>
-            </h3>
-          </div>
-          <div className="artist-show-card__body-details--discover">
-            {showDate && (
-              <p className="artist-show-card__body-detail--discover">
-                <Clock className="artist-show-card__body-detail-icon--discover" />
-                <span>{showDate}</span>
-              </p>
-            )}
-            {showLocation && (
-              <p className="artist-show-card__body-detail--discover artist-show-card__body-detail--discover-location">
-                <MapPin className="artist-show-card__body-detail-icon--discover artist-show-card__body-detail-icon--discover-location" />
-                <span
-                  style={{
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {showLocation}
-                </span>
-              </p>
-            )}
-          </div>
-        </div>
-      </article>
-    </>
-  );
-});
-
-ShowCard.displayName = "ShowCard";
-ShowCard.propTypes = {
-  show: PropTypes.shape({
-    id: PropTypes.string,
-    artistName: PropTypes.string,
-    matchType: PropTypes.string,
-    eventName: PropTypes.string,
-    image: PropTypes.string,
-    url: PropTypes.string,
-    date: PropTypes.string,
-    time: PropTypes.string,
-    dateTime: PropTypes.string,
-    venueName: PropTypes.string,
-    city: PropTypes.string,
-    region: PropTypes.string,
-    distance: PropTypes.number,
-  }).isRequired,
-};
-
 function DiscoverRail({
   title,
   mobileTitle,
@@ -1349,10 +1176,6 @@ function DiscoverPage() {
     initialNearbyLocation.mode,
   );
   const [appliedNearbyZip, setAppliedNearbyZip] = useState(
-    initialNearbyLocation.zip,
-  );
-  const [showNearbyZipEditor, setShowNearbyZipEditor] = useState(false);
-  const [nearbyZipDraft, setNearbyZipDraft] = useState(
     initialNearbyLocation.zip,
   );
   const [showFullBasedOnList, setShowFullBasedOnList] = useState(false);
@@ -2371,105 +2194,34 @@ function DiscoverPage() {
     if (id === "recommendedShows") {
       if (!sectionAvailability.recommendedShows) return null;
       const zipModeActive = nearbyLocationMode === "zip";
-      const nearbyLocationBadge = nearbyShowsData?.configured !== false && (
-        <span className="artist-nearby-badge">{nearbyLocationLabel}</span>
-      );
-      const nearbyHeaderActions = (
-        <>
-          <div className="artist-nearby-config">
-            <button
-              type="button"
-              onClick={() => {
-                setNearbyLocationMode("ip");
-                setShowNearbyZipEditor(false);
-                try {
-                  localStorage.setItem(DISCOVER_NEARBY_MODE_KEY, "ip");
-                } catch {}
-              }}
-              className={`btn btn-xs ${!zipModeActive ? "btn-neutral-active" : "btn-ghost"}`}
-            >
-              Your Area
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setNearbyLocationMode("zip");
-                try {
-                  localStorage.setItem(DISCOVER_NEARBY_MODE_KEY, "zip");
-                } catch {}
-                if (!appliedNearbyZip.trim()) {
-                  setNearbyZipDraft("");
-                  setShowNearbyZipEditor(true);
-                }
-              }}
-              className={`btn btn-xs ${zipModeActive ? "btn-neutral-active" : "btn-ghost"}`}
-            >
-              ZIP
-            </button>
-          </div>
-          {zipModeActive && (
-            <div className="discover-page__zip-editor-wrap">
-              <button
-                type="button"
-                onClick={() => {
-                  setNearbyZipDraft(appliedNearbyZip);
-                  setShowNearbyZipEditor((value) => !value);
-                }}
-                className="btn btn-surface btn-icon-square"
-                aria-label="Edit ZIP"
-                title="Edit ZIP"
-              >
-                <Pencil className="artist-icon-sm" />
-              </button>
-              {showNearbyZipEditor && (
-                <div className="artist-nearby-zip-editor">
-                  <div className="artist-nearby-zip-editor__field">
-                    <input
-                      type="text"
-                      value={nearbyZipDraft}
-                      onChange={(event) =>
-                        setNearbyZipDraft(event.target.value)
-                      }
-                      className="artist-nearby-zip-editor__input"
-                      placeholder="ZIP or postal code"
-                    />
-                  </div>
-                  <div className="artist-nearby-zip-editor__actions">
-                    <button
-                      type="button"
-                      onClick={() => setShowNearbyZipEditor(false)}
-                      className="btn btn-secondary btn-sm"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const sanitized = nearbyZipDraft.trim();
-                        if (!sanitized) return;
-                        setAppliedNearbyZip(sanitized);
-                        setNearbyLocationMode("zip");
-                        setShowNearbyZipEditor(false);
-                        try {
-                          localStorage.setItem(DISCOVER_NEARBY_MODE_KEY, "zip");
-                          localStorage.setItem(
-                            DISCOVER_NEARBY_ZIP_KEY,
-                            sanitized,
-                          );
-                        } catch {}
-                      }}
-                      className="btn btn-primary btn-sm"
-                      disabled={!nearbyZipDraft.trim()}
-                    >
-                      Save
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      );
+      const nearbyHeaderActions =
+        nearbyShowsData?.configured !== false ? (
+          <NearbyLocationControl
+            locationMode={nearbyLocationMode}
+            appliedZip={appliedNearbyZip}
+            location={nearbyShowsData?.location}
+            onSelectYourLocation={() => {
+              setNearbyLocationMode("ip");
+              try {
+                localStorage.setItem(DISCOVER_NEARBY_MODE_KEY, "ip");
+              } catch {}
+            }}
+            onStartCustomLocation={() => {
+              setNearbyLocationMode("zip");
+              try {
+                localStorage.setItem(DISCOVER_NEARBY_MODE_KEY, "zip");
+              } catch {}
+            }}
+            onApplyZip={(sanitized) => {
+              setAppliedNearbyZip(sanitized);
+              setNearbyLocationMode("zip");
+              try {
+                localStorage.setItem(DISCOVER_NEARBY_MODE_KEY, "zip");
+                localStorage.setItem(DISCOVER_NEARBY_ZIP_KEY, sanitized);
+              } catch {}
+            }}
+          />
+        ) : null;
       if (nearbyShowsData?.configured === false) {
         return (
           <section key="recommendedShows" className="artist-discover-section">
@@ -2523,14 +2275,13 @@ function DiscoverPage() {
             key="recommendedShows"
             title="Shows Near You"
             onViewAll={() => navigate("/shows")}
-            afterTitle={nearbyLocationBadge}
             headerActions={nearbyHeaderActions}
           >
             <div className="artist-nearby-status">
-              <h3 className="artist-nearby-status__title">ZIP not set</h3>
+              <h3 className="artist-nearby-status__title">Location not set</h3>
               <p className="artist-nearby-status__text">
-                Enter a ZIP or postal code using the edit control above, or
-                switch back to Your Area.
+                Open the location menu and enter a ZIP or postal code, or choose
+                Your location.
               </p>
             </div>
           </DiscoverRail>
@@ -2543,7 +2294,6 @@ function DiscoverPage() {
             key="recommendedShows"
             title="Shows Near You"
             onViewAll={() => navigate("/shows")}
-            afterTitle={nearbyLocationBadge}
             headerActions={nearbyHeaderActions}
           >
             <>
