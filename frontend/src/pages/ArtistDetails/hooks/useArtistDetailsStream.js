@@ -471,7 +471,13 @@ export function useArtistDetailsStream(
       clearTimeout(fallbackTimeout);
       eventSource.close();
     };
-  }, [mbid, artistNameFromNav, stableInitialLibraryHint, appearsOnLimitKey]);
+  }, [
+    mbid,
+    artistNameFromNav,
+    stableInitialLibraryHint,
+    appearsOnLimitKey,
+    normalizedAppearsOnLimit,
+  ]);
 
   useEffect(() => {
     if (!mbid || !artist?.id) return;
@@ -548,6 +554,7 @@ export function useArtistDetailsStream(
     artistNameFromNav,
     selectedReleaseTypesKey,
     appearsOnLimitKey,
+    normalizedAppearsOnLimit,
   ]);
 
   useEffect(() => {

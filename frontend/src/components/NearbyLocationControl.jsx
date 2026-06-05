@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import PropTypes from "prop-types";
 import { ChevronDown, Locate } from "lucide-react";
 
-export function getNearbyCityLabel(location) {
+function getNearbyCityLabel(location) {
   if (!location) return "Location";
   if (location.city) return location.city;
   const first = location.label?.split(",")?.[0]?.trim();
