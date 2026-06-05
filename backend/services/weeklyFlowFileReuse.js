@@ -3,7 +3,10 @@ import path from "path";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { buildSharedTrackIdentity } from "./weeklyFlowPlaylistConfig.js";
 import { libraryManager } from "./libraryManager.js";
-import { resolveWeeklyFlowRoot } from "./weeklyFlowPaths.js";
+import {
+  remapLegacyWeeklyFlowPath,
+  resolveWeeklyFlowRoot,
+} from "./weeklyFlowPaths.js";
 
 export const EXISTING_FILE_MODES = new Set(["download", "hardlink", "copy"]);
 const DEFAULT_EXISTING_FILE_MODE = "hardlink";
@@ -138,7 +141,7 @@ async function findAurralSource(track, options = {}) {
     if (excludeJobIds.has(String(job.id || ""))) continue;
     if (!job.finalPath || typeof job.finalPath !== "string") continue;
     if (buildSharedTrackIdentity(job) !== identity) continue;
-    const sourcePath = path.resolve(job.finalPath);
+    const sourcePath = remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowRoot);
     if (!isPathInsideRoot(sourcePath, path.resolve(weeklyFlowRoot))) continue;
     if (targetPlaylistType && String(job.playlistType || "") === targetPlaylistType) {
       const targetRoot = getPlaylistRoot(weeklyFlowRoot, targetPlaylistType);

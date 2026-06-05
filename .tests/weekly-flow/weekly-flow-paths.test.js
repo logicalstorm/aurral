@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import path from "path";
 
 import {
   createIsolatedStateDir,
@@ -11,9 +12,11 @@ import {
 const isolatedState = await createIsolatedStateDir("weekly-flow-paths");
 applyIsolatedBackendEnv(isolatedState);
 
-const { resolveWeeklyFlowRoot } = await importFromRepo(
-  "backend/services/weeklyFlowPaths.js",
-);
+const {
+  resolveWeeklyFlowRoot,
+  remapLegacyWeeklyFlowPath,
+  resolveExistingWeeklyFlowTrackPath,
+} = await importFromRepo("backend/services/weeklyFlowPaths.js");
 
 test.after(async () => {
   await cleanupIsolatedState(isolatedState);
@@ -47,6 +50,40 @@ test("resolveWeeklyFlowRoot uses absolute DOWNLOAD_FOLDER when WEEKLY_FLOW_FOLDE
     if (previousDownload === undefined) delete process.env.DOWNLOAD_FOLDER;
     else process.env.DOWNLOAD_FOLDER = previousDownload;
   }
+});
+
+test("remapLegacyWeeklyFlowPath rewrites /app/downloads paths to the active flow root", () => {
+  const legacyPath =
+    "/app/downloads/aurral-weekly-flow/playlist-id/Artist/Album/Track.flac";
+  assert.equal(
+    remapLegacyWeeklyFlowPath(legacyPath, "/data/downloads/tmp"),
+    "/data/downloads/tmp/aurral-weekly-flow/playlist-id/Artist/Album/Track.flac",
+  );
+});
+
+test("resolveExistingWeeklyFlowTrackPath prefers a migrated legacy path when the file exists", async () => {
+  const fs = await import("fs/promises");
+  const root = path.join(process.env.WEEKLY_FLOW_FOLDER, "legacy-path-check");
+  const playlistPath = path.join(
+    root,
+    "aurral-weekly-flow",
+    "playlist-id",
+    "Artist",
+    "Track.flac",
+  );
+  await fs.mkdir(path.dirname(playlistPath), { recursive: true });
+  await fs.writeFile(playlistPath, "audio");
+
+  const resolved = await resolveExistingWeeklyFlowTrackPath(
+    "/app/downloads/aurral-weekly-flow/playlist-id/Artist/Track.flac",
+    root,
+  );
+
+  assert.equal(resolved?.path, playlistPath);
+  assert.equal(
+    resolved?.migratedFrom,
+    "/app/downloads/aurral-weekly-flow/playlist-id/Artist/Track.flac",
+  );
 });
 
 test("resolveWeeklyFlowRoot falls back to /app/downloads for relative DOWNLOAD_FOLDER", () => {
