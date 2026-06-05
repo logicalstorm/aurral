@@ -43,6 +43,7 @@ import {
   PlaylistDetailHero,
   FlowDetailTabs,
   FlowLibraryCreateMenu,
+  LibrarySidebarToggleIcon,
 } from "./flows/FlowPlaylistUI";
 import {
   FlowEmptyState,
@@ -583,6 +584,16 @@ const parseFlowImportFile = (content) => {
   return playlists;
 };
 
+const LIBRARY_SIDEBAR_COLLAPSED_KEY = "aurral.playlists.sidebarCollapsed";
+
+function readLibrarySidebarCollapsed() {
+  try {
+    return localStorage.getItem(LIBRARY_SIDEBAR_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function FlowPage() {
   useDocumentTitle("Playlists");
   const navigate = useNavigate();
@@ -601,6 +612,9 @@ function FlowPage() {
   const [confirmDisable, setConfirmDisable] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [libraryFilter, setLibraryFilter] = useState("all");
+  const [libraryCollapsed, setLibraryCollapsed] = useState(
+    readLibrarySidebarCollapsed,
+  );
   const [detailTab, setDetailTab] = useState("tracks");
   const [mobileShowDetail, setMobileShowDetail] = useState(false);
   const [optimisticEnabled, setOptimisticEnabled] = useState({});
@@ -1728,12 +1742,40 @@ function FlowPage() {
         onChange={handleImportFileChange}
       />
       <div
-        className={`flow-page__shell${mobileShowDetail ? " flow-page--detail-open" : ""}`}
+        className={`flow-page__shell${mobileShowDetail ? " flow-page--detail-open" : ""}${libraryCollapsed ? " flow-page__shell--library-collapsed" : ""}`}
       >
         <aside
-          className={`flow-page__library${mobileShowDetail ? " flow-page__library--hidden" : ""}`}
+          className={`flow-page__library${mobileShowDetail ? " flow-page__library--hidden" : ""}${libraryCollapsed ? " flow-page__library--collapsed" : ""}`}
         >
           <div className="flow-page__library-head">
+            <button
+              type="button"
+              className="flow-page__library-collapse"
+              onClick={() => {
+                setLibraryCollapsed((prev) => {
+                  const next = !prev;
+                  try {
+                    localStorage.setItem(
+                      LIBRARY_SIDEBAR_COLLAPSED_KEY,
+                      next ? "1" : "0",
+                    );
+                  } catch {}
+                  return next;
+                });
+              }}
+              aria-label={
+                libraryCollapsed
+                  ? "Expand playlist sidebar"
+                  : "Collapse playlist sidebar"
+              }
+              title={
+                libraryCollapsed
+                  ? "Expand playlist sidebar"
+                  : "Collapse playlist sidebar"
+              }
+            >
+              <LibrarySidebarToggleIcon collapsed={libraryCollapsed} />
+            </button>
             <h1 className="flow-page__library-title">Playlists</h1>
             <FlowLibraryCreateMenu
               onImport={handleOpenImportPicker}
@@ -1742,6 +1784,7 @@ function FlowPage() {
               creatingPlaylist={creatingPlaylist}
               creatingFlow={creating}
               canCreateFlow={canCreateGeneratedFlow}
+              compact={libraryCollapsed}
             />
           </div>
           <div
@@ -1784,8 +1827,8 @@ function FlowPage() {
                     artworkUrl={artworkUrlFor(entry.id)}
                     isActive={selectedId === entry.id}
                     stats={stats}
+                    collapsed={libraryCollapsed}
                     onSelect={selectPlaylist}
-                    onArtworkClick={handleOpenEditModal}
                   />
                 );
               })
