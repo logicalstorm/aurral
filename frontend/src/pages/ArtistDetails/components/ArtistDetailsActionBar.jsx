@@ -45,8 +45,7 @@ export function ArtistDetailsActionBar({
   canRefreshArtist,
   handleRefreshArtist,
   refreshingArtist,
-  previewTracks,
-  loadingPreview,
+  buildingQueue = false,
   isArtistPlaybackActive,
   handlePreviewPlayAll,
   onEditIds,
@@ -56,7 +55,6 @@ export function ArtistDetailsActionBar({
 }) {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const currentMonitorOption = getCurrentMonitorOption?.();
-  const hasPreview = previewTracks?.some((track) => track?.preview_url);
   const isPreviewPlaying = isArtistPlaybackActive;
 
   const renderLibraryAction = () => {
@@ -180,24 +178,22 @@ export function ArtistDetailsActionBar({
     <div className="artist-action-bar">
       <div className="artist-action-bar__inner">
         <div className="artist-action-bar__group">
-          {hasPreview && (
-            <button
-              type="button"
-              onClick={handlePreviewPlayAll}
-              disabled={loadingPreview}
-              className="btn btn-primary btn-round-lg"
-              aria-label={isPreviewPlaying ? "Pause preview" : "Play preview"}
-              title={isPreviewPlaying ? "Pause preview" : "Play preview"}
-            >
-              {loadingPreview ? (
-                <Loader className="artist-icon-md animate-spin" />
-              ) : isPreviewPlaying ? (
-                <Pause className="artist-icon-md" />
-              ) : (
-                <Play className="artist-icon-md" />
-              )}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handlePreviewPlayAll}
+            disabled={buildingQueue}
+            className="btn btn-primary btn-round-lg"
+            aria-label={isPreviewPlaying ? "Pause playback" : "Play artist"}
+            title={isPreviewPlaying ? "Pause playback" : "Play artist"}
+          >
+            {buildingQueue ? (
+              <Loader className="artist-icon-md animate-spin" />
+            ) : isPreviewPlaying ? (
+              <Pause className="artist-icon-md" />
+            ) : (
+              <Play className="artist-icon-md" />
+            )}
+          </button>
           {renderLibraryAction()}
         </div>
 
@@ -303,8 +299,7 @@ ArtistDetailsActionBar.propTypes = {
   canRefreshArtist: PropTypes.bool,
   handleRefreshArtist: PropTypes.func.isRequired,
   refreshingArtist: PropTypes.bool,
-  previewTracks: PropTypes.array,
-  loadingPreview: PropTypes.bool,
+  buildingQueue: PropTypes.bool,
   isArtistPlaybackActive: PropTypes.bool,
   handlePreviewPlayAll: PropTypes.func.isRequired,
   onEditIds: PropTypes.func,

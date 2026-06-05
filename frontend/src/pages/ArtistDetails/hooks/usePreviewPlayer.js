@@ -30,6 +30,7 @@ export function usePreviewPlayer(
   } = useAudioQueue();
 
   const artistName = artistNameFromNav || artist?.name || "";
+  const releaseGroups = artist?.["release-groups"] || [];
   const artistSource = mbid
     ? { type: "artist", id: mbid, label: artistName }
     : null;
@@ -85,15 +86,17 @@ export function usePreviewPlayer(
     try {
       const tracks = await buildArtistPlaybackQueue({
         artistName,
+        artistMbid: mbid,
         previewTracks: getPlayableTracks(),
         existsInLibrary,
         libraryArtist,
         libraryAlbums,
         downloadStatuses,
         albumTracksCache: albumTracks,
+        releaseGroups,
       });
       if (tracks.length === 0) return;
-      playQueue(tracks, { source: artistSource });
+      playQueue(tracks, { source: artistSource, shuffle: true });
     } finally {
       setBuildingQueue(false);
     }
@@ -102,7 +105,8 @@ export function usePreviewPlayer(
   return {
     previewTracks,
     setPreviewTracks,
-    loadingPreview: loadingPreview || buildingQueue,
+    loadingPreview,
+    buildingQueue,
     setLoadingPreview,
     playingPreviewId,
     isArtistPlaybackActive,
