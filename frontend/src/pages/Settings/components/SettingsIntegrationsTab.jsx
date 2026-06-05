@@ -2,11 +2,13 @@ import { useState } from "react";
 import { CheckCircle, ChevronDown, RefreshCw } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
+import { LidarrLibraryAccessCheck } from "./LidarrLibraryAccessCheck";
 import {
   getLidarrMetadataProfiles,
   getLidarrProfiles,
   getLidarrTags,
   testLidarrConnection,
+  testLidarrLibraryAccess,
 } from "../../../utils/api";
 
 export function SettingsIntegrationsTab({
@@ -43,6 +45,10 @@ export function SettingsIntegrationsTab({
     navidrome: true,
   });
   const [lidarrTestLatencyMs, setLidarrTestLatencyMs] = useState(null);
+  const [testingLidarrLibraryAccess, setTestingLidarrLibraryAccess] =
+    useState(false);
+  const [lidarrLibraryAccessResult, setLidarrLibraryAccessResult] =
+    useState(null);
   const safeLidarrProfiles = Array.isArray(lidarrProfiles)
     ? lidarrProfiles
     : [];
@@ -61,6 +67,41 @@ export function SettingsIntegrationsTab({
       ...current,
       [section]: !current[section],
     }));
+  };
+
+  const handleTestLidarrLibraryAccess = async () => {
+    const url = settings.integrations?.lidarr?.url;
+    const apiKey = settings.integrations?.lidarr?.apiKey;
+    if (!url || !apiKey) {
+      showError("Please enter both URL and API key");
+      return;
+    }
+    setTestingLidarrLibraryAccess(true);
+    setLidarrLibraryAccessResult(null);
+    try {
+      const result = await testLidarrLibraryAccess(url, apiKey);
+      setLidarrLibraryAccessResult(result);
+      if (result.ok) {
+        if (result.partial) {
+          showInfo(
+            "Folders are reachable, but no downloaded tracks were found to verify yet.",
+          );
+        } else {
+          showSuccess("Library access looks good.");
+        }
+      } else {
+        showError("Library access check failed. See the results below.");
+      }
+    } catch (error) {
+      const message =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Library access check failed";
+      showError(message);
+    } finally {
+      setTestingLidarrLibraryAccess(false);
+    }
   };
 
   const handleTestLidarr = async () => {
@@ -262,19 +303,20 @@ export function SettingsIntegrationsTab({
                   placeholder="http://lidarr:8686"
                   autoComplete="off"
                   value={settings.integrations?.lidarr?.url || ""}
-                  onChange={(e) => {
-                    setLidarrTestLatencyMs(null);
-                    updateSettings({
-                      ...settings,
-                      integrations: {
-                        ...settings.integrations,
-                        lidarr: {
-                          ...(settings.integrations?.lidarr || {}),
-                          url: e.target.value,
+                    onChange={(e) => {
+                      setLidarrTestLatencyMs(null);
+                      setLidarrLibraryAccessResult(null);
+                      updateSettings({
+                        ...settings,
+                        integrations: {
+                          ...settings.integrations,
+                          lidarr: {
+                            ...(settings.integrations?.lidarr || {}),
+                            url: e.target.value,
+                          },
                         },
-                      },
-                    });
-                  }}
+                      });
+                    }}
                 />
               </div>
               <div>
@@ -292,6 +334,7 @@ export function SettingsIntegrationsTab({
                     value={settings.integrations?.lidarr?.apiKey || ""}
                     onChange={(e) => {
                       setLidarrTestLatencyMs(null);
+                      setLidarrLibraryAccessResult(null);
                       updateSettings({
                         ...settings,
                         integrations: {
@@ -309,12 +352,13 @@ export function SettingsIntegrationsTab({
                     onClick={handleTestLidarr}
                     disabled={
                       testingLidarr ||
+                      testingLidarrLibraryAccess ||
                       !settings.integrations?.lidarr?.url ||
                       !settings.integrations?.lidarr?.apiKey
                     }
                     className="btn btn-secondary"
                   >
-                    {testingLidarr ? "Testing..." : "Test"}
+                    {testingLidarr ? "Testing..." : "Test connection"}
                   </button>
                 </div>
                 <p className="settings-page__hint">
@@ -325,6 +369,28 @@ export function SettingsIntegrationsTab({
                     Last test response time: {lidarrTestLatencyMs} ms
                   </p>
                 )}
+                <div className="settings-page__lidarr-access-row">
+                  <button
+                    type="button"
+                    onClick={handleTestLidarrLibraryAccess}
+                    disabled={
+                      testingLidarrLibraryAccess ||
+                      testingLidarr ||
+                      !settings.integrations?.lidarr?.url ||
+                      !settings.integrations?.lidarr?.apiKey
+                    }
+                    className="btn btn-secondary"
+                  >
+                    {testingLidarrLibraryAccess
+                      ? "Checking library access..."
+                      : "Test library access"}
+                  </button>
+                  <p className="settings-page__hint">
+                    Verifies Aurral can read files from Lidarr&apos;s music
+                    folders for playback and playlist reuse.
+                  </p>
+                </div>
+                <LidarrLibraryAccessCheck result={lidarrLibraryAccessResult} />
               </div>
               <div>
                 <label
