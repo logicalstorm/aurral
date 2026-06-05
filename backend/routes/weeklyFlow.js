@@ -344,29 +344,21 @@ router.get("/artwork/:playlistId", noCache, async (req, res) => {
   if (!canAccessPlaylistType(req.user, playlistId)) {
     return res.status(404).json({ error: "Playlist artwork not found" });
   }
-  const playlistName = playlistManager.getPlaylistName(playlistId);
-  if (!playlistName) {
+  const artwork = await playlistManager.resolveArtworkFile(playlistId);
+  if (!artwork) {
     return res.status(404).json({ error: "Playlist artwork not found" });
   }
 
-  const fileName = `${playlistManager._getPlaylistBaseName(playlistName)}.png`;
-  const safeRoot = path.resolve(playlistManager.libraryRoot);
-  const safePath = path.resolve(safeRoot, fileName);
-  if (path.dirname(safePath) !== safeRoot) {
-    return res.status(403).json({ error: "Invalid artwork path" });
-  }
+  res.type(artwork.extension === ".webp" ? "webp" : "png");
+  res.sendFile(artwork.safePath);
+});
 
-  try {
-    const stat = await fsp.stat(safePath);
-    if (!stat.isFile()) {
-      return res.status(404).json({ error: "Playlist artwork not found" });
-    }
-  } catch {
-    return res.status(404).json({ error: "Playlist artwork not found" });
-  }
-
-  res.type("png");
-  res.sendFile(safePath);
+const artworkUploadParser = express.raw({
+  limit: "8mb",
+  type: (req) => {
+    const contentType = String(req.headers["content-type"] || "").toLowerCase();
+    return contentType.startsWith("image/");
+  },
 });
 
 router.use(requireAuth);
@@ -454,6 +446,60 @@ const canAccessPlaylistType = (user, playlistType) => {
   }
   return false;
 };
+
+router.put("/artwork/:playlistId", artworkUploadParser, async (req, res) => {
+  const { playlistId } = req.params;
+  if (!canAccessPlaylistType(req.user, playlistId)) {
+    return res.status(404).json({ error: "Playlist not found" });
+  }
+  if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+    return res.status(400).json({
+      error: "Bad Request",
+      message: "Image body is required",
+    });
+  }
+  try {
+    await playlistManager.saveArtworkUpload(playlistId, req.body);
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(400).json({
+      error: "Bad Request",
+      message: error?.message || "Failed to save artwork",
+    });
+  }
+});
+
+router.delete("/artwork/:playlistId", async (req, res) => {
+  const { playlistId } = req.params;
+  if (!canAccessPlaylistType(req.user, playlistId)) {
+    return res.status(404).json({ error: "Playlist not found" });
+  }
+  try {
+    await playlistManager.removeArtwork(playlistId);
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(400).json({
+      error: "Bad Request",
+      message: error?.message || "Failed to remove artwork",
+    });
+  }
+});
+
+router.post("/artwork/:playlistId/generate", async (req, res) => {
+  const { playlistId } = req.params;
+  if (!canAccessPlaylistType(req.user, playlistId)) {
+    return res.status(404).json({ error: "Playlist not found" });
+  }
+  try {
+    await playlistManager.generateArtwork(playlistId);
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(400).json({
+      error: "Bad Request",
+      message: error?.message || "Failed to generate artwork",
+    });
+  }
+});
 
 const filterJobsForUser = (user, jobs) =>
   (Array.isArray(jobs) ? jobs : []).filter((job) =>

@@ -269,7 +269,7 @@ function ArtistDetailsPage() {
     return () => {
       cancelled = true;
     };
-  }, [artist, artistNameFromNav, isBlockedByEntries, mbid, normalizeArtists]);
+  }, [artist?.id, artist?.name, artistNameFromNav, isBlockedByEntries, mbid]);
 
   const library = useArtistDetailsLibrary({
     artist,

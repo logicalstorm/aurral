@@ -6,6 +6,7 @@ import {
   Sparkles,
   History,
   AudioWaveform,
+  Download,
   Ticket,
   Ban,
 } from "lucide-react";
@@ -94,6 +95,12 @@ function Sidebar({ appVersion, mode }) {
         path: "/flow",
         label: "Flow",
         icon: AudioWaveform,
+        permission: "accessFlow",
+      },
+      {
+        path: "/downloads",
+        label: "Downloads",
+        icon: Download,
         permission: "accessFlow",
       },
       { path: "/blocklist", label: "Blocklist", icon: Ban },

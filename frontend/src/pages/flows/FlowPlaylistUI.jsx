@@ -1,0 +1,330 @@
+import { useEffect, useRef, useState } from "react";
+import {
+  ChevronLeft,
+  ExternalLink,
+  ListMusic,
+  Plus,
+  Sparkles,
+  Upload,
+} from "lucide-react";
+import PillToggle from "../../components/PillToggle";
+import { PlaylistArtworkThumb } from "../FlowPageComponents";
+import { getDownloadedTrackCount } from "./flowStats";
+
+export function FlowLibraryCreateMenu({
+  onImport,
+  onNewPlaylist,
+  onNewFlow,
+  creatingPlaylist = false,
+  creatingFlow = false,
+  canCreateFlow = true,
+  spotifyImportHref = "https://aurral.org/aurral-convert",
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  const close = () => setIsOpen(false);
+
+  return (
+    <div
+      className={`flow-page__library-create${isOpen ? " is-open" : ""}`}
+      ref={menuRef}
+    >
+      <button
+        type="button"
+        className="flow-page__library-create-btn"
+        onClick={() => setIsOpen((prev) => !prev)}
+        aria-label="Create playlist or flow"
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+      >
+        <Plus className="flow-page__library-create-icon" aria-hidden="true" />
+      </button>
+      {isOpen ? (
+        <>
+          <button
+            type="button"
+            className="artist-backdrop-button"
+            onClick={close}
+            aria-label="Close menu"
+          />
+          <div
+            className="flow-page__library-create-menu"
+            role="menu"
+            aria-label="Create and import"
+          >
+            <p className="flow-page__library-create-menu-label">Create</p>
+            <div className="flow-page__library-create-primary">
+              <button
+                type="button"
+                role="menuitem"
+                className="flow-page__library-create-action flow-page__library-create-action--playlist"
+                disabled={creatingPlaylist}
+                onClick={() => {
+                  onNewPlaylist?.();
+                  close();
+                }}
+              >
+                <span
+                  className="flow-page__library-create-action-icon"
+                  aria-hidden="true"
+                >
+                  <ListMusic className="flow-page__library-create-action-glyph" />
+                </span>
+                <span className="flow-page__library-create-action-copy">
+                  <span className="flow-page__library-create-action-title">
+                    {creatingPlaylist ? "Creating playlist..." : "New playlist"}
+                  </span>
+                  <span className="flow-page__library-create-action-desc">
+                    Curate and play your own track list
+                  </span>
+                </span>
+              </button>
+              {canCreateFlow ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flow-page__library-create-action flow-page__library-create-action--flow"
+                  disabled={creatingFlow}
+                  onClick={() => {
+                    onNewFlow?.();
+                    close();
+                  }}
+                >
+                  <span
+                    className="flow-page__library-create-action-icon flow-page__library-create-action-icon--flow"
+                    aria-hidden="true"
+                  >
+                    <Sparkles className="flow-page__library-create-action-glyph" />
+                  </span>
+                  <span className="flow-page__library-create-action-copy">
+                    <span className="flow-page__library-create-action-title">
+                      {creatingFlow ? "Creating flow..." : "New flow"}
+                    </span>
+                    <span className="flow-page__library-create-action-desc">
+                      Auto-updating playlist from your recipe
+                    </span>
+                  </span>
+                </button>
+              ) : null}
+            </div>
+            <p className="flow-page__library-create-menu-label flow-page__library-create-menu-label--import">
+              Import
+            </p>
+            <div className="flow-page__library-create-secondary">
+              <button
+                type="button"
+                role="menuitem"
+                className="flow-page__library-create-secondary-item"
+                onClick={() => {
+                  onImport?.();
+                  close();
+                }}
+              >
+                <Upload className="flow-page__library-create-secondary-icon" />
+                <span>Import JSON</span>
+              </button>
+              <a
+                href={spotifyImportHref}
+                target="_blank"
+                rel="noreferrer"
+                role="menuitem"
+                className="flow-page__library-create-secondary-item"
+                onClick={close}
+              >
+                <ExternalLink className="flow-page__library-create-secondary-icon" />
+                <span>Spotify import</span>
+              </a>
+            </div>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+export function PlaylistLibraryItem({
+  entry,
+  artworkUrl,
+  isActive,
+  stats,
+  onSelect,
+  onArtworkClick,
+}) {
+  const downloadedCount = getDownloadedTrackCount(stats);
+  const trackLabel = `${downloadedCount} track${downloadedCount === 1 ? "" : "s"}`;
+  const typeLabel =
+    entry.kind === "flow"
+      ? entry.enabled === true
+        ? "Flow"
+        : "Flow draft"
+      : "Playlist";
+
+  return (
+    <div
+      className={`flow-page__library-item${isActive ? " is-active" : ""}`}
+      role="button"
+      tabIndex={0}
+      aria-current={isActive ? "true" : undefined}
+      onClick={() => onSelect?.(entry)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect?.(entry);
+        }
+      }}
+    >
+      <PlaylistArtworkThumb
+        artworkUrl={artworkUrl}
+        name={entry.name}
+        className="flow-page__library-item-artwork"
+        onClick={
+          onArtworkClick
+            ? (event) => {
+                event.stopPropagation();
+                onArtworkClick(entry);
+              }
+            : undefined
+        }
+      />
+      <div className="flow-page__library-item-body">
+        <div className="flow-page__library-item-top">
+          <span className="flow-page__library-item-type">{typeLabel}</span>
+        </div>
+        <span className="flow-page__library-item-title" title={entry.name}>
+          {entry.name}
+        </span>
+        <span className="flow-page__library-item-meta">{trackLabel}</span>
+      </div>
+    </div>
+  );
+}
+
+export function PlaylistDetailHero({
+  entry,
+  artworkUrl,
+  metaLine,
+  statusLine = "",
+  enabled,
+  togglingId,
+  onToggleEnabled,
+  onBack,
+  showBack,
+  onRenameTitle,
+  onArtworkClick,
+  primaryActions,
+  moreMenu,
+}) {
+  const isFlow = entry.kind === "flow";
+  const typeLabel = isFlow
+    ? enabled
+      ? "Flow"
+      : "Flow draft"
+    : "Playlist";
+
+  return (
+    <div className="flow-page__detail-hero">
+      {showBack ? (
+        <button
+          type="button"
+          className="flow-page__detail-back btn btn-secondary btn-sm"
+          onClick={onBack}
+          aria-label="Back to library"
+        >
+          <ChevronLeft className="artist-icon-sm" />
+          Library
+        </button>
+      ) : null}
+      <div className="flow-page__detail-hero-main">
+        <div className="flow-page__detail-hero-copy">
+          <PlaylistArtworkThumb
+            artworkUrl={artworkUrl}
+            name={entry.name}
+            className="flow-page__detail-artwork"
+            onClick={onArtworkClick}
+          />
+          <div className="flow-page__detail-hero-text">
+            <div className="flow-page__detail-hero-top">
+              <span className="flow-page__detail-eyebrow">{typeLabel}</span>
+              {statusLine ? (
+                <p
+                  className="flow-page__detail-meta flow-page__detail-meta--status flow-page__detail-status-inline"
+                  title={statusLine}
+                >
+                  {statusLine}
+                </p>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className="flow-page__detail-title flow-page__detail-title--hero flow-page__detail-title-button"
+              title={entry.name}
+              onClick={onRenameTitle}
+            >
+              {entry.name}
+            </button>
+            {metaLine ? (
+              <p className="flow-page__detail-meta">{metaLine}</p>
+            ) : null}
+          </div>
+        </div>
+        <div className="flow-page__detail-hero-actions">
+          {primaryActions}
+          {isFlow ? (
+            <div className="flow-page__toggle-wrap" data-no-card-toggle="true">
+              <PillToggle
+                checked={enabled}
+                className={`pill-toggle--flow-compact${enabled ? "" : " is-off"}`}
+                onChange={(event) => onToggleEnabled?.(event.target.checked)}
+                disabled={togglingId === entry.id}
+              />
+            </div>
+          ) : null}
+          {moreMenu}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function FlowDetailTabs({ activeTab, onChange }) {
+  const tabs = [
+    { id: "tracks", label: "Tracks", icon: ListMusic },
+    { id: "recipe", label: "Recipe", icon: Sparkles },
+  ];
+
+  return (
+    <div className="artist-segmented flow-page__detail-tabs" role="tablist">
+      {tabs.map((tab) => {
+        const Icon = tab.icon;
+        const isActive = activeTab === tab.id;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            aria-pressed={isActive}
+            className={`artist-segmented-button flow-page__detail-tab${isActive ? " is-active" : ""}`}
+            onClick={() => onChange(tab.id)}
+          >
+            <Icon className="artist-icon-xs" aria-hidden="true" />
+            {tab.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
