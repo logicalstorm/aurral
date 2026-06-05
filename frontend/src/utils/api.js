@@ -621,6 +621,20 @@ export const requestAlbumFromSearch = async (payload) => {
   return response.data;
 };
 
+export const getLibraryPlaybackQueue = async () => {
+  const response = await api.get("/library/playback-queue");
+  const tracks = Array.isArray(response.data) ? response.data : [];
+  return Promise.all(
+    tracks.map(async (track) => ({
+      ...track,
+      preview_url: track.streamPath
+        ? await buildStreamUrl(track.streamPath)
+        : track.preview_url || null,
+      previewProvider: "lidarr",
+    })),
+  );
+};
+
 export const getLibraryTracks = async (
   albumId,
   releaseGroupMbid = null,

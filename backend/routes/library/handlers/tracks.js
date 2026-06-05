@@ -72,6 +72,18 @@ const streamAudioFile = async (req, res, filePath) => {
 };
 
 export default function registerTracks(router) {
+  router.get("/playback-queue", cacheMiddleware(120), async (req, res) => {
+    try {
+      const tracks = await libraryManager.getPlaybackQueue();
+      res.json(tracks);
+    } catch (error) {
+      res.status(500).json({
+        error: "Failed to build playback queue",
+        message: error.message,
+      });
+    }
+  });
+
   router.get("/tracks", cacheMiddleware(120), async (req, res) => {
     try {
       const { albumId, releaseGroupMbid } = req.query;
