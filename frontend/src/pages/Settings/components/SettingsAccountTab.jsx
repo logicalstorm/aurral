@@ -17,6 +17,7 @@ export function SettingsAccountTab({
   loading,
   saving,
   handleSave,
+  hidePanelHeader = false,
 }) {
   if (loading) {
     return (
@@ -28,19 +29,16 @@ export function SettingsAccountTab({
 
   return (
     <div className="settings-page__panel">
-      <div className="settings-page__panel-header">
-        <h2
-          className="settings-page__panel-title"
-          
-        >
-          Profile
-        </h2>
-        <FlipSaveButton
-          saving={saving}
-          disabled={!hasUnsavedChanges}
-          onClick={handleSave}
-        />
-      </div>
+      {!hidePanelHeader && (
+        <div className="settings-page__panel-header">
+          <h2 className="settings-page__panel-title">Profile</h2>
+          <FlipSaveButton
+            saving={saving}
+            disabled={!hasUnsavedChanges}
+            onClick={handleSave}
+          />
+        </div>
+      )}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -59,9 +57,9 @@ export function SettingsAccountTab({
             >
               Listening History
             </h3>
-            <div className="flex items-center gap-2">
+            <div className="settings-page__inline-row">
               {listenHistoryUsername && (
-                <span className="text-sm" >
+                <span className="settings-page__muted-copy">
                   {listenHistoryProvider === "listenbrainz"
                     ? `ListenBrainz: ${listenHistoryUsername}`
                     : `Last.fm: ${listenHistoryUsername}`}
@@ -112,14 +110,14 @@ export function SettingsAccountTab({
         <div
           className="settings-page__section"
         >
-          <div className="mb-2">
+          <div className="settings-page__section-intro">
             <h3
               className="settings-page__section-title"
               
             >
               Library Defaults
             </h3>
-            <p className="mt-1 text-sm" >
+            <p className="settings-page__section-note">
               These defaults apply to one-click artist adds unless you override
               them from the Customize action on the artist page.
             </p>
@@ -127,7 +125,7 @@ export function SettingsAccountTab({
 
           <fieldset
             disabled={!lidarrConfigured}
-            className={`space-y-4 ${lidarrConfigured ? "" : "opacity-60"}`}
+            className={`settings-page__field-stack--lg${lidarrConfigured ? "" : " settings-page__is-dimmed"}`}
           >
             <div>
               <label
@@ -169,7 +167,7 @@ export function SettingsAccountTab({
           </fieldset>
 
           {!lidarrConfigured && (
-            <p className="text-xs" >
+            <p className="settings-page__footnote">
               Lidarr must be configured by an admin before personal library
               defaults can be saved.
             </p>

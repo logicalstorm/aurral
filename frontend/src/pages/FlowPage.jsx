@@ -1784,8 +1784,8 @@ function FlowPage() {
   };
   if (loading && !status) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-[#707e61]" />
+      <div className="flow-page__loading">
+        <Loader2 className="artist-spinner artist-spinner--large" />
       </div>
     );
   }
@@ -1802,19 +1802,19 @@ function FlowPage() {
       currentWorkerSettings.existingFileMode;
 
   return (
-    <div className="flow-page max-w-6xl mx-auto pb-10 sm:px-4">
+    <div className="flow-page">
       <input
         ref={importInputRef}
         type="file"
         accept="application/json,.json"
-        className="hidden"
+        className="flow-page__hidden-input"
         onChange={handleImportFileChange}
       />
-      <div className="mb-4 flex items-center justify-between gap-3 px-4 sm:px-0">
-        <div className="flex min-w-0 items-end gap-2">
-          <h2 className="text-base font-semibold text-white">Playlists / Flows</h2>
+      <div className="flow-page__header">
+        <div className="flow-page__header-title-wrap">
+          <h1 className="flow-page__header-title">Playlists / Flows</h1>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flow-page__header-actions">
           {user?.role === "admin" && (
             <button
               type="button"
@@ -1822,7 +1822,7 @@ function FlowPage() {
               className="btn btn-secondary btn-sm btn-icon btn--faded"
               aria-label="Open flow worker settings"
             >
-              <Settings className="w-4 h-4" />
+              <Settings className="artist-icon-sm" />
             </button>
           )}
           <button
@@ -1848,10 +1848,10 @@ function FlowPage() {
             className="btn btn-secondary btn-sm btn--wide-sm"
             disabled={creatingPlaylist}
           >
-            <span className="hidden sm:inline">
+            <span className="flow-page__btn-label--wide">
               {creatingPlaylist ? "Creating..." : "New Playlist"}
             </span>
-            <span className="sm:hidden">Playlist</span>
+            <span className="flow-page__btn-label--compact">Playlist</span>
           </button>
           {canCreateGeneratedFlow ? (
             <button
@@ -1860,18 +1860,18 @@ function FlowPage() {
               className="btn btn-primary btn-sm btn--wide-sm"
               disabled={creating}
             >
-              <span className="hidden sm:inline">
+              <span className="flow-page__btn-label--wide">
                 {creating ? "Creating..." : "New Flow"}
               </span>
-              <span className="sm:hidden">Flow</span>
+              <span className="flow-page__btn-label--compact">Flow</span>
             </button>
           ) : null}
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="flow-page__list">
         {sharedPlaylists.length > 0 && (
-          <div className="space-y-3">
+          <div className="flow-page__list-group">
             {sharedPlaylists.map((playlist) => (
               <SharedPlaylistCard
                 key={playlist.id}

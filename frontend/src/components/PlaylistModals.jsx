@@ -13,19 +13,15 @@ function ModalShell({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
-      style={{ backgroundColor: "rgba(0, 0, 0, 0.78)" }}
+      className="playlist-modal-backdrop"
       onClick={disableClose ? undefined : onClose}
     >
-      <div
-        className="card card-overlay w-full max-w-2xl border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
-          <div className="space-y-1">
-            <h3 className="text-lg font-semibold text-white">{title}</h3>
+      <div className="playlist-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="playlist-modal__header">
+          <div className="playlist-modal__heading">
+            <h3 className="playlist-modal__title">{title}</h3>
             {description ? (
-              <p className="text-sm text-[#b8b8bf]">{description}</p>
+              <p className="playlist-modal__description">{description}</p>
             ) : null}
           </div>
           <button
@@ -35,13 +31,11 @@ function ModalShell({
             aria-label="Close"
             disabled={disableClose}
           >
-            <X className="h-4 w-4" />
+            <X className="artist-icon-sm" />
           </button>
         </div>
-        <div className="px-5 py-4">{children}</div>
-        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-white/10 px-5 py-4">
-          {footer}
-        </div>
+        <div className="playlist-modal__body">{children}</div>
+        <div className="playlist-modal__footer">{footer}</div>
       </div>
     </div>
   );
@@ -161,19 +155,17 @@ export function CreatePlaylistModal({
             disabled={saving}
           >
             {saving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="artist-icon-sm animate-spin" />
             ) : (
-              <Plus className="h-4 w-4" />
+              <Plus className="artist-icon-sm" />
             )}
             Create Playlist
           </button>
         </>
       }
     >
-      <div className="space-y-3">
-        <label className="block text-sm font-medium text-white">
-          Playlist Name
-        </label>
+      <div className="playlist-modal__fields">
+        <label className="artist-field-label">Playlist Name</label>
         <input
           type="text"
           value={name}
@@ -187,12 +179,12 @@ export function CreatePlaylistModal({
               handleSubmit();
             }
           }}
-          className="input h-11 w-full"
+          className="input input--tall"
           placeholder="Night Drive"
           autoFocus
         />
         {localError || error ? (
-          <p className="text-sm text-red-400">{localError || error}</p>
+          <p className="artist-error-text">{localError || error}</p>
         ) : null}
       </div>
     </ModalShell>
@@ -317,25 +309,23 @@ export function PlaylistTrackModal({
             disabled={saving}
           >
             {saving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="artist-icon-sm animate-spin" />
             ) : (
-              <Check className="h-4 w-4" />
+              <Check className="artist-icon-sm" />
             )}
             Save To Playlist
           </button>
         </>
       }
     >
-      <div className="space-y-4">
+      <div className="playlist-modal__section">
         {availablePlaylists.length > 0 ? (
-          <div className="inline-flex rounded-lg border border-white/10 bg-black/20 p-1">
+          <div className="playlist-modal__segmented">
             <button
               type="button"
               onClick={() => setTargetMode("existing")}
-              className={`rounded-md px-3 py-2 text-sm transition ${
-                targetMode === "existing"
-                  ? "bg-[#707e61] text-white"
-                  : "text-[#c2c2c8]"
+              className={`playlist-modal__segment${
+                targetMode === "existing" ? " is-active" : ""
               }`}
             >
               Existing Playlist
@@ -343,10 +333,8 @@ export function PlaylistTrackModal({
             <button
               type="button"
               onClick={() => setTargetMode("new")}
-              className={`rounded-md px-3 py-2 text-sm transition ${
-                targetMode === "new"
-                  ? "bg-[#707e61] text-white"
-                  : "text-[#c2c2c8]"
+              className={`playlist-modal__segment${
+                targetMode === "new" ? " is-active" : ""
               }`}
             >
               New Playlist
@@ -355,11 +343,9 @@ export function PlaylistTrackModal({
         ) : null}
 
         {targetMode === "existing" && availablePlaylists.length > 0 ? (
-          <div className="grid gap-2">
-            <label className="text-sm font-medium text-white">
-              Choose Playlist
-            </label>
-            <div className="grid gap-2">
+          <div className="playlist-modal__fields">
+            <label className="artist-field-label">Choose Playlist</label>
+            <div className="playlist-modal__option-list">
               {availablePlaylists.map((playlist) => {
                 const selected = playlistId === playlist.id;
                 return (
@@ -367,22 +353,20 @@ export function PlaylistTrackModal({
                     key={playlist.id}
                     type="button"
                     onClick={() => setPlaylistId(playlist.id)}
-                    className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left transition ${
-                      selected
-                        ? "border-[#8fa07b] bg-[#2a3223]"
-                        : "border-white/10 bg-[#15151a] hover:border-white/20"
+                    className={`playlist-modal__playlist-option${
+                      selected ? " is-selected" : ""
                     }`}
                   >
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-white">
+                    <div className="playlist-modal__playlist-copy">
+                      <div className="playlist-modal__playlist-name">
                         {playlist.name}
                       </div>
-                      <div className="text-xs text-[#b8b8bf]">
+                      <div className="playlist-modal__playlist-meta">
                         {playlist.trackCount || 0} tracks
                       </div>
                     </div>
                     {selected ? (
-                      <Check className="h-4 w-4 shrink-0 text-[#dfe8d2]" />
+                      <Check className="artist-icon-sm" />
                     ) : null}
                   </button>
                 );
@@ -390,10 +374,8 @@ export function PlaylistTrackModal({
             </div>
           </div>
         ) : (
-          <div className="grid gap-2">
-            <label className="text-sm font-medium text-white">
-              New Playlist Name
-            </label>
+          <div className="playlist-modal__fields">
+            <label className="artist-field-label">New Playlist Name</label>
             <input
               type="text"
               value={playlistName}
@@ -401,25 +383,22 @@ export function PlaylistTrackModal({
                 setPlaylistName(event.target.value);
                 if (localError) setLocalError("");
               }}
-              className="input h-11 w-full"
+              className="input input--tall"
               placeholder="Sunday picks"
             />
           </div>
         )}
 
-        <div className="rounded-xl border border-white/10 bg-[#15151a]">
-          <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2 text-xs uppercase tracking-[0.18em] text-[#9ea0a8]">
-            <ListMusic className="h-3.5 w-3.5" />
+        <div className="playlist-modal__tracks-panel">
+          <div className="playlist-modal__tracks-header">
+            <ListMusic className="artist-icon-xs" />
             Tracks
           </div>
-          <div className="divide-y divide-white/5">
+          <div>
             {trackDrafts.map((track) => (
-              <div
-                key={track.rowId}
-                className="grid gap-3 px-3 py-3 md:grid-cols-3"
-              >
-                <div className="grid gap-1">
-                  <label className="text-xs text-[#aeb0b7]">Song</label>
+              <div key={track.rowId} className="playlist-modal__track-row">
+                <div className="playlist-modal__track-field">
+                  <label className="playlist-modal__track-label">Song</label>
                   <input
                     type="text"
                     value={track.trackName}
@@ -433,8 +412,8 @@ export function PlaylistTrackModal({
                     className="input input-sm"
                   />
                 </div>
-                <div className="grid gap-1">
-                  <label className="text-xs text-[#aeb0b7]">Artist</label>
+                <div className="playlist-modal__track-field">
+                  <label className="playlist-modal__track-label">Artist</label>
                   <input
                     type="text"
                     value={track.artistName}
@@ -448,8 +427,8 @@ export function PlaylistTrackModal({
                     className="input input-sm"
                   />
                 </div>
-                <div className="grid gap-1">
-                  <label className="text-xs text-[#aeb0b7]">Album</label>
+                <div className="playlist-modal__track-field">
+                  <label className="playlist-modal__track-label">Album</label>
                   <input
                     type="text"
                     value={track.albumName}
@@ -470,7 +449,7 @@ export function PlaylistTrackModal({
         </div>
 
         {localError || error ? (
-          <p className="text-sm text-red-400">{localError || error}</p>
+          <p className="artist-error-text">{localError || error}</p>
         ) : null}
       </div>
     </ModalShell>

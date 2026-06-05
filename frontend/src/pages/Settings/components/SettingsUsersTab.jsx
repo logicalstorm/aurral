@@ -186,7 +186,7 @@ export function SettingsUsersTab({
               }
             }}
           >
-            <div className="space-y-1">
+            <div className="settings-page__field-stack">
               <label htmlFor="change-pw-current" className="label">
                 Current password
               </label>
@@ -200,7 +200,7 @@ export function SettingsUsersTab({
                 required
               />
             </div>
-            <div className="space-y-1">
+            <div className="settings-page__field-stack">
               <label htmlFor="change-pw-new" className="label">
                 New password
               </label>
@@ -214,7 +214,7 @@ export function SettingsUsersTab({
                 required
               />
             </div>
-            <div className="space-y-1">
+            <div className="settings-page__field-stack">
               <label htmlFor="change-pw-confirm" className="label">
                 Confirm new password
               </label>
@@ -341,7 +341,7 @@ export function SettingsUsersTab({
                           );
                         }}
                       >
-                        <Lock className="w-4 h-4" />
+                        <Lock className="artist-icon-sm" />
                         Manage
                       </button>
                       <button
@@ -352,7 +352,7 @@ export function SettingsUsersTab({
                           u.role !== "admin" && setDeleteUserTarget(u)
                         }
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="artist-icon-sm" />
                         Delete
                       </button>
                     </div>
@@ -384,7 +384,7 @@ export function SettingsUsersTab({
                     aria-label="Close"
                     disabled={deletingUser}
                   >
-                    <X className="w-5 h-5" />
+                    <X className="artist-icon-md" />
                   </button>
                 </div>
                 <p className="settings-page__modal-copy">
@@ -454,7 +454,7 @@ export function SettingsUsersTab({
                     onClick={() => setShowAddUserModal(false)}
                     aria-label="Close"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="artist-icon-md" />
                   </button>
                 </div>
                 <form
@@ -502,11 +502,11 @@ export function SettingsUsersTab({
                     <label className="settings-page__section-label">
                       Account
                     </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1">
+                    <div className="settings-page__two-col-grid">
+                      <div className="settings-page__field-stack">
                         <label
                           htmlFor="add-user-username"
-                          className="label text-sm normal-case tracking-normal"
+                          className="artist-field-label"
                         >
                           Username
                         </label>
@@ -521,10 +521,10 @@ export function SettingsUsersTab({
                           }
                         />
                       </div>
-                      <div className="space-y-1">
+                      <div className="settings-page__field-stack">
                         <label
                           htmlFor="add-user-password"
-                          className="label text-sm normal-case tracking-normal"
+                          className="artist-field-label"
                         >
                           Password
                         </label>
@@ -541,7 +541,7 @@ export function SettingsUsersTab({
                       </div>
                     </div>
                   </div>
-                  <div className="space-y-3">
+                  <div className="settings-page__field-stack--md">
                     <label className="settings-page__section-label">
                       Permissions
                     </label>
@@ -564,13 +564,13 @@ export function SettingsUsersTab({
                               }))
                             }
                           />
-                          <span className="text-sm">{label}</span>
+                          <span className="settings-page__muted-copy">{label}</span>
                         </label>
                       ))}
                     </div>
                   </div>
                   <div
-                    className="flex gap-3 justify-end pt-4 mt-4"
+                    className="settings-page__modal-actions"
                   >
                     <button
                       type="button"
@@ -611,7 +611,7 @@ export function SettingsUsersTab({
                     onClick={() => setEditUser(null)}
                     aria-label="Close"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="artist-icon-md" />
                   </button>
                 </div>
                 <form
@@ -680,11 +680,11 @@ export function SettingsUsersTab({
                         : "Password (optional)"}
                     </label>
                     {isSelfEdit ? (
-                      <div className="space-y-3">
-                        <div className="space-y-1">
+                      <div className="settings-page__field-stack--md">
+                        <div className="settings-page__field-stack">
                           <label
                             htmlFor="edit-current-password"
-                            className="label text-sm normal-case tracking-normal"
+                            className="artist-field-label"
                           >
                             Current password
                           </label>
@@ -699,10 +699,10 @@ export function SettingsUsersTab({
                             }
                           />
                         </div>
-                        <div className="space-y-1">
+                        <div className="settings-page__field-stack">
                           <label
                             htmlFor="edit-new-password"
-                            className="label text-sm normal-case tracking-normal"
+                            className="artist-field-label"
                           >
                             New password
                           </label>
@@ -729,7 +729,7 @@ export function SettingsUsersTab({
                     )}
                   </div>
                   {!isSelfEdit && (
-                    <div className="space-y-3">
+                    <div className="settings-page__field-stack--md">
                       <label className="settings-page__section-label">
                         Permissions
                       </label>
@@ -752,14 +752,14 @@ export function SettingsUsersTab({
                                 }))
                               }
                             />
-                            <span className="text-sm">{label}</span>
+                            <span className="settings-page__muted-copy">{label}</span>
                           </label>
                         ))}
                       </div>
                     </div>
                   )}
                   <div
-                    className="flex gap-3 justify-end pt-4 mt-4"
+                    className="settings-page__modal-actions"
                   >
                     <button
                       type="button"

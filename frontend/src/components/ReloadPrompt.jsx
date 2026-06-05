@@ -18,17 +18,12 @@ function ReloadPrompt() {
   }
 
   return (
-    <div
-      className="fixed bottom-0 right-0 p-4 m-4 z-50 shadow-xl max-w-sm w-full animate-slide-up"
-      style={{ backgroundColor: "#211f27" }}
-    >
-      <div className="flex flex-col gap-2">
-        <div className="flex-1">
-          <p className="text-sm font-medium" style={{ color: "#fff" }}>
-            New content available, click on reload button to update.
-          </p>
-        </div>
-        <div className="flex gap-2 mt-2">
+    <div className="reload-prompt">
+      <div className="reload-prompt__content">
+        <p className="reload-prompt__text">
+          New content available, click on reload button to update.
+        </p>
+        <div className="reload-prompt__actions">
           <button
             type="button"
             className="btn btn-primary btn-sm btn--grow"

@@ -148,7 +148,7 @@ export function SettingsNotificationsTab({
               className="settings-page__section-title">
               Gotify
             </h3>
-            <div className="flex items-center gap-2">
+            <div className="settings-page__inline-row">
               {settings.integrations?.gotify?.url &&
                 settings.integrations?.gotify?.token && (
                   <span className="settings-page__status">
@@ -228,7 +228,7 @@ export function SettingsNotificationsTab({
               </p>
             </div>
             <div className="settings-page__split settings-page__fields">
-              <div className="flex items-center justify-between">
+              <div className="settings-page__inline-row settings-page__inline-row--between">
                 <span
                   className="artist-field-label">
                   Notify when daily Discover is updated
@@ -252,7 +252,7 @@ export function SettingsNotificationsTab({
                   }
                 />
               </div>
-              <div className="flex items-center justify-between">
+              <div className="settings-page__inline-row settings-page__inline-row--between">
                 <span
                   className="artist-field-label">
                   Notify when weekly flow finishes
@@ -299,7 +299,7 @@ export function SettingsNotificationsTab({
           </div>
 
           {!webhooks.length && (
-            <p className="text-sm" >
+            <p className="settings-page__muted-copy">
               No webhooks configured. Click &ldquo;Add Webhook&rdquo; to create one.
             </p>
           )}
@@ -360,7 +360,7 @@ export function SettingsNotificationsTab({
                     <label className="artist-field-label">
                       Body
                       {wh.body !== null && (
-                        <span className="ml-2 font-normal text-xs" >
+                        <span className="settings-page__hint-inline">
                           POST — variables: <code>$flowPath</code>, <code>$flowName</code>
                         </span>
                       )}
@@ -413,9 +413,9 @@ export function SettingsNotificationsTab({
                     </button>
                   </div>
                   {(wh.headers || []).length > 0 && (
-                    <div className="space-y-2">
+                    <div className="settings-page__field-stack--md">
                       {(wh.headers || []).map((header, hIndex) => (
-                        <div key={hIndex} className="flex gap-2 items-center">
+                        <div key={hIndex} className="settings-page__header-fields-row">
                           <SettingsInput
                             wrapperClassName="settings-page__field-grow"
                             className="settings-page__mono-input"
@@ -450,7 +450,7 @@ export function SettingsNotificationsTab({
           </div>
 
           <div className="settings-page__split settings-page__fields">
-            <div className="flex items-center justify-between">
+            <div className="settings-page__inline-row settings-page__inline-row--between">
               <span className="artist-field-label">
                 Notify when daily Discover is updated
               </span>
@@ -459,7 +459,7 @@ export function SettingsNotificationsTab({
                 onChange={(e) => updateWebhookEvents({ notifyDiscoveryUpdated: e.target.checked })}
               />
             </div>
-            <div className="flex items-center justify-between">
+            <div className="settings-page__inline-row settings-page__inline-row--between">
               <span className="artist-field-label">
                 Notify when weekly flow finishes
               </span>
