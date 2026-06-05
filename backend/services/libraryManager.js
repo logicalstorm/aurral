@@ -12,6 +12,7 @@ const LIDARR_RETRY_MS = 60000;
 const FULL_LIST_FALLBACK_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 const TRACKS_CACHE_TTL_MS = 120000;
 const TRACKS_CACHE_MAX = 300;
+const PLAYBACK_QUEUE_CACHE_TTL_MS = 120000;
 
 let lidarrClient = null;
 let _cachedArtists = [];
@@ -19,6 +20,7 @@ let _lastLidarrFailureAt = 0;
 let _retryTimeoutId = null;
 let _lastFullArtistFetchAt = 0;
 const _tracksCache = new Map();
+let _playbackQueueCache = null;
 
 function buildTrackFileIndex(trackFiles) {
   const index = new Map();
@@ -1484,6 +1486,103 @@ export class LibraryManager {
         `[LibraryManager] Failed to fetch tracks from Lidarr: ${error.message}`,
       );
       return [];
+    }
+  }
+
+  async getPlaybackQueue() {
+    if (
+      _playbackQueueCache &&
+      _playbackQueueCache.expires > Date.now()
+    ) {
+      return _playbackQueueCache.tracks;
+    }
+
+    const lidarr = await getLidarrClient();
+    if (!lidarr || !lidarr.isConfigured()) {
+      return [];
+    }
+
+    try {
+      const [artists, rawAlbums, rawTracks, rawTrackFiles] = await Promise.all([
+        this.getAllArtists(),
+        lidarr.request("/album"),
+        lidarr.getAllTracks(),
+        lidarr.getAllTrackFiles(),
+      ]);
+
+      const artistNameById = new Map(
+        artists.map((artist) => [
+          String(artist.id),
+          artist.artistName || "Unknown Artist",
+        ]),
+      );
+
+      const albumMetaById = new Map();
+      for (const album of Array.isArray(rawAlbums) ? rawAlbums : []) {
+        const albumId = String(album.id);
+        const artistId = String(album.artistId);
+        albumMetaById.set(albumId, {
+          title: album.title || "Unknown Album",
+          artistId,
+          artistName: artistNameById.get(artistId) || "Unknown Artist",
+        });
+      }
+
+      const trackMetaById = new Map();
+      for (const track of Array.isArray(rawTracks) ? rawTracks : []) {
+        trackMetaById.set(String(track.id), {
+          title: track.title || track.trackTitle || "Unknown Track",
+          albumId: String(track.albumId),
+          trackNumber: track.trackNumber || 0,
+        });
+      }
+
+      const queue = [];
+      for (const file of Array.isArray(rawTrackFiles) ? rawTrackFiles : []) {
+        const trackId = String(file.trackId);
+        const albumId = String(file.albumId);
+        const trackMeta = trackMetaById.get(trackId);
+        const albumMeta = albumMetaById.get(albumId);
+        if (!trackMeta || !albumMeta || !file.path) continue;
+
+        const streamFormat = path
+          .extname(file.path)
+          .replace(/^\./, "")
+          .toLowerCase();
+
+        queue.push({
+          id: `lib-${albumMeta.artistId}-${albumId}-${trackId}`,
+          title: trackMeta.title,
+          artist: albumMeta.artistName,
+          album: albumMeta.title,
+          streamPath: `/library/file-stream/${encodeURIComponent(albumId)}/${encodeURIComponent(trackId)}`,
+          streamFormat: streamFormat || null,
+          quality:
+            file.quality?.quality?.name ||
+            file.mediaInfo?.audioFormat ||
+            null,
+          trackNumber: trackMeta.trackNumber,
+        });
+      }
+
+      queue.sort((a, b) => {
+        const artistCmp = a.artist.localeCompare(b.artist);
+        if (artistCmp !== 0) return artistCmp;
+        const albumCmp = a.album.localeCompare(b.album);
+        if (albumCmp !== 0) return albumCmp;
+        return (a.trackNumber || 0) - (b.trackNumber || 0);
+      });
+
+      _playbackQueueCache = {
+        tracks: queue,
+        expires: Date.now() + PLAYBACK_QUEUE_CACHE_TTL_MS,
+      };
+      return queue;
+    } catch (error) {
+      console.error(
+        `[LibraryManager] Failed to build playback queue: ${error.message}`,
+      );
+      return _playbackQueueCache?.tracks || [];
     }
   }
 
