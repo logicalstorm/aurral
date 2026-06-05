@@ -501,21 +501,17 @@ textarea {
   border-radius: 0;
 }
 
-.btn-add-library span,
-.btn-add-library .btn-add-library__icon {
+.btn-add-library span {
   display: block;
   position: absolute;
   top: 0;
-  height: 100%;
-  text-align: center;
-}
-
-.btn-add-library span {
   left: 0;
   width: 72%;
+  height: 100%;
   font-size: 0.9375rem;
   font-weight: 600;
   line-height: inherit;
+  text-align: center;
   transition: all 0.25s cubic-bezier(0.31, -0.105, 0.43, 1.4);
 }
 
@@ -530,9 +526,12 @@ textarea {
 }
 
 .btn-add-library__icon {
+  position: absolute;
+  top: 0;
   right: 0;
   display: flex;
   width: 28%;
+  height: 100%;
   align-items: center;
   justify-content: center;
   transition: all 0.25s cubic-bezier(0.31, -0.105, 0.43, 1.4);
@@ -592,6 +591,7 @@ textarea {
   align-items: center;
   justify-content: center;
   border: none;
+  border-radius: 0 var(--aurral-radius-round) var(--aurral-radius-round) 0;
   background: transparent;
   color: var(--aurral-white);
   transition:
@@ -3065,6 +3065,12 @@ textarea {
   margin-bottom: 0.75rem;
   overflow: hidden;
   background: var(--aurral-surface-mid);
+}
+
+.artist-similar-avatar .artist-image-root,
+.artist-similar-avatar .artist-image-placeholder {
+  width: 100%;
+  height: 100%;
 }
 
 .artist-similar-match {
