@@ -7,7 +7,7 @@ import {
   Download,
   Trash2,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   getFlowJobs,
   createFlow,
@@ -31,7 +31,6 @@ import {
 } from "../utils/api";
 import {
   CreatePlaylistModal,
-  PlaylistTrackModal,
   RenamePlaylistModal,
 } from "../components/PlaylistModals";
 import { useAuth } from "../contexts/AuthContext";
@@ -75,6 +74,30 @@ function formatNextRun(nextRunAt, now = Date.now()) {
   }
   const days = Math.ceil(diff / dayMs);
   return days === 1 ? "1 day" : `${days} days`;
+}
+
+function formatNextRunShort(nextRunAt, now = Date.now()) {
+  if (!nextRunAt) return null;
+  const ts =
+    typeof nextRunAt === "number" ? nextRunAt : parseInt(nextRunAt, 10);
+  if (!Number.isFinite(ts)) return null;
+  const diff = ts - now;
+  if (diff <= 0) return "soon";
+  const dayMs = 24 * 60 * 60 * 1000;
+  const days = Math.ceil(diff / dayMs);
+  if (days >= 1) {
+    return `${days}d`;
+  }
+  return "soon";
+}
+
+function formatFlowLastRunShort(lastRunAt) {
+  const timestamp =
+    typeof lastRunAt === "number" ? lastRunAt : Number.parseInt(lastRunAt, 10);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return null;
+  return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
 const DEFAULT_MIX = { discover: 34, mix: 33, trending: 33, focus: 0 };
@@ -563,6 +586,7 @@ const parseFlowImportFile = (content) => {
 function FlowPage() {
   useDocumentTitle("Playlists");
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     status,
     loading,
@@ -606,9 +630,9 @@ function FlowPage() {
   const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
   const [creatingPlaylist, setCreatingPlaylist] = useState(false);
   const [createPlaylistError, setCreatePlaylistError] = useState("");
-  const [playlistTrackModal, setPlaylistTrackModal] = useState(null);
-  const [playlistTrackSubmitting, setPlaylistTrackSubmitting] = useState(false);
-  const [playlistTrackError, setPlaylistTrackError] = useState("");
+  const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
+  const [playlistMenuError, setPlaylistMenuError] = useState("");
+  const [playlistsLoading, setPlaylistsLoading] = useState(false);
   const importInputRef = useRef(null);
   const { user } = useAuth();
   const { showSuccess, showError } = useToast();
@@ -813,117 +837,6 @@ function FlowPage() {
     }
   };
 
-  const openPlaylistTrackModal = ({
-    track,
-    title = "Add To Playlist",
-    description = "",
-    excludedPlaylistIds = [],
-    moveFromPlaylistId = null,
-    sourceTrackJobId = null,
-  }) => {
-    const normalizedTrack = buildTrackForPlaylistModal(track);
-    if (!normalizedTrack) {
-      showError("Track details are incomplete");
-      return;
-    }
-    setPlaylistTrackError("");
-    setPlaylistTrackModal({
-      title,
-      description,
-      tracks: [normalizedTrack],
-      excludedPlaylistIds,
-      moveFromPlaylistId,
-      sourceTrackJobId: sourceTrackJobId || track?.id || null,
-      defaultNewPlaylistName: getNextPlaylistName(
-        `${normalizedTrack.artistName} Picks`,
-      ),
-    });
-  };
-
-  const handleAddTrackToPlaylist = (track, options = {}) => {
-    openPlaylistTrackModal({
-      track,
-      title: options.title || "Add Track To Playlist",
-      description:
-        options.description ||
-        "Save this song into an existing playlist or start a new one.",
-      excludedPlaylistIds: options.excludedPlaylistIds || [],
-      sourceTrackJobId: track?.id || null,
-    });
-  };
-
-  const handleMoveTrackToPlaylist = (track, playlistId) => {
-    openPlaylistTrackModal({
-      track,
-      title: "Move To Playlist",
-      description:
-        "Add this track to another playlist. It will be removed from the current playlist.",
-      excludedPlaylistIds: [playlistId],
-      moveFromPlaylistId: playlistId,
-      sourceTrackJobId: track?.id || null,
-    });
-  };
-
-  const handleSubmitPlaylistTrackModal = async (payload) => {
-    setPlaylistTrackSubmitting(true);
-    setPlaylistTrackError("");
-    try {
-      const moveFromPlaylistId = playlistTrackModal?.moveFromPlaylistId;
-      const sourceTrackJobId = playlistTrackModal?.sourceTrackJobId;
-      if (payload?.mode === "new") {
-        const response = await createSharedPlaylist({
-          name: payload.name,
-          tracks: payload.tracks,
-        });
-        if (moveFromPlaylistId && sourceTrackJobId) {
-          await deleteSharedPlaylistTrack(moveFromPlaylistId, sourceTrackJobId);
-          showSuccess(
-            `Track moved to ${response?.playlist?.name || payload.name}`,
-          );
-        } else {
-          showSuccess(
-            `Track saved to ${response?.playlist?.name || payload.name}`,
-          );
-        }
-      } else {
-        const targetPlaylist = sharedPlaylists.find(
-          (playlist) => playlist.id === payload?.playlistId,
-        );
-        await addSharedPlaylistTracks(payload.playlistId, {
-          tracks: payload.tracks,
-        });
-        if (moveFromPlaylistId && sourceTrackJobId) {
-          await deleteSharedPlaylistTrack(moveFromPlaylistId, sourceTrackJobId);
-          showSuccess(
-            `Track moved to ${targetPlaylist?.name || "playlist"}`,
-          );
-        } else {
-          showSuccess(
-            `Track added to ${targetPlaylist?.name || "playlist"}`,
-          );
-        }
-      }
-      setPlaylistTrackModal(null);
-      await fetchStatus();
-      if (selectedId) {
-        await fetchFlowTracks(selectedId, {
-          showSpinner: false,
-          includeFailed: true,
-        });
-      }
-    } catch (err) {
-      const message =
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        err.message ||
-        "Failed to save track to playlist";
-      setPlaylistTrackError(message);
-      showError(message);
-    } finally {
-      setPlaylistTrackSubmitting(false);
-    }
-  };
-
   const handleDelete = async (flow) => {
     setConfirmDelete({
       flowId: flow.id,
@@ -1073,8 +986,29 @@ function FlowPage() {
   );
 
   useEffect(() => {
+    const navPlaylistId = location.state?.selectedPlaylistId;
+    if (navPlaylistId) {
+      const navEntry = collection.find((entry) => entry.id === navPlaylistId);
+      if (
+        navEntry &&
+        !filteredCollection.some((entry) => entry.id === navPlaylistId)
+      ) {
+        setLibraryFilter("all");
+        return;
+      }
+    }
     if (!filteredCollection.length) {
-      if (selectedId) setSelectedId(null);
+      if (!navPlaylistId && selectedId) setSelectedId(null);
+      return;
+    }
+    if (
+      navPlaylistId &&
+      filteredCollection.some((entry) => entry.id === navPlaylistId)
+    ) {
+      setSelectedId(navPlaylistId);
+      setMobileShowDetail(true);
+      setDetailTab("tracks");
+      navigate(location.pathname, { replace: true, state: {} });
       return;
     }
     if (
@@ -1083,7 +1017,14 @@ function FlowPage() {
     ) {
       setSelectedId(filteredCollection[0].id);
     }
-  }, [filteredCollection, selectedId]);
+  }, [
+    collection,
+    filteredCollection,
+    location.pathname,
+    location.state?.selectedPlaylistId,
+    navigate,
+    selectedId,
+  ]);
 
   const selectedIncludeFailed = selectedEntry?.kind === "shared";
 
@@ -1377,6 +1318,103 @@ function FlowPage() {
     }
   };
 
+  const loadPlaylistsForMenu = async () => {
+    setPlaylistsLoading(true);
+    setPlaylistMenuError("");
+    try {
+      await fetchStatus();
+    } catch (err) {
+      const message =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        "Failed to load playlists";
+      setPlaylistMenuError(message);
+      showError(message);
+    } finally {
+      setPlaylistsLoading(false);
+    }
+  };
+
+  const getDefaultTrackPlaylistName = (track) =>
+    getNextPlaylistName(`${track?.artistName || "Artist"} Picks`);
+
+  const saveTrackToPlaylist = async (
+    track,
+    target,
+    { moveFromPlaylistId = null } = {},
+  ) => {
+    const payload = buildTrackForPlaylistModal(track);
+    if (!payload) {
+      showError("Track details are incomplete");
+      return;
+    }
+    setPlaylistMenuError("");
+    setPlaylistMenuSavingKey(String(track?.id ?? ""));
+    const sourceTrackJobId = track?.id || null;
+    try {
+      if (target?.mode === "new") {
+        const name =
+          String(target?.name || "").trim() ||
+          getNextPlaylistName(`${payload.artistName} Picks`);
+        const response = await createSharedPlaylist({
+          name,
+          tracks: [payload],
+        });
+        if (moveFromPlaylistId && sourceTrackJobId) {
+          await deleteSharedPlaylistTrack(moveFromPlaylistId, sourceTrackJobId);
+          showSuccess(
+            `Track moved to ${response?.playlist?.name || name}`,
+          );
+        } else {
+          showSuccess(
+            `Track saved to ${response?.playlist?.name || name}`,
+          );
+        }
+      } else {
+        const targetPlaylist = sharedPlaylists.find(
+          (playlist) => playlist.id === target?.playlistId,
+        );
+        await addSharedPlaylistTracks(target.playlistId, {
+          tracks: [payload],
+        });
+        if (moveFromPlaylistId && sourceTrackJobId) {
+          await deleteSharedPlaylistTrack(moveFromPlaylistId, sourceTrackJobId);
+          showSuccess(
+            `Track moved to ${targetPlaylist?.name || "playlist"}`,
+          );
+        } else {
+          showSuccess(
+            `Track added to ${targetPlaylist?.name || "playlist"}`,
+          );
+        }
+      }
+      await fetchStatus();
+      if (selectedId) {
+        await fetchFlowTracks(selectedId, {
+          showSpinner: false,
+          includeFailed: true,
+        });
+      }
+    } catch (err) {
+      const message =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        "Failed to save track to playlist";
+      setPlaylistMenuError(message);
+      showError(message);
+    } finally {
+      setPlaylistMenuSavingKey("");
+    }
+  };
+
+  const handleAddTrackToPlaylist = (track, target) =>
+    saveTrackToPlaylist(track, target);
+
+  const handleMoveTrackToPlaylist = (track, target, moveFromPlaylistId) =>
+    saveTrackToPlaylist(track, target, { moveFromPlaylistId });
+
   const bumpArtworkRevision = useCallback((playlistId) => {
     if (!playlistId) return;
     setArtworkRevisionById((prev) => ({
@@ -1623,27 +1661,35 @@ function FlowPage() {
       .length;
   })();
   const selectedEntryTrackLabel = `${selectedEntryTrackCount} track${selectedEntryTrackCount === 1 ? "" : "s"}`;
-  const detailMetaLine = (() => {
-    if (!selectedEntry) return "";
-    const base = selectedEntryUsername
-      ? `${selectedEntryUsername} · ${selectedEntryTrackLabel}`
-      : selectedEntryTrackLabel;
-    if (selectedIsFlow && selectedFlow && flowLastRun) {
-      return `${base} · updated ${flowLastRun}`;
-    }
-    return base;
-  })();
-  const detailStatusParts = [];
-  if (selectedIsFlow && selectedFlow) {
-    if (flowNextRun && getPlaylistState(selectedFlow.id) !== "running") {
-      detailStatusParts.push(
-        flowNextRun === "soon"
-          ? "Next update soon"
-          : `Next update in ${flowNextRun}`,
-      );
-    }
-  }
-  const detailStatusLine = detailStatusParts.join(" · ");
+  const flowLastRunShort = selectedFlow
+    ? formatFlowLastRunShort(selectedFlow.lastRunAt)
+    : null;
+  const flowNextRunShort =
+    selectedFlow && flowEnabled && getPlaylistState(selectedFlow.id) !== "running"
+      ? formatNextRunShort(selectedFlow.nextRunAt, countdownNow)
+      : null;
+  const detailMetaLine =
+    selectedEntry && !selectedIsFlow
+      ? selectedEntryUsername
+        ? `${selectedEntryUsername} · ${selectedEntryTrackLabel}`
+        : selectedEntryTrackLabel
+      : "";
+  const detailFlowMeta =
+    selectedIsFlow && selectedEntry
+      ? {
+          username: selectedEntryUsername,
+          trackLabel: selectedEntryTrackLabel,
+          lastRunShort: flowLastRunShort,
+          lastRunTitle: flowLastRun ? `Last updated ${flowLastRun}` : "",
+          nextRunShort: flowNextRunShort,
+          nextRunTitle:
+            flowNextRunShort === "soon"
+              ? "Next update soon"
+              : flowNextRun
+                ? `Next update in ${flowNextRun}`
+                : "",
+        }
+      : null;
   const simpleDraft =
     selectedFlow && simpleDrafts[selectedFlow.id]
       ? simpleDrafts[selectedFlow.id]
@@ -1762,7 +1808,7 @@ function FlowPage() {
                 entry={selectedEntry}
                 artworkUrl={artworkUrlFor(selectedEntry.id)}
                 metaLine={detailMetaLine}
-                statusLine={detailStatusLine}
+                flowMeta={detailFlowMeta}
                 enabled={flowEnabled}
                 togglingId={togglingId}
                 onToggleEnabled={(checked) =>
@@ -1871,6 +1917,12 @@ function FlowPage() {
                           ? "No tracks generated for this flow yet."
                           : "Enable this flow to generate tracks."
                       }
+                      playlists={sharedPlaylists}
+                      playlistsLoading={playlistsLoading}
+                      playlistSavingKey={playlistMenuSavingKey}
+                      playlistMenuError={playlistMenuError}
+                      getDefaultPlaylistName={getDefaultTrackPlaylistName}
+                      onLoadPlaylists={loadPlaylistsForMenu}
                       onAddTrackToPlaylist={handleAddTrackToPlaylist}
                       onNavigateArtist={handleNavigateArtist}
                     />
@@ -1880,10 +1932,16 @@ function FlowPage() {
                       loading={selectedTracksLoading}
                       error={selectedTracksError}
                       emptyMessage="No tracks in this playlist yet."
-                      showStatus
                       hideFailedTracks
                       showFailedDetails={false}
                       useTrackContextMenu
+                      playlists={sharedPlaylists}
+                      playlistsLoading={playlistsLoading}
+                      playlistSavingKey={playlistMenuSavingKey}
+                      playlistMenuError={playlistMenuError}
+                      excludedPlaylistIds={[selectedPlaylist.id]}
+                      getDefaultPlaylistName={getDefaultTrackPlaylistName}
+                      onLoadPlaylists={loadPlaylistsForMenu}
                       reSearchingTrackIds={reSearchingTrackIds}
                       deletingTrackId={deletingTrackId}
                       onReSearchTrack={(track) =>
@@ -1898,13 +1956,13 @@ function FlowPage() {
                           track,
                         )
                       }
-                      onAddTrackToPlaylist={(track) =>
-                        handleAddTrackToPlaylist(track, {
-                          excludedPlaylistIds: [selectedPlaylist.id],
-                        })
-                      }
-                      onMoveTrackToPlaylist={(track) =>
-                        handleMoveTrackToPlaylist(track, selectedPlaylist.id)
+                      onAddTrackToPlaylist={handleAddTrackToPlaylist}
+                      onMoveTrackToPlaylist={(track, target) =>
+                        handleMoveTrackToPlaylist(
+                          track,
+                          target,
+                          selectedPlaylist.id,
+                        )
                       }
                       onNavigateArtist={handleNavigateArtist}
                     />
@@ -2038,26 +2096,6 @@ function FlowPage() {
           setIsCreatePlaylistOpen(false);
         }}
         onSubmit={handleCreatePlaylist}
-      />
-      <PlaylistTrackModal
-        open={!!playlistTrackModal}
-        title={playlistTrackModal?.title || "Add To Playlist"}
-        description={playlistTrackModal?.description || ""}
-        playlists={sharedPlaylists}
-        initialTracks={playlistTrackModal?.tracks || []}
-        excludedPlaylistIds={playlistTrackModal?.excludedPlaylistIds || []}
-        defaultNewPlaylistName={
-          playlistTrackModal?.defaultNewPlaylistName ||
-          getNextPlaylistName("Playlist")
-        }
-        saving={playlistTrackSubmitting}
-        error={playlistTrackError}
-        onClose={() => {
-          if (playlistTrackSubmitting) return;
-          setPlaylistTrackError("");
-          setPlaylistTrackModal(null);
-        }}
-        onSubmit={handleSubmitPlaylistTrackModal}
       />
     </div>
   );

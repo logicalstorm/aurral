@@ -42,3 +42,28 @@ export const getPlaylistStateFromStats = (stats) => {
   if (stats.done > 0) return "completed";
   return "idle";
 };
+
+export const getCombinedActivityStats = (status) => {
+  const flow = status?.stats || EMPTY_FLOW_STATS;
+  const shared = status?.sharedStats || EMPTY_FLOW_STATS;
+  const pending = Number(flow.pending || 0) + Number(shared.pending || 0);
+  const downloading =
+    Number(flow.downloading || 0) + Number(shared.downloading || 0);
+  const done = Number(flow.done || 0) + Number(shared.done || 0);
+  const failed = Number(flow.failed || 0) + Number(shared.failed || 0);
+  return {
+    pending,
+    downloading,
+    done,
+    failed,
+    total: pending + downloading + done,
+  };
+};
+
+export const hasFlowWorkerActivity = (status) => {
+  if (!status) return false;
+  if (status.worker?.running === true) return true;
+  if (status.operationQueue?.processing === true) return true;
+  const stats = getCombinedActivityStats(status);
+  return stats.pending > 0 || stats.downloading > 0;
+};

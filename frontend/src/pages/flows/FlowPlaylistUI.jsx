@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  ArrowRight,
   ChevronLeft,
+  Clock,
   ExternalLink,
   ListMusic,
   Plus,
@@ -212,11 +214,66 @@ export function PlaylistLibraryItem({
   );
 }
 
+function FlowDetailMeta({ meta }) {
+  if (!meta) return null;
+  const parts = [];
+  if (meta.username) {
+    parts.push(<span key="user">{meta.username}</span>);
+  }
+  if (meta.trackLabel) {
+    parts.push(<span key="tracks">{meta.trackLabel}</span>);
+  }
+  if (meta.lastRunShort || meta.nextRunShort) {
+    parts.push(
+      <span key="run" className="flow-page__detail-meta-run">
+        {meta.lastRunShort ? (
+          <span
+            className="flow-page__detail-meta-chip"
+            title={meta.lastRunTitle || undefined}
+          >
+            <Clock className="artist-icon-xs" aria-hidden="true" />
+            {meta.lastRunShort}
+          </span>
+        ) : null}
+        {meta.nextRunShort ? (
+          <span
+            className="flow-page__detail-meta-chip flow-page__detail-meta-chip--next"
+            title={meta.nextRunTitle || undefined}
+          >
+            {meta.lastRunShort ? (
+              <ArrowRight
+                className="artist-icon-xs flow-page__detail-meta-arrow"
+                aria-hidden="true"
+              />
+            ) : null}
+            {meta.nextRunShort}
+          </span>
+        ) : null}
+      </span>,
+    );
+  }
+  if (!parts.length) return null;
+  return (
+    <p className="flow-page__detail-meta flow-page__detail-meta--flow">
+      {parts.map((part, index) => (
+        <span key={part.key} className="flow-page__detail-meta-group">
+          {index > 0 ? (
+            <span className="flow-page__detail-meta-sep" aria-hidden="true">
+              ·
+            </span>
+          ) : null}
+          {part}
+        </span>
+      ))}
+    </p>
+  );
+}
+
 export function PlaylistDetailHero({
   entry,
   artworkUrl,
   metaLine,
-  statusLine = "",
+  flowMeta = null,
   enabled,
   togglingId,
   onToggleEnabled,
@@ -258,14 +315,6 @@ export function PlaylistDetailHero({
           <div className="flow-page__detail-hero-text">
             <div className="flow-page__detail-hero-top">
               <span className="flow-page__detail-eyebrow">{typeLabel}</span>
-              {statusLine ? (
-                <p
-                  className="flow-page__detail-meta flow-page__detail-meta--status flow-page__detail-status-inline"
-                  title={statusLine}
-                >
-                  {statusLine}
-                </p>
-              ) : null}
             </div>
             <button
               type="button"
@@ -275,7 +324,9 @@ export function PlaylistDetailHero({
             >
               {entry.name}
             </button>
-            {metaLine ? (
+            {flowMeta ? (
+              <FlowDetailMeta meta={flowMeta} />
+            ) : metaLine ? (
               <p className="flow-page__detail-meta">{metaLine}</p>
             ) : null}
           </div>
