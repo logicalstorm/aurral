@@ -165,6 +165,23 @@ setTimeout(() => {
     );
 }, 5000);
 
+const REUSE_REPAIR_INTERVAL_MS = 30 * 60 * 1000;
+setInterval(() => {
+  import("./services/weeklyFlowWorker.js")
+    .then((m) => m.weeklyFlowWorker.scheduleReuseLinkRepair(false))
+    .catch((err) =>
+      console.error("Weekly flow reuse repair error:", err.message),
+    );
+}, REUSE_REPAIR_INTERVAL_MS);
+
+setTimeout(() => {
+  import("./services/weeklyFlowWorker.js")
+    .then((m) => m.weeklyFlowWorker.scheduleReuseLinkRepair(true))
+    .catch((err) =>
+      console.error("Weekly flow reuse repair startup error:", err.message),
+    );
+}, 15000);
+
 const frontendDist = path.join(__dirname, "..", "frontend", "dist");
 const frontendFallbackRoute = /.*/;
 
