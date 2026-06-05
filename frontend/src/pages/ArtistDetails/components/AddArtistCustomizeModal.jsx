@@ -36,15 +36,15 @@ export function AddArtistCustomizeModal({
         className="artist-modal"
         onClick={(e) => e.stopPropagation()}
       >
-        <div>
+        <div className="artist-modal__header">
           <h3 className="artist-modal__title">
             Customize Add
           </h3>
-          <p className="artist-modal__subcopy">
+        </div>
+        <p className="artist-modal__subcopy">
             Choose where <strong>{artistName}</strong> should go for this add
             only.
-          </p>
-        </div>
+        </p>
 
         {loading ? (
           <div className="artist-loading">
@@ -58,69 +58,75 @@ export function AddArtistCustomizeModal({
               <label className="artist-field-label">
                 Root Folder
               </label>
-              <select
-                className="input"
-                value={rootFolderPath}
-                onChange={(e) => setRootFolderPath(e.target.value)}
-                disabled={!configured || confirming}
-              >
-                <option value="">
-                  {configured
-                    ? "Use automatic default"
-                    : "Lidarr is not configured"}
-                </option>
-                {rootFolders.map((folder) => (
-                  <option key={folder.path} value={folder.path}>
-                    {folder.path}
+              <div className="artist-modal-field aurral-radius-round">
+                <select
+                  className="artist-modal-select"
+                  value={rootFolderPath}
+                  onChange={(e) => setRootFolderPath(e.target.value)}
+                  disabled={!configured || confirming}
+                >
+                  <option value="">
+                    {configured
+                      ? "Use automatic default"
+                      : "Lidarr is not configured"}
                   </option>
-                ))}
-              </select>
+                  {rootFolders.map((folder) => (
+                    <option key={folder.path} value={folder.path}>
+                      {folder.path}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div>
               <label className="artist-field-label">
                 Quality Profile
               </label>
-              <select
-                className="input"
-                value={qualityProfileId}
-                onChange={(e) => setQualityProfileId(e.target.value)}
-                disabled={!configured || confirming}
-              >
-                <option value="">
-                  {configured
-                    ? "Use automatic default"
-                    : "Lidarr is not configured"}
-                </option>
-                {qualityProfiles.map((profile) => (
-                  <option key={profile.id} value={String(profile.id)}>
-                    {profile.name}
+              <div className="artist-modal-field aurral-radius-round">
+                <select
+                  className="artist-modal-select"
+                  value={qualityProfileId}
+                  onChange={(e) => setQualityProfileId(e.target.value)}
+                  disabled={!configured || confirming}
+                >
+                  <option value="">
+                    {configured
+                      ? "Use automatic default"
+                      : "Lidarr is not configured"}
                   </option>
-                ))}
-              </select>
+                  {qualityProfiles.map((profile) => (
+                    <option key={profile.id} value={String(profile.id)}>
+                      {profile.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div>
               <label className="artist-field-label">
                 Tag
               </label>
-              <select
-                className="input"
-                value={tagId}
-                onChange={(e) => setTagId(e.target.value)}
-                disabled={!configured || confirming}
-              >
-                <option value="">
-                  {configured
-                    ? "Use saved global default"
-                    : "Lidarr is not configured"}
-                </option>
-                {tags.map((tag) => (
-                  <option key={tag.id} value={String(tag.id)}>
-                    {tag.label}
+              <div className="artist-modal-field aurral-radius-round">
+                <select
+                  className="artist-modal-select"
+                  value={tagId}
+                  onChange={(e) => setTagId(e.target.value)}
+                  disabled={!configured || confirming}
+                >
+                  <option value="">
+                    {configured
+                      ? "Use saved global default"
+                      : "Lidarr is not configured"}
                   </option>
-                ))}
-              </select>
+                  {tags.map((tag) => (
+                    <option key={tag.id} value={String(tag.id)}>
+                      {tag.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <p className="artist-subtext">

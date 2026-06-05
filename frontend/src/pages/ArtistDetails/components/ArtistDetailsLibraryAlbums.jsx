@@ -319,7 +319,7 @@ export function ArtistDetailsLibraryAlbums({
                   key={option.value}
                   type="button"
                   onClick={() => setCompletionFilter(option.value)}
-                  className={`artist-segmented-button${isActive ? " is-active" : ""}`}
+                  className={`btn btn-xs${isActive ? " btn-neutral-active" : " btn-ghost"}`}
                   aria-pressed={isActive}
                   aria-label={option.label}
                   title={option.title}
@@ -333,7 +333,7 @@ export function ArtistDetailsLibraryAlbums({
             <button
               type="button"
               onClick={handleReSearchMissingDownloads}
-              className="artist-icon-button"
+              className="btn btn-surface btn-icon-square"
               aria-label="Re-search all missing downloads"
               title={
                 incompleteAlbumCount > 0
@@ -354,7 +354,7 @@ export function ArtistDetailsLibraryAlbums({
           <button
             type="button"
             onClick={() => scrollByAmount(-1)}
-            className="artist-scroll-button"
+            className="btn btn-ghost btn-icon-square"
             aria-label="Scroll library albums left"
             disabled={!canScrollLeft}
           >
@@ -363,7 +363,7 @@ export function ArtistDetailsLibraryAlbums({
           <button
             type="button"
             onClick={() => scrollByAmount(1)}
-            className="artist-scroll-button"
+            className="btn btn-ghost btn-icon-square"
             aria-label="Scroll library albums right"
             disabled={!canScrollRight}
           >
@@ -458,7 +458,7 @@ export function ArtistDetailsLibraryAlbums({
                         });
                         setAlbumDropdownOpen(rgId);
                       }}
-                      className="artist-menu-button"
+                      className="btn btn-surface btn-icon-square"
                       title="Options"
                       aria-label={`Album options for ${libraryAlbum.albumName}`}
                     >
@@ -648,7 +648,7 @@ export function ArtistDetailsLibraryAlbums({
                       {track.preview_url ? (
                         <button
                           type="button"
-                          className="artist-track-play-button"
+                          className="btn btn-surface btn-track-play"
                           onClick={(event) => handleTrackPreviewPlay(track, event)}
                           aria-label={isPlaying ? "Pause preview" : "Play preview"}
                           title={isPlaying ? "Pause preview" : "Play preview"}

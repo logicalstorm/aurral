@@ -29,6 +29,7 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { useWebSocketChannel } from "../hooks/useWebSocket";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import {
   FlowCard,
   FlowEmptyState,
@@ -605,6 +606,7 @@ const sanitizeFlowStats = (stats) => {
 };
 
 function FlowPage() {
+  useDocumentTitle("Flow");
   const navigate = useNavigate();
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1817,7 +1819,7 @@ function FlowPage() {
             <button
               type="button"
               onClick={handleOpenWorkerSettings}
-              className="btn btn-secondary btn-sm p-2 opacity-80 hover:opacity-100"
+              className="btn btn-secondary btn-sm btn-icon btn--faded"
               aria-label="Open flow worker settings"
             >
               <Settings className="w-4 h-4" />
@@ -1826,24 +1828,24 @@ function FlowPage() {
           <button
             type="button"
             onClick={handleOpenImportPicker}
-            className="hidden btn btn-secondary btn-sm gap-2 sm:inline-flex"
+            className="btn btn-secondary btn-sm btn--hide-mobile"
           >
-            <Upload className="w-4 h-4" />
+            <Upload className="artist-icon-xs" />
             Import
           </button>
           <a
             href="https://aurral.org/aurral-convert"
             target="_blank"
             rel="noreferrer"
-            className="hidden btn btn-secondary btn-sm gap-2 sm:inline-flex"
+            className="btn btn-secondary btn-sm btn--hide-mobile"
           >
-            <ExternalLink className="w-4 h-4" />
+            <ExternalLink className="artist-icon-xs" />
             Spotify Import
           </a>
           <button
             type="button"
             onClick={handleOpenCreatePlaylist}
-            className="btn btn-secondary btn-sm px-3 sm:px-4"
+            className="btn btn-secondary btn-sm btn--wide-sm"
             disabled={creatingPlaylist}
           >
             <span className="hidden sm:inline">
@@ -1855,7 +1857,7 @@ function FlowPage() {
             <button
               type="button"
               onClick={handleCreateInline}
-              className="btn btn-primary btn-sm px-3 sm:px-4"
+              className="btn btn-primary btn-sm btn--wide-sm"
               disabled={creating}
             >
               <span className="hidden sm:inline">

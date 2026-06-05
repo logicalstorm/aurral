@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import {
   Grid3X3,
   List,
@@ -179,6 +180,18 @@ function SearchResultsPage() {
   }, [type, trimmedQuery]);
   const isTagSearch = normalizedType === "tag";
   const isAlbumSearch = normalizedType === "album";
+  const pageTitle = useMemo(() => {
+    if (normalizedType === "recommended") return "Recommended for You";
+    if (normalizedType === "trending") return "Global Trending";
+    if (isTagSearch && trimmedQuery) {
+      return trimmedQuery.startsWith("#")
+        ? trimmedQuery
+        : `#${trimmedQuery.replace(/^#/, "")}`;
+    }
+    if (isAlbumSearch) return trimmedQuery || "Album Results";
+    return trimmedQuery || "Search Results";
+  }, [normalizedType, isTagSearch, trimmedQuery, isAlbumSearch]);
+  useDocumentTitle(pageTitle);
   const albumSort = searchParams.get("sort") || DEFAULT_ALBUM_SORT;
   const showTagBanner = isTagSearch && lastfmConfigured === false && !dismissedTagBanner;
   const supportsDiscoveryFeedback =
@@ -890,19 +903,6 @@ function SearchResultsPage() {
           ? `We couldn't find any artists for tag "${trimmedQuery.replace(/^#/, "")}"`
           : `We couldn't find any artists matching "${trimmedQuery}"`;
 
-  const pageTitle =
-    normalizedType === "recommended"
-      ? "Recommended for You"
-      : normalizedType === "trending"
-        ? "Global Trending"
-        : isTagSearch && trimmedQuery
-          ? trimmedQuery.startsWith("#")
-            ? trimmedQuery
-            : `#${trimmedQuery.replace(/^#/, "")}`
-          : isAlbumSearch
-            ? trimmedQuery || "Album Results"
-            : trimmedQuery || "Search Results";
-
   const pageSubtitle =
     normalizedType === "recommended"
       ? `${results.length} artist${results.length !== 1 ? "s" : ""} we think you'll like`
@@ -928,14 +928,14 @@ function SearchResultsPage() {
             <div className="search-banner__actions">
               <button
                 type="button"
-                className="artist-action-button"
+                className="btn btn-secondary btn--bold btn-min-h"
                 onClick={() => navigate("/settings")}
               >
                 Open Settings
               </button>
               <button
                 type="button"
-                className="artist-icon-button"
+                className="btn btn-surface btn-icon-square"
                 aria-label="Dismiss Last.fm reminder"
                 onClick={() => {
                   setDismissedTagBanner(true);
@@ -995,7 +995,7 @@ function SearchResultsPage() {
                 <button
                   type="button"
                   onClick={() => setAlbumOptionsOpen((current) => !current)}
-                  className="artist-icon-button"
+                  className="btn btn-surface btn-icon-square"
                   aria-label="Album search options"
                   title="Album search options"
                   aria-expanded={albumOptionsOpen}
@@ -1022,7 +1022,7 @@ function SearchResultsPage() {
                       <button
                         type="button"
                         onClick={() => setAlbumViewMode("grid")}
-                        className={`artist-options-view-button${albumViewMode === "grid" ? " is-active" : ""}`}
+                        className={`btn btn-icon-square btn-surface${albumViewMode === "grid" ? " btn-neutral-active" : ""}`}
                         aria-label="Grid view"
                         title="Grid view"
                       >
@@ -1031,7 +1031,7 @@ function SearchResultsPage() {
                       <button
                         type="button"
                         onClick={() => setAlbumViewMode("list")}
-                        className={`artist-options-view-button${albumViewMode === "list" ? " is-active" : ""}`}
+                        className={`btn btn-icon-square btn-surface${albumViewMode === "list" ? " btn-neutral-active" : ""}`}
                         aria-label="List view"
                         title="List view"
                       >

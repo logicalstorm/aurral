@@ -131,7 +131,7 @@ function ArtistActionsMenu({
         event.stopPropagation();
         setShowMenu((prev) => !prev);
       }}
-      className="artist-menu-button--discover"
+      className="btn btn-surface btn-icon-square"
       aria-label={`Artist options for ${artist.name}`}
     >
       <MoreVertical className="artist-icon-sm" />

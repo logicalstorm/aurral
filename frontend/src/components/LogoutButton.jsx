@@ -6,12 +6,12 @@ const LogoutButton = ({ onClick, collapsed }) => {
   if (collapsed) {
     return (
       <button
+        type="button"
         onClick={onClick}
-        className="group relative p-2 rounded-md transition-colors hover:bg-white/5"
-        style={{ color: "#c1c1c3" }}
+        className="btn btn-ghost btn-icon-square group relative"
         aria-label="Log out"
       >
-        <LogOut className="w-4 h-4" />
+        <LogOut className="artist-icon-xs" aria-hidden="true" />
         <span
           className="absolute left-full ml-2 px-2.5 py-1.5 text-xs font-medium rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-[100]"
           style={{

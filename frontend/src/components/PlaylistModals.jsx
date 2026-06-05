@@ -18,7 +18,7 @@ function ModalShell({
       onClick={disableClose ? undefined : onClose}
     >
       <div
-        className="card w-full max-w-2xl border border-white/10 bg-[#1c1b22] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+        className="card card-overlay w-full max-w-2xl border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
@@ -31,7 +31,7 @@ function ModalShell({
           <button
             type="button"
             onClick={disableClose ? undefined : onClose}
-            className="btn btn-ghost btn-sm p-2"
+            className="btn btn-ghost btn-sm btn-icon"
             aria-label="Close"
             disabled={disableClose}
           >
@@ -157,7 +157,7 @@ export function CreatePlaylistModal({
           <button
             type="button"
             onClick={handleSubmit}
-            className="btn btn-primary btn-sm gap-2"
+            className="btn btn-primary btn-sm"
             disabled={saving}
           >
             {saving ? (
@@ -187,7 +187,7 @@ export function CreatePlaylistModal({
               handleSubmit();
             }
           }}
-          className="input h-11 w-full bg-[#15151a]"
+          className="input h-11 w-full"
           placeholder="Night Drive"
           autoFocus
         />
@@ -313,7 +313,7 @@ export function PlaylistTrackModal({
           <button
             type="button"
             onClick={handleSubmit}
-            className="btn btn-primary btn-sm gap-2"
+            className="btn btn-primary btn-sm"
             disabled={saving}
           >
             {saving ? (
@@ -401,7 +401,7 @@ export function PlaylistTrackModal({
                 setPlaylistName(event.target.value);
                 if (localError) setLocalError("");
               }}
-              className="input h-11 w-full bg-[#15151a]"
+              className="input h-11 w-full"
               placeholder="Sunday picks"
             />
           </div>
@@ -430,7 +430,7 @@ export function PlaylistTrackModal({
                         event.target.value,
                       )
                     }
-                    className="input input-sm bg-[#101015]"
+                    className="input input-sm"
                   />
                 </div>
                 <div className="grid gap-1">
@@ -445,7 +445,7 @@ export function PlaylistTrackModal({
                         event.target.value,
                       )
                     }
-                    className="input input-sm bg-[#101015]"
+                    className="input input-sm"
                   />
                 </div>
                 <div className="grid gap-1">
@@ -460,7 +460,7 @@ export function PlaylistTrackModal({
                         event.target.value,
                       )
                     }
-                    className="input input-sm bg-[#101015]"
+                    className="input input-sm"
                     placeholder="Optional"
                   />
                 </div>

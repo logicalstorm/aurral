@@ -156,13 +156,13 @@ const UpdateBanner = ({ currentVersion, visible = true }) => {
             href={updateInfo.url}
             target="_blank"
             rel="noreferrer"
-            className="btn btn-secondary bg-gray-700/50 hover:bg-gray-700/70 btn-sm w-full sm:w-auto"
+            className="btn btn-secondary btn-sm btn--stack-mobile"
           >
             {updateInfo.channel === "test" ? "View tags" : "View release"}
           </a>
           <button
             type="button"
-            className="btn btn-ghost btn-sm hover:bg-gray-700/50 w-full sm:w-auto"
+            className="btn btn-ghost btn-sm btn--stack-mobile"
             onClick={dismissUpdate}
           >
             Hide until next update

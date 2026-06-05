@@ -1,9 +1,11 @@
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useAccountSettings } from "./Settings/hooks/useAccountSettings";
 import { SettingsAccountTab } from "./Settings/components/SettingsAccountTab";
 
 function ProfilePage() {
+  useDocumentTitle("Profile");
   const { showSuccess, showError } = useToast();
   const { user: authUser } = useAuth();
   const account = useAccountSettings(authUser, showSuccess, showError);
