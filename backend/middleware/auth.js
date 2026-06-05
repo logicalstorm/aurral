@@ -572,6 +572,7 @@ export const createAuthMiddleware = () => {
     }
     if (
       /^\/api\/library\/stream\/[^/]+$/.test(req.path) ||
+      /^\/api\/library\/file-stream\/[^/]+\/[^/]+$/i.test(req.path) ||
       /^\/api\/artists\/[a-f0-9-]{36}\/stream$/i.test(req.path) ||
       /^\/api\/weekly-flow\/stream\/[^/]+$/i.test(req.path) ||
       (req.method === "GET" &&
