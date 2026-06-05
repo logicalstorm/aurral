@@ -19,6 +19,10 @@ import {
   normalizeExistingFileMode,
   reuseTrackForPlaylist,
 } from "../services/weeklyFlowFileReuse.js";
+import {
+  remapLegacyWeeklyFlowPath,
+  resolveExistingWeeklyFlowTrackPath,
+} from "../services/weeklyFlowPaths.js";
 import { noCache } from "../middleware/cache.js";
 import { hasPermission, verifyTokenAuth } from "../middleware/auth.js";
 import {
@@ -281,11 +285,17 @@ router.get("/stream/:jobId", noCache, async (req, res) => {
   if (job.status !== "done" || !job.finalPath) {
     return res.status(400).json({ error: "Track is not ready to stream" });
   }
-  const safeRoot = path.resolve(weeklyFlowWorker.weeklyFlowRoot);
-  const safePath = path.resolve(job.finalPath);
-  if (!safePath.startsWith(safeRoot)) {
-    return res.status(403).json({ error: "Invalid track path" });
+  const resolved = await resolveExistingWeeklyFlowTrackPath(
+    job.finalPath,
+    weeklyFlowWorker.weeklyFlowRoot,
+  );
+  if (!resolved) {
+    return res.status(404).json({ error: "Track file missing" });
   }
+  if (resolved.migratedFrom) {
+    downloadTracker.setDone(job.id, resolved.path, job.albumName || null);
+  }
+  const safePath = resolved.path;
   let stat;
   try {
     stat = await fsp.stat(safePath);
@@ -1005,7 +1015,10 @@ router.post("/flows/:flowId/static-playlist", async (req, res) => {
     const staticPlaylistLinkMode =
       existingFileMode === "download" ? "hardlink" : existingFileMode;
     for (const job of uniqueCompletedJobs) {
-      const safeSourcePath = path.resolve(job.finalPath);
+      const safeSourcePath = remapLegacyWeeklyFlowPath(
+        job.finalPath,
+        weeklyFlowWorker.weeklyFlowRoot,
+      );
       if (!isPathInsideRoot(safeSourcePath, sourceRoot)) {
         throw new Error(
           `Track path is outside the flow library: ${job.finalPath}`,
@@ -1373,7 +1386,10 @@ router.put("/shared-playlists/:playlistId", async (req, res) => {
         for (const job of existingJobs) {
           if (matchedJobIds.has(job.id)) continue;
           if (job.status === "done" && typeof job.finalPath === "string") {
-            const safeFinalPath = path.resolve(job.finalPath);
+            const safeFinalPath = remapLegacyWeeklyFlowPath(
+              job.finalPath,
+              weeklyFlowWorker.weeklyFlowRoot,
+            );
             if (isPathInsideRoot(safeFinalPath, playlistRoot)) {
               await fsp.rm(safeFinalPath, { force: true });
             }
@@ -1448,7 +1464,10 @@ router.delete(
         "aurral-weekly-flow",
         playlistId,
       );
-      const safeFinalPath = path.resolve(job.finalPath);
+      const safeFinalPath = remapLegacyWeeklyFlowPath(
+        job.finalPath,
+        weeklyFlowWorker.weeklyFlowRoot,
+      );
       if (!isPathInsideRoot(safeFinalPath, playlistRoot)) {
         return res.status(400).json({
           error: "Track path is outside the playlist library",
@@ -1522,7 +1541,10 @@ router.post(
 
       if (job.status === "done" && typeof job.finalPath === "string") {
         const playlistRoot = getPlaylistLibraryRoot(playlistId);
-        const safeFinalPath = path.resolve(job.finalPath);
+        const safeFinalPath = remapLegacyWeeklyFlowPath(
+          job.finalPath,
+          weeklyFlowWorker.weeklyFlowRoot,
+        );
         if (!isPathInsideRoot(safeFinalPath, playlistRoot)) {
           return res.status(400).json({
             error: "Track path is outside the playlist library",
