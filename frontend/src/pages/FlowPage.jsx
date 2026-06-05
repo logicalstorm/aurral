@@ -889,6 +889,44 @@ function FlowPage() {
     setConfirmDelete(null);
   };
 
+  const fetchFlowTracks = useCallback(
+    async (flowId, { showSpinner = true, includeFailed = false } = {}) => {
+      if (!flowId) return;
+      if (showSpinner) {
+        setTracksLoadingByFlowId((prev) => ({ ...prev, [flowId]: true }));
+      }
+      setTracksErrorByFlowId((prev) => ({ ...prev, [flowId]: "" }));
+      try {
+        const jobs = await getFlowJobs(flowId, 500);
+        const normalized = (Array.isArray(jobs) ? jobs : [])
+          .filter((job) => includeFailed || job?.status !== "failed")
+          .map((job) => ({
+            ...job,
+            albumName: job?.albumName || null,
+            reason: job?.reason || null,
+            streamUrl:
+              job?.status === "done" && job?.id
+                ? getFlowTrackStreamUrl(job.id)
+                : null,
+          }));
+        setTracksByFlowId((prev) => ({
+          ...prev,
+          [flowId]: normalized,
+        }));
+      } catch (err) {
+        const message =
+          err.response?.data?.message || err.message || "Failed to load tracks";
+        setTracksErrorByFlowId((prev) => ({ ...prev, [flowId]: message }));
+        showError(message);
+      } finally {
+        if (showSpinner) {
+          setTracksLoadingByFlowId((prev) => ({ ...prev, [flowId]: false }));
+        }
+      }
+    },
+    [showError],
+  );
+
   const handleToggleEnabled = async (flow, nextEnabled) => {
     setTogglingId(flow.id);
     try {
@@ -1045,7 +1083,7 @@ function FlowPage() {
   useEffect(() => {
     if (!selectedId) return;
     fetchFlowTracks(selectedId, { includeFailed: selectedIncludeFailed });
-  }, [selectedId, selectedIncludeFailed]);
+  }, [selectedId, selectedIncludeFailed, fetchFlowTracks]);
 
   const selectPlaylist = (entry) => {
     setSelectedId(entry.id);
@@ -1293,42 +1331,6 @@ function FlowPage() {
       );
     } finally {
       setConvertingId(null);
-    }
-  };
-
-  const fetchFlowTracks = async (
-    flowId,
-    { showSpinner = true, includeFailed = false } = {},
-  ) => {
-    if (!flowId) return;
-    if (showSpinner) {
-      setTracksLoadingByFlowId((prev) => ({ ...prev, [flowId]: true }));
-    }
-    setTracksErrorByFlowId((prev) => ({ ...prev, [flowId]: "" }));
-    try {
-      const jobs = await getFlowJobs(flowId, 500);
-      const normalized = (Array.isArray(jobs) ? jobs : [])
-        .filter((job) => includeFailed || job?.status !== "failed")
-        .map((job) => ({
-          ...job,
-          albumName: job?.albumName || null,
-          reason: job?.reason || null,
-          streamUrl:
-            job?.status === "done" && job?.id ? getFlowTrackStreamUrl(job.id) : null,
-        }));
-      setTracksByFlowId((prev) => ({
-        ...prev,
-        [flowId]: normalized,
-      }));
-    } catch (err) {
-      const message =
-        err.response?.data?.message || err.message || "Failed to load tracks";
-      setTracksErrorByFlowId((prev) => ({ ...prev, [flowId]: message }));
-      showError(message);
-    } finally {
-      if (showSpinner) {
-        setTracksLoadingByFlowId((prev) => ({ ...prev, [flowId]: false }));
-      }
     }
   };
 
