@@ -16,6 +16,7 @@ import {
 } from "./weeklyFlowSoulseekMatcher.js";
 import {
   normalizeExistingFileMode,
+  repairReusableTrackLinks,
   reuseTrackForPlaylist,
 } from "./weeklyFlowFileReuse.js";
 
@@ -42,6 +43,7 @@ const MAX_DOWNLOAD_ATTEMPTS_PER_JOB = 7;
 const MAX_DOWNLOAD_ATTEMPTS_PER_RETRY = 9;
 const FALLBACK_MP3_REGEX = /^[^/\\]+-[a-f0-9]{8}\.mp3$/i;
 const FALLBACK_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
+const REUSE_REPAIR_INTERVAL_MS = 30 * 60 * 1000;
 const MAX_RETRIES_PER_JOB = 1;
 const MAX_RETRIES_FOR_TIMEOUT_LOGIN = 1;
 const MAX_RETRIES_FOR_QUEUED_DOWNLOAD = 2;
@@ -67,6 +69,8 @@ export class WeeklyFlowWorker {
     this.running = false;
     this.activeCount = 0;
     this.lastFallbackSweepAt = 0;
+    this.lastReuseRepairAt = 0;
+    this.reuseRepairCursor = 0;
     this.processLoop = null;
     this.processTimer = null;
     this.retryAttempts = new Map();
@@ -78,6 +82,7 @@ export class WeeklyFlowWorker {
     this.lastDequeuedPlaylistType = null;
     this.fallbackSweepInFlight = null;
     this.fallbackSweepTimer = null;
+    this.reuseRepairInFlight = null;
     this.lastJobMetrics = null;
     this.sanitizeCache = new Map();
     this.incompleteRetryTimers = new Map();
@@ -1029,6 +1034,40 @@ export class WeeklyFlowWorker {
       });
   }
 
+  async repairReusableLinks(force = false) {
+    const now = Date.now();
+    if (!force && now - this.lastReuseRepairAt < REUSE_REPAIR_INTERVAL_MS) {
+      return null;
+    }
+    this.lastReuseRepairAt = now;
+    const { existingFileMode } = this.getWorkerSettings();
+    if (normalizeExistingFileMode(existingFileMode) === "download") {
+      return null;
+    }
+    const result = await repairReusableTrackLinks({
+      existingFileMode,
+      weeklyFlowRoot: this.weeklyFlowRoot,
+      cursor: this.reuseRepairCursor,
+    });
+    if (Number.isFinite(result?.nextCursor)) {
+      this.reuseRepairCursor = result.nextCursor;
+    }
+    return result;
+  }
+
+  scheduleReuseLinkRepair(force = false) {
+    if (this.reuseRepairInFlight) return;
+    this.reuseRepairInFlight = this.repairReusableLinks(force)
+      .catch((error) => {
+        console.warn(
+          `[WeeklyFlowWorker] Reuse link repair failed: ${error?.message || error}`,
+        );
+      })
+      .finally(() => {
+        this.reuseRepairInFlight = null;
+      });
+  }
+
   async start() {
     if (this.running) {
       return;
@@ -1038,9 +1077,11 @@ export class WeeklyFlowWorker {
     this.running = true;
     console.log("[WeeklyFlowWorker] Starting worker...");
     await this.moveFallbackMp3sToDir(true);
+    this.scheduleReuseLinkRepair(true);
     this.fallbackSweepTimer = setInterval(() => {
       if (!this.running) return;
       this.scheduleFallbackSweep(false);
+      this.scheduleReuseLinkRepair(false);
     }, FALLBACK_SWEEP_INTERVAL_MS);
 
     this.processLoop = () => {
