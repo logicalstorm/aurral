@@ -278,6 +278,7 @@ function ArtistDetailsPage() {
   const {
     previewTracks,
     loadingPreview,
+    buildingQueue,
     setLoadingPreview,
     playingPreviewId,
     isArtistPlaybackActive,
@@ -613,8 +614,7 @@ function ArtistDetailsPage() {
         canRefreshArtist={canChangeMonitoring}
         handleRefreshArtist={library.handleRefreshArtist}
         refreshingArtist={library.refreshingArtist}
-        loadingPreview={loadingPreview}
-        previewTracks={previewTracks}
+        buildingQueue={buildingQueue}
         isArtistPlaybackActive={isArtistPlaybackActive}
         handlePreviewPlayAll={handlePreviewPlayAll}
         onEditIds={handleOpenEditIds}
