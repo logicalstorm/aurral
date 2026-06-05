@@ -706,7 +706,7 @@ router.post("/start/:flowId", async (req, res) => {
   }
 });
 
-router.get("/status", (req, res) => {
+router.get("/status", noCache, (req, res) => {
   const includeJobs =
     req.query.includeJobs === "1" || req.query.includeJobs === "true";
   const flowId = req.query.flowId ? String(req.query.flowId) : null;

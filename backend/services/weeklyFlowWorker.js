@@ -101,7 +101,7 @@ export class WeeklyFlowWorker {
   }
 
   _recordFailureMetric(message) {
-    if (this._isQueuedError(message)) {
+    if (this._isSlowSourceError(message)) {
       this.downloadMetrics.queuedFailures += 1;
       return;
     }
@@ -347,10 +347,12 @@ export class WeeklyFlowWorker {
     );
   }
 
-  _isQueuedError(message) {
-    return String(message || "")
-      .toLowerCase()
-      .includes("download queued");
+  _isSlowSourceError(message) {
+    const text = String(message || "").toLowerCase();
+    return (
+      text.includes("download queued") ||
+      text.includes("download stalled (no bytes received)")
+    );
   }
 
   _isOfflineSourceError(message) {
@@ -366,14 +368,14 @@ export class WeeklyFlowWorker {
   }
 
   _getRetryLimitForError(message) {
-    if (this._isQueuedError(message)) return MAX_RETRIES_FOR_QUEUED_DOWNLOAD;
+    if (this._isSlowSourceError(message)) return MAX_RETRIES_FOR_QUEUED_DOWNLOAD;
     if (this._isOfflineSourceError(message)) return MAX_RETRIES_FOR_OFFLINE_SOURCE;
     if (this._isAuthFailure(message)) return MAX_RETRIES_FOR_TIMEOUT_LOGIN;
     return MAX_RETRIES_PER_JOB;
   }
 
   _getRetryDelayMs(attempt, message) {
-    if (this._isQueuedError(message)) {
+    if (this._isSlowSourceError(message)) {
       return Number(attempt) <= 1
         ? QUEUED_RETRY_BASE_DELAY_MS
         : QUEUED_RETRY_MAX_DELAY_MS;
@@ -583,7 +585,7 @@ export class WeeklyFlowWorker {
       .trim()
       .toLowerCase();
     if (user) {
-      if (this._isQueuedError(text)) {
+      if (this._isSlowSourceError(text)) {
         state.queuedUsers.add(user);
       }
       if (this._isOfflineSourceError(text)) {
@@ -1105,8 +1107,8 @@ export class WeeklyFlowWorker {
             if (retryable && attempts < retryLimit) {
               const retryAttempt = attempts + 1;
               this.retryAttempts.set(job.id, retryAttempt);
-              const queuedError = this._isQueuedError(message);
-              if (!queuedError) {
+              const slowSourceError = this._isSlowSourceError(message);
+              if (!slowSourceError) {
                 this._recordRetryableFailure();
               }
               const retryDelayMs = this._getRetryDelayMs(retryAttempt, message);
@@ -1116,13 +1118,13 @@ export class WeeklyFlowWorker {
               );
               if (this._isAuthFailure(message)) {
                 this._pauseWorker(AUTH_FAILURE_PAUSE_MS);
-              } else if (!queuedError && this._isConnectivityFailure(message)) {
+              } else if (!slowSourceError && this._isConnectivityFailure(message)) {
                 this._pauseWorker(CONNECTIVITY_FAILURE_PAUSE_MS);
               }
               downloadTracker.setPending(
                 job.id,
-                queuedError
-                  ? `Remote queue full; retrying in ${Math.ceil(retryDelayMs / 1000)}s (attempt ${retryAttempt}/${retryLimit})`
+                slowSourceError
+                  ? `Remote source slow; retrying in ${Math.ceil(retryDelayMs / 1000)}s (attempt ${retryAttempt}/${retryLimit})`
                   : `${message} (retry ${retryAttempt}/${retryLimit} in ${Math.ceil(retryDelayMs / 1000)}s)`,
                 {
                   asRetryCycle: true,
@@ -1535,10 +1537,6 @@ export class WeeklyFlowWorker {
                   0,
                   Math.min(100, Number(progressPct) || 0),
                 );
-              },
-              {
-                queuedTimeoutMs:
-                  soulseekClient.getQueuedTimeoutForAttempt(attemptIndex),
               },
             );
             this._assertJobCanContinue(job, runGeneration);

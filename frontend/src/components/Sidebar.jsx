@@ -12,10 +12,16 @@ import {
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { getBootstrapStatus } from "../utils/api";
+import { useFlowWorkerActivity } from "../pages/flows/useFlowWorkerActivity";
 
 function Sidebar({ appVersion, mode }) {
   const location = useLocation();
   const { user } = useAuth();
+  const hasFlowAccess =
+    user?.role === "admin" || !!user?.permissions?.accessFlow;
+  const { hasActivity: hasDownloadActivity } = useFlowWorkerActivity({
+    enabled: hasFlowAccess,
+  });
   const resolvedVersion =
     appVersion || import.meta.env.VITE_APP_VERSION || "unknown";
   const navRef = useRef(null);
@@ -230,6 +236,8 @@ function Sidebar({ appVersion, mode }) {
               {navItems.map((item, index) => {
                 const Icon = item.icon;
                 const active = isActive(item.path);
+                const showActivityDot =
+                  item.path === "/downloads" && hasDownloadActivity;
 
                 return (
                   <Link
@@ -245,10 +253,27 @@ function Sidebar({ appVersion, mode }) {
                     className={`sidebar-link ${
                       isIcons ? "sidebar-link--icons" : "sidebar-link--full"
                     }${active ? " is-active" : ""}`}
+                    aria-label={
+                      isIcons
+                        ? showActivityDot
+                          ? `${item.label} (active)`
+                          : item.label
+                        : undefined
+                    }
                   >
-                    <Icon className="sidebar-link__icon" />
+                    <span className="sidebar-link__icon-wrap">
+                      <Icon className="sidebar-link__icon" aria-hidden="true" />
+                      {showActivityDot ? (
+                        <span className="sidebar-link__activity" aria-hidden="true" />
+                      ) : null}
+                    </span>
                     {!isIcons && (
-                      <span className="sidebar-link__label">{item.label}</span>
+                      <span className="sidebar-link__label">
+                        {item.label}
+                        {showActivityDot ? (
+                          <span className="sr-only"> (active)</span>
+                        ) : null}
+                      </span>
                     )}
                     {isIcons && (
                       <span className="sidebar-tooltip">{item.label}</span>
