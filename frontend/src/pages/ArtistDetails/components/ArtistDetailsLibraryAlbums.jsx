@@ -9,11 +9,10 @@ import {
   ExternalLink,
   Trash2,
   RefreshCw,
-  Pause,
-  Play,
 } from "lucide-react";
 import { getPopularityScale } from "../utils";
 import { TrackPlaylistMenu } from "./TrackPlaylistMenu";
+import { TrackPlayButton } from "./TrackPlayButton";
 
 export function ArtistDetailsLibraryAlbums({
   artist,
@@ -646,21 +645,12 @@ export function ArtistDetailsLibraryAlbums({
                         {track.trackNumber || track.position || idx + 1}
                       </span>
                       {track.preview_url ? (
-                        <button
-                          type="button"
-                          className="btn btn-surface btn-track-play"
+                        <TrackPlayButton
+                          track={track}
+                          isPlaying={isPlaying}
+                          isLoading={isLoadingPreview}
                           onClick={(event) => handleTrackPreviewPlay(track, event)}
-                          aria-label={isPlaying ? "Pause preview" : "Play preview"}
-                          title={isPlaying ? "Pause preview" : "Play preview"}
-                        >
-                          {isLoadingPreview ? (
-                            <Loader className="artist-icon-xs animate-spin" />
-                          ) : isPlaying ? (
-                            <Pause className="artist-icon-xs" />
-                          ) : (
-                            <Play className="artist-icon-xs" />
-                          )}
-                        </button>
+                        />
                       ) : (
                         <span />
                       )}
