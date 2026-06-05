@@ -182,6 +182,27 @@ setTimeout(() => {
     );
 }, 15000);
 
+setTimeout(async () => {
+  try {
+    const [{ migrateLegacyWeeklyFlowPaths, resolveWeeklyFlowRoot }, trackerModule] =
+      await Promise.all([
+        import("./services/weeklyFlowPaths.js"),
+        import("./services/weeklyFlowDownloadTracker.js"),
+      ]);
+    const result = await migrateLegacyWeeklyFlowPaths(
+      resolveWeeklyFlowRoot(),
+      trackerModule.downloadTracker,
+    );
+    if (result.migrated > 0) {
+      console.log(
+        `[WeeklyFlow] Migrated ${result.migrated} legacy track paths to ${resolveWeeklyFlowRoot()}`,
+      );
+    }
+  } catch (err) {
+    console.error("Weekly flow path migration error:", err.message);
+  }
+}, 3000);
+
 const frontendDist = path.join(__dirname, "..", "frontend", "dist");
 const frontendFallbackRoute = /.*/;
 
