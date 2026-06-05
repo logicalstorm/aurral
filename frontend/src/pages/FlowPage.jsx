@@ -37,7 +37,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useFlowStatus } from "./flows/useFlowStatus";
-import { getDownloadedTrackCount } from "./flows/flowStats";
+import { formatTrackCountLabel } from "./flows/flowStats";
 import {
   PlaylistLibraryItem,
   PlaylistDetailHero,
@@ -1670,13 +1670,22 @@ function FlowPage() {
     : null;
   const selectedEntryUsername =
     selectedEntry?.ownerUsername || user?.username || null;
-  const selectedEntryTrackCount = (() => {
-    const fromStats = getDownloadedTrackCount(selectedStats);
-    if (fromStats > 0 || !selectedId) return fromStats;
-    return (selectedTracks || []).filter((track) => track.status === "done")
-      .length;
+  const selectedEntryTotalTracks = (() => {
+    if (!selectedEntry) return 0;
+    const fromEntry =
+      selectedEntry.kind === "flow"
+        ? Number(selectedFlow?.size || 0)
+        : Number(selectedPlaylist?.trackCount || 0);
+    return Math.max(
+      fromEntry,
+      selectedTracks.length,
+      Number(selectedStats?.total || 0),
+    );
   })();
-  const selectedEntryTrackLabel = `${selectedEntryTrackCount} track${selectedEntryTrackCount === 1 ? "" : "s"}`;
+  const selectedEntryTrackLabel = formatTrackCountLabel(
+    selectedEntryTotalTracks,
+    selectedStats,
+  );
   const flowLastRunShort = selectedFlow
     ? formatFlowLastRunShort(selectedFlow.lastRunAt)
     : null;

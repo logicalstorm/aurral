@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import PillToggle from "../../components/PillToggle";
 import { PlaylistArtworkThumb } from "../FlowPageComponents";
-import { getDownloadedTrackCount } from "./flowStats";
+import { formatTrackCountLabel } from "./flowStats";
 
 const MAIN_CONTENT_PORTAL_SELECTOR = ".app-main-wrap";
 const LIBRARY_CREATE_MENU_WIDTH = 296;
@@ -285,8 +285,11 @@ export function PlaylistLibraryItem({
   onSelect,
   onArtworkClick,
 }) {
-  const downloadedCount = getDownloadedTrackCount(stats);
-  const trackLabel = `${downloadedCount} track${downloadedCount === 1 ? "" : "s"}`;
+  const trackCount =
+    entry.kind === "flow"
+      ? Number(entry.size || 0)
+      : Number(entry.trackCount || 0);
+  const trackLabel = formatTrackCountLabel(trackCount, stats);
   const typeLabel =
     entry.kind === "flow"
       ? entry.enabled === true
@@ -330,7 +333,9 @@ export function PlaylistLibraryItem({
         <span className="flow-page__library-item-title" title={entry.name}>
           {entry.name}
         </span>
-        <span className="flow-page__library-item-meta">{trackLabel}</span>
+        <span className="flow-page__library-item-meta" title={trackLabel}>
+          {trackLabel}
+        </span>
       </div>
     </div>
   );
