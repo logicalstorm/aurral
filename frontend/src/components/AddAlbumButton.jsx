@@ -1,6 +1,5 @@
-import PropTypes from 'prop-types';
-import { Plus, Loader } from 'lucide-react';
-import './AddAlbumButton.css';
+import PropTypes from "prop-types";
+import { Plus, Loader } from "lucide-react";
 
 const AddAlbumButton = ({
   onClick,
@@ -15,18 +14,18 @@ const AddAlbumButton = ({
       type="button"
       onClick={onClick}
       disabled={disabled || isLoading}
-      className={`add-album-btn ${className || ""}`}
+      className={`btn btn-add-album${className ? ` ${className}` : ""}`}
       style={style}
       title={label}
     >
-      <div className="icon-container">
+      <div className="btn-add-album__icon">
         {isLoading ? (
-          <Loader className="w-4 h-4 animate-spin" />
+          <Loader className="animate-spin" aria-hidden="true" />
         ) : (
-          <Plus className="w-4 h-4" />
+          <Plus aria-hidden="true" />
         )}
       </div>
-      <span className="label">{label}</span>
+      <span className="btn-add-album__label">{label}</span>
     </button>
   );
 };

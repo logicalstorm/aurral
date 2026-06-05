@@ -117,7 +117,7 @@ export function ArtistDetailsReleaseTrackList({
                 {track.preview_url ? (
                   <button
                     type="button"
-                    className="artist-track-play-button"
+                    className="btn btn-surface btn-track-play"
                     onClick={(event) => handleTrackPreviewPlay(track, event)}
                     aria-label={isPlaying ? "Pause preview" : "Play preview"}
                     title={isPlaying ? "Pause preview" : "Play preview"}

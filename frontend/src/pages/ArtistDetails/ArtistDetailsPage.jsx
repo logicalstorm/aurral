@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Loader, Music, X } from "lucide-react";
 import { useToast } from "../../contexts/ToastContext";
 import { useAuth } from "../../contexts/AuthContext";
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { useArtistDetailsStream } from "./hooks/useArtistDetailsStream";
 import { usePreviewPlayer } from "./hooks/usePreviewPlayer";
 import { useArtistDetailsLibrary } from "./hooks/useArtistDetailsLibrary";
@@ -147,12 +148,8 @@ function ArtistDetailsPage() {
     setArtist,
   } = stream;
 
-  useEffect(() => {
-    const artistDisplayName = artist?.name || artistNameFromNav || "";
-    document.title = artistDisplayName
-      ? `${artistDisplayName} - Aurral`
-      : "Aurral";
-  }, [artist?.name, artistNameFromNav]);
+  const artistDisplayName = artist?.name || artistNameFromNav || "";
+  useDocumentTitle(artistDisplayName);
 
   const preview = usePreviewPlayer(mbid, artistNameFromNav, artist);
   const {
@@ -160,11 +157,14 @@ function ArtistDetailsPage() {
     loadingPreview,
     setLoadingPreview,
     playingPreviewId,
-    previewProgress,
     previewSnappingBack,
+    previewPaused,
+    previewAnimationKey,
+    playAllActive,
     previewVolume,
     previewAudioRef,
     handlePreviewPlay,
+    handlePreviewPlayAll,
     setPreviewTracks,
   } = preview;
 
@@ -612,7 +612,8 @@ function ArtistDetailsPage() {
         previewTracks={previewTracks}
         playingPreviewId={playingPreviewId}
         previewSnappingBack={previewSnappingBack}
-        handlePreviewPlay={handlePreviewPlay}
+        playAllActive={playAllActive}
+        handlePreviewPlayAll={handlePreviewPlayAll}
         onEditIds={handleOpenEditIds}
         onToggleBlockArtist={handleToggleBlockArtist}
         blockingArtist={blockingArtist}
@@ -625,8 +626,9 @@ function ArtistDetailsPage() {
         loadingPreview={loadingPreview}
         previewTracks={previewTracks}
         playingPreviewId={playingPreviewId}
-        previewProgress={previewProgress}
         previewSnappingBack={previewSnappingBack}
+        previewPaused={previewPaused}
+        previewAnimationKey={previewAnimationKey}
         handlePreviewPlay={handlePreviewPlay}
         onAddTrackToPlaylist={handlePreviewTrackAdd}
         playlists={sharedPlaylists}
@@ -756,6 +758,7 @@ function ArtistDetailsPage() {
         appSettings={appSettings}
         existsInLibrary={existsInLibrary}
         coverImages={coverImages}
+        onNavigate={(path) => navigate(path)}
       />
 
       {(loadingSimilar || similarArtists.length > 0) && (
@@ -856,7 +859,7 @@ function EditArtistIdsModal({
           </h3>
           <button
             type="button"
-            className="artist-icon-button"
+            className="btn btn-surface btn-icon-square"
             onClick={onClose}
             aria-label="Close"
           >

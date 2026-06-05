@@ -49,7 +49,8 @@ export function ArtistDetailsActionBar({
   loadingPreview,
   playingPreviewId,
   previewSnappingBack,
-  handlePreviewPlay,
+  playAllActive,
+  handlePreviewPlayAll,
   onEditIds,
   onToggleBlockArtist,
   blockingArtist,
@@ -57,14 +58,14 @@ export function ArtistDetailsActionBar({
 }) {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const currentMonitorOption = getCurrentMonitorOption?.();
-  const firstPreview = previewTracks?.find((track) => track?.preview_url);
+  const hasPreview = previewTracks?.some((track) => track?.preview_url);
   const isPreviewPlaying =
-    firstPreview && playingPreviewId === firstPreview.id && !previewSnappingBack;
+    playAllActive && playingPreviewId && !previewSnappingBack;
 
   const renderLibraryAction = () => {
     if (loadingLibrary) {
       return (
-        <div className="artist-action-button">
+        <div className="btn btn-secondary btn--bold btn-min-h">
           <Loader className="artist-icon-sm animate-spin" />
           {existsInLibrary ? "Loading library" : "Checking Lidarr"}
         </div>
@@ -77,7 +78,7 @@ export function ArtistDetailsActionBar({
           <button
             type="button"
             onClick={() => setShowRemoveDropdown(!showRemoveDropdown)}
-            className="artist-action-button artist-action-button--active"
+            className="btn btn-neutral-active btn--bold btn-min-h"
           >
             <CheckCircle className="artist-icon-sm" />
             In Library
@@ -158,17 +159,17 @@ export function ArtistDetailsActionBar({
     if (!canAddArtist) return null;
 
     return (
-      <div className="add-to-library-button-group">
+      <div className="btn-add-library-group">
         <AddToLibraryButton
           onClick={handleAddToLibrary}
           isLoading={addingToLibrary}
-          className="add-to-library-button--split"
+          className="btn-add-library--split"
         />
         <button
           type="button"
           onClick={handleOpenAddCustomizeModal}
           disabled={addingToLibrary}
-          className="add-to-library-button-split-trigger"
+          className="btn btn-add-library-split"
           aria-label="Customize add options"
           title="Customize add options"
         >
@@ -182,12 +183,12 @@ export function ArtistDetailsActionBar({
     <div className="artist-action-bar">
       <div className="artist-action-bar__inner">
         <div className="artist-action-bar__group">
-          {firstPreview && (
+          {hasPreview && (
             <button
               type="button"
-              onClick={() => handlePreviewPlay(firstPreview)}
+              onClick={handlePreviewPlayAll}
               disabled={loadingPreview}
-              className="artist-round-button"
+              className="btn btn-primary btn-round-lg"
               aria-label={isPreviewPlaying ? "Pause preview" : "Play preview"}
               title={isPreviewPlaying ? "Pause preview" : "Play preview"}
             >
@@ -209,7 +210,7 @@ export function ArtistDetailsActionBar({
               type="button"
               onClick={handleRefreshArtist}
               disabled={refreshingArtist}
-              className="artist-action-button"
+              className="btn btn-secondary btn--bold btn-min-h"
             >
               {refreshingArtist ? (
                 <Loader className="artist-icon-sm animate-spin" />
@@ -223,7 +224,7 @@ export function ArtistDetailsActionBar({
             <button
               type="button"
               onClick={() => setShowMoreMenu((value) => !value)}
-              className="artist-icon-button"
+              className="btn btn-surface btn-icon-square"
               aria-label="More artist actions"
               title="More artist actions"
             >
@@ -307,7 +308,8 @@ ArtistDetailsActionBar.propTypes = {
   loadingPreview: PropTypes.bool,
   playingPreviewId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   previewSnappingBack: PropTypes.bool,
-  handlePreviewPlay: PropTypes.func.isRequired,
+  playAllActive: PropTypes.bool,
+  handlePreviewPlayAll: PropTypes.func.isRequired,
   onEditIds: PropTypes.func,
   onToggleBlockArtist: PropTypes.func,
   blockingArtist: PropTypes.bool,

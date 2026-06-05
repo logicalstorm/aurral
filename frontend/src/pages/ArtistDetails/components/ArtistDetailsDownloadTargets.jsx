@@ -191,7 +191,7 @@ export function ArtistDetailsDownloadTargets({
             {canAddAlbum && missingReleasePick.releaseGroupId && (
               <div>
                 <AddAlbumButton
-                  className="add-album-btn--expanded"
+                  className="btn-add-album is-expanded"
                   onClick={(event) => {
                     event.stopPropagation();
                     handleRequestAlbum(
@@ -231,7 +231,7 @@ export function ArtistDetailsDownloadTargets({
                       {track.preview_url ? (
                         <button
                           type="button"
-                          className="artist-track-play-button"
+                          className="btn btn-surface btn-track-play"
                           onClick={(event) => handleTrackPreviewPlay(track, event)}
                           aria-label={isPlaying ? "Pause preview" : "Play preview"}
                           title={isPlaying ? "Pause preview" : "Play preview"}

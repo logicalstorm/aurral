@@ -402,7 +402,7 @@ function CommaTokenInput({
 
   return (
     <div
-      className="min-h-10 w-full rounded-md border border-white/10 bg-[#1f1f24] px-3 py-2 text-sm text-white transition focus-within:border-[#90a07d] focus-within:ring-1 focus-within:ring-[#90a07d]"
+      className="min-h-10 w-full rounded-md border border-white/10 bg-[var(--aurral-surface)] px-3 py-2 text-sm text-white transition focus-within:border-[#90a07d] focus-within:ring-1 focus-within:ring-[#90a07d]"
       onClick={() => setIsFocused(true)}
     >
       {isFocused ? (
@@ -722,7 +722,7 @@ export function FlowPageHeader({ onNewFlow }) {
       <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={onNewFlow}
-          className="btn btn-primary btn-sm flex items-center gap-2"
+          className="btn btn-primary btn-sm"
         >
           <FilePlus2 className="w-4 h-4" />
           New Flow
@@ -857,14 +857,14 @@ export function MoreMenu({ children, activeButtonClass = "btn-primary" }) {
       <button 
         type="button" 
         onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }} 
-        className={`btn btn-sm gap-2 px-2.5 ${isOpen ? activeButtonClass : "btn-secondary"}`}
+        className={`btn btn-sm btn--toolbar ${isOpen ? activeButtonClass : "btn-secondary"}`}
         aria-label="More options"
       >
         <MoreHorizontal className="w-4 h-4" />
         <span className="hidden sm:inline">More</span>
       </button>
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 z-30 flex w-48 flex-col rounded-md border border-[#3a3a44] bg-[#2d2d36] py-1"
+        <div className="absolute right-0 top-full mt-2 z-30 flex w-48 flex-col rounded-md border border-[#3a3a44] bg-[var(--aurral-overlay)] py-1"
              onClick={() => setIsOpen(false)}>
           {children}
         </div>
@@ -1017,10 +1017,6 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
         (track) => track.isMarkedForDeletion || track.status === "failed",
       )
     : draftTracks;
-  const utilityButtonClass =
-    "inline-flex h-8 items-center gap-1.5 rounded-md border border-white/12 bg-[#4a4a52] px-3 text-xs font-medium text-[#ededf0] transition hover:border-white/20 hover:bg-[#575762] disabled:cursor-not-allowed disabled:opacity-50";
-  const activeUtilityButtonClass =
-    "border-white/20 bg-[#5a5a64] text-white hover:bg-[#676773]";
   const initialPayload = useMemo(() => {
     try {
       return JSON.stringify(buildTrackSavePayload(buildEditableTrackRows(tracks)));
@@ -1150,7 +1146,7 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
             <button
               type="button"
               onClick={() => setMissingOnly((prev) => !prev)}
-              className={`${utilityButtonClass} ${missingOnly ? activeUtilityButtonClass : ""}`}
+              className={`btn btn-secondary btn-xs${missingOnly ? " btn-neutral-active" : ""}`}
             >
               {missingOnly ? "Show All" : "Missing Only"}
             </button>
@@ -1158,10 +1154,10 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
           <button
             type="button"
             onClick={handleAddTrack}
-            className={utilityButtonClass}
+            className="btn btn-secondary btn-xs"
             disabled={saving}
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="artist-icon-xs" />
             Add Track
           </button>
         </div>
@@ -1197,7 +1193,7 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                             <div className="grid gap-1">
                               <input
                                 type="text"
-                                className="input input-xs h-8 w-full min-w-0 bg-[#141419] px-2 text-sm"
+                                className="input input-xs h-8 w-full min-w-0 px-2 text-sm"
                                 value={track.trackName}
                                 onChange={(event) =>
                                   updateTrack(track.rowId, "trackName", event.target.value)
@@ -1220,7 +1216,7 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                           ) : (
                             <input
                               type="text"
-                              className="input input-xs h-8 w-full min-w-0 bg-[#141419] px-2 text-sm"
+                              className="input input-xs h-8 w-full min-w-0 px-2 text-sm"
                               value={track.artistName}
                               onChange={(event) =>
                                 updateTrack(track.rowId, "artistName", event.target.value)
@@ -1237,7 +1233,7 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                           ) : (
                             <input
                               type="text"
-                              className="input input-xs h-8 w-full min-w-0 bg-[#141419] px-2 text-sm"
+                              className="input input-xs h-8 w-full min-w-0 px-2 text-sm"
                               value={track.albumName}
                               onChange={(event) =>
                                 updateTrack(track.rowId, "albumName", event.target.value)
@@ -1251,7 +1247,7 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                             <button
                               type="button"
                               onClick={() => toggleTrackDeletion(track.rowId)}
-                              className="btn btn-secondary btn-xs px-2"
+                              className="btn btn-secondary btn-xs"
                             >
                               Undo
                             </button>
@@ -1259,7 +1255,7 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                             <button
                               type="button"
                               onClick={() => toggleTrackDeletion(track.rowId)}
-                              className="btn btn-ghost btn-xs px-2 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                              className="btn btn-ghost-danger btn-xs"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -1308,7 +1304,7 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                           <div className="grid gap-1 min-w-[180px]">
                             <input
                               type="text"
-                              className="input input-xs bg-[#141419]"
+                              className="input input-xs"
                               value={track.trackName}
                               onChange={(event) =>
                                 updateTrack(track.rowId, "trackName", event.target.value)
@@ -1331,7 +1327,7 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                         ) : (
                           <input
                             type="text"
-                            className="input input-xs min-w-[180px] bg-[#141419]"
+                            className="input input-xs min-w-[180px]"
                             value={track.artistName}
                             onChange={(event) =>
                               updateTrack(track.rowId, "artistName", event.target.value)
@@ -1348,7 +1344,7 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                         ) : (
                           <input
                             type="text"
-                            className="input input-xs min-w-[180px] bg-[#141419]"
+                            className="input input-xs min-w-[180px]"
                             value={track.albumName}
                             onChange={(event) =>
                               updateTrack(track.rowId, "albumName", event.target.value)
@@ -1362,7 +1358,7 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                           <button
                             type="button"
                             onClick={() => toggleTrackDeletion(track.rowId)}
-                            className="btn btn-secondary btn-xs px-2"
+                            className="btn btn-secondary btn-xs"
                           >
                             Undo
                           </button>
@@ -1370,7 +1366,7 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                           <button
                             type="button"
                             onClick={() => toggleTrackDeletion(track.rowId)}
-                            className="btn btn-ghost btn-xs px-2 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                            className="btn btn-ghost-danger btn-xs"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1645,7 +1641,7 @@ export function FlowCard({
               <div className="flex shrink-0 items-center justify-end gap-1 self-end min-[420px]:self-start">
                 <button
                   onClick={onViewTracks}
-                  className={`hidden sm:inline-flex btn ${isTracksOpen ? "btn-neutral-active" : "btn-secondary"} btn-sm gap-2 px-2.5`}
+                  className={`btn btn--hide-mobile btn-sm btn--toolbar ${isTracksOpen ? "btn-neutral-active" : "btn-secondary"}`}
                   aria-label={isTracksOpen ? `Close ${flow.name} tracks` : `View ${flow.name} tracks`}
                   title={isTracksOpen ? `Close ${flow.name} tracks` : `View ${flow.name} tracks`}
                   aria-pressed={isTracksOpen}
@@ -1656,7 +1652,7 @@ export function FlowCard({
                 </button>
                 <button
                   onClick={onToggleEditing}
-                  className={`hidden sm:inline-flex btn ${isEditing ? "btn-neutral-active" : "btn-secondary"} btn-sm gap-2 px-2.5`}
+                  className={`btn btn--hide-mobile btn-sm btn--toolbar ${isEditing ? "btn-neutral-active" : "btn-secondary"}`}
                   aria-label={isEditing ? "Close editor" : "Edit flow"}
                   title={isEditing ? `Close ${flow.name} editor` : `Edit ${flow.name}`}
                   aria-pressed={isEditing}
@@ -1667,7 +1663,7 @@ export function FlowCard({
                 <MoreMenu activeButtonClass="btn-neutral-active">
                   <button
                     onClick={onViewTracks}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
                     aria-pressed={isTracksOpen}
                     disabled={!enabled && !isTracksOpen}
                   >
@@ -1676,7 +1672,7 @@ export function FlowCard({
                   </button>
                   <button
                     onClick={onToggleEditing}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white sm:hidden"
+                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white sm:hidden"
                     aria-pressed={isEditing}
                   >
                     <Pencil className="w-4 h-4" />
@@ -1687,7 +1683,7 @@ export function FlowCard({
                       <button
                         type="button"
                         onClick={isNameDirty ? onNameApply : onNameCancel}
-                        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={isNameApplying}
                       >
                         {isNameApplying ? (
@@ -1700,7 +1696,7 @@ export function FlowCard({
                       <button
                         type="button"
                         onClick={onNameCancel}
-                        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={isNameApplying}
                       >
                         <X className="w-4 h-4" />
@@ -1711,7 +1707,7 @@ export function FlowCard({
                     <button
                       type="button"
                       onClick={onToggleNameEditing}
-                      className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white sm:hidden"
+                      className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white sm:hidden"
                     >
                       <Pencil className="w-4 h-4" />
                       Rename Title
@@ -1720,7 +1716,7 @@ export function FlowCard({
                   <div className="my-1 border-t border-white/10 sm:hidden" />
                   <button
                     onClick={onRunNow}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={!canRunNow}
                   >
                     {isRerunningThisFlow ? (
@@ -1732,7 +1728,7 @@ export function FlowCard({
                   </button>
                   <button
                     onClick={onConvertToStatic}
-                    className="w-full text-left px-3 py-2.5 text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white flex items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full text-left px-3 py-2.5 text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white flex items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={!canConvertToStatic || convertingId === flow.id}
                   >
                     {convertingId === flow.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <FilePlus2 className="w-4 h-4" />}
@@ -1740,7 +1736,7 @@ export function FlowCard({
                   </button>
                   <button
                     onClick={onExport}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={!canExport}
                   >
                     <Download className="w-4 h-4" />
@@ -1775,7 +1771,7 @@ export function FlowCard({
                   {isNameEditing ? (
                     <input
                       type="text"
-                      className="input input-sm h-9 w-full max-w-md bg-[#1c1b22] text-base font-medium text-white"
+                      className="input input-sm h-9 w-full max-w-md text-base font-medium text-white"
                       value={simpleDraft?.name ?? ""}
                       onChange={(event) =>
                         onDraftChange((prev) => ({
@@ -1813,7 +1809,7 @@ export function FlowCard({
                           ? (isNameDirty ? onNameApply : onNameCancel)
                           : onToggleNameEditing
                       }
-                      className={`btn ${isNameEditing ? "btn-primary" : "btn-ghost"} btn-xs px-2`}
+                      className={`btn ${isNameEditing ? "btn-primary" : "btn-ghost"} btn-xs`}
                       aria-label={isNameEditing ? `Save ${flow.name}` : `Edit ${flow.name}`}
                       title={isNameEditing ? `Save ${flow.name}` : `Edit ${flow.name}`}
                       disabled={isNameApplying}
@@ -1830,7 +1826,7 @@ export function FlowCard({
                       <button
                         type="button"
                         onClick={onNameCancel}
-                        className="btn btn-ghost btn-xs px-2"
+                        className="btn btn-ghost btn-xs"
                         aria-label={`Cancel editing ${flow.name}`}
                         title={`Cancel editing ${flow.name}`}
                         disabled={isNameApplying}
@@ -1892,7 +1888,7 @@ export function FlowCard({
             <FlowFormFields
               draft={simpleDraft}
               remaining={simpleRemaining}
-              inputClassName="input bg-[#1f1f24]"
+              inputClassName="input"
               errorMessage={simpleError}
               onDraftChange={onDraftChange}
               onClearError={onClearError}
@@ -2192,7 +2188,7 @@ export function FlowTracksPanel({
         <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center gap-2">
           <button
             onClick={handlePrevious}
-            className="btn btn-secondary btn-sm px-2"
+            className="btn btn-secondary btn-sm btn-icon"
             disabled={playableTracks.length === 0}
             aria-label="Previous track"
           >
@@ -2200,7 +2196,7 @@ export function FlowTracksPanel({
           </button>
           <button
             onClick={handlePrimaryPlay}
-            className="btn btn-primary btn-sm px-2"
+            className="btn btn-primary btn-sm btn-icon"
             disabled={playableTracks.length === 0}
             aria-label={isPlaying ? "Pause playback" : "Start playback"}
           >
@@ -2208,7 +2204,7 @@ export function FlowTracksPanel({
           </button>
           <button
             onClick={handleNext}
-            className="btn btn-secondary btn-sm px-2"
+            className="btn btn-secondary btn-sm btn-icon"
             disabled={playableTracks.length === 0}
             aria-label="Next track"
           >
@@ -2216,7 +2212,7 @@ export function FlowTracksPanel({
           </button>
           <button
             onClick={() => setIsShuffleEnabled((prev) => !prev)}
-            className="btn btn-secondary btn-sm px-2"
+            className="btn btn-secondary btn-sm btn-icon"
             aria-label={isShuffleEnabled ? "Disable shuffle" : "Enable shuffle"}
             style={
               isShuffleEnabled
@@ -2231,7 +2227,7 @@ export function FlowTracksPanel({
           {headerActions}
           <button
             onClick={handleToggleMute}
-            className="btn btn-ghost btn-xs px-1.5"
+            className="btn btn-ghost btn-icon btn-xs"
             aria-label={volume <= 0 ? "Unmute" : "Mute"}
           >
             {volume <= 0 ? (
@@ -2342,7 +2338,7 @@ export function FlowTracksPanel({
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handlePlayTrack(track)}
-                          className="btn btn-secondary btn-xs px-2"
+                          className="btn btn-secondary btn-xs"
                           disabled={!canPlay}
                         >
                           {isCurrent && isPlaying ? (
@@ -2354,7 +2350,7 @@ export function FlowTracksPanel({
                         {onAddTrackToPlaylist ? (
                           <button
                             onClick={() => onAddTrackToPlaylist(track)}
-                            className="btn btn-secondary btn-xs px-2"
+                            className="btn btn-secondary btn-xs"
                             aria-label={`Add ${track.trackName} to playlist`}
                             title={`Add ${track.trackName} to playlist`}
                             disabled={!track.artistName || !track.trackName}
@@ -2365,7 +2361,7 @@ export function FlowTracksPanel({
                         {canReSearch ? (
                           <button
                             onClick={() => onReSearchTrack(track)}
-                            className="btn btn-secondary btn-xs px-2"
+                            className="btn btn-secondary btn-xs"
                             aria-label={`Re-search ${track.trackName}`}
                             title={`Re-search ${track.trackName}`}
                             disabled={isReSearching}
@@ -2380,7 +2376,7 @@ export function FlowTracksPanel({
                         {canDelete ? (
                           <button
                             onClick={() => onDeleteTrack?.(track)}
-                            className="btn btn-ghost btn-xs px-2 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                            className="btn btn-ghost-danger btn-xs"
                             aria-label={`Remove ${track.trackName} from playlist`}
                             title={`Remove ${track.trackName} from playlist`}
                             disabled={deletingTrackId === track.id}
@@ -2418,7 +2414,7 @@ export function FlowEmptyState({ onCreate, creating, canCreate = true }) {
         {canCreate ? (
           <button
             onClick={onCreate}
-            className="btn btn-primary btn-sm flex items-center gap-2"
+            className="btn btn-primary btn-sm"
             disabled={creating}
           >
             <FilePlus2 className="w-4 h-4" />
@@ -2517,7 +2513,7 @@ export function SharedPlaylistCard({
                 <button
                   type="button"
                   onClick={onViewTracks}
-                  className={`hidden sm:inline-flex btn ${isTracksOpen ? "btn-neutral-active" : "btn-secondary"} btn-sm gap-2 px-2.5`}
+                  className={`btn btn--hide-mobile btn-sm btn--toolbar ${isTracksOpen ? "btn-neutral-active" : "btn-secondary"}`}
                   aria-label={isTracksOpen ? `Close ${playlist.name} tracks` : `View ${playlist.name} tracks`}
                   title={isTracksOpen ? `Close ${playlist.name} tracks` : `View ${playlist.name} tracks`}
                   aria-pressed={isTracksOpen}
@@ -2529,7 +2525,7 @@ export function SharedPlaylistCard({
                   <button
                     type="button"
                     onClick={onViewTracks}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white sm:hidden"
+                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white sm:hidden"
                     aria-pressed={isTracksOpen}
                   >
                     <ListMusic className="w-4 h-4" />
@@ -2540,7 +2536,7 @@ export function SharedPlaylistCard({
                       <button
                         type="button"
                         onClick={onApplyEdit}
-                        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={isApplyingName}
                       >
                         {isApplyingName ? (
@@ -2553,7 +2549,7 @@ export function SharedPlaylistCard({
                       <button
                         type="button"
                         onClick={onCancelEdit}
-                        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={isApplyingName}
                       >
                         <X className="w-4 h-4" />
@@ -2564,7 +2560,7 @@ export function SharedPlaylistCard({
                     <button
                       type="button"
                       onClick={onToggleEditing}
-                      className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white sm:hidden"
+                      className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white sm:hidden"
                     >
                       <Pencil className="w-4 h-4" />
                       Rename Title
@@ -2574,7 +2570,7 @@ export function SharedPlaylistCard({
                   <button
                     type="button"
                     onClick={onExport}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white"
+                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white"
                   >
                     <Download className="w-4 h-4" />
                     Download JSON
@@ -2583,7 +2579,7 @@ export function SharedPlaylistCard({
                   <button
                     type="button"
                     onClick={() => onSetRetryCyclePaused?.(!retryCyclePaused)}
-                    className="w-full text-left px-3 py-2.5 text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white flex items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full text-left px-3 py-2.5 text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white flex items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={retryActionInFlight}
                   >
                     {retryActionInFlight ? (
@@ -2613,7 +2609,7 @@ export function SharedPlaylistCard({
                 {isEditing ? (
                   <input
                     type="text"
-                    className="input input-sm h-9 w-full max-w-md bg-[#1c1b22] text-base font-medium text-white"
+                    className="input input-sm h-9 w-full max-w-md text-base font-medium text-white"
                     value={nameDraft ?? ""}
                     onChange={(event) => onNameChange(event.target.value)}
                     onKeyDown={(event) => {
@@ -2637,7 +2633,7 @@ export function SharedPlaylistCard({
                   <button
                     type="button"
                     onClick={isEditing ? onApplyEdit : onToggleEditing}
-                    className={`btn ${isEditing ? "btn-primary" : "btn-ghost"} btn-xs px-2`}
+                    className={`btn ${isEditing ? "btn-primary" : "btn-ghost"} btn-xs`}
                     aria-label={isEditing ? `Save ${playlist.name}` : `Edit ${playlist.name}`}
                     title={isEditing ? `Save ${playlist.name}` : `Edit ${playlist.name}`}
                     disabled={isApplyingName}
@@ -2654,7 +2650,7 @@ export function SharedPlaylistCard({
                     <button
                       type="button"
                       onClick={onCancelEdit}
-                      className="btn btn-ghost btn-xs px-2"
+                      className="btn btn-ghost btn-xs"
                       aria-label={`Cancel editing ${playlist.name}`}
                       title={`Cancel editing ${playlist.name}`}
                       disabled={isApplyingName}
@@ -2722,7 +2718,7 @@ export function SharedPlaylistCard({
                   <button
                     type="button"
                     onClick={onToggleTrackEditing}
-                    className="btn btn-ghost btn-xs p-2"
+                    className="btn btn-ghost btn-icon btn-xs"
                     aria-label={`Cancel editing ${playlist.name} tracklist`}
                     title={`Cancel editing ${playlist.name} tracklist`}
                     disabled={isApplyingTracks}
@@ -2737,7 +2733,7 @@ export function SharedPlaylistCard({
                         onToggleTrackEditing();
                       }
                     }}
-                    className="btn btn-primary btn-xs p-2"
+                    className="btn btn-primary btn-icon btn-xs"
                     aria-label={`Save ${playlist.name} tracklist`}
                     title={`Save ${playlist.name} tracklist`}
                     disabled={isApplyingTracks}
@@ -2775,7 +2771,7 @@ export function SharedPlaylistCard({
                     }
                     onToggleTrackEditing();
                   }}
-                  className={`btn ${isTrackEditing ? "btn-primary" : "btn-secondary"} btn-xs p-2`}
+                  className={`btn ${isTrackEditing ? "btn-primary" : "btn-secondary"} btn-icon btn-xs`}
                   aria-label={isTrackEditing ? `Save ${playlist.name} tracklist` : `Edit ${playlist.name} tracklist`}
                   title={isTrackEditing ? `Save ${playlist.name} tracklist` : `Edit ${playlist.name} tracklist`}
                   disabled={isApplyingTracks}
@@ -2819,7 +2815,7 @@ export function FlowImportReviewModal({
       onClick={importing ? undefined : onCancel}
     >
       <div
-        className="mx-4 w-full max-w-3xl overflow-hidden rounded-lg border border-white/5 bg-card shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+        className="card card-overlay mx-4 w-full max-w-3xl overflow-hidden rounded-lg border border-white/5 shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="border-b border-white/10 px-5 py-4">
@@ -2911,7 +2907,7 @@ export function FlowImportReviewModal({
             <button
               type="button"
               onClick={onConfirm}
-              className="btn btn-primary gap-2"
+              className="btn btn-primary"
               disabled={importing || flows.length === 0}
             >
               {importing ? (
@@ -2943,7 +2939,7 @@ export function ConfirmDeleteModal({ confirmDelete, deletingId, onCancel, onConf
       style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
       onClick={onCancel}
     >
-      <div className="card max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+      <div className="card card-overlay max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-xl font-bold mb-2 text-white">
           Delete {confirmDelete.title}?
         </h3>
@@ -2984,7 +2980,7 @@ export function ConfirmDisableModal({
       style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
       onClick={onCancel}
     >
-      <div className="card max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+      <div className="card card-overlay max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-xl font-bold mb-2 text-white">
           Turn off {confirmDisable.title}?
         </h3>
@@ -3023,7 +3019,7 @@ export function ConfirmStopAllModal({
       style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
       onClick={onCancel}
     >
-      <div className="card max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+      <div className="card card-overlay max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-xl font-bold mb-2 text-white">
           Stop all playlists?
         </h3>
@@ -3204,7 +3200,7 @@ export function FlowWorkerSettingsModal({
       style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
       onClick={onCancel}
     >
-      <div className="card max-w-lg w-full mx-4 grid gap-5" onClick={(e) => e.stopPropagation()}>
+      <div className="card card-overlay max-w-lg w-full mx-4 grid gap-5" onClick={(e) => e.stopPropagation()}>
         <div className="grid gap-1">
           <h3 className="text-xl font-bold text-white">Worker Settings</h3>
         </div>
@@ -3223,7 +3219,7 @@ export function FlowWorkerSettingsModal({
                 type="button"
                 onClick={onRotateSoulseekCredential}
                 disabled={!canRotate || rotatingSoulseekCredential}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-white/10 bg-white/5 text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                className="btn btn-secondary btn-icon"
                 title={
                   canRotate
                     ? "Rotate Soulseek account now"
@@ -3300,7 +3296,7 @@ export function FlowWorkerSettingsModal({
                       retryCycleMinutes: Number(event.target.value),
                     }))
                   }
-                  className="h-[52px] w-full appearance-none rounded-md border border-white/10 bg-black/20 pl-3 pr-12 text-sm text-white outline-none transition focus:border-[#90a07d] focus:ring-1 focus:ring-[#90a07d]"
+                  className="h-[52px] w-full appearance-none rounded-md border border-white/10 bg-[var(--aurral-surface)] pl-3 pr-12 text-sm text-white outline-none transition focus:border-[#90a07d] focus:ring-1 focus:ring-[#90a07d]"
                 >
                   {FLOW_WORKER_RETRY_CYCLE_OPTIONS.map((option) => (
                     <option
@@ -3392,7 +3388,7 @@ export function FlowWorkerSettingsModal({
                     existingFileMode: event.target.value,
                   }))
                 }
-                className="h-[52px] w-full appearance-none rounded-md border border-white/10 bg-black/20 pl-3 pr-12 text-sm text-white outline-none transition focus:border-[#90a07d] focus:ring-1 focus:ring-[#90a07d]"
+                className="h-[52px] w-full appearance-none rounded-md border border-white/10 bg-[var(--aurral-surface)] pl-3 pr-12 text-sm text-white outline-none transition focus:border-[#90a07d] focus:ring-1 focus:ring-[#90a07d]"
                 title="How generated playlists reuse existing Aurral or Lidarr files"
               >
                 {FLOW_WORKER_EXISTING_FILE_OPTIONS.map((option) => (

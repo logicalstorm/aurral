@@ -83,11 +83,7 @@ function SortableSectionRow({ item, onToggle, showUnavailable }) {
       <button
         type="button"
         onClick={() => onToggle(item.id)}
-        className={`artist-customize-section-toggle ${
-          item.enabled 
-            ? "artist-customize-section-toggle--active" 
-            : "artist-customize-section-toggle--inactive"
-        }`}
+        className={`btn btn-xs${item.enabled ? " btn-primary" : " btn-secondary"}`}
         aria-pressed={item.enabled}
         aria-label={`${item.enabled ? "Hide" : "Show"} ${item.label}`}
       >
@@ -188,7 +184,7 @@ export function DiscoverLayoutModal({
           </div>
           <button
             type="button"
-            className="artist-customize-modal__close"
+            className="btn btn-ghost btn-icon-square"
             onClick={onClose}
             disabled={isSaving}
             aria-label="Close"
@@ -237,7 +233,7 @@ export function DiscoverLayoutModal({
           <button
             type="button"
             onClick={onReset}
-            className="artist-customize-modal__reset-btn"
+            className="btn btn-ghost btn-sm"
             disabled={isSaving}
           >
             Reset to Default
@@ -246,7 +242,7 @@ export function DiscoverLayoutModal({
             <button
               type="button"
               onClick={onClose}
-              className="artist-customize-modal__cancel-btn"
+              className="btn btn-secondary btn-sm"
               disabled={isSaving}
             >
               Cancel
@@ -254,7 +250,7 @@ export function DiscoverLayoutModal({
             <button
               type="button"
               onClick={onSave}
-              className="artist-customize-modal__save-btn"
+              className="btn btn-primary btn-sm"
               disabled={isSaving}
             >
               {isSaving ? "Saving..." : "Save Layout"}

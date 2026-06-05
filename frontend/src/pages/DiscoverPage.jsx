@@ -49,6 +49,7 @@ import {
   updateBlocklist,
 } from "../utils/api";
 import { useWebSocketChannel } from "../hooks/useWebSocket";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useAuth } from "../contexts/AuthContext";
 import {
   applyArtistDiscoveryFeedback,
@@ -728,7 +729,7 @@ const ArtistCard = memo(
                   event.stopPropagation();
                   setShowMenu((prev) => !prev);
                 }}
-                className="artist-menu-button--discover"
+                className="btn btn-surface btn-icon-square"
                 aria-label={`Artist options for ${artist.name}`}
               >
                 <MoreVertical className="artist-icon-sm" />
@@ -1251,7 +1252,7 @@ function DiscoverRail({
             <button
               type="button"
               onClick={onViewAll}
-              className="artist-link-button--discover"
+              className="btn btn-ghost btn-icon-square"
               aria-label={`Open ${title}`}
             >
               →
@@ -1264,7 +1265,7 @@ function DiscoverRail({
           <button
             type="button"
             onClick={() => scrollByAmount(-1)}
-            className="artist-scroll-button--discover"
+            className="btn btn-ghost btn-icon-square"
             style={{ color: canScrollLeft ? "#6f7685" : "#2d3442" }}
             aria-label={`Scroll ${title} left`}
             disabled={!canScrollLeft}
@@ -1274,7 +1275,7 @@ function DiscoverRail({
           <button
             type="button"
             onClick={() => scrollByAmount(1)}
-            className="artist-scroll-button--discover"
+            className="btn btn-ghost btn-icon-square"
             style={{ color: canScrollRight ? "#d1d5df" : "#2d3442" }}
             aria-label={`Scroll ${title} right`}
             disabled={!canScrollRight}
@@ -1303,6 +1304,7 @@ DiscoverRail.propTypes = {
 };
 
 function DiscoverPage() {
+  useDocumentTitle("Discover");
   const { user: authUser, hasPermission } = useAuth();
   const initialNearbyLocation = useMemo(() => readStoredNearbyLocation(), []);
   const [data, setData] = useState(() => readStoredDiscoveryData(authUser?.id));
@@ -2384,7 +2386,7 @@ function DiscoverPage() {
                   localStorage.setItem(DISCOVER_NEARBY_MODE_KEY, "ip");
                 } catch {}
               }}
-              className={`artist-nearby-config__button ${!zipModeActive ? "artist-nearby-config__button--active" : ""}`}
+              className={`btn btn-xs ${!zipModeActive ? "btn-neutral-active" : "btn-ghost"}`}
             >
               Your Area
             </button>
@@ -2395,8 +2397,12 @@ function DiscoverPage() {
                 try {
                   localStorage.setItem(DISCOVER_NEARBY_MODE_KEY, "zip");
                 } catch {}
+                if (!appliedNearbyZip.trim()) {
+                  setNearbyZipDraft("");
+                  setShowNearbyZipEditor(true);
+                }
               }}
-              className={`artist-nearby-config__button ${zipModeActive ? "artist-nearby-config__button--active" : ""}`}
+              className={`btn btn-xs ${zipModeActive ? "btn-neutral-active" : "btn-ghost"}`}
             >
               ZIP
             </button>
@@ -2409,7 +2415,7 @@ function DiscoverPage() {
                   setNearbyZipDraft(appliedNearbyZip);
                   setShowNearbyZipEditor((value) => !value);
                 }}
-                className="artist-nearby-edit-button"
+                className="btn btn-surface btn-icon-square"
                 aria-label="Edit ZIP"
                 title="Edit ZIP"
               >
@@ -2417,18 +2423,22 @@ function DiscoverPage() {
               </button>
               {showNearbyZipEditor && (
                 <div className="artist-nearby-zip-editor">
-                  <input
-                    type="text"
-                    value={nearbyZipDraft}
-                    onChange={(event) => setNearbyZipDraft(event.target.value)}
-                    className="artist-nearby-zip-editor__input"
-                    placeholder="ZIP or postal code"
-                  />
+                  <div className="artist-nearby-zip-editor__field">
+                    <input
+                      type="text"
+                      value={nearbyZipDraft}
+                      onChange={(event) =>
+                        setNearbyZipDraft(event.target.value)
+                      }
+                      className="artist-nearby-zip-editor__input"
+                      placeholder="ZIP or postal code"
+                    />
+                  </div>
                   <div className="artist-nearby-zip-editor__actions">
                     <button
                       type="button"
                       onClick={() => setShowNearbyZipEditor(false)}
-                      className="artist-nearby-zip-editor__cancel"
+                      className="btn btn-secondary btn-sm"
                     >
                       Cancel
                     </button>
@@ -2448,7 +2458,7 @@ function DiscoverPage() {
                           );
                         } catch {}
                       }}
-                      className="artist-nearby-zip-editor__save"
+                      className="btn btn-primary btn-sm"
                       disabled={!nearbyZipDraft.trim()}
                     >
                       Save
@@ -2509,15 +2519,21 @@ function DiscoverPage() {
 
       if (zipModeActive && !appliedNearbyZip.trim()) {
         return (
-          <section key="recommendedShows" className="artist-discover-section">
+          <DiscoverRail
+            key="recommendedShows"
+            title="Shows Near You"
+            onViewAll={() => navigate("/shows")}
+            afterTitle={nearbyLocationBadge}
+            headerActions={nearbyHeaderActions}
+          >
             <div className="artist-nearby-status">
               <h3 className="artist-nearby-status__title">ZIP not set</h3>
               <p className="artist-nearby-status__text">
-                Set a ZIP code from the Shows page area settings to use ZIP mode
-                here.
+                Enter a ZIP or postal code using the edit control above, or
+                switch back to Your Area.
               </p>
             </div>
-          </section>
+          </DiscoverRail>
         );
       }
 
@@ -2886,7 +2902,7 @@ function DiscoverPage() {
             <button
               type="button"
               onClick={openDiscoverModal}
-              className="artist-action-button--customize"
+              className="btn btn-surface btn--bold btn-min-h discover-page__customize-btn"
             >
               <LayoutTemplate className="artist-discover-hero__customize-icon" />
               <span>Customize</span>

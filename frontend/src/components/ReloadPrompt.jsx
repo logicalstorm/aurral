@@ -30,23 +30,15 @@ function ReloadPrompt() {
         </div>
         <div className="flex gap-2 mt-2">
           <button
-            className="flex-1 px-3 py-1.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2"
-            style={{
-              backgroundColor: "#707e61",
-              color: "#fff",
-              "--tw-ring-color": "#c1c1c3",
-            }}
+            type="button"
+            className="btn btn-primary btn-sm btn--grow"
             onClick={() => updateServiceWorker(true)}
           >
             Reload
           </button>
           <button
-            className="flex-1 px-3 py-1.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2"
-            style={{
-              "--tw-ring-color": "#c1c1c3",
-              backgroundColor: "#211f27",
-              color: "#fff",
-            }}
+            type="button"
+            className="btn btn-secondary btn-sm btn--grow"
             onClick={close}
           >
             Close

@@ -15,8 +15,9 @@ export function ArtistDetailsPreviewTracks({
   loadingPreview,
   previewTracks,
   playingPreviewId,
-  previewProgress,
   previewSnappingBack,
+  previewPaused,
+  previewAnimationKey,
   handlePreviewPlay,
   onAddTrackToPlaylist,
   playlists,
@@ -102,13 +103,16 @@ export function ArtistDetailsPreviewTracks({
                 >
                   {playingPreviewId === track.id && (
                     <div
-                      className="artist-track-progress"
-                      style={{
-                        width: `${previewProgress * 100}%`,
-                        transition: previewSnappingBack
-                          ? "width 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)"
-                          : "width 0.1s linear",
-                      }}
+                      key={previewAnimationKey}
+                      className={
+                        previewSnappingBack
+                          ? "artist-track-progress artist-track-progress--snapping"
+                          : `artist-track-progress artist-track-progress--playing${
+                              previewPaused
+                                ? " artist-track-progress--paused"
+                                : ""
+                            }`
+                      }
                     />
                   )}
                   <span className="artist-track-number">
@@ -118,7 +122,7 @@ export function ArtistDetailsPreviewTracks({
                     type="button"
                     onClick={() => handlePreviewPlay(track)}
                     disabled={!track.preview_url}
-                    className="artist-track-play-button artist-track-play-button--large"
+                    className="btn btn-surface btn-track-play-lg"
                     aria-label={isPlaying ? "Pause preview" : "Play preview"}
                     title={isPlaying ? "Pause preview" : "Play preview"}
                   >
@@ -190,8 +194,9 @@ ArtistDetailsPreviewTracks.propTypes = {
   loadingPreview: PropTypes.bool,
   previewTracks: PropTypes.array,
   playingPreviewId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  previewProgress: PropTypes.number,
   previewSnappingBack: PropTypes.bool,
+  previewPaused: PropTypes.bool,
+  previewAnimationKey: PropTypes.number,
   handlePreviewPlay: PropTypes.func.isRequired,
   onAddTrackToPlaylist: PropTypes.func,
   playlists: PropTypes.array,
