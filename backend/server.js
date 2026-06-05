@@ -104,7 +104,11 @@ app.use(
         ],
         connectSrc: ["'self'", "ws:", "wss:", "https://api.github.com"],
         mediaSrc: ["'self'", "https://*.dzcdn.net", "https://*.deezer.com"],
-        frameSrc: ["'none'"],
+        frameSrc: [
+          "'self'",
+          "https://www.youtube-nocookie.com",
+          "https://www.youtube.com",
+        ],
         frameAncestors: null,
         upgradeInsecureRequests: null,
       },
