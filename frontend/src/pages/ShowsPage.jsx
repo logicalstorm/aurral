@@ -1,16 +1,10 @@
-import { useState, useEffect, useRef, memo } from "react";
-import PropTypes from "prop-types";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import {
-  Loader,
-  Music,
-  Clock,
-  MapPin,
-  Pencil,
-  AlertCircle,
-} from "lucide-react";
+import { Loader, Music, MapPin, AlertCircle } from "lucide-react";
 import { getNearbyShows } from "../utils/api";
+import NearbyLocationControl from "../components/NearbyLocationControl";
+import ShowCard from "../components/ShowCard";
 
 const NEARBY_MODE_KEY = "discoverNearbyMode";
 const NEARBY_ZIP_KEY = "discoverNearbyZip";
@@ -21,126 +15,16 @@ const SHOW_FILTER_OPTIONS = [
   { id: "discover", label: "Discover" },
 ];
 
-const formatShowDate = (show) => {
-  if (!show?.date && !show?.dateTime) return null;
-  const raw = show.dateTime || show.date;
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) {
-    return show.date || null;
-  }
-  const dateLabel = parsed.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-  if (show.time) {
-    return `${dateLabel} at ${show.time}`;
-  }
-  return dateLabel;
-};
-
-const formatShowLocation = (show) =>
-  [show?.venueName, [show?.city, show?.region].filter(Boolean).join(", ")]
-    .filter(Boolean)
-    .join(" - ");
-
-const ShowCard = memo(({ show }) => {
-  const showDate = formatShowDate(show);
-  const showLocation = formatShowLocation(show);
-
-  return (
-    <article className="shows-page__card">
-      <a
-        href={show.url || "#"}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="shows-page__card-media"
-      >
-        {show.image ? (
-          <img
-            src={show.image}
-            alt={show.eventName || show.artistName}
-            loading="lazy"
-            decoding="async"
-          />
-        ) : (
-          <div className="artist-media-placeholder">
-            <Music className="artist-icon-lg" />
-          </div>
-        )}
-        {Number.isFinite(show.distance) && (
-          <span className="shows-page__card-badge">
-            {Math.round(show.distance)} mi
-          </span>
-        )}
-      </a>
-      <div className="shows-page__card-body">
-        <p className="shows-page__card-artist artist-truncate">
-          {show.artistName}
-        </p>
-        <h3 className="shows-page__card-title">
-          <a
-            href={show.url || "#"}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shows-page__card-link"
-          >
-            {show.eventName}
-          </a>
-        </h3>
-        <div className="shows-page__card-meta">
-          {showDate && (
-            <p className="shows-page__card-meta-line">
-              <Clock className="artist-icon-xs" />
-              <span className="artist-truncate">{showDate}</span>
-            </p>
-          )}
-          {showLocation && (
-            <p className="shows-page__card-meta-line">
-              <MapPin className="artist-icon-xs" />
-              <span className="artist-clamp-2">{showLocation}</span>
-            </p>
-          )}
-        </div>
-      </div>
-    </article>
-  );
-});
-
-ShowCard.displayName = "ShowCard";
-
-ShowCard.propTypes = {
-  show: PropTypes.shape({
-    id: PropTypes.string,
-    artistName: PropTypes.string,
-    eventName: PropTypes.string,
-    image: PropTypes.string,
-    url: PropTypes.string,
-    date: PropTypes.string,
-    time: PropTypes.string,
-    dateTime: PropTypes.string,
-    venueName: PropTypes.string,
-    city: PropTypes.string,
-    region: PropTypes.string,
-    distance: PropTypes.number,
-  }).isRequired,
-};
-
 function ShowsPage() {
   useDocumentTitle("Shows");
   const navigate = useNavigate();
-  const zipEditorRef = useRef(null);
   const [showsData, setShowsData] = useState(null);
   const [showsLoading, setShowsLoading] = useState(false);
   const [showsError, setShowsError] = useState(null);
   const [showFilter, setShowFilter] = useState("all");
   const [locationMode, setLocationMode] = useState("ip");
   const [appliedZip, setAppliedZip] = useState("");
-  const [showZipEditor, setShowZipEditor] = useState(false);
-  const [zipDraft, setZipDraft] = useState("");
   const zipModeActive = locationMode === "zip";
-  const zipEditorVisible =
-    showZipEditor || (zipModeActive && !appliedZip.trim());
 
   useEffect(() => {
     try {
@@ -150,23 +34,8 @@ function ShowsPage() {
         setLocationMode(storedMode);
       }
       setAppliedZip(storedZip);
-      setZipDraft(storedZip);
     } catch {}
   }, []);
-
-  useEffect(() => {
-    if (!zipEditorVisible || !appliedZip.trim()) return;
-    const handleClickOutside = (event) => {
-      if (
-        zipEditorRef.current &&
-        !zipEditorRef.current.contains(event.target)
-      ) {
-        setShowZipEditor(false);
-      }
-    };
-    document.addEventListener("click", handleClickOutside);
-    return () => document.removeEventListener("click", handleClickOutside);
-  }, [zipEditorVisible, appliedZip]);
 
   useEffect(() => {
     const shouldUseZip = locationMode === "zip";
@@ -215,18 +84,9 @@ function ShowsPage() {
         : allShows;
   const locationLabel =
     showsData?.location?.label || showsData?.location?.postalCode || "your area";
-
-  const saveZip = () => {
-    const sanitized = zipDraft.trim();
-    if (!sanitized) return;
-    setAppliedZip(sanitized);
-    setLocationMode("zip");
-    setShowZipEditor(false);
-    try {
-      localStorage.setItem(NEARBY_MODE_KEY, "zip");
-      localStorage.setItem(NEARBY_ZIP_KEY, sanitized);
-    } catch {}
-  };
+  const pageSubtitle = showsLoading
+    ? "Finding Ticketmaster events matched to your library and recommendations."
+    : `Upcoming concerts around ${locationLabel}, matched to artists in your library and Discover.`;
 
   const emptyMessage =
     showFilter === "library"
@@ -239,91 +99,35 @@ function ShowsPage() {
     <div className="shows-page">
       <header className="shows-page__header">
         <div className="shows-page__title-row">
-          <h1 className="shows-page__title">Shows Near You</h1>
-          <div className="shows-page__location-controls">
-            <div className="artist-segmented">
-              <button
-                type="button"
-                onClick={() => {
-                  setLocationMode("ip");
-                  setShowZipEditor(false);
-                  try {
-                    localStorage.setItem(NEARBY_MODE_KEY, "ip");
-                  } catch {}
-                }}
-                className={`btn btn-xs shows-page__segment${!zipModeActive ? " btn-neutral-active" : " btn-ghost"}`}
-              >
-                Your Area
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setLocationMode("zip");
-                  try {
-                    localStorage.setItem(NEARBY_MODE_KEY, "zip");
-                  } catch {}
-                  if (!appliedZip.trim()) {
-                    setZipDraft("");
-                    setShowZipEditor(true);
-                  }
-                }}
-                className={`btn btn-xs shows-page__segment${zipModeActive ? " btn-neutral-active" : " btn-ghost"}`}
-              >
-                ZIP
-              </button>
-            </div>
-            {zipModeActive && (
-              <div ref={zipEditorRef} className="shows-page__zip-editor">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setZipDraft(appliedZip);
-                    setShowZipEditor((value) => !value);
-                  }}
-                  className="btn btn-surface btn-icon-square"
-                  aria-label="Edit ZIP"
-                  title="Edit ZIP"
-                >
-                  <Pencil className="artist-icon-sm" />
-                </button>
-                {zipEditorVisible && (
-                  <div className="artist-nearby-zip-editor">
-                    <div className="artist-nearby-zip-editor__field">
-                      <input
-                        type="text"
-                        value={zipDraft}
-                        onChange={(event) => setZipDraft(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key !== "Enter") return;
-                          event.preventDefault();
-                          saveZip();
-                        }}
-                        className="artist-nearby-zip-editor__input"
-                        placeholder="ZIP or postal code"
-                      />
-                    </div>
-                    <div className="artist-nearby-zip-editor__actions">
-                      <button
-                        type="button"
-                        onClick={() => setShowZipEditor(false)}
-                        className="btn btn-secondary btn-sm"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={saveZip}
-                        className="btn btn-primary btn-sm"
-                        disabled={!zipDraft.trim()}
-                      >
-                        Save
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+          <div className="shows-page__title-wrap">
+            <h1 className="shows-page__title">Shows Near You</h1>
+            <p className="shows-page__subtitle">{pageSubtitle}</p>
           </div>
+          <NearbyLocationControl
+            locationMode={locationMode}
+            appliedZip={appliedZip}
+            location={showsData?.location}
+            onSelectYourLocation={() => {
+              setLocationMode("ip");
+              try {
+                localStorage.setItem(NEARBY_MODE_KEY, "ip");
+              } catch {}
+            }}
+            onStartCustomLocation={() => {
+              setLocationMode("zip");
+              try {
+                localStorage.setItem(NEARBY_MODE_KEY, "zip");
+              } catch {}
+            }}
+            onApplyZip={(sanitized) => {
+              setAppliedZip(sanitized);
+              setLocationMode("zip");
+              try {
+                localStorage.setItem(NEARBY_MODE_KEY, "zip");
+                localStorage.setItem(NEARBY_ZIP_KEY, sanitized);
+              } catch {}
+            }}
+          />
         </div>
       </header>
 
@@ -366,43 +170,51 @@ function ShowsPage() {
             Enter a ZIP or postal code
           </h2>
           <p className="search-empty-panel__message">
-            Use a postal code to browse library shows in another area.
+            Open the location menu above and enter a ZIP or postal code.
           </p>
         </div>
       ) : shows.length > 0 ? (
         <section className="shows-page__content">
           <div className="shows-page__toolbar">
-            <div className="shows-page__toolbar-main">
+            <div className="shows-page__toolbar-copy">
               <p className="artist-count shows-page__result-count">
                 Showing {shows.length}
                 {showFilter === "all" && showsData?.total > shows.length
                   ? ` of ${showsData.total}`
                   : ""}{" "}
-                upcoming matches around {locationLabel}
+                upcoming matches
               </p>
-              <div className="artist-segmented">
-                {SHOW_FILTER_OPTIONS.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => setShowFilter(option.id)}
-                    className={`btn btn-xs shows-page__segment${showFilter === option.id ? " btn-neutral-active" : " btn-ghost"}`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
+              {showFilter === "all" && showsData?.total > shows.length && (
+                <p className="shows-page__hint">
+                  Refine the area to narrow the list
+                </p>
+              )}
             </div>
-            {showFilter === "all" && showsData?.total > shows.length && (
-              <p className="shows-page__hint">Refine the area to narrow the list</p>
-            )}
+            <div
+              className="artist-segmented shows-page__filters"
+              role="group"
+              aria-label="Show filters"
+            >
+              {SHOW_FILTER_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setShowFilter(option.id)}
+                  className={`artist-segmented-button${showFilter === option.id ? " is-active" : ""}`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="shows-page__grid">
             {shows.map((show) => (
-              <ShowCard
+              <div
                 key={`${show.id}-${show.artistName}-${show.sourceType || show.matchType || "show"}`}
-                show={show}
-              />
+                className="shows-page__grid-item"
+              >
+                <ShowCard show={show} />
+              </div>
             ))}
           </div>
         </section>
