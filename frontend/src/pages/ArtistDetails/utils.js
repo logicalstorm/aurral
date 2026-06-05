@@ -304,3 +304,23 @@ export const buildLastfmArtistUrl = (artistName) =>
 
 export const buildLastfmAlbumUrl = (artistName, albumTitle) =>
   `${buildLastfmArtistUrl(artistName)}/${encodeLastfmPathSegment(albumTitle)}`;
+
+export const getArtistReleaseGridColumnCount = () => {
+  if (typeof window === "undefined") return 2;
+  if (window.matchMedia("(min-width: 1024px)").matches) return 6;
+  if (window.matchMedia("(min-width: 640px)").matches) return 3;
+  return 2;
+};
+
+export const getExpandedReleaseRenderAfterIndex = (
+  expandedReleaseIndex,
+  itemCount,
+  gridColumnCount,
+) => {
+  if (expandedReleaseIndex < 0) return -1;
+  return Math.min(
+    expandedReleaseIndex +
+      (gridColumnCount - 1 - (expandedReleaseIndex % gridColumnCount)),
+    itemCount - 1,
+  );
+};

@@ -211,13 +211,15 @@ export function ArtistDetailsActionBar({
               onClick={handleRefreshArtist}
               disabled={refreshingArtist}
               className="btn btn-secondary btn--bold btn-min-h"
+              aria-label="Refresh artist"
+              title="Refresh artist"
             >
               {refreshingArtist ? (
                 <Loader className="artist-icon-sm animate-spin" />
               ) : (
                 <RefreshCw className="artist-icon-sm" />
               )}
-              Refresh
+              <span className="artist-hidden-mobile">Refresh</span>
             </button>
           )}
           <div className="artist-relative">
