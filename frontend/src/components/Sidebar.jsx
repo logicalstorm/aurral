@@ -92,8 +92,8 @@ function Sidebar({ appVersion, mode }) {
         ? [{ path: "/shows", label: "Shows", icon: Ticket }]
         : []),
       {
-        path: "/flow",
-        label: "Flow",
+        path: "/playlists",
+        label: "Playlists",
         icon: AudioWaveform,
         permission: "accessFlow",
       },

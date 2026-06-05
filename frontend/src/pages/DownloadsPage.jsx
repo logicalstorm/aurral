@@ -69,7 +69,7 @@ function DownloadsQueueRow({
             <span className="downloads-page__row-type">
               {entry.kind === "flow" ? "Flow" : "Playlist"}
             </span>
-            <Link to="/flow" className="downloads-page__row-title">
+            <Link to="/playlists" className="downloads-page__row-title">
               {entry.name}
             </Link>
           </div>
@@ -356,7 +356,7 @@ function DownloadsPage() {
         {queueEntries.length === 0 ? (
           <div className="artist-empty-panel">
             <p className="artist-empty-message">
-              No playlists or flows yet. Create them on the Flow page.
+              No playlists or flows yet. Create them on the Playlists page.
             </p>
           </div>
         ) : (
