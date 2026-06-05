@@ -162,6 +162,7 @@ function LibraryPage() {
       if (tracks.length === 0) return;
       playQueue(tracks, {
         source: { type: "library", id: "library", label: "Your Library" },
+        shuffle: true,
       });
     } finally {
       setBuildingPlaybackQueue(false);
