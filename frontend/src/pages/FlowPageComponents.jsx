@@ -259,9 +259,7 @@ export function MixSlider({
           })}
         </div>
         {trailingControl ? (
-          <div className="flow-page__mix-trailing">
-            {trailingControl}
-          </div>
+          <div className="flow-page__mix-trailing">{trailingControl}</div>
         ) : null}
       </div>
       <div
@@ -270,19 +268,25 @@ export function MixSlider({
         style={{ touchAction: handles.length > 0 ? "none" : "auto" }}
       >
         <div className="flow-page__mix-bar-inner">
-          {SOURCE_MIX_OPTIONS.map((option) => {
-            const percent = Number(normalized[option.key] || 0);
+          {activeKeys.map((key) => {
+            const percent = Number(normalized[key] || 0);
+            if (percent <= 0) return null;
+            const option =
+              SOURCE_MIX_OPTIONS.find((entry) => entry.key === key) ||
+              { key, label: key };
             const showLabel = percent >= labelMinPercent;
             return (
               <div
-                key={option.key}
-                className="flow-page__mix-segment"
+                key={key}
+                className={`flow-page__mix-segment flow-page__mix-segment--${key}`}
                 style={{
                   width: `${percent}%`,
-                  backgroundColor: SOURCE_MIX_COLORS[option.key],
+                  backgroundColor: SOURCE_MIX_COLORS[key],
                 }}
               >
-                {showLabel ? `${option.label} (${trackCounts[option.key] ?? 0})` : ""}
+                {showLabel
+                  ? `${option.label} (${trackCounts[key] ?? 0})`
+                  : ""}
               </div>
             );
           })}
@@ -445,7 +449,7 @@ function CommaTokenInput({
 export function FlowFormFields({
   draft,
   remaining,
-  inputClassName = "input",
+  inputClassName = "flow-page__field-control",
   errorMessage,
   onDraftChange,
   onClearError,
@@ -499,26 +503,52 @@ export function FlowFormFields({
   return (
     <div className="flow-page__form">
       <div className="flow-page__form-section">
-        <div className="flow-page__form-grid flow-page__form-grid--schedule">
+        <div className="flow-page__schedule-row">
           <div className="flow-page__field">
             <label className="flow-page__field-label">
               Tracks
             </label>
-            <input
-              type="number"
-              min="1"
-              max="100"
-              className={`${inputClassName} flow-page__field-input--size`}
-              value={draft.size}
-              onChange={(event) => {
-                const value = event.target.value;
-                updateDraft((prev) => ({ ...prev, size: value }));
-              }}
-            />
+            <div className="flow-page__field-round">
+              <input
+                type="number"
+                min="1"
+                max="100"
+                className={`${inputClassName} flow-page__field-input--size`}
+                value={draft.size}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  updateDraft((prev) => ({ ...prev, size: value }));
+                }}
+              />
+            </div>
           </div>
           <div className="flow-page__field">
             <label className="flow-page__field-label">
-              Update Days
+              Update hour
+            </label>
+            <div className="flow-page__field-round flow-page__field-round--select">
+              <select
+                className={`${inputClassName} flow-page__field-select`}
+                value={scheduleTime}
+                onChange={(event) =>
+                  updateDraft((prev) => ({
+                    ...prev,
+                    scheduleTime: event.target.value || "00:00",
+                  }))
+                }
+              >
+                {SCHEDULE_HOUR_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="flow-page__select-icon" />
+            </div>
+          </div>
+          <div className="flow-page__field flow-page__field--schedule-days">
+            <label className="flow-page__field-label">
+              Update days
             </label>
             <div className="flow-page__weekday-grid">
               {WEEKDAY_OPTIONS.map((day) => {
@@ -561,36 +591,12 @@ export function FlowFormFields({
               })}
             </div>
           </div>
-          <div className="flow-page__field">
-              <label className="flow-page__field-label">
-              Update Hour
-              </label>
-              <div className="flow-page__select-wrap">
-                <select
-                  className={`${inputClassName} flow-page__field-select`}
-                  value={scheduleTime}
-                  onChange={(event) =>
-                    updateDraft((prev) => ({
-                      ...prev,
-                      scheduleTime: event.target.value || "00:00",
-                    }))
-                  }
-                >
-                  {SCHEDULE_HOUR_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="flow-page__select-icon" />
-              </div>
-            </div>
         </div>
       </div>
 
       <div className="flow-page__form-section">
         <div className="flow-page__field-label flow-page__field-label--section">
-          Source Mix
+          Source mix
         </div>
 
         <div>
@@ -607,12 +613,7 @@ export function FlowFormFields({
                     deepDive: !(prev?.deepDive === true),
                   }))
                 }
-                className={`flow-page__mix-toggle${draft.deepDive === true ? " is-active" : ""}${Object.keys(disabledSources || {}).length > 0 ? " is-disabled" : ""}`}
-                style={
-                  draft.deepDive === true
-                    ? { backgroundColor: "var(--aurral-gray-light)" }
-                    : undefined
-                }
+                className={`flow-page__mix-toggle flow-page__mix-toggle--feature${draft.deepDive === true ? " is-active" : ""}${Object.keys(disabledSources || {}).length > 0 ? " is-disabled" : ""}`}
                 aria-pressed={draft.deepDive === true}
                 disabled={Object.keys(disabledSources || {}).length > 0}
                 title={
@@ -647,7 +648,7 @@ export function FlowFormFields({
       <div className={`flow-page__form-section${focusEnabled ? "" : " flow-page__form-section--dimmed"}`}>
         <div className="flow-page__field">
           <div className="flow-page__field-label flow-page__field-label--section">
-            Focus Filters
+            Focus filters
           </div>
           {focusValidationError ? (
             <div className="flow-page__warning-text">
@@ -659,7 +660,7 @@ export function FlowFormFields({
         <div className="flow-page__form-grid">
           <div className="flow-page__field">
             <label className="flow-page__field-label">
-              Genre Tags (separate by comma)
+              Genre tags (separate by comma)
             </label>
             <CommaTokenInput
               value={draft.includeTags}
@@ -675,7 +676,7 @@ export function FlowFormFields({
 
           <div className="flow-page__field">
             <label className="flow-page__field-label">
-              Related Artists (separate by comma)
+              Related artists (separate by comma)
             </label>
             <CommaTokenInput
               value={draft.includeRelatedArtists}
@@ -817,6 +818,146 @@ export function FlowStatusCards({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function FlowTrackKebabMenu({
+  track,
+  canReSearch,
+  isReSearching,
+  canDelete,
+  isDeleting,
+  onReSearch,
+  onDelete,
+  onAddToPlaylist,
+  onMoveToPlaylist,
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  const close = () => setIsOpen(false);
+  const trackLabel = track?.trackName || "track";
+
+  return (
+    <div
+      className={`flow-page__track-menu${isOpen ? " is-open" : ""}`}
+      ref={menuRef}
+    >
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          setIsOpen((prev) => !prev);
+        }}
+        className="btn btn-secondary btn-icon btn-xs flow-page__track-menu-trigger"
+        aria-label={`Options for ${trackLabel}`}
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+      >
+        <MoreHorizontal className="artist-icon-xs" />
+      </button>
+      {isOpen ? (
+        <>
+          <button
+            type="button"
+            className="artist-backdrop-button"
+            onClick={close}
+            aria-label="Close track menu"
+          />
+          <div
+            className="artist-dropdown artist-dropdown--right flow-page__track-menu-dropdown"
+            role="menu"
+          >
+            {canReSearch ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="artist-menu-item"
+                disabled={isReSearching}
+                onClick={() => {
+                  onReSearch?.(track);
+                  close();
+                }}
+              >
+                <span className="artist-menu-item__main">
+                  {isReSearching ? (
+                    <Loader2 className="artist-icon-sm animate-spin" />
+                  ) : (
+                    <Search className="artist-icon-sm" />
+                  )}
+                  Re-search
+                </span>
+              </button>
+            ) : null}
+            {onAddToPlaylist ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="artist-menu-item"
+                onClick={() => {
+                  onAddToPlaylist(track);
+                  close();
+                }}
+              >
+                <span className="artist-menu-item__main">
+                  <Plus className="artist-icon-sm" />
+                  Add to playlist
+                </span>
+              </button>
+            ) : null}
+            {onMoveToPlaylist ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="artist-menu-item"
+                onClick={() => {
+                  onMoveToPlaylist(track);
+                  close();
+                }}
+              >
+                <span className="artist-menu-item__main">
+                  <ListMusic className="artist-icon-sm" />
+                  Move to playlist
+                </span>
+              </button>
+            ) : null}
+            {canDelete ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="artist-menu-item artist-menu-item--danger"
+                disabled={isDeleting}
+                onClick={() => {
+                  onDelete?.(track);
+                  close();
+                }}
+              >
+                <span className="artist-menu-item__main">
+                  {isDeleting ? (
+                    <Loader2 className="artist-icon-sm animate-spin" />
+                  ) : (
+                    <Trash2 className="artist-icon-sm" />
+                  )}
+                  Remove from playlist
+                </span>
+              </button>
+            ) : null}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -1371,7 +1512,12 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
   );
 });
 
-function PlaylistArtworkThumb({ artworkUrl, name }) {
+export function PlaylistArtworkThumb({
+  artworkUrl,
+  name,
+  className = "",
+  onClick,
+}) {
   const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => {
@@ -1379,23 +1525,33 @@ function PlaylistArtworkThumb({ artworkUrl, name }) {
   }, [artworkUrl]);
 
   const fallbackLabel = String(name || "?").trim().charAt(0).toUpperCase() || "?";
+  const classes = `flow-page__artwork${onClick ? " flow-page__artwork--interactive" : ""}${className ? ` ${className}` : ""}`;
+  const content =
+    !imageFailed && artworkUrl ? (
+      <img
+        src={artworkUrl}
+        alt={`${name} cover`}
+        loading="lazy"
+        onError={() => setImageFailed(true)}
+      />
+    ) : (
+      <div className="flow-page__artwork-fallback">{fallbackLabel}</div>
+    );
 
-  return (
-    <div className="flow-page__artwork">
-      {!imageFailed && artworkUrl ? (
-        <img
-          src={artworkUrl}
-          alt={`${name} cover`}
-          loading="lazy"
-          onError={() => setImageFailed(true)}
-        />
-      ) : (
-        <div className="flow-page__artwork-fallback">
-          {fallbackLabel}
-        </div>
-      )}
-    </div>
-  );
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        className={classes}
+        onClick={onClick}
+        aria-label={`Edit ${name} cover`}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={classes}>{content}</div>;
 }
 
 const MOBILE_CARD_MEDIA_QUERY = "(max-width: 639px)";
@@ -1569,7 +1725,7 @@ export function FlowCard({
       nextRun === "soon" ? "Next update soon" : `Next update in ${nextRun}`,
     );
   }
-  const typeLabel = enabled ? "Flow" : "Flow Draft";
+  const typeLabel = enabled ? "Flow" : "Flow draft";
   const statusSummary = enabled ? "" : "Flow ready when enabled";
   const ownerLabel = isAdminView && flow?.ownerUsername
     ? `Owner: ${flow.ownerUsername}`
@@ -1883,7 +2039,7 @@ export function FlowCard({
             <FlowFormFields
               draft={simpleDraft}
               remaining={simpleRemaining}
-              inputClassName="input"
+              inputClassName="flow-page__field-control"
               errorMessage={simpleError}
               onDraftChange={onDraftChange}
               onClearError={onClearError}
@@ -1935,8 +2091,10 @@ export function FlowTracksPanel({
   headerActions = null,
   deletingTrackId = null,
   reSearchingTrackIds = {},
+  useTrackContextMenu = false,
   onDeleteTrack,
   onAddTrackToPlaylist,
+  onMoveTrackToPlaylist,
   onNavigateArtist,
   onReSearchTrack,
 }) {
@@ -2268,12 +2426,14 @@ export function FlowTracksPanel({
             <tbody>
               {visibleTracks.map((track) => {
                 const canPlay = track.status === "done" && !!track.streamUrl;
-                const canDelete = editable && track.status === "done" && !!track.id;
+                const canDelete =
+                  typeof onDeleteTrack === "function" && !!track.id;
                 const canReSearch =
                   typeof onReSearchTrack === "function" &&
                   !!track.id &&
                   (track.status === "done" || track.status === "failed");
                 const isReSearching = reSearchingTrackIds[track.id] === true;
+                const isDeleting = deletingTrackId === track.id;
                 const isCurrent = track.id === currentTrackId;
                 const progressWidth = `${Math.round(playbackProgress * 100)}%`;
                 return (
@@ -2318,9 +2478,15 @@ export function FlowTracksPanel({
                     <td>
                       <div className="flow-page__tracks-actions">
                         <button
+                          type="button"
                           onClick={() => handlePlayTrack(track)}
-                          className="btn btn-secondary btn-xs"
+                          className="btn btn-secondary btn-icon btn-xs"
                           disabled={!canPlay}
+                          aria-label={
+                            isCurrent && isPlaying
+                              ? `Pause ${track.trackName}`
+                              : `Play ${track.trackName}`
+                          }
                         >
                           {isCurrent && isPlaying ? (
                             <Pause className="artist-icon-xs" />
@@ -2328,47 +2494,72 @@ export function FlowTracksPanel({
                             <Play className="artist-icon-xs" />
                           )}
                         </button>
-                        {onAddTrackToPlaylist ? (
-                          <button
-                            onClick={() => onAddTrackToPlaylist(track)}
-                            className="btn btn-secondary btn-xs"
-                            aria-label={`Add ${track.trackName} to playlist`}
-                            title={`Add ${track.trackName} to playlist`}
-                            disabled={!track.artistName || !track.trackName}
-                          >
-                            <Plus className="artist-icon-xs" />
-                          </button>
-                        ) : null}
-                        {canReSearch ? (
-                          <button
-                            onClick={() => onReSearchTrack(track)}
-                            className="btn btn-secondary btn-xs"
-                            aria-label={`Re-search ${track.trackName}`}
-                            title={`Re-search ${track.trackName}`}
-                            disabled={isReSearching}
-                          >
-                            {isReSearching ? (
-                              <Loader2 className="artist-icon-xs animate-spin" />
-                            ) : (
-                              <Search className="artist-icon-xs" />
-                            )}
-                          </button>
-                        ) : null}
-                        {canDelete ? (
-                          <button
-                            onClick={() => onDeleteTrack?.(track)}
-                            className="btn btn-ghost-danger btn-xs"
-                            aria-label={`Remove ${track.trackName} from playlist`}
-                            title={`Remove ${track.trackName} from playlist`}
-                            disabled={deletingTrackId === track.id}
-                          >
-                            {deletingTrackId === track.id ? (
-                              <Loader2 className="artist-icon-xs animate-spin" />
-                            ) : (
-                              <Trash2 className="artist-icon-xs" />
-                            )}
-                          </button>
-                        ) : null}
+                        {useTrackContextMenu ? (
+                          <FlowTrackKebabMenu
+                            track={track}
+                            canReSearch={canReSearch}
+                            isReSearching={isReSearching}
+                            canDelete={canDelete}
+                            isDeleting={isDeleting}
+                            onReSearch={onReSearchTrack}
+                            onDelete={onDeleteTrack}
+                            onAddToPlaylist={
+                              onAddTrackToPlaylist &&
+                              track.artistName &&
+                              track.trackName
+                                ? onAddTrackToPlaylist
+                                : null
+                            }
+                            onMoveToPlaylist={onMoveTrackToPlaylist}
+                          />
+                        ) : (
+                          <>
+                            {onAddTrackToPlaylist ? (
+                              <button
+                                type="button"
+                                onClick={() => onAddTrackToPlaylist(track)}
+                                className="btn btn-secondary btn-icon btn-xs"
+                                aria-label={`Add ${track.trackName} to playlist`}
+                                title={`Add ${track.trackName} to playlist`}
+                                disabled={!track.artistName || !track.trackName}
+                              >
+                                <Plus className="artist-icon-xs" />
+                              </button>
+                            ) : null}
+                            {canReSearch ? (
+                              <button
+                                type="button"
+                                onClick={() => onReSearchTrack(track)}
+                                className="btn btn-secondary btn-icon btn-xs"
+                                aria-label={`Re-search ${track.trackName}`}
+                                title={`Re-search ${track.trackName}`}
+                                disabled={isReSearching}
+                              >
+                                {isReSearching ? (
+                                  <Loader2 className="artist-icon-xs animate-spin" />
+                                ) : (
+                                  <Search className="artist-icon-xs" />
+                                )}
+                              </button>
+                            ) : null}
+                            {canDelete ? (
+                              <button
+                                type="button"
+                                onClick={() => onDeleteTrack?.(track)}
+                                className="btn btn-ghost-danger btn-icon btn-xs"
+                                aria-label={`Remove ${track.trackName} from playlist`}
+                                title={`Remove ${track.trackName} from playlist`}
+                                disabled={isDeleting}
+                              >
+                                {isDeleting ? (
+                                  <Loader2 className="artist-icon-xs animate-spin" />
+                                ) : (
+                                  <Trash2 className="artist-icon-xs" />
+                                )}
+                              </button>
+                            ) : null}
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -2383,26 +2574,25 @@ export function FlowTracksPanel({
   );
 }
 
-export function FlowEmptyState({ onCreate, creating, canCreate = true }) {
+export function FlowEmptyState({ canCreate = true, libraryFilter = "all" }) {
+  const label =
+    libraryFilter === "playlists"
+      ? "No playlists yet."
+      : libraryFilter === "flows"
+        ? canCreate
+          ? "No flows yet."
+          : "Flows need a Last.fm API key for generated sources."
+        : canCreate
+          ? "Nothing here yet."
+          : "No playlists or flows yet.";
+  const hint = canCreate ? " Use + to import or create one." : "";
+
   return (
     <div className="flow-page__empty">
-      <div className="flow-page__empty-row">
-        <span>
-          {canCreate
-            ? "No flows yet. Start with your first flow."
-            : "Flows require a Last.fm API key for generated source selection."}
-        </span>
-        {canCreate ? (
-          <button
-            onClick={onCreate}
-            className="btn btn-primary btn-sm"
-            disabled={creating}
-          >
-            <FilePlus2 className="artist-icon-sm" />
-            {creating ? "Creating..." : "Create First Flow"}
-          </button>
-        ) : null}
-      </div>
+      <p className="flow-page__empty-message">
+        {label}
+        {hint}
+      </p>
     </div>
   );
 }
