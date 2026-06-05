@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import PropTypes from "prop-types";
 import { ExternalLink } from "lucide-react";
 import { getArtistHeroImage, getArtistType, getTagColor } from "../utils";
@@ -83,12 +83,16 @@ const buildRelationLinks = (artist) => {
     .filter(Boolean);
 };
 
+const tagSearchPath = (name) =>
+  `/search?q=${encodeURIComponent(`#${name}`)}&type=tag`;
+
 export function ArtistDetailsAbout({
   artist,
   libraryArtist,
   appSettings,
   existsInLibrary,
   coverImages,
+  onNavigate,
 }) {
   const tags = useMemo(() => buildTags(artist), [artist]);
   const visibleTags = tags.slice(0, 5);
@@ -198,8 +202,22 @@ export function ArtistDetailsAbout({
               {artistTypeLabel && <span>{artistTypeLabel}</span>}
               {artist?.disambiguation && <span>{artist.disambiguation}</span>}
               {visibleTags.length > 0 && (
-                <span>
-                  {visibleTags.map((tag) => tag.name).join(" · ")}
+                <span className="artist-about-meta__tags">
+                  {visibleTags.map((tag, index) => (
+                    <Fragment key={tag.key}>
+                      {index > 0 ? (
+                        <span aria-hidden="true"> · </span>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="artist-about-meta__tag"
+                        onClick={() => onNavigate?.(tagSearchPath(tag.name))}
+                        title={`View artists with tag: ${tag.name}`}
+                      >
+                        {tag.name}
+                      </button>
+                    </Fragment>
+                  ))}
                 </span>
               )}
             </div>
@@ -221,13 +239,16 @@ export function ArtistDetailsAbout({
               <h3 className="artist-about-side-title">Tags</h3>
               <div className="artist-tag-list">
                 {tags.slice(0, 14).map((tag) => (
-                  <span
+                  <button
                     key={tag.key}
+                    type="button"
+                    onClick={() => onNavigate?.(tagSearchPath(tag.name))}
                     className="artist-tag"
                     style={{ backgroundColor: getTagColor(tag.name) }}
+                    title={`View artists with tag: ${tag.name}`}
                   >
                     #{tag.name}
-                  </span>
+                  </button>
                 ))}
               </div>
             </div>
@@ -273,4 +294,5 @@ ArtistDetailsAbout.propTypes = {
   appSettings: PropTypes.object,
   existsInLibrary: PropTypes.bool,
   coverImages: PropTypes.array,
+  onNavigate: PropTypes.func,
 };

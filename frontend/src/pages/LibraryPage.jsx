@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { ArrowDown, ArrowUp, ChevronDown, Loader, Music, AlertCircle, Search } from "lucide-react";
 import { getLibraryArtists } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
@@ -39,6 +40,8 @@ function LibraryPage() {
   const sentinelRef = useRef(null);
   const toolbarRef = useRef(null);
   const navigate = useNavigate();
+
+  useDocumentTitle("Library");
 
   const selectedSort =
     SORT_OPTIONS.find((option) => option.value === sortKey) || SORT_OPTIONS[0];
@@ -227,7 +230,7 @@ function LibraryPage() {
           <button
             type="button"
             onClick={() => setRetryKey((k) => k + 1)}
-            className="artist-action-button library-page__retry-button"
+            className="btn btn-secondary btn--bold btn-min-h library-page__retry-button"
           >
             Try Again
           </button>
@@ -246,7 +249,7 @@ function LibraryPage() {
           <button
             type="button"
             onClick={() => navigate("/search")}
-            className="artist-action-button library-page__empty-action"
+            className="btn btn-secondary btn--bold btn-min-h library-page__empty-action"
           >
             Search for Artists
           </button>
@@ -330,7 +333,7 @@ function LibraryPage() {
             <button
               type="button"
               onClick={() => setSearchTerm("")}
-              className="artist-action-button library-page__empty-action"
+              className="btn btn-secondary btn--bold btn-min-h library-page__empty-action"
             >
               Clear Search
             </button>

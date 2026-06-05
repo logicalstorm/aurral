@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CheckCircle, ChevronDown, RefreshCw } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
+import { SettingsInput, SettingsSelect } from "./SettingsField";
 import {
   getLidarrMetadataProfiles,
   getLidarrProfiles,
@@ -207,12 +208,10 @@ export function SettingsIntegrationsTab({
   };
 
   return (
-    <div className="card animate-fade-in">
-      <div className="flex items-center justify-between mb-6">
+    <div className="settings-page__panel">
+      <div className="settings-page__panel-header">
         <h2
-          className="text-2xl font-bold flex items-center"
-          style={{ color: "#fff" }}
-        >
+          className="settings-page__panel-title">
           Integrations
         </h2>
         <FlipSaveButton
@@ -223,57 +222,43 @@ export function SettingsIntegrationsTab({
       </div>
       <form
         onSubmit={handleSaveSettings}
-        className="space-y-6"
+        className="settings-page__form"
         autoComplete="off"
       >
         <div
-          className="p-6 rounded-lg space-y-4"
-          style={{
-            backgroundColor: "#1a1a1e",
-            border: "1px solid #2a2a2e",
-          }}
+          className="settings-page__section"
         >
-          <div className="flex items-center justify-between mb-2">
-            <h3
-              className="text-lg font-medium flex items-center"
-              style={{ color: "#fff" }}
-            >
-              <button
+          <div className="settings-page__section-header">
+            <button
                 type="button"
                 onClick={() => toggleSection("lidarr")}
-                className="flex items-center gap-2 text-left"
-                style={{ color: "#fff" }}
+                className="settings-page__section-toggle"
                 aria-expanded={!collapsedSections.lidarr}
               >
                 <ChevronDown
-                  className={`w-4 h-4 transition-transform ${
-                    collapsedSections.lidarr ? "-rotate-90" : ""
-                  }`}
+                  className={`settings-page__section-toggle-icon${collapsedSections.lidarr ? " is-collapsed" : ""}`}
                 />
                 <span>Lidarr</span>
               </button>
-            </h3>
             <div className="flex items-center gap-2">
               {health?.lidarrConfigured && (
-                <span className="flex items-center text-sm text-green-400">
-                  <CheckCircle className="w-4 h-4 mr-1" />
+                <span className="settings-page__status">
+                  <CheckCircle className="settings-page__status-icon" />
                   Connected
                 </span>
               )}
             </div>
           </div>
           {!collapsedSections.lidarr && (
-            <fieldset className="grid grid-cols-1 gap-4">
+            <fieldset className="settings-page__fields">
               <div>
                 <label
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: "#fff" }}
+                  className="artist-field-label"
                 >
                   Server URL
                 </label>
-                <input
-                  type="url"
-                  className="input"
+                <SettingsInput type="url"
+
                   placeholder="http://lidarr:8686"
                   autoComplete="off"
                   value={settings.integrations?.lidarr?.url || ""}
@@ -294,15 +279,14 @@ export function SettingsIntegrationsTab({
               </div>
               <div>
                 <label
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: "#fff" }}
+                  className="artist-field-label"
                 >
                   API Key
                 </label>
-                <div className="flex gap-2">
-                  <input
+                <div className="settings-page__field-row">
+                  <SettingsInput
+                    wrapperClassName="settings-page__field-grow"
                     type="password"
-                    className="input flex-1"
                     placeholder="Enter Lidarr API Key"
                     autoComplete="off"
                     value={settings.integrations?.lidarr?.apiKey || ""}
@@ -333,25 +317,23 @@ export function SettingsIntegrationsTab({
                     {testingLidarr ? "Testing..." : "Test"}
                   </button>
                 </div>
-                <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
+                <p className="settings-page__hint">
                   Found in Settings &rarr; General &rarr; Security.
                 </p>
                 {lidarrTestLatencyMs !== null && (
-                  <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
+                  <p className="settings-page__hint">
                     Last test response time: {lidarrTestLatencyMs} ms
                   </p>
                 )}
               </div>
               <div>
                 <label
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: "#fff" }}
+                  className="artist-field-label"
                 >
                   External URL
                 </label>
-                <input
-                  type="url"
-                  className="input"
+                <SettingsInput type="url"
+
                   placeholder="https://lidarr.example.com"
                   autoComplete="off"
                   value={settings.integrations?.lidarr?.externalUrl || ""}
@@ -368,21 +350,20 @@ export function SettingsIntegrationsTab({
                     })
                   }
                 />
-                <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
+                <p className="settings-page__hint">
                   Optional. Used only for browser-facing &quot;View on
                   Lidarr&quot; links. Leave blank to use the server URL above.
                 </p>
               </div>
               <div>
                 <label
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: "#fff" }}
+                  className="artist-field-label"
                 >
                   Default Quality Profile
                 </label>
-                <div className="flex gap-2">
-                  <select
-                    className="input flex-1"
+                <div className="settings-page__field-row">
+                  <SettingsSelect
+                    wrapperClassName="settings-page__field-grow"
                     value={
                       settings.integrations?.lidarr?.qualityProfileId
                         ? String(settings.integrations.lidarr.qualityProfileId)
@@ -416,7 +397,7 @@ export function SettingsIntegrationsTab({
                         {profile.name}
                       </option>
                     ))}
-                  </select>
+                  </SettingsSelect>
                   <button
                     type="button"
                     onClick={handleRefreshProfiles}
@@ -434,20 +415,19 @@ export function SettingsIntegrationsTab({
                     />
                   </button>
                 </div>
-                <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
+                <p className="settings-page__hint">
                   Quality profile used when adding artists and albums to Lidarr.
                 </p>
               </div>
               <div>
                 <label
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: "#fff" }}
+                  className="artist-field-label"
                 >
                   Default Metadata Profile
                 </label>
-                <div className="flex gap-2">
-                  <select
-                    className="input flex-1"
+                <div className="settings-page__field-row">
+                  <SettingsSelect
+                    wrapperClassName="settings-page__field-grow"
                     value={
                       settings.integrations?.lidarr?.metadataProfileId
                         ? String(settings.integrations.lidarr.metadataProfileId)
@@ -481,7 +461,7 @@ export function SettingsIntegrationsTab({
                         {profile.name}
                       </option>
                     ))}
-                  </select>
+                  </SettingsSelect>
                   <button
                     type="button"
                     onClick={handleRefreshMetadataProfiles}
@@ -499,20 +479,19 @@ export function SettingsIntegrationsTab({
                     />
                   </button>
                 </div>
-                <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
+                <p className="settings-page__hint">
                   Metadata profile used when adding artists to Lidarr.
                 </p>
               </div>
               <div>
                 <label
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: "#fff" }}
+                  className="artist-field-label"
                 >
                   Tag
                 </label>
-                <div className="flex gap-2">
-                  <select
-                    className="input flex-1"
+                <div className="settings-page__field-row">
+                  <SettingsSelect
+                    wrapperClassName="settings-page__field-grow"
                     value={
                       settings.integrations?.lidarr?.tagId
                         ? String(settings.integrations.lidarr.tagId)
@@ -546,7 +525,7 @@ export function SettingsIntegrationsTab({
                         {tag.label}
                       </option>
                     ))}
-                  </select>
+                  </SettingsSelect>
                   <button
                     type="button"
                     onClick={handleRefreshTags}
@@ -564,19 +543,17 @@ export function SettingsIntegrationsTab({
                     />
                   </button>
                 </div>
-                <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
+                <p className="settings-page__hint">
                   Tag applied to artists added through Aurral.
                 </p>
               </div>
               <div>
                 <label
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: "#fff" }}
+                  className="artist-field-label"
                 >
                   Default Monitoring Option
                 </label>
-                <select
-                  className="input"
+                <SettingsSelect
                   value={
                     settings.integrations?.lidarr?.defaultMonitorOption ||
                     "none"
@@ -601,8 +578,8 @@ export function SettingsIntegrationsTab({
                   <option value="missing">Missing Albums</option>
                   <option value="latest">Latest Album</option>
                   <option value="first">First Album</option>
-                </select>
-                <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
+                </SettingsSelect>
+                <p className="settings-page__hint">
                   Default monitoring used when adding new artists.
                 </p>
               </div>
@@ -610,7 +587,7 @@ export function SettingsIntegrationsTab({
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    className="checkbox"
+                    className="artist-checkbox"
                     checked={
                       settings.integrations?.lidarr?.searchOnAdd || false
                     }
@@ -628,17 +605,15 @@ export function SettingsIntegrationsTab({
                     }
                   />
                   <span
-                    className="text-sm font-medium"
-                    style={{ color: "#fff" }}
-                  >
+                    className="artist-field-label">
                     Search on Add
                   </span>
                 </label>
-                <p className="mt-1 text-xs ml-6" style={{ color: "#c1c1c3" }}>
+                <p className="settings-page__hint settings-page__hint--indented">
                   Automatically search for albums when adding them to library
                 </p>
               </div>
-              <div className="pt-4 border-t" style={{ borderColor: "#2a2a2e" }}>
+              <div className="settings-page__split">
                 <button
                   type="button"
                   onClick={() => {
@@ -654,21 +629,21 @@ export function SettingsIntegrationsTab({
                     setShowCommunityGuideModal(true);
                   }}
                   disabled={applyingCommunityGuide || !health?.lidarrConfigured}
-                  className="btn btn-primary w-full"
+                  className="btn btn-primary btn--full"
                 >
                   {applyingCommunityGuide
                     ? "Applying..."
                     : "Apply Davo's Recommended Settings"}
                 </button>
-                <p className="mt-2 text-xs" style={{ color: "#c1c1c3" }}>
+                <p className="settings-page__hint">
                   Creates quality profile, updates quality definitions, adds
                   custom formats, and updates naming scheme.{" "}
                   <a
                     href="https://wiki.servarr.com/lidarr/community-guide"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="underline"
-                    style={{ color: "#60a5fa" }}
+                    className="settings-page__link"
+                    
                   >
                     Read more
                   </a>
@@ -678,53 +653,39 @@ export function SettingsIntegrationsTab({
           )}
         </div>
         <div
-          className="p-6 rounded-lg space-y-4"
-          style={{
-            backgroundColor: "#1a1a1e",
-            border: "1px solid #2a2a2e",
-          }}
+          className="settings-page__section"
         >
-          <div className="flex items-center justify-between mb-2">
-            <h3
-              className="text-lg font-medium flex items-center"
-              style={{ color: "#fff" }}
-            >
-              <button
+          <div className="settings-page__section-header">
+            <button
                 type="button"
                 onClick={() => toggleSection("lastfm")}
-                className="flex items-center gap-2 text-left"
-                style={{ color: "#fff" }}
+                className="settings-page__section-toggle"
                 aria-expanded={!collapsedSections.lastfm}
               >
                 <ChevronDown
-                  className={`w-4 h-4 transition-transform ${
-                    collapsedSections.lastfm ? "-rotate-90" : ""
-                  }`}
+                  className={`settings-page__section-toggle-icon${collapsedSections.lastfm ? " is-collapsed" : ""}`}
                 />
                 <span>Last.fm</span>
               </button>
-            </h3>
             <div className="flex items-center gap-2">
               {health?.lastfmConfigured && (
-                <span className="flex items-center text-sm text-green-400">
-                  <CheckCircle className="w-4 h-4 mr-1" />
+                <span className="settings-page__status">
+                  <CheckCircle className="settings-page__status-icon" />
                   Configured
                 </span>
               )}
             </div>
           </div>
           {!collapsedSections.lastfm && (
-            <fieldset className="space-y-4">
+            <fieldset className="settings-page__fields">
               <div>
                 <label
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: "#fff" }}
+                  className="artist-field-label"
                 >
                   API Key
                 </label>
-                <input
-                  type="password"
-                  className="input"
+                <SettingsInput type="password"
+
                   placeholder="Last.fm API Key"
                   autoComplete="off"
                   value={settings.integrations?.lastfm?.apiKey || ""}
@@ -744,14 +705,12 @@ export function SettingsIntegrationsTab({
               </div>
               <div>
                 <label
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: "#fff" }}
+                  className="artist-field-label"
                 >
                   Default Username
                 </label>
-                <input
-                  type="text"
-                  className="input"
+                <SettingsInput type="text"
+
                   placeholder="Your Last.fm username"
                   autoComplete="off"
                   value={settings.integrations?.lastfm?.username || ""}
@@ -768,7 +727,7 @@ export function SettingsIntegrationsTab({
                     })
                   }
                 />
-                <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
+                <p className="settings-page__hint">
                   Used as the app-wide fallback for users who have not set their
                   own Last.fm or ListenBrainz account in Profile.
                 </p>
@@ -777,54 +736,38 @@ export function SettingsIntegrationsTab({
           )}
         </div>
         <div
-          className="p-6 rounded-lg space-y-4"
-          style={{
-            backgroundColor: "#1a1a1e",
-            border: "1px solid #2a2a2e",
-          }}
+          className="settings-page__section"
         >
-          <div className="flex items-center justify-between mb-2">
-            <h3
-              className="text-lg font-medium flex items-center"
-              style={{ color: "#fff" }}
-            >
-              <button
+          <div className="settings-page__section-header">
+            <button
                 type="button"
                 onClick={() => toggleSection("ticketmaster")}
-                className="flex items-center gap-2 text-left"
-                style={{ color: "#fff" }}
+                className="settings-page__section-toggle"
                 aria-expanded={!collapsedSections.ticketmaster}
               >
                 <ChevronDown
-                  className={`w-4 h-4 transition-transform ${
-                    collapsedSections.ticketmaster ? "-rotate-90" : ""
-                  }`}
+                  className={`settings-page__section-toggle-icon${collapsedSections.ticketmaster ? " is-collapsed" : ""}`}
                 />
                 <span>Ticketmaster</span>
               </button>
-            </h3>
             <div className="flex items-center gap-2">
               {health?.ticketmasterConfigured && (
-                <span className="flex items-center text-sm text-green-400">
-                  <CheckCircle className="w-4 h-4 mr-1" />
+                <span className="settings-page__status">
+                  <CheckCircle className="settings-page__status-icon" />
                   Configured
                 </span>
               )}
             </div>
           </div>
           {!collapsedSections.ticketmaster && (
-            <fieldset className="space-y-4">
+            <fieldset className="settings-page__fields">
               <div
-                className="rounded-lg p-4 space-y-2"
-                style={{
-                  backgroundColor: "#141418",
-                  border: "1px solid #2a2a2e",
-                }}
+                className="settings-page__callout"
               >
-                <p className="text-sm font-medium" style={{ color: "#fff" }}>
+                <p className="artist-field-label">
                   Get an API key
                 </p>
-                <p className="text-sm leading-6" style={{ color: "#c1c1c3" }}>
+                <p className="settings-page__callout-copy">
                   Register on the developers portal. After the registration, the
                   default application will be created. The application contains
                   a Consumer Key that is used for authentication.
@@ -833,22 +776,19 @@ export function SettingsIntegrationsTab({
                   href="https://developer-acct.ticketmaster.com/user/login"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex text-sm font-medium underline"
-                  style={{ color: "#60a5fa" }}
+                  className="settings-page__link"
                 >
                   Open the Ticketmaster developer portal
                 </a>
               </div>
               <div>
                 <label
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: "#fff" }}
+                  className="artist-field-label"
                 >
                   Consumer Key
                 </label>
-                <input
-                  type="password"
-                  className="input"
+                <SettingsInput type="password"
+
                   placeholder="Enter Ticketmaster Consumer Key"
                   autoComplete="off"
                   value={settings.integrations?.ticketmaster?.apiKey || ""}
@@ -865,23 +805,21 @@ export function SettingsIntegrationsTab({
                     })
                   }
                 />
-                <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
+                <p className="settings-page__hint">
                   Used for the Discover page&apos;s nearby shows section.
                 </p>
               </div>
               <div>
                 <label
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: "#fff" }}
+                  className="artist-field-label"
                 >
                   Search Radius (miles)
                 </label>
-                <input
-                  type="number"
+                <SettingsInput type="number"
                   min={5}
                   max={250}
                   step={5}
-                  className="input"
+
                   value={
                     settings.integrations?.ticketmaster?.searchRadiusMiles ?? 50
                   }
@@ -902,17 +840,18 @@ export function SettingsIntegrationsTab({
                     });
                   }}
                 />
-                <p className="mt-1 text-xs" style={{ color: "#c1c1c3" }}>
+                <p className="settings-page__hint">
                   Controls how far from your selected area Ticketmaster events
                   are searched.
                 </p>
               </div>
               <label className="flex items-center justify-between gap-4">
-                <span style={{ color: "#fff" }}>
+                <span >
                   Include recommended artists in local shows
                 </span>
                 <input
                   type="checkbox"
+                  className="artist-checkbox"
                   checked={localDiscoveryIncludeRecommendations}
                   onChange={(e) =>
                     updateSettings({
@@ -930,11 +869,12 @@ export function SettingsIntegrationsTab({
                 />
               </label>
               <label className="flex items-center justify-between gap-4">
-                <span style={{ color: "#fff" }}>
+                <span >
                   Include trending artists in local shows
                 </span>
                 <input
                   type="checkbox"
+                  className="artist-checkbox"
                   checked={localDiscoveryIncludeTrending}
                   onChange={(e) =>
                     updateSettings({
@@ -954,36 +894,24 @@ export function SettingsIntegrationsTab({
           )}
         </div>
         <div
-          className="p-6 rounded-lg space-y-4"
-          style={{
-            backgroundColor: "#1a1a1e",
-            border: "1px solid #2a2a2e",
-          }}
+          className="settings-page__section"
         >
-          <div className="flex items-center justify-between mb-2">
-            <h3
-              className="text-lg font-medium flex items-center"
-              style={{ color: "#fff" }}
-            >
-              <button
+          <div className="settings-page__section-header">
+            <button
                 type="button"
                 onClick={() => toggleSection("navidrome")}
-                className="flex items-center gap-2 text-left"
-                style={{ color: "#fff" }}
+                className="settings-page__section-toggle"
                 aria-expanded={!collapsedSections.navidrome}
               >
                 <ChevronDown
-                  className={`w-4 h-4 transition-transform ${
-                    collapsedSections.navidrome ? "-rotate-90" : ""
-                  }`}
+                  className={`settings-page__section-toggle-icon${collapsedSections.navidrome ? " is-collapsed" : ""}`}
                 />
                 <span>Subsonic / Navidrome</span>
               </button>
-            </h3>
             <div className="flex items-center gap-2">
               {settings.integrations?.navidrome?.url && (
-                <span className="flex items-center text-sm text-green-400">
-                  <CheckCircle className="w-4 h-4 mr-1" />
+                <span className="settings-page__status">
+                  <CheckCircle className="settings-page__status-icon" />
                   Configured
                 </span>
               )}
@@ -993,14 +921,12 @@ export function SettingsIntegrationsTab({
             <fieldset>
               <div>
                 <label
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: "#fff" }}
+                  className="artist-field-label"
                 >
                   Server URL
                 </label>
-                <input
-                  type="url"
-                  className="input"
+                <SettingsInput type="url"
+
                   placeholder="https://music.example.com"
                   autoComplete="off"
                   value={settings.integrations?.navidrome?.url || ""}
@@ -1021,14 +947,12 @@ export function SettingsIntegrationsTab({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label
-                    className="block text-sm font-medium mb-1"
-                    style={{ color: "#fff" }}
+                    className="artist-field-label"
                   >
                     Username
                   </label>
-                  <input
-                    type="text"
-                    className="input"
+                  <SettingsInput type="text"
+
                     autoComplete="off"
                     value={settings.integrations?.navidrome?.username || ""}
                     onChange={(e) =>
@@ -1047,14 +971,12 @@ export function SettingsIntegrationsTab({
                 </div>
                 <div>
                   <label
-                    className="block text-sm font-medium mb-1"
-                    style={{ color: "#fff" }}
+                    className="artist-field-label"
                   >
                     Password
                   </label>
-                  <input
-                    type="password"
-                    className="input"
+                  <SettingsInput type="password"
+
                     autoComplete="off"
                     value={settings.integrations?.navidrome?.password || ""}
                     onChange={(e) =>
@@ -1072,7 +994,7 @@ export function SettingsIntegrationsTab({
                   />
                 </div>
               </div>
-              <p className="mt-3 text-xs" style={{ color: "#8a8a8e" }}>
+              <p className="settings-page__hint">
                 When using Weekly Flow: set Navidrome&apos;s{" "}
                 <code>Scanner.PurgeMissing</code> to <code>always</code> or{" "}
                 <code>full</code> (e.g.{" "}

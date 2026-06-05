@@ -7,12 +7,13 @@ import {
 } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 const inputClass =
   "block w-full px-3 py-2.5 rounded sm:text-sm focus:outline-none focus:ring-2 focus:ring-offset-0";
 const inputStyle = {
-  backgroundColor: "#2a2a30",
-  color: "#fff",
+  backgroundColor: "var(--aurral-surface)",
+  color: "var(--aurral-white)",
   border: "1px solid #4a4a52",
 };
 
@@ -32,6 +33,7 @@ const STEPS = [
 ];
 
 function Onboarding() {
+  useDocumentTitle("Setup");
   const [step, setStep] = useState(0);
   const [authUser, setAuthUser] = useState("admin");
   const [authPassword, setAuthPassword] = useState("");
@@ -435,14 +437,9 @@ function Onboarding() {
             <button
               type="button"
               onClick={handleBack}
-              className="flex items-center gap-1 py-2 px-4 text-sm border rounded transition-colors"
-              style={{
-                ...inputStyle,
-                borderColor: "#3d3d44",
-                color: "#c1c1c3",
-              }}
+              className="btn btn-secondary btn-sm btn--bold"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="artist-icon-xs" />
               Back
             </button>
           )}
@@ -458,11 +455,7 @@ function Onboarding() {
                     : handleNext
             }
             disabled={isPrimaryDisabled}
-            className="flex-1 flex items-center justify-center gap-1 py-2 px-4 text-sm font-medium rounded transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-            style={{
-              backgroundColor: isPrimaryDisabled ? "#3d3d44" : "#707e61",
-              color: "#fff",
-            }}
+            className={`btn btn-sm btn--bold btn--grow${isPrimaryDisabled ? " btn-secondary" : " btn-primary"}`}
           >
             {currentStep === "done" ? (
               submitting ? (
@@ -474,7 +467,7 @@ function Onboarding() {
               lidarrTestSuccess ? (
                 <>
                   Next
-                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight className="artist-icon-xs" />
                 </>
               ) : testingLidarr ? (
                 "Testing…"
@@ -487,7 +480,7 @@ function Onboarding() {
               ) : navidromeTestSuccess ? (
                 <>
                   Next
-                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight className="artist-icon-xs" />
                 </>
               ) : testingNavidrome ? (
                 "Testing…"
@@ -498,7 +491,7 @@ function Onboarding() {
               hasLastfm ? (
                 <>
                   Next
-                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight className="artist-icon-xs" />
                 </>
               ) : (
                 "Skip"

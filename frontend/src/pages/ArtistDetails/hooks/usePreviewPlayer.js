@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSharedVolume } from "../../../hooks/useSharedVolume";
 import { getArtistPreview } from "../../../utils/api";
 
@@ -8,12 +8,29 @@ export function usePreviewPlayer(mbid, artistNameFromNav, artist) {
   const [previewTracks, setPreviewTracks] = useState([]);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [playingPreviewId, setPlayingPreviewId] = useState(null);
-  const [previewProgress, setPreviewProgress] = useState(0);
   const [previewSnappingBack, setPreviewSnappingBack] = useState(false);
+  const [previewPaused, setPreviewPaused] = useState(false);
+  const [previewAnimationKey, setPreviewAnimationKey] = useState(0);
+  const [playAllActive, setPlayAllActive] = useState(false);
   const [previewVolume, setPreviewVolume] = useSharedVolume();
   const previewAudioRef = useRef(null);
-  const previewTickRef = useRef(null);
   const snapBackTimeoutRef = useRef(null);
+  const playAllActiveRef = useRef(false);
+  const previewTracksRef = useRef([]);
+  const playingPreviewIdRef = useRef(null);
+  const advancePlayAllRef = useRef(null);
+
+  useEffect(() => {
+    previewTracksRef.current = previewTracks;
+  }, [previewTracks]);
+
+  useEffect(() => {
+    playingPreviewIdRef.current = playingPreviewId;
+  }, [playingPreviewId]);
+
+  useEffect(() => {
+    playAllActiveRef.current = playAllActive;
+  }, [playAllActive]);
 
   useEffect(() => {
     const name = artistNameFromNav || artist?.name;
@@ -28,17 +45,63 @@ export function usePreviewPlayer(mbid, artistNameFromNav, artist) {
       .finally(() => setLoadingPreview(false));
   }, [mbid, artistNameFromNav, artist]);
 
-  const finishSnapBack = () => {
+  const finishSnapBack = useCallback(() => {
     if (snapBackTimeoutRef.current) clearTimeout(snapBackTimeoutRef.current);
     snapBackTimeoutRef.current = null;
     setPlayingPreviewId(null);
-    setPreviewProgress(0);
     setPreviewSnappingBack(false);
-  };
+    setPreviewPaused(false);
+    setPlayAllActive(false);
+  }, []);
+
+  const scheduleSnapBack = useCallback(() => {
+    setPreviewSnappingBack(true);
+    setPreviewPaused(false);
+    if (snapBackTimeoutRef.current) clearTimeout(snapBackTimeoutRef.current);
+    snapBackTimeoutRef.current = setTimeout(finishSnapBack, SNAP_BACK_MS);
+  }, [finishSnapBack]);
+
+  const getPlayableTracks = useCallback(
+    () => previewTracksRef.current.filter((track) => track?.preview_url),
+    [],
+  );
+
+  const playPreviewTrack = useCallback(
+    (track) => {
+      const audio = previewAudioRef.current;
+      if (!audio || !track?.preview_url) return;
+      if (snapBackTimeoutRef.current) clearTimeout(snapBackTimeoutRef.current);
+      snapBackTimeoutRef.current = null;
+      setPreviewSnappingBack(false);
+      setPreviewPaused(false);
+      setPreviewAnimationKey((key) => key + 1);
+      setPlayingPreviewId(track.id);
+      audio.volume = previewVolume;
+      audio.src = track.preview_url;
+      audio.play();
+    },
+    [previewVolume],
+  );
+
+  const advancePlayAll = useCallback(() => {
+    const playable = getPlayableTracks();
+    const currentId = playingPreviewIdRef.current;
+    const currentIndex = playable.findIndex((track) => track.id === currentId);
+    const nextTrack = currentIndex >= 0 ? playable[currentIndex + 1] : null;
+    if (nextTrack) {
+      playPreviewTrack(nextTrack);
+      return;
+    }
+    setPlayAllActive(false);
+    scheduleSnapBack();
+  }, [getPlayableTracks, playPreviewTrack, scheduleSnapBack]);
+
+  advancePlayAllRef.current = advancePlayAll;
 
   const handlePreviewPlay = (track) => {
     const audio = previewAudioRef.current;
     if (!audio || !track.preview_url) return;
+    setPlayAllActive(false);
     audio.volume = previewVolume;
     if (playingPreviewId === track.id) {
       if (audio.paused) {
@@ -46,44 +109,41 @@ export function usePreviewPlayer(mbid, artistNameFromNav, artist) {
           clearTimeout(snapBackTimeoutRef.current);
         snapBackTimeoutRef.current = null;
         setPreviewSnappingBack(false);
+        setPreviewPaused(false);
         audio.play();
       } else {
         audio.pause();
-        if (previewTickRef.current)
-          cancelAnimationFrame(previewTickRef.current);
-        previewTickRef.current = null;
-        setPreviewSnappingBack(true);
-        setPreviewProgress(0);
-        snapBackTimeoutRef.current = setTimeout(finishSnapBack, SNAP_BACK_MS);
+        scheduleSnapBack();
       }
       return;
     }
-    if (snapBackTimeoutRef.current) clearTimeout(snapBackTimeoutRef.current);
-    snapBackTimeoutRef.current = null;
-    setPreviewSnappingBack(false);
-    setPlayingPreviewId(track.id);
-    setPreviewProgress(0);
-    if (previewTickRef.current) cancelAnimationFrame(previewTickRef.current);
-    const PREVIEW_DURATION = 30;
-    const tick = () => {
-      if (audio.ended) {
-        if (previewTickRef.current)
-          cancelAnimationFrame(previewTickRef.current);
-        previewTickRef.current = null;
-        setPreviewSnappingBack(true);
-        setPreviewProgress(0);
-        snapBackTimeoutRef.current = setTimeout(finishSnapBack, SNAP_BACK_MS);
+    playPreviewTrack(track);
+  };
+
+  const handlePreviewPlayAll = () => {
+    const audio = previewAudioRef.current;
+    const playable = getPlayableTracks();
+    if (!audio || playable.length === 0) return;
+
+    if (playAllActive && playingPreviewId) {
+      if (!audio.paused && !previewSnappingBack) {
+        audio.pause();
+        setPreviewPaused(true);
         return;
       }
-      const t = audio.currentTime;
-      const d = audio.duration;
-      const duration = Number.isFinite(d) && d > 0 ? d : PREVIEW_DURATION;
-      setPreviewProgress(Math.min(1, t / duration));
-      previewTickRef.current = requestAnimationFrame(tick);
-    };
-    previewTickRef.current = requestAnimationFrame(tick);
-    audio.src = track.preview_url;
-    audio.play();
+      if (audio.paused) {
+        if (snapBackTimeoutRef.current)
+          clearTimeout(snapBackTimeoutRef.current);
+        snapBackTimeoutRef.current = null;
+        setPreviewSnappingBack(false);
+        setPreviewPaused(false);
+        audio.play();
+        return;
+      }
+    }
+
+    setPlayAllActive(true);
+    playPreviewTrack(playable[0]);
   };
 
   useEffect(() => {
@@ -95,46 +155,18 @@ export function usePreviewPlayer(mbid, artistNameFromNav, artist) {
   useEffect(() => {
     const audio = previewAudioRef.current;
     if (!audio) return;
-    const PREVIEW_DURATION = 30;
-    const updateProgress = () => {
-      const t = audio.currentTime;
-      const d = audio.duration;
-      const duration = Number.isFinite(d) && d > 0 ? d : PREVIEW_DURATION;
-      setPreviewProgress(Math.min(1, t / duration));
-    };
-    const onLoadedMetadata = updateProgress;
-    const clearProgressTick = () => {
-      if (previewTickRef.current != null) {
-        cancelAnimationFrame(previewTickRef.current);
-        previewTickRef.current = null;
-      }
-    };
     const onEnded = () => {
-      clearProgressTick();
-      setPreviewSnappingBack(true);
-      setPreviewProgress(0);
-      if (snapBackTimeoutRef.current) clearTimeout(snapBackTimeoutRef.current);
-      snapBackTimeoutRef.current = setTimeout(finishSnapBack, SNAP_BACK_MS);
+      if (playAllActiveRef.current) {
+        advancePlayAllRef.current?.();
+        return;
+      }
+      scheduleSnapBack();
     };
-    const onPause = () => {
-      clearProgressTick();
-      setPreviewSnappingBack(true);
-      setPreviewProgress(0);
-      if (snapBackTimeoutRef.current) clearTimeout(snapBackTimeoutRef.current);
-      snapBackTimeoutRef.current = setTimeout(finishSnapBack, SNAP_BACK_MS);
-    };
-    audio.addEventListener("timeupdate", updateProgress);
-    audio.addEventListener("loadedmetadata", onLoadedMetadata);
     audio.addEventListener("ended", onEnded);
-    audio.addEventListener("pause", onPause);
     return () => {
-      clearProgressTick();
-      audio.removeEventListener("timeupdate", updateProgress);
-      audio.removeEventListener("loadedmetadata", onLoadedMetadata);
       audio.removeEventListener("ended", onEnded);
-      audio.removeEventListener("pause", onPause);
     };
-  }, [previewTracks.length]);
+  }, [previewTracks.length, scheduleSnapBack]);
 
   return {
     previewTracks,
@@ -142,11 +174,14 @@ export function usePreviewPlayer(mbid, artistNameFromNav, artist) {
     loadingPreview,
     setLoadingPreview,
     playingPreviewId,
-    previewProgress,
     previewSnappingBack,
+    previewPaused,
+    previewAnimationKey,
+    playAllActive,
     previewVolume,
     setPreviewVolume,
     previewAudioRef,
     handlePreviewPlay,
+    handlePreviewPlayAll,
   };
 }

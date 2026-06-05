@@ -98,7 +98,7 @@ export function ArtistDetailsSimilar({
           <button
             type="button"
             onClick={() => scrollByAmount(-1)}
-            className="artist-scroll-button"
+            className="btn btn-ghost btn-icon-square"
             aria-label="Scroll similar artists left"
             disabled={!canScrollLeft}
           >
@@ -107,7 +107,7 @@ export function ArtistDetailsSimilar({
           <button
             type="button"
             onClick={() => scrollByAmount(1)}
-            className="artist-scroll-button"
+            className="btn btn-ghost btn-icon-square"
             aria-label="Scroll similar artists right"
             disabled={!canScrollRight}
           >

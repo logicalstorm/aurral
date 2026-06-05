@@ -16,6 +16,7 @@ import AddAlbumButton from "../../components/AddAlbumButton";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
 import { useSharedVolume } from "../../hooks/useSharedVolume";
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { useArtistDetailsStream } from "./hooks/useArtistDetailsStream";
 import { useArtistDetailsLibrary } from "./hooks/useArtistDetailsLibrary";
 import { allReleaseTypes } from "./constants";
@@ -167,12 +168,10 @@ function ArtistAppearsOnPage() {
   } = stream;
   const artistCoverImage = getArtistPosterImage(coverImages);
 
-  useEffect(() => {
-    const artistDisplayName = artist?.name || artistNameFromNav || "";
-    document.title = artistDisplayName
-      ? `Featuring ${artistDisplayName} - Aurral`
-      : "Aurral";
-  }, [artist?.name, artistNameFromNav]);
+  const artistDisplayName = artist?.name || artistNameFromNav || "";
+  useDocumentTitle(
+    artistDisplayName ? `Featuring ${artistDisplayName}` : "",
+  );
 
   const library = useArtistDetailsLibrary({
     artist,
@@ -558,7 +557,7 @@ function ArtistAppearsOnPage() {
           <button
             type="button"
             onClick={() => setOptionsOpen((current) => !current)}
-            className="artist-icon-button"
+            className="btn btn-surface btn-icon-square"
             aria-label="Appears on display options"
             title="Appears on display options"
             aria-expanded={optionsOpen}
@@ -589,7 +588,7 @@ function ArtistAppearsOnPage() {
                 <button
                   type="button"
                   onClick={() => setViewMode("grid")}
-                  className={`artist-options-view-button${viewMode === "grid" ? " is-active" : ""}`}
+                  className={`btn btn-icon-square btn-surface${viewMode === "grid" ? " btn-neutral-active" : ""}`}
                   aria-label="Grid view"
                   title="Grid view"
                 >
@@ -598,7 +597,7 @@ function ArtistAppearsOnPage() {
                 <button
                   type="button"
                   onClick={() => setViewMode("list")}
-                  className={`artist-options-view-button${viewMode === "list" ? " is-active" : ""}`}
+                  className={`btn btn-icon-square btn-surface${viewMode === "list" ? " btn-neutral-active" : ""}`}
                   aria-label="List view"
                   title="List view"
                 >
