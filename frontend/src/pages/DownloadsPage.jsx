@@ -57,7 +57,7 @@ function DownloadsQueueRow({
     done < Number(entry.trackCount || 0);
 
   return (
-    <div className="downloads-page__row">
+    <article className="downloads-page__row">
       <PlaylistArtworkThumb
         artworkUrl={artworkUrl}
         name={entry.name}
@@ -65,7 +65,7 @@ function DownloadsQueueRow({
       />
       <div className="downloads-page__row-body">
         <div className="downloads-page__row-header">
-          <div>
+          <div className="downloads-page__row-copy">
             <span className="downloads-page__row-type">
               {entry.kind === "flow" ? "Flow" : "Playlist"}
             </span>
@@ -114,14 +114,20 @@ function DownloadsQueueRow({
               <span>Pending {pending}</span>
               <span>Downloading {downloading}</span>
               <span>Done {done}</span>
-              {failed > 0 ? <span>Stalled {failed}</span> : null}
+              {failed > 0 ? (
+                <span className="downloads-page__row-stats-stalled">
+                  Stalled {failed}
+                </span>
+              ) : null}
             </div>
           </div>
         ) : (
-          <p className="downloads-page__row-empty">No download activity yet</p>
+          <p className="artist-subtext downloads-page__row-empty">
+            No download activity yet
+          </p>
         )}
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -296,16 +302,25 @@ function DownloadsPage() {
 
   if (loading && !status) {
     return (
-      <div className="downloads-page__loading">
-        <Loader2 className="artist-spinner artist-spinner--large" />
+      <div className="downloads-page">
+        <header className="downloads-page__header">
+          <h1 className="downloads-page__title">Downloads</h1>
+          <p className="downloads-page__subtitle">
+            Worker queue, download progress, and retry orchestration for your
+            playlists and flows.
+          </p>
+        </header>
+        <div className="artist-loading">
+          <Loader2 className="artist-spinner artist-spinner--large animate-spin" />
+        </div>
       </div>
     );
   }
 
   return (
     <div className="downloads-page">
-      <div className="downloads-page__header">
-        <div>
+      <header className="downloads-page__header">
+        <div className="downloads-page__header-copy">
           <h1 className="downloads-page__title">Downloads</h1>
           <p className="downloads-page__subtitle">
             Worker queue, download progress, and retry orchestration for your
@@ -313,27 +328,31 @@ function DownloadsPage() {
           </p>
         </div>
         {user?.role === "admin" ? (
-          <button
-            type="button"
-            onClick={handleOpenWorkerSettings}
-            className="btn btn-secondary btn-sm"
-          >
-            <Settings className="artist-icon-xs" />
-            Worker settings
-          </button>
+          <div className="downloads-page__header-actions">
+            <button
+              type="button"
+              onClick={handleOpenWorkerSettings}
+              className="btn btn-secondary btn-sm"
+            >
+              <Settings className="artist-icon-xs" />
+              Worker settings
+            </button>
+          </div>
         ) : null}
+      </header>
+
+      <div className="downloads-page__overview">
+        <FlowStatusCards
+          status={status}
+          enabledCount={enabledFlowCount}
+          flowCount={flows.length}
+          runningCount={runningCount}
+          completedCount={completedCount}
+        />
       </div>
 
-      <FlowStatusCards
-        status={status}
-        enabledCount={enabledFlowCount}
-        flowCount={flows.length}
-        runningCount={runningCount}
-        completedCount={completedCount}
-      />
-
-      <section className="downloads-page__section">
-        <h2 className="downloads-page__section-title">Queue by playlist</h2>
+      <section className="artist-section downloads-page__section">
+        <h2 className="artist-section-title">Queue by playlist</h2>
         {queueEntries.length === 0 ? (
           <div className="artist-empty-panel">
             <p className="artist-empty-message">
