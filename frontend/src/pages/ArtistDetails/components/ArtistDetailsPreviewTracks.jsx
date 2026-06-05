@@ -4,20 +4,13 @@ import { Loader, Pause, Play } from "lucide-react";
 import { getArtistTopSongVideo } from "../../../utils/api";
 import { TrackPlaylistMenu } from "./TrackPlaylistMenu";
 
-const previewDurationLabel = (track) => {
-  if (track?.duration_ms > 0) return "0:30";
-  return "";
-};
-
 export function ArtistDetailsPreviewTracks({
   mbid,
   artistName,
   loadingPreview,
   previewTracks,
   playingPreviewId,
-  previewSnappingBack,
-  previewPaused,
-  previewAnimationKey,
+  isArtistPlaybackActive,
   handlePreviewPlay,
   onAddTrackToPlaylist,
   playlists,
@@ -94,27 +87,15 @@ export function ArtistDetailsPreviewTracks({
         >
           <div className="artist-preview-list">
             {previewTracks.map((track, index) => {
+              const trackId = String(track.id || `${track.title}-${index}`);
               const isPlaying =
-                playingPreviewId === track.id && !previewSnappingBack;
+                isArtistPlaybackActive &&
+                String(playingPreviewId) === trackId;
               return (
                 <div
-                  key={track.id || `${track.title}-${index}`}
+                  key={trackId}
                   className="artist-track-row artist-track-row--preview"
                 >
-                  {playingPreviewId === track.id && (
-                    <div
-                      key={previewAnimationKey}
-                      className={
-                        previewSnappingBack
-                          ? "artist-track-progress artist-track-progress--snapping"
-                          : `artist-track-progress artist-track-progress--playing${
-                              previewPaused
-                                ? " artist-track-progress--paused"
-                                : ""
-                            }`
-                      }
-                    />
-                  )}
                   <span className="artist-track-number">
                     {index + 1}
                   </span>
@@ -146,7 +127,7 @@ export function ArtistDetailsPreviewTracks({
                         menuVariant="preview-tracks"
                         playlists={playlists}
                         loading={playlistsLoading}
-                        saving={playlistSavingKey === String(track.id || "")}
+                        saving={playlistSavingKey === trackId}
                         error={playlistError}
                         defaultNewPlaylistName={getDefaultPlaylistName?.(track)}
                         onLoadPlaylists={onLoadPlaylists}
@@ -156,9 +137,6 @@ export function ArtistDetailsPreviewTracks({
                       />
                     </div>
                   ) : null}
-                  <span className="artist-track-duration">
-                    {previewDurationLabel(track)}
-                  </span>
                 </div>
               );
             })}
@@ -194,9 +172,7 @@ ArtistDetailsPreviewTracks.propTypes = {
   loadingPreview: PropTypes.bool,
   previewTracks: PropTypes.array,
   playingPreviewId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  previewSnappingBack: PropTypes.bool,
-  previewPaused: PropTypes.bool,
-  previewAnimationKey: PropTypes.number,
+  isArtistPlaybackActive: PropTypes.bool,
   handlePreviewPlay: PropTypes.func.isRequired,
   onAddTrackToPlaylist: PropTypes.func,
   playlists: PropTypes.array,

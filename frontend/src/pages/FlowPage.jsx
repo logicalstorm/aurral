@@ -1660,6 +1660,17 @@ function FlowPage() {
   const selectedTracksError = selectedId
     ? tracksErrorByFlowId[selectedId] || ""
     : "";
+  const playbackSource = selectedEntry
+    ? {
+        type: selectedIsFlow ? "flow" : "playlist",
+        id: selectedEntry.id,
+        label:
+          selectedFlow?.name ||
+          selectedPlaylist?.name ||
+          selectedEntry.name ||
+          "Playlist",
+      }
+    : null;
   const flowEnabled = selectedFlow?.enabled === true;
   const flowNextRun =
     selectedFlow && flowEnabled
@@ -1966,6 +1977,7 @@ function FlowPage() {
                       tracks={selectedTracks}
                       loading={selectedTracksLoading}
                       error={selectedTracksError}
+                      playbackSource={playbackSource}
                       emptyMessage={
                         flowEnabled
                           ? "No tracks generated for this flow yet."
@@ -1985,6 +1997,7 @@ function FlowPage() {
                       tracks={selectedTracks}
                       loading={selectedTracksLoading}
                       error={selectedTracksError}
+                      playbackSource={playbackSource}
                       emptyMessage="No tracks in this playlist yet."
                       hideFailedTracks
                       useTrackContextMenu

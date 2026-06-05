@@ -3,7 +3,6 @@ import PropTypes from "prop-types";
 import { CheckCircle, Music } from "lucide-react";
 import AddAlbumButton from "./AddAlbumButton";
 import { useToast } from "../contexts/ToastContext";
-import { useSharedVolume } from "../hooks/useSharedVolume";
 import {
   addSharedPlaylistTracks,
   createSharedPlaylist,
@@ -138,7 +137,6 @@ function SearchAlbumResults({
   viewMode = "grid",
 }) {
   const { showError, showSuccess } = useToast();
-  const [previewVolume] = useSharedVolume();
   const [expandedAlbumId, setExpandedAlbumId] = useState(null);
   const [albumTracks, setAlbumTracks] = useState({});
   const [loadingTracks, setLoadingTracks] = useState({});
@@ -464,7 +462,12 @@ function SearchAlbumResults({
                 trackKey={expandedTrackKey}
                 tracks={expandedTracks}
                 loading={expandedLoading}
-                previewVolume={previewVolume}
+                playbackSource={{
+                  type: "search",
+                  id: expandedAlbum?.id,
+                  label: expandedAlbum?.title || "Search",
+                }}
+                artistName={expandedAlbum?.artistName || ""}
                 onAddTrackToPlaylist={handleReleaseTrackAdd}
                 playlists={sharedPlaylists}
                 playlistsLoading={playlistModalLoading}

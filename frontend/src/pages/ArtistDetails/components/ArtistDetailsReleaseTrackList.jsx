@@ -1,16 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 import PropTypes from "prop-types";
 import { Loader } from "lucide-react";
 import { TrackPlayButton } from "./TrackPlayButton";
 import { getReleaseYear } from "../utils";
 import { TrackPlaylistMenu } from "./TrackPlaylistMenu";
+import { ArtistTrackListToolbar } from "./ArtistTrackListToolbar";
+import { useAlbumTrackListToolbar } from "../../../hooks/useAlbumTrackListToolbar";
+import { useGlobalTrackPlayback } from "../../../hooks/useGlobalTrackPlayback";
+import { normalizePreviewTrack } from "../../../utils/audioQueue";
 
 export function ArtistDetailsReleaseTrackList({
   release,
   trackKey,
   tracks,
   loading,
-  previewVolume = 0.75,
+  artistName = "",
+  playbackSource = null,
   onAddTrackToPlaylist,
   playlists,
   playlistsLoading,
@@ -19,64 +24,56 @@ export function ArtistDetailsReleaseTrackList({
   getDefaultPlaylistName,
   onLoadPlaylists,
 }) {
-  const [playingTrackId, setPlayingTrackId] = useState(null);
-  const [loadingTrackId, setLoadingTrackId] = useState(null);
-  const previewAudioRef = useRef(null);
+  const normalizeTrack = useCallback(
+    (track, index) =>
+      normalizePreviewTrack(
+        {
+          id: track?.id ?? track?.mbid ?? `${trackKey}-${index}`,
+          title: track?.title || track?.trackName,
+          preview_url: track?.preview_url,
+        },
+        artistName,
+        { album: release?.title || "" },
+      ),
+    [artistName, release?.title, trackKey],
+  );
 
-  useEffect(() => {
-    const audio = previewAudioRef.current;
-    if (!audio) return;
-    audio.volume = previewVolume;
-  }, [previewVolume]);
+  const { isTrackPlaying, isTrackLoading, handlePlay } = useGlobalTrackPlayback(
+    (track, index) => normalizeTrack(track, index),
+  );
 
-  useEffect(() => {
-    const audio = previewAudioRef.current;
-    if (!audio) return undefined;
-    const resetPlayback = () => {
-      setPlayingTrackId(null);
-      setLoadingTrackId(null);
-    };
-    audio.addEventListener("ended", resetPlayback);
-    audio.addEventListener("error", resetPlayback);
-    return () => {
-      audio.removeEventListener("ended", resetPlayback);
-      audio.removeEventListener("error", resetPlayback);
-      audio.pause();
-      audio.src = "";
-    };
-  }, []);
+  const getQueueTracks = useCallback(
+    () =>
+      (tracks || [])
+        .filter((entry) => entry?.preview_url)
+        .map((entry, entryIndex) => normalizeTrack(entry, entryIndex)),
+    [tracks, normalizeTrack],
+  );
 
-  const handleTrackPreviewPlay = async (track, event) => {
+  const {
+    disabled: toolbarDisabled,
+    isListPlaying,
+    isShuffleEnabled,
+    handlePlayAll,
+    handleShufflePlay,
+  } = useAlbumTrackListToolbar({
+    getQueueTracks,
+    playbackSource,
+  });
+
+  const handleTrackPreviewPlay = (track, index, event) => {
     event.stopPropagation();
-    const previewUrl = track?.preview_url;
-    const currentTrackId = String(track?.id ?? track?.mbid ?? "");
-    const audio = previewAudioRef.current;
-    if (!audio || !previewUrl || !currentTrackId) return;
-    try {
-      if (playingTrackId === currentTrackId) {
-        audio.pause();
-        setPlayingTrackId(null);
-        return;
-      }
-      setLoadingTrackId(currentTrackId);
-      if (audio.src !== previewUrl) {
-        audio.src = previewUrl;
-      }
-      audio.volume = previewVolume;
-      await audio.play();
-      setPlayingTrackId(currentTrackId);
-    } catch {
-      setPlayingTrackId(null);
-    } finally {
-      setLoadingTrackId(null);
-    }
+    if (!track?.preview_url) return;
+    const queue = (tracks || [])
+      .filter((entry) => entry?.preview_url)
+      .map((entry, entryIndex) => normalizeTrack(entry, entryIndex));
+    handlePlay(track, { source: playbackSource, queue }, index);
   };
 
   if (!release) return null;
 
   return (
     <div className="artist-expanded-panel">
-      <audio ref={previewAudioRef} preload="none" />
       <div className="artist-expanded-panel__header">
         <div className="artist-min-0">
           <h3 className="artist-card-title artist-truncate">{release.title}</h3>
@@ -93,13 +90,21 @@ export function ArtistDetailsReleaseTrackList({
           <Loader className="artist-spinner animate-spin" />
         </div>
       ) : tracks?.length ? (
-        <div className="artist-track-list__rows">
+        <>
+          <ArtistTrackListToolbar
+            disabled={toolbarDisabled}
+            isPlaying={isListPlaying}
+            isShuffleEnabled={isShuffleEnabled}
+            onPlayAll={handlePlayAll}
+            onShufflePlay={handleShufflePlay}
+          />
+          <div className="artist-track-list__rows">
           {tracks.map((track, index) => {
             const currentTrackId = String(
               track.id ?? track.mbid ?? `${trackKey}-${index}`,
             );
-            const isPlaying = playingTrackId === currentTrackId;
-            const isLoadingPreview = loadingTrackId === currentTrackId;
+            const isPlaying = isTrackPlaying(currentTrackId);
+            const isLoadingPreview = isTrackLoading(currentTrackId);
             const durationLabel = track.length
               ? `${Math.floor(track.length / 60000)}:${Math.floor(
                   (track.length % 60000) / 1000,
@@ -120,7 +125,9 @@ export function ArtistDetailsReleaseTrackList({
                     track={track}
                     isPlaying={isPlaying}
                     isLoading={isLoadingPreview}
-                    onClick={(event) => handleTrackPreviewPlay(track, event)}
+                    onClick={(event) =>
+                      handleTrackPreviewPlay(track, index, event)
+                    }
                   />
                 ) : (
                   <span />
@@ -150,7 +157,8 @@ export function ArtistDetailsReleaseTrackList({
               </div>
             );
           })}
-        </div>
+          </div>
+        </>
       ) : (
         <p className="artist-empty-message">No tracks available</p>
       )}
@@ -163,7 +171,12 @@ ArtistDetailsReleaseTrackList.propTypes = {
   trackKey: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   tracks: PropTypes.array,
   loading: PropTypes.bool,
-  previewVolume: PropTypes.number,
+  artistName: PropTypes.string,
+  playbackSource: PropTypes.shape({
+    type: PropTypes.string,
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    label: PropTypes.string,
+  }),
   onAddTrackToPlaylist: PropTypes.func,
   playlists: PropTypes.array,
   playlistsLoading: PropTypes.bool,

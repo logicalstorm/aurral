@@ -10,9 +10,11 @@ import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Onboarding from "./pages/Onboarding";
 import { getBootstrapStatus } from "./utils/api";
+import { AudioPlayerProvider } from "react-use-audio-player";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ToastProvider, useToast } from "./contexts/ToastContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { AudioQueueProvider } from "./contexts/AudioQueueProvider";
 import ReloadPrompt from "./components/ReloadPrompt";
 import UpdateBanner from "./components/UpdateBanner";
 import { useWebSocketChannel } from "./hooks/useWebSocket";
@@ -285,8 +287,12 @@ function App() {
     <ThemeProvider>
       <ToastProvider>
         <AuthProvider>
-          <AppContent />
-          <ReloadPrompt />
+          <AudioPlayerProvider>
+            <AudioQueueProvider>
+              <AppContent />
+              <ReloadPrompt />
+            </AudioQueueProvider>
+          </AudioPlayerProvider>
         </AuthProvider>
       </ToastProvider>
     </ThemeProvider>

@@ -47,9 +47,7 @@ export function ArtistDetailsActionBar({
   refreshingArtist,
   previewTracks,
   loadingPreview,
-  playingPreviewId,
-  previewSnappingBack,
-  playAllActive,
+  isArtistPlaybackActive,
   handlePreviewPlayAll,
   onEditIds,
   onToggleBlockArtist,
@@ -59,8 +57,7 @@ export function ArtistDetailsActionBar({
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const currentMonitorOption = getCurrentMonitorOption?.();
   const hasPreview = previewTracks?.some((track) => track?.preview_url);
-  const isPreviewPlaying =
-    playAllActive && playingPreviewId && !previewSnappingBack;
+  const isPreviewPlaying = isArtistPlaybackActive;
 
   const renderLibraryAction = () => {
     if (loadingLibrary) {
@@ -308,9 +305,7 @@ ArtistDetailsActionBar.propTypes = {
   refreshingArtist: PropTypes.bool,
   previewTracks: PropTypes.array,
   loadingPreview: PropTypes.bool,
-  playingPreviewId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  previewSnappingBack: PropTypes.bool,
-  playAllActive: PropTypes.bool,
+  isArtistPlaybackActive: PropTypes.bool,
   handlePreviewPlayAll: PropTypes.func.isRequired,
   onEditIds: PropTypes.func,
   onToggleBlockArtist: PropTypes.func,
