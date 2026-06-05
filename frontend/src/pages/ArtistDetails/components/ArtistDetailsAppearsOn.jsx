@@ -29,7 +29,8 @@ export function ArtistDetailsAppearsOn({
   canAddAlbum,
   handleRequestAlbum,
   requestingAlbum,
-  previewVolume,
+  playbackSource,
+  artistName,
   onAddTrackToPlaylist,
   playlists,
   playlistsLoading,
@@ -173,7 +174,8 @@ export function ArtistDetailsAppearsOn({
                   trackKey={expandedTrackKey}
                   tracks={expandedTracks}
                   loading={expandedLoading}
-                  previewVolume={previewVolume}
+                  playbackSource={playbackSource}
+                  artistName={artistName}
                   onAddTrackToPlaylist={onAddTrackToPlaylist}
                   playlists={playlists}
                   playlistsLoading={playlistsLoading}
@@ -204,7 +206,12 @@ ArtistDetailsAppearsOn.propTypes = {
   canAddAlbum: PropTypes.bool,
   handleRequestAlbum: PropTypes.func.isRequired,
   requestingAlbum: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  previewVolume: PropTypes.number,
+  playbackSource: PropTypes.shape({
+    type: PropTypes.string,
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    label: PropTypes.string,
+  }),
+  artistName: PropTypes.string,
   onAddTrackToPlaylist: PropTypes.func,
   playlists: PropTypes.array,
   playlistsLoading: PropTypes.bool,

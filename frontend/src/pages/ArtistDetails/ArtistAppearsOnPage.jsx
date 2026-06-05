@@ -15,7 +15,6 @@ import {
 import AddAlbumButton from "../../components/AddAlbumButton";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
-import { useSharedVolume } from "../../hooks/useSharedVolume";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { useArtistDetailsStream } from "./hooks/useArtistDetailsStream";
 import { useArtistDetailsLibrary } from "./hooks/useArtistDetailsLibrary";
@@ -125,7 +124,6 @@ function ArtistAppearsOnPage() {
   const { state } = useLocation();
   const { showSuccess, showError } = useToast();
   const { hasPermission } = useAuth();
-  const [previewVolume] = useSharedVolume();
   const [selectedTab, setSelectedTab] = useState("all");
   const [sortKey, setSortKey] = useState("date");
   const [sortDirection, setSortDirection] = useState("desc");
@@ -631,7 +629,12 @@ function ArtistAppearsOnPage() {
                   trackKey={expandedTrackKey}
                   tracks={expandedTracks}
                   loading={expandedLoading}
-                  previewVolume={previewVolume}
+                  playbackSource={{
+                    type: "artist",
+                    id: mbid,
+                    label: artistDisplayName,
+                  }}
+                  artistName={artistDisplayName}
                   onAddTrackToPlaylist={handleReleaseTrackAdd}
                   playlists={sharedPlaylists}
                   playlistsLoading={playlistModalLoading}

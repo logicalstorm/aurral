@@ -151,23 +151,6 @@ function ArtistDetailsPage() {
   const artistDisplayName = artist?.name || artistNameFromNav || "";
   useDocumentTitle(artistDisplayName);
 
-  const preview = usePreviewPlayer(mbid, artistNameFromNav, artist);
-  const {
-    previewTracks,
-    loadingPreview,
-    setLoadingPreview,
-    playingPreviewId,
-    previewSnappingBack,
-    previewPaused,
-    previewAnimationKey,
-    playAllActive,
-    previewVolume,
-    previewAudioRef,
-    handlePreviewPlay,
-    handlePreviewPlayAll,
-    setPreviewTracks,
-  } = preview;
-
   const normalizeArtists = useCallback((artists) => {
     const source = Array.isArray(artists) ? artists : [];
     const seen = new Set();
@@ -284,6 +267,24 @@ function ArtistDetailsPage() {
     showError,
     selectedReleaseTypes,
   });
+
+  const preview = usePreviewPlayer(mbid, artistNameFromNav, artist, {
+    existsInLibrary,
+    libraryArtist,
+    libraryAlbums,
+    downloadStatuses: library.downloadStatuses || {},
+    albumTracks: library.albumTracks || {},
+  });
+  const {
+    previewTracks,
+    loadingPreview,
+    setLoadingPreview,
+    playingPreviewId,
+    isArtistPlaybackActive,
+    handlePreviewPlay,
+    handlePreviewPlayAll,
+    setPreviewTracks,
+  } = preview;
 
   const downloadTargets = useMemo(
     () =>
@@ -574,10 +575,14 @@ function ArtistDetailsPage() {
   }
 
   const artistCoverImage = getArtistPosterImage(coverImages);
+  const playbackSource = {
+    type: "artist",
+    id: mbid,
+    label: artistDisplayName,
+  };
 
   return (
     <div className="artist-details-page">
-      {previewTracks.length > 0 && <audio ref={previewAudioRef} />}
       <ArtistDetailsHero
         artist={artist}
         coverImages={coverImages}
@@ -610,9 +615,7 @@ function ArtistDetailsPage() {
         refreshingArtist={library.refreshingArtist}
         loadingPreview={loadingPreview}
         previewTracks={previewTracks}
-        playingPreviewId={playingPreviewId}
-        previewSnappingBack={previewSnappingBack}
-        playAllActive={playAllActive}
+        isArtistPlaybackActive={isArtistPlaybackActive}
         handlePreviewPlayAll={handlePreviewPlayAll}
         onEditIds={handleOpenEditIds}
         onToggleBlockArtist={handleToggleBlockArtist}
@@ -626,9 +629,7 @@ function ArtistDetailsPage() {
         loadingPreview={loadingPreview}
         previewTracks={previewTracks}
         playingPreviewId={playingPreviewId}
-        previewSnappingBack={previewSnappingBack}
-        previewPaused={previewPaused}
-        previewAnimationKey={previewAnimationKey}
+        isArtistPlaybackActive={isArtistPlaybackActive}
         handlePreviewPlay={handlePreviewPlay}
         onAddTrackToPlaylist={handlePreviewTrackAdd}
         playlists={sharedPlaylists}
@@ -647,7 +648,8 @@ function ArtistDetailsPage() {
         canAddAlbum={canAddAlbum}
         requestingAlbum={library.requestingAlbum}
         handleRequestAlbum={library.handleRequestAlbum}
-        previewVolume={previewVolume}
+        playbackSource={playbackSource}
+        artistName={artistDisplayName}
         onAddTrackToPlaylist={handleReleaseTrackAdd}
         playlists={sharedPlaylists}
         playlistsLoading={playlistModalLoading}
@@ -686,7 +688,8 @@ function ArtistDetailsPage() {
           getDefaultPlaylistName={getDefaultTrackPlaylistName}
           onLoadPlaylists={loadSharedPlaylists}
           onVisibleCoverIdsChange={setVisibleLibraryCoverIds}
-          previewVolume={previewVolume}
+          playbackSource={playbackSource}
+          artistName={artistDisplayName}
         />
       )}
 
@@ -704,7 +707,8 @@ function ArtistDetailsPage() {
           canAddAlbum={canAddAlbum}
           handleRequestAlbum={library.handleRequestAlbum}
           requestingAlbum={library.requestingAlbum}
-          previewVolume={previewVolume}
+          playbackSource={playbackSource}
+          artistName={artistDisplayName}
           onAddTrackToPlaylist={handleReleaseTrackAdd}
           playlists={sharedPlaylists}
           playlistsLoading={playlistModalLoading}
@@ -735,7 +739,8 @@ function ArtistDetailsPage() {
             canAddAlbum={canAddAlbum}
             handleRequestAlbum={library.handleRequestAlbum}
             requestingAlbum={library.requestingAlbum}
-            previewVolume={previewVolume}
+            playbackSource={playbackSource}
+            artistName={artistDisplayName}
             onAddTrackToPlaylist={handleReleaseTrackAdd}
             playlists={sharedPlaylists}
             playlistsLoading={playlistModalLoading}

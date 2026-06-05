@@ -21,10 +21,6 @@ import {
   Play,
   Pause,
   Shuffle,
-  SkipBack,
-  SkipForward,
-  Volume2,
-  VolumeX,
   Plus,
   Search,
   ChevronDown,
@@ -36,11 +32,12 @@ import {
 import { Link } from "react-router-dom";
 import PillToggle from "../components/PillToggle";
 import FlipSaveButton from "../components/FlipSaveButton";
+import { useAudioQueue } from "../hooks/useAudioQueue";
+import { normalizeFlowTrack } from "../utils/audioQueue";
 import {
   TrackPlaylistMenu,
   TrackPlaylistSubmenu,
 } from "./ArtistDetails/components/TrackPlaylistMenu";
-import { useSharedVolume } from "../hooks/useSharedVolume";
 import { TAG_COLORS } from "./ArtistDetails/constants";
 import { getTagColor } from "./ArtistDetails/utils";
 
@@ -2249,25 +2246,23 @@ export function FlowTracksPanel({
   onMoveTrackToPlaylist,
   onNavigateArtist,
   onReSearchTrack,
+  playbackSource = null,
 }) {
-  const [queue, setQueue] = useState([]);
-  const [currentTrackId, setCurrentTrackId] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isShuffleEnabled, setIsShuffleEnabled] = useState(false);
-  const [sharedVolume, setSharedVolume] = useSharedVolume();
-  const volume = Math.round(sharedVolume * 100);
-  const lastVolumeRef = useRef(volume > 0 ? volume : 70);
-  const audioRef = useRef(null);
+  const {
+    playQueue,
+    playTrack,
+    togglePlayPause,
+    isShuffleEnabled,
+    matchesSource,
+    isPlaying,
+    currentTrack: activeTrack,
+  } = useAudioQueue();
 
   const playableTracks = useMemo(
     () => tracks.filter((track) => track.status === "done" && track.streamUrl),
     [tracks],
   );
 
-  const currentTrack = useMemo(
-    () => playableTracks.find((track) => track.id === currentTrackId) || null,
-    [playableTracks, currentTrackId],
-  );
   const visibleTracks = useMemo(
     () =>
       hideFailedTracks
@@ -2276,241 +2271,79 @@ export function FlowTracksPanel({
     [hideFailedTracks, tracks],
   );
 
-  const startQueue = (trackIds) => {
-    if (!trackIds.length) return;
-    setQueue(trackIds);
-    setCurrentTrackId(trackIds[0]);
-  };
+  const isSourceActive = matchesSource(playbackSource);
+  const currentTrackId =
+    isSourceActive && activeTrack?.id ? activeTrack.id : null;
+  const isCurrentPlaying = isSourceActive && isPlaying;
 
-  const getOrderedIds = () => playableTracks.map((track) => track.id);
-
-  const getShuffledIds = () => {
-    const ids = getOrderedIds();
-    const shuffled = [...ids];
-    for (let i = shuffled.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-  };
-
-  const getPlaybackIds = () =>
-    isShuffleEnabled ? getShuffledIds() : getOrderedIds();
+  const isPlaylistPlaying = isSourceActive && isCurrentPlaying;
 
   const handlePrimaryPlay = () => {
     if (playableTracks.length === 0) return;
-    const audio = audioRef.current;
-    const hasCurrentPlayable = playableTracks.some((track) => track.id === currentTrackId);
-    if (currentTrackId && hasCurrentPlayable) {
-      if (isPlaying) {
-        audio?.pause();
-        return;
-      }
-      audio
-        ?.play()
-        .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false));
+    if (isSourceActive && (isPlaying || currentTrackId)) {
+      togglePlayPause();
       return;
     }
-    const ids = getPlaybackIds();
-    if (ids.length === 0) return;
-    startQueue(ids);
+    const queueTracks = playableTracks.map((track) => normalizeFlowTrack(track));
+    playQueue(queueTracks, {
+      source: playbackSource,
+      shuffle: false,
+    });
   };
 
-  const handlePrevious = () => {
+  const handleShufflePlay = () => {
     if (playableTracks.length === 0) return;
-    if (!queue.length || !currentTrackId) {
-      const ids = getPlaybackIds();
-      if (ids.length === 0) return;
-      startQueue(ids);
-      return;
-    }
-    const currentIndex = queue.findIndex((id) => id === currentTrackId);
-    if (currentIndex > 0) {
-      setCurrentTrackId(queue[currentIndex - 1]);
-      return;
-    }
-    const audio = audioRef.current;
-    if (audio) {
-      audio.currentTime = 0;
-    }
-  };
-
-  const handleNext = () => {
-    if (playableTracks.length === 0) return;
-    if (!queue.length || !currentTrackId) {
-      const ids = getPlaybackIds();
-      if (ids.length === 0) return;
-      startQueue(ids);
-      return;
-    }
-    const currentIndex = queue.findIndex((id) => id === currentTrackId);
-    const nextId = currentIndex >= 0 ? queue[currentIndex + 1] : null;
-    if (nextId) {
-      setCurrentTrackId(nextId);
-      return;
-    }
-    setIsPlaying(false);
-    setCurrentTrackId(null);
-    setQueue([]);
+    const queueTracks = playableTracks.map((track) => normalizeFlowTrack(track));
+    playQueue(queueTracks, {
+      source: playbackSource,
+      shuffle: true,
+    });
   };
 
   const handlePlayTrack = (track) => {
     if (!track?.streamUrl) return;
-    if (currentTrackId === track.id) {
-      if (isPlaying) {
-        audioRef.current?.pause();
-        return;
-      }
-      audioRef.current
-        ?.play()
-        .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false));
+    const normalized = normalizeFlowTrack(track);
+    if (currentTrackId === track.id && isSourceActive) {
+      togglePlayPause();
       return;
     }
-    setQueue([track.id]);
-    setCurrentTrackId(track.id);
+    playTrack(normalized, {
+      source: playbackSource,
+      queue: playableTracks.map((entry) => normalizeFlowTrack(entry)),
+      shuffle: isShuffleEnabled,
+    });
   };
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !currentTrack?.streamUrl) return;
-    audio.src = currentTrack.streamUrl;
-    audio
-      .play()
-      .then(() => setIsPlaying(true))
-      .catch(() => setIsPlaying(false));
-  }, [currentTrack?.id, currentTrack?.streamUrl]);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.muted = volume <= 0;
-    audio.volume = sharedVolume;
-  }, [sharedVolume, volume]);
-
-  useEffect(() => {
-    if (volume > 0) {
-      lastVolumeRef.current = volume;
-    }
-  }, [volume]);
-
-  const handleVolumeChange = (nextValue) => {
-    const nextVolume = Math.min(Math.max(Number(nextValue) || 0, 0), 100);
-    if (nextVolume > 0) {
-      lastVolumeRef.current = nextVolume;
-    }
-    setSharedVolume(nextVolume / 100);
-  };
-
-  const handleToggleMute = () => {
-    if (volume <= 0) {
-      const restoredVolume = lastVolumeRef.current > 0 ? lastVolumeRef.current : 70;
-      setSharedVolume(restoredVolume / 100);
-      return;
-    }
-    if (volume > 0) {
-      lastVolumeRef.current = volume;
-    }
-    setSharedVolume(0);
-  };
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    const handlePlay = () => setIsPlaying(true);
-    const handlePause = () => setIsPlaying(false);
-    const handleEnded = () => {
-      const currentIndex = queue.findIndex((id) => id === currentTrackId);
-      const nextId = currentIndex >= 0 ? queue[currentIndex + 1] : null;
-      if (nextId) {
-        setCurrentTrackId(nextId);
-        return;
-      }
-      setIsPlaying(false);
-      setCurrentTrackId(null);
-      setQueue([]);
-    };
-    audio.addEventListener("play", handlePlay);
-    audio.addEventListener("pause", handlePause);
-    audio.addEventListener("ended", handleEnded);
-    return () => {
-      audio.removeEventListener("play", handlePlay);
-      audio.removeEventListener("pause", handlePause);
-      audio.removeEventListener("ended", handleEnded);
-    };
-  }, [queue, currentTrackId]);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    return () => {
-      if (audio) {
-        audio.pause();
-        audio.src = "";
-      }
-    };
-  }, []);
 
   return (
     <div className="flow-page__tracks">
-      <div className="flow-page__tracks-player">
-        <div className="flow-page__tracks-player-center">
+      <div className="flow-page__tracks-toolbar">
+        <div className="flow-page__tracks-toolbar-start">
           <button
-            onClick={handlePrevious}
-            className="btn btn-secondary btn-sm btn-icon"
-            disabled={playableTracks.length === 0}
-            aria-label="Previous track"
-          >
-            <SkipBack className="artist-icon-sm" />
-          </button>
-          <button
+            type="button"
             onClick={handlePrimaryPlay}
-            className="btn btn-primary btn-sm btn-icon"
+            className="btn btn-primary btn-round-lg"
             disabled={playableTracks.length === 0}
-            aria-label={isPlaying ? "Pause playback" : "Start playback"}
+            aria-label={isPlaylistPlaying ? "Pause playback" : "Play all tracks"}
           >
-            {isPlaying ? <Pause className="artist-icon-sm" /> : <Play className="artist-icon-sm" />}
-          </button>
-          <button
-            onClick={handleNext}
-            className="btn btn-secondary btn-sm btn-icon"
-            disabled={playableTracks.length === 0}
-            aria-label="Next track"
-          >
-            <SkipForward className="artist-icon-sm" />
-          </button>
-          <button
-            onClick={() => setIsShuffleEnabled((prev) => !prev)}
-            className={`btn btn-secondary btn-sm btn-icon flow-page__tracks-player-shuffle${isShuffleEnabled ? " is-active" : ""}`}
-            aria-label={isShuffleEnabled ? "Disable shuffle" : "Enable shuffle"}
-          >
-            <Shuffle className="artist-icon-sm" />
-          </button>
-        </div>
-        <div className="flow-page__tracks-player-side">
-          {headerActions}
-          <button
-            onClick={handleToggleMute}
-            className="btn btn-ghost btn-icon btn-xs"
-            aria-label={volume <= 0 ? "Unmute" : "Mute"}
-          >
-            {volume <= 0 ? (
-              <VolumeX className="artist-icon-sm" />
+            {isPlaylistPlaying ? (
+              <Pause className="artist-icon-md" />
             ) : (
-              <Volume2 className="artist-icon-sm" />
+              <Play className="artist-icon-md" />
             )}
           </button>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            value={volume}
-            onChange={(event) => handleVolumeChange(event.target.value)}
-            className="volume-slider flow-page__volume-slider"
-            aria-label="Track volume"
-          />
+          <button
+            type="button"
+            onClick={handleShufflePlay}
+            className={`btn btn-secondary btn-round-lg flow-page__tracks-toolbar-shuffle${isShuffleEnabled ? " is-active" : ""}`}
+            disabled={playableTracks.length === 0}
+            aria-label="Shuffle and play"
+          >
+            <Shuffle className="artist-icon-md" />
+          </button>
         </div>
+        {headerActions ? (
+          <div className="flow-page__tracks-toolbar-actions">{headerActions}</div>
+        ) : null}
       </div>
 
       <div className="flow-page__tracks-body">
@@ -2557,7 +2390,7 @@ export function FlowTracksPanel({
                   (track.status === "done" || track.status === "failed");
                 const isReSearching = reSearchingTrackIds[track.id] === true;
                 const isDeleting = deletingTrackId === track.id;
-                const isCurrent = track.id === currentTrackId;
+                const isCurrent = track.id === currentTrackId && isCurrentPlaying;
                 return (
                   <tr
                     key={track.id}
@@ -2574,12 +2407,12 @@ export function FlowTracksPanel({
                           className="flow-page__tracks-table-index-play btn btn-secondary btn-icon btn-xs"
                           disabled={!canPlay}
                           aria-label={
-                            isCurrent && isPlaying
+                            isCurrent
                               ? `Pause ${track.trackName}`
                               : `Play ${track.trackName}`
                           }
                         >
-                          {isCurrent && isPlaying ? (
+                          {isCurrent ? (
                             <Pause className="artist-icon-xs" />
                           ) : (
                             <Play className="artist-icon-xs" />
@@ -2681,7 +2514,6 @@ export function FlowTracksPanel({
           </table>
         )}
       </div>
-      <audio ref={audioRef} preload="metadata" />
     </div>
   );
 }
@@ -3053,6 +2885,11 @@ export function SharedPlaylistCard({
               emptyMessage="No tracks in this static playlist yet."
               editable={false}
               hideFailedTracks={true}
+              playbackSource={{
+                type: "playlist",
+                id: playlist.id,
+                label: playlist.name,
+              }}
               headerActions={
                 <button
                   type="button"
