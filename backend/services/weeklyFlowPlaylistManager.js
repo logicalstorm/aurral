@@ -8,18 +8,17 @@ import {
   writePlaylistArtworkSidecar,
   writePlaylistArtworkWebpFromBuffer,
 } from "./playlistArtwork.js";
+import { resolveWeeklyFlowRoot } from "./weeklyFlowPaths.js";
 
 const ARTWORK_FILE_EXTENSIONS = [".webp", ".png"];
 const ARTWORK_SUPPRESS_SUFFIX = ".no-artwork";
 
 export class WeeklyFlowPlaylistManager {
   constructor(
-    weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER || "/app/downloads",
+    weeklyFlowRoot = resolveWeeklyFlowRoot(),
     { triggerEnsureOnInit = process.env.NODE_ENV !== "test" } = {},
   ) {
-    this.weeklyFlowRoot = path.isAbsolute(weeklyFlowRoot)
-      ? weeklyFlowRoot
-      : path.resolve(process.cwd(), weeklyFlowRoot);
+    this.weeklyFlowRoot = resolveWeeklyFlowRoot(weeklyFlowRoot);
     this.libraryRoot = path.join(this.weeklyFlowRoot, "aurral-weekly-flow");
     this.navidromeClient = null;
     this._navidromeConfigKey = "";
