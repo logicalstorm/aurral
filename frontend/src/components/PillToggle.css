@@ -99,8 +99,3 @@
   opacity: 0.5;
 }
 
-@media (max-width: 419px) {
-  .pill-toggle--flow-compact {
-    --w: 38px;
-  }
-}
