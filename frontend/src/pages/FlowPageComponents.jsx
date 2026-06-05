@@ -30,6 +30,7 @@ import {
   ChevronDown,
   RefreshCw,
   MoreHorizontal,
+  Save,
   X,
 } from "lucide-react";
 import PillToggle from "../components/PillToggle";
@@ -3225,139 +3226,6 @@ export function FlowWorkerSettingsModal({
   onRotateSoulseekCredential,
   onSave,
 }) {
-  const [hoveredConcurrencyIndex, setHoveredConcurrencyIndex] = useState(null);
-  const [hoveredFormatIndex, setHoveredFormatIndex] = useState(null);
-  const concurrencyTabsRef = useRef(null);
-  const concurrencyActiveBubbleRef = useRef(null);
-  const concurrencyHoverBubbleRef = useRef(null);
-  const concurrencyOptionRefs = useRef({});
-  const formatTabsRef = useRef(null);
-  const formatActiveBubbleRef = useRef(null);
-  const formatHoverBubbleRef = useRef(null);
-  const formatOptionRefs = useRef({});
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const updateConcurrencyActiveBubble = () => {
-      if (!concurrencyTabsRef.current || !concurrencyActiveBubbleRef.current) {
-        return;
-      }
-      const activeIndex = FLOW_WORKER_CONCURRENCY_OPTIONS.findIndex(
-        (value) => value === settings.concurrency,
-      );
-      if (activeIndex === -1) {
-        concurrencyActiveBubbleRef.current.style.opacity = "0";
-        return;
-      }
-      const activeOptionEl = concurrencyOptionRefs.current[activeIndex];
-      if (!activeOptionEl) {
-        setTimeout(updateConcurrencyActiveBubble, 50);
-        return;
-      }
-      const tabsRect = concurrencyTabsRef.current.getBoundingClientRect();
-      const tabRect = activeOptionEl.getBoundingClientRect();
-      concurrencyActiveBubbleRef.current.style.left = `${tabRect.left - tabsRect.left}px`;
-      concurrencyActiveBubbleRef.current.style.top = `${tabRect.top - tabsRect.top}px`;
-      concurrencyActiveBubbleRef.current.style.width = `${tabRect.width}px`;
-      concurrencyActiveBubbleRef.current.style.height = `${tabRect.height}px`;
-      concurrencyActiveBubbleRef.current.style.opacity = "1";
-    };
-    const timeoutId = setTimeout(updateConcurrencyActiveBubble, 10);
-    window.addEventListener("resize", updateConcurrencyActiveBubble);
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener("resize", updateConcurrencyActiveBubble);
-    };
-  }, [isOpen, settings.concurrency]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const updateConcurrencyHoverBubble = () => {
-      if (!concurrencyTabsRef.current || !concurrencyHoverBubbleRef.current) {
-        return;
-      }
-      if (hoveredConcurrencyIndex === null) {
-        concurrencyHoverBubbleRef.current.style.left = "0px";
-        concurrencyHoverBubbleRef.current.style.top = "0px";
-        concurrencyHoverBubbleRef.current.style.width = "100%";
-        concurrencyHoverBubbleRef.current.style.height = "100%";
-        concurrencyHoverBubbleRef.current.style.opacity = "0.6";
-        return;
-      }
-      const hoveredOptionEl = concurrencyOptionRefs.current[hoveredConcurrencyIndex];
-      if (!hoveredOptionEl) return;
-      const tabsRect = concurrencyTabsRef.current.getBoundingClientRect();
-      const tabRect = hoveredOptionEl.getBoundingClientRect();
-      concurrencyHoverBubbleRef.current.style.left = `${tabRect.left - tabsRect.left}px`;
-      concurrencyHoverBubbleRef.current.style.top = `${tabRect.top - tabsRect.top}px`;
-      concurrencyHoverBubbleRef.current.style.width = `${tabRect.width}px`;
-      concurrencyHoverBubbleRef.current.style.height = `${tabRect.height}px`;
-      concurrencyHoverBubbleRef.current.style.opacity = "1";
-    };
-    updateConcurrencyHoverBubble();
-  }, [isOpen, hoveredConcurrencyIndex]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const updateFormatActiveBubble = () => {
-      if (!formatTabsRef.current || !formatActiveBubbleRef.current) {
-        return;
-      }
-      const activeIndex = FLOW_WORKER_FORMAT_OPTIONS.findIndex(
-        (option) => option.id === settings.preferredFormat,
-      );
-      if (activeIndex === -1) {
-        formatActiveBubbleRef.current.style.opacity = "0";
-        return;
-      }
-      const activeOptionEl = formatOptionRefs.current[activeIndex];
-      if (!activeOptionEl) {
-        setTimeout(updateFormatActiveBubble, 50);
-        return;
-      }
-      const tabsRect = formatTabsRef.current.getBoundingClientRect();
-      const tabRect = activeOptionEl.getBoundingClientRect();
-      formatActiveBubbleRef.current.style.left = `${tabRect.left - tabsRect.left}px`;
-      formatActiveBubbleRef.current.style.top = `${tabRect.top - tabsRect.top}px`;
-      formatActiveBubbleRef.current.style.width = `${tabRect.width}px`;
-      formatActiveBubbleRef.current.style.height = `${tabRect.height}px`;
-      formatActiveBubbleRef.current.style.opacity = "1";
-    };
-    const timeoutId = setTimeout(updateFormatActiveBubble, 10);
-    window.addEventListener("resize", updateFormatActiveBubble);
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener("resize", updateFormatActiveBubble);
-    };
-  }, [isOpen, settings.preferredFormat]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const updateFormatHoverBubble = () => {
-      if (!formatTabsRef.current || !formatHoverBubbleRef.current) {
-        return;
-      }
-      if (hoveredFormatIndex === null) {
-        formatHoverBubbleRef.current.style.left = "0px";
-        formatHoverBubbleRef.current.style.top = "0px";
-        formatHoverBubbleRef.current.style.width = "100%";
-        formatHoverBubbleRef.current.style.height = "100%";
-        formatHoverBubbleRef.current.style.opacity = "0.6";
-        return;
-      }
-      const hoveredOptionEl = formatOptionRefs.current[hoveredFormatIndex];
-      if (!hoveredOptionEl) return;
-      const tabsRect = formatTabsRef.current.getBoundingClientRect();
-      const tabRect = hoveredOptionEl.getBoundingClientRect();
-      formatHoverBubbleRef.current.style.left = `${tabRect.left - tabsRect.left}px`;
-      formatHoverBubbleRef.current.style.top = `${tabRect.top - tabsRect.top}px`;
-      formatHoverBubbleRef.current.style.width = `${tabRect.width}px`;
-      formatHoverBubbleRef.current.style.height = `${tabRect.height}px`;
-      formatHoverBubbleRef.current.style.opacity = "1";
-    };
-    updateFormatHoverBubble();
-  }, [isOpen, hoveredFormatIndex]);
-
   if (!isOpen) return null;
 
   const credentialUsername = String(soulseekCredential?.username || "").trim();
@@ -3365,86 +3233,75 @@ export function FlowWorkerSettingsModal({
 
   return (
     <div className="artist-modal-backdrop" onClick={onCancel}>
-      <div className="flow-page__worker-modal" onClick={(e) => e.stopPropagation()}>
-        <h3 className="flow-page__worker-modal-title">Worker Settings</h3>
+      <div
+        className="settings-page__modal settings-page__modal--wide flow-page__worker-modal"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-labelledby="worker-settings-title"
+        aria-modal="true"
+      >
+        <div className="settings-page__modal-header settings-page__modal-header--spaced">
+          <h3 id="worker-settings-title" className="settings-page__modal-title">
+            Worker Settings
+          </h3>
+        </div>
+
         <div className="flow-page__worker-fields">
-          <div className="flow-page__worker-section">
-            <div className="flow-page__worker-section-row">
-              <div className="flow-page__field">
-                <label className="flow-page__field-label">
-                  Soulseek Account
-                </label>
-                <div className="flow-page__worker-section-value">
-                  {credentialUsername || "Unavailable"}
-                </div>
+          <div className="flow-page__worker-account">
+            <div className="flow-page__field">
+              <label className="flow-page__field-label">Soulseek Account</label>
+              <div className="flow-page__worker-account-value">
+                {credentialUsername || "Unavailable"}
               </div>
-              <button
-                type="button"
-                onClick={onRotateSoulseekCredential}
-                disabled={!canRotate || rotatingSoulseekCredential}
-                className="btn btn-secondary btn-icon"
-                title={
-                  canRotate
-                    ? "Rotate Soulseek account now"
-                    : "Soulseek account cannot be rotated here"
-                }
-                aria-label="Rotate Soulseek account now"
-              >
-                <RefreshCw
-                  className={`artist-icon-sm${rotatingSoulseekCredential ? " animate-spin" : ""}`}
-                />
-              </button>
             </div>
+            <button
+              type="button"
+              onClick={onRotateSoulseekCredential}
+              disabled={!canRotate || rotatingSoulseekCredential}
+              className="btn btn-secondary btn-icon flow-page__worker-rotate"
+              title={
+                canRotate
+                  ? "Rotate Soulseek account now"
+                  : "Soulseek account cannot be rotated here"
+              }
+              aria-label="Rotate Soulseek account now"
+            >
+              <RefreshCw
+                className={`artist-icon-sm${rotatingSoulseekCredential ? " animate-spin" : ""}`}
+              />
+            </button>
           </div>
+
           <div className="flow-page__worker-fields-split">
             <div className="flow-page__field">
               <label className="flow-page__field-label">
                 Download Concurrency
               </label>
               <div
-                ref={concurrencyTabsRef}
-                className="flow-page__segmented"
+                className="artist-segmented flow-page__worker-segmented"
                 role="radiogroup"
                 aria-label="Download concurrency"
               >
-                <div
-                  ref={concurrencyActiveBubbleRef}
-                  className="flow-page__segmented-bubble flow-page__segmented-bubble--active flow-page__segmented-bubble--initial"
-                />
-                <div
-                  ref={concurrencyHoverBubbleRef}
-                  className="flow-page__segmented-bubble flow-page__segmented-bubble--hover"
-                />
-                <div
-                  className="flow-page__segmented-options"
-                  onMouseLeave={() => setHoveredConcurrencyIndex(null)}
-                >
-                  {FLOW_WORKER_CONCURRENCY_OPTIONS.map((value, index) => (
-                    <button
-                      key={value}
-                      ref={(el) => {
-                        if (el) concurrencyOptionRefs.current[index] = el;
-                      }}
-                      type="button"
-                      role="radio"
-                      aria-checked={settings.concurrency === value}
-                      onMouseEnter={() => setHoveredConcurrencyIndex(index)}
-                      onClick={() =>
-                        onChange((prev) => ({ ...prev, concurrency: value }))
-                      }
-                      className="flow-page__segmented-option"
-                    >
-                      {value}
-                    </button>
-                  ))}
-                </div>
+                {FLOW_WORKER_CONCURRENCY_OPTIONS.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={settings.concurrency === value}
+                    className={`artist-segmented-button${settings.concurrency === value ? " is-active" : ""}`}
+                    onClick={() =>
+                      onChange((prev) => ({ ...prev, concurrency: value }))
+                    }
+                  >
+                    {value}
+                  </button>
+                ))}
               </div>
             </div>
+
             <div className="flow-page__field">
-              <label className="flow-page__field-label">
-                Retry Cycle
-              </label>
-              <div className="flow-page__worker-select-wrap">
+              <label className="flow-page__field-label">Retry Cycle</label>
+              <div className="artist-modal-field aurral-radius-round">
                 <select
                   value={settings.retryCycleMinutes}
                   onChange={(event) =>
@@ -3453,65 +3310,40 @@ export function FlowWorkerSettingsModal({
                       retryCycleMinutes: Number(event.target.value),
                     }))
                   }
-                  className="flow-page__worker-select"
+                  className="artist-modal-select"
                 >
                   {FLOW_WORKER_RETRY_CYCLE_OPTIONS.map((option) => (
-                    <option
-                      key={option.minutes}
-                      value={option.minutes}
-                    >
+                    <option key={option.minutes} value={option.minutes}>
                       {option.label}
                     </option>
                   ))}
                 </select>
-                <ChevronDown className="flow-page__worker-select-icon" />
               </div>
             </div>
           </div>
+
           <div className="flow-page__field">
-            <label className="flow-page__field-label">
-              Preferred Format
-            </label>
+            <label className="flow-page__field-label">Preferred Format</label>
             <div className="flow-page__worker-format-row">
-              <div
-                ref={formatTabsRef}
-                className="flow-page__segmented flow-page__segmented--wide"
-              >
-                <div
-                  ref={formatActiveBubbleRef}
-                  className="flow-page__segmented-bubble flow-page__segmented-bubble--active flow-page__segmented-bubble--initial"
-                />
-                <div
-                  ref={formatHoverBubbleRef}
-                  className="flow-page__segmented-bubble flow-page__segmented-bubble--hover"
-                />
-                <div
-                  className="flow-page__segmented-options"
-                  onMouseLeave={() => setHoveredFormatIndex(null)}
-                >
-                  {FLOW_WORKER_FORMAT_OPTIONS.map((option, index) => (
-                    <button
-                      key={option.id}
-                      ref={(el) => {
-                        if (el) formatOptionRefs.current[index] = el;
-                      }}
-                      type="button"
-                      onMouseEnter={() => setHoveredFormatIndex(index)}
-                      onClick={() =>
-                        onChange((prev) => ({
-                          ...prev,
-                          preferredFormat: option.id,
-                        }))
-                      }
-                      className="flow-page__segmented-option"
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
+              <div className="artist-segmented flow-page__worker-segmented flow-page__worker-segmented--wide">
+                {FLOW_WORKER_FORMAT_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={`artist-segmented-button${settings.preferredFormat === option.id ? " is-active" : ""}`}
+                    onClick={() =>
+                      onChange((prev) => ({
+                        ...prev,
+                        preferredFormat: option.id,
+                      }))
+                    }
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
-              <div className="flow-page__strict-toggle">
-                <span className="flow-page__strict-toggle-label">Strict</span>
+              <div className="flow-page__worker-strict">
+                <span className="flow-page__worker-strict-label">Strict</span>
                 <PillToggle
                   checked={settings.preferredFormatStrict === true}
                   onChange={(event) => {
@@ -3525,11 +3357,10 @@ export function FlowWorkerSettingsModal({
               </div>
             </div>
           </div>
+
           <div className="flow-page__field">
-            <label className="flow-page__field-label">
-              Existing Files
-            </label>
-            <div className="flow-page__worker-select-wrap">
+            <label className="flow-page__field-label">Existing Files</label>
+            <div className="artist-modal-field aurral-radius-round">
               <select
                 value={settings.existingFileMode || "hardlink"}
                 onChange={(event) =>
@@ -3538,37 +3369,41 @@ export function FlowWorkerSettingsModal({
                     existingFileMode: event.target.value,
                   }))
                 }
-                className="flow-page__worker-select"
+                className="artist-modal-select"
                 title="How generated playlists reuse existing Aurral or Lidarr files"
               >
                 {FLOW_WORKER_EXISTING_FILE_OPTIONS.map((option) => (
-                  <option
-                    key={option.id}
-                    value={option.id}
-                  >
+                  <option key={option.id} value={option.id}>
                     {option.label}
                   </option>
                 ))}
               </select>
-              <ChevronDown className="flow-page__worker-select-icon" />
             </div>
           </div>
         </div>
-        <div className="artist-modal__actions">
+
+        <div className="settings-page__modal-actions">
           <button
+            type="button"
             onClick={onCancel}
             className="btn btn-secondary"
             disabled={saving || rotatingSoulseekCredential}
           >
             Cancel
           </button>
-          <FlipSaveButton
-            disabled={!hasChanges}
-            saving={saving}
+          <button
+            type="button"
             onClick={onSave}
-            label="Save"
-            savedLabel="Saved"
-          />
+            className="btn btn-primary"
+            disabled={!hasChanges || saving || rotatingSoulseekCredential}
+          >
+            {saving ? (
+              <Loader2 className="artist-icon-xs animate-spin" />
+            ) : (
+              <Save className="artist-icon-xs" />
+            )}
+            {saving ? "Saving..." : "Save"}
+          </button>
         </div>
       </div>
     </div>
