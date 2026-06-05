@@ -27,6 +27,7 @@ const {
   createPlaylistFileEntry,
   repairCompletedTrackLink,
   repairReusableTrackLinks,
+  pathsShareDevice,
 } = reuseModule;
 
 const weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER;
@@ -205,6 +206,58 @@ test("repairCompletedTrackLink skips tracks already linked to the reusable sourc
 
   assert.equal(result.repaired, false);
   assert.equal(result.reason, "Already linked to reusable source");
+});
+
+test("pathsShareDevice returns true for files in the same directory", async () => {
+  const root = path.join(weeklyFlowRoot, "shared-device");
+  const left = path.join(root, "source.flac");
+  const right = path.join(root, "target.flac");
+  await fs.mkdir(root, { recursive: true });
+  await fs.writeFile(left, "audio");
+
+  assert.equal(await pathsShareDevice(left, right), true);
+});
+
+test("repairCompletedTrackLink skips hardlink repair across filesystems", async () => {
+  const track = {
+    artistName: "Artist",
+    trackName: "Song",
+    albumName: "Album",
+  };
+  const sourcePath = path.join(weeklyFlowRoot, "lidarr", "Song.flac");
+  const playlistPath = path.join(
+    weeklyFlowRoot,
+    "aurral-weekly-flow",
+    "flow-playlist",
+    "Song.flac",
+  );
+  await fs.mkdir(path.dirname(sourcePath), { recursive: true });
+  await fs.mkdir(path.dirname(playlistPath), { recursive: true });
+  await fs.writeFile(sourcePath, "source-audio");
+  await fs.writeFile(playlistPath, "playlist-audio");
+  const jobId = downloadTracker.addJob(track, "flow-playlist");
+  downloadTracker.setDone(jobId, playlistPath, track.albumName);
+
+  const result = await repairCompletedTrackLink(
+    downloadTracker.getJob(jobId),
+    {
+      existingFileMode: "hardlink",
+      weeklyFlowRoot,
+      deviceCheck: async () => false,
+      resolveSource: async () => ({
+        source: {
+          sourceType: "lidarr",
+          sourcePath,
+          albumName: track.albumName,
+        },
+        reason: null,
+      }),
+    },
+  );
+
+  assert.equal(result.repaired, false);
+  assert.equal(result.reason, "Hardlink unavailable across filesystems");
+  assert.equal(await fs.readFile(playlistPath, "utf8"), "playlist-audio");
 });
 
 test("repairReusableTrackLinks does nothing when reuse is disabled", async () => {

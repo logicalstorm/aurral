@@ -19,6 +19,7 @@ import {
   repairReusableTrackLinks,
   reuseTrackForPlaylist,
 } from "./weeklyFlowFileReuse.js";
+import { resolveWeeklyFlowRoot } from "./weeklyFlowPaths.js";
 
 const DEFAULT_CONCURRENCY = 3;
 const MIN_CONCURRENCY = 1;
@@ -61,11 +62,9 @@ const PLAYLIST_MUTATION_CODE = "PLAYLIST_MUTATION_IN_PROGRESS";
 
 export class WeeklyFlowWorker {
   constructor(
-    weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER || "/app/downloads",
+    weeklyFlowRoot = resolveWeeklyFlowRoot(),
   ) {
-    this.weeklyFlowRoot = path.isAbsolute(weeklyFlowRoot)
-      ? weeklyFlowRoot
-      : path.resolve(process.cwd(), weeklyFlowRoot);
+    this.weeklyFlowRoot = resolveWeeklyFlowRoot(weeklyFlowRoot);
     this.running = false;
     this.activeCount = 0;
     this.lastFallbackSweepAt = 0;
