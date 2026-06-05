@@ -680,7 +680,7 @@ const ArtistCard = memo(
       <div className="artist-discover-card">
         <div
           onClick={handleClick}
-          className={`artist-discover-card__cover ${hasValidMbid ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
+          className={`artist-discover-card__cover${hasValidMbid ? "" : " is-disabled"}`}
         >
           <ArtistImage
             src={artist.image || artist.imageUrl}
@@ -697,7 +697,7 @@ const ArtistCard = memo(
             <div className="artist-card-title-row--discover">
               <h3
                 onClick={handleClick}
-                className={`artist-card-title--discover ${hasValidMbid ? "" : "cursor-not-allowed opacity-75"}`}
+                className={`artist-card-title--discover${hasValidMbid ? "" : " is-disabled"}`}
                 title={artist.name}
               >
                 {artist.name}
@@ -939,7 +939,7 @@ const AlbumCard = memo(
       <div className="artist-discover-card">
         <div
           onClick={handleClick}
-          className={`artist-discover-card__cover ${hasValidMbid ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
+          className={`artist-discover-card__cover${hasValidMbid ? "" : " is-disabled"}`}
         >
           {coverUrl ? (
             <img
@@ -961,7 +961,7 @@ const AlbumCard = memo(
             <div className="artist-card-title-row--discover">
               <h3
                 onClick={handleClick}
-                className={`artist-card-title--discover ${hasValidMbid ? "" : "cursor-not-allowed opacity-75"}`}
+                className={`artist-card-title--discover${hasValidMbid ? "" : " is-disabled"}`}
                 title={album.albumName}
               >
                 {album.albumName}
@@ -2408,7 +2408,7 @@ function DiscoverPage() {
             </button>
           </div>
           {zipModeActive && (
-            <div className="relative">
+            <div className="discover-page__zip-editor-wrap">
               <button
                 type="button"
                 onClick={() => {
@@ -2913,7 +2913,7 @@ function DiscoverPage() {
             {topGenres.length > 0 && (
               <div>
                 <h3 className="artist-discover-hero__tags-section-title">
-                  Top Tags
+                  Top tags:
                 </h3>
                 <div className="artist-tag-list--discover">
                   {topGenres.slice(0, 30).map((genre, i) => (

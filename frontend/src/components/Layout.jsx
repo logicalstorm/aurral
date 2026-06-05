@@ -208,7 +208,7 @@ function Layout({ children, appVersion }) {
               sidebarMode === "icons" ? "Expand sidebar" : "Collapse to icons"
             }
           >
-            <Menu className="w-5 h-5" />
+            <Menu aria-hidden="true" />
           </button>
 
           <GlobalSearch />
@@ -249,11 +249,11 @@ function Layout({ children, appVersion }) {
           <>
             <button
               type="button"
-              className="app-mobile-backdrop md:hidden"
+              className="app-mobile-backdrop app-mobile-only"
               onClick={() => setIsMobileMenuOpen(false)}
               aria-label="Close navigation menu"
             />
-            <div className="app-mobile-menu md:hidden">
+            <div className="app-mobile-menu app-mobile-only">
               <nav className="app-mobile-menu__nav">
                 {mobileOverflowItems.map((item) => {
                   const Icon = item.icon;
@@ -264,7 +264,7 @@ function Layout({ children, appVersion }) {
                       to={item.path}
                       className={`app-mobile-menu__item${active ? " is-active" : ""}`}
                     >
-                      <Icon className="h-4 w-4" />
+                      <Icon aria-hidden="true" />
                       <span>{item.label}</span>
                     </Link>
                   );
@@ -278,7 +278,7 @@ function Layout({ children, appVersion }) {
                     }}
                     className="app-mobile-menu__item"
                   >
-                    <LogOut className="h-4 w-4" />
+                    <LogOut aria-hidden="true" />
                     <span>Log out</span>
                   </button>
                 )}
@@ -288,7 +288,7 @@ function Layout({ children, appVersion }) {
         )}
 
         <nav
-          className="app-mobile-nav md:hidden"
+          className="app-mobile-nav app-mobile-only"
           aria-label="Mobile navigation"
         >
           <div className="app-mobile-nav__grid">
@@ -301,7 +301,7 @@ function Layout({ children, appVersion }) {
                   to={item.path}
                   className={`app-mobile-nav__item${active ? " is-active" : ""}`}
                 >
-                  <Icon className="h-6 w-6" />
+                  <Icon aria-hidden="true" />
                   <span>{item.label}</span>
                 </Link>
               );
@@ -318,7 +318,7 @@ function Layout({ children, appVersion }) {
               aria-label="More navigation options"
               aria-expanded={isMobileMenuOpen}
             >
-              <Ellipsis className="h-6 w-6" />
+              <Ellipsis aria-hidden="true" />
               <span>More</span>
             </button>
           </div>

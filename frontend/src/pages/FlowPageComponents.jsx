@@ -36,6 +36,7 @@ import PillToggle from "../components/PillToggle";
 import FlipSaveButton from "../components/FlipSaveButton";
 import { useSharedVolume } from "../hooks/useSharedVolume";
 import { TAG_COLORS } from "./ArtistDetails/constants";
+import { getTagColor } from "./ArtistDetails/utils";
 
 const SOURCE_MIX_COLORS = {
   discover: TAG_COLORS[10],
@@ -223,9 +224,9 @@ export function MixSlider({
     }));
 
   return (
-    <div className="grid gap-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap gap-2">
+    <div className="flow-page__mix">
+      <div className="flow-page__mix-header">
+        <div className="flow-page__mix-toggles">
           {SOURCE_MIX_OPTIONS.map((option) => {
             const isActive = normalized[option.key] > 0;
             const isOnlyActive = isActive && activeKeys.length === 1;
@@ -240,24 +241,17 @@ export function MixSlider({
                   onChange(toggleSourceInMix(normalized, option.key, normalizeMixPercent))
                 }
                 disabled={isDisabled}
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                  isActive
-                    ? "text-[#141414]"
-                    : "border-white/10 bg-white/[0.035] text-[#9f9fa7] hover:bg-white/[0.07]"
-                } ${isDisabled ? "cursor-not-allowed opacity-50" : ""}`}
+                className={`flow-page__mix-toggle${isActive ? " is-active" : ""}${isDisabled ? " is-disabled" : ""}`}
                 style={
                   isActive
-                    ? {
-                        backgroundColor: SOURCE_MIX_COLORS[option.key],
-                        borderColor: SOURCE_MIX_COLORS[option.key],
-                      }
+                    ? { backgroundColor: SOURCE_MIX_COLORS[option.key] }
                     : undefined
                 }
                 aria-pressed={isActive}
                 title={disabledReason || undefined}
               >
                 <span>{option.label}</span>
-                <span className={isActive ? "text-black/65" : "text-[#76767d]"}>
+                <span className="flow-page__mix-toggle-state">
                   {disabledReason ? "Needs Last.fm" : isActive ? "On" : "Off"}
                 </span>
               </button>
@@ -265,24 +259,24 @@ export function MixSlider({
           })}
         </div>
         {trailingControl ? (
-          <div className="flex items-center gap-2 self-end sm:self-auto">
+          <div className="flow-page__mix-trailing">
             {trailingControl}
           </div>
         ) : null}
       </div>
       <div
         ref={barRef}
-        className="relative h-9 rounded-full border border-white/10 bg-white/5 select-none"
+        className="flow-page__mix-bar"
         style={{ touchAction: handles.length > 0 ? "none" : "auto" }}
       >
-        <div className="absolute inset-0 flex overflow-hidden rounded-full">
+        <div className="flow-page__mix-bar-inner">
           {SOURCE_MIX_OPTIONS.map((option) => {
             const percent = Number(normalized[option.key] || 0);
             const showLabel = percent >= labelMinPercent;
             return (
               <div
                 key={option.key}
-                className="h-full text-[10px] font-semibold text-black/70 flex items-center justify-center"
+                className="flow-page__mix-segment"
                 style={{
                   width: `${percent}%`,
                   backgroundColor: SOURCE_MIX_COLORS[option.key],
@@ -298,11 +292,11 @@ export function MixSlider({
             key={handle.key}
             type="button"
             onPointerDown={(event) => startDrag(event, handle.handleIndex)}
-            className="absolute top-0 h-full w-4 -ml-2 cursor-ew-resize z-10"
+            className="flow-page__mix-handle"
             style={{ left: `${handle.position}%` }}
             aria-label={handle.ariaLabel}
           >
-            <span className="absolute left-1/2 top-1 bottom-1 w-2 -translate-x-1/2 rounded-full bg-white/80" />
+            <span className="flow-page__mix-handle-thumb" />
           </button>
         ))}
       </div>
@@ -379,7 +373,6 @@ function CommaTokenInput({
   value,
   placeholder,
   onChange,
-  chipClassName,
 }) {
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef(null);
@@ -402,14 +395,14 @@ function CommaTokenInput({
 
   return (
     <div
-      className="min-h-10 w-full rounded-md border border-white/10 bg-[var(--aurral-surface)] px-3 py-2 text-sm text-white transition focus-within:border-[#90a07d] focus-within:ring-1 focus-within:ring-[#90a07d]"
+      className="flow-page__token-input"
       onClick={() => setIsFocused(true)}
     >
       {isFocused ? (
         <input
           ref={inputRef}
           type="text"
-          className="w-full bg-transparent text-sm text-white outline-none placeholder:text-[#6f6f76]"
+          className="flow-page__token-input-field"
           placeholder={placeholder}
           value={rawValue}
           onFocus={() => setIsFocused(true)}
@@ -427,20 +420,21 @@ function CommaTokenInput({
           }}
         />
       ) : (
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flow-page__token-input-chips">
           {committed.map((entry) => (
             <span
               key={`${placeholder}-${entry}`}
-              className={chipClassName}
+              className="flow-page__token-chip"
+              style={{ backgroundColor: getTagColor(entry) }}
             >
               {entry}
             </span>
           ))}
           {committed.length === 0 ? (
-            <span className="text-sm text-[#6f6f76]">{placeholder}</span>
+            <span className="flow-page__token-placeholder">{placeholder}</span>
           ) : null}
           {pending ? (
-            <span className="text-sm text-[#c9c9cf]">{pending}</span>
+            <span className="flow-page__token-pending">{pending}</span>
           ) : null}
         </div>
       )}
@@ -503,18 +497,18 @@ export function FlowFormFields({
   })();
 
   return (
-    <div className="grid gap-6">
-      <div className="grid gap-4 rounded-lg border border-white/10 bg-white/5 p-4">
-        <div className="grid gap-4 lg:grid-cols-[96px_minmax(0,1fr)_160px] lg:items-start">
-          <div className="grid content-start gap-2">
-            <label className="flex min-h-5 items-end text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
+    <div className="flow-page__form">
+      <div className="flow-page__form-section">
+        <div className="flow-page__form-grid flow-page__form-grid--schedule">
+          <div className="flow-page__field">
+            <label className="flow-page__field-label">
               Tracks
             </label>
             <input
               type="number"
               min="1"
               max="100"
-              className={`${inputClassName} w-[4.75rem] text-center sm:w-24 lg:text-left`}
+              className={`${inputClassName} flow-page__field-input--size`}
               value={draft.size}
               onChange={(event) => {
                 const value = event.target.value;
@@ -522,26 +516,22 @@ export function FlowFormFields({
               }}
             />
           </div>
-          <div className="grid content-start justify-start gap-2 lg:justify-center">
-            <label className="flex min-h-5 items-end justify-start text-xs uppercase tracking-wider text-[#8b8b90] font-medium lg:justify-center">
+          <div className="flow-page__field">
+            <label className="flow-page__field-label">
               Update Days
             </label>
-            <div className="inline-flex w-fit items-center gap-1.5 rounded-xl bg-black/10 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-2">
+            <div className="flow-page__weekday-grid">
               {WEEKDAY_OPTIONS.map((day) => {
                 const checked = scheduleDays.includes(day.id);
                 return (
                   <label
                     key={day.id}
-                    className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-semibold transition-colors cursor-pointer sm:h-10 sm:w-10 ${
-                      checked
-                        ? "bg-[#8f8f97] text-white"
-                        : "bg-[#15161a] text-[#a7aab5] hover:bg-[#202229] hover:text-[#dde1ea]"
-                    }`}
+                    className={`flow-page__weekday${checked ? " is-active" : ""}`}
                     title={day.full}
                   >
                     <input
                       type="checkbox"
-                      className="sr-only"
+                      className="flow-page__weekday-input"
                       checked={checked}
                       disabled={checked && scheduleDays.length === 1}
                       onChange={() =>
@@ -571,13 +561,13 @@ export function FlowFormFields({
               })}
             </div>
           </div>
-          <div className="grid content-start justify-start gap-2 lg:justify-self-end">
-              <label className="flex min-h-5 items-end text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
+          <div className="flow-page__field">
+              <label className="flow-page__field-label">
               Update Hour
               </label>
-              <div className="relative w-[6.75rem] sm:w-40">
+              <div className="flow-page__select-wrap">
                 <select
-                  className={`${inputClassName} w-full appearance-none pr-10`}
+                  className={`${inputClassName} flow-page__field-select`}
                   value={scheduleTime}
                   onChange={(event) =>
                     updateDraft((prev) => ({
@@ -592,20 +582,18 @@ export function FlowFormFields({
                     </option>
                   ))}
                 </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#b8b8bf]" />
+                <ChevronDown className="flow-page__select-icon" />
               </div>
             </div>
         </div>
       </div>
 
-      <div className="grid gap-3 rounded-lg border border-white/10 bg-white/5 p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] font-semibold">
-            Source Mix
-          </div>
+      <div className="flow-page__form-section">
+        <div className="flow-page__field-label flow-page__field-label--section">
+          Source Mix
         </div>
 
-        <div className="pt-1">
+        <div>
           <MixSlider
             mix={draft.mix}
             trackCounts={mixScaled}
@@ -619,11 +607,12 @@ export function FlowFormFields({
                     deepDive: !(prev?.deepDive === true),
                   }))
                 }
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                className={`flow-page__mix-toggle${draft.deepDive === true ? " is-active" : ""}${Object.keys(disabledSources || {}).length > 0 ? " is-disabled" : ""}`}
+                style={
                   draft.deepDive === true
-                    ? "border-[#d6d6db] bg-[#d6d6db] text-[#141414]"
-                    : "border-white/10 bg-white/[0.035] text-[#9f9fa7] hover:bg-white/[0.07]"
-                }`}
+                    ? { backgroundColor: "var(--aurral-gray-light)" }
+                    : undefined
+                }
                 aria-pressed={draft.deepDive === true}
                 disabled={Object.keys(disabledSources || {}).length > 0}
                 title={
@@ -634,7 +623,7 @@ export function FlowFormFields({
                 aria-label={`Deep Dive ${draft.deepDive === true ? "on" : "off"}. Deep Dive pulls tracks ranked 10 through 25 instead of the top 10.`}
               >
                 <span>Deep Dive</span>
-                <span className={draft.deepDive === true ? "text-black/65" : "text-[#76767d]"}>
+                <span className="flow-page__mix-toggle-state">
                   {draft.deepDive === true ? "On" : "Off"}
                 </span>
               </button>
@@ -648,36 +637,33 @@ export function FlowFormFields({
             normalizeMixPercent={normalizeMixPercent}
           />
           {Object.keys(disabledSources || {}).length > 0 ? (
-            <p className="text-xs text-amber-300">
+            <p className="flow-page__warning-text">
               Flow generation requires Last.fm for source selection in this version.
             </p>
           ) : null}
         </div>
       </div>
 
-      <div className={`grid gap-4 rounded-lg border border-white/10 bg-white/5 p-4 transition-opacity ${focusEnabled ? "" : "opacity-60"}`}>
-        <div className="flex items-center justify-between">
-          <div className="grid gap-1">
-            <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] font-semibold">
-              Focus Filters
-            </div>
-            {focusValidationError ? (
-              <div className="text-[11px] font-medium text-amber-300">
-                {focusValidationError}
-              </div>
-            ) : null}
+      <div className={`flow-page__form-section${focusEnabled ? "" : " flow-page__form-section--dimmed"}`}>
+        <div className="flow-page__field">
+          <div className="flow-page__field-label flow-page__field-label--section">
+            Focus Filters
           </div>
+          {focusValidationError ? (
+            <div className="flow-page__warning-text">
+              {focusValidationError}
+            </div>
+          ) : null}
         </div>
 
-        <div className="grid gap-4">
-          <div className="grid gap-1.5">
-            <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
+        <div className="flow-page__form-grid">
+          <div className="flow-page__field">
+            <label className="flow-page__field-label">
               Genre Tags (separate by comma)
             </label>
             <CommaTokenInput
               value={draft.includeTags}
               placeholder="lofi, indie"
-              chipClassName="rounded-full border border-[#90a07d]/35 bg-[#90a07d]/12 px-2.5 py-1 text-[11px] font-medium text-[#d7e0ce]"
               onChange={(nextValue) =>
                 updateDraft((prev) => ({
                   ...prev,
@@ -687,14 +673,13 @@ export function FlowFormFields({
             />
           </div>
 
-          <div className="grid gap-1.5">
-            <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
+          <div className="flow-page__field">
+            <label className="flow-page__field-label">
               Related Artists (separate by comma)
             </label>
             <CommaTokenInput
               value={draft.includeRelatedArtists}
               placeholder="artist a, artist b"
-              chipClassName="rounded-full border border-[#7aa2f7]/35 bg-[#7aa2f7]/12 px-2.5 py-1 text-[11px] font-medium text-[#d8e4ff]"
               onChange={(nextValue) =>
                 updateDraft((prev) => ({
                   ...prev,
@@ -706,25 +691,23 @@ export function FlowFormFields({
         </div>
       </div>
       
-      {errorMessage && <div className="text-xs text-red-400 font-medium">{errorMessage}</div>}
+      {errorMessage && <div className="flow-page__error-text">{errorMessage}</div>}
     </div>
   );
 }
 
 export function FlowPageHeader({ onNewFlow }) {
   return (
-    <div className="flex flex-col gap-4 mb-6 lg:flex-row lg:items-center lg:justify-between">
-      <div className="flex items-start gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-white">Flow</h1>
-        </div>
+    <div className="flow-page__page-header">
+      <div className="flow-page__page-header-row">
+        <h1 className="flow-page__page-title">Flow</h1>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flow-page__header-actions">
         <button
           onClick={onNewFlow}
           className="btn btn-primary btn-sm"
         >
-          <FilePlus2 className="w-4 h-4" />
+          <FilePlus2 className="artist-icon-sm" />
           New Flow
         </button>
       </div>
@@ -782,53 +765,55 @@ export function FlowStatusCards({
         : "badge-neutral";
 
   return (
-    <div className="mb-6 rounded-lg border border-white/5 bg-card p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-white">Worker Overview</h2>
+    <div className="flow-page__worker-card">
+      <div className="flow-page__worker-card-header">
+        <h2 className="flow-page__worker-card-title">Worker Overview</h2>
         <span className={`badge ${statusBadgeClass}`}>
           {statusLabel}
         </span>
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
+      <div className="flow-page__worker-summary">
         {workerRunning ? (
-          <Loader2 className="w-4 h-4 animate-spin text-[#9aa886]" />
+          <Loader2 className="flow-page__worker-summary-icon animate-spin" />
         ) : (
-          <Clock className="w-4 h-4 text-[#d0d0d4]" />
+          <Clock className="flow-page__worker-summary-icon flow-page__worker-summary-icon--idle" />
         )}
-        <span className="text-[#e3e3e7]">{summaryMessage}</span>
+        <span>{summaryMessage}</span>
       </div>
       {total > 0 ? (
-        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
-          <div
-            className="h-full rounded-full bg-[#9aa886] transition-all duration-300"
-            style={{ width: `${progressPct}%` }}
-          />
+        <div className="flow-page__progress">
+          <div className="flow-page__progress-bar">
+            <div
+              className="flow-page__progress-fill"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
         </div>
       ) : null}
-      <div className="mt-3 overflow-x-auto rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs">
-        <div className="flex min-w-max items-center gap-3 text-[#c1c1c3]">
-          <div className="flex items-center gap-2 whitespace-nowrap">
-            <span className="rounded bg-black/30 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#d0d0d4]">
+      <div className="flow-page__worker-stats">
+        <div className="flow-page__worker-stats-row">
+          <div className="flow-page__worker-stats-group">
+            <span className="flow-page__worker-stats-label">
               Flows
             </span>
-            <span>On <span className="text-white">{enabledCount}/{flowCount}</span></span>
-            <span className="text-white/25">•</span>
-            <span>Running <span className="text-white">{runningCount}</span></span>
-            <span className="text-white/25">•</span>
-            <span>Completed <span className="text-white">{completedCount}</span></span>
-            <span className="text-white/25">•</span>
-            <span>Idle <span className="text-white">{idleCount}</span></span>
+            <span>On <span className="flow-page__worker-stats-value">{enabledCount}/{flowCount}</span></span>
+            <span className="flow-page__card-meta-dot">•</span>
+            <span>Running <span className="flow-page__worker-stats-value">{runningCount}</span></span>
+            <span className="flow-page__card-meta-dot">•</span>
+            <span>Completed <span className="flow-page__worker-stats-value">{completedCount}</span></span>
+            <span className="flow-page__card-meta-dot">•</span>
+            <span>Idle <span className="flow-page__worker-stats-value">{idleCount}</span></span>
           </div>
-          <div className="h-4 w-px shrink-0 bg-white/15" />
-          <div className="flex items-center gap-2 whitespace-nowrap">
-            <span className="rounded bg-black/30 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#d0d0d4]">
+          <div className="flow-page__worker-stats-divider" />
+          <div className="flow-page__worker-stats-group">
+            <span className="flow-page__worker-stats-label">
               Tracks
             </span>
-            <span>Pending <span className="text-white">{pending}</span></span>
-            <span className="text-white/25">•</span>
-            <span>Downloading <span className="text-white">{downloading}</span></span>
-            <span className="text-white/25">•</span>
-            <span>Done <span className="text-white">{done}</span></span>
+            <span>Pending <span className="flow-page__worker-stats-value">{pending}</span></span>
+            <span className="flow-page__card-meta-dot">•</span>
+            <span>Downloading <span className="flow-page__worker-stats-value">{downloading}</span></span>
+            <span className="flow-page__card-meta-dot">•</span>
+            <span>Done <span className="flow-page__worker-stats-value">{done}</span></span>
           </div>
         </div>
       </div>
@@ -853,19 +838,21 @@ export function MoreMenu({ children, activeButtonClass = "btn-primary" }) {
   }, [isOpen]);
 
   return (
-    <div className={`relative ${isOpen ? "z-20" : "z-10"}`} ref={menuRef}>
+    <div className={`flow-page__menu-wrap${isOpen ? " is-open" : ""}`} ref={menuRef}>
       <button 
         type="button" 
         onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }} 
         className={`btn btn-sm btn--toolbar ${isOpen ? activeButtonClass : "btn-secondary"}`}
         aria-label="More options"
       >
-        <MoreHorizontal className="w-4 h-4" />
-        <span className="hidden sm:inline">More</span>
+        <MoreHorizontal className="artist-icon-sm" />
+        <span className="flow-page__btn-label--wide">More</span>
       </button>
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 z-30 flex w-48 flex-col rounded-md border border-[#3a3a44] bg-[var(--aurral-overlay)] py-1"
-             onClick={() => setIsOpen(false)}>
+        <div
+          className="artist-dropdown artist-dropdown--right"
+          onClick={() => setIsOpen(false)}
+        >
           {children}
         </div>
       )}
@@ -909,26 +896,23 @@ function TrackStatusBadge({ status, pendingDelete = false, compact = false }) {
     : isDownloaded
       ? "Downloaded"
       : "Not Downloaded";
+  const statusClass = pendingDelete
+    ? "flow-page__track-status--delete"
+    : isDownloaded
+      ? "flow-page__track-status--done"
+      : "flow-page__track-status--pending";
   return (
     <span
-      className={`inline-flex h-6 w-6 items-center justify-center rounded-full border sm:h-6 sm:w-6 ${
-        compact ? "h-4 w-4" : ""
-      } ${
-        pendingDelete
-          ? "border-[#6f5941] bg-[#3a3025] text-[#ddb98b]"
-          : isDownloaded
-          ? "border-[#35533a] bg-[#223124] text-[#7ee081]"
-          : "border-[#4b4231] bg-[#30281d] text-[#d8b16f]"
-      }`}
+      className={`flow-page__track-status ${statusClass}${compact ? " flow-page__track-status--compact" : ""}`}
       title={label}
       aria-label={label}
     >
       {pendingDelete ? (
-        <X className={compact ? "w-2.5 h-2.5" : "w-3.5 h-3.5"} />
+        <X className={`artist-icon-xs${compact ? " flow-page__track-status-icon--compact" : ""}`} />
       ) : isDownloaded ? (
-        <Check className={compact ? "w-2.5 h-2.5" : "w-3.5 h-3.5"} />
+        <Check className={`artist-icon-xs${compact ? " flow-page__track-status-icon--compact" : ""}`} />
       ) : (
-        <CircleDashed className={compact ? "w-2.5 h-2.5" : "w-3.5 h-3.5"} />
+        <CircleDashed className={`artist-icon-xs${compact ? " flow-page__track-status-icon--compact" : ""}`} />
       )}
     </span>
   );
@@ -1105,8 +1089,8 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
 
   if (loading) {
     return (
-      <div className="rounded-lg border border-white/10 bg-[#1f1f24] p-6 flex items-center gap-2 text-[#c1c1c3]">
-        <Loader2 className="w-4 h-4 animate-spin" />
+      <div className="flow-page__editor flow-page__tracks-loading">
+        <Loader2 className="artist-icon-sm animate-spin" />
         Loading tracks...
       </div>
     );
@@ -1114,33 +1098,33 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
 
   if (error) {
     return (
-      <div className="rounded-lg border border-white/10 bg-[#1f1f24] p-6 text-red-400 text-sm">
+      <div className="flow-page__editor flow-page__tracks-error">
         {error}
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg border border-white/10 bg-[#211f27] overflow-hidden">
-      <div className="border-b border-white/10 px-3 py-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-[#b7bbc7]">
+    <div className="flow-page__editor">
+      <div className="flow-page__editor-header">
+        <div className="flow-page__editor-meta">
           <span>{draftTracks.length} tracks</span>
           {missingCount > 0 ? (
             <>
-              <span className="text-white/25">•</span>
+              <span className="flow-page__card-meta-dot">•</span>
               <span>{missingCount} missing</span>
             </>
           ) : null}
           {pendingDeletionCount > 0 ? (
             <>
-              <span className="text-white/25">•</span>
-              <span className="text-[#d7b58a]">
+              <span className="flow-page__card-meta-dot">•</span>
+              <span className="flow-page__editor-meta-mark">
                 {pendingDeletionCount} marked for deletion
               </span>
             </>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flow-page__editor-actions">
           {headerActions}
           {missingCount > 0 ? (
             <button
@@ -1162,15 +1146,15 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
           </button>
         </div>
       </div>
-      <div className="overflow-auto max-h-[60vh]">
+      <div className="flow-page__editor-body">
         {visibleTracks.length === 0 ? (
-          <div className="p-6 text-sm text-[#c1c1c3]">
+          <div className="flow-page__editor-empty">
             {missingOnly ? "No missing tracks right now." : "No tracks in this playlist yet."}
           </div>
         ) : (
           <>
-            <div className="grid gap-2 p-3 sm:hidden">
-              <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 px-2.5 text-[10px] font-medium uppercase tracking-[0.16em] text-[#8b8b90]">
+            <div className="flow-page__editor-mobile">
+              <div className="flow-page__editor-mobile-header">
                 <div>Song</div>
                 <div>Artist</div>
                 <div>Album</div>
@@ -1181,19 +1165,19 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                 const isMarkedForDeletion = track.isMarkedForDeletion === true;
                 const showStaticValues = isLocked || isMarkedForDeletion;
                 return (
-                  <div key={track.rowId} className={isMarkedForDeletion ? "opacity-50" : ""}>
-                    <div className="rounded-lg border border-white/8 bg-[#1c1b22] p-2.5 text-[#d6d6d8]">
-                      <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-2">
-                        <div className="min-w-0">
+                  <div key={track.rowId} className={isMarkedForDeletion ? "flow-page__editor-table-row is-struck" : ""}>
+                    <div className="flow-page__editor-mobile-row">
+                      <div className="flow-page__editor-mobile-grid">
+                        <div className="flow-page__editor-mobile-cell">
                           {showStaticValues ? (
-                            <div className={`truncate text-sm ${isMarkedForDeletion ? "line-through" : ""}`}>
+                            <div className={`flow-page__editor-mobile-text${isMarkedForDeletion ? " is-struck" : ""}`}>
                               {track.trackName || "Untitled Song"}
                             </div>
                           ) : (
-                            <div className="grid gap-1">
+                            <div className="flow-page__editor-field-stack">
                               <input
                                 type="text"
-                                className="input input-xs h-8 w-full min-w-0 px-2 text-sm"
+                                className="input input-xs flow-page__editor-input"
                                 value={track.trackName}
                                 onChange={(event) =>
                                   updateTrack(track.rowId, "trackName", event.target.value)
@@ -1201,22 +1185,22 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                                 placeholder="Song name"
                               />
                               {track.error ? (
-                                <span className="text-[11px] text-[#d49c9c]">
+                                <span className="flow-page__editor-track-error">
                                   {track.error}
                                 </span>
                               ) : null}
                             </div>
                           )}
                         </div>
-                        <div className="min-w-0">
+                        <div className="flow-page__editor-mobile-cell">
                           {showStaticValues ? (
-                            <div className={`truncate text-sm ${isMarkedForDeletion ? "line-through" : ""}`}>
+                            <div className={`flow-page__editor-mobile-text${isMarkedForDeletion ? " is-struck" : ""}`}>
                               {track.artistName || "Unknown Artist"}
                             </div>
                           ) : (
                             <input
                               type="text"
-                              className="input input-xs h-8 w-full min-w-0 px-2 text-sm"
+                              className="input input-xs flow-page__editor-input"
                               value={track.artistName}
                               onChange={(event) =>
                                 updateTrack(track.rowId, "artistName", event.target.value)
@@ -1225,15 +1209,15 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                             />
                           )}
                         </div>
-                        <div className="min-w-0">
+                        <div className="flow-page__editor-mobile-cell">
                           {showStaticValues ? (
-                            <div className={`truncate text-sm ${isMarkedForDeletion ? "line-through" : ""}`}>
+                            <div className={`flow-page__editor-mobile-text${isMarkedForDeletion ? " is-struck" : ""}`}>
                               {track.albumName || "Unknown Album"}
                             </div>
                           ) : (
                             <input
                               type="text"
-                              className="input input-xs h-8 w-full min-w-0 px-2 text-sm"
+                              className="input input-xs flow-page__editor-input"
                               value={track.albumName}
                               onChange={(event) =>
                                 updateTrack(track.rowId, "albumName", event.target.value)
@@ -1242,7 +1226,7 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                             />
                           )}
                         </div>
-                        <div className="flex justify-end">
+                        <div className="flow-page__editor-actions-cell">
                           {isMarkedForDeletion ? (
                             <button
                               type="button"
@@ -1257,7 +1241,7 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                               onClick={() => toggleTrackDeletion(track.rowId)}
                               className="btn btn-ghost-danger btn-xs"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="artist-icon-xs" />
                             </button>
                           )}
                         </div>
@@ -1267,41 +1251,39 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                 );
               })}
             </div>
-            <table className="hidden w-full text-sm sm:table">
-              <thead className="sticky top-0 z-20 bg-[#1c1b22]">
-                <tr className="text-left text-[#8b8b90] uppercase text-xs tracking-wider">
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Song</th>
-                  <th className="px-3 py-2">Artist</th>
-                  <th className="px-3 py-2">Album</th>
-                  <th className="px-3 py-2">Actions</th>
+            <table className="flow-page__editor-table">
+              <thead className="flow-page__editor-table-head">
+                <tr>
+                  <th>Status</th>
+                  <th>Song</th>
+                  <th>Artist</th>
+                  <th>Album</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {visibleTracks.map((track, index) => {
+                {visibleTracks.map((track) => {
                   const isLocked = track.status === "done";
                   const isMarkedForDeletion = track.isMarkedForDeletion === true;
                   const showStaticValues = isLocked || isMarkedForDeletion;
                   return (
                     <tr
                       key={track.rowId}
-                      className={`border-t border-white/5 text-[#d6d6d8] ${
-                        index % 2 === 0 ? "bg-[#211f27]" : "bg-[#1c1b22]"
-                      } ${isMarkedForDeletion ? "opacity-50" : ""}`}
+                      className={`flow-page__editor-table-row${isMarkedForDeletion ? " is-struck" : ""}`}
                     >
-                      <td className="px-3 py-2 align-top">
+                      <td>
                         <TrackStatusBadge
                           status={track.status}
                           pendingDelete={isMarkedForDeletion}
                         />
                       </td>
-                      <td className="px-3 py-2 align-top">
+                      <td>
                         {showStaticValues ? (
-                          <div className={`min-w-[180px] ${isMarkedForDeletion ? "line-through" : ""}`}>
+                          <div className={`flow-page__editor-field-wide${isMarkedForDeletion ? " flow-page__editor-mobile-text is-struck" : ""}`}>
                             {track.trackName || "Untitled Song"}
                           </div>
                         ) : (
-                          <div className="grid gap-1 min-w-[180px]">
+                          <div className="flow-page__editor-field-stack flow-page__editor-field-wide">
                             <input
                               type="text"
                               className="input input-xs"
@@ -1312,22 +1294,22 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                               placeholder="Song name"
                             />
                             {track.error ? (
-                              <span className="text-[11px] text-[#d49c9c]">
+                              <span className="flow-page__editor-track-error">
                                 {track.error}
                               </span>
                             ) : null}
                           </div>
                         )}
                       </td>
-                      <td className="px-3 py-2 align-top">
+                      <td>
                         {showStaticValues ? (
-                          <div className={`min-w-[180px] ${isMarkedForDeletion ? "line-through" : ""}`}>
+                          <div className={`flow-page__editor-field-wide${isMarkedForDeletion ? " flow-page__editor-mobile-text is-struck" : ""}`}>
                             {track.artistName || "Unknown Artist"}
                           </div>
                         ) : (
                           <input
                             type="text"
-                            className="input input-xs min-w-[180px]"
+                            className="input input-xs flow-page__editor-field-wide"
                             value={track.artistName}
                             onChange={(event) =>
                               updateTrack(track.rowId, "artistName", event.target.value)
@@ -1336,15 +1318,15 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                           />
                         )}
                       </td>
-                      <td className="px-3 py-2 align-top">
+                      <td>
                         {showStaticValues ? (
-                          <div className={`min-w-[180px] ${isMarkedForDeletion ? "line-through" : ""}`}>
+                          <div className={`flow-page__editor-field-wide${isMarkedForDeletion ? " flow-page__editor-mobile-text is-struck" : ""}`}>
                             {track.albumName || "Unknown Album"}
                           </div>
                         ) : (
                           <input
                             type="text"
-                            className="input input-xs min-w-[180px]"
+                            className="input input-xs flow-page__editor-field-wide"
                             value={track.albumName}
                             onChange={(event) =>
                               updateTrack(track.rowId, "albumName", event.target.value)
@@ -1353,7 +1335,7 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                           />
                         )}
                       </td>
-                      <td className="px-3 py-2 align-top">
+                      <td>
                         {isMarkedForDeletion ? (
                           <button
                             type="button"
@@ -1368,7 +1350,7 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
                             onClick={() => toggleTrackDeletion(track.rowId)}
                             className="btn btn-ghost-danger btn-xs"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="artist-icon-xs" />
                           </button>
                         )}
                       </td>
@@ -1381,7 +1363,7 @@ export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrack
         )}
       </div>
       {editorError ? (
-        <div className="border-t border-white/10 px-3 py-2 text-xs text-red-400">
+        <div className="flow-page__editor-error">
           {editorError}
         </div>
       ) : null}
@@ -1399,17 +1381,16 @@ function PlaylistArtworkThumb({ artworkUrl, name }) {
   const fallbackLabel = String(name || "?").trim().charAt(0).toUpperCase() || "?";
 
   return (
-    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-[#1c1b22] min-[360px]:h-16 min-[360px]:w-16 sm:h-20 sm:w-20 sm:rounded-[1.25rem]">
+    <div className="flow-page__artwork">
       {!imageFailed && artworkUrl ? (
         <img
           src={artworkUrl}
           alt={`${name} cover`}
-          className="h-full w-full object-cover"
           loading="lazy"
           onError={() => setImageFailed(true)}
         />
       ) : (
-        <div className="flex h-full w-full items-center justify-center bg-white/5 text-lg font-semibold text-[#d2dac9]">
+        <div className="flow-page__artwork-fallback">
           {fallbackLabel}
         </div>
       )}
@@ -1600,45 +1581,45 @@ export function FlowCard({
   };
 
   return (
-    <div className="bg-card overflow-visible border border-white/5 -mx-4 rounded-none sm:mx-0 sm:rounded-lg">
-      <div className="p-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
+    <div className="flow-page__card">
+      <div className="flow-page__card-body">
         <div
-          className="min-w-0 flex-1 flex gap-3 sm:gap-4 cursor-pointer sm:cursor-default"
+          className="flow-page__card-main"
           onClick={handleMobileTrackToggle}
         >
-          <div className={enabled ? "" : "opacity-50"}>
+          <div className={enabled ? "" : "flow-page__card--dimmed"}>
             <PlaylistArtworkThumb artworkUrl={artworkUrl} name={flow.name} />
           </div>
-          <div className="min-w-0 flex-1 grid gap-2">
-            <div className="flex flex-col gap-2 min-[420px]:flex-row min-[420px]:items-start min-[420px]:justify-between">
-              <div className={enabled ? "" : "opacity-50"}>
-                <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
-                  <span className="rounded-full bg-black/25 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[#d2dac9]">
+          <div className="flow-page__card-content">
+            <div className="flow-page__card-top">
+              <div className={enabled ? "" : "flow-page__card--dimmed"}>
+                <div className="flow-page__card-badges">
+                  <span className="flow-page__badge flow-page__badge--type">
                     {typeLabel}
                   </span>
-                  <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-[#c6c6cb]">
+                  <span className="flow-page__badge flow-page__badge--count">
                     {flow.size} tracks
                   </span>
                   {ownerLabel ? (
-                    <span className="rounded-full border border-[#90a07d]/25 bg-[#90a07d]/10 px-2 py-0.5 text-[11px] text-[#d8e5cc]">
+                    <span className="flow-page__badge flow-page__badge--owner">
                       {ownerLabel}
                     </span>
                   ) : null}
                   {state === "running" && (
-                    <span className="badge badge-success badge-sm gap-1.5 pl-1.5 pr-2">
-                      <Loader2 className="w-3 h-3 animate-spin" />
+                    <span className="badge badge-success flow-page__status-badge">
+                      <Loader2 className="artist-icon-xs animate-spin" />
                       Running
                     </span>
                   )}
                   {togglingId === flow.id && (
-                    <span className="badge badge-secondary badge-sm gap-1.5 pl-1.5 pr-2">
-                      <Loader2 className="w-3 h-3 animate-spin" />
+                    <span className="badge badge-secondary flow-page__status-badge">
+                      <Loader2 className="artist-icon-xs animate-spin" />
                       Updating
                     </span>
                   )}
                 </div>
               </div>
-              <div className="flex shrink-0 items-center justify-end gap-1 self-end min-[420px]:self-start">
+              <div className="flow-page__card-actions">
                 <button
                   onClick={onViewTracks}
                   className={`btn btn--hide-mobile btn-sm btn--toolbar ${isTracksOpen ? "btn-neutral-active" : "btn-secondary"}`}
@@ -1647,8 +1628,8 @@ export function FlowCard({
                   aria-pressed={isTracksOpen}
                   disabled={!enabled && !isTracksOpen}
                 >
-                  <ListMusic className="w-4 h-4" />
-                  <span className="hidden md:inline">Tracks</span>
+                  <ListMusic className="artist-icon-sm" />
+                  <span className="flow-page__btn-label--md">Tracks</span>
                 </button>
                 <button
                   onClick={onToggleEditing}
@@ -1657,121 +1638,139 @@ export function FlowCard({
                   title={isEditing ? `Close ${flow.name} editor` : `Edit ${flow.name}`}
                   aria-pressed={isEditing}
                 >
-                  <Pencil className="w-4 h-4" />
-                  <span className="hidden md:inline">Manage</span>
+                  <Pencil className="artist-icon-sm" />
+                  <span className="flow-page__btn-label--md">Manage</span>
                 </button>
                 <MoreMenu activeButtonClass="btn-neutral-active">
                   <button
                     onClick={onViewTracks}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
+                    className="artist-menu-item flow-page__menu-item--mobile-only"
                     aria-pressed={isTracksOpen}
                     disabled={!enabled && !isTracksOpen}
                   >
-                    <ListMusic className="w-4 h-4" />
-                    {isTracksOpen ? "Hide Tracks" : "View Tracks"}
+                    <span className="artist-menu-item__main">
+                      <ListMusic className="artist-icon-sm" />
+                      {isTracksOpen ? "Hide Tracks" : "View Tracks"}
+                    </span>
                   </button>
                   <button
                     onClick={onToggleEditing}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white sm:hidden"
+                    className="artist-menu-item flow-page__menu-item--mobile-only"
                     aria-pressed={isEditing}
                   >
-                    <Pencil className="w-4 h-4" />
-                    {isEditing ? "Close Manage View" : "Manage Flow"}
+                    <span className="artist-menu-item__main">
+                      <Pencil className="artist-icon-sm" />
+                      {isEditing ? "Close Manage View" : "Manage Flow"}
+                    </span>
                   </button>
                   {isNameEditing ? (
                     <>
                       <button
                         type="button"
                         onClick={isNameDirty ? onNameApply : onNameCancel}
-                        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
+                        className="artist-menu-item flow-page__menu-item--mobile-only"
                         disabled={isNameApplying}
                       >
-                        {isNameApplying ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Check className="w-4 h-4" />
-                        )}
-                        Save Title
+                        <span className="artist-menu-item__main">
+                          {isNameApplying ? (
+                            <Loader2 className="artist-icon-sm animate-spin" />
+                          ) : (
+                            <Check className="artist-icon-sm" />
+                          )}
+                          Save Title
+                        </span>
                       </button>
                       <button
                         type="button"
                         onClick={onNameCancel}
-                        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
+                        className="artist-menu-item flow-page__menu-item--mobile-only"
                         disabled={isNameApplying}
                       >
-                        <X className="w-4 h-4" />
-                        Cancel Rename
+                        <span className="artist-menu-item__main">
+                          <X className="artist-icon-sm" />
+                          Cancel Rename
+                        </span>
                       </button>
                     </>
                   ) : (
                     <button
                       type="button"
                       onClick={onToggleNameEditing}
-                      className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white sm:hidden"
+                      className="artist-menu-item flow-page__menu-item--mobile-only"
                     >
-                      <Pencil className="w-4 h-4" />
-                      Rename Title
+                      <span className="artist-menu-item__main">
+                        <Pencil className="artist-icon-sm" />
+                        Rename Title
+                      </span>
                     </button>
                   )}
-                  <div className="my-1 border-t border-white/10 sm:hidden" />
+                  <div className="flow-page__menu-divider flow-page__menu-divider--mobile-only" />
                   <button
                     onClick={onRunNow}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    className="artist-menu-item"
                     disabled={!canRunNow}
                   >
-                    {isRerunningThisFlow ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Play className="w-4 h-4" />
-                    )}
-                    Run Now
+                    <span className="artist-menu-item__main">
+                      {isRerunningThisFlow ? (
+                        <Loader2 className="artist-icon-sm animate-spin" />
+                      ) : (
+                        <Play className="artist-icon-sm" />
+                      )}
+                      Run Now
+                    </span>
                   </button>
                   <button
                     onClick={onConvertToStatic}
-                    className="w-full text-left px-3 py-2.5 text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white flex items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="artist-menu-item"
                     disabled={!canConvertToStatic || convertingId === flow.id}
                   >
-                    {convertingId === flow.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <FilePlus2 className="w-4 h-4" />}
-                    Convert to Static
+                    <span className="artist-menu-item__main">
+                      {convertingId === flow.id ? <Loader2 className="artist-icon-sm animate-spin" /> : <FilePlus2 className="artist-icon-sm" />}
+                      Convert to Static
+                    </span>
                   </button>
                   <button
                     onClick={onExport}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    className="artist-menu-item"
                     disabled={!canExport}
                   >
-                    <Download className="w-4 h-4" />
-                    Download JSON
+                    <span className="artist-menu-item__main">
+                      <Download className="artist-icon-sm" />
+                      Download JSON
+                    </span>
                   </button>
-                  <div className="my-1 border-t border-white/10" />
+                  <div className="flow-page__menu-divider" />
                   <button
                     onClick={onDelete}
-                    className="w-full text-left px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 flex items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="artist-menu-item artist-menu-item--danger"
                     disabled={deletingId === flow.id}
                   >
-                    {deletingId === flow.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                    Delete Flow
+                    <span className="artist-menu-item__main">
+                      {deletingId === flow.id ? <Loader2 className="artist-icon-sm animate-spin" /> : <Trash2 className="artist-icon-sm" />}
+                      Delete Flow
+                    </span>
                   </button>
                 </MoreMenu>
-                <div className="flex items-center rounded-md bg-black/20 px-1.5 py-1 min-[420px]:px-2 min-[420px]:py-1.5">
+                <div className="flow-page__toggle-wrap">
                   {togglingId === flow.id && (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-white/50" />
+                    <Loader2 className="artist-icon-xs animate-spin flow-page__toggle-spinner" />
                   )}
                   <PillToggle
                     checked={enabled}
-                    className={enabled ? "max-[420px]:[--w:38px]" : "is-off max-[420px]:[--w:38px]"}
+                    className={`pill-toggle--flow-compact${enabled ? "" : " is-off"}`}
                     onChange={(event) => onToggleEnabled(event.target.checked)}
                     disabled={togglingId === flow.id}
                   />
                 </div>
               </div>
             </div>
-            <div className="space-y-1">
-              <div className={enabled ? "" : "opacity-50"}>
-                <div className="flex min-w-0 items-start gap-2">
+            <div className="flow-page__card-title-row">
+              <div className={enabled ? "" : "flow-page__card--dimmed"}>
+                <div className="flow-page__card-title-row">
                   {isNameEditing ? (
                     <input
                       type="text"
-                      className="input input-sm h-9 w-full max-w-md text-base font-medium text-white"
+                      className="input input-sm flow-page__card-title-input"
                       value={simpleDraft?.name ?? ""}
                       onChange={(event) =>
                         onDraftChange((prev) => ({
@@ -1797,11 +1796,11 @@ export function FlowCard({
                       aria-label={`Edit ${flow.name} name`}
                     />
                   ) : (
-                    <h3 className="min-w-0 truncate text-sm font-medium text-white sm:text-base">
+                    <h3 className="flow-page__card-title">
                       {flow.name}
                     </h3>
                   )}
-                  <div className="hidden shrink-0 items-center gap-1 sm:flex">
+                  <div className="flow-page__card-title-actions">
                     <button
                       type="button"
                       onClick={
@@ -1815,11 +1814,11 @@ export function FlowCard({
                       disabled={isNameApplying}
                     >
                       {isNameApplying ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <Loader2 className="artist-icon-xs animate-spin" />
                       ) : isNameEditing ? (
-                        <Check className="w-3.5 h-3.5" />
+                        <Check className="artist-icon-xs" />
                       ) : (
-                        <Pencil className="w-3.5 h-3.5" />
+                        <Pencil className="artist-icon-xs" />
                       )}
                     </button>
                     {isNameEditing ? (
@@ -1831,48 +1830,44 @@ export function FlowCard({
                         title={`Cancel editing ${flow.name}`}
                         disabled={isNameApplying}
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <X className="artist-icon-xs" />
                       </button>
                     ) : null}
                   </div>
                 </div>
-                <div className="hidden flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[#b5b5bc] sm:gap-x-3 sm:text-xs md:flex">
+                <div className="flow-page__card-meta">
                   {statusSummary ? <span>{statusSummary}</span> : null}
                   {statusSummary && metaItems.length > 0 ? (
-                    <>
-                      <span className="text-white/25">•</span>
-                    </>
+                    <span className="flow-page__card-meta-dot">•</span>
                   ) : null}
                   {metaItems.length > 0 ? <span>{metaItems.join(" • ")}</span> : null}
                 </div>
               </div>
             </div>
               {flowWorkerMessage ? (
-              <div className={`hidden truncate text-xs text-[#9aa886] sm:block ${enabled ? "" : "opacity-50"}`}>
+              <div className={`flow-page__card-status flow-page__card-hint--desktop${enabled ? "" : " flow-page__card--dimmed"}`}>
                 {flowWorkerMessage}
               </div>
             ) : null}
-            <div className={`text-[11px] text-[#9aa886] sm:hidden ${enabled ? "" : "opacity-50"}`}>
+            <div className={`flow-page__card-hint flow-page__card-hint--mobile${enabled ? "" : " flow-page__card--dimmed"}`}>
               {isTracksOpen ? "Tap card to hide tracks" : "Tap card to view tracks"}
             </div>
             {(state === "running" || state === "completed") && total > 0 ? (
-              <div className={`grid gap-1.5 ${enabled ? "" : "opacity-50"}`}>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+              <div className={`flow-page__progress${enabled ? "" : " flow-page__card--dimmed"}`}>
+                <div className="flow-page__progress-bar">
                   <div
-                    className={`h-full rounded-full transition-all duration-300 ${
-                      state === "completed" ? "bg-[#7aa2f7]" : "bg-[#9aa886]"
-                    }`}
+                    className={`flow-page__progress-fill${state === "completed" ? " flow-page__progress-fill--completed" : ""}`}
                     style={{ width: `${progressPct}%` }}
                   />
                 </div>
-                <div className="text-[11px] text-[#d3d3d8] sm:hidden">{progressPct}% complete</div>
-                <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#d3d3d8] sm:flex">
+                <div className="flow-page__progress-stats-mobile">{progressPct}% complete</div>
+                <div className="flow-page__progress-stats">
                   <span>{progressPct}% complete</span>
-                  <span className="text-white/25">•</span>
+                  <span className="flow-page__card-meta-dot">•</span>
                   <span>Pending {pendingCount}</span>
-                  <span className="text-white/25">•</span>
+                  <span className="flow-page__card-meta-dot">•</span>
                   <span>Downloading {downloadingCount}</span>
-                    <span className="text-white/25">•</span>
+                  <span className="flow-page__card-meta-dot">•</span>
                   <span>Done {processedDisplay}</span>
                 </div>
               </div>
@@ -1882,9 +1877,9 @@ export function FlowCard({
       </div>
 
       {isEditing && (
-        <div className="px-4 pb-4">
-          <div className="card-separator mb-4" />
-          <div className="grid gap-3">
+        <div className="flow-page__card-expanded">
+          <div className="flow-page__card-expanded-separator" />
+          <div className="flow-page__form">
             <FlowFormFields
               draft={simpleDraft}
               remaining={simpleRemaining}
@@ -1895,7 +1890,7 @@ export function FlowCard({
               normalizeMixPercent={normalizeMixPercent}
               disabledSources={disabledSources}
             />
-            <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="flow-page__card-footer-actions">
               <button onClick={onCancel} className="btn btn-secondary btn-sm">
                 Cancel
               </button>
@@ -1913,8 +1908,8 @@ export function FlowCard({
       )}
 
       {isTracksOpen && (
-        <div className="pb-4 sm:px-4">
-          <div className="card-separator mx-4 mb-4 sm:mx-0" />
+        <div className="flow-page__card-expanded">
+          <div className="flow-page__card-expanded-separator" />
           <FlowTracksPanel
             tracks={tracks}
             loading={tracksLoading}
@@ -2183,16 +2178,16 @@ export function FlowTracksPanel({
   }, []);
 
   return (
-    <div className="overflow-hidden border border-white/10 bg-[#211f27] rounded-none sm:rounded-lg">
-      <div className="relative bg-[#211f27] px-3 py-2.5 border-b border-white/10 flex items-center">
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center gap-2">
+    <div className="flow-page__tracks">
+      <div className="flow-page__tracks-player">
+        <div className="flow-page__tracks-player-center">
           <button
             onClick={handlePrevious}
             className="btn btn-secondary btn-sm btn-icon"
             disabled={playableTracks.length === 0}
             aria-label="Previous track"
           >
-            <SkipBack className="w-4 h-4" />
+            <SkipBack className="artist-icon-sm" />
           </button>
           <button
             onClick={handlePrimaryPlay}
@@ -2200,7 +2195,7 @@ export function FlowTracksPanel({
             disabled={playableTracks.length === 0}
             aria-label={isPlaying ? "Pause playback" : "Start playback"}
           >
-            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            {isPlaying ? <Pause className="artist-icon-sm" /> : <Play className="artist-icon-sm" />}
           </button>
           <button
             onClick={handleNext}
@@ -2208,22 +2203,17 @@ export function FlowTracksPanel({
             disabled={playableTracks.length === 0}
             aria-label="Next track"
           >
-            <SkipForward className="w-4 h-4" />
+            <SkipForward className="artist-icon-sm" />
           </button>
           <button
             onClick={() => setIsShuffleEnabled((prev) => !prev)}
-            className="btn btn-secondary btn-sm btn-icon"
+            className={`btn btn-secondary btn-sm btn-icon flow-page__tracks-player-shuffle${isShuffleEnabled ? " is-active" : ""}`}
             aria-label={isShuffleEnabled ? "Disable shuffle" : "Enable shuffle"}
-            style={
-              isShuffleEnabled
-                ? { backgroundColor: "rgba(154, 168, 134, 0.3)", borderColor: "rgba(154, 168, 134, 0.65)" }
-                : undefined
-            }
           >
-            <Shuffle className="w-4 h-4" />
+            <Shuffle className="artist-icon-sm" />
           </button>
         </div>
-        <div className="ml-auto flex items-center gap-2 relative z-10">
+        <div className="flow-page__tracks-player-side">
           {headerActions}
           <button
             onClick={handleToggleMute}
@@ -2231,9 +2221,9 @@ export function FlowTracksPanel({
             aria-label={volume <= 0 ? "Unmute" : "Mute"}
           >
             {volume <= 0 ? (
-              <VolumeX className="w-4 h-4 text-[#8b8b90]" />
+              <VolumeX className="artist-icon-sm" />
             ) : (
-              <Volume2 className="w-4 h-4 text-[#8b8b90]" />
+              <Volume2 className="artist-icon-sm" />
             )}
           </button>
           <input
@@ -2243,40 +2233,40 @@ export function FlowTracksPanel({
             step="1"
             value={volume}
             onChange={(event) => handleVolumeChange(event.target.value)}
-            className="volume-slider hidden w-24 sm:block"
+            className="volume-slider flow-page__volume-slider"
             aria-label="Track volume"
           />
         </div>
       </div>
 
-      <div className="overflow-auto max-h-[55vh]">
+      <div className="flow-page__tracks-body">
         {loading && (
-          <div className="p-6 flex items-center gap-2 text-[#c1c1c3]">
-            <Loader2 className="w-4 h-4 animate-spin" />
+          <div className="flow-page__tracks-loading">
+            <Loader2 className="artist-icon-sm animate-spin" />
             Loading tracks...
           </div>
         )}
         {!loading && error && (
-          <div className="p-6 text-red-400 text-sm">{error}</div>
+          <div className="flow-page__tracks-error">{error}</div>
         )}
         {!loading && !error && visibleTracks.length === 0 && (
-          <div className="p-6 text-[#c1c1c3] text-sm">
+          <div className="flow-page__tracks-empty">
             {emptyMessage}
           </div>
         )}
         {!loading && !error && visibleTracks.length > 0 && (
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-20 bg-[#1c1b22]">
-              <tr className="text-left text-[#8b8b90] uppercase text-xs tracking-wider">
-                {showStatus ? <th className="hidden px-3 py-2 sm:table-cell">Status</th> : null}
-                <th className="px-3 py-2">Song</th>
-                <th className="px-3 py-2">Artist</th>
-                <th className="px-3 py-2">Album</th>
-                <th className="px-3 py-2">Actions</th>
+          <table className="flow-page__tracks-table">
+            <thead className="flow-page__tracks-table-head">
+              <tr>
+                {showStatus ? <th className="flow-page__tracks-table-status">Status</th> : null}
+                <th>Song</th>
+                <th>Artist</th>
+                <th>Album</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {visibleTracks.map((track, index) => {
+              {visibleTracks.map((track) => {
                 const canPlay = track.status === "done" && !!track.streamUrl;
                 const canDelete = editable && track.status === "done" && !!track.id;
                 const canReSearch =
@@ -2289,34 +2279,25 @@ export function FlowTracksPanel({
                 return (
                   <tr
                     key={track.id}
-                    className={`border-t border-white/5 text-[#d6d6d8] relative overflow-hidden ${
-                      index % 2 === 0 ? "bg-[#211f27]" : "bg-[#1c1b22]"
-                    }`}
+                    className={`flow-page__tracks-table-row${isCurrent ? " is-current" : ""}${isCurrent && progressSnappingBack ? " is-snapping" : ""}`}
                     style={
                       isCurrent
-                        ? {
-                            backgroundImage: "linear-gradient(rgba(112, 126, 97, 0.55), rgba(112, 126, 97, 0.55))",
-                            backgroundSize: `${progressWidth} 100%`,
-                            backgroundRepeat: "no-repeat",
-                            transition: progressSnappingBack
-                              ? "background-size 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)"
-                              : "background-size 0.1s linear",
-                          }
+                        ? { "--playback-progress": progressWidth }
                         : undefined
                     }
                   >
                     {showStatus ? (
-                      <td className="hidden px-3 py-2 align-top sm:table-cell">
+                      <td className="flow-page__tracks-table-status">
                         <TrackStatusBadge status={track.status} />
                       </td>
                     ) : null}
-                    <td className="px-3 py-2">{track.trackName}</td>
-                    <td className="px-3 py-2">
+                    <td>{track.trackName}</td>
+                    <td>
                       {track.artistMbid ? (
                         <button
                           type="button"
                           onClick={() => onNavigateArtist(track)}
-                          className="text-left text-[#d6d6d8] transition-colors hover:text-white hover:underline"
+                          className="flow-page__tracks-artist-link"
                         >
                           {track.artistName}
                         </button>
@@ -2324,27 +2305,27 @@ export function FlowTracksPanel({
                         track.artistName
                       )}
                     </td>
-                    <td className="px-3 py-2">
-                      <div className="grid gap-1">
+                    <td>
+                      <div className="flow-page__editor-field-stack">
                         <span>{track.albumName || "Unknown Album"}</span>
                         {showFailedDetails && track.status === "failed" && track.error ? (
-                          <span className="text-[11px] text-[#d49c9c]">
+                          <span className="flow-page__editor-track-error">
                             {track.error}
                           </span>
                         ) : null}
                       </div>
                     </td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
+                    <td>
+                      <div className="flow-page__tracks-actions">
                         <button
                           onClick={() => handlePlayTrack(track)}
                           className="btn btn-secondary btn-xs"
                           disabled={!canPlay}
                         >
                           {isCurrent && isPlaying ? (
-                            <Pause className="w-3.5 h-3.5" />
+                            <Pause className="artist-icon-xs" />
                           ) : (
-                            <Play className="w-3.5 h-3.5" />
+                            <Play className="artist-icon-xs" />
                           )}
                         </button>
                         {onAddTrackToPlaylist ? (
@@ -2355,7 +2336,7 @@ export function FlowTracksPanel({
                             title={`Add ${track.trackName} to playlist`}
                             disabled={!track.artistName || !track.trackName}
                           >
-                            <Plus className="w-3.5 h-3.5" />
+                            <Plus className="artist-icon-xs" />
                           </button>
                         ) : null}
                         {canReSearch ? (
@@ -2367,9 +2348,9 @@ export function FlowTracksPanel({
                             disabled={isReSearching}
                           >
                             {isReSearching ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <Loader2 className="artist-icon-xs animate-spin" />
                             ) : (
-                              <Search className="w-3.5 h-3.5" />
+                              <Search className="artist-icon-xs" />
                             )}
                           </button>
                         ) : null}
@@ -2382,9 +2363,9 @@ export function FlowTracksPanel({
                             disabled={deletingTrackId === track.id}
                           >
                             {deletingTrackId === track.id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <Loader2 className="artist-icon-xs animate-spin" />
                             ) : (
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="artist-icon-xs" />
                             )}
                           </button>
                         ) : null}
@@ -2404,8 +2385,8 @@ export function FlowTracksPanel({
 
 export function FlowEmptyState({ onCreate, creating, canCreate = true }) {
   return (
-    <div className="p-4 bg-card rounded-lg border border-white/5 text-sm text-[#c1c1c3]">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flow-page__empty">
+      <div className="flow-page__empty-row">
         <span>
           {canCreate
             ? "No flows yet. Start with your first flow."
@@ -2417,7 +2398,7 @@ export function FlowEmptyState({ onCreate, creating, canCreate = true }) {
             className="btn btn-primary btn-sm"
             disabled={creating}
           >
-            <FilePlus2 className="w-4 h-4" />
+            <FilePlus2 className="artist-icon-sm" />
             {creating ? "Creating..." : "Create First Flow"}
           </button>
         ) : null}
@@ -2487,29 +2468,29 @@ export function SharedPlaylistCard({
   };
 
   return (
-    <div className="overflow-visible border border-white/5 bg-card -mx-4 rounded-none sm:mx-0 sm:rounded-lg">
-      <div className="flex flex-col gap-3 px-4 py-4 md:flex-row md:items-start md:justify-between md:gap-4">
+    <div className="flow-page__card">
+      <div className="flow-page__card-body">
         <div
-          className="min-w-0 flex-1 flex gap-3 sm:gap-4 cursor-pointer sm:cursor-default"
+          className="flow-page__card-main"
           onClick={handleMobileTrackToggle}
         >
           <PlaylistArtworkThumb artworkUrl={artworkUrl} name={playlist.name} />
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="flex flex-col gap-2 min-[420px]:flex-row min-[420px]:items-start min-[420px]:justify-between">
-              <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
-                <span className="rounded-full bg-black/25 px-3.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[#d6e5c8]">
+          <div className="flow-page__card-content">
+            <div className="flow-page__card-top">
+              <div className="flow-page__card-badges">
+                <span className="flow-page__badge flow-page__badge--type">
                   Playlist
                 </span>
-                <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-[#c6c6cb]">
+                <span className="flow-page__badge flow-page__badge--count">
                   {playlist.trackCount} tracks
                 </span>
                 {ownerLabel ? (
-                  <span className="rounded-full border border-[#90a07d]/25 bg-[#90a07d]/10 px-2 py-0.5 text-[11px] text-[#d8e5cc]">
+                  <span className="flow-page__badge flow-page__badge--owner">
                     {ownerLabel}
                   </span>
                 ) : null}
               </div>
-              <div className="flex shrink-0 items-center justify-end gap-1 self-end min-[420px]:self-start">
+              <div className="flow-page__card-actions">
                 <button
                   type="button"
                   onClick={onViewTracks}
@@ -2518,98 +2499,112 @@ export function SharedPlaylistCard({
                   title={isTracksOpen ? `Close ${playlist.name} tracks` : `View ${playlist.name} tracks`}
                   aria-pressed={isTracksOpen}
                 >
-                  <ListMusic className="w-4 h-4" />
-                  <span className="hidden md:inline">Tracks</span>
+                  <ListMusic className="artist-icon-sm" />
+                  <span className="flow-page__btn-label--md">Tracks</span>
                 </button>
                 <MoreMenu activeButtonClass="btn-neutral-active">
                   <button
                     type="button"
                     onClick={onViewTracks}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white sm:hidden"
+                    className="artist-menu-item flow-page__menu-item--mobile-only"
                     aria-pressed={isTracksOpen}
                   >
-                    <ListMusic className="w-4 h-4" />
-                    {isTracksOpen ? "Hide Tracks" : "View Tracks"}
+                    <span className="artist-menu-item__main">
+                      <ListMusic className="artist-icon-sm" />
+                      {isTracksOpen ? "Hide Tracks" : "View Tracks"}
+                    </span>
                   </button>
                   {isEditing ? (
                     <>
                       <button
                         type="button"
                         onClick={onApplyEdit}
-                        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
+                        className="artist-menu-item flow-page__menu-item--mobile-only"
                         disabled={isApplyingName}
                       >
-                        {isApplyingName ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Check className="w-4 h-4" />
-                        )}
-                        Save Title
+                        <span className="artist-menu-item__main">
+                          {isApplyingName ? (
+                            <Loader2 className="artist-icon-sm animate-spin" />
+                          ) : (
+                            <Check className="artist-icon-sm" />
+                          )}
+                          Save Title
+                        </span>
                       </button>
                       <button
                         type="button"
                         onClick={onCancelEdit}
-                        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
+                        className="artist-menu-item flow-page__menu-item--mobile-only"
                         disabled={isApplyingName}
                       >
-                        <X className="w-4 h-4" />
-                        Cancel Rename
+                        <span className="artist-menu-item__main">
+                          <X className="artist-icon-sm" />
+                          Cancel Rename
+                        </span>
                       </button>
                     </>
                   ) : (
                     <button
                       type="button"
                       onClick={onToggleEditing}
-                      className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white sm:hidden"
+                      className="artist-menu-item flow-page__menu-item--mobile-only"
                     >
-                      <Pencil className="w-4 h-4" />
-                      Rename Title
+                      <span className="artist-menu-item__main">
+                        <Pencil className="artist-icon-sm" />
+                        Rename Title
+                      </span>
                     </button>
                   )}
-                  <div className="my-1 border-t border-white/10 sm:hidden" />
+                  <div className="flow-page__menu-divider flow-page__menu-divider--mobile-only" />
                   <button
                     type="button"
                     onClick={onExport}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white"
+                    className="artist-menu-item"
                   >
-                    <Download className="w-4 h-4" />
-                    Download JSON
+                    <span className="artist-menu-item__main">
+                      <Download className="artist-icon-sm" />
+                      Download JSON
+                    </span>
                   </button>
-                  <div className="my-1 border-t border-white/10" />
+                  <div className="flow-page__menu-divider" />
                   <button
                     type="button"
                     onClick={() => onSetRetryCyclePaused?.(!retryCyclePaused)}
-                    className="w-full text-left px-3 py-2.5 text-sm text-[#d6d6d8] hover:bg-[var(--aurral-overlay-hover)] hover:text-white flex items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="artist-menu-item"
                     disabled={retryActionInFlight}
                   >
-                    {retryActionInFlight ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : retryCyclePaused ? (
-                      <Play className="w-4 h-4" />
-                    ) : (
-                      <Pause className="w-4 h-4" />
-                    )}
-                    {retryCyclePaused ? "Resume Retry Cycle" : "Pause Retry Cycle"}
+                    <span className="artist-menu-item__main">
+                      {retryActionInFlight ? (
+                        <Loader2 className="artist-icon-sm animate-spin" />
+                      ) : retryCyclePaused ? (
+                        <Play className="artist-icon-sm" />
+                      ) : (
+                        <Pause className="artist-icon-sm" />
+                      )}
+                      {retryCyclePaused ? "Resume Retry Cycle" : "Pause Retry Cycle"}
+                    </span>
                   </button>
-                  <div className="my-1 border-t border-white/10" />
+                  <div className="flow-page__menu-divider" />
                   <button
                     type="button"
                     onClick={onDelete}
-                    className="w-full text-left px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 flex items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="artist-menu-item artist-menu-item--danger"
                     disabled={deletingId === playlist.id}
                   >
-                    {deletingId === playlist.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                    Delete Playlist
+                    <span className="artist-menu-item__main">
+                      {deletingId === playlist.id ? <Loader2 className="artist-icon-sm animate-spin" /> : <Trash2 className="artist-icon-sm" />}
+                      Delete Playlist
+                    </span>
                   </button>
                 </MoreMenu>
               </div>
             </div>
-            <div className="space-y-1">
-              <div className="flex min-w-0 items-start gap-2">
+            <div className="flow-page__card-title-row">
+              <div className="flow-page__card-title-row">
                 {isEditing ? (
                   <input
                     type="text"
-                    className="input input-sm h-9 w-full max-w-md text-base font-medium text-white"
+                    className="input input-sm flow-page__card-title-input"
                     value={nameDraft ?? ""}
                     onChange={(event) => onNameChange(event.target.value)}
                     onKeyDown={(event) => {
@@ -2625,11 +2620,11 @@ export function SharedPlaylistCard({
                     aria-label={`Edit ${playlist.name} name`}
                   />
                 ) : (
-                  <h3 className="min-w-0 truncate text-sm font-medium text-white sm:text-base">
+                  <h3 className="flow-page__card-title">
                     {playlist.name}
                   </h3>
                 )}
-                <div className="hidden shrink-0 items-center gap-1 sm:flex">
+                <div className="flow-page__card-title-actions">
                   <button
                     type="button"
                     onClick={isEditing ? onApplyEdit : onToggleEditing}
@@ -2639,11 +2634,11 @@ export function SharedPlaylistCard({
                     disabled={isApplyingName}
                   >
                     {isApplyingName ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <Loader2 className="artist-icon-xs animate-spin" />
                     ) : isEditing ? (
-                      <Check className="w-3.5 h-3.5" />
+                      <Check className="artist-icon-xs" />
                     ) : (
-                      <Pencil className="w-3.5 h-3.5" />
+                      <Pencil className="artist-icon-xs" />
                     )}
                   </button>
                   {isEditing ? (
@@ -2655,47 +2650,47 @@ export function SharedPlaylistCard({
                       title={`Cancel editing ${playlist.name}`}
                       disabled={isApplyingName}
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="artist-icon-xs" />
                     </button>
                   ) : null}
                 </div>
               </div>
               {nameError ? (
-                <p className="text-xs text-red-400">
+                <p className="flow-page__error-text">
                   {nameError}
                 </p>
               ) : null}
               {isCurrentJob ? (
-                <p className="truncate text-xs text-[#9ed3a1]">
+                <p className="flow-page__card-status">
                   Downloading {currentJob.trackName}
                 </p>
               ) : null}
               {waitingForRetryCycle ? (
-                <p className="text-xs text-[#d8c78e]">
+                <p className="flow-page__warning-text">
                   Waiting for next retry cycle
                 </p>
               ) : null}
-              <p className="text-[11px] text-[#9aa886] sm:hidden">
+              <p className="flow-page__card-hint flow-page__card-hint--mobile">
                 {isTracksOpen ? "Tap card to hide tracks" : "Tap card to view tracks"}
               </p>
             </div>
-            <div className="grid gap-1.5">
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+            <div className="flow-page__progress">
+              <div className="flow-page__progress-bar">
                 <div
-                  className="h-full rounded-full bg-[#707e61] transition-all duration-300"
+                  className="flow-page__progress-fill"
                   style={{ width: `${progressPct}%` }}
                 />
               </div>
-              <div className="text-[11px] text-[#c7ccc7] sm:hidden">{progressPct}% complete</div>
-              <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#c7ccc7] sm:flex">
+              <div className="flow-page__progress-stats-mobile">{progressPct}% complete</div>
+              <div className="flow-page__progress-stats">
                 <span>{progressPct}% complete</span>
-                <span className="text-white/25">•</span>
+                <span className="flow-page__card-meta-dot">•</span>
                 <span>Pending {pending}</span>
-                <span className="text-white/25">•</span>
+                <span className="flow-page__card-meta-dot">•</span>
                 <span>Downloading {downloading}</span>
-                <span className="text-white/25">•</span>
+                <span className="flow-page__card-meta-dot">•</span>
                 <span>Done {done}</span>
-                <span className="text-white/25">•</span>
+                <span className="flow-page__card-meta-dot">•</span>
                 <span>Stalled {failed}</span>
               </div>
             </div>
@@ -2704,8 +2699,8 @@ export function SharedPlaylistCard({
       </div>
 
       {isTracksOpen && (
-        <div className="pb-4 sm:px-4">
-          <div className="card-separator mx-4 mb-4 sm:mx-0" />
+        <div className="flow-page__card-expanded">
+          <div className="flow-page__card-expanded-separator" />
           {isTrackEditing ? (
             <SharedPlaylistTrackEditor
               ref={trackEditorRef}
@@ -2723,7 +2718,7 @@ export function SharedPlaylistCard({
                     title={`Cancel editing ${playlist.name} tracklist`}
                     disabled={isApplyingTracks}
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <X className="artist-icon-xs" />
                   </button>
                   <button
                     type="button"
@@ -2739,9 +2734,9 @@ export function SharedPlaylistCard({
                     disabled={isApplyingTracks}
                   >
                     {isApplyingTracks ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <Loader2 className="artist-icon-xs animate-spin" />
                     ) : (
-                      <Check className="w-3.5 h-3.5" />
+                      <Check className="artist-icon-xs" />
                     )}
                   </button>
                 </>
@@ -2777,11 +2772,11 @@ export function SharedPlaylistCard({
                   disabled={isApplyingTracks}
                 >
                   {isApplyingTracks ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <Loader2 className="artist-icon-xs animate-spin" />
                   ) : isTrackEditing ? (
-                    <Check className="w-3.5 h-3.5" />
+                    <Check className="artist-icon-xs" />
                   ) : (
-                    <Pencil className="w-3.5 h-3.5" />
+                    <Pencil className="artist-icon-xs" />
                   )}
                 </button>
               }
@@ -2810,58 +2805,57 @@ export function FlowImportReviewModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0, 0, 0, 0.78)" }}
+      className="artist-modal-backdrop"
       onClick={importing ? undefined : onCancel}
     >
       <div
-        className="card card-overlay mx-4 w-full max-w-3xl overflow-hidden rounded-lg border border-white/5 shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+        className="flow-page__import-modal"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="border-b border-white/10 px-5 py-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-1">
-              <div className="text-xs font-medium uppercase tracking-[0.2em] text-[#dbe6cf]">
+        <div className="flow-page__import-modal-header">
+          <div className="flow-page__import-modal-header-row">
+            <div>
+              <div className="flow-page__import-modal-eyebrow">
                 Import Playlist
               </div>
-              <h3 className="text-lg font-semibold text-white">
+              <h3 className="flow-page__import-modal-title">
                 {importReview.fileName || "Selected playlist file"}
               </h3>
-              <p className="text-sm text-[#bcc4b4]">
+              <p className="flow-page__import-modal-copy">
                 {flows.length} {flows.length === 1 ? "playlist" : "playlists"} detected. Imports stay separate from weekly flows and queue their own downloads.
               </p>
             </div>
-            <div className="rounded-full bg-black/25 px-3 py-1 text-sm text-[#dbe6cf]">
+            <div className="flow-page__import-modal-badge">
               JSON import
             </div>
           </div>
         </div>
 
-        <div className="max-h-[60vh] overflow-auto px-5 py-4">
-          <div className="grid gap-3">
+        <div className="flow-page__import-modal-body">
+          <div className="flow-page__import-list">
             {flows.map((flow, index) => {
               const trackCount = Number(flow?.tracks?.length || flow?.trackCount || 0);
               const previewTracks = Array.isArray(flow?.tracks) ? flow.tracks.slice(0, 3) : [];
               return (
                 <div
                   key={`${flow?.name || "flow"}-${index}`}
-                  className="rounded-lg border border-white/5 bg-black/20 px-4 py-3"
+                  className="flow-page__import-item"
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h4 className="text-sm font-medium text-white">
+                  <div className="flow-page__import-item-header">
+                    <h4 className="flow-page__import-item-title">
                       {flow?.name || `Playlist ${index + 1}`}
                     </h4>
-                    <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-[#c6c6cb]">
+                    <span className="flow-page__badge flow-page__badge--count">
                       {trackCount} tracks
                     </span>
                     {flow?.sourceName ? (
-                      <span className="rounded-full bg-black/25 px-2 py-0.5 text-[11px] text-[#dce8d0]">
+                      <span className="flow-page__badge flow-page__badge--type">
                         From {flow.sourceName}
                       </span>
                     ) : null}
                   </div>
-                  <div className="mt-3">
-                    <label className="mb-1 block text-[11px] uppercase tracking-[0.16em] text-[#90988b]">
+                  <div className="flow-page__field">
+                    <label className="flow-page__field-label">
                       Playlist Name
                     </label>
                     <input
@@ -2870,17 +2864,17 @@ export function FlowImportReviewModal({
                       onChange={(event) => onNameChange?.(index, event.target.value)}
                       placeholder={`Playlist ${index + 1}`}
                       disabled={importing}
-                      className="w-full rounded-md border border-white/10 bg-black/35 px-3 py-2 text-sm text-white outline-none transition focus:border-[#90a07d] focus:ring-1 focus:ring-[#90a07d]"
+                      className="input flow-page__field-input"
                     />
                   </div>
-                  <div className="mt-2 grid gap-1 text-xs text-[#aeb0b6]">
+                  <div className="flow-page__import-preview">
                     {previewTracks.map((track) => (
                       <span key={`${track.artistName}-${track.trackName}`}>
                         {track.artistName} — {track.trackName}
                       </span>
                     ))}
                     {trackCount > previewTracks.length ? (
-                      <span className="text-[#89938a]">
+                      <span className="flow-page__import-preview-more">
                         +{trackCount - previewTracks.length} more tracks
                       </span>
                     ) : null}
@@ -2891,11 +2885,11 @@ export function FlowImportReviewModal({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4">
-          <p className="max-w-xl text-xs leading-5 text-[#9ca09f]">
+        <div className="flow-page__import-modal-footer">
+          <p className="flow-page__import-modal-hint">
             Supports exported playlist files, a single playlist object, or a raw array of tracks. Imported playlists stay separate from weekly flow refreshes.
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flow-page__import-modal-actions">
             <button
               type="button"
               onClick={onCancel}
@@ -2912,12 +2906,12 @@ export function FlowImportReviewModal({
             >
               {importing ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="artist-icon-sm animate-spin" />
                   Importing...
                 </>
               ) : (
                 <>
-                  <Upload className="w-4 h-4" />
+                  <Upload className="artist-icon-sm" />
                   Import Playlists
                 </>
               )}
@@ -2934,28 +2928,23 @@ export function ConfirmDeleteModal({ confirmDelete, deletingId, onCancel, onConf
   const isShared = confirmDelete.kind === "shared";
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
-      onClick={onCancel}
-    >
-      <div className="card card-overlay max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-xl font-bold mb-2 text-white">
+    <div className="artist-modal-backdrop" onClick={onCancel}>
+      <div className="artist-modal" onClick={(e) => e.stopPropagation()}>
+        <h3 className="artist-modal__title">
           Delete {confirmDelete.title}?
         </h3>
-        <p className="text-[#c1c1c3] mb-6">
+        <p className="artist-modal__subcopy">
           {isShared
             ? "This removes the imported static playlist and any downloaded files tied to it."
             : "This removes the flow and its playlist setup. You can recreate it later."}
         </p>
-        <div className="flex gap-3 justify-end">
+        <div className="artist-modal__actions">
           <button onClick={onCancel} className="btn btn-secondary">
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="btn btn-primary"
-            style={{ backgroundColor: "#ef4444" }}
+            className="btn btn-secondary flow-page__btn--destructive"
             disabled={deletingId === confirmDelete.flowId}
           >
             {deletingId === confirmDelete.flowId ? "Deleting..." : "Delete"}
@@ -2975,26 +2964,21 @@ export function ConfirmDisableModal({
   if (!confirmDisable) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
-      onClick={onCancel}
-    >
-      <div className="card card-overlay max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-xl font-bold mb-2 text-white">
+    <div className="artist-modal-backdrop" onClick={onCancel}>
+      <div className="artist-modal" onClick={(e) => e.stopPropagation()}>
+        <h3 className="artist-modal__title">
           Turn off {confirmDisable.title}?
         </h3>
-        <p className="text-[#c1c1c3] mb-6">
+        <p className="artist-modal__subcopy">
           This pauses future runs. You can turn it back on anytime.
         </p>
-        <div className="flex gap-3 justify-end">
+        <div className="artist-modal__actions">
           <button onClick={onCancel} className="btn btn-secondary">
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="btn btn-primary"
-            style={{ backgroundColor: "#ef4444" }}
+            className="btn btn-secondary flow-page__btn--destructive"
             disabled={togglingId === confirmDisable.flowId}
           >
             {togglingId === confirmDisable.flowId ? "Turning off..." : "Turn Off"}
@@ -3014,26 +2998,21 @@ export function ConfirmStopAllModal({
   if (!confirmStopAll) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
-      onClick={onCancel}
-    >
-      <div className="card card-overlay max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-xl font-bold mb-2 text-white">
+    <div className="artist-modal-backdrop" onClick={onCancel}>
+      <div className="artist-modal" onClick={(e) => e.stopPropagation()}>
+        <h3 className="artist-modal__title">
           Stop all playlists?
         </h3>
-        <p className="text-[#c1c1c3] mb-6">
+        <p className="artist-modal__subcopy">
           This pauses future runs. You can start them again anytime.
         </p>
-        <div className="flex gap-3 justify-end">
+        <div className="artist-modal__actions">
           <button onClick={onCancel} className="btn btn-secondary">
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="btn btn-primary"
-            style={{ backgroundColor: "#ef4444" }}
+            className="btn btn-secondary flow-page__btn--destructive"
             disabled={bulkActionRunning}
           >
             {bulkActionRunning ? "Stopping..." : "Stop All"}
@@ -3195,23 +3174,17 @@ export function FlowWorkerSettingsModal({
   const canRotate = soulseekCredential?.canRotate === true;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
-      onClick={onCancel}
-    >
-      <div className="card card-overlay max-w-lg w-full mx-4 grid gap-5" onClick={(e) => e.stopPropagation()}>
-        <div className="grid gap-1">
-          <h3 className="text-xl font-bold text-white">Worker Settings</h3>
-        </div>
-        <div className="grid gap-4">
-          <div className="grid gap-3 rounded-md border border-white/10 bg-black/20 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="grid gap-1">
-                <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
+    <div className="artist-modal-backdrop" onClick={onCancel}>
+      <div className="flow-page__worker-modal" onClick={(e) => e.stopPropagation()}>
+        <h3 className="flow-page__worker-modal-title">Worker Settings</h3>
+        <div className="flow-page__worker-fields">
+          <div className="flow-page__worker-section">
+            <div className="flow-page__worker-section-row">
+              <div className="flow-page__field">
+                <label className="flow-page__field-label">
                   Soulseek Account
                 </label>
-                <div className="text-sm font-medium text-white">
+                <div className="flow-page__worker-section-value">
                   {credentialUsername || "Unavailable"}
                 </div>
               </div>
@@ -3228,37 +3201,32 @@ export function FlowWorkerSettingsModal({
                 aria-label="Rotate Soulseek account now"
               >
                 <RefreshCw
-                  className={`h-4 w-4 ${
-                    rotatingSoulseekCredential ? "animate-spin" : ""
-                  }`}
+                  className={`artist-icon-sm${rotatingSoulseekCredential ? " animate-spin" : ""}`}
                 />
               </button>
             </div>
           </div>
-          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px] md:items-end">
-            <div className="grid gap-1.5">
-              <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
+          <div className="flow-page__worker-fields-split">
+            <div className="flow-page__field">
+              <label className="flow-page__field-label">
                 Download Concurrency
               </label>
               <div
                 ref={concurrencyTabsRef}
-                className="relative p-1.5 inline-flex"
-                style={{ backgroundColor: "#0f0f12" }}
+                className="flow-page__segmented"
                 role="radiogroup"
                 aria-label="Download concurrency"
               >
                 <div
                   ref={concurrencyActiveBubbleRef}
-                  className="absolute transition-all duration-300 ease-out z-10 opacity-0"
-                  style={{ backgroundColor: "#211f27" }}
+                  className="flow-page__segmented-bubble flow-page__segmented-bubble--active flow-page__segmented-bubble--initial"
                 />
                 <div
                   ref={concurrencyHoverBubbleRef}
-                  className="absolute transition-all duration-200 ease-out z-0"
-                  style={{ backgroundColor: "#1a1a1e" }}
+                  className="flow-page__segmented-bubble flow-page__segmented-bubble--hover"
                 />
                 <div
-                  className="relative flex gap-1"
+                  className="flow-page__segmented-options"
                   onMouseLeave={() => setHoveredConcurrencyIndex(null)}
                 >
                   {FLOW_WORKER_CONCURRENCY_OPTIONS.map((value, index) => (
@@ -3274,8 +3242,7 @@ export function FlowWorkerSettingsModal({
                       onClick={() =>
                         onChange((prev) => ({ ...prev, concurrency: value }))
                       }
-                      className="relative z-20 flex items-center justify-center px-4 py-2.5 font-medium transition-all duration-200 text-sm"
-                      style={{ color: "#fff" }}
+                      className="flow-page__segmented-option"
                     >
                       {value}
                     </button>
@@ -3283,11 +3250,11 @@ export function FlowWorkerSettingsModal({
                 </div>
               </div>
             </div>
-            <div className="grid gap-1.5">
-              <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
+            <div className="flow-page__field">
+              <label className="flow-page__field-label">
                 Retry Cycle
               </label>
-              <div className="relative">
+              <div className="flow-page__worker-select-wrap">
                 <select
                   value={settings.retryCycleMinutes}
                   onChange={(event) =>
@@ -3296,44 +3263,40 @@ export function FlowWorkerSettingsModal({
                       retryCycleMinutes: Number(event.target.value),
                     }))
                   }
-                  className="h-[52px] w-full appearance-none rounded-md border border-white/10 bg-[var(--aurral-surface)] pl-3 pr-12 text-sm text-white outline-none transition focus:border-[#90a07d] focus:ring-1 focus:ring-[#90a07d]"
+                  className="flow-page__worker-select"
                 >
                   {FLOW_WORKER_RETRY_CYCLE_OPTIONS.map((option) => (
                     <option
                       key={option.minutes}
                       value={option.minutes}
-                      className="bg-[#131419] text-white"
                     >
                       {option.label}
                     </option>
                   ))}
                 </select>
-                <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white" />
+                <ChevronDown className="flow-page__worker-select-icon" />
               </div>
             </div>
           </div>
-          <div className="grid gap-1.5">
-            <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
+          <div className="flow-page__field">
+            <label className="flow-page__field-label">
               Preferred Format
             </label>
-            <div className="flex items-stretch gap-2">
+            <div className="flow-page__worker-format-row">
               <div
                 ref={formatTabsRef}
-                className="relative p-1.5 flex-1 min-w-0"
-                style={{ backgroundColor: "#0f0f12" }}
+                className="flow-page__segmented flow-page__segmented--wide"
               >
                 <div
                   ref={formatActiveBubbleRef}
-                  className="absolute transition-all duration-300 ease-out z-10 opacity-0"
-                  style={{ backgroundColor: "#211f27" }}
+                  className="flow-page__segmented-bubble flow-page__segmented-bubble--active flow-page__segmented-bubble--initial"
                 />
                 <div
                   ref={formatHoverBubbleRef}
-                  className="absolute transition-all duration-200 ease-out z-0"
-                  style={{ backgroundColor: "#1a1a1e" }}
+                  className="flow-page__segmented-bubble flow-page__segmented-bubble--hover"
                 />
                 <div
-                  className="relative flex gap-1"
+                  className="flow-page__segmented-options"
                   onMouseLeave={() => setHoveredFormatIndex(null)}
                 >
                   {FLOW_WORKER_FORMAT_OPTIONS.map((option, index) => (
@@ -3350,18 +3313,15 @@ export function FlowWorkerSettingsModal({
                           preferredFormat: option.id,
                         }))
                       }
-                      className="relative z-20 flex items-center justify-center px-4 py-2.5 font-medium transition-all duration-200 text-sm"
-                      style={{ color: "#fff" }}
+                      className="flow-page__segmented-option"
                     >
                       {option.label}
                     </button>
                   ))}
                 </div>
               </div>
-              <div className="flex min-w-[100px] items-center justify-end rounded-md border border-white/10 bg-black/20 px-3 py-2">
-                <div className="grid gap-0.5 pr-3">
-                  <span className="text-sm font-medium text-white">Strict</span>
-                </div>
+              <div className="flow-page__strict-toggle">
+                <span className="flow-page__strict-toggle-label">Strict</span>
                 <PillToggle
                   checked={settings.preferredFormatStrict === true}
                   onChange={(event) => {
@@ -3375,11 +3335,11 @@ export function FlowWorkerSettingsModal({
               </div>
             </div>
           </div>
-          <div className="grid gap-1.5">
-            <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
+          <div className="flow-page__field">
+            <label className="flow-page__field-label">
               Existing Files
             </label>
-            <div className="relative">
+            <div className="flow-page__worker-select-wrap">
               <select
                 value={settings.existingFileMode || "hardlink"}
                 onChange={(event) =>
@@ -3388,24 +3348,23 @@ export function FlowWorkerSettingsModal({
                     existingFileMode: event.target.value,
                   }))
                 }
-                className="h-[52px] w-full appearance-none rounded-md border border-white/10 bg-[var(--aurral-surface)] pl-3 pr-12 text-sm text-white outline-none transition focus:border-[#90a07d] focus:ring-1 focus:ring-[#90a07d]"
+                className="flow-page__worker-select"
                 title="How generated playlists reuse existing Aurral or Lidarr files"
               >
                 {FLOW_WORKER_EXISTING_FILE_OPTIONS.map((option) => (
                   <option
                     key={option.id}
                     value={option.id}
-                    className="bg-[#131419] text-white"
                   >
                     {option.label}
                   </option>
                 ))}
               </select>
-              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white" />
+              <ChevronDown className="flow-page__worker-select-icon" />
             </div>
           </div>
         </div>
-        <div className="flex gap-3 justify-end">
+        <div className="artist-modal__actions">
           <button
             onClick={onCancel}
             className="btn btn-secondary"

@@ -283,8 +283,8 @@ function GlobalSearch() {
             aria-expanded={scopeMenuOpen}
             aria-label="Search scope"
           >
-            <span className="sm:hidden">{selectedScope.shortLabel}</span>
-            <span className="hidden sm:inline">{selectedScope.label}</span>
+            <span className="global-search__scope-label--short">{selectedScope.shortLabel}</span>
+            <span className="global-search__scope-label--full">{selectedScope.label}</span>
             <ChevronDown
               className={`artist-icon-sm${scopeMenuOpen ? " artist-chevron--open" : ""}`}
             />
@@ -307,8 +307,8 @@ function GlobalSearch() {
                         role="option"
                         aria-selected={selected}
                       >
-                        <span className="sm:hidden">{scope.shortLabel}</span>
-                        <span className="hidden sm:inline">{scope.label}</span>
+                        <span className="global-search__scope-label--short">{scope.shortLabel}</span>
+                        <span className="global-search__scope-label--full">{scope.label}</span>
                         {selected && (
                           <span className="global-search__selected-dot" />
                         )}
@@ -337,12 +337,12 @@ function GlobalSearch() {
           />
           {!searchQuery && (
             <div className="global-search__placeholder">
-              <span className="sm:hidden">Search...</span>
-              <span className="hidden sm:inline">Type</span>
+              <span className="global-search__scope-label--short">Search...</span>
+              <span className="global-search__scope-label--full">Type</span>
               <span className="global-search__key">
                 /
               </span>
-              <span className="hidden sm:inline">to search</span>
+              <span className="global-search__scope-label--full">to search</span>
             </div>
           )}
           {loadingSuggestions && (
