@@ -15,10 +15,12 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "axios": "^1.16.1",
+    "howler": "^2.2.4",
     "lucide-react": "^1.17.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-router-dom": "^7.16.0"
+    "react-router-dom": "^7.16.0",
+    "react-use-audio-player": "^4.0.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
