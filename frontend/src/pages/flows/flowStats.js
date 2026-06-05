@@ -11,6 +11,27 @@ export const getDownloadedTrackCount = (stats) => {
   return Number.isFinite(done) && done >= 0 ? done : 0;
 };
 
+export const getPlaylistDownloadProgressPct = (stats, trackCount = 0) => {
+  const done = Number(stats?.done || 0);
+  const total = Math.max(
+    Number(trackCount || 0),
+    Number(stats?.pending || 0) +
+      Number(stats?.downloading || 0) +
+      done,
+  );
+  if (total <= 0) return null;
+  return Math.min(100, Math.round((done / total) * 100));
+};
+
+export const formatTrackCountLabel = (trackCount, stats) => {
+  const count = Math.max(Number(trackCount || 0), Number(stats?.total || 0));
+  const trackWord = count === 1 ? "track" : "tracks";
+  const base = `${count} ${trackWord}`;
+  const pct = getPlaylistDownloadProgressPct(stats, count);
+  if (pct === null) return base;
+  return `${base} · ${pct}%`;
+};
+
 export const buildFlowStatsFromJobs = (jobs) => {
   const stats = { ...EMPTY_FLOW_STATS };
   if (!Array.isArray(jobs)) return stats;
