@@ -1393,7 +1393,6 @@ function DiscoverPage() {
         setNearbyLocationMode(storedMode);
       }
       setAppliedNearbyZip(storedZip);
-      setNearbyZipDraft(storedZip);
     } catch {}
   }, [authUser?.id]);
 

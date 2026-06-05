@@ -2,7 +2,7 @@ import { memo } from "react";
 import PropTypes from "prop-types";
 import { Clock, MapPin, Music } from "lucide-react";
 
-export const formatShowDate = (show) => {
+const formatShowDate = (show) => {
   if (!show?.date && !show?.dateTime) return null;
   const raw = show.dateTime || show.date;
   const parsed = new Date(raw);
@@ -20,7 +20,7 @@ export const formatShowDate = (show) => {
   return dateLabel;
 };
 
-export const formatShowLocation = (show) =>
+const formatShowLocation = (show) =>
   [show?.venueName, [show?.city, show?.region].filter(Boolean).join(", ")]
     .filter(Boolean)
     .join(" - ");

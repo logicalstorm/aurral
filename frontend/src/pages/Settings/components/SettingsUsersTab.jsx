@@ -295,7 +295,7 @@ export function SettingsUsersTab({
               <div className="settings-page__loading">Loading…</div>
             ) : (
               <ul>
-                {usersList.map((u, i) => (
+                {usersList.map((u) => (
                   <li
                     key={u.id}
                     className="settings-page__user-row"

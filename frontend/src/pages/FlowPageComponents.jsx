@@ -922,7 +922,7 @@ function FlowTrackKebabMenu({
   useEffect(() => {
     if (!isOpen) return;
     playlistMenuProps?.onLoadPlaylists?.();
-  }, [isOpen]);
+  }, [isOpen, playlistMenuProps]);
 
   const close = () => {
     setIsOpen(false);
@@ -2232,7 +2232,6 @@ export function FlowTracksPanel({
   loading,
   error,
   emptyMessage = "No tracks generated for this flow yet.",
-  editable = false,
   hideFailedTracks = false,
   headerActions = null,
   deletingTrackId = null,
