@@ -13,6 +13,47 @@ import PillToggle from "../../components/PillToggle";
 import { PlaylistArtworkThumb } from "../FlowPageComponents";
 import { getDownloadedTrackCount } from "./flowStats";
 
+export function LibrarySidebarToggleIcon({ collapsed = false }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="flow-page__library-collapse-icon"
+      aria-hidden="true"
+    >
+      <rect
+        x="3.5"
+        y="3.5"
+        width="17"
+        height="17"
+        rx="2.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <path d="M9 3.5v17" stroke="currentColor" strokeWidth="1.5" />
+      {collapsed ? (
+        <path
+          d="M13.5 12H18M16 9.5L18.5 12L16 14.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ) : (
+        <path
+          d="M15.5 12H11M13.5 9.5L11 12L13.5 14.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+    </svg>
+  );
+}
+
 export function FlowLibraryCreateMenu({
   onImport,
   onNewPlaylist,
@@ -20,6 +61,7 @@ export function FlowLibraryCreateMenu({
   creatingPlaylist = false,
   creatingFlow = false,
   canCreateFlow = true,
+  compact = false,
   spotifyImportHref = "https://aurral.org/aurral-convert",
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -41,7 +83,7 @@ export function FlowLibraryCreateMenu({
 
   return (
     <div
-      className={`flow-page__library-create${isOpen ? " is-open" : ""}`}
+      className={`flow-page__library-create${compact ? " is-compact" : ""}${isOpen ? " is-open" : ""}`}
       ref={menuRef}
     >
       <button
@@ -162,6 +204,7 @@ export function PlaylistLibraryItem({
   artworkUrl,
   isActive,
   stats,
+  collapsed = false,
   onSelect,
   onArtworkClick,
 }) {
@@ -180,6 +223,8 @@ export function PlaylistLibraryItem({
       role="button"
       tabIndex={0}
       aria-current={isActive ? "true" : undefined}
+      aria-label={collapsed ? entry.name : undefined}
+      title={collapsed ? entry.name : undefined}
       onClick={() => onSelect?.(entry)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
