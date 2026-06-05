@@ -1,8 +1,13 @@
-import { useEffect, useMemo } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import PropTypes from "prop-types";
 import { ArrowRight, CheckCircle, Music, Star } from "lucide-react";
 import AddAlbumButton from "../../../components/AddAlbumButton";
-import { getReleaseMetric, getReleaseYear } from "../utils";
+import {
+  getArtistReleaseGridColumnCount,
+  getExpandedReleaseRenderAfterIndex,
+  getReleaseMetric,
+  getReleaseYear,
+} from "../utils";
 import { ArtistDetailsReleaseTrackList } from "./ArtistDetailsReleaseTrackList";
 
 const sortLatest = (items) =>
@@ -35,6 +40,9 @@ export function ArtistDetailsAppearsOn({
   onVisibleCoverIdsChange,
   onViewAll,
 }) {
+  const [gridColumnCount, setGridColumnCount] = useState(
+    getArtistReleaseGridColumnCount,
+  );
   const releaseGroups = useMemo(
     () => artist["appears-on-release-groups"] || [],
     [artist],
@@ -48,6 +56,14 @@ export function ArtistDetailsAppearsOn({
     onVisibleCoverIdsChange?.(visibleReleaseGroups.map((item) => item.id).filter(Boolean));
   }, [onVisibleCoverIdsChange, visibleReleaseGroups]);
 
+  useEffect(() => {
+    const updateGridColumnCount = () =>
+      setGridColumnCount(getArtistReleaseGridColumnCount());
+    updateGridColumnCount();
+    window.addEventListener("resize", updateGridColumnCount);
+    return () => window.removeEventListener("resize", updateGridColumnCount);
+  }, []);
+
   const expandedRelease = visibleReleaseGroups.find(
     (releaseGroup) => releaseGroup.id === expandedReleaseGroup,
   );
@@ -55,6 +71,16 @@ export function ArtistDetailsAppearsOn({
   const expandedTrackKey = expandedStatus?.libraryId || expandedRelease?.id;
   const expandedTracks = expandedTrackKey ? albumTracks[expandedTrackKey] : null;
   const expandedLoading = expandedTrackKey ? loadingTracks[expandedTrackKey] : false;
+  const expandedReleaseIndex = expandedRelease
+    ? visibleReleaseGroups.findIndex(
+        (releaseGroup) => releaseGroup.id === expandedRelease.id,
+      )
+    : -1;
+  const expandedRenderAfterIndex = getExpandedReleaseRenderAfterIndex(
+    expandedReleaseIndex,
+    visibleReleaseGroups.length,
+    gridColumnCount,
+  );
 
   if (releaseGroups.length === 0) return null;
 
@@ -77,13 +103,13 @@ export function ArtistDetailsAppearsOn({
       </div>
 
       <div className="artist-release-grid">
-        {visibleReleaseGroups.map((releaseGroup) => {
+        {visibleReleaseGroups.map((releaseGroup, index) => {
           const status = getAlbumStatus(releaseGroup.id);
           const metric = getReleaseMetric(releaseGroup);
           const artistCredit = releaseGroup["artist-credit"]?.[0]?.name || "";
           return (
+            <Fragment key={releaseGroup.id}>
             <article
-              key={releaseGroup.id}
               className="artist-release-card"
               onClick={() => handleReleaseGroupAlbumClick(releaseGroup, status?.libraryId)}
             >
@@ -140,26 +166,28 @@ export function ArtistDetailsAppearsOn({
                 </p>
               )}
             </article>
+            {expandedRelease && expandedRenderAfterIndex === index ? (
+              <div className="artist-grid-full">
+                <ArtistDetailsReleaseTrackList
+                  release={expandedRelease}
+                  trackKey={expandedTrackKey}
+                  tracks={expandedTracks}
+                  loading={expandedLoading}
+                  previewVolume={previewVolume}
+                  onAddTrackToPlaylist={onAddTrackToPlaylist}
+                  playlists={playlists}
+                  playlistsLoading={playlistsLoading}
+                  playlistSavingKey={playlistSavingKey}
+                  playlistError={playlistError}
+                  getDefaultPlaylistName={getDefaultPlaylistName}
+                  onLoadPlaylists={onLoadPlaylists}
+                />
+              </div>
+            ) : null}
+            </Fragment>
           );
         })}
       </div>
-
-      {expandedRelease && (
-        <ArtistDetailsReleaseTrackList
-          release={expandedRelease}
-          trackKey={expandedTrackKey}
-          tracks={expandedTracks}
-          loading={expandedLoading}
-          previewVolume={previewVolume}
-          onAddTrackToPlaylist={onAddTrackToPlaylist}
-          playlists={playlists}
-          playlistsLoading={playlistsLoading}
-          playlistSavingKey={playlistSavingKey}
-          playlistError={playlistError}
-          getDefaultPlaylistName={getDefaultPlaylistName}
-          onLoadPlaylists={onLoadPlaylists}
-        />
-      )}
     </section>
   );
 }

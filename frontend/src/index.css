@@ -2136,7 +2136,10 @@ textarea {
 }
 
 .artist-action-bar__inner {
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
 }
 
 .artist-action-bar__group,
@@ -2147,7 +2150,13 @@ textarea {
 }
 
 .artist-action-bar__group {
-  flex-wrap: wrap;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+}
+
+.artist-row-actions {
+  flex-shrink: 0;
 }
 
 .artist-action-bar__inner,
@@ -2372,6 +2381,49 @@ textarea {
 
 .artist-link-button:hover {
   color: var(--aurral-white);
+}
+
+@media (max-width: 639px) {
+  .artist-heading-row:has(.artist-tabs) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    align-items: center;
+    gap: 0.625rem 0.75rem;
+  }
+
+  .artist-heading-row:has(.artist-tabs) > .artist-min-0 {
+    display: contents;
+  }
+
+  .artist-heading-row:has(.artist-tabs) .artist-controls-row {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .artist-heading-row:has(.artist-tabs) > .artist-link-button {
+    grid-column: 2;
+    grid-row: 1;
+    white-space: nowrap;
+  }
+
+  .artist-heading-row:has(.artist-tabs) .artist-tabs {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .artist-heading-row:has(.artist-tabs) .artist-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .artist-heading-row:has(.artist-tabs) .artist-tab {
+    flex-shrink: 0;
+  }
 }
 
 .artist-release-grid,
@@ -3409,11 +3461,6 @@ textarea {
 @media (min-width: 640px) {
   .artist-hidden-mobile {
     display: inline-flex;
-  }
-
-  .artist-action-bar__inner {
-    flex-direction: row;
-    align-items: center;
   }
 
   .artist-release-grid,
@@ -6797,6 +6844,14 @@ textarea {
   padding: 0.75rem;
   background-color: var(--aurral-overlay);
   border-radius: var(--aurral-radius-sm);
+}
+
+.flow-page__library-create-menu--portaled {
+  top: 0;
+  right: auto;
+  z-index: 50;
+  width: min(18.5rem, calc(100vw - 1.5rem));
+  max-width: calc(100% - 1.5rem);
 }
 
 .flow-page__library-create-menu-label {
