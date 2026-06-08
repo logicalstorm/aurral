@@ -27,6 +27,7 @@ import healthRouter from "./routes/health.js";
 import weeklyFlowRouter from "./routes/weeklyFlow.js";
 import { startSlskdOrchestratorWorker } from "./services/slskdOrchestratorWorker.js";
 import { startDiscoveryRefreshWorker } from "./services/discoveryRefreshWorker.js";
+import { ensurePlaylistFilesystemLayout } from "./services/playlistFilesystemMigration.js";
 import authRouter from "./routes/auth.js";
 import imageProxyRouter from "./routes/imageProxy.js";
 
@@ -323,6 +324,8 @@ broadcastDownloadStatuses();
 setInterval(broadcastDownloadStatuses, DOWNLOAD_STATUS_INTERVAL_MS);
 broadcastWeeklyFlowStatus();
 setInterval(broadcastWeeklyFlowStatus, WEEKLY_FLOW_STATUS_INTERVAL_MS);
+
+ensurePlaylistFilesystemLayout();
 
 httpServer.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server running on port ${PORT}`);
