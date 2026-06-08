@@ -103,7 +103,8 @@ export const upsertAurralHistory = (entry = {}) => {
 export const recordAurralHistory = (entry = {}) => appendAurralHistory(entry);
 
 export const recordDiscoveryRefreshStarted = () =>
-  appendAurralHistory({
+  upsertAurralHistory({
+    referenceId: "discovery",
     kind: "discovery_refresh",
     title: "Refreshing discovery",
     subtitle: "Gathering recommendations from your library and listening history",
@@ -125,7 +126,8 @@ export const recordDiscoveryUpdated = ({
   if (genreCount > 0) {
     parts.push(`${genreCount} genre${genreCount === 1 ? "" : "s"}`);
   }
-  return appendAurralHistory({
+  return upsertAurralHistory({
+    referenceId: "discovery",
     kind: "discovery_refresh",
     title: "Discovery updated",
     subtitle: parts.length > 0 ? parts.join(", ") : "Recommendations refreshed",
@@ -137,7 +139,8 @@ export const recordDiscoveryUpdated = ({
 };
 
 export const recordDiscoveryRefreshFailed = (message = "Discovery refresh failed") =>
-  appendAurralHistory({
+  upsertAurralHistory({
+    referenceId: "discovery",
     kind: "discovery_refresh",
     title: "Discovery refresh failed",
     subtitle: String(message || "").trim() || null,
@@ -175,7 +178,8 @@ export const recordAlbumRequested = ({
   const artist = String(artistName || "").trim();
   const ref = String(albumId || artistMbid || name).trim();
   if (!ref) return null;
-  return appendAurralHistory({
+  return upsertAurralHistory({
+    referenceId: ref,
     kind: "album_requested",
     title: searching ? `Searching Lidarr for ${name}` : `Requested ${name}`,
     subtitle: artist || null,
@@ -204,7 +208,8 @@ export const recordFlowGenerationStarted = ({ flowId } = {}) => {
   const id = String(flowId || "").trim();
   if (!id) return null;
   const flowName = resolvePlaylistName(id);
-  return appendAurralHistory({
+  return upsertAurralHistory({
+    referenceId: id,
     kind: "flow_generating",
     title: `Generating playlist for ${flowName}`,
     subtitle: "Building tracklist from discovery sources",
@@ -220,23 +225,25 @@ export const recordFlowTracksGenerated = ({
   tracksQueued = 0,
   reserveTracks = 0,
 } = {}) => {
+  const id = String(flowId || "").trim();
+  if (!id) return null;
   const total = tracksQueued + reserveTracks;
   if (total <= 0) return null;
-  const flowName = resolvePlaylistName(flowId);
-  return appendAurralHistory({
-    kind: "flow_generated",
-    title:
-      total === 1
-        ? `Generated 1 track for ${flowName}`
-        : `Generated ${total} tracks for ${flowName}`,
+  const flowName = resolvePlaylistName(id);
+  return upsertAurralHistory({
+    referenceId: id,
+    kind: "flow_generating",
+    title: `Generated playlist for ${flowName}`,
     subtitle:
       reserveTracks > 0
-        ? `${tracksQueued} queued · ${reserveTracks} in reserve`
-        : `${tracksQueued} queued for download`,
-    status: tracksQueued > 0 ? "processing" : "completed",
-    statusLabel: tracksQueued > 0 ? "Generating" : "Generated",
-    href: buildPlaylistHref(flowId),
-    metadata: { flowId, tracksQueued, reserveTracks },
+        ? `${total} tracks · ${tracksQueued} queued · ${reserveTracks} in reserve`
+        : total === 1
+          ? "1 track queued for download"
+          : `${total} tracks queued for download`,
+    status: "completed",
+    statusLabel: "Generated",
+    href: buildPlaylistHref(id),
+    metadata: { flowId: id, tracksQueued, reserveTracks },
   });
 };
 
