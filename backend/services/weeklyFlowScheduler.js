@@ -4,6 +4,7 @@ import { playlistManager } from "./weeklyFlowPlaylistManager.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { slskdClient } from "./slskdClient.js";
 import { weeklyFlowOperationQueue } from "./weeklyFlowOperationQueue.js";
+import { recordFlowGenerationStarted } from "./aurralHistoryService.js";
 
 export async function runScheduledRefresh() {
   if (!slskdClient.isConfigured()) return;
@@ -17,6 +18,7 @@ export async function runScheduledRefresh() {
         `scheduled:${flow.id}`,
         async () => {
           if (!flowPlaylistConfig.isEnabled(flow.id)) return;
+          recordFlowGenerationStarted({ flowId: flow.id });
           const flowStats = downloadTracker.getPlaylistTypeStats(flow.id);
           const shouldStopWorker =
             weeklyFlowWorker.running &&

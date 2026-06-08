@@ -2222,6 +2222,7 @@ export function FlowTracksPanel({
   tracks,
   loading,
   error,
+  activityHint = null,
   emptyMessage = "No tracks generated for this flow yet.",
   hideFailedTracks = false,
   headerActions = null,
@@ -2352,7 +2353,14 @@ export function FlowTracksPanel({
         )}
         {!loading && !error && visibleTracks.length === 0 && (
           <div className="flow-page__tracks-empty">
-            {emptyMessage}
+            {activityHint ? (
+              <>
+                <Loader2 className="artist-icon-sm animate-spin" />
+                <span>{activityHint}</span>
+              </>
+            ) : (
+              emptyMessage
+            )}
           </div>
         )}
         {!loading && !error && visibleTracks.length > 0 && (
