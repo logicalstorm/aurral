@@ -456,7 +456,7 @@ export const buildStreamUrl = async (path) => {
 export const getFlowTrackStreamUrl = (jobId) => {
   const base = import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
   const { token } = getStoredAuth();
-  let url = `${base}/weekly-flow/stream/${encodeURIComponent(jobId)}`;
+  let url = `${base}/playlists/stream/${encodeURIComponent(jobId)}`;
   if (token) {
     url += `?token=${encodeURIComponent(token)}`;
   }
@@ -474,7 +474,7 @@ export const getFlowArtworkUrl = (playlistId, version) => {
     params.set("v", String(version));
   }
   const query = params.toString();
-  let url = `${base}/weekly-flow/artwork/${encodeURIComponent(playlistId)}`;
+  let url = `${base}/playlists/artwork/${encodeURIComponent(playlistId)}`;
   if (query) {
     url += `?${query}`;
   }
@@ -483,7 +483,7 @@ export const getFlowArtworkUrl = (playlistId, version) => {
 
 export const uploadFlowArtwork = async (playlistId, file) => {
   const response = await api.put(
-    `/weekly-flow/artwork/${encodeURIComponent(playlistId)}`,
+    `/playlists/artwork/${encodeURIComponent(playlistId)}`,
     file,
     {
       headers: {
@@ -496,14 +496,14 @@ export const uploadFlowArtwork = async (playlistId, file) => {
 
 export const deleteFlowArtwork = async (playlistId) => {
   const response = await api.delete(
-    `/weekly-flow/artwork/${encodeURIComponent(playlistId)}`,
+    `/playlists/artwork/${encodeURIComponent(playlistId)}`,
   );
   return response.data;
 };
 
 export const generateFlowArtwork = async (playlistId) => {
   const response = await api.post(
-    `/weekly-flow/artwork/${encodeURIComponent(playlistId)}/generate`,
+    `/playlists/artwork/${encodeURIComponent(playlistId)}/generate`,
   );
   return response.data;
 };
@@ -996,6 +996,11 @@ export const getLidarrTags = async (url, apiKey) => {
   return response.data;
 };
 
+export const testSlskdConnection = async () => {
+  const response = await api.post("/settings/slskd/test");
+  return response.data;
+};
+
 export const testLidarrConnection = async (url, apiKey) => {
   const params = new URLSearchParams();
   if (url) params.append("url", url);
@@ -1057,47 +1062,47 @@ export const getFlowStatus = async ({
   if (jobsLimit != null) {
     params.jobsLimit = jobsLimit;
   }
-  const response = await api.get("/weekly-flow/status", { params });
+  const response = await api.get("/playlists/status", { params });
   return response.data;
 };
 
 export const getFlowJobs = async (flowId, limit = 200) => {
-  const response = await api.get(`/weekly-flow/jobs/${flowId}`, {
+  const response = await api.get(`/playlists/jobs/${flowId}`, {
     params: { limit },
   });
   return response.data;
 };
 
 export const createFlow = async (payload) => {
-  const response = await api.post("/weekly-flow/flows", payload);
+  const response = await api.post("/playlists/flows", payload);
   return response.data;
 };
 
 export const updateFlow = async (flowId, payload) => {
-  const response = await api.put(`/weekly-flow/flows/${flowId}`, payload);
+  const response = await api.put(`/playlists/flows/${flowId}`, payload);
   return response.data;
 };
 
 export const deleteFlow = async (flowId) => {
-  const response = await api.delete(`/weekly-flow/flows/${flowId}`);
+  const response = await api.delete(`/playlists/flows/${flowId}`);
   return response.data;
 };
 
 export const convertFlowToStaticPlaylist = async (flowId, payload = {}) => {
   const response = await api.post(
-    `/weekly-flow/flows/${flowId}/static-playlist`,
+    `/playlists/flows/${flowId}/static-playlist`,
     payload,
   );
   return response.data;
 };
 
 export const createSharedPlaylist = async (payload) => {
-  const response = await api.post("/weekly-flow/shared-playlists", payload);
+  const response = await api.post("/playlists/shared-playlists", payload);
   return response.data;
 };
 
 export const setFlowEnabled = async (flowId, enabled) => {
-  const response = await api.put(`/weekly-flow/flows/${flowId}/enabled`, {
+  const response = await api.put(`/playlists/flows/${flowId}/enabled`, {
     enabled,
   });
   return response.data;
@@ -1105,7 +1110,7 @@ export const setFlowEnabled = async (flowId, enabled) => {
 
 export const importSharedPlaylist = async (payload) => {
   const response = await api.post(
-    "/weekly-flow/shared-playlists/import",
+    "/playlists/shared-playlists/import",
     payload,
   );
   return response.data;
@@ -1113,7 +1118,7 @@ export const importSharedPlaylist = async (payload) => {
 
 export const updateSharedPlaylist = async (playlistId, payload) => {
   const response = await api.put(
-    `/weekly-flow/shared-playlists/${playlistId}`,
+    `/playlists/shared-playlists/${playlistId}`,
     payload,
   );
   return response.data;
@@ -1121,7 +1126,7 @@ export const updateSharedPlaylist = async (playlistId, payload) => {
 
 export const addSharedPlaylistTracks = async (playlistId, payload) => {
   const response = await api.post(
-    `/weekly-flow/shared-playlists/${playlistId}/tracks`,
+    `/playlists/shared-playlists/${playlistId}/tracks`,
     payload,
   );
   return response.data;
@@ -1129,62 +1134,58 @@ export const addSharedPlaylistTracks = async (playlistId, payload) => {
 
 export const deleteSharedPlaylist = async (playlistId) => {
   const response = await api.delete(
-    `/weekly-flow/shared-playlists/${playlistId}`,
+    `/playlists/shared-playlists/${playlistId}`,
   );
   return response.data;
 };
 
 export const deleteSharedPlaylistTrack = async (playlistId, jobId) => {
   const response = await api.delete(
-    `/weekly-flow/shared-playlists/${playlistId}/tracks/${jobId}`,
+    `/playlists/shared-playlists/${playlistId}/tracks/${jobId}`,
   );
   return response.data;
 };
 
 export const reSearchSharedPlaylistTrack = async (playlistId, jobId) => {
   const response = await api.post(
-    `/weekly-flow/shared-playlists/${playlistId}/tracks/${jobId}/research`,
+    `/playlists/shared-playlists/${playlistId}/tracks/${jobId}/research`,
   );
   return response.data;
 };
 
 export const startFlowPlaylist = async (flowId, limit = 30) => {
-  const response = await api.post(`/weekly-flow/start/${flowId}`, {
+  const response = await api.post(`/playlists/start/${flowId}`, {
     limit,
   });
   return response.data;
 };
 
 export const resetFlowPlaylists = async (flowIds) => {
-  const response = await api.post("/weekly-flow/reset", {
+  const response = await api.post("/playlists/reset", {
     flowIds,
   });
   return response.data;
 };
 
 export const startFlowWorker = async () => {
-  const response = await api.post("/weekly-flow/worker/start");
+  const response = await api.post("/playlists/worker/start");
   return response.data;
 };
 
 export const stopFlowWorker = async () => {
-  const response = await api.post("/weekly-flow/worker/stop");
+  const response = await api.post("/playlists/worker/stop");
   return response.data;
 };
 
 export const updateFlowWorkerSettings = async (settings) => {
-  const response = await api.put("/weekly-flow/worker/settings", settings);
+  const response = await api.put("/playlists/worker/settings", settings);
   return response.data;
 };
 
-export const rotateFlowWorkerSoulseekCredentials = async () => {
-  const response = await api.post("/weekly-flow/worker/soulseek/rotate");
-  return response.data;
-};
 
 export const setPlaylistRetryCyclePaused = async (playlistId, paused) => {
   const response = await api.put(
-    `/weekly-flow/playlists/${playlistId}/retry-cycle`,
+    `/playlists/playlists/${playlistId}/retry-cycle`,
     { paused },
   );
   return response.data;
