@@ -13,6 +13,57 @@ const getSettingStmt = db.prepare("SELECT value FROM settings WHERE key = ?");
 const upsertSettingStmt = db.prepare(
   "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)"
 );
+const deleteSettingStmt = db.prepare("DELETE FROM settings WHERE key = ?");
+
+const PLAYLIST_WORKER_RETRY_CYCLE_MINUTES = [15, 30, 60, 360, 720, 1440];
+
+function readStoredSettingJson(primaryKey, legacyKeys = []) {
+  const primary = dbHelpers.parseJSON(getSettingStmt.get(primaryKey)?.value);
+  if (primary != null) return primary;
+  for (const legacyKey of legacyKeys) {
+    const legacy = dbHelpers.parseJSON(getSettingStmt.get(legacyKey)?.value);
+    if (legacy != null) return legacy;
+  }
+  return null;
+}
+
+function deleteStoredSettingKeys(keys) {
+  for (const key of keys) {
+    deleteSettingStmt.run(key);
+  }
+}
+
+function normalizePlaylistWorkerSettings(raw) {
+  const worker = raw && typeof raw === "object" ? raw : {};
+  const parsedConcurrency = Number(worker.concurrency);
+  const concurrency =
+    Number.isFinite(parsedConcurrency) && parsedConcurrency >= 1
+      ? Math.min(3, Math.floor(parsedConcurrency))
+      : 2;
+  const parsedRetryCycleMinutes = Number(worker.retryCycleMinutes);
+  const retryCycleMinutes =
+    Number.isFinite(parsedRetryCycleMinutes) &&
+    PLAYLIST_WORKER_RETRY_CYCLE_MINUTES.includes(
+      Math.floor(parsedRetryCycleMinutes),
+    )
+      ? Math.floor(parsedRetryCycleMinutes)
+      : 15;
+  const retryPausedPlaylistIds = Array.isArray(worker.retryPausedPlaylistIds)
+    ? [
+        ...new Set(
+          worker.retryPausedPlaylistIds
+            .map((entry) => String(entry || "").trim())
+            .filter(Boolean),
+        ),
+      ]
+    : [];
+  return {
+    concurrency,
+    retryCycleMinutes,
+    retryPausedPlaylistIds,
+    existingFileMode: normalizeExistingFileMode(worker.existingFileMode),
+  };
+}
 
 const getDiscoveryCacheStmt = db.prepare(
   "SELECT value, last_updated FROM discovery_cache WHERE key = ?"
@@ -363,70 +414,18 @@ export const dbOps = {
     const releaseTypes = dbHelpers.parseJSON(
       getSettingStmt.get("releaseTypes")?.value
     );
-    const weeklyFlowPlaylists = dbHelpers.parseJSON(
-      getSettingStmt.get("weeklyFlowPlaylists")?.value
-    );
-    const weeklyFlows = dbHelpers.parseJSON(
-      getSettingStmt.get("weeklyFlows")?.value
-    );
-    const sharedFlowPlaylists = dbHelpers.parseJSON(
-      getSettingStmt.get("sharedFlowPlaylists")?.value
-    );
-    const weeklyFlowWorker = dbHelpers.parseJSON(
-      getSettingStmt.get("weeklyFlowWorker")?.value
+    const flows = readStoredSettingJson("flows", ["weeklyFlows"]);
+    const sharedPlaylists = readStoredSettingJson("sharedPlaylists", [
+      "sharedFlowPlaylists",
+    ]);
+    const playlistWorker = normalizePlaylistWorkerSettings(
+      readStoredSettingJson("playlistWorker", ["weeklyFlowWorker"]),
     );
     const blocklist = dbHelpers.parseJSON(
       getSettingStmt.get("blocklist")?.value
     );
     const onboardingComplete =
       getSettingStmt.get("onboardingComplete")?.value === "true";
-    const parsedConcurrency = Number(weeklyFlowWorker?.concurrency);
-    const concurrency =
-      Number.isFinite(parsedConcurrency) && parsedConcurrency >= 1
-        ? Math.min(3, Math.floor(parsedConcurrency))
-        : 2;
-    const preferredFormat =
-      String(weeklyFlowWorker?.preferredFormat || "").toLowerCase() === "mp3"
-        ? "mp3"
-        : "flac";
-    const preferredFormatStrict = weeklyFlowWorker?.preferredFormatStrict === true;
-    const parsedRetryCycleMinutes = Number(weeklyFlowWorker?.retryCycleMinutes);
-    const retryCycleMinutes =
-      Number.isFinite(parsedRetryCycleMinutes) &&
-      [15, 30, 60, 360, 720, 1440].includes(
-        Math.floor(parsedRetryCycleMinutes),
-      )
-        ? Math.floor(parsedRetryCycleMinutes)
-        : 15;
-    const retryPausedPlaylistIds = Array.isArray(
-      weeklyFlowWorker?.retryPausedPlaylistIds,
-    )
-      ? [...new Set(
-          weeklyFlowWorker.retryPausedPlaylistIds
-            .map((entry) => String(entry || "").trim())
-            .filter(Boolean),
-        )]
-      : [];
-    const existingFileMode = normalizeExistingFileMode(
-      weeklyFlowWorker?.existingFileMode,
-    );
-
-    const defaultFlowPlaylists = {
-      discover: { enabled: false, nextRunAt: null },
-      mix: { enabled: false, nextRunAt: null },
-      trending: { enabled: false, nextRunAt: null },
-    };
-    const merged = weeklyFlowPlaylists
-      ? { ...defaultFlowPlaylists, ...weeklyFlowPlaylists }
-      : defaultFlowPlaylists;
-    if (merged.recommended) {
-      merged.discover = {
-        ...defaultFlowPlaylists.discover,
-        ...merged.discover,
-        ...merged.recommended,
-      };
-    }
-    delete merged.recommended;
 
     const result = {
       integrations: decryptIntegrations(integrations, encKey) || {},
@@ -438,17 +437,9 @@ export const dbOps = {
           : { localNetworkBypass: { enabled: false } },
       rootFolderPath: rootFolderPath || null,
       releaseTypes: releaseTypes || [],
-      weeklyFlowPlaylists: merged,
-      weeklyFlows: weeklyFlows || null,
-      sharedFlowPlaylists: sharedFlowPlaylists || null,
-      weeklyFlowWorker: {
-        concurrency,
-        preferredFormat,
-        preferredFormatStrict,
-        retryCycleMinutes,
-        retryPausedPlaylistIds,
-        existingFileMode,
-      },
+      flows: flows || null,
+      sharedPlaylists: sharedPlaylists || null,
+      playlistWorker,
       blocklist:
         blocklist && typeof blocklist === "object"
           ? blocklist
@@ -499,29 +490,28 @@ export const dbOps = {
           dbHelpers.stringifyJSON(settings.releaseTypes)
         );
       }
-      if (settings.weeklyFlowPlaylists !== undefined) {
+      if (settings.flows !== undefined) {
         upsertSettingStmt.run(
-          "weeklyFlowPlaylists",
-          dbHelpers.stringifyJSON(settings.weeklyFlowPlaylists)
+          "flows",
+          dbHelpers.stringifyJSON(settings.flows),
         );
+        deleteStoredSettingKeys(["weeklyFlows"]);
       }
-      if (settings.weeklyFlows !== undefined) {
+      if (settings.sharedPlaylists !== undefined) {
         upsertSettingStmt.run(
-          "weeklyFlows",
-          dbHelpers.stringifyJSON(settings.weeklyFlows)
+          "sharedPlaylists",
+          dbHelpers.stringifyJSON(settings.sharedPlaylists),
         );
+        deleteStoredSettingKeys(["sharedFlowPlaylists"]);
       }
-      if (settings.sharedFlowPlaylists !== undefined) {
+      if (settings.playlistWorker !== undefined) {
         upsertSettingStmt.run(
-          "sharedFlowPlaylists",
-          dbHelpers.stringifyJSON(settings.sharedFlowPlaylists)
+          "playlistWorker",
+          dbHelpers.stringifyJSON(
+            normalizePlaylistWorkerSettings(settings.playlistWorker),
+          ),
         );
-      }
-      if (settings.weeklyFlowWorker !== undefined) {
-        upsertSettingStmt.run(
-          "weeklyFlowWorker",
-          dbHelpers.stringifyJSON(settings.weeklyFlowWorker)
-        );
+        deleteStoredSettingKeys(["weeklyFlowWorker"]);
       }
       if (settings.blocklist !== undefined) {
         upsertSettingStmt.run(
