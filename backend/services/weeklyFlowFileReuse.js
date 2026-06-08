@@ -406,7 +406,7 @@ export async function reuseTrackForPlaylist(track, playlistType, options = {}) {
   console.log(
     `[WeeklyFlowReuse] Reused ${source.sourceType} track for ${playlistType}: ${track.artistName} - ${track.trackName}`,
   );
-  if (!options.skipHistory) {
+  if (!options.skipHistory && source.sourceType !== "lidarr") {
     import("./aurralHistoryService.js")
       .then(({ recordTrackReused }) =>
         recordTrackReused({
