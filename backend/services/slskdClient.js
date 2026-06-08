@@ -63,6 +63,18 @@ function readProperty(object, ...keys) {
   return null;
 }
 
+function normalizeArrayPayload(value) {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.$values)) return value.$values;
+  if (value && typeof value === "object") {
+    const values = Object.values(value);
+    if (values.every((entry) => entry && typeof entry === "object")) {
+      return values;
+    }
+  }
+  return [];
+}
+
 export function isSearchComplete(data) {
   if (data?.isComplete === true || data?.IsComplete === true) return true;
   const state = String(data?.state || data?.State || "");
@@ -78,11 +90,12 @@ export function isSearchInProgress(data) {
 }
 
 function readSearchResponses(searchData) {
+  if (Array.isArray(searchData)) return searchData;
   const responses = readProperty(searchData, "responses", "Responses");
-  return Array.isArray(responses) ? responses : [];
+  return normalizeArrayPayload(responses);
 }
 
-function normalizeSearchFile(file, user, response = null) {
+function normalizeSearchFile(file, user, response = null, fromLockedList = false) {
   const filename = String(
     readProperty(file, "filename", "Filename", "file", "File") || "",
   ).trim();
@@ -92,6 +105,10 @@ function normalizeSearchFile(file, user, response = null) {
     user || responseUser || readProperty(file, "user", "User") || "",
   ).trim();
   const responseSlots = readProperty(response, "hasFreeUploadSlot", "HasFreeUploadSlot");
+  const locked =
+    fromLockedList ||
+    readProperty(file, "isLocked", "IsLocked", "locked", "Locked") === true;
+  const bitRate = readProperty(file, "bitRate", "BitRate", "bitrate") ?? null;
   return {
     user: resolvedUser,
     file: filename,
@@ -105,9 +122,36 @@ function normalizeSearchFile(file, user, response = null) {
         readProperty(response, "uploadSpeed", "UploadSpeed") ??
         0,
     ),
-    bitRate: readProperty(file, "bitRate", "BitRate", "bitrate") ?? null,
+    bitRate,
+    bitrate: bitRate,
     extension: readProperty(file, "extension", "Extension") ?? null,
+    locked,
+    isLocked: locked,
   };
+}
+
+function readBatchFailures(data) {
+  return normalizeArrayPayload(readProperty(data, "failures", "Failures"));
+}
+
+function readBatchTransfers(data) {
+  const batch = readProperty(data, "batch", "Batch") || data;
+  return normalizeArrayPayload(readProperty(batch, "transfers", "Transfers"));
+}
+
+function summarizeBatchFailures(failures) {
+  const messages = normalizeArrayPayload(failures)
+    .map((failure) => {
+      const filename = String(
+        readProperty(failure, "filename", "Filename") || "",
+      ).trim();
+      const message = String(
+        readProperty(failure, "message", "Message") || "",
+      ).trim();
+      return [filename, message].filter(Boolean).join(": ");
+    })
+    .filter(Boolean);
+  return messages.length > 0 ? messages.join("; ") : "all files failed";
 }
 
 export class SlskdClient {
@@ -261,7 +305,7 @@ export class SlskdClient {
     const client = buildClient();
     const response = await client.get(`/api/v0/searches/${searchId}/responses`);
     if (response.status !== 200) return [];
-    return Array.isArray(response.data) ? response.data : [];
+    return readSearchResponses(response.data);
   }
 
   async hydrateCompletedSearch(searchId, data) {
@@ -337,13 +381,24 @@ export class SlskdClient {
         readProperty(response, "username", "Username") || "",
       ).trim();
       const fileLists = [
-        readProperty(response, "files", "Files"),
-        readProperty(response, "lockedFiles", "LockedFiles"),
+        {
+          files: readProperty(response, "files", "Files"),
+          locked: false,
+        },
+        {
+          files: readProperty(response, "lockedFiles", "LockedFiles"),
+          locked: true,
+        },
       ];
-      for (const files of fileLists) {
-        if (!Array.isArray(files)) continue;
+      for (const fileList of fileLists) {
+        const files = normalizeArrayPayload(fileList.files);
         for (const file of files) {
-          const normalized = normalizeSearchFile(file, user, response);
+          const normalized = normalizeSearchFile(
+            file,
+            user,
+            response,
+            fileList.locked,
+          );
           if (!normalized.user || !normalized.file) continue;
           const key = `${normalized.user}\0${normalized.file}`;
           if (seen.has(key)) continue;
@@ -369,6 +424,7 @@ export class SlskdClient {
       const client = buildClient();
       const body = {
         id: options.batchId || randomUUID(),
+        searchId: options.searchId || null,
         username: String(username || "").trim(),
         files: (Array.isArray(files) ? files : []).map((file) => ({
           filename: String(file.filename || file.file || "").trim(),
@@ -387,6 +443,17 @@ export class SlskdClient {
           body,
         );
         if ([200, 201, 207].includes(response.status)) {
+          const failures = readBatchFailures(response.data);
+          const transfers = readBatchTransfers(response.data);
+          if (
+            body.files.length > 0 &&
+            failures.length >= body.files.length &&
+            transfers.length === 0
+          ) {
+            throw new Error(
+              `slskd batch enqueue failed: ${summarizeBatchFailures(failures)}`,
+            );
+          }
           return {
             batchId: response.data?.batch?.id || body.id,
             response: response.data,
