@@ -128,7 +128,15 @@ const UpdateBanner = ({ currentVersion, visible = true }) => {
       active = false;
       clearInterval(intervalId);
     };
-  }, [checkMetaKey, dismissKey, releaseChannel, repo, resolvedVersion, visible]);
+  }, [
+    checkMetaKey,
+    dismissKey,
+    isPrereleaseChannel,
+    releaseChannel,
+    repo,
+    resolvedVersion,
+    visible,
+  ]);
 
   const dismissUpdate = () => {
     if (!updateInfo?.latestKey) {
