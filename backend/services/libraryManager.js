@@ -266,6 +266,14 @@ export class LibraryManager {
       console.log(`[LibraryManager] Added artist "${artistName}" to Lidarr`);
       const mappedArtist = this.mapLidarrArtist(lidarrArtist);
       upsertCachedArtist(mappedArtist);
+      import("./aurralHistoryService.js")
+        .then(({ recordArtistAdded }) =>
+          recordArtistAdded({
+            artistName: mappedArtist.artistName || artistName,
+            artistMbid: mappedArtist.mbid || mbid,
+          }),
+        )
+        .catch(() => {});
       return mappedArtist;
     } catch (error) {
       if (isArtistAlreadyAddedError(error)) {

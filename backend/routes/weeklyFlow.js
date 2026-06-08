@@ -19,6 +19,10 @@ import {
   normalizeExistingFileMode,
   reuseTrackForPlaylist,
 } from "../services/weeklyFlowFileReuse.js";
+import {
+  recordFlowTracksGenerated,
+  recordPlaylistTracksAdded,
+} from "../services/aurralHistoryService.js";
 import { PLAYLIST_LIBRARY_DIR } from "../services/playlistPaths.js";
 import {
   remapLegacyWeeklyFlowPath,
@@ -254,6 +258,7 @@ const reuseTracksForPlaylist = async (tracks, playlistId) => {
       existingFileMode,
       weeklyFlowRoot: weeklyFlowWorker.weeklyFlowRoot,
       targetPlaylistType: playlistId,
+      skipHistory: true,
     });
     if (reuse.reused) {
       reusedJobIds.push(reuse.jobId);
@@ -262,6 +267,15 @@ const reuseTracksForPlaylist = async (tracks, playlistId) => {
     }
   }
   return { reusedJobIds, tracksToQueue };
+};
+
+const recordPlaylistHistory = (playlistId, { tracksQueued = 0, tracksReused = 0 } = {}) => {
+  if (tracksQueued + tracksReused <= 0) return;
+  recordPlaylistTracksAdded({
+    playlistId,
+    tracksQueued,
+    tracksReused,
+  });
 };
 
 router.get("/stream/:jobId", noCache, async (req, res) => {
@@ -557,6 +571,11 @@ const queueFlowEnableRefresh = (flowId, mutationVersion) => {
           await restartWorkerIfPending();
           return;
         }
+        recordFlowTracksGenerated({
+          flowId,
+          tracksQueued: Number(seeded?.tracksQueued || 0),
+          reserveTracks: Number(seeded?.reserveTracks || 0),
+        });
       } finally {
         releaseMutation();
       }
@@ -694,6 +713,12 @@ router.post("/start/:flowId", async (req, res) => {
     } else {
       weeklyFlowWorker.wake();
     }
+
+    recordFlowTracksGenerated({
+      flowId,
+      tracksQueued: result?.tracksQueued || 0,
+      reserveTracks: result?.reserveTracks || 0,
+    });
 
     res.json({
       success: true,
@@ -1106,6 +1131,11 @@ router.post("/shared-playlists", async (req, res) => {
       }
     }
 
+    recordPlaylistHistory(playlist.id, {
+      tracksQueued,
+      tracksReused: reusedJobIds.length,
+    });
+
     res.json({
       success: true,
       playlist,
@@ -1173,6 +1203,11 @@ router.post("/shared-playlists/import", async (req, res) => {
     } else if (jobIds.length > 0) {
       weeklyFlowWorker.wake();
     }
+
+    recordPlaylistHistory(playlist.id, {
+      tracksQueued: jobIds.length,
+      tracksReused: reused.reusedJobIds.length,
+    });
 
     res.json({
       success: true,
@@ -1243,6 +1278,11 @@ router.post("/shared-playlists/:playlistId/tracks", async (req, res) => {
         weeklyFlowWorker.wake();
       }
     }
+
+    recordPlaylistHistory(playlistId, {
+      tracksQueued: jobIds.length,
+      tracksReused: reusedJobIds.length,
+    });
 
     res.json({
       success: true,
@@ -1383,6 +1423,9 @@ router.put("/shared-playlists/:playlistId", async (req, res) => {
       } else {
         weeklyFlowWorker.wake();
       }
+    }
+    if (tracksQueued > 0) {
+      recordPlaylistHistory(playlistId, { tracksQueued });
     }
     res.json({ success: true, playlist, tracksQueued });
   } catch (error) {
