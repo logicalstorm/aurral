@@ -18,7 +18,9 @@ let connectionCache = { checkedAt: 0, result: null };
 function getSettings() {
   const integrations = dbOps.getSettings()?.integrations || {};
   const slskd = integrations.slskd || {};
-  const url = String(slskd.url || "").trim().replace(/\/+$/, "");
+  const url = String(slskd.url || "")
+    .trim()
+    .replace(/\/+$/, "");
   const apiKey = String(slskd.apiKey || "").trim();
   return { url, apiKey, slskd };
 }
@@ -26,7 +28,9 @@ function getSettings() {
 export function getSlskdSearchFormatOptions() {
   const slskd = getSettings().slskd || {};
   const preferredFormat =
-    String(slskd.preferredFormat || "").toLowerCase() === "mp3" ? "mp3" : "flac";
+    String(slskd.preferredFormat || "").toLowerCase() === "mp3"
+      ? "mp3"
+      : "flac";
   return {
     preferredFormat,
     strictFormat: slskd.preferredFormatStrict === true,
@@ -78,17 +82,58 @@ function calculateQuadraticDelay(progress) {
   return Math.min(5, Math.max(0.5, delay));
 }
 
-function normalizeSearchFile(file, user) {
-  const filename = String(file?.filename || file?.file || "").trim();
-  const size = Number(file?.size || file?.length || 0);
+function readProperty(object, ...keys) {
+  for (const key of keys) {
+    const value = object?.[key];
+    if (value != null && value !== "") return value;
+  }
+  return null;
+}
+
+export function isSearchComplete(data) {
+  if (data?.isComplete === true || data?.IsComplete === true) return true;
+  const state = String(data?.state || data?.State || "");
+  return state.includes("Completed");
+}
+
+export function isSearchInProgress(data) {
+  if (isSearchComplete(data)) return false;
+  const state = String(data?.state || data?.State || "").trim();
+  if (!state || state === "None") return true;
+  if (state.includes("InProgress")) return true;
+  return state === "Requested" || state === "Queued";
+}
+
+function readSearchResponses(searchData) {
+  const responses = readProperty(searchData, "responses", "Responses");
+  return Array.isArray(responses) ? responses : [];
+}
+
+function normalizeSearchFile(file, user, response = null) {
+  const filename = String(
+    readProperty(file, "filename", "Filename", "file", "File") || "",
+  ).trim();
+  const size = Number(readProperty(file, "size", "Size", "length", "Length") || 0);
+  const responseUser = readProperty(response, "username", "Username");
+  const resolvedUser = String(
+    user || responseUser || readProperty(file, "user", "User") || "",
+  ).trim();
+  const responseSlots = readProperty(response, "hasFreeUploadSlot", "HasFreeUploadSlot");
   return {
-    user: String(user || file?.user || "").trim(),
+    user: resolvedUser,
     file: filename,
     size,
-    slots: Number(file?.slots ?? file?.freeUploadSlots ?? 0),
-    speed: Number(file?.uploadSpeed ?? file?.speed ?? 0),
-    bitRate: file?.bitRate ?? null,
-    extension: file?.extension ?? null,
+    slots: Number(
+      readProperty(file, "slots", "Slots", "freeUploadSlots") ??
+        (responseSlots === true ? 1 : 0),
+    ),
+    speed: Number(
+      readProperty(file, "uploadSpeed", "UploadSpeed", "speed", "Speed") ??
+        readProperty(response, "uploadSpeed", "UploadSpeed") ??
+        0,
+    ),
+    bitRate: readProperty(file, "bitRate", "BitRate", "bitrate") ?? null,
+    extension: readProperty(file, "extension", "Extension") ?? null,
   };
 }
 
@@ -239,6 +284,50 @@ export class SlskdClient {
     return response.data;
   }
 
+  async getSearchResponses(searchId) {
+    const client = buildClient();
+    const response = await client.get(`/api/v0/searches/${searchId}/responses`);
+    if (response.status !== 200) return [];
+    return Array.isArray(response.data) ? response.data : [];
+  }
+
+  async hydrateCompletedSearch(searchId, data) {
+    const responseCount = Number(
+      data?.responseCount || data?.ResponseCount || 0,
+    );
+    const fileCount = Number(data?.fileCount || data?.FileCount || 0);
+    if (responseCount <= 0 && fileCount <= 0) return data;
+    if (this.flattenSearchResults(data).length > 0) return data;
+
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const refreshed = await this.getSearch(searchId);
+      if (this.flattenSearchResults(refreshed).length > 0) {
+        return refreshed;
+      }
+      const responses = await this.getSearchResponses(searchId);
+      if (responses.length > 0) {
+        return { ...refreshed, responses };
+      }
+    }
+
+    const responses = await this.getSearchResponses(searchId);
+    if (responses.length > 0) {
+      return { ...data, responses };
+    }
+    logger.slskd(
+      "warn",
+      "slskd search completed with counts but no file payloads",
+      {
+        searchId,
+        responseCount,
+        fileCount,
+      },
+    );
+    return data;
+  }
+
   async waitForSearch(searchId, timeoutMs = DEFAULT_SEARCH_TIMEOUT_MS) {
     const start = Date.now();
     let grace = false;
@@ -246,41 +335,48 @@ export class SlskdClient {
     let totalFiles = 0;
     while (true) {
       const data = await this.getSearch(searchId);
-      const state = String(data?.state || "InProgress");
-      const fileCount = Number(data?.fileCount || 0);
+      const fileCount = Number(data?.fileCount || data?.FileCount || 0);
       totalFiles = Math.max(totalFiles, fileCount);
-      if (state !== "InProgress") {
-        return data;
+      if (isSearchComplete(data)) {
+        return await this.hydrateCompletedSearch(searchId, data);
+      }
+      if (!isSearchInProgress(data)) {
+        return await this.hydrateCompletedSearch(searchId, data);
       }
       const elapsed = Date.now() - start;
       if (elapsed > timeoutMs && !grace) {
         grace = true;
         graceUntil = Date.now() + 20000;
       } else if (grace && Date.now() > graceUntil) {
-        return data;
+        return await this.hydrateCompletedSearch(searchId, data);
       }
       const progress = Math.min(1, totalFiles / DEFAULT_FILE_LIMIT);
-      const waitSeconds = grace
-        ? 1
-        : calculateQuadraticDelay(progress);
-      await new Promise((resolve) =>
-        setTimeout(resolve, waitSeconds * 1000),
-      );
+      const waitSeconds = grace ? 1 : calculateQuadraticDelay(progress);
+      await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
     }
   }
 
   flattenSearchResults(searchData) {
     const results = [];
-    const responses = Array.isArray(searchData?.responses)
-      ? searchData.responses
-      : [];
-    for (const response of responses) {
-      const user = String(response?.username || "").trim();
-      const files = Array.isArray(response?.files) ? response.files : [];
-      for (const file of files) {
-        const normalized = normalizeSearchFile(file, user);
-        if (!normalized.user || !normalized.file) continue;
-        results.push(normalized);
+    const seen = new Set();
+    for (const response of readSearchResponses(searchData)) {
+      const user = String(
+        readProperty(response, "username", "Username") || "",
+      ).trim();
+      const fileLists = [
+        readProperty(response, "files", "Files"),
+        readProperty(response, "lockedFiles", "LockedFiles"),
+      ];
+      for (const files of fileLists) {
+        if (!Array.isArray(files)) continue;
+        for (const file of files) {
+          const normalized = normalizeSearchFile(file, user, response);
+          if (!normalized.user || !normalized.file) continue;
+          const key = `${normalized.user}\0${normalized.file}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          results.push(normalized);
+        }
       }
     }
     return results;
@@ -331,9 +427,7 @@ export class SlskdClient {
           delaySeconds *= 2;
           continue;
         }
-        throw new Error(
-          `slskd batch enqueue failed: HTTP ${response.status}`,
-        );
+        throw new Error(`slskd batch enqueue failed: HTTP ${response.status}`);
       }
       throw new Error("slskd batch enqueue busy after retries");
     });
