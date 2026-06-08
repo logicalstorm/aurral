@@ -1,3 +1,5 @@
+import { withHonkerLock } from "./honkerDb.js";
+
 class WeeklyFlowOperationQueue {
   constructor() {
     this.queue = [];
@@ -20,7 +22,14 @@ class WeeklyFlowOperationQueue {
       if (!next) continue;
       this.currentLabel = next.label || null;
       try {
-        const result = await next.operation();
+        const result = await withHonkerLock(
+          "weekly-flow-operation",
+          next.operation,
+          {
+            ttlSeconds: 120,
+            waitTimeoutMs: 10 * 60 * 1000,
+          },
+        );
         next.resolve(result);
       } catch (error) {
         next.reject(error);

@@ -83,6 +83,52 @@ export function tryAcquireSlskdLock(ttlSeconds = 120) {
   return getHonkerDb().tryLock("slskd-api", WORKER_ID, ttlSeconds);
 }
 
+export async function withHonkerLock(
+  name,
+  fn,
+  {
+    ttlSeconds = 120,
+    waitTimeoutMs = 300000,
+    retryDelayMs = 250,
+  } = {},
+) {
+  const safeName = String(name || "").trim();
+  if (!safeName) {
+    throw new Error("Honker lock name is required");
+  }
+  const deadline = Date.now() + Math.max(0, Number(waitTimeoutMs) || 0);
+  let lock = null;
+  while (!lock) {
+    lock = getHonkerDb().tryLock(safeName, WORKER_ID, ttlSeconds);
+    if (lock) break;
+    if (Date.now() >= deadline) {
+      throw new Error(`Timed out waiting for Honker lock: ${safeName}`);
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.max(50, Number(retryDelayMs) || 250)),
+    );
+  }
+
+  const heartbeatMs = Math.max(
+    1000,
+    Math.floor((Number(ttlSeconds) || 120) * 1000 * 0.33),
+  );
+  const heartbeat = setInterval(() => {
+    try {
+      lock.heartbeat(ttlSeconds);
+    } catch {}
+  }, heartbeatMs);
+
+  try {
+    return await fn();
+  } finally {
+    clearInterval(heartbeat);
+    try {
+      lock.release();
+    } catch {}
+  }
+}
+
 export function getWorkerId() {
   return WORKER_ID;
 }

@@ -1,6 +1,7 @@
 import axios from "axios";
 import { randomUUID } from "crypto";
 import { dbOps } from "../config/db-helpers.js";
+import { withHonkerLock } from "./honkerDb.js";
 import { logger } from "./logger.js";
 
 const DEFAULT_SEARCH_TIMEOUT_MS = 120000;
@@ -8,11 +9,7 @@ const DEFAULT_FILE_LIMIT = 1000;
 const DEFAULT_RESPONSE_LIMIT = 150;
 const DEFAULT_MAX_PEER_QUEUE = 150;
 const DEFAULT_MIN_PEER_SPEED = 51200;
-const ENQUEUE_MAX_CONCURRENT = 1;
-const SEARCH_MAX_CONCURRENT = 1;
 
-let searchSlots = 0;
-let enqueueSlots = 0;
 let connectionCache = { checkedAt: 0, result: null };
 
 function getSettings() {
@@ -51,30 +48,6 @@ function buildClient() {
     },
     validateStatus: () => true,
   });
-}
-
-async function withSearchLock(fn) {
-  while (searchSlots >= SEARCH_MAX_CONCURRENT) {
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  searchSlots += 1;
-  try {
-    return await fn();
-  } finally {
-    searchSlots = Math.max(0, searchSlots - 1);
-  }
-}
-
-async function withEnqueueLock(fn) {
-  while (enqueueSlots >= ENQUEUE_MAX_CONCURRENT) {
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  enqueueSlots += 1;
-  try {
-    return await fn();
-  } finally {
-    enqueueSlots = Math.max(0, enqueueSlots - 1);
-  }
 }
 
 function calculateQuadraticDelay(progress) {
@@ -227,7 +200,7 @@ export class SlskdClient {
   }
 
   async createSearch(searchText, options = {}) {
-    return withSearchLock(async () => {
+    return withHonkerLock("slskd-api", async () => {
       const client = buildClient();
       const id = String(options.id || randomUUID());
       const body = {
@@ -392,7 +365,7 @@ export class SlskdClient {
   }
 
   async enqueueBatch({ username, files, options = {} }) {
-    return withEnqueueLock(async () => {
+    return withHonkerLock("slskd-api", async () => {
       const client = buildClient();
       const body = {
         id: options.batchId || randomUUID(),
