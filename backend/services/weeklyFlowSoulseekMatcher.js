@@ -264,6 +264,10 @@ function countAudioFiles(files) {
   return files.filter((item) => AUDIO_EXTENSIONS.has(path.extname(String(item?.file || "")).toLowerCase())).length;
 }
 
+function isLockedSearchResult(item) {
+  return item?.locked === true || item?.isLocked === true;
+}
+
 function scoreTrackCount(expected, actual) {
   if (!expected || !actual) return 0;
   if (actual === expected) return 30;
@@ -520,8 +524,9 @@ function buildGroupCandidate(group, context, options = {}) {
     });
     const formatScore =
       ext === `.${preferredFormat}` ? 18 : ext === ".flac" || ext === ".mp3" ? 9 : 0;
-    const bitrateScore = Number.isFinite(Number(item?.bitrate))
-      ? Math.min(8, Math.round(Number(item.bitrate) / 64))
+    const bitRate = Number(item?.bitrate ?? item?.bitRate ?? 0);
+    const bitrateScore = Number.isFinite(bitRate)
+      ? Math.min(8, Math.round(bitRate / 64))
       : 0;
     const totalScore =
       artistScore +
@@ -597,8 +602,10 @@ export function rankFlowSearchResults(results, context, options = {}) {
 
   const ranked = [];
   for (const group of groups.values()) {
-    group.audioFiles = group.files.filter((item) =>
-      AUDIO_EXTENSIONS.has(path.extname(String(item?.file || "")).toLowerCase()),
+    group.audioFiles = group.files.filter(
+      (item) =>
+        !isLockedSearchResult(item) &&
+        AUDIO_EXTENSIONS.has(path.extname(String(item?.file || "")).toLowerCase()),
     );
     if (group.audioFiles.length === 0) continue;
     group.audioFileCount = countAudioFiles(group.files);

@@ -226,6 +226,44 @@ test("rankFlowSearchResults accepts strong title and album matches without artis
   assert.equal(ranked[0].isLikelyMatch, true);
 });
 
+test("rankFlowSearchResults ignores locked slskd files for downloads", () => {
+  const ranked = rankFlowSearchResults(
+    [
+      {
+        user: "lockedUser",
+        file: "Artist Name\\Album Name\\01 - Correct Track.flac",
+        size: 100,
+        slots: false,
+        locked: true,
+        bitrate: 900,
+        speed: 900000,
+      },
+      {
+        user: "openUser",
+        file: "Artist Name\\Album Name\\01 - Correct Track.mp3",
+        size: 100,
+        slots: true,
+        locked: false,
+        bitrate: 320,
+        speed: 700000,
+      },
+    ],
+    {
+      artistName: "Artist Name",
+      trackName: "Correct Track",
+      albumName: "Album Name",
+      artistAliases: [],
+    },
+    {
+      preferredFormat: "flac",
+      strictFormat: false,
+    },
+  );
+
+  assert.equal(ranked.some((entry) => entry.raw.user === "lockedUser"), false);
+  assert.equal(ranked[0].raw.user, "openUser");
+});
+
 test("rankFlowSearchResults skips blacklisted users and penalizes queued users", () => {
   const ranked = rankFlowSearchResults(
     [
