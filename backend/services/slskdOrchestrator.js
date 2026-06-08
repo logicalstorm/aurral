@@ -2,6 +2,7 @@ import path from "path";
 import fs from "fs/promises";
 import { db } from "../config/db-sqlite.js";
 import { slskdClient } from "./slskdClient.js";
+import { logger } from "./logger.js";
 import { enqueuePipelineJob } from "./honkerDb.js";
 import { downloadTracker } from "./playlistDownloadTracker.js";
 import {
@@ -96,7 +97,9 @@ async function failJob(job, message) {
     .catch(() => {});
   const { weeklyFlowWorker } = await import("./weeklyFlowWorker.js");
   weeklyFlowWorker.wake(0);
-  await weeklyFlowWorker.checkPlaylistComplete(job.playlistId || job.playlistType);
+  await weeklyFlowWorker.checkPlaylistComplete(
+    job.playlistId || job.playlistType,
+  );
 }
 
 export async function failPipelineJob(payload, message) {
@@ -162,13 +165,22 @@ async function moveIntoPlaylistLibrary(sourcePath, targetPath) {
   }
 }
 
-async function locateCompletedDownload(slskdRoot, playlistRoot, destination, fileName) {
+async function locateCompletedDownload(
+  slskdRoot,
+  playlistRoot,
+  destination,
+  fileName,
+) {
   const directCandidates = [];
   if (slskdRoot) {
     directCandidates.push(joinUnderRoot(slskdRoot, destination, fileName));
   }
   if (playlistRoot) {
-    const playlistCandidate = joinUnderRoot(playlistRoot, destination, fileName);
+    const playlistCandidate = joinUnderRoot(
+      playlistRoot,
+      destination,
+      fileName,
+    );
     if (
       !directCandidates.some(
         (entry) => path.resolve(entry) === path.resolve(playlistCandidate),
@@ -215,7 +227,10 @@ async function handleSearch(payload) {
     .then(({ recordTrackJobSearching }) => recordTrackJobSearching(job))
     .catch(() => {});
   const resolvedTrack = buildResolvedTrack(job);
-  const queries = buildFlowSearchQueries(resolvedTrack).slice(0, MAX_SEARCH_QUERIES);
+  const queries = buildFlowSearchQueries(resolvedTrack).slice(
+    0,
+    MAX_SEARCH_QUERIES,
+  );
   const searchOptions = await getWorkerSearchOptions();
   const aggregated = [];
   const seen = new Set();
@@ -234,13 +249,28 @@ async function handleSearch(payload) {
     updateSlskdMetaStmt.run(searchIdRef.value, null, null, null, job.id);
     job.slskdSearchId = searchIdRef.value;
   }
-  const ranked = rankFlowSearchResults(aggregated, resolvedTrack, searchOptions);
-  const candidates = selectRankedMatchAttempts(ranked, 7).map((entry) => ({
+  const ranked = rankFlowSearchResults(
+    aggregated,
+    resolvedTrack,
+    searchOptions,
+  );
+  const eligible = ranked.filter((entry) => entry.preDownloadValid);
+  const candidatePool = eligible.length > 0 ? eligible : ranked;
+  const candidates = selectRankedMatchAttempts(candidatePool, 7).map((entry) => ({
     raw: entry.raw,
     score: entry.score,
     resolvedAlbumName: entry.resolvedAlbumName,
   }));
   if (candidates.length === 0) {
+    logger.slskd("warn", "No slskd download candidates after search", {
+      jobId: job.id,
+      artistName: job.artistName,
+      trackName: job.trackName,
+      queryCount: queries.length,
+      rawResultCount: aggregated.length,
+      rankedCount: ranked.length,
+      eligibleCount: eligible.length,
+    });
     await failJob(job, "No suitable slskd search results");
     return null;
   }
@@ -259,7 +289,9 @@ async function handleDownload(payload) {
   import("./aurralHistoryService.js")
     .then(({ recordTrackJobDownloading }) => recordTrackJobDownloading(job))
     .catch(() => {});
-  const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+  const candidates = Array.isArray(payload.candidates)
+    ? payload.candidates
+    : [];
   const index = Number(payload.candidateIndex || 0);
   const candidate = candidates[index];
   if (!candidate?.raw?.user || !candidate?.raw?.file) {
