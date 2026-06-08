@@ -2,6 +2,13 @@ const SCHEMA_VERSION_KEY = "schemaVersion";
 const TARGET_SCHEMA_VERSION = 2;
 const LEGACY_LIBRARY_DIR = "aurral-weekly-flow";
 const PLAYLIST_LIBRARY_DIR = "aurral-playlists";
+const LEGACY_SETTINGS_KEYS = [
+  "weeklyFlows",
+  "sharedFlowPlaylists",
+  "weeklyFlowWorker",
+  "weeklyFlowPlaylists",
+  "playlists",
+];
 
 function tableExists(db, name) {
   const row = db
@@ -22,57 +29,45 @@ function tryAddColumn(db, sql) {
   }
 }
 
-function migrateSettings(db, dbHelpers) {
-  const getSettingStmt = db.prepare("SELECT value FROM settings WHERE key = ?");
-  const upsertSettingStmt = db.prepare(
-    "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+function buildPlaylistWorkerSettings(weeklyFlowWorker, playlistWorker) {
+  const legacy = weeklyFlowWorker && typeof weeklyFlowWorker === "object"
+    ? weeklyFlowWorker
+    : {};
+  const current = playlistWorker && typeof playlistWorker === "object"
+    ? playlistWorker
+    : {};
+  const parsedConcurrency = Number(
+    current.concurrency ?? legacy.concurrency,
   );
-
-  const flows = dbHelpers.parseJSON(getSettingStmt.get("flows")?.value);
-  const playlists = dbHelpers.parseJSON(getSettingStmt.get("playlists")?.value);
-  const weeklyFlows = dbHelpers.parseJSON(getSettingStmt.get("weeklyFlows")?.value);
-  const weeklyFlowPlaylists = dbHelpers.parseJSON(
-    getSettingStmt.get("weeklyFlowPlaylists")?.value,
+  const concurrency =
+    Number.isFinite(parsedConcurrency) && parsedConcurrency >= 1
+      ? Math.min(3, Math.floor(parsedConcurrency))
+      : 2;
+  const parsedRetryCycleMinutes = Number(
+    current.retryCycleMinutes ?? legacy.retryCycleMinutes,
   );
-  const weeklyFlowWorker = dbHelpers.parseJSON(
-    getSettingStmt.get("weeklyFlowWorker")?.value,
-  );
-  const playlistWorker = dbHelpers.parseJSON(
-    getSettingStmt.get("playlistWorker")?.value,
-  );
-
-  if (!flows && weeklyFlows) {
-    upsertSettingStmt.run("flows", dbHelpers.stringifyJSON(weeklyFlows));
-  }
-  if (!playlists && weeklyFlowPlaylists) {
-    upsertSettingStmt.run(
-      "playlists",
-      dbHelpers.stringifyJSON(weeklyFlowPlaylists),
-    );
-  }
-  if (!playlistWorker && weeklyFlowWorker) {
-    upsertSettingStmt.run(
-      "playlistWorker",
-      dbHelpers.stringifyJSON({
-        existingFileMode:
-          weeklyFlowWorker.existingFileMode === "download"
-            ? "download"
-            : "reuse",
-        retryPausedPlaylistIds: weeklyFlowWorker.retryPausedPlaylistIds || [],
-      }),
-    );
-  }
-
-  const integrations = dbHelpers.parseJSON(
-    getSettingStmt.get("integrations")?.value,
-  );
-  if (integrations) {
-    const next = { ...integrations };
-    if (next.soulseek) {
-      delete next.soulseek;
-    }
-    upsertSettingStmt.run("integrations", dbHelpers.stringifyJSON(next));
-  }
+  const retryCycleMinutes =
+    Number.isFinite(parsedRetryCycleMinutes) &&
+    [15, 30, 60, 360, 720, 1440].includes(Math.floor(parsedRetryCycleMinutes))
+      ? Math.floor(parsedRetryCycleMinutes)
+      : 15;
+  const retryPausedPlaylistIds = Array.isArray(current.retryPausedPlaylistIds)
+    ? current.retryPausedPlaylistIds
+    : Array.isArray(legacy.retryPausedPlaylistIds)
+      ? legacy.retryPausedPlaylistIds
+      : [];
+  const existingFileModeRaw =
+    current.existingFileMode ?? legacy.existingFileMode;
+  const existingFileMode =
+    String(existingFileModeRaw || "").trim().toLowerCase() === "download"
+      ? "download"
+      : "reuse";
+  return {
+    concurrency,
+    retryCycleMinutes,
+    retryPausedPlaylistIds,
+    existingFileMode,
+  };
 }
 
 function backfillSlskdSettings(db, dbHelpers) {
@@ -109,6 +104,65 @@ function backfillSlskdSettings(db, dbHelpers) {
       slskd,
     }),
   );
+}
+
+export function finalizeV2SettingsKeys(db, dbHelpers) {
+  const getSettingStmt = db.prepare("SELECT value FROM settings WHERE key = ?");
+  const upsertSettingStmt = db.prepare(
+    "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+  );
+  const deleteSettingStmt = db.prepare("DELETE FROM settings WHERE key = ?");
+
+  const flows = dbHelpers.parseJSON(getSettingStmt.get("flows")?.value);
+  const weeklyFlows = dbHelpers.parseJSON(
+    getSettingStmt.get("weeklyFlows")?.value,
+  );
+  if (!flows && weeklyFlows) {
+    upsertSettingStmt.run("flows", dbHelpers.stringifyJSON(weeklyFlows));
+  }
+
+  const sharedPlaylists = dbHelpers.parseJSON(
+    getSettingStmt.get("sharedPlaylists")?.value,
+  );
+  const sharedFlowPlaylists = dbHelpers.parseJSON(
+    getSettingStmt.get("sharedFlowPlaylists")?.value,
+  );
+  if (!sharedPlaylists && sharedFlowPlaylists) {
+    upsertSettingStmt.run(
+      "sharedPlaylists",
+      dbHelpers.stringifyJSON(sharedFlowPlaylists),
+    );
+  }
+
+  const playlistWorker = dbHelpers.parseJSON(
+    getSettingStmt.get("playlistWorker")?.value,
+  );
+  const weeklyFlowWorker = dbHelpers.parseJSON(
+    getSettingStmt.get("weeklyFlowWorker")?.value,
+  );
+  if (weeklyFlowWorker || playlistWorker) {
+    upsertSettingStmt.run(
+      "playlistWorker",
+      dbHelpers.stringifyJSON(
+        buildPlaylistWorkerSettings(weeklyFlowWorker, playlistWorker),
+      ),
+    );
+  }
+
+  backfillSlskdSettings(db, dbHelpers);
+
+  for (const key of LEGACY_SETTINGS_KEYS) {
+    deleteSettingStmt.run(key);
+  }
+
+  const integrations = dbHelpers.parseJSON(
+    getSettingStmt.get("integrations")?.value,
+  );
+  if (integrations?.soulseek) {
+    const next = { ...integrations };
+    delete next.soulseek;
+    upsertSettingStmt.run("integrations", dbHelpers.stringifyJSON(next));
+  }
 }
 
 function migrateJobsTable(db) {
@@ -249,14 +303,13 @@ export function applyV2Migration(db, dbHelpers) {
   const currentVersion = Number(
     getSettingStmt.get(SCHEMA_VERSION_KEY)?.value || 1,
   );
-  backfillSlskdSettings(db, dbHelpers);
+  finalizeV2SettingsKeys(db, dbHelpers);
   if (currentVersion >= TARGET_SCHEMA_VERSION) {
     migrateJobsTable(db);
     return { migrated: false, schemaVersion: currentVersion };
   }
 
   const run = db.transaction(() => {
-    migrateSettings(db, dbHelpers);
     migrateJobsTable(db);
     upsertSettingStmt.run(SCHEMA_VERSION_KEY, String(TARGET_SCHEMA_VERSION));
   });

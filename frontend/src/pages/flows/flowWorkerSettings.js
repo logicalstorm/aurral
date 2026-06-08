@@ -1,7 +1,5 @@
 export const DEFAULT_WORKER_SETTINGS = {
   concurrency: 2,
-  preferredFormat: "flac",
-  preferredFormatStrict: false,
   retryCycleMinutes: 15,
   existingFileMode: "reuse",
 };
@@ -39,15 +37,10 @@ export const getWorkerSettingsFromStatus = (status) => {
     Number.isFinite(parsedConcurrency) && parsedConcurrency >= 1
       ? Math.min(3, Math.floor(parsedConcurrency))
       : DEFAULT_WORKER_SETTINGS.concurrency;
-  const preferredFormat =
-    String(raw.preferredFormat || "").toLowerCase() === "mp3" ? "mp3" : "flac";
-  const preferredFormatStrict = raw.preferredFormatStrict === true;
   const retryCycleMinutes = normalizeRetryCycleMinutes(raw.retryCycleMinutes);
   const existingFileMode = normalizeExistingFileMode(raw.existingFileMode);
   return {
     concurrency,
-    preferredFormat,
-    preferredFormatStrict,
     retryCycleMinutes,
     existingFileMode,
   };

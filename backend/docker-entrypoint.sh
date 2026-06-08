@@ -6,7 +6,7 @@ if [ "$(id -u)" = "0" ]; then
     target_gid="${AURRAL_GID:-${PGID:-}}"
 
     default_uid="$(awk -F: '$1=="nodejs"{print $3; exit}' /etc/passwd)"
-    default_gid="$(awk -F: '$1=="nodejs"{print $4; exit}' /etc/passwd)"
+    default_gid="$(awk -F: '$1=="nodejs"{print $4; exit}' /etc/group)"
 
     if [ -z "$default_uid" ]; then
         default_uid="1001"
@@ -24,20 +24,20 @@ if [ "$(id -u)" = "0" ]; then
 
     target_group="$(awk -F: -v gid="$target_gid" '$3==gid{print $1; exit}' /etc/group)"
     if [ -z "$target_group" ]; then
-        addgroup -g "$target_gid" -S aurral
+        groupadd -g "$target_gid" aurral
         target_group="aurral"
     fi
 
     target_user="$(awk -F: -v uid="$target_uid" '$3==uid{print $1; exit}' /etc/passwd)"
     if [ -z "$target_user" ]; then
-        adduser -S -u "$target_uid" -G "$target_group" aurral
+        useradd -u "$target_uid" -g "$target_group" -M -s /usr/sbin/nologin aurral
         target_user="aurral"
     fi
 
     mkdir -p /app/backend/data
     chown -R "$target_uid:$target_gid" /app/backend/data
 
-    exec su-exec "$target_uid:$target_gid" "$@"
+    exec gosu "$target_uid:$target_gid" "$@"
 fi
 
 exec "$@"

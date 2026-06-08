@@ -23,10 +23,7 @@ export function useFlowWorkerActivity({ enabled = true } = {}) {
   const handleFlowStatusMessage = useCallback(
     (msg) => {
       if (!enabled) return;
-      if (
-        msg?.type !== "weekly_flow_status" &&
-        msg?.type !== "playlist_status"
-      ) {
+      if (msg?.type !== "playlist_status") {
         return;
       }
       if (!msg?.status || typeof msg.status !== "object") return;

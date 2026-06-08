@@ -240,10 +240,8 @@ export const defaultData = {
       retryDelayMinutes: 5,
       maxRetries: 3,
     },
-    weeklyFlowWorker: {
+    playlistWorker: {
       concurrency: 2,
-      preferredFormat: "flac",
-      preferredFormatStrict: false,
       retryCycleMinutes: 15,
       existingFileMode: "reuse",
     },

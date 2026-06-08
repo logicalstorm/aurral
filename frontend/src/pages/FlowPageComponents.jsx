@@ -65,10 +65,6 @@ const WEEKDAY_OPTIONS = [
 ];
 
 const FLOW_WORKER_CONCURRENCY_OPTIONS = [1, 2, 3];
-const FLOW_WORKER_FORMAT_OPTIONS = [
-  { id: "flac", label: "FLAC" },
-  { id: "mp3", label: "MP3" },
-];
 const FLOW_WORKER_EXISTING_FILE_OPTIONS = [
   { id: "download", label: "Download" },
   { id: "reuse", label: "Reuse existing files" },
@@ -3231,42 +3227,6 @@ export function FlowWorkerSettingsModal({
                     </option>
                   ))}
                 </select>
-              </div>
-            </div>
-          </div>
-
-          <div className="flow-page__field">
-            <label className="flow-page__field-label">Preferred Format</label>
-            <div className="flow-page__worker-format-row">
-              <div className="artist-segmented flow-page__worker-segmented flow-page__worker-segmented--wide">
-                {FLOW_WORKER_FORMAT_OPTIONS.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    className={`artist-segmented-button${settings.preferredFormat === option.id ? " is-active" : ""}`}
-                    onClick={() =>
-                      onChange((prev) => ({
-                        ...prev,
-                        preferredFormat: option.id,
-                      }))
-                    }
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-              <div className="flow-page__worker-strict">
-                <span className="flow-page__worker-strict-label">Strict</span>
-                <PillToggle
-                  checked={settings.preferredFormatStrict === true}
-                  onChange={(event) => {
-                    const checked = event.target.checked;
-                    onChange((prev) => ({
-                      ...prev,
-                      preferredFormatStrict: checked,
-                    }));
-                  }}
-                />
               </div>
             </div>
           </div>

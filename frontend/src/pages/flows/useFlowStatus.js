@@ -27,10 +27,7 @@ export function useFlowStatus() {
   }, []);
 
   const handleFlowStatusMessage = useCallback((msg) => {
-      if (
-        msg?.type !== "weekly_flow_status" &&
-        msg?.type !== "playlist_status"
-      ) {
+      if (msg?.type !== "playlist_status") {
         return;
       }
     if (!msg?.status || typeof msg.status !== "object") return;
