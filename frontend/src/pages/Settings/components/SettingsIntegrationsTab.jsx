@@ -9,6 +9,7 @@ import {
   getLidarrTags,
   testLidarrConnection,
   testLidarrLibraryAccess,
+  testSlskdConnection,
 } from "../../../utils/api";
 
 export function SettingsIntegrationsTab({
@@ -43,7 +44,9 @@ export function SettingsIntegrationsTab({
     lastfm: true,
     ticketmaster: true,
     navidrome: true,
+    slskd: false,
   });
+  const [testingSlskd, setTestingSlskd] = useState(false);
   const [lidarrTestLatencyMs, setLidarrTestLatencyMs] = useState(null);
   const [testingLidarrLibraryAccess, setTestingLidarrLibraryAccess] =
     useState(false);
@@ -956,6 +959,168 @@ export function SettingsIntegrationsTab({
                   }
                 />
               </label>
+            </fieldset>
+          )}
+        </div>
+        <div className="settings-page__section">
+          <div className="settings-page__section-header">
+            <button
+              type="button"
+              onClick={() => toggleSection("slskd")}
+              className="settings-page__section-toggle"
+              aria-expanded={!collapsedSections.slskd}
+            >
+              <ChevronDown
+                className={`settings-page__section-toggle-icon${collapsedSections.slskd ? " is-collapsed" : ""}`}
+              />
+              <span>slskd</span>
+            </button>
+            <div className="settings-page__inline-row">
+              {settings.integrations?.slskd?.url &&
+                settings.integrations?.slskd?.apiKey && (
+                  <span className="settings-page__status">
+                    <CheckCircle className="settings-page__status-icon" />
+                    Configured
+                  </span>
+                )}
+            </div>
+          </div>
+          {!collapsedSections.slskd && (
+            <fieldset className="settings-page__fields">
+              <div>
+                <label className="artist-field-label">Server URL</label>
+                <SettingsInput
+                  type="url"
+                  placeholder="http://localhost:5030"
+                  autoComplete="off"
+                  value={settings.integrations?.slskd?.url || ""}
+                  onChange={(e) =>
+                    updateSettings({
+                      ...settings,
+                      integrations: {
+                        ...settings.integrations,
+                        slskd: {
+                          ...(settings.integrations?.slskd || {}),
+                          url: e.target.value,
+                        },
+                      },
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <label className="artist-field-label">API key</label>
+                <div className="settings-page__field-row">
+                  <SettingsInput
+                    wrapperClassName="settings-page__field-grow"
+                    type="password"
+                    autoComplete="off"
+                    value={settings.integrations?.slskd?.apiKey || ""}
+                    onChange={(e) =>
+                      updateSettings({
+                        ...settings,
+                        integrations: {
+                          ...settings.integrations,
+                          slskd: {
+                            ...(settings.integrations?.slskd || {}),
+                            apiKey: e.target.value,
+                          },
+                        },
+                      })
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={testingSlskd}
+                    onClick={async () => {
+                      if (
+                        !settings.integrations?.slskd?.url ||
+                        !settings.integrations?.slskd?.apiKey
+                      ) {
+                        showError("Enter slskd URL and API key first");
+                        return;
+                      }
+                      setTestingSlskd(true);
+                      try {
+                        await handleSaveSettings();
+                        const result = await testSlskdConnection();
+                        if (result.success || result.ok) {
+                          showSuccess(result.message || "slskd connection OK");
+                        } else {
+                          showError(result.message || "slskd connection failed");
+                        }
+                      } catch (error) {
+                        showError(
+                          error.response?.data?.message ||
+                            error.response?.data?.error ||
+                            error.message ||
+                            "slskd connection failed",
+                        );
+                      } finally {
+                        setTestingSlskd(false);
+                      }
+                    }}
+                  >
+                    <RefreshCw
+                      className={`artist-icon-sm${testingSlskd ? " animate-spin" : ""}`}
+                    />
+                    {testingSlskd ? "Testing..." : "Test connection"}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <div className="settings-page__format-row">
+                  <div className="settings-page__format-col settings-page__format-col--grow">
+                    <label className="artist-field-label">Preferred format</label>
+                    <SettingsSelect
+                      value={settings.integrations?.slskd?.preferredFormat || "flac"}
+                      onChange={(e) =>
+                        updateSettings({
+                          ...settings,
+                          integrations: {
+                            ...settings.integrations,
+                            slskd: {
+                              ...(settings.integrations?.slskd || {}),
+                              preferredFormat: e.target.value,
+                            },
+                          },
+                        })
+                      }
+                    >
+                      <option value="flac">FLAC</option>
+                      <option value="mp3">MP3</option>
+                    </SettingsSelect>
+                  </div>
+                  <div className="settings-page__format-col">
+                    <label className="artist-field-label">Strict format only</label>
+                    <div className="settings-page__format-strict-control">
+                      <input
+                        type="checkbox"
+                        className="artist-checkbox"
+                        checked={
+                          settings.integrations?.slskd?.preferredFormatStrict === true
+                        }
+                        onChange={(e) =>
+                          updateSettings({
+                            ...settings,
+                            integrations: {
+                              ...settings.integrations,
+                              slskd: {
+                                ...(settings.integrations?.slskd || {}),
+                                preferredFormatStrict: e.target.checked,
+                              },
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+                <p className="settings-page__hint">
+                  Used when ranking slskd search results for flows and playlists.
+                </p>
+              </div>
             </fieldset>
           )}
         </div>

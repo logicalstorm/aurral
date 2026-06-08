@@ -72,8 +72,7 @@ const FLOW_WORKER_FORMAT_OPTIONS = [
 ];
 const FLOW_WORKER_EXISTING_FILE_OPTIONS = [
   { id: "download", label: "Download" },
-  { id: "hardlink", label: "Hardlink" },
-  { id: "copy", label: "Copy" },
+  { id: "reuse", label: "Reuse existing files" },
 ];
 const FLOW_WORKER_RETRY_CYCLE_OPTIONS = [
   { minutes: 15, label: "15 min" },
@@ -3163,19 +3162,13 @@ export function ConfirmStopAllModal({
 export function FlowWorkerSettingsModal({
   isOpen,
   settings,
-  soulseekCredential,
   hasChanges,
   saving,
-  rotatingSoulseekCredential,
   onCancel,
   onChange,
-  onRotateSoulseekCredential,
   onSave,
 }) {
   if (!isOpen) return null;
-
-  const credentialUsername = String(soulseekCredential?.username || "").trim();
-  const canRotate = soulseekCredential?.canRotate === true;
 
   return (
     <div className="artist-modal-backdrop" onClick={onCancel}>
@@ -3193,31 +3186,6 @@ export function FlowWorkerSettingsModal({
         </div>
 
         <div className="flow-page__worker-fields">
-          <div className="flow-page__worker-account">
-            <div className="flow-page__field">
-              <label className="flow-page__field-label">Soulseek Account</label>
-              <div className="flow-page__worker-account-value">
-                {credentialUsername || "Unavailable"}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={onRotateSoulseekCredential}
-              disabled={!canRotate || rotatingSoulseekCredential}
-              className="btn btn-secondary btn-icon flow-page__worker-rotate"
-              title={
-                canRotate
-                  ? "Rotate Soulseek account now"
-                  : "Soulseek account cannot be rotated here"
-              }
-              aria-label="Rotate Soulseek account now"
-            >
-              <RefreshCw
-                className={`artist-icon-sm${rotatingSoulseekCredential ? " animate-spin" : ""}`}
-              />
-            </button>
-          </div>
-
           <div className="flow-page__worker-fields-split">
             <div className="flow-page__field">
               <label className="flow-page__field-label">
@@ -3308,7 +3276,7 @@ export function FlowWorkerSettingsModal({
             <label className="flow-page__field-label">Existing Files</label>
             <div className="artist-modal-field aurral-radius-round">
               <select
-                value={settings.existingFileMode || "hardlink"}
+                value={settings.existingFileMode || "reuse"}
                 onChange={(event) =>
                   onChange((prev) => ({
                     ...prev,
