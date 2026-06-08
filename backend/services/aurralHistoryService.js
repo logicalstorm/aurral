@@ -316,7 +316,8 @@ export const recordTrackJobActivity = ({
   const playlistName = resolvePlaylistName(playlistId);
   const track = String(trackName || "Track").trim();
   const artist = String(artistName || "Artist").trim();
-  return appendAurralHistory({
+  return upsertAurralHistory({
+    referenceId: id,
     kind: "track_download",
     title: title || `Searching slskd for ${track}`,
     subtitle: subtitle || `${artist} · ${playlistName}`,
