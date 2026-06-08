@@ -198,6 +198,7 @@ const buildLidarrRequests = async (lidarrClient) => {
 
     requestsByAlbumId.set(String(albumId), {
       id: `lidarr-queue-${item.id ?? albumId}`,
+      source: "lidarr",
       type: "album",
       albumId: String(albumId),
       albumMbid: item?.album?.foreignAlbumId || null,
@@ -301,6 +302,7 @@ const buildLidarrRequests = async (lidarrClient) => {
 
     requestsByAlbumId.set(String(albumId), {
       id: `lidarr-history-${record.id ?? albumId}`,
+      source: "lidarr",
       type: "album",
       albumId: String(albumId),
       albumMbid: record?.album?.foreignAlbumId || null,
@@ -426,14 +428,22 @@ const buildLidarrRequests = async (lidarrClient) => {
   return filterDismissedRequests(sorted);
 };
 
+const buildAurralRequests = async () => {
+  const { getAurralHistoryRequests } = await import(
+    "../services/aurralHistoryService.js"
+  );
+  return getAurralHistoryRequests();
+};
+
 const buildRequestsResponse = async (lidarrClient) => {
-  const [lidarrRequests, slskdRequests] = await Promise.all([
+  const [lidarrRequests, slskdRequests, aurralRequests] = await Promise.all([
     lidarrClient?.isConfigured()
       ? buildLidarrRequests(lidarrClient)
       : Promise.resolve([]),
     buildSlskdRequests(),
+    buildAurralRequests(),
   ]);
-  return [...lidarrRequests, ...slskdRequests].sort(
+  return [...lidarrRequests, ...slskdRequests, ...aurralRequests].sort(
     (a, b) => new Date(b.requestedAt) - new Date(a.requestedAt),
   );
 };
@@ -444,10 +454,16 @@ router.get("/", requireAuth, noCache, async (req, res) => {
     const { lidarrClient } = await import("../services/lidarrClient.js");
 
     if (!lidarrClient?.isConfigured()) {
-      const slskdOnly = await buildSlskdRequests();
-      lastRequestsResponse = slskdOnly;
+      const [slskdOnly, aurralOnly] = await Promise.all([
+        buildSlskdRequests(),
+        buildAurralRequests(),
+      ]);
+      const combined = [...slskdOnly, ...aurralOnly].sort(
+        (a, b) => new Date(b.requestedAt) - new Date(a.requestedAt),
+      );
+      lastRequestsResponse = combined;
       lastRequestsAt = Date.now();
-      return res.json(slskdOnly);
+      return res.json(combined);
     }
 
     const now = Date.now();

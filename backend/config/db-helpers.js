@@ -116,6 +116,38 @@ const deleteArtistOverrideStmt = db.prepare(
   "DELETE FROM artist_overrides WHERE mbid = ?"
 );
 
+const insertAurralHistoryStmt = db.prepare(`
+  INSERT OR REPLACE INTO aurral_history (
+    id, kind, title, subtitle, status, status_label, href, metadata, created_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+const getAurralHistoryStmt = db.prepare(`
+  SELECT id, kind, title, subtitle, status, status_label, href, metadata, created_at
+  FROM aurral_history
+  WHERE created_at >= ?
+  ORDER BY created_at DESC
+  LIMIT ?
+`);
+const getAurralHistoryByIdStmt = db.prepare(`
+  SELECT id, kind, title, subtitle, status, status_label, href, metadata, created_at
+  FROM aurral_history
+  WHERE id = ?
+`);
+const deleteAurralHistoryOlderThanStmt = db.prepare(
+  "DELETE FROM aurral_history WHERE created_at < ?",
+);
+const countAurralHistoryStmt = db.prepare(
+  "SELECT COUNT(*) as count FROM aurral_history",
+);
+const deleteOldestAurralHistoryStmt = db.prepare(`
+  DELETE FROM aurral_history
+  WHERE id IN (
+    SELECT id FROM aurral_history
+    ORDER BY created_at ASC
+    LIMIT ?
+  )
+`);
+
 const getUserByUsernameStmt = db.prepare(
   "SELECT * FROM users WHERE username = ?"
 );
@@ -784,5 +816,64 @@ export const dbOps = {
   deleteArtistOverride(mbid) {
     if (!mbid) return null;
     return deleteArtistOverrideStmt.run(mbid);
+  },
+
+  insertAurralHistory(entry) {
+    if (!entry?.id || !entry?.title) return null;
+    insertAurralHistoryStmt.run(
+      entry.id,
+      entry.kind || "activity",
+      entry.title,
+      entry.subtitle || null,
+      entry.status || "completed",
+      entry.statusLabel || null,
+      entry.href || null,
+      dbHelpers.stringifyJSON(entry.metadata),
+      Number(entry.createdAt) || Date.now(),
+    );
+    return entry;
+  },
+
+  getAurralHistoryById(id) {
+    if (!id) return null;
+    const row = getAurralHistoryByIdStmt.get(String(id));
+    if (!row) return null;
+    return {
+      id: row.id,
+      kind: row.kind,
+      title: row.title,
+      subtitle: row.subtitle || null,
+      status: row.status || "completed",
+      statusLabel: row.status_label || null,
+      href: row.href || null,
+      metadata: dbHelpers.parseJSON(row.metadata),
+      createdAt: row.created_at,
+    };
+  },
+
+  getAurralHistory({ since = 0, limit = 200 } = {}) {
+    const safeLimit = Math.max(1, Math.min(500, Number(limit) || 200));
+    const safeSince = Number(since) || 0;
+    return getAurralHistoryStmt.all(safeSince, safeLimit).map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      title: row.title,
+      subtitle: row.subtitle || null,
+      status: row.status || "completed",
+      statusLabel: row.status_label || null,
+      href: row.href || null,
+      metadata: dbHelpers.parseJSON(row.metadata),
+      createdAt: row.created_at,
+    }));
+  },
+
+  pruneAurralHistory({ maxAgeMs = 30 * 24 * 60 * 60 * 1000, maxEntries = 500 } = {}) {
+    const cutoff = Date.now() - Math.max(0, Number(maxAgeMs) || 0);
+    deleteAurralHistoryOlderThanStmt.run(cutoff);
+    const count = Number(countAurralHistoryStmt.get()?.count || 0);
+    const overflow = count - Math.max(1, Number(maxEntries) || 500);
+    if (overflow > 0) {
+      deleteOldestAurralHistoryStmt.run(overflow);
+    }
   },
 };
