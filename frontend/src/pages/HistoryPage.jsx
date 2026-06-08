@@ -30,6 +30,8 @@ const HISTORY_TABS = [
   { value: "aurral", label: "Aurral", source: "aurral" },
 ];
 
+const HISTORY_PAGE_SIZE = 25;
+
 const getHistorySource = (request) => {
   if (request.source === "slskd") return "slskd";
   if (request.source === "aurral") return "aurral";
@@ -160,6 +162,7 @@ function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("all");
+  const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
   const navigate = useNavigate();
 
   const filteredRequests = useMemo(
@@ -175,10 +178,21 @@ function HistoryPage() {
     [filteredRequests],
   );
 
-  const timelineGroups = useMemo(
-    () => groupRequestsByDate(sortedRequests),
-    [sortedRequests],
+  const visibleRequests = useMemo(
+    () => sortedRequests.slice(0, visibleCount),
+    [sortedRequests, visibleCount],
   );
+
+  const hasMoreHistory = visibleCount < sortedRequests.length;
+
+  const timelineGroups = useMemo(
+    () => groupRequestsByDate(visibleRequests),
+    [visibleRequests],
+  );
+
+  useEffect(() => {
+    setVisibleCount(HISTORY_PAGE_SIZE);
+  }, [activeTab]);
 
   const fetchRequests = useCallback(async ({ silent = false } = {}) => {
     if (!silent) {
@@ -442,6 +456,19 @@ function HistoryPage() {
                 return row;
               });
             })()}
+            {hasMoreHistory && (
+              <div className="requests-page__load-more">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setVisibleCount((count) => count + HISTORY_PAGE_SIZE)
+                  }
+                  className="btn btn-secondary btn--bold btn-min-h"
+                >
+                  Load more
+                </button>
+              </div>
+            )}
           </div>
         )
       )}
