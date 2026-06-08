@@ -882,12 +882,15 @@ const buildRecommendationsFromSeeds = async ({
   );
 };
 
-export const updateDiscoveryCache = async () => {
-  if (discoveryCache.isUpdating) {
+export const updateDiscoveryCache = async (options = {}) => {
+  const skipBusyGuard = options.skipBusyGuard === true;
+  if (!skipBusyGuard && discoveryCache.isUpdating) {
     console.log("Discovery update already in progress, skipping...");
-    return;
+    return { skipped: true };
   }
-  discoveryCache.isUpdating = true;
+  if (!discoveryCache.isUpdating) {
+    discoveryCache.isUpdating = true;
+  }
   console.log("Starting background update of discovery recommendations...");
   emitDiscoveryProgress("starting", "Preparing discovery refresh", 5);
 
