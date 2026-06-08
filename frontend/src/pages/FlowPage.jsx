@@ -38,7 +38,7 @@ import { useToast } from "../contexts/ToastContext";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useFlowStatus } from "./flows/useFlowStatus";
 import { formatTrackCountLabel } from "./flows/flowStats";
-import { getFlowRunActivity } from "./flows/flowRunActivity";
+import { getPlaylistRunActivity } from "./flows/flowRunActivity";
 import {
   PlaylistLibraryItem,
   PlaylistDetailHero,
@@ -623,6 +623,7 @@ function FlowPage() {
   const [deletingId, setDeletingId] = useState(null);
   const [convertingId, setConvertingId] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
+  const [togglingToEnabled, setTogglingToEnabled] = useState(null);
   const [rerunningId, setRerunningId] = useState(null);
   const [renameModal, setRenameModal] = useState(null);
   const [artworkRevisionById, setArtworkRevisionById] = useState({});
@@ -636,6 +637,7 @@ function FlowPage() {
   const [applyingFlowNameId, setApplyingFlowNameId] = useState(null);
   const [applyingSharedPlaylistNameId, setApplyingSharedPlaylistNameId] = useState(null);
   const [reSearchingTrackIds, setReSearchingTrackIds] = useState({});
+  const [savingToPlaylistId, setSavingToPlaylistId] = useState(null);
   const [deletingTrackId, setDeletingTrackId] = useState(null);
   const [tracksLoadingByFlowId, setTracksLoadingByFlowId] = useState({});
   const [tracksErrorByFlowId, setTracksErrorByFlowId] = useState({});
@@ -930,6 +932,7 @@ function FlowPage() {
 
   const handleToggleEnabled = async (flow, nextEnabled) => {
     setTogglingId(flow.id);
+    setTogglingToEnabled(nextEnabled);
     try {
       await setFlowEnabled(flow.id, nextEnabled);
       showSuccess(nextEnabled ? "Flow enabled" : "Flow disabled");
@@ -945,6 +948,7 @@ function FlowPage() {
         return next;
       });
       setTogglingId(null);
+      setTogglingToEnabled(null);
     }
   };
 
@@ -1368,6 +1372,13 @@ function FlowPage() {
     }
     setPlaylistMenuError("");
     setPlaylistMenuSavingKey(String(track?.id ?? ""));
+    const targetPlaylistId =
+      target?.mode === "new"
+        ? null
+        : String(target?.playlistId || "").trim() || null;
+    if (targetPlaylistId) {
+      setSavingToPlaylistId(targetPlaylistId);
+    }
     const sourceTrackJobId = track?.id || null;
     try {
       if (target?.mode === "new") {
@@ -1423,6 +1434,7 @@ function FlowPage() {
       showError(message);
     } finally {
       setPlaylistMenuSavingKey("");
+      setSavingToPlaylistId(null);
     }
   };
 
@@ -1740,21 +1752,40 @@ function FlowPage() {
       : false;
   const flowCanExport = Number(selectedStats?.total || 0) > 0;
   const flowCanConvert = Number(selectedStats?.done || 0) > 0;
-  const selectedFlowActivity =
-    selectedFlow?.id && selectedFlow.enabled === true
-      ? getFlowRunActivity({
-          flowId: selectedFlow.id,
-          enabled: true,
-          status,
-          stats: selectedStats,
-          rerunning: rerunningId === selectedFlow.id,
-        })
-      : null;
-  const selectedFlowActivityMessage = selectedFlowActivity?.message || null;
+  const countReSearchingForPlaylist = (playlistId) => {
+    if (!playlistId) return 0;
+    const tracks = tracksByFlowId[playlistId];
+    if (!Array.isArray(tracks) || tracks.length === 0) return 0;
+    let count = 0;
+    for (const track of tracks) {
+      if (track?.id && reSearchingTrackIds[track.id]) count += 1;
+    }
+    return count;
+  };
+  const getEntryActivityMessage = (entry) => {
+    if (!entry?.id) return null;
+    const isFlow = entry.kind === "flow";
+    const activity = getPlaylistRunActivity({
+      playlistId: entry.id,
+      kind: isFlow ? "flow" : "playlist",
+      enabled: isFlow ? entry.enabled === true : true,
+      status,
+      stats: getPlaylistStats(entry.id),
+      rerunning: rerunningId === entry.id,
+      togglingToEnabled:
+        togglingId === entry.id ? togglingToEnabled : null,
+      addingTrack: savingToPlaylistId === entry.id,
+      reSearchingCount: countReSearchingForPlaylist(entry.id),
+    });
+    return activity?.message || null;
+  };
+  const selectedActivityMessage = selectedEntry
+    ? getEntryActivityMessage(selectedEntry)
+    : null;
   const flowCanRunNow =
     selectedFlow?.enabled === true &&
     rerunningId !== selectedFlow?.id &&
-    !selectedFlowActivityMessage;
+    !selectedActivityMessage;
   const renameModalSaving =
     renameModal?.kind === "flow"
       ? applyingFlowNameId === renameModal.id
@@ -1863,6 +1894,7 @@ function FlowPage() {
                     artworkUrl={artworkUrlFor(entry.id)}
                     isActive={selectedId === entry.id}
                     stats={stats}
+                    activityHint={getEntryActivityMessage(entry)}
                     collapsed={libraryCollapsed}
                     onSelect={selectPlaylist}
                   />
@@ -1888,7 +1920,7 @@ function FlowPage() {
                 artworkUrl={artworkUrlFor(selectedEntry.id)}
                 metaLine={detailMetaLine}
                 flowMeta={detailFlowMeta}
-                activityHint={selectedFlowActivityMessage}
+                activityHint={selectedActivityMessage}
                 enabled={flowEnabled}
                 togglingId={togglingId}
                 onToggleEnabled={(checked) =>
@@ -1997,7 +2029,7 @@ function FlowPage() {
                       loading={selectedTracksLoading}
                       error={selectedTracksError}
                       playbackSource={playbackSource}
-                      activityHint={selectedFlowActivityMessage}
+                      activityHint={selectedActivityMessage}
                       emptyMessage={
                         flowEnabled
                           ? "No tracks generated for this flow yet."
@@ -2018,6 +2050,7 @@ function FlowPage() {
                       loading={selectedTracksLoading}
                       error={selectedTracksError}
                       playbackSource={playbackSource}
+                      activityHint={selectedActivityMessage}
                       emptyMessage="No tracks in this playlist yet."
                       useTrackContextMenu
                       playlists={sharedPlaylists}

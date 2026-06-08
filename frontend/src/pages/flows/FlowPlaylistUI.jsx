@@ -282,6 +282,7 @@ export function PlaylistLibraryItem({
   artworkUrl,
   isActive,
   stats,
+  activityHint = null,
   collapsed = false,
   onSelect,
   onArtworkClick,
@@ -327,9 +328,26 @@ export function PlaylistLibraryItem({
             : undefined
         }
       />
-      <div className="flow-page__library-item-body">
+      <div
+        className="flow-page__library-item-body"
+        title={collapsed && activityHint ? activityHint : undefined}
+      >
         <div className="flow-page__library-item-top">
           <span className="flow-page__library-item-type">{typeLabel}</span>
+          {activityHint ? (
+            <span
+              className="flow-page__library-item-activity"
+              title={activityHint}
+            >
+              <Loader2
+                className="artist-icon-xs animate-spin"
+                aria-hidden="true"
+              />
+              <span className="flow-page__library-item-activity-text">
+                {activityHint}
+              </span>
+            </span>
+          ) : null}
         </div>
         <span className="flow-page__library-item-title" title={entry.name}>
           {entry.name}
