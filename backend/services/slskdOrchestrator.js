@@ -106,6 +106,10 @@ function readBatchTransfers(batch) {
   return [];
 }
 
+function readTransferState(transfer) {
+  return transfer?.state || transfer?.State || "";
+}
+
 export function enqueueJobPipeline(jobId) {
   return downloadTracker.enqueueSlskdPipeline(jobId);
 }
@@ -392,12 +396,18 @@ async function handleDownload(payload) {
     await failJob(job, message);
     return null;
   }
-  updateSlskdMetaStmt.run(null, result.batchId, null, null, job.id);
-  job.slskdBatchId = result.batchId;
+  updateSlskdMetaStmt.run(null, result.batchId || null, null, null, job.id);
+  job.slskdBatchId = result.batchId || null;
   return {
     ...payload,
     phase: "poll",
     batchId: result.batchId,
+    legacyTransfer: result.legacy
+      ? {
+          id: result.transferId,
+          username: result.username || candidate.raw.user,
+        }
+      : null,
     candidate,
     candidateIndex: index,
     pollAttempts: 0,
@@ -412,6 +422,39 @@ async function handlePoll(payload) {
   if (pollAttempts > MAX_POLL_ATTEMPTS) {
     await failJob(job, "slskd transfer polling timed out");
     return null;
+  }
+  if (payload.legacyTransfer?.id && payload.legacyTransfer?.username) {
+    const transfer = await slskdClient.getTransfer(
+      payload.legacyTransfer.username,
+      payload.legacyTransfer.id,
+    );
+    if (!transfer) {
+      return { ...payload, phase: "poll", delaySeconds: 3, pollAttempts };
+    }
+    const state = classifyTransferState(readTransferState(transfer));
+    if (state === "failed") {
+      const nextIndex = Number(payload.candidateIndex || 0) + 1;
+      if (nextIndex < (payload.candidates?.length || 0)) {
+        return {
+          ...payload,
+          phase: "download",
+          candidateIndex: nextIndex,
+          pollAttempts: 0,
+          legacyTransfer: null,
+        };
+      }
+      await failJob(job, "slskd transfer failed");
+      return null;
+    }
+    if (state !== "success") {
+      return { ...payload, phase: "poll", delaySeconds: 3, pollAttempts };
+    }
+    return {
+      ...payload,
+      phase: "finalize",
+      batch: { transfers: [transfer] },
+      pollAttempts,
+    };
   }
   const batch = await slskdClient.getBatch(payload.batchId);
   if (!batch) {
@@ -440,7 +483,7 @@ async function handlePoll(payload) {
     return { ...payload, phase: "poll", delaySeconds: 3, pollAttempts };
   }
   const states = transfers.map((transfer) =>
-    classifyTransferState(transfer?.state),
+    classifyTransferState(readTransferState(transfer)),
   );
   const anyFailed = states.some((state) => state === "failed");
   const allSuccess = states.every((state) => state === "success");

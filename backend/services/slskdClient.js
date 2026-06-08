@@ -139,6 +139,23 @@ function readBatchTransfers(data) {
   return normalizeArrayPayload(readProperty(batch, "transfers", "Transfers"));
 }
 
+function readLegacyEnqueued(data) {
+  return normalizeArrayPayload(readProperty(data, "enqueued", "Enqueued"));
+}
+
+function shouldFallbackToLegacyDownloadEndpoint(response) {
+  if (![400, 404, 405].includes(Number(response?.status))) return false;
+  const message =
+    typeof response?.data === "string"
+      ? response.data
+      : JSON.stringify(response?.data || "");
+  return (
+    response.status === 404 ||
+    message.includes("QueueDownloadRequest") ||
+    message.includes("IEnumerable")
+  );
+}
+
 function summarizeBatchFailures(failures) {
   const messages = normalizeArrayPayload(failures)
     .map((failure) => {
@@ -152,6 +169,10 @@ function summarizeBatchFailures(failures) {
     })
     .filter(Boolean);
   return messages.length > 0 ? messages.join("; ") : "all files failed";
+}
+
+function readId(value) {
+  return readProperty(value, "id", "Id");
 }
 
 export class SlskdClient {
@@ -247,6 +268,10 @@ export class SlskdClient {
     return withHonkerLock("slskd-api", async () => {
       const client = buildClient();
       const id = String(options.id || randomUUID());
+      const searchTimeoutSeconds = Math.max(
+        5,
+        Math.ceil(Number(options.searchTimeoutMs || DEFAULT_SEARCH_TIMEOUT_MS) / 1000),
+      );
       const body = {
         id,
         searchText: String(searchText || "").trim(),
@@ -260,9 +285,7 @@ export class SlskdClient {
         ),
         minimumResponseFileCount: Number(options.minimumResponseFileCount || 1),
         responseLimit: Number(options.responseLimit || DEFAULT_RESPONSE_LIMIT),
-        searchTimeout: Number(
-          options.searchTimeoutMs || DEFAULT_SEARCH_TIMEOUT_MS,
-        ),
+        searchTimeout: searchTimeoutSeconds,
       };
       let retryCount = 0;
       let delaySeconds = 30;
@@ -422,10 +445,11 @@ export class SlskdClient {
   async enqueueBatch({ username, files, options = {} }) {
     return withHonkerLock("slskd-api", async () => {
       const client = buildClient();
+      const normalizedUsername = String(username || "").trim();
       const body = {
         id: options.batchId || randomUUID(),
         searchId: options.searchId || null,
-        username: String(username || "").trim(),
+        username: normalizedUsername,
         files: (Array.isArray(files) ? files : []).map((file) => ({
           filename: String(file.filename || file.file || "").trim(),
           size: Number(file.size || 0),
@@ -442,6 +466,35 @@ export class SlskdClient {
           "/api/v0/transfers/downloads/batches",
           body,
         );
+        if (shouldFallbackToLegacyDownloadEndpoint(response)) {
+          const legacyResponse = await client.post(
+            `/api/v0/transfers/downloads/${encodeURIComponent(normalizedUsername)}`,
+            body.files,
+          );
+          if (![200, 201, 207].includes(legacyResponse.status)) {
+            throw new Error(
+              `slskd legacy enqueue failed: HTTP ${legacyResponse.status} ${String(
+                legacyResponse.data || "",
+              )}`,
+            );
+          }
+          const enqueued = readLegacyEnqueued(legacyResponse.data);
+          const failures = readBatchFailures(legacyResponse.data);
+          if (body.files.length > 0 && enqueued.length === 0) {
+            throw new Error(
+              `slskd legacy enqueue failed: ${summarizeBatchFailures(failures)}`,
+            );
+          }
+          const firstTransfer = enqueued[0] || null;
+          return {
+            batchId: null,
+            legacy: true,
+            transferId: readId(firstTransfer) || null,
+            username: normalizedUsername,
+            transfers: enqueued,
+            response: legacyResponse.data,
+          };
+        }
         if ([200, 201, 207].includes(response.status)) {
           const failures = readBatchFailures(response.data);
           const transfers = readBatchTransfers(response.data);
@@ -454,8 +507,13 @@ export class SlskdClient {
               `slskd batch enqueue failed: ${summarizeBatchFailures(failures)}`,
             );
           }
+          const batch = readProperty(response.data, "batch", "Batch") || {};
           return {
-            batchId: response.data?.batch?.id || body.id,
+            batchId: readId(batch) || body.id,
+            legacy: false,
+            transferId: readId(transfers[0]) || null,
+            username: normalizedUsername,
+            transfers,
             response: response.data,
           };
         }
