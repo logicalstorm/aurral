@@ -4,7 +4,8 @@ import fsp from "fs/promises";
 import path from "path";
 import { downloadTracker } from "../services/weeklyFlowDownloadTracker.js";
 import { weeklyFlowWorker } from "../services/weeklyFlowWorker.js";
-import { soulseekClient } from "../services/simpleSoulseekClient.js";
+import { slskdClient } from "../services/slskdClient.js";
+import { startSlskdOrchestratorWorker } from "../services/slskdOrchestratorWorker.js";
 import { playlistManager } from "../services/weeklyFlowPlaylistManager.js";
 import {
   buildSharedTrackIdentity,
@@ -15,10 +16,10 @@ import {
 import { weeklyFlowOperationQueue } from "../services/weeklyFlowOperationQueue.js";
 import { getWeeklyFlowStatusSnapshot } from "../services/weeklyFlowStatusSnapshot.js";
 import {
-  createPlaylistFileEntry,
   normalizeExistingFileMode,
   reuseTrackForPlaylist,
 } from "../services/weeklyFlowFileReuse.js";
+import { PLAYLIST_LIBRARY_DIR } from "../services/playlistPaths.js";
 import {
   remapLegacyWeeklyFlowPath,
   resolveExistingWeeklyFlowTrackPath,
@@ -34,7 +35,7 @@ import { getLastfmApiKey } from "../services/apiClients.js";
 
 const router = express.Router();
 const FLOW_WORKER_RETRY_CYCLE_OPTIONS_MINUTES = [15, 30, 60, 360, 720, 1440];
-const EXISTING_FILE_MODE_OPTIONS = ["download", "hardlink", "copy"];
+const EXISTING_FILE_MODE_OPTIONS = ["download", "reuse"];
 const AUDIO_CONTENT_TYPES = {
   ".mp3": "audio/mpeg",
   ".m4a": "audio/mp4",
@@ -239,7 +240,7 @@ const sortJobsForTrackReuse = (jobs) =>
 const getPlaylistLibraryRoot = (playlistType) =>
   path.resolve(
     weeklyFlowWorker.weeklyFlowRoot,
-    "aurral-weekly-flow",
+    PLAYLIST_LIBRARY_DIR,
     String(playlistType || "").trim(),
   );
 
@@ -516,12 +517,7 @@ const filterJobsForUser = (user, jobs) =>
     canAccessPlaylistType(user, job?.playlistType),
   );
 
-const sanitizeSoulseekStatus = (user, status) => {
-  if (user?.role === "admin") return status;
-  if (!status || typeof status !== "object") return status;
-  const { credential, ...rest } = status;
-  return rest;
-};
+const sanitizeSlskdStatus = (user, status) => status;
 
 const queueFlowEnableRefresh = (flowId, mutationVersion) => {
   weeklyFlowOperationQueue
@@ -619,9 +615,9 @@ router.post("/start/:flowId", async (req, res) => {
       return res.status(404).json({ error: "Flow not found" });
     }
 
-    if (!soulseekClient.isConfigured()) {
+    if (!slskdClient.isConfigured()) {
       return res.status(400).json({
-        error: "Soulseek credentials not configured",
+        error: "slskd not configured",
       });
     }
     const unavailableError = getUnavailableFlowSourceError(flow.mix);
@@ -733,7 +729,7 @@ router.get("/status", noCache, (req, res) => {
   });
   res.json({
     ...snapshot,
-    soulseek: sanitizeSoulseekStatus(req.user, snapshot.soulseek),
+    slskd: sanitizeSlskdStatus(req.user, snapshot.slskd),
   });
 });
 
@@ -910,9 +906,9 @@ router.put("/flows/:flowId/enabled", async (req, res) => {
           message: unavailableError,
         });
       }
-      if (!soulseekClient.isConfigured()) {
+      if (!slskdClient.isConfigured()) {
         return res.status(400).json({
-          error: "Soulseek credentials not configured",
+          error: "slskd not configured",
         });
       }
 
@@ -972,11 +968,6 @@ router.post("/flows/:flowId/static-playlist", async (req, res) => {
       });
     }
 
-    const sourceRoot = path.resolve(
-      weeklyFlowWorker.weeklyFlowRoot,
-      "aurral-weekly-flow",
-      flowId,
-    );
     const uniqueCompletedJobsByIdentity = new Map();
     for (const job of completedJobs) {
       const identity = buildTrackIdentity(job);
@@ -1004,40 +995,14 @@ router.post("/flows/:flowId/static-playlist", async (req, res) => {
       ownerUserId: flow.ownerUserId ?? req.user.id,
     });
 
-    const targetRoot = path.resolve(
-      weeklyFlowWorker.weeklyFlowRoot,
-      "aurral-weekly-flow",
-      playlist.id,
-    );
-    const existingFileMode = normalizeExistingFileMode(
-      weeklyFlowWorker.getWorkerSettings().existingFileMode,
-    );
-    const staticPlaylistLinkMode =
-      existingFileMode === "download" ? "hardlink" : existingFileMode;
     for (const job of uniqueCompletedJobs) {
       const safeSourcePath = remapLegacyWeeklyFlowPath(
         job.finalPath,
         weeklyFlowWorker.weeklyFlowRoot,
       );
-      if (!isPathInsideRoot(safeSourcePath, sourceRoot)) {
-        throw new Error(
-          `Track path is outside the flow library: ${job.finalPath}`,
-        );
-      }
       const stat = await fsp.stat(safeSourcePath);
       if (!stat.isFile()) {
         throw new Error(`Track file is missing: ${job.finalPath}`);
-      }
-      const relativePath = path.relative(sourceRoot, safeSourcePath);
-      const targetPath = path.join(targetRoot, relativePath);
-      await fsp.mkdir(path.dirname(targetPath), { recursive: true });
-      const linked = await createPlaylistFileEntry(
-        safeSourcePath,
-        targetPath,
-        staticPlaylistLinkMode,
-      );
-      if (!linked.linked) {
-        await fsp.copyFile(safeSourcePath, targetPath);
       }
 
       const jobId = downloadTracker.addJob(
@@ -1056,13 +1021,13 @@ router.post("/flows/:flowId/static-playlist", async (req, res) => {
         playlist.id,
       );
       if (jobId) {
-        downloadTracker.setDone(jobId, targetPath, job.albumName || null);
+        downloadTracker.setDone(jobId, safeSourcePath, job.albumName || null);
       }
     }
 
     playlistManager.updateConfig(false);
     await playlistManager.ensureSmartPlaylists();
-    await playlistManager.scanLibrary();
+    await playlistManager.scheduleScanLibrary(true);
 
     res.json({
       success: true,
@@ -1133,7 +1098,7 @@ router.post("/shared-playlists", async (req, res) => {
     playlistManager.updateConfig(false);
     await playlistManager.ensureSmartPlaylists();
     if (reusedJobIds.length > 0) {
-      await playlistManager.scanLibrary();
+      playlistManager.scheduleScanLibrary();
     }
     if (tracksQueued > 0) {
       if (!weeklyFlowWorker.running) {
@@ -1184,9 +1149,9 @@ router.post("/shared-playlists/import", async (req, res) => {
         message: "Import file must include at least one track",
       });
     }
-    if (!soulseekClient.isConfigured()) {
+    if (!slskdClient.isConfigured()) {
       return res.status(400).json({
-        error: "Soulseek credentials not configured",
+        error: "slskd not configured",
       });
     }
 
@@ -1203,7 +1168,7 @@ router.post("/shared-playlists/import", async (req, res) => {
     playlistManager.updateConfig(false);
     await playlistManager.ensureSmartPlaylists();
     if (reused.reusedJobIds.length > 0) {
-      await playlistManager.scanLibrary();
+      playlistManager.scheduleScanLibrary();
     }
     if (jobIds.length > 0 && !weeklyFlowWorker.running) {
       await weeklyFlowWorker.start();
@@ -1271,7 +1236,7 @@ router.post("/shared-playlists/:playlistId/tracks", async (req, res) => {
     playlistManager.updateConfig(false);
     await playlistManager.ensureSmartPlaylists();
     if (reusedJobIds.length > 0) {
-      await playlistManager.scanLibrary();
+      playlistManager.scheduleScanLibrary();
     }
     if (jobIds.length > 0) {
       if (!weeklyFlowWorker.running) {
@@ -1378,11 +1343,7 @@ router.put("/shared-playlists/:playlistId", async (req, res) => {
           }
         }
 
-        const playlistRoot = path.resolve(
-          weeklyFlowWorker.weeklyFlowRoot,
-          "aurral-weekly-flow",
-          playlistId,
-        );
+        const playlistRoot = getPlaylistLibraryRoot(playlistId);
         for (const job of existingJobs) {
           if (matchedJobIds.has(job.id)) continue;
           if (job.status === "done" && typeof job.finalPath === "string") {
@@ -1417,7 +1378,7 @@ router.put("/shared-playlists/:playlistId", async (req, res) => {
 
     playlistManager.updateConfig(false);
     await playlistManager.ensureSmartPlaylists();
-    await playlistManager.scanLibrary();
+    await playlistManager.scheduleScanLibrary(true);
     if (tracksQueued > 0) {
       if (!weeklyFlowWorker.running) {
         await weeklyFlowWorker.start();
@@ -1459,22 +1420,14 @@ router.delete(
         });
       }
 
-      const playlistRoot = path.resolve(
-        weeklyFlowWorker.weeklyFlowRoot,
-        "aurral-weekly-flow",
-        playlistId,
-      );
+      const playlistRoot = getPlaylistLibraryRoot(playlistId);
       const safeFinalPath = remapLegacyWeeklyFlowPath(
         job.finalPath,
         weeklyFlowWorker.weeklyFlowRoot,
       );
-      if (!isPathInsideRoot(safeFinalPath, playlistRoot)) {
-        return res.status(400).json({
-          error: "Track path is outside the playlist library",
-        });
+      if (isPathInsideRoot(safeFinalPath, playlistRoot)) {
+        await fsp.rm(safeFinalPath, { force: true });
       }
-
-      await fsp.rm(safeFinalPath, { force: true });
       downloadTracker.removeJob(jobId);
 
       const nextTracks = Array.isArray(playlist.tracks)
@@ -1503,6 +1456,9 @@ router.delete(
           tracks: nextTracks,
         },
       );
+      playlistManager.updateConfig(false);
+      await playlistManager.refreshPlaylist(playlistId);
+      await playlistManager.scheduleScanLibrary(true);
 
       res.json({
         success: true,
@@ -1545,12 +1501,9 @@ router.post(
           job.finalPath,
           weeklyFlowWorker.weeklyFlowRoot,
         );
-        if (!isPathInsideRoot(safeFinalPath, playlistRoot)) {
-          return res.status(400).json({
-            error: "Track path is outside the playlist library",
-          });
+        if (isPathInsideRoot(safeFinalPath, playlistRoot)) {
+          await fsp.rm(safeFinalPath, { force: true });
         }
-        await fsp.rm(safeFinalPath, { force: true });
       }
 
       const reset = downloadTracker.setPending(jobId, null);
@@ -1559,6 +1512,10 @@ router.post(
           error: "Failed to requeue track",
         });
       }
+
+      playlistManager.updateConfig(false);
+      await playlistManager.refreshPlaylist(playlistId);
+      playlistManager.scheduleScanLibrary();
 
       await restartWorkerIfPending();
       if (weeklyFlowWorker.running) {
@@ -1725,7 +1682,7 @@ router.put("/worker/settings", requireAdmin, async (req, res) => {
     const normalized = String(existingFileMode || "").trim().toLowerCase();
     if (!EXISTING_FILE_MODE_OPTIONS.includes(normalized)) {
       return res.status(400).json({
-        error: "existingFileMode must be one of: download, hardlink, copy",
+        error: "existingFileMode must be one of: download, reuse",
       });
     }
   }
@@ -1736,38 +1693,12 @@ router.put("/worker/settings", requireAdmin, async (req, res) => {
     retryCycleMinutes,
     existingFileMode,
   });
-  try {
-    await soulseekClient.applyConfigChanges();
-  } catch (error) {
-    console.warn(
-      "[WeeklyFlow] Failed to apply Soulseek config changes:",
-      error.message,
-    );
-  }
   return res.json({ success: true, settings });
-});
-
-router.post("/worker/soulseek/rotate", requireAdmin, async (req, res) => {
-  try {
-    const result = await soulseekClient.regenerateCredentials({
-      reason: "manual_rotate",
-    });
-    await soulseekClient.applyConfigChanges();
-    return res.json({
-      success: true,
-      credential: soulseekClient.getCredentialStatus(),
-      username: result.username,
-    });
-  } catch (error) {
-    return res.status(400).json({
-      error: "Failed to rotate Soulseek credentials",
-      message: error.message,
-    });
-  }
 });
 
 router.post("/worker/start", requireAdmin, async (req, res) => {
   try {
+    startSlskdOrchestratorWorker();
     await weeklyFlowWorker.start();
     res.json({ success: true, message: "Worker started" });
   } catch (error) {
@@ -1835,48 +1766,29 @@ router.post("/playlist/:playlistType/create", requireAdmin, async (req, res) => 
     res.json({
       success: true,
       message:
-        "Smart playlists ensured. Tracks in aurral-weekly-flow/<flow-id> will appear in matching smart playlists after Navidrome scans the flow library.",
+        "Playlists ensured. M3U files in aurral-playlists/_playlists reference completed track paths and import after Navidrome scans the Aurral library.",
     });
   } catch (error) {
     res.status(500).json({
-      error: "Failed to ensure smart playlists or trigger scan",
+      error: "Failed to ensure playlists or trigger scan",
       message: error.message,
     });
   }
 });
 
-router.get("/test/soulseek", requireAdmin, async (req, res) => {
+router.get("/test/slskd", requireAdmin, async (req, res) => {
   try {
-    if (!soulseekClient.isConfigured()) {
-      return res.status(400).json({
-        error: "Soulseek not configured",
-        configured: false,
-      });
+    const result = await slskdClient.testConnection({ force: true });
+    if (!result.configured) {
+      return res.status(400).json(result);
     }
-
-    const connected = soulseekClient.isConnected();
-    if (!connected) {
-      try {
-        await soulseekClient.connect();
-      } catch (error) {
-        return res.status(500).json({
-          error: "Failed to connect to Soulseek",
-          message: error.message,
-          configured: true,
-          connected: false,
-        });
-      }
+    if (!result.ok) {
+      return res.status(502).json(result);
     }
-
-    res.json({
-      success: true,
-      configured: true,
-      connected: true,
-      message: "Soulseek client is ready",
-    });
+    return res.json({ success: true, ...result });
   } catch (error) {
     res.status(500).json({
-      error: "Soulseek test failed",
+      error: "slskd test failed",
       message: error.message,
     });
   }
@@ -1892,25 +1804,13 @@ router.post("/test/download", async (req, res) => {
       });
     }
 
-    if (!soulseekClient.isConfigured()) {
+    if (!slskdClient.isConfigured()) {
       return res.status(400).json({
-        error: "Soulseek not configured",
+        error: "slskd not configured",
       });
     }
 
-    if (!soulseekClient.isConnected()) {
-      await soulseekClient.connect();
-    }
-
-    const searchWithTimeout = (ms) =>
-      Promise.race([
-        soulseekClient.search(artistName, trackName),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Search timed out")), ms),
-        ),
-      ]);
-
-    const results = await searchWithTimeout(15000);
+    const results = await slskdClient.searchQuery(`${artistName} ${trackName}`);
     if (!results || results.length === 0) {
       return res.status(404).json({
         error: "No search results found",
@@ -1919,32 +1819,19 @@ router.post("/test/download", async (req, res) => {
       });
     }
 
-    const bestMatch = soulseekClient.pickBestMatch(results, trackName);
-    if (!bestMatch) {
-      return res.status(404).json({
-        error: "No suitable match found",
-        resultsCount: results.length,
-      });
-    }
-
     res.json({
       success: true,
       artistName,
       trackName,
       resultsCount: results.length,
-      bestMatch: {
-        file: bestMatch.file,
-        size: bestMatch.size,
-        user: bestMatch.user,
-        slots: bestMatch.slots,
-      },
-      message: "Search successful - ready to download",
+      sample: results.slice(0, 3),
+      message: "Search successful",
     });
   } catch (error) {
     console.error("[weekly-flow] test/download error:", error);
     res.status(500).json({
-      error: "Test download failed",
-      message: error?.message || String(error),
+      error: "Download test failed",
+      message: error.message,
     });
   }
 });

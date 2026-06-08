@@ -2,7 +2,7 @@ import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { weeklyFlowWorker } from "./weeklyFlowWorker.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { weeklyFlowOperationQueue } from "./weeklyFlowOperationQueue.js";
-import { soulseekClient } from "./simpleSoulseekClient.js";
+import { slskdClient } from "./slskdClient.js";
 import { userOps } from "../config/db-helpers.js";
 import { getFlowCapabilities } from "./listenbrainzDiscoveryFallback.js";
 
@@ -186,7 +186,7 @@ export function getWeeklyFlowStatusSnapshot({
       ...workerStatus,
       stats,
     },
-    soulseek: soulseekClient.getStatus(),
+    slskd: slskdClient.getStatus(),
     stats,
     flowStats,
     sharedStats,
