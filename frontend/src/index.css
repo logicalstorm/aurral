@@ -7153,6 +7153,21 @@ textarea {
   font-size: 0.6875rem;
 }
 
+.flow-page__library-item-activity {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--aurral-green);
+  font-size: 0.6875rem;
+}
+
+.flow-page__library-item-activity-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .flow-page__library-item-title {
   overflow: hidden;
   text-overflow: ellipsis;

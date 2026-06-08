@@ -1,22 +1,13 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Loader,
   Clock,
   CheckCircle2,
   AlertCircle,
-  X,
   Music,
-  RefreshCw,
 } from "lucide-react";
-import {
-  getRequests,
-  deleteRequest,
-  getDownloadStatus,
-  triggerAlbumSearch,
-} from "../utils/api";
-import { useToast } from "../contexts/ToastContext";
-import { useWebSocketChannel } from "../hooks/useWebSocket";
+import { getRequests } from "../utils/api";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { TAG_COLORS } from "./ArtistDetails/constants";
 
@@ -50,90 +41,6 @@ const getHistorySource = (request) => {
 const matchesHistoryTab = (request, tab) => {
   if (tab === "all") return true;
   return getHistorySource(request) === tab;
-};
-
-const HISTORY_SORT_OPTIONS = [
-  { value: "timeline", label: "Timeline" },
-  { value: "status", label: "Active first" },
-];
-
-const STATUS_SORT_ORDER = {
-  searching: 0,
-  downloading: 1,
-  pending: 2,
-  completed: 3,
-  failed: 4,
-};
-
-const getHistorySortGroup = (request, downloadStatuses, reSearchingAlbumIds) => {
-  if (request.source === "slskd" || request.kind === "track_download") {
-    if (request.status === "completed") return "completed";
-    if (request.status === "failed") return "failed";
-    const label = String(request.statusLabel || "").toLowerCase();
-    if (label.includes("download")) return "downloading";
-    if (label.includes("search")) return "searching";
-    if (label.includes("mov")) return "downloading";
-    if (request.status === "processing" || request.status === "pending") {
-      return "pending";
-    }
-    return "completed";
-  }
-
-  if (request.source === "aurral") {
-    if (request.status === "completed") return "completed";
-    if (request.status === "failed") return "failed";
-    if (request.status === "processing" || request.status === "pending") {
-      const label = String(request.statusLabel || "").toLowerCase();
-      if (label.includes("search")) return "searching";
-      if (label.includes("download")) return "downloading";
-      return "pending";
-    }
-    return "completed";
-  }
-
-  const albumId = request.albumId ? String(request.albumId) : null;
-  if (albumId && reSearchingAlbumIds[albumId]) return "searching";
-
-  const albumStatus = albumId ? downloadStatuses[albumId] : null;
-  const liveStatus = albumStatus?.status;
-
-  if (liveStatus === "searching") return "searching";
-  if (liveStatus === "failed" || request.status === "failed") return "failed";
-  if (
-    liveStatus === "downloading" ||
-    liveStatus === "moving" ||
-    liveStatus === "adding" ||
-    liveStatus === "processing"
-  ) {
-    return "downloading";
-  }
-  if (liveStatus === "added" || request.status === "available") return "completed";
-  if (request.status === "processing" || request.inQueue) return "downloading";
-  if (request.status === "failed") return "failed";
-  if (request.status === "available") return "completed";
-  return "pending";
-};
-
-const sortHistoryRequests = (
-  items,
-  sortMode,
-  downloadStatuses,
-  reSearchingAlbumIds,
-) => {
-  const sorted = [...items];
-  if (sortMode === "timeline") {
-    return sorted.sort(
-      (a, b) => new Date(b.requestedAt) - new Date(a.requestedAt),
-    );
-  }
-  return sorted.sort((a, b) => {
-    const groupA =
-      STATUS_SORT_ORDER[getHistorySortGroup(a, downloadStatuses, reSearchingAlbumIds)];
-    const groupB =
-      STATUS_SORT_ORDER[getHistorySortGroup(b, downloadStatuses, reSearchingAlbumIds)];
-    if (groupA !== groupB) return groupA - groupB;
-    return new Date(b.requestedAt) - new Date(a.requestedAt);
-  });
 };
 
 const formatTimelineTime = (value) => {
@@ -193,189 +100,56 @@ const groupRequestsByDate = (requests) => {
 
 const EMPTY_STATE_COPY = {
   all: {
-    title: "No activity yet",
+    title: "No requests yet",
     message:
-      "A chronological log of downloads, searches, and background work will appear here.",
+      "A chronological log of album requests, track downloads, and other activity will appear here.",
   },
   lidarr: {
-    title: "No Lidarr activity",
-    message: "Album requests and downloads from Lidarr will appear here.",
+    title: "No Lidarr requests",
+    message: "Album requests from Lidarr will appear here.",
   },
   slskd: {
-    title: "No slskd activity",
-    message: "Track searches, downloads, and transfers from slskd will appear here.",
+    title: "No slskd requests",
+    message: "Track searches and downloads from slskd will appear here.",
   },
   aurral: {
     title: "No Aurral activity",
-    message:
-      "Discovery refreshes, playlist changes, and other background work will appear here.",
+    message: "Playlist updates, discovery refreshes, and other work will appear here.",
   },
 };
 
-function RequestStatusBadge({ request, downloadStatuses }) {
-  if (request.source === "slskd" || request.kind === "track_download") {
-    if (request.status === "completed") {
-      return (
-        <span className="requests-page__badge requests-page__badge--success">
-          <CheckCircle2 className="artist-icon-xs" />
-          {request.statusLabel || "Done"}
-        </span>
-      );
-    }
-    if (request.status === "failed") {
-      return (
-        <span className="requests-page__badge requests-page__badge--failed">
-          <AlertCircle className="artist-icon-xs" />
-          Failed
-        </span>
-      );
-    }
-    if (request.status === "processing" || request.status === "pending") {
-      return (
-        <span className="requests-page__badge requests-page__badge--active">
-          <Loader className="artist-icon-xs animate-spin" />
-          {request.statusLabel || "Working"}
-        </span>
-      );
-    }
-    return (
-      <span className="requests-page__badge requests-page__badge--pending">
-        <Clock className="artist-icon-xs" />
-        Pending
-      </span>
-    );
-  }
-
-  if (request.source === "aurral") {
-    if (request.status === "completed") {
-      return (
-        <span className="requests-page__badge requests-page__badge--success">
-          <CheckCircle2 className="artist-icon-xs" />
-          {request.statusLabel || "Done"}
-        </span>
-      );
-    }
-    if (request.status === "failed") {
-      return (
-        <span className="requests-page__badge requests-page__badge--failed">
-          <AlertCircle className="artist-icon-xs" />
-          {request.statusLabel || "Failed"}
-        </span>
-      );
-    }
-    if (request.status === "processing" || request.status === "pending") {
-      return (
-        <span className="requests-page__badge requests-page__badge--active">
-          <Loader className="artist-icon-xs animate-spin" />
-          {request.statusLabel || "Working"}
-        </span>
-      );
-    }
-    return (
-      <span className="requests-page__badge requests-page__badge--pending">
-        <Clock className="artist-icon-xs" />
-        {request.statusLabel || "Updated"}
-      </span>
-    );
-  }
-
-  const albumStatus = request.albumId
-    ? downloadStatuses[String(request.albumId)]
-    : null;
-  const artistDownloadStatuses = Object.values(downloadStatuses).filter(
-    (status) =>
-      status &&
-      (status.status === "adding" ||
-        status.status === "searching" ||
-        status.status === "downloading" ||
-        status.status === "moving"),
-  );
-  const hasActiveDownloads = artistDownloadStatuses.length > 0;
-
-  if (albumStatus?.status === "adding") {
-    return (
-      <span className="requests-page__badge requests-page__badge--active">
-        <Loader className="artist-icon-xs animate-spin" />
-        Adding
-      </span>
-    );
-  }
-
-  if (albumStatus?.status === "downloading") {
-    return (
-      <span className="requests-page__badge requests-page__badge--active">
-        <Loader className="artist-icon-xs animate-spin" />
-        Downloading
-      </span>
-    );
-  }
-
-  if (albumStatus?.status === "searching") {
-    return (
-      <span className="requests-page__badge requests-page__badge--active">
-        <Loader className="artist-icon-xs animate-spin" />
-        Searching
-      </span>
-    );
-  }
-
-  if (albumStatus?.status === "moving") {
-    return (
-      <span className="requests-page__badge requests-page__badge--active">
-        <Loader className="artist-icon-xs animate-spin" />
-        Moving
-      </span>
-    );
-  }
-
-  if (albumStatus?.status === "processing") {
-    return (
-      <span className="requests-page__badge requests-page__badge--active">
-        <Loader className="artist-icon-xs animate-spin" />
-        Processing
-      </span>
-    );
-  }
-
-  if (albumStatus?.status === "added") {
+function RequestStatusBadge({ request }) {
+  if (request.status === "completed" || request.status === "available") {
     return (
       <span className="requests-page__badge requests-page__badge--success">
         <CheckCircle2 className="artist-icon-xs" />
-        Completed
+        {request.statusLabel || "Done"}
       </span>
     );
   }
 
-  if (request.status === "available") {
-    return (
-      <span className="requests-page__badge requests-page__badge--success">
-        <CheckCircle2 className="artist-icon-xs" />
-        Available
-      </span>
-    );
-  }
-
-  if (albumStatus?.status === "failed" || request.status === "failed") {
+  if (request.status === "failed") {
     return (
       <span className="requests-page__badge requests-page__badge--failed">
         <AlertCircle className="artist-icon-xs" />
-        Failed
+        {request.statusLabel || "Failed"}
       </span>
     );
   }
 
-  if (request.status === "processing" || hasActiveDownloads) {
+  if (request.status === "processing" || request.status === "pending") {
     return (
       <span className="requests-page__badge requests-page__badge--active">
         <Loader className="artist-icon-xs animate-spin" />
-        {hasActiveDownloads ? "Downloading" : "Processing"}
+        {request.statusLabel || "In progress"}
       </span>
     );
   }
 
   return (
     <span className="requests-page__badge requests-page__badge--pending">
-      Requested
+      <Clock className="artist-icon-xs" />
+      {request.statusLabel || "Requested"}
     </span>
   );
 }
@@ -386,43 +160,7 @@ function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("all");
-  const [sortMode, setSortMode] = useState("timeline");
-  const [downloadStatuses, setDownloadStatuses] = useState({});
-  const [reSearchingAlbumIds, setReSearchingAlbumIds] = useState({});
   const navigate = useNavigate();
-  const { showError, showSuccess } = useToast();
-  const activeAlbumIdsRef = useRef([]);
-  const lastDownloadWsAtRef = useRef(0);
-  const handleDownloadStatusMessage = useCallback((msg) => {
-    if (msg?.type !== "download_statuses") return;
-    lastDownloadWsAtRef.current = Date.now();
-    const activeIds = activeAlbumIdsRef.current;
-    if (!activeIds.length) return;
-    const incoming = msg.statuses || {};
-    const next = {};
-    for (const id of activeIds) {
-      if (incoming[id]) next[id] = incoming[id];
-    }
-    setDownloadStatuses((prev) => {
-      const prevKeys = Object.keys(prev);
-      const nextKeys = Object.keys(next);
-      if (prevKeys.length !== nextKeys.length) return next;
-      for (const key of nextKeys) {
-        const prevStatus = prev[key];
-        const nextStatus = next[key];
-        if (
-          prevStatus?.status !== nextStatus?.status ||
-          prevStatus?.progress !== nextStatus?.progress ||
-          prevStatus?.updatedAt !== nextStatus?.updatedAt
-        ) {
-          return next;
-        }
-      }
-      return prev;
-    });
-  }, []);
-
-  useWebSocketChannel("downloads", handleDownloadStatusMessage);
 
   const filteredRequests = useMemo(
     () => requests.filter((request) => matchesHistoryTab(request, activeTab)),
@@ -431,38 +169,16 @@ function HistoryPage() {
 
   const sortedRequests = useMemo(
     () =>
-      sortHistoryRequests(
-        filteredRequests,
-        sortMode,
-        downloadStatuses,
-        reSearchingAlbumIds,
+      [...filteredRequests].sort(
+        (a, b) => new Date(b.requestedAt) - new Date(a.requestedAt),
       ),
-    [filteredRequests, sortMode, downloadStatuses, reSearchingAlbumIds],
+    [filteredRequests],
   );
 
   const timelineGroups = useMemo(
-    () =>
-      sortMode === "timeline" ? groupRequestsByDate(sortedRequests) : [],
-    [sortedRequests, sortMode],
+    () => groupRequestsByDate(sortedRequests),
+    [sortedRequests],
   );
-
-  const activeAlbumIds = useMemo(() => {
-    return requests
-      .filter(
-        (request) =>
-          request.albumId &&
-          (request.inQueue ||
-            (request.status &&
-              request.status !== "available" &&
-              request.status !== "failed")),
-      )
-      .map((request) => String(request.albumId));
-  }, [requests]);
-
-  const activeAlbumIdsKey = useMemo(() => {
-    if (!activeAlbumIds.length) return "";
-    return [...activeAlbumIds].sort().join(",");
-  }, [activeAlbumIds]);
 
   const fetchRequests = useCallback(async ({ silent = false } = {}) => {
     if (!silent) {
@@ -482,33 +198,6 @@ function HistoryPage() {
     }
   }, []);
 
-  const fetchActiveDownloadStatus = useCallback(async (albumIds) => {
-    const hasExplicitAlbumIds = Array.isArray(albumIds);
-    const ids = Array.isArray(albumIds)
-      ? albumIds
-      : activeAlbumIdsRef.current;
-    if (!ids.length) {
-      setDownloadStatuses({});
-      return;
-    }
-    try {
-      const statuses = await getDownloadStatus(ids);
-      setDownloadStatuses((prev) => {
-        if (hasExplicitAlbumIds) {
-          return {
-            ...prev,
-            ...(statuses || {}),
-          };
-        }
-        return statuses || {};
-      });
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    activeAlbumIdsRef.current = activeAlbumIds;
-  }, [activeAlbumIds]);
-
   useEffect(() => {
     fetchRequests();
     const initialRefreshTimeout = setTimeout(() => {
@@ -517,13 +206,11 @@ function HistoryPage() {
 
     const handleFocus = () => {
       fetchRequests({ silent: true });
-      fetchActiveDownloadStatus();
     };
 
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
         fetchRequests({ silent: true });
-        fetchActiveDownloadStatus();
       }
     };
 
@@ -535,95 +222,19 @@ function HistoryPage() {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [fetchRequests, fetchActiveDownloadStatus]);
+  }, [fetchRequests]);
 
   useEffect(() => {
-    const albumIds = activeAlbumIdsKey ? activeAlbumIdsKey.split(",") : [];
-    if (!albumIds.length) {
-      setDownloadStatuses({});
-      return;
-    }
-
-    let cancelled = false;
-    const pollDownloadStatus = async () => {
-      if (Date.now() - lastDownloadWsAtRef.current < 20000) {
-        return;
-      }
-      try {
-        const statuses = await getDownloadStatus(albumIds);
-        if (!cancelled) {
-          setDownloadStatuses(statuses || {});
-        }
-      } catch {}
-    };
-
-    pollDownloadStatus();
-    const interval = setInterval(pollDownloadStatus, 10000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [activeAlbumIdsKey]);
-
-  useEffect(() => {
-    const hasActive = requests.some(
+    const hasOpen = requests.some(
       (request) =>
-        request.inQueue ||
-        request.status === "processing" ||
-        request.status === "pending" ||
-        (request.status &&
-          request.status !== "available" &&
-          request.status !== "failed" &&
-          request.status !== "completed"),
+        request.status === "processing" || request.status === "pending",
     );
-    const intervalMs = hasActive ? 8000 : 45000;
+    const intervalMs = hasOpen ? 15000 : 60000;
     const interval = setInterval(() => {
       fetchRequests({ silent: true });
     }, intervalMs);
     return () => clearInterval(interval);
   }, [requests, fetchRequests]);
-
-  const handleStopDownload = async (request) => {
-    if (!request.inQueue || !request.albumId) return;
-    try {
-      await deleteRequest(request.albumId);
-      setRequests((prev) =>
-        prev.filter((r) => String(r.albumId) !== String(request.albumId)),
-      );
-    } catch {
-      showError("Failed to stop download");
-    }
-  };
-
-  const handleReSearchRequest = async (request) => {
-    if (!request?.albumId) return;
-    const albumId = String(request.albumId);
-    setReSearchingAlbumIds((prev) => ({
-      ...prev,
-      [albumId]: true,
-    }));
-    try {
-      setDownloadStatuses((prev) => ({
-        ...prev,
-        [albumId]: { status: "searching" },
-      }));
-      await triggerAlbumSearch(request.albumId);
-      showSuccess("Search triggered for album");
-      fetchActiveDownloadStatus([albumId]);
-    } catch (err) {
-      showError(
-        `Failed to re-search album: ${
-          err.response?.data?.message || err.message
-        }`,
-      );
-    } finally {
-      setReSearchingAlbumIds((prev) => {
-        const next = { ...prev };
-        delete next[albumId];
-        return next;
-      });
-    }
-  };
 
   const navigateToArtist = (request, isAlbum, artistMbid, artistName, displayName) => {
     if (!artistMbid || artistMbid === "null" || artistMbid === "undefined") {
@@ -675,16 +286,6 @@ function HistoryPage() {
       (artistMbid &&
         artistMbid !== "null" &&
         artistMbid !== "undefined");
-    const albumStatus = request.albumId
-      ? downloadStatuses[String(request.albumId)]
-      : null;
-    const statusValue = albumStatus?.status;
-    const isFailed =
-      statusValue === "failed" ||
-      (!statusValue && request.status === "failed");
-    const isReSearching =
-      request.albumId &&
-      !!reSearchingAlbumIds[String(request.albumId)];
     const historySource = getHistorySource(request);
     const sourceColor = HISTORY_SOURCE_COLORS[historySource];
     const sourceLabel = HISTORY_SOURCE_LABELS[historySource];
@@ -730,41 +331,7 @@ function HistoryPage() {
           className="requests-page__status"
           onClick={(event) => event.stopPropagation()}
         >
-          <RequestStatusBadge
-            request={request}
-            downloadStatuses={downloadStatuses}
-          />
-          {(isFailed || request.inQueue) && request.albumId && (
-            <div className="requests-page__actions">
-              {isFailed && (
-                <button
-                  type="button"
-                  onClick={() => handleReSearchRequest(request)}
-                  className="btn btn-surface btn-icon-square requests-page__action"
-                  title="Re-search"
-                  aria-label="Re-search"
-                  disabled={isReSearching}
-                >
-                  {isReSearching ? (
-                    <Loader className="artist-icon-xs animate-spin" />
-                  ) : (
-                    <RefreshCw className="artist-icon-xs" />
-                  )}
-                </button>
-              )}
-              {request.inQueue && (
-                <button
-                  type="button"
-                  onClick={() => handleStopDownload(request)}
-                  className="btn btn-surface btn-icon-square requests-page__action btn--danger-text"
-                  title="Stop download"
-                  aria-label="Stop download"
-                >
-                  <X className="artist-icon-xs" />
-                </button>
-              )}
-            </div>
-          )}
+          <RequestStatusBadge request={request} />
         </div>
       </article>
     );
@@ -778,7 +345,7 @@ function HistoryPage() {
         <header className="requests-page__header">
           <h1 className="requests-page__title">History</h1>
           <p className="requests-page__subtitle">
-            A live timeline of downloads, searches, and background work
+            A chronological log of requests and activity
           </p>
         </header>
         <div className="artist-loading">
@@ -793,7 +360,7 @@ function HistoryPage() {
       <header className="requests-page__header">
         <h1 className="requests-page__title">History</h1>
         <p className="requests-page__subtitle">
-          A live timeline of downloads, searches, and background work
+          A chronological log of requests and activity
         </p>
       </header>
 
@@ -817,22 +384,6 @@ function HistoryPage() {
               }
             >
               {tab.label}
-            </button>
-          ))}
-        </div>
-        <div
-          className="artist-segmented requests-page__sort"
-          role="group"
-          aria-label="Sort history"
-        >
-          {HISTORY_SORT_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setSortMode(option.value)}
-              className={`artist-segmented-button${sortMode === option.value ? " is-active" : ""}`}
-            >
-              {option.label}
             </button>
           ))}
         </div>
@@ -873,28 +424,24 @@ function HistoryPage() {
       ) : (
         !error && (
           <div className="requests-page__list">
-            {sortMode === "timeline"
-              ? (() => {
-                  let rowIndex = 0;
-                  return timelineGroups.map((entry) => {
-                    if (entry.type === "date") {
-                      return (
-                        <div
-                          key={entry.key}
-                          className="requests-page__date-group"
-                        >
-                          {entry.label}
-                        </div>
-                      );
-                    }
-                    const row = renderRequestRow(entry.request, rowIndex);
-                    rowIndex += 1;
-                    return row;
-                  });
-                })()
-              : sortedRequests.map((request, index) =>
-                  renderRequestRow(request, index),
-                )}
+            {(() => {
+              let rowIndex = 0;
+              return timelineGroups.map((entry) => {
+                if (entry.type === "date") {
+                  return (
+                    <div
+                      key={entry.key}
+                      className="requests-page__date-group"
+                    >
+                      {entry.label}
+                    </div>
+                  );
+                }
+                const row = renderRequestRow(entry.request, rowIndex);
+                rowIndex += 1;
+                return row;
+              });
+            })()}
           </div>
         )
       )}

@@ -13,45 +13,75 @@ export function parseOperationQueueLabel(label) {
   };
 }
 
-export function getFlowRunActivity({
-  flowId,
+export function getPlaylistRunActivity({
+  playlistId,
+  kind = "flow",
   enabled = true,
   status = null,
   stats = null,
   rerunning = false,
+  togglingToEnabled = null,
+  addingTrack = false,
+  reSearchingCount = 0,
 } = {}) {
-  if (!flowId || !enabled) return null;
+  if (!playlistId) return null;
+
+  if (togglingToEnabled === true) {
+    return { message: "Enabling flow…", phase: "preparing" };
+  }
+
+  if (togglingToEnabled === false) {
+    return { message: "Disabling flow…", phase: "preparing" };
+  }
+
+  if (addingTrack) {
+    return { message: "Adding track…", phase: "preparing" };
+  }
+
+  if (reSearchingCount > 0) {
+    return {
+      message:
+        reSearchingCount === 1
+          ? "Re-searching track…"
+          : `Re-searching ${reSearchingCount} tracks…`,
+      phase: "searching",
+    };
+  }
 
   const operationQueue = status?.operationQueue;
   const queueProcessing = operationQueue?.processing === true;
   const { action: queueAction, flowId: queueFlowId } = parseOperationQueueLabel(
     operationQueue?.currentLabel,
   );
-  const queueTargetsThisFlow = queueFlowId === flowId;
+  const queueTargetsThisPlaylist = queueFlowId === playlistId;
   const hintPhase = String(status?.hint?.phase || "").trim();
   const hintMessage = String(status?.hint?.message || "").trim();
   const currentJob = status?.worker?.currentJob;
-  const isCurrentJobForFlow =
-    currentJob?.playlistType === flowId &&
+  const isCurrentJobForPlaylist =
+    currentJob?.playlistType === playlistId &&
     currentJob?.artistName &&
     currentJob?.trackName;
   const pendingCount = Number(stats?.pending || 0);
   const downloadingCount = Number(stats?.downloading || 0);
   const doneCount = Number(stats?.done || 0);
-  const isGeneratingThisFlow =
+  const isGeneratingThisPlaylist =
     queueProcessing &&
     GENERATION_ACTIONS.has(queueAction) &&
-    queueTargetsThisFlow;
-  const isQueueCleanupThisFlow =
+    queueTargetsThisPlaylist;
+  const isQueueCleanupThisPlaylist =
     queueProcessing &&
     CLEANUP_ACTIONS.has(queueAction) &&
-    queueTargetsThisFlow;
+    queueTargetsThisPlaylist;
 
-  if (rerunning || isGeneratingThisFlow) {
+  if (kind === "flow" && !enabled && !rerunning && !isQueueCleanupThisPlaylist) {
+    return null;
+  }
+
+  if (rerunning || isGeneratingThisPlaylist) {
     return { message: "Generating playlist…", phase: "generating" };
   }
 
-  if (isCurrentJobForFlow) {
+  if (isCurrentJobForPlaylist) {
     const progressPct = Math.max(
       0,
       Math.min(100, Math.round(Number(currentJob?.progressPct || 0))),
@@ -62,7 +92,7 @@ export function getFlowRunActivity({
     };
   }
 
-  if (isQueueCleanupThisFlow) {
+  if (isQueueCleanupThisPlaylist) {
     return { message: "Cleaning flow files…", phase: "cleaning" };
   }
 
@@ -82,7 +112,7 @@ export function getFlowRunActivity({
 
   if (
     queueProcessing &&
-    queueTargetsThisFlow &&
+    queueTargetsThisPlaylist &&
     hintMessage &&
     hintPhase !== "completed"
   ) {
@@ -93,4 +123,11 @@ export function getFlowRunActivity({
   }
 
   return null;
+}
+
+export function getFlowRunActivity(options = {}) {
+  return getPlaylistRunActivity({
+    ...options,
+    playlistId: options.flowId || options.playlistId,
+  });
 }
