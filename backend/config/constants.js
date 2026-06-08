@@ -184,8 +184,12 @@ export const defaultData = {
         discoveryRecommendationsPerRefresh: 200,
         discoveryMode: "balanced",
       },
-      slskd: { url: "", apiKey: "" },
-      soulseek: { username: "", password: "" },
+      slskd: {
+        url: "",
+        apiKey: "",
+        preferredFormat: "flac",
+        preferredFormatStrict: false,
+      },
       ticketmaster: {
         apiKey: "",
         searchRadiusMiles: 50,
@@ -241,7 +245,7 @@ export const defaultData = {
       preferredFormat: "flac",
       preferredFormatStrict: false,
       retryCycleMinutes: 15,
-      existingFileMode: "hardlink",
+      existingFileMode: "reuse",
     },
   },
   blocklist: [],
