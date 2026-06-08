@@ -368,7 +368,15 @@ export class SlskdClient {
     return data;
   }
 
-  async waitForSearch(searchId, timeoutMs = DEFAULT_SEARCH_TIMEOUT_MS) {
+  async waitForSearch(
+    searchId,
+    timeoutMs = DEFAULT_SEARCH_TIMEOUT_MS,
+    options = {},
+  ) {
+    const earlyExitWhen =
+      typeof options.earlyExitWhen === "function"
+        ? options.earlyExitWhen
+        : null;
     const start = Date.now();
     let grace = false;
     let graceUntil = 0;
@@ -377,6 +385,9 @@ export class SlskdClient {
       const data = await this.getSearch(searchId);
       const fileCount = Number(data?.fileCount || data?.FileCount || 0);
       totalFiles = Math.max(totalFiles, fileCount);
+      if (earlyExitWhen?.(data)) {
+        return await this.hydrateCompletedSearch(searchId, data);
+      }
       if (isSearchComplete(data)) {
         return await this.hydrateCompletedSearch(searchId, data);
       }

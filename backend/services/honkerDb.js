@@ -20,6 +20,17 @@ let pipelineQueue = null;
 let discoveryRefreshQueue = null;
 const WORKER_ID = `aurral-${process.pid}`;
 
+const PIPELINE_PHASE_PRIORITY = {
+  search: 0,
+  poll: 10,
+  download: 20,
+  finalize: 30,
+};
+
+export function getPipelinePriorityForPhase(phase) {
+  return PIPELINE_PHASE_PRIORITY[String(phase || "").toLowerCase()] ?? 0;
+}
+
 export function getHonkerDb() {
   if (!honkerDb) {
     honkerDb = honker.open(DB_PATH);
@@ -45,8 +56,12 @@ export function enqueuePipelineJob(payload, options = {}) {
       : options.delaySeconds != null
         ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
         : null;
+  const priority =
+    options.priority != null
+      ? Number(options.priority)
+      : getPipelinePriorityForPhase(payload?.phase);
   const jobId = queue.enqueue(payload, {
-    priority: Number(options.priority || 0),
+    priority,
     runAt,
   });
   import("./slskdOrchestratorWorker.js")
