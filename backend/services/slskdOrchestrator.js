@@ -26,6 +26,7 @@ const updateSlskdMetaStmt = db.prepare(`
 `);
 
 const MAX_SEARCH_QUERIES = 4;
+const MIN_SEARCH_CANDIDATES = 1;
 const MAX_EMPTY_POLL_ATTEMPTS = 60;
 const MAX_POLL_ATTEMPTS = 600;
 
@@ -254,12 +255,63 @@ async function locateCompletedDownload(
   return null;
 }
 
-async function runSearchQuery(query, searchIdRef) {
+function countPreDownloadValidCandidates(results, resolvedTrack, searchOptions) {
+  const ranked = rankFlowSearchResults(results, resolvedTrack, searchOptions);
+  return ranked.filter((entry) => entry.preDownloadValid).length;
+}
+
+function mergeSearchResults(aggregated, seen, results) {
+  for (const result of results) {
+    const key = `${result.user}\0${result.file}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    aggregated.push(result);
+  }
+}
+
+function hasEnoughSearchCandidates(
+  aggregated,
+  queryResults,
+  seen,
+  resolvedTrack,
+  searchOptions,
+) {
+  const probe = aggregated.slice();
+  const probeSeen = new Set(seen);
+  for (const result of queryResults) {
+    const key = `${result.user}\0${result.file}`;
+    if (probeSeen.has(key)) continue;
+    probeSeen.add(key);
+    probe.push(result);
+  }
+  return (
+    countPreDownloadValidCandidates(probe, resolvedTrack, searchOptions) >=
+    MIN_SEARCH_CANDIDATES
+  );
+}
+
+async function runSearchQuery(
+  query,
+  searchIdRef,
+  resolvedTrack,
+  searchOptions,
+  aggregated,
+  seen,
+) {
   const created = await slskdClient.createSearch(query);
   if (!searchIdRef.value) {
     searchIdRef.value = created.id;
   }
-  const completed = await slskdClient.waitForSearch(created.id);
+  const completed = await slskdClient.waitForSearch(created.id, undefined, {
+    earlyExitWhen: (data) =>
+      hasEnoughSearchCandidates(
+        aggregated,
+        slskdClient.flattenSearchResults(data),
+        seen,
+        resolvedTrack,
+        searchOptions,
+      ),
+  });
   return slskdClient.flattenSearchResults(completed);
 }
 
@@ -281,19 +333,22 @@ async function handleSearch(payload) {
   const seen = new Set();
   const searchIdRef = { value: null };
   for (const query of queries) {
-    const results = await runSearchQuery(query, searchIdRef);
-    for (const result of results) {
-      const key = `${result.user}\0${result.file}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      aggregated.push(result);
-    }
-    const rankedSoFar = rankFlowSearchResults(
-      aggregated,
+    const results = await runSearchQuery(
+      query,
+      searchIdRef,
       resolvedTrack,
       searchOptions,
+      aggregated,
+      seen,
     );
-    if (rankedSoFar.filter((entry) => entry.preDownloadValid).length >= 3) {
+    mergeSearchResults(aggregated, seen, results);
+    if (
+      countPreDownloadValidCandidates(
+        aggregated,
+        resolvedTrack,
+        searchOptions,
+      ) >= MIN_SEARCH_CANDIDATES
+    ) {
       break;
     }
   }
@@ -604,5 +659,5 @@ export async function continuePipeline(payload) {
     });
     return;
   }
-  enqueuePipelineJob(payload);
+  enqueuePipelineJob(payload, {});
 }
