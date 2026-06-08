@@ -5743,29 +5743,73 @@ textarea {
 .requests-page__list {
   display: grid;
   gap: 0.125rem;
+  overflow: hidden;
+  border-radius: var(--aurral-radius-sm);
+  background: var(--aurral-surface);
+}
+
+.requests-page__date-group {
+  margin: 1rem 0 0.375rem;
+  padding: 0 0.5rem;
+  color: var(--aurral-gray-light);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.requests-page__date-group:first-child {
+  margin-top: 0;
 }
 
 .requests-page__row {
-  display: flex;
+  position: relative;
+  display: grid;
+  grid-template-columns: 4.75rem minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 0.75rem;
   min-height: 2.75rem;
-  padding: 0.375rem 0.5rem;
-  border-radius: var(--aurral-radius-sm);
+  padding: 0.375rem 0.75rem 0.375rem 0.875rem;
+  background: var(--aurral-surface);
   transition: background-color 0.18s ease;
 }
 
-.requests-page__row--lidarr,
-.requests-page__row--slskd,
-.requests-page__row--aurral {
-  box-shadow: inset 3px 0 0 var(--history-source-color);
+.requests-page__row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: var(--history-source-color);
 }
 
-.requests-page__row--lidarr:nth-child(even),
-.requests-page__row--slskd:nth-child(even),
-.requests-page__row--aurral:nth-child(even) {
-  background: color-mix(in srgb, var(--history-source-color) 12%, var(--aurral-surface-mid));
+.requests-page__time {
+  flex-shrink: 0;
+  color: var(--aurral-gray);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.requests-page__title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.requests-page__source {
+  flex-shrink: 0;
+  color: var(--aurral-gray-light);
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.requests-page__row--alt {
+  background: var(--aurral-surface-mid);
 }
 
 .requests-page__row.is-clickable {
@@ -5773,7 +5817,7 @@ textarea {
 }
 
 .requests-page__row.is-clickable:hover {
-  background: color-mix(in srgb, var(--history-source-color) 18%, var(--aurral-overlay));
+  background: var(--aurral-overlay);
 }
 
 .requests-page__actions {

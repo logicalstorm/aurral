@@ -83,58 +83,19 @@ const refreshRequestsCache = async (lidarrClient) => {
   return pendingRequestsRefresh;
 };
 
-const mapSlskdJobStatus = (status) => {
-  if (status === "done") return "completed";
-  if (status === "failed") return "failed";
-  if (status === "downloading") return "downloading";
-  return "pending";
-};
-
-const buildSlskdRequests = async () => {
-  const [{ downloadTracker }, { flowPlaylistConfig }] = await Promise.all([
-    import("../services/weeklyFlowDownloadTracker.js"),
-    import("../services/weeklyFlowPlaylistConfig.js"),
-  ]);
-  const playlistNames = new Map();
-  for (const flow of flowPlaylistConfig.getFlows()) {
-    playlistNames.set(String(flow.id), flow.name || flow.id);
-  }
-  for (const playlist of flowPlaylistConfig.getSharedPlaylists()) {
-    playlistNames.set(String(playlist.id), playlist.name || playlist.id);
-  }
-  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-  return downloadTracker
-    .getAll()
-    .filter((job) => {
-      if (job.status === "pending" || job.status === "downloading") {
-        return true;
-      }
-      if (job.status === "failed") {
-        return Number(job.completedAt || 0) >= cutoff;
-      }
-      if (job.status === "done") {
-        return Number(job.completedAt || 0) >= cutoff;
-      }
-      return false;
-    })
-    .map((job) => {
-      const playlistId = String(job.playlistId || job.playlistType || "");
-      const playlistName = playlistNames.get(playlistId) || playlistId;
-      return {
-        id: `slskd-${job.id}`,
-        source: "slskd",
-        type: "track",
-        title: job.trackName,
-        subtitle: `${job.artistName} · ${playlistName}`,
-        status: mapSlskdJobStatus(job.status),
-        requestedAt: toIso(job.createdAt),
-        playlistId,
-        jobId: job.id,
-        slskdBatchId: job.slskdBatchId || null,
-        remoteUsername: job.remoteUsername || null,
-        inQueue: job.status === "pending" || job.status === "downloading",
-      };
-    });
+const filterRedundantAurralRequests = (aurralRequests, lidarrRequests) => {
+  const lidarrAlbumIds = new Set(
+    lidarrRequests
+      .map((request) => request.albumId)
+      .filter(Boolean)
+      .map((albumId) => String(albumId)),
+  );
+  if (!lidarrAlbumIds.size) return aurralRequests;
+  return aurralRequests.filter((request) => {
+    if (request.kind !== "album_requested") return true;
+    if (!request.albumId) return true;
+    return !lidarrAlbumIds.has(String(request.albumId));
+  });
 };
 
 const buildLidarrRequests = async (lidarrClient) => {
@@ -436,14 +397,17 @@ const buildAurralRequests = async () => {
 };
 
 const buildRequestsResponse = async (lidarrClient) => {
-  const [lidarrRequests, slskdRequests, aurralRequests] = await Promise.all([
+  const [lidarrRequests, aurralRequests] = await Promise.all([
     lidarrClient?.isConfigured()
       ? buildLidarrRequests(lidarrClient)
       : Promise.resolve([]),
-    buildSlskdRequests(),
     buildAurralRequests(),
   ]);
-  return [...lidarrRequests, ...slskdRequests, ...aurralRequests].sort(
+  const filteredAurral = filterRedundantAurralRequests(
+    aurralRequests,
+    lidarrRequests,
+  );
+  return [...lidarrRequests, ...filteredAurral].sort(
     (a, b) => new Date(b.requestedAt) - new Date(a.requestedAt),
   );
 };
@@ -454,16 +418,10 @@ router.get("/", requireAuth, noCache, async (req, res) => {
     const { lidarrClient } = await import("../services/lidarrClient.js");
 
     if (!lidarrClient?.isConfigured()) {
-      const [slskdOnly, aurralOnly] = await Promise.all([
-        buildSlskdRequests(),
-        buildAurralRequests(),
-      ]);
-      const combined = [...slskdOnly, ...aurralOnly].sort(
-        (a, b) => new Date(b.requestedAt) - new Date(a.requestedAt),
-      );
-      lastRequestsResponse = combined;
+      const aurralOnly = await buildAurralRequests();
+      lastRequestsResponse = aurralOnly;
       lastRequestsAt = Date.now();
-      return res.json(combined);
+      return res.json(aurralOnly);
     }
 
     const now = Date.now();

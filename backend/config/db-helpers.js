@@ -867,7 +867,7 @@ export const dbOps = {
     }));
   },
 
-  pruneAurralHistory({ maxAgeMs = 30 * 24 * 60 * 60 * 1000, maxEntries = 500 } = {}) {
+  pruneAurralHistory({ maxAgeMs = 30 * 24 * 60 * 60 * 1000, maxEntries = 1000 } = {}) {
     const cutoff = Date.now() - Math.max(0, Number(maxAgeMs) || 0);
     deleteAurralHistoryOlderThanStmt.run(cutoff);
     const count = Number(countAurralHistoryStmt.get()?.count || 0);
