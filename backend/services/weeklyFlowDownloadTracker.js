@@ -26,6 +26,32 @@ function stringifyArtistAliases(value) {
   return normalized.length > 0 ? JSON.stringify(normalized) : null;
 }
 
+function parseAlbumTrackTitles(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.map((entry) => String(entry || "").trim()).filter(Boolean)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function stringifyAlbumTrackTitles(value) {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const normalized = value
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean);
+  return normalized.length > 0 ? JSON.stringify(normalized) : null;
+}
+
+function normalizePositiveInteger(value) {
+  if (value == null || !Number.isFinite(Number(value))) return null;
+  const normalized = Math.floor(Number(value));
+  return normalized > 0 ? normalized : null;
+}
+
 function rowToJob(row) {
   return {
     id: row.id,
@@ -41,6 +67,9 @@ function rowToJob(row) {
       row.duration_ms != null && Number.isFinite(Number(row.duration_ms))
         ? Number(row.duration_ms)
         : null,
+    trackNumber: normalizePositiveInteger(row.track_number),
+    albumTrackCount: normalizePositiveInteger(row.album_track_count),
+    albumTrackTitles: parseAlbumTrackTitles(row.album_track_titles),
     artistAliases: parseArtistAliases(row.artist_aliases),
     playlistId: row.playlist_id || row.playlist_type,
     playlistType: row.playlist_type || row.playlist_id,
@@ -71,6 +100,9 @@ const insertStmt = db.prepare(`
     track_mbid,
     release_year,
     duration_ms,
+    track_number,
+    album_track_count,
+    album_track_titles,
     artist_aliases,
     playlist_id,
     playlist_type,
@@ -82,7 +114,7 @@ const insertStmt = db.prepare(`
     completed_at,
     created_at
   )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 const updateStmt = db.prepare(`
@@ -100,6 +132,9 @@ const updateStmt = db.prepare(`
       track_mbid = ?,
       release_year = ?,
       duration_ms = ?,
+      track_number = ?,
+      album_track_count = ?,
+      album_track_titles = ?,
       artist_aliases = ?
   WHERE id = ?
 `);
@@ -153,6 +188,9 @@ function buildPipelinePayload(job) {
       trackMbid: job.trackMbid,
       releaseYear: job.releaseYear,
       durationMs: job.durationMs,
+      trackNumber: job.trackNumber,
+      albumTrackCount: job.albumTrackCount,
+      albumTrackTitles: job.albumTrackTitles || [],
       artistAliases: job.artistAliases || [],
     },
     attempt: 0,
@@ -312,6 +350,9 @@ export class WeeklyFlowDownloadTracker {
           job.trackMbid ?? null,
           job.releaseYear ?? null,
           job.durationMs ?? null,
+          job.trackNumber ?? null,
+          job.albumTrackCount ?? null,
+          stringifyAlbumTrackTitles(job.albumTrackTitles),
           stringifyArtistAliases(job.artistAliases),
           job.id,
         );
@@ -335,6 +376,9 @@ export class WeeklyFlowDownloadTracker {
           job.trackMbid ?? null,
           job.releaseYear ?? null,
           job.durationMs ?? null,
+          job.trackNumber ?? null,
+          job.albumTrackCount ?? null,
+          stringifyAlbumTrackTitles(job.albumTrackTitles),
           stringifyArtistAliases(job.artistAliases),
           job.id,
         );
@@ -358,6 +402,9 @@ export class WeeklyFlowDownloadTracker {
       job.trackMbid ?? null,
       job.releaseYear ?? null,
       job.durationMs ?? null,
+      job.trackNumber ?? null,
+      job.albumTrackCount ?? null,
+      stringifyAlbumTrackTitles(job.albumTrackTitles),
       stringifyArtistAliases(job.artistAliases),
       job.playlistId || job.playlistType,
       job.playlistType || job.playlistId,
@@ -386,6 +433,9 @@ export class WeeklyFlowDownloadTracker {
       job.trackMbid ?? null,
       job.releaseYear ?? null,
       job.durationMs ?? null,
+      job.trackNumber ?? null,
+      job.albumTrackCount ?? null,
+      stringifyAlbumTrackTitles(job.albumTrackTitles),
       stringifyArtistAliases(job.artistAliases),
       job.id,
     );
@@ -412,6 +462,13 @@ export class WeeklyFlowDownloadTracker {
         track?.durationMs != null && Number.isFinite(Number(track.durationMs))
           ? Math.max(0, Math.round(Number(track.durationMs)))
           : null,
+      trackNumber: normalizePositiveInteger(track?.trackNumber),
+      albumTrackCount: normalizePositiveInteger(track?.albumTrackCount),
+      albumTrackTitles: Array.isArray(track?.albumTrackTitles)
+        ? track.albumTrackTitles
+            .map((entry) => String(entry || "").trim())
+            .filter(Boolean)
+        : [],
       artistAliases: Array.isArray(track?.artistAliases)
         ? track.artistAliases
             .map((entry) => String(entry || "").trim())
@@ -489,6 +546,33 @@ export class WeeklyFlowDownloadTracker {
       const nextSerialized = JSON.stringify(nextAliases);
       if (previousSerialized !== nextSerialized) {
         job.artistAliases = nextAliases;
+        changed = true;
+      }
+    }
+    if ("trackNumber" in metadata) {
+      const nextTrackNumber = normalizePositiveInteger(metadata.trackNumber);
+      if (job.trackNumber !== nextTrackNumber) {
+        job.trackNumber = nextTrackNumber;
+        changed = true;
+      }
+    }
+    if ("albumTrackCount" in metadata) {
+      const nextTrackCount = normalizePositiveInteger(metadata.albumTrackCount);
+      if (job.albumTrackCount !== nextTrackCount) {
+        job.albumTrackCount = nextTrackCount;
+        changed = true;
+      }
+    }
+    if ("albumTrackTitles" in metadata) {
+      const nextTitles = Array.isArray(metadata.albumTrackTitles)
+        ? metadata.albumTrackTitles
+            .map((entry) => String(entry || "").trim())
+            .filter(Boolean)
+        : [];
+      const previousSerialized = JSON.stringify(job.albumTrackTitles || []);
+      const nextSerialized = JSON.stringify(nextTitles);
+      if (previousSerialized !== nextSerialized) {
+        job.albumTrackTitles = nextTitles;
         changed = true;
       }
     }

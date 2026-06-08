@@ -36,17 +36,42 @@ function sanitizePathPart(value, fallback = "Unknown") {
   return text || fallback;
 }
 
-function buildResolvedTrack(job) {
+function normalizePositiveInteger(value) {
+  if (value == null || !Number.isFinite(Number(value))) return null;
+  const normalized = Math.floor(Number(value));
+  return normalized > 0 ? normalized : null;
+}
+
+function normalizeTrackTitles(value) {
+  return Array.isArray(value)
+    ? value.map((entry) => String(entry || "").trim()).filter(Boolean)
+    : [];
+}
+
+function buildResolvedTrack(job, payloadTrack = {}) {
+  const track =
+    payloadTrack && typeof payloadTrack === "object" ? payloadTrack : {};
   return {
-    artistName: job.artistName,
-    trackName: job.trackName,
-    albumName: job.albumName,
-    artistMbid: job.artistMbid,
-    albumMbid: job.albumMbid,
-    trackMbid: job.trackMbid,
-    releaseYear: job.releaseYear,
-    durationMs: job.durationMs,
-    artistAliases: job.artistAliases || [],
+    artistName: job.artistName || track.artistName,
+    trackName: job.trackName || track.trackName,
+    albumName: job.albumName || track.albumName,
+    artistMbid: job.artistMbid || track.artistMbid,
+    albumMbid: job.albumMbid || track.albumMbid,
+    trackMbid: job.trackMbid || track.trackMbid,
+    releaseYear: job.releaseYear || track.releaseYear,
+    durationMs: job.durationMs ?? track.durationMs ?? null,
+    trackNumber: normalizePositiveInteger(job.trackNumber ?? track.trackNumber),
+    albumTrackCount: normalizePositiveInteger(
+      job.albumTrackCount ?? track.albumTrackCount,
+    ),
+    albumTrackTitles: normalizeTrackTitles(
+      (job.albumTrackTitles?.length ? job.albumTrackTitles : null) ||
+        track.albumTrackTitles,
+    ),
+    artistAliases:
+      Array.isArray(job.artistAliases) && job.artistAliases.length
+        ? job.artistAliases
+        : normalizeTrackTitles(track.artistAliases),
   };
 }
 
@@ -82,7 +107,7 @@ export function enqueuePendingJobsWithoutBatch() {
   if (!slskdClient.isConfigured()) return 0;
   let count = 0;
   for (const job of downloadTracker.getByStatus("pending")) {
-    if (job.slskdBatchId) {
+    if (job.slskdBatchId || job.slskdSearchId) {
       downloadTracker.clearSlskdPipelineState(job.id);
     }
     if (enqueueJobPipeline(job.id)) count += 1;
@@ -226,7 +251,7 @@ async function handleSearch(payload) {
   import("./aurralHistoryService.js")
     .then(({ recordTrackJobSearching }) => recordTrackJobSearching(job))
     .catch(() => {});
-  const resolvedTrack = buildResolvedTrack(job);
+  const resolvedTrack = buildResolvedTrack(job, payload.track);
   const queries = buildFlowSearchQueries(resolvedTrack).slice(
     0,
     MAX_SEARCH_QUERIES,
@@ -243,7 +268,14 @@ async function handleSearch(payload) {
       seen.add(key);
       aggregated.push(result);
     }
-    if (aggregated.length >= 3) break;
+    const rankedSoFar = rankFlowSearchResults(
+      aggregated,
+      resolvedTrack,
+      searchOptions,
+    );
+    if (rankedSoFar.filter((entry) => entry.preDownloadValid).length >= 3) {
+      break;
+    }
   }
   if (searchIdRef.value) {
     updateSlskdMetaStmt.run(searchIdRef.value, null, null, null, job.id);
@@ -405,7 +437,7 @@ async function handleFinalize(payload) {
   const validation = await validateDownloadedTrack(
     finalPath,
     candidate,
-    buildResolvedTrack(job),
+    buildResolvedTrack(job, payload.track),
   );
   if (!validation.valid) {
     await fs.rm(finalPath, { force: true }).catch(() => {});

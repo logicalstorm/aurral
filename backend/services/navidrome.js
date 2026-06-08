@@ -2,7 +2,8 @@ import axios from "axios";
 import crypto from "crypto";
 
 const LEGACY_LIBRARY_DIR = "aurral-weekly-flow";
-const WEEKLY_FLOW_LIBRARY_NAME = "Aurral Weekly Flow";
+const PLAYLIST_LIBRARY_NAME = "Aurral Playlists";
+const LEGACY_LIBRARY_NAMES = new Set(["Aurral Weekly Flow"]);
 
 function normalizeLibraryPath(value) {
   return String(value || "").trim().replace(/\\/g, "/").replace(/\/+$/, "");
@@ -260,7 +261,7 @@ export class NavidromeClient {
 
   async ensureWeeklyFlowLibrary(libraryPath) {
     if (!this.isConfigured()) return null;
-    const name = WEEKLY_FLOW_LIBRARY_NAME;
+    const name = PLAYLIST_LIBRARY_NAME;
     const normalizedPath = normalizeLibraryPath(libraryPath);
     try {
       const libs = await this.getLibraries();
@@ -268,9 +269,20 @@ export class NavidromeClient {
       const byPath = list.find(
         (lib) => normalizeLibraryPath(lib.path) === normalizedPath,
       );
-      if (byPath) return byPath;
+      if (byPath) {
+        if (byPath.name !== name) {
+          return this.updateLibrary(byPath.id, {
+            ...byPath,
+            name,
+            path: normalizedPath,
+          });
+        }
+        return byPath;
+      }
 
-      const byName = list.find((lib) => lib.name === name);
+      const byName = list.find(
+        (lib) => lib.name === name || LEGACY_LIBRARY_NAMES.has(lib.name),
+      );
       if (byName) {
         if (normalizeLibraryPath(byName.path) !== normalizedPath) {
           return this.updateLibrary(byName.id, {

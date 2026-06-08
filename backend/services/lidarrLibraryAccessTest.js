@@ -185,7 +185,7 @@ export async function runLidarrLibraryAccessTest(lidarrClient, options = {}) {
     steps.push(
       step("hardlink", "warn", "Lidarr and Aurral downloads are on different filesystems", {
         detail: `Lidarr files are under ${sample.path}, but Aurral writes downloads under ${flowLibraryRoot}.`,
-        fix: "Mount /data into the container and set DOWNLOAD_FOLDER to the absolute in-container path for your downloads folder (for example /data/downloads/tmp).",
+        fix: "Mount the same shared root into Aurral, slskd, and Navidrome, then set DOWNLOAD_FOLDER to the shared path Aurral should write (for example /data/downloads/aurral).",
       }),
     );
   }
