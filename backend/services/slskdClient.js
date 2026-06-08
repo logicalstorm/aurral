@@ -130,21 +130,25 @@ export class SlskdClient {
         connectionCache = { checkedAt: Date.now(), result };
         return result;
       }
-      const serverState = String(appRes.data?.server?.state || "");
-      const connected = serverState.includes("Connected");
+      const server = appRes.data?.server || {};
+      const serverState = String(server.state || "");
+      const soulseekConnected =
+        server.isConnected === true || serverState.includes("Connected");
       const downloadPath =
         optionsRes.data?.directories?.downloads ||
         optionsRes.data?.directories?.download ||
         null;
       const result = {
-        ok: connected,
+        ok: true,
         configured: true,
-        connected,
+        connected: soulseekConnected,
+        soulseekConnected,
+        warning: !soulseekConnected,
         serverState,
         downloadPath,
-        message: connected
+        message: soulseekConnected
           ? "slskd is connected"
-          : `slskd is not connected (${serverState || "unknown"})`,
+          : `Aurral reached slskd, but Soulseek is ${serverState || "disconnected"}. Open slskd, log in, and connect to the Soulseek server.`,
       };
       connectionCache = { checkedAt: Date.now(), result };
       return result;
