@@ -154,3 +154,83 @@ test("enqueueBatch rejects slskd all-failed batch responses", async () => {
     await mock.close();
   }
 });
+
+test("enqueueBatch falls back to legacy slskd download endpoint", async () => {
+  const originalSettings = dbOps.getSettings();
+  const transferId = "00000000-0000-4000-8000-000000000002";
+  const calls = [];
+  const mock = await createMockServer(async (request, response) => {
+    let body = "";
+    request.on("data", (chunk) => {
+      body += chunk.toString();
+    });
+    request.on("end", () => {
+      calls.push({ method: request.method, url: request.url, body });
+      if (
+        request.method === "POST" &&
+        request.url === "/api/v0/transfers/downloads/batches"
+      ) {
+        response.writeHead(400, { "content-type": "application/json" });
+        response.end(
+          JSON.stringify(
+            "The JSON value could not be converted to System.Collections.Generic.IEnumerable`1[slskd.Transfers.API.QueueDownloadRequest].",
+          ),
+        );
+        return;
+      }
+      if (
+        request.method === "POST" &&
+        request.url === "/api/v0/transfers/downloads/peer"
+      ) {
+        response.writeHead(201, { "content-type": "application/json" });
+        response.end(
+          JSON.stringify({
+            enqueued: [
+              {
+                id: transferId,
+                username: "peer",
+                filename: "Artist/Album/Open.flac",
+                state: "Queued, Locally",
+              },
+            ],
+            failed: [],
+          }),
+        );
+        return;
+      }
+      response.writeHead(404);
+      response.end();
+    });
+  });
+
+  dbOps.updateSettings({
+    ...originalSettings,
+    integrations: {
+      ...(originalSettings.integrations || {}),
+      slskd: {
+        url: mock.url,
+        apiKey: "test-key",
+      },
+    },
+  });
+
+  try {
+    const result = await slskdClient.enqueueBatch({
+      username: "peer",
+      files: [{ filename: "Artist/Album/Open.flac", size: 123 }],
+    });
+    assert.equal(result.legacy, true);
+    assert.equal(result.transferId, transferId);
+    assert.equal(result.batchId, null);
+    assert.deepEqual(
+      calls.map((call) => call.url),
+      [
+        "/api/v0/transfers/downloads/batches",
+        "/api/v0/transfers/downloads/peer",
+      ],
+    );
+  } finally {
+    dbOps.updateSettings(originalSettings);
+    await mock.close();
+  }
+});
