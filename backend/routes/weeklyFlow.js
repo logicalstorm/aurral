@@ -1455,21 +1455,18 @@ router.delete(
       if (!job || job.playlistType !== playlistId) {
         return res.status(404).json({ error: "Track not found" });
       }
-      if (job.status !== "done" || typeof job.finalPath !== "string") {
-        return res.status(400).json({
-          error: "Only completed tracks can be removed",
-        });
-      }
-
       const playlistRoot = getPlaylistLibraryRoot(playlistId);
-      const safeFinalPath = remapLegacyWeeklyFlowPath(
-        job.finalPath,
-        weeklyFlowWorker.weeklyFlowRoot,
-      );
-      if (isPathInsideRoot(safeFinalPath, playlistRoot)) {
-        await fsp.rm(safeFinalPath, { force: true });
+      if (job.status === "done" && typeof job.finalPath === "string") {
+        const safeFinalPath = remapLegacyWeeklyFlowPath(
+          job.finalPath,
+          weeklyFlowWorker.weeklyFlowRoot,
+        );
+        if (isPathInsideRoot(safeFinalPath, playlistRoot)) {
+          await fsp.rm(safeFinalPath, { force: true });
+        }
       }
       downloadTracker.removeJob(jobId);
+      weeklyFlowWorker.pruneOrphanedJobState();
 
       const nextTracks = Array.isArray(playlist.tracks)
         ? [...playlist.tracks]
