@@ -38,6 +38,7 @@ import { useToast } from "../contexts/ToastContext";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useFlowStatus } from "./flows/useFlowStatus";
 import { formatTrackCountLabel } from "./flows/flowStats";
+import { getFlowRunActivity } from "./flows/flowRunActivity";
 import {
   PlaylistLibraryItem,
   PlaylistDetailHero,
@@ -1739,8 +1740,21 @@ function FlowPage() {
       : false;
   const flowCanExport = Number(selectedStats?.total || 0) > 0;
   const flowCanConvert = Number(selectedStats?.done || 0) > 0;
+  const selectedFlowActivity =
+    selectedFlow?.id && selectedFlow.enabled === true
+      ? getFlowRunActivity({
+          flowId: selectedFlow.id,
+          enabled: true,
+          status,
+          stats: selectedStats,
+          rerunning: rerunningId === selectedFlow.id,
+        })
+      : null;
+  const selectedFlowActivityMessage = selectedFlowActivity?.message || null;
   const flowCanRunNow =
-    selectedFlow?.enabled === true && rerunningId !== selectedFlow?.id;
+    selectedFlow?.enabled === true &&
+    rerunningId !== selectedFlow?.id &&
+    !selectedFlowActivityMessage;
   const renameModalSaving =
     renameModal?.kind === "flow"
       ? applyingFlowNameId === renameModal.id
@@ -1874,6 +1888,7 @@ function FlowPage() {
                 artworkUrl={artworkUrlFor(selectedEntry.id)}
                 metaLine={detailMetaLine}
                 flowMeta={detailFlowMeta}
+                activityHint={selectedFlowActivityMessage}
                 enabled={flowEnabled}
                 togglingId={togglingId}
                 onToggleEnabled={(checked) =>
@@ -1894,7 +1909,11 @@ function FlowPage() {
                           disabled={!flowCanRunNow}
                         >
                           <span className="artist-menu-item__main">
-                            <Play className="artist-icon-sm" />
+                            {rerunningId === selectedFlow.id ? (
+                              <Loader2 className="artist-icon-sm animate-spin" />
+                            ) : (
+                              <Play className="artist-icon-sm" />
+                            )}
                             Run now
                           </span>
                         </button>
@@ -1978,6 +1997,7 @@ function FlowPage() {
                       loading={selectedTracksLoading}
                       error={selectedTracksError}
                       playbackSource={playbackSource}
+                      activityHint={selectedFlowActivityMessage}
                       emptyMessage={
                         flowEnabled
                           ? "No tracks generated for this flow yet."

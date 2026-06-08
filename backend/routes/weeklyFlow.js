@@ -20,6 +20,7 @@ import {
   reuseTrackForPlaylist,
 } from "../services/weeklyFlowFileReuse.js";
 import {
+  recordFlowGenerationStarted,
   recordFlowTracksGenerated,
   recordPlaylistTracksAdded,
 } from "../services/aurralHistoryService.js";
@@ -543,6 +544,7 @@ const queueFlowEnableRefresh = (flowId, mutationVersion) => {
 
       const releaseMutation = await beginPlaylistMutation(flowId);
       try {
+        recordFlowGenerationStarted({ flowId });
         playlistManager.updateConfig(false);
         await playlistManager.weeklyReset([flowId]);
         weeklyFlowWorker.clearPlaylistRunState(flowId);
@@ -661,6 +663,7 @@ router.post("/start/:flowId", async (req, res) => {
 
         const releaseMutation = await beginPlaylistMutation(flowId);
         try {
+          recordFlowGenerationStarted({ flowId });
           playlistManager.updateConfig(false);
           await playlistManager.weeklyReset([flowId]);
           weeklyFlowWorker.clearPlaylistRunState(flowId);
