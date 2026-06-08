@@ -5691,6 +5691,10 @@ textarea {
   margin-bottom: 1.5rem;
 }
 
+.requests-page__tabs {
+  margin-bottom: 1.5rem;
+}
+
 .requests-page__title {
   margin: 0 0 0.5rem;
   color: var(--aurral-white);

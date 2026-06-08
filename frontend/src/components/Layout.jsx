@@ -105,7 +105,7 @@ function Layout({ children, appVersion }) {
     () => [
       { path: "/discover", label: "Discover", icon: Sparkles },
       { path: "/library", label: "Library", icon: Library },
-      { path: "/requests", label: "Requests", icon: History },
+      { path: "/history", label: "History", icon: History },
     ],
     [],
   );

@@ -31,7 +31,7 @@ const MetadataProvidersPage = lazy(
 const ArtistDetailsPage = lazy(() => import("./pages/ArtistDetailsPage"));
 const ArtistAlbumsPage = lazy(() => import("./pages/ArtistAlbumsPage"));
 const ArtistAppearsOnPage = lazy(() => import("./pages/ArtistAppearsOnPage"));
-const RequestsPage = lazy(() => import("./pages/RequestsPage"));
+const HistoryPage = lazy(() => import("./pages/HistoryPage"));
 const FlowPage = lazy(() => import("./pages/FlowPage"));
 const BlocklistPage = lazy(() => import("./pages/BlocklistPage"));
 const DISCOVERY_MANUAL_REFRESH_KEY = "aurral.discovery.manualRefreshPending";
@@ -237,8 +237,9 @@ function AppContent() {
                 }
               />
               <Route path="/flow" element={<Navigate to="/playlists" replace />} />
-              <Route path="/downloads" element={<Navigate to="/requests" replace />} />
-              <Route path="/requests" element={<RequestsPage />} />
+              <Route path="/downloads" element={<Navigate to="/history" replace />} />
+              <Route path="/requests" element={<Navigate to="/history" replace />} />
+              <Route path="/history" element={<HistoryPage />} />
               <Route path="/blocklist" element={<BlocklistPage />} />
               <Route
                 path="/artist/:mbid/albums"

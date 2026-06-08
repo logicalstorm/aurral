@@ -406,6 +406,17 @@ export async function reuseTrackForPlaylist(track, playlistType, options = {}) {
   console.log(
     `[WeeklyFlowReuse] Reused ${source.sourceType} track for ${playlistType}: ${track.artistName} - ${track.trackName}`,
   );
+  if (!options.skipHistory) {
+    import("./aurralHistoryService.js")
+      .then(({ recordTrackReused }) =>
+        recordTrackReused({
+          track,
+          playlistId: playlistType,
+          sourceType: source.sourceType,
+        }),
+      )
+      .catch(() => {});
+  }
   refreshPlaylistAfterReuse(playlistType).catch((error) => {
     console.warn(
       `[WeeklyFlowReuse] Failed to refresh playlist ${playlistType}: ${error?.message || error}`,

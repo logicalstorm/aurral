@@ -893,6 +893,9 @@ export const updateDiscoveryCache = async (options = {}) => {
   }
   console.log("Starting background update of discovery recommendations...");
   emitDiscoveryProgress("starting", "Preparing discovery refresh", 5);
+  import("./aurralHistoryService.js")
+    .then(({ recordDiscoveryRefreshStarted }) => recordDiscoveryRefreshStarted())
+    .catch(() => {});
 
   try {
     const { libraryManager } = await import("./libraryManager.js");
@@ -947,6 +950,11 @@ export const updateDiscoveryCache = async (options = {}) => {
         phase: "completed",
         progress: 100,
         progressMessage: "Discovery refresh completed",
+      });
+      const { recordDiscoveryUpdated } = await import("./aurralHistoryService.js");
+      recordDiscoveryUpdated({
+        recommendationCount: fallbackData.recommendations?.length || 0,
+        genreCount: fallbackData.topGenres?.length || 0,
       });
       return;
     }
@@ -1259,6 +1267,12 @@ export const updateDiscoveryCache = async (options = {}) => {
       progressMessage: "Discovery refresh completed",
     });
 
+    const { recordDiscoveryUpdated } = await import("./aurralHistoryService.js");
+    recordDiscoveryUpdated({
+      recommendationCount: discoveryData.recommendations?.length || 0,
+      genreCount: discoveryData.topGenres?.length || 0,
+    });
+
     try {
       const cleaned = dbOps.cleanOldImageCache(30);
       if (cleaned?.changes > 0) {
@@ -1281,6 +1295,11 @@ export const updateDiscoveryCache = async (options = {}) => {
       progressMessage: "Discovery refresh failed",
       error: error.message,
     });
+    import("./aurralHistoryService.js")
+      .then(({ recordDiscoveryRefreshFailed }) =>
+        recordDiscoveryRefreshFailed(error.message),
+      )
+      .catch(() => {});
   } finally {
     discoveryCache.isUpdating = false;
   }

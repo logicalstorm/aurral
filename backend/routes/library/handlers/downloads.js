@@ -549,6 +549,17 @@ export default function registerDownloads(router) {
           }
           invalidateAllDownloadStatusesCache();
 
+          const { recordAlbumRequested } = await import(
+            "../../../services/aurralHistoryService.js"
+          );
+          recordAlbumRequested({
+            albumId,
+            albumName: album.albumName,
+            artistName: artist?.artistName || album.artistName,
+            artistMbid: artist?.mbid || artist?.foreignArtistId,
+            searching: searchOnAdd,
+          });
+
           res.json({
             success: true,
             message: searchOnAdd
@@ -624,6 +635,16 @@ export default function registerDownloads(router) {
           );
         }
         invalidateAllDownloadStatusesCache();
+
+        const { recordAlbumSearchStarted } = await import(
+          "../../../services/aurralHistoryService.js"
+        );
+        recordAlbumSearchStarted({
+          albumId,
+          albumName: album.albumName,
+          artistName: artist?.artistName || album.artistName,
+          artistMbid: artist?.mbid || artist?.foreignArtistId,
+        });
 
         res.json({
           success: true,
