@@ -18,12 +18,19 @@ import {
 import { useToast } from "../contexts/ToastContext";
 import { useWebSocketChannel } from "../hooks/useWebSocket";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { TAG_COLORS } from "./ArtistDetails/constants";
+
+const HISTORY_SOURCE_COLORS = {
+  lidarr: TAG_COLORS[10],
+  slskd: TAG_COLORS[0],
+  aurral: TAG_COLORS[12],
+};
 
 const HISTORY_TABS = [
   { value: "all", label: "All" },
-  { value: "lidarr", label: "Lidarr" },
-  { value: "slskd", label: "slskd" },
-  { value: "aurral", label: "Aurral" },
+  { value: "lidarr", label: "Lidarr", source: "lidarr" },
+  { value: "slskd", label: "slskd", source: "slskd" },
+  { value: "aurral", label: "Aurral", source: "aurral" },
 ];
 
 const getHistorySource = (request) => {
@@ -37,6 +44,84 @@ const getHistorySource = (request) => {
 const matchesHistoryTab = (request, tab) => {
   if (tab === "all") return true;
   return getHistorySource(request) === tab;
+};
+
+const HISTORY_SORT_OPTIONS = [
+  { value: "status", label: "Status" },
+  { value: "timeline", label: "Timeline" },
+];
+
+const STATUS_SORT_ORDER = {
+  searching: 0,
+  downloading: 1,
+  pending: 2,
+  completed: 3,
+  failed: 4,
+};
+
+const getHistorySortGroup = (request, downloadStatuses, reSearchingAlbumIds) => {
+  if (request.source === "slskd") {
+    if (request.status === "completed") return "completed";
+    if (request.status === "failed") return "failed";
+    if (request.status === "downloading") return "downloading";
+    return "pending";
+  }
+
+  if (request.source === "aurral") {
+    if (request.status === "completed") return "completed";
+    if (request.status === "failed") return "failed";
+    if (request.status === "processing" || request.status === "pending") {
+      const label = String(request.statusLabel || "").toLowerCase();
+      if (label.includes("search")) return "searching";
+      if (label.includes("download")) return "downloading";
+      return "pending";
+    }
+    return "completed";
+  }
+
+  const albumId = request.albumId ? String(request.albumId) : null;
+  if (albumId && reSearchingAlbumIds[albumId]) return "searching";
+
+  const albumStatus = albumId ? downloadStatuses[albumId] : null;
+  const liveStatus = albumStatus?.status;
+
+  if (liveStatus === "searching") return "searching";
+  if (liveStatus === "failed" || request.status === "failed") return "failed";
+  if (
+    liveStatus === "downloading" ||
+    liveStatus === "moving" ||
+    liveStatus === "adding" ||
+    liveStatus === "processing"
+  ) {
+    return "downloading";
+  }
+  if (liveStatus === "added" || request.status === "available") return "completed";
+  if (request.status === "processing" || request.inQueue) return "downloading";
+  if (request.status === "failed") return "failed";
+  if (request.status === "available") return "completed";
+  return "pending";
+};
+
+const sortHistoryRequests = (
+  items,
+  sortMode,
+  downloadStatuses,
+  reSearchingAlbumIds,
+) => {
+  const sorted = [...items];
+  if (sortMode === "timeline") {
+    return sorted.sort(
+      (a, b) => new Date(b.requestedAt) - new Date(a.requestedAt),
+    );
+  }
+  return sorted.sort((a, b) => {
+    const groupA =
+      STATUS_SORT_ORDER[getHistorySortGroup(a, downloadStatuses, reSearchingAlbumIds)];
+    const groupB =
+      STATUS_SORT_ORDER[getHistorySortGroup(b, downloadStatuses, reSearchingAlbumIds)];
+    if (groupA !== groupB) return groupA - groupB;
+    return new Date(b.requestedAt) - new Date(a.requestedAt);
+  });
 };
 
 const EMPTY_STATE_COPY = {
@@ -233,6 +318,7 @@ function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("all");
+  const [sortMode, setSortMode] = useState("status");
   const [downloadStatuses, setDownloadStatuses] = useState({});
   const [reSearchingAlbumIds, setReSearchingAlbumIds] = useState({});
   const navigate = useNavigate();
@@ -273,6 +359,17 @@ function HistoryPage() {
   const filteredRequests = useMemo(
     () => requests.filter((request) => matchesHistoryTab(request, activeTab)),
     [requests, activeTab],
+  );
+
+  const sortedRequests = useMemo(
+    () =>
+      sortHistoryRequests(
+        filteredRequests,
+        sortMode,
+        downloadStatuses,
+        reSearchingAlbumIds,
+      ),
+    [filteredRequests, sortMode, downloadStatuses, reSearchingAlbumIds],
   );
 
   const activeAlbumIds = useMemo(() => {
@@ -506,19 +603,45 @@ function HistoryPage() {
         </p>
       </header>
 
-      <div className="artist-tabs requests-page__tabs" role="tablist">
-        {HISTORY_TABS.map((tab) => (
-          <button
-            key={tab.value}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab.value}
-            onClick={() => setActiveTab(tab.value)}
-            className={`artist-tab${activeTab === tab.value ? " is-active" : ""}`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="requests-page__toolbar">
+        <div className="artist-tabs requests-page__tabs" role="tablist">
+          {HISTORY_TABS.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.value}
+              onClick={() => setActiveTab(tab.value)}
+              className={`artist-tab${tab.source ? " requests-page__tab--source" : ""}${activeTab === tab.value ? " is-active" : ""}`}
+              style={
+                tab.source
+                  ? {
+                      "--history-source-color":
+                        HISTORY_SOURCE_COLORS[tab.source],
+                    }
+                  : undefined
+              }
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div
+          className="artist-segmented requests-page__sort"
+          role="group"
+          aria-label="Sort history"
+        >
+          {HISTORY_SORT_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setSortMode(option.value)}
+              className={`artist-segmented-button${sortMode === option.value ? " is-active" : ""}`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {error && (
@@ -556,7 +679,7 @@ function HistoryPage() {
       ) : (
         !error && (
           <div className="requests-page__list">
-            {filteredRequests.map((request) => {
+            {sortedRequests.map((request) => {
               const isSlskd = request.source === "slskd";
               const isAurral = request.source === "aurral";
               const isAlbum = request.type === "album";
@@ -595,11 +718,14 @@ function HistoryPage() {
                   year: "numeric",
                 },
               );
+              const historySource = getHistorySource(request);
+              const sourceColor = HISTORY_SOURCE_COLORS[historySource];
 
               return (
                 <article
                   key={request.id || request.mbid}
-                  className={`requests-page__row${canNavigate ? " is-clickable" : ""}`}
+                  className={`requests-page__row requests-page__row--${historySource}${canNavigate ? " is-clickable" : ""}`}
+                  style={{ "--history-source-color": sourceColor }}
                   onClick={() => {
                     if (!canNavigate) return;
                     handleRowNavigate(request, {
@@ -617,7 +743,10 @@ function HistoryPage() {
                     <div className="requests-page__meta">
                       {metaLine && (
                         <span className="requests-page__meta-line">
-                          <Music className="artist-icon-xs" />
+                          <Music
+                            className="artist-icon-xs requests-page__meta-icon"
+                            style={{ color: sourceColor }}
+                          />
                           <span className="artist-truncate">{metaLine}</span>
                         </span>
                       )}
