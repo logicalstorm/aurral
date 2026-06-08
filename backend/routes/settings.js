@@ -73,7 +73,11 @@ router.post("/slskd/test", async (req, res) => {
     if (!result.ok) {
       return res.status(502).json(result);
     }
-    return res.json({ success: true, ...result });
+    return res.json({
+      success: true,
+      warning: result.warning === true,
+      ...result,
+    });
   } catch (error) {
     return res.status(500).json({
       error: "slskd test failed",

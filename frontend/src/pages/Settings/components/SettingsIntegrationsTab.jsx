@@ -1046,7 +1046,14 @@ export function SettingsIntegrationsTab({
                         await handleSaveSettings();
                         const result = await testSlskdConnection();
                         if (result.success || result.ok) {
-                          showSuccess(result.message || "slskd connection OK");
+                          if (result.warning || result.soulseekConnected === false) {
+                            showInfo(
+                              result.message ||
+                                "slskd API is reachable, but Soulseek is not connected",
+                            );
+                          } else {
+                            showSuccess(result.message || "slskd connection OK");
+                          }
                         } else {
                           showError(result.message || "slskd connection failed");
                         }
