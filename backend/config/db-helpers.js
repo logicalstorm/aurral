@@ -94,9 +94,15 @@ const DEFAULT_PERMISSIONS = {
 
 const normalizeExistingFileMode = (value) => {
   const normalized = String(value || "").trim().toLowerCase();
-  return ["download", "hardlink", "copy"].includes(normalized)
-    ? normalized
-    : "hardlink";
+  if (normalized === "download") return "download";
+  if (
+    normalized === "reuse" ||
+    normalized === "hardlink" ||
+    normalized === "copy"
+  ) {
+    return "reuse";
+  }
+  return "reuse";
 };
 
 export const userOps = {
