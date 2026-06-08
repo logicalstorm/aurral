@@ -39,6 +39,7 @@ const defaultSettings = {
       apiKey: "",
       preferredFormat: "flac",
       preferredFormatStrict: false,
+      cleanupAfterRuns: false,
     },
     ticketmaster: {
       apiKey: "",

@@ -71,6 +71,7 @@ export const normalizeSettings = (savedSettings) => {
         apiKey: "",
         preferredFormat: "flac",
         preferredFormatStrict: false,
+        cleanupAfterRuns: false,
         ...(savedSettings.integrations?.slskd || {}),
       },
       ticketmaster: {
