@@ -1,7 +1,6 @@
 import express from "express";
 import {
   getDiscoveryCache,
-  updateDiscoveryCache,
   updateUserDiscoveryCache,
   getUserDiscoveryCacheStaleness,
   getDiscoveryAutoRefreshHours,
@@ -42,6 +41,7 @@ import {
   getFallbackTagNames,
   searchFallbackGenreArtists,
 } from "../services/listenbrainzDiscoveryFallback.js";
+import { requestDiscoveryRefresh } from "../services/discoveryRefreshScheduler.js";
 
 const router = express.Router();
 
@@ -232,14 +232,17 @@ const applyBlocklistToTagList = (tags, blocklist) => {
 };
 
 router.post("/refresh", requireAuth, requireAdmin, (req, res) => {
-  const discoveryCache = getDiscoveryCache();
-  if (discoveryCache.isUpdating) {
+  const result = requestDiscoveryRefresh({
+    reason: "manual",
+    force: true,
+  });
+  if (!result.enqueued) {
     return res.status(409).json({
       message: "Discovery update already in progress",
       isUpdating: true,
+      reason: result.reason,
     });
   }
-  updateDiscoveryCache();
   res.json({
     message: "Discovery update started",
     isUpdating: true,
@@ -326,10 +329,10 @@ router.get("/", requireAuth, async (req, res) => {
     isUpdating = false;
   } else if (!hasData && !hasCompletedRefresh && !isUpdating) {
     lastDiscoveryRevalidateAt = Date.now();
-    updateDiscoveryCache().catch((err) => {
-      console.error("[Discover] Lazy discovery refresh failed:", err.message);
-    });
-    isUpdating = true;
+    const lazyRefresh = requestDiscoveryRefresh({ reason: "lazy" });
+    if (lazyRefresh.enqueued) {
+      isUpdating = true;
+    }
   }
 
   let {
@@ -400,10 +403,10 @@ router.get("/", requireAuth, async (req, res) => {
     Date.now() - lastDiscoveryRevalidateAt > DISCOVERY_REVALIDATE_COOLDOWN_MS
   ) {
     lastDiscoveryRevalidateAt = Date.now();
-    updateDiscoveryCache().catch((err) => {
-      console.error("[Discover] SWR revalidation failed:", err.message);
-    });
-    isUpdating = true;
+    const staleRefresh = requestDiscoveryRefresh({ reason: "stale" });
+    if (staleRefresh.enqueued) {
+      isUpdating = true;
+    }
   }
 
   if (recommendations.length > 0 || globalTop.length > 0) {
