@@ -63,6 +63,25 @@ router.get("/", noCache, (req, res) => {
   }
 });
 
+router.post("/slskd/test", async (req, res) => {
+  try {
+    const { slskdClient } = await import("../services/slskdClient.js");
+    const result = await slskdClient.testConnection({ force: true });
+    if (!result.configured) {
+      return res.status(400).json(result);
+    }
+    if (!result.ok) {
+      return res.status(502).json(result);
+    }
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    return res.status(500).json({
+      error: "slskd test failed",
+      message: error.message,
+    });
+  }
+});
+
 router.post("/", async (req, res) => {
   try {
     const { quality, releaseTypes, integrations, rootFolderPath, security } =

@@ -210,12 +210,10 @@ router.post("/complete", async (req, res) => {
       integrations?.lastfm?.apiKey && integrations?.lastfm?.username;
     const hasLidarr = !!integrations?.lidarr?.apiKey;
     if (hasLastfm || hasLidarr) {
-      const { updateDiscoveryCache } = await import(
-        "../services/discoveryService.js"
+      const { requestDiscoveryRefresh } = await import(
+        "../services/discoveryRefreshScheduler.js"
       );
-      updateDiscoveryCache().catch((err) => {
-        console.error("[Onboarding] Discovery refresh failed:", err.message);
-      });
+      requestDiscoveryRefresh({ reason: "onboarding" });
     }
 
     res.json({ success: true });
