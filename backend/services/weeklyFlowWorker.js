@@ -1259,6 +1259,21 @@ export class WeeklyFlowWorker {
           err.message,
         ),
       );
+      import("./slskdClient.js")
+        .then(({ slskdClient, isSlskdCleanupAfterRunsEnabled }) => {
+          if (!isSlskdCleanupAfterRunsEnabled()) return null;
+          const globalStats = downloadTracker.getStats();
+          if (globalStats.pending > 0 || globalStats.downloading > 0) {
+            return null;
+          }
+          return slskdClient.cleanupAfterRun();
+        })
+        .catch((err) =>
+          console.warn(
+            "[WeeklyFlowWorker] slskd cleanup failed:",
+            err?.message || err,
+          ),
+        );
       this.playlistFinalizing.delete(playlistKey);
     }
   }
