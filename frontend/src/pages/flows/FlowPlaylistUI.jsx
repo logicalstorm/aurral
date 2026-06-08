@@ -12,6 +12,7 @@ import {
   Clock,
   ExternalLink,
   ListMusic,
+  Loader2,
   Plus,
   Sparkles,
   Upload,
@@ -401,6 +402,7 @@ export function PlaylistDetailHero({
   artworkUrl,
   metaLine,
   flowMeta = null,
+  activityHint = null,
   enabled,
   togglingId,
   onToggleEnabled,
@@ -455,6 +457,15 @@ export function PlaylistDetailHero({
               <FlowDetailMeta meta={flowMeta} />
             ) : metaLine ? (
               <p className="flow-page__detail-meta">{metaLine}</p>
+            ) : null}
+            {activityHint ? (
+              <p className="flow-page__detail-meta flow-page__detail-activity">
+                <Loader2
+                  className="artist-icon-xs animate-spin"
+                  aria-hidden="true"
+                />
+                <span>{activityHint}</span>
+              </p>
             ) : null}
           </div>
         </div>

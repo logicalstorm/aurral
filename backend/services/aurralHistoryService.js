@@ -12,6 +12,7 @@ const KIND_SOURCE_MAP = {
   track_reused_aurral: "aurral",
   discovery_refresh: "aurral",
   flow_generated: "aurral",
+  flow_generating: "aurral",
   playlist_tracks_added: "aurral",
 };
 
@@ -198,6 +199,21 @@ export const recordAlbumSearchStarted = ({
     artistMbid,
     searching: true,
   });
+
+export const recordFlowGenerationStarted = ({ flowId } = {}) => {
+  const id = String(flowId || "").trim();
+  if (!id) return null;
+  const flowName = resolvePlaylistName(id);
+  return appendAurralHistory({
+    kind: "flow_generating",
+    title: `Generating playlist for ${flowName}`,
+    subtitle: "Building tracklist from discovery sources",
+    status: "processing",
+    statusLabel: "Generating",
+    href: buildPlaylistHref(id),
+    metadata: { flowId: id },
+  });
+};
 
 export const recordFlowTracksGenerated = ({
   flowId,
