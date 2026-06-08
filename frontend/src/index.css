@@ -7358,6 +7358,15 @@ textarea {
   letter-spacing: 0.02em;
 }
 
+.flow-page__detail-activity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.375rem;
+  color: var(--aurral-green);
+  font-size: 0.8125rem;
+}
+
 .flow-page__detail-hero-actions {
   display: flex;
   flex-shrink: 0;
