@@ -37,7 +37,7 @@ test.after(async () => {
   await cleanupIsolatedState(isolatedState);
 });
 
-test("writes WebP sidecar artwork for flow and playlist smart playlists", async () => {
+test("writes WebP sidecar artwork for flow and playlist m3u files", async () => {
   const flow = flowPlaylistConfig.createFlow({
     name: "Late Night",
     enabled: false,
@@ -50,21 +50,21 @@ test("writes WebP sidecar artwork for flow and playlist smart playlists", async 
   });
 
   const manager = new WeeklyFlowPlaylistManager(process.env.WEEKLY_FLOW_FOLDER);
-  await manager.ensureSmartPlaylists();
+  await manager.ensurePlaylists();
 
   const flowName = manager._getFlowPlaylistNames("Late Night").current;
   const flowBase = manager._sanitize(flowName);
-  const flowNsp = path.join(manager.libraryRoot, `${flowBase}.nsp`);
+  const flowM3u = path.join(manager.libraryRoot, `${flowBase}.m3u`);
   const flowWebp = path.join(manager.libraryRoot, `${flowBase}.webp`);
 
   const playlistName = manager._getSharedPlaylistNames("Road Trip").current;
   const playlistBase = manager._sanitize(playlistName);
-  const playlistNsp = path.join(manager.libraryRoot, `${playlistBase}.nsp`);
+  const playlistM3u = path.join(manager.libraryRoot, `${playlistBase}.m3u`);
   const playlistWebp = path.join(manager.libraryRoot, `${playlistBase}.webp`);
 
-  await assert.doesNotReject(() => fs.access(flowNsp));
+  await assert.doesNotReject(() => fs.access(flowM3u));
   await assert.doesNotReject(() => fs.access(flowWebp));
-  await assert.doesNotReject(() => fs.access(playlistNsp));
+  await assert.doesNotReject(() => fs.access(playlistM3u));
   await assert.doesNotReject(() => fs.access(playlistWebp));
 
   const flowMeta = await sharp(flowWebp).metadata();
@@ -86,26 +86,26 @@ test("removes old sidecar artwork when a flow is renamed", async () => {
   flowPlaylistConfig.setEnabled(flow.id, true);
 
   const manager = new WeeklyFlowPlaylistManager(process.env.WEEKLY_FLOW_FOLDER);
-  await manager.ensureSmartPlaylists();
+  await manager.ensurePlaylists();
 
   const oldName = manager._getFlowPlaylistNames("Old Name").current;
   const oldBase = manager._sanitize(oldName);
-  const oldNsp = path.join(manager.libraryRoot, `${oldBase}.nsp`);
+  const oldM3u = path.join(manager.libraryRoot, `${oldBase}.m3u`);
   const oldWebp = path.join(manager.libraryRoot, `${oldBase}.webp`);
-  await assert.doesNotReject(() => fs.access(oldNsp));
+  await assert.doesNotReject(() => fs.access(oldM3u));
   await assert.doesNotReject(() => fs.access(oldWebp));
 
   flowPlaylistConfig.updateFlow(flow.id, { name: "New Name" });
-  await manager.ensureSmartPlaylists();
+  await manager.ensurePlaylists();
 
   const newName = manager._getFlowPlaylistNames("New Name").current;
   const newBase = manager._sanitize(newName);
-  const newNsp = path.join(manager.libraryRoot, `${newBase}.nsp`);
+  const newM3u = path.join(manager.libraryRoot, `${newBase}.m3u`);
   const newWebp = path.join(manager.libraryRoot, `${newBase}.webp`);
-  await assert.doesNotReject(() => fs.access(newNsp));
+  await assert.doesNotReject(() => fs.access(newM3u));
   await assert.doesNotReject(() => fs.access(newWebp));
 
-  await assert.rejects(() => fs.access(oldNsp));
+  await assert.rejects(() => fs.access(oldM3u));
   await assert.rejects(() => fs.access(oldWebp));
 });
 
@@ -117,7 +117,7 @@ test("does not regenerate artwork after explicit remove until generate", async (
   flowPlaylistConfig.setEnabled(flow.id, true);
 
   const manager = new WeeklyFlowPlaylistManager(process.env.WEEKLY_FLOW_FOLDER);
-  await manager.ensureSmartPlaylists();
+  await manager.ensurePlaylists();
 
   const flowWebp = path.join(
     manager.libraryRoot,
@@ -128,10 +128,9 @@ test("does not regenerate artwork after explicit remove until generate", async (
   await manager.removeArtwork(flow.id);
   await assert.rejects(() => fs.access(flowWebp));
 
-  await manager.ensureSmartPlaylists();
+  await manager.ensurePlaylists();
   await assert.rejects(() => fs.access(flowWebp));
 
   await manager.generateArtwork(flow.id);
   await assert.doesNotReject(() => fs.access(flowWebp));
 });
-

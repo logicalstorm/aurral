@@ -48,7 +48,7 @@ export async function importFromRepo(relativePath) {
 export async function resetDatabase(db) {
   const tables = [
     "sessions",
-    "weekly_flow_jobs",
+    "playlist_download_jobs",
     "users",
     "discovery_cache",
     "images_cache",

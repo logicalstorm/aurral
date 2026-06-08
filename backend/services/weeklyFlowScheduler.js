@@ -2,11 +2,11 @@ import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { weeklyFlowWorker } from "./weeklyFlowWorker.js";
 import { playlistManager } from "./weeklyFlowPlaylistManager.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
-import { soulseekClient } from "./simpleSoulseekClient.js";
+import { slskdClient } from "./slskdClient.js";
 import { weeklyFlowOperationQueue } from "./weeklyFlowOperationQueue.js";
 
 export async function runScheduledRefresh() {
-  if (!soulseekClient.isConfigured()) return;
+  if (!slskdClient.isConfigured()) return;
 
   const due = flowPlaylistConfig.getDueForRefresh();
   if (due.length === 0) return;
