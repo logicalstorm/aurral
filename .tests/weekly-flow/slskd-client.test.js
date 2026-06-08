@@ -5,7 +5,12 @@ import http from "http";
 import { importFromRepo } from "../helpers/backendTestHarness.js";
 
 const [
-  { isSearchComplete, isSearchInProgress, slskdClient },
+  {
+    isSearchComplete,
+    isSearchInProgress,
+    isSlskdCleanupAfterRunsEnabled,
+    slskdClient,
+  },
   { dbOps },
 ] = await Promise.all([
   importFromRepo("backend/services/slskdClient.js"),
@@ -270,6 +275,86 @@ test("enqueueBatch falls back to legacy slskd download endpoint", async () => {
       [
         "/api/v0/transfers/downloads/batches",
         "/api/v0/transfers/downloads/peer",
+      ],
+    );
+  } finally {
+    dbOps.updateSettings(originalSettings);
+    await mock.close();
+  }
+});
+
+test("isSlskdCleanupAfterRunsEnabled reads the integrations setting", () => {
+  const originalSettings = dbOps.getSettings();
+  dbOps.updateSettings({
+    ...originalSettings,
+    integrations: {
+      ...(originalSettings.integrations || {}),
+      slskd: {
+        ...(originalSettings.integrations?.slskd || {}),
+        cleanupAfterRuns: true,
+      },
+    },
+  });
+  assert.equal(isSlskdCleanupAfterRunsEnabled(), true);
+  dbOps.updateSettings(originalSettings);
+});
+
+test("cleanupAfterRun removes completed searches and downloads", async () => {
+  const originalSettings = dbOps.getSettings();
+  const calls = [];
+  const mock = await createMockServer((request, response) => {
+    calls.push({ method: request.method, url: request.url });
+    if (request.method === "GET" && request.url === "/api/v0/searches") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(
+        JSON.stringify([
+          { id: "search-done", state: "Completed" },
+          { id: "search-active", state: "InProgress" },
+        ]),
+      );
+      return;
+    }
+    if (
+      request.method === "DELETE" &&
+      request.url === "/api/v0/searches/search-done"
+    ) {
+      response.writeHead(204);
+      response.end();
+      return;
+    }
+    if (
+      request.method === "DELETE" &&
+      request.url === "/api/v0/transfers/downloads/all/completed"
+    ) {
+      response.writeHead(204);
+      response.end();
+      return;
+    }
+    response.writeHead(404);
+    response.end();
+  });
+
+  dbOps.updateSettings({
+    ...originalSettings,
+    integrations: {
+      ...(originalSettings.integrations || {}),
+      slskd: {
+        url: mock.url,
+        apiKey: "test-key",
+      },
+    },
+  });
+
+  try {
+    const result = await slskdClient.cleanupAfterRun();
+    assert.equal(result.searchesRemoved, 1);
+    assert.equal(result.downloadsRemoved, true);
+    assert.deepEqual(
+      calls.map((call) => `${call.method} ${call.url}`),
+      [
+        "GET /api/v0/searches",
+        "DELETE /api/v0/searches/search-done",
+        "DELETE /api/v0/transfers/downloads/all/completed",
       ],
     );
   } finally {

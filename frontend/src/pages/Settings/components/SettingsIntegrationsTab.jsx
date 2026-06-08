@@ -1077,55 +1077,79 @@ export function SettingsIntegrationsTab({
                 </div>
               </div>
               <div>
-                <div className="settings-page__format-row">
-                  <div className="settings-page__format-col settings-page__format-col--grow">
-                    <label className="artist-field-label">Preferred format</label>
-                    <SettingsSelect
-                      value={settings.integrations?.slskd?.preferredFormat || "flac"}
-                      onChange={(e) =>
-                        updateSettings({
-                          ...settings,
-                          integrations: {
-                            ...settings.integrations,
-                            slskd: {
-                              ...(settings.integrations?.slskd || {}),
-                              preferredFormat: e.target.value,
-                            },
+                <label className="artist-field-label">Preferred format</label>
+                <SettingsSelect
+                  value={settings.integrations?.slskd?.preferredFormat || "flac"}
+                  onChange={(e) =>
+                    updateSettings({
+                      ...settings,
+                      integrations: {
+                        ...settings.integrations,
+                        slskd: {
+                          ...(settings.integrations?.slskd || {}),
+                          preferredFormat: e.target.value,
+                        },
+                      },
+                    })
+                  }
+                >
+                  <option value="flac">FLAC</option>
+                  <option value="mp3">MP3</option>
+                </SettingsSelect>
+              </div>
+              <div>
+                <label className="artist-checkbox-label">
+                  <input
+                    type="checkbox"
+                    className="artist-checkbox"
+                    checked={
+                      settings.integrations?.slskd?.preferredFormatStrict === true
+                    }
+                    onChange={(e) =>
+                      updateSettings({
+                        ...settings,
+                        integrations: {
+                          ...settings.integrations,
+                          slskd: {
+                            ...(settings.integrations?.slskd || {}),
+                            preferredFormatStrict: e.target.checked,
                           },
-                        })
-                      }
-                    >
-                      <option value="flac">FLAC</option>
-                      <option value="mp3">MP3</option>
-                    </SettingsSelect>
-                  </div>
-                  <div className="settings-page__format-col">
-                    <label className="artist-field-label">Strict format only</label>
-                    <div className="settings-page__format-strict-control">
-                      <input
-                        type="checkbox"
-                        className="artist-checkbox"
-                        checked={
-                          settings.integrations?.slskd?.preferredFormatStrict === true
-                        }
-                        onChange={(e) =>
-                          updateSettings({
-                            ...settings,
-                            integrations: {
-                              ...settings.integrations,
-                              slskd: {
-                                ...(settings.integrations?.slskd || {}),
-                                preferredFormatStrict: e.target.checked,
-                              },
-                            },
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
-                <p className="settings-page__hint">
+                        },
+                      })
+                    }
+                  />
+                  <span className="artist-field-label">Strict format only</span>
+                </label>
+                <p className="settings-page__hint settings-page__hint--indented">
                   Used when ranking slskd search results for flows and playlists.
+                </p>
+              </div>
+              <div>
+                <label className="artist-checkbox-label">
+                  <input
+                    type="checkbox"
+                    className="artist-checkbox"
+                    checked={
+                      settings.integrations?.slskd?.cleanupAfterRuns === true
+                    }
+                    onChange={(e) =>
+                      updateSettings({
+                        ...settings,
+                        integrations: {
+                          ...settings.integrations,
+                          slskd: {
+                            ...(settings.integrations?.slskd || {}),
+                            cleanupAfterRuns: e.target.checked,
+                          },
+                        },
+                      })
+                    }
+                  />
+                  <span className="artist-field-label">Clean up after runs</span>
+                </label>
+                <p className="settings-page__hint settings-page__hint--indented">
+                  Clear completed searches and downloads from slskd when a flow or
+                  playlist run finishes.
                 </p>
               </div>
             </fieldset>
@@ -1156,7 +1180,7 @@ export function SettingsIntegrationsTab({
             </div>
           </div>
           {!collapsedSections.navidrome && (
-            <fieldset>
+            <fieldset className="settings-page__fields">
               <div>
                 <label
                   className="artist-field-label"
@@ -1182,55 +1206,45 @@ export function SettingsIntegrationsTab({
                   }
                 />
               </div>
-              <div className="settings-page__two-col-grid">
-                <div>
-                  <label
-                    className="artist-field-label"
-                  >
-                    Username
-                  </label>
-                  <SettingsInput type="text"
-
-                    autoComplete="off"
-                    value={settings.integrations?.navidrome?.username || ""}
-                    onChange={(e) =>
-                      updateSettings({
-                        ...settings,
-                        integrations: {
-                          ...settings.integrations,
-                          navidrome: {
-                            ...(settings.integrations?.navidrome || {}),
-                            username: e.target.value,
-                          },
+              <div>
+                <label className="artist-field-label">Username</label>
+                <SettingsInput
+                  type="text"
+                  autoComplete="off"
+                  value={settings.integrations?.navidrome?.username || ""}
+                  onChange={(e) =>
+                    updateSettings({
+                      ...settings,
+                      integrations: {
+                        ...settings.integrations,
+                        navidrome: {
+                          ...(settings.integrations?.navidrome || {}),
+                          username: e.target.value,
                         },
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <label
-                    className="artist-field-label"
-                  >
-                    Password
-                  </label>
-                  <SettingsInput type="password"
-
-                    autoComplete="off"
-                    value={settings.integrations?.navidrome?.password || ""}
-                    onChange={(e) =>
-                      updateSettings({
-                        ...settings,
-                        integrations: {
-                          ...settings.integrations,
-                          navidrome: {
-                            ...(settings.integrations?.navidrome || {}),
-                            password: e.target.value,
-                          },
+                      },
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <label className="artist-field-label">Password</label>
+                <SettingsInput
+                  type="password"
+                  autoComplete="off"
+                  value={settings.integrations?.navidrome?.password || ""}
+                  onChange={(e) =>
+                    updateSettings({
+                      ...settings,
+                      integrations: {
+                        ...settings.integrations,
+                        navidrome: {
+                          ...(settings.integrations?.navidrome || {}),
+                          password: e.target.value,
                         },
-                      })
-                    }
-                  />
-                </div>
+                      },
+                    })
+                  }
+                />
               </div>
               <p className="settings-page__hint">
                 When using Weekly Flow: set Navidrome&apos;s{" "}

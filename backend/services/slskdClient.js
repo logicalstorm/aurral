@@ -34,6 +34,11 @@ export function getSlskdSearchFormatOptions() {
   };
 }
 
+export function isSlskdCleanupAfterRunsEnabled() {
+  const slskd = getSettings().slskd || {};
+  return slskd.cleanupAfterRuns === true;
+}
+
 function buildClient() {
   const { url, apiKey } = getSettings();
   if (!url || !apiKey) {
@@ -582,6 +587,53 @@ export class SlskdClient {
       events: Array.isArray(response.data) ? response.data : [],
       totalCount,
     };
+  }
+
+  async listSearches() {
+    const client = buildClient();
+    const response = await client.get("/api/v0/searches");
+    if (response.status !== 200) return [];
+    return normalizeArrayPayload(response.data);
+  }
+
+  async deleteSearch(searchId) {
+    const id = String(searchId || "").trim();
+    if (!id) return false;
+    const client = buildClient();
+    const response = await client.delete(`/api/v0/searches/${encodeURIComponent(id)}`);
+    return [200, 204, 404].includes(response.status);
+  }
+
+  async removeCompletedDownloads() {
+    const client = buildClient();
+    const response = await client.delete(
+      "/api/v0/transfers/downloads/all/completed",
+    );
+    return [200, 204, 404].includes(response.status);
+  }
+
+  async cleanupAfterRun() {
+    if (!this.isConfigured()) {
+      return { skipped: true, reason: "not configured" };
+    }
+    return withHonkerLock("slskd-api", async () => {
+      let searchesRemoved = 0;
+      const searches = await this.listSearches();
+      for (const search of searches) {
+        if (isSearchInProgress(search)) continue;
+        const searchId = readId(search);
+        if (!searchId) continue;
+        if (await this.deleteSearch(searchId)) {
+          searchesRemoved += 1;
+        }
+      }
+      const downloadsRemoved = await this.removeCompletedDownloads();
+      logger.slskd("info", "Cleaned up slskd after run", {
+        searchesRemoved,
+        downloadsRemoved,
+      });
+      return { searchesRemoved, downloadsRemoved };
+    });
   }
 }
 
