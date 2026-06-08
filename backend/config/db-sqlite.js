@@ -87,6 +87,9 @@ db.exec(`
     track_mbid TEXT,
     release_year TEXT,
     duration_ms INTEGER,
+    track_number INTEGER,
+    album_track_count INTEGER,
+    album_track_titles TEXT,
     artist_aliases TEXT,
     playlist_id TEXT NOT NULL,
     playlist_type TEXT,
@@ -168,6 +171,15 @@ if (!tableColumns.includes("release_year")) {
 }
 if (!tableColumns.includes("duration_ms")) {
   tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN duration_ms INTEGER");
+}
+if (!tableColumns.includes("track_number")) {
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN track_number INTEGER");
+}
+if (!tableColumns.includes("album_track_count")) {
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN album_track_count INTEGER");
+}
+if (!tableColumns.includes("album_track_titles")) {
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN album_track_titles TEXT");
 }
 if (!tableColumns.includes("artist_aliases")) {
   tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN artist_aliases TEXT");

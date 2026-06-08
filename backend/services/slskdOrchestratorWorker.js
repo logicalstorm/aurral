@@ -22,8 +22,8 @@ async function runLoop() {
       if (!running) break;
       try {
         const nextPayload = await processPipelinePayload(job.payload);
-        job.ack();
         await continuePipeline(nextPayload);
+        job.ack();
       } catch (error) {
         const message = error?.message || String(error);
         if (job.attempts >= 4) {

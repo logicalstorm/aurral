@@ -7,7 +7,7 @@ export function migrateToV2({ logger = console } = {}) {
   const layout = ensurePlaylistFilesystemLayout({ logger });
   if (result.migrated || layout.renamed || layout.merged > 0 || layout.sidecarsMoved > 0) {
     logger.info?.(
-      "[migrate:v2] Upgrade complete. Configure slskd in Settings → Integrations. If Navidrome still points at aurral-weekly-flow, restart Aurral or update the Aurral Weekly Flow library path to aurral-playlists.",
+      "[migrate:v2] Upgrade complete. Configure slskd in Settings -> Integrations. If Navidrome still points at aurral-weekly-flow, restart Aurral or update the Aurral Playlists library path to aurral-playlists.",
     );
   }
   return { ...result, layout };

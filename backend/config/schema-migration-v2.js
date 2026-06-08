@@ -194,6 +194,9 @@ function migrateJobsTable(db) {
         track_mbid TEXT,
         release_year TEXT,
         duration_ms INTEGER,
+        track_number INTEGER,
+        album_track_count INTEGER,
+        album_track_titles TEXT,
         artist_aliases TEXT,
         playlist_id TEXT NOT NULL,
         playlist_type TEXT,
@@ -241,6 +244,18 @@ function migrateJobsTable(db) {
   tryAddColumn(
     db,
     "ALTER TABLE playlist_download_jobs ADD COLUMN remote_filename TEXT",
+  );
+  tryAddColumn(
+    db,
+    "ALTER TABLE playlist_download_jobs ADD COLUMN track_number INTEGER",
+  );
+  tryAddColumn(
+    db,
+    "ALTER TABLE playlist_download_jobs ADD COLUMN album_track_count INTEGER",
+  );
+  tryAddColumn(
+    db,
+    "ALTER TABLE playlist_download_jobs ADD COLUMN album_track_titles TEXT",
   );
 
   const latestColumns = db
