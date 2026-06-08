@@ -268,9 +268,9 @@ export class SlskdClient {
     return withHonkerLock("slskd-api", async () => {
       const client = buildClient();
       const id = String(options.id || randomUUID());
-      const searchTimeoutSeconds = Math.max(
-        5,
-        Math.ceil(Number(options.searchTimeoutMs || DEFAULT_SEARCH_TIMEOUT_MS) / 1000),
+      const searchTimeoutMs = Math.max(
+        5000,
+        Math.floor(Number(options.searchTimeoutMs || DEFAULT_SEARCH_TIMEOUT_MS)),
       );
       const body = {
         id,
@@ -285,7 +285,7 @@ export class SlskdClient {
         ),
         minimumResponseFileCount: Number(options.minimumResponseFileCount || 1),
         responseLimit: Number(options.responseLimit || DEFAULT_RESPONSE_LIMIT),
-        searchTimeout: searchTimeoutSeconds,
+        searchTimeout: searchTimeoutMs,
       };
       let retryCount = 0;
       let delaySeconds = 30;
