@@ -15,7 +15,6 @@ import {
   getDownloadStatus,
   triggerAlbumSearch,
 } from "../utils/api";
-import ArtistImage from "../components/ArtistImage";
 import { useToast } from "../contexts/ToastContext";
 import { useWebSocketChannel } from "../hooks/useWebSocket";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -461,6 +460,25 @@ function HistoryPage() {
     });
   };
 
+  const handleRowNavigate = (request, {
+    isSlskd,
+    isAurral,
+    isAlbum,
+    artistMbid,
+    artistName,
+    displayName,
+  }) => {
+    if (isSlskd && request.playlistId) {
+      navigate(`/playlists?selected=${encodeURIComponent(request.playlistId)}`);
+      return;
+    }
+    if (isAurral && request.href) {
+      navigate(request.href);
+      return;
+    }
+    navigateToArtist(request, isAlbum, artistMbid, artistName, displayName);
+  };
+
   const emptyState = EMPTY_STATE_COPY[activeTab] || EMPTY_STATE_COPY.all;
 
   if (loading) {
@@ -547,16 +565,17 @@ function HistoryPage() {
                 : isAlbum
                   ? request.albumName
                   : request.name;
-              const artistName = isSlskd
-                ? String(request.subtitle || "").split(" · ")[0] || null
-                : isAurral
-                  ? request.subtitle || null
-                  : isAlbum
-                    ? request.artistName
-                    : null;
+              const artistName = isAlbum ? request.artistName : null;
+              const metaLine = isSlskd || isAurral
+                ? request.subtitle || null
+                : artistName;
               const artistMbid = isAlbum ? request.artistMbid : request.mbid;
-              const hasValidMbid =
-                artistMbid && artistMbid !== "null" && artistMbid !== "undefined";
+              const canNavigate =
+                (isSlskd && request.playlistId) ||
+                (isAurral && request.href) ||
+                (artistMbid &&
+                  artistMbid !== "null" &&
+                  artistMbid !== "undefined");
               const albumStatus = request.albumId
                 ? downloadStatuses[String(request.albumId)]
                 : null;
@@ -568,127 +587,91 @@ function HistoryPage() {
                 request.albumId &&
                 !!reSearchingAlbumIds[String(request.albumId)];
 
+              const formattedDate = new Date(request.requestedAt).toLocaleDateString(
+                undefined,
+                {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                },
+              );
+
               return (
                 <article
                   key={request.id || request.mbid}
-                  className="requests-page__row"
+                  className={`requests-page__row${canNavigate ? " is-clickable" : ""}`}
+                  onClick={() => {
+                    if (!canNavigate) return;
+                    handleRowNavigate(request, {
+                      isSlskd,
+                      isAurral,
+                      isAlbum,
+                      artistMbid,
+                      artistName,
+                      displayName,
+                    });
+                  }}
                 >
-                  <div
-                    className={`artist-media-cell artist-list-cover requests-page__cover${hasValidMbid || isSlskd || isAurral ? " is-clickable" : " is-disabled"}`}
-                    onClick={() => {
-                      if (isSlskd && request.playlistId) {
-                        navigate(`/playlists?selected=${encodeURIComponent(request.playlistId)}`);
-                        return;
-                      }
-                      if (isAurral && request.href) {
-                        navigate(request.href);
-                        return;
-                      }
-                      navigateToArtist(
-                        request,
-                        isAlbum,
-                        artistMbid,
-                        artistName,
-                        displayName,
-                      );
-                    }}
-                  >
-                    {isSlskd || isAurral ? (
-                      <div className="requests-page__cover-fallback">
-                        <Music className="artist-icon-lg" />
-                      </div>
-                    ) : (
-                      <ArtistImage
-                        src={request.image}
-                        mbid={artistMbid}
-                        artistName={isAlbum ? artistName : displayName}
-                        alt={displayName}
-                        className="artist-image-fill"
-                      />
-                    )}
+                  <div className="requests-page__details">
+                    <h3 className="requests-page__item-title">{displayName}</h3>
+                    <div className="requests-page__meta">
+                      {metaLine && (
+                        <span className="requests-page__meta-line">
+                          <Music className="artist-icon-xs" />
+                          <span className="artist-truncate">{metaLine}</span>
+                        </span>
+                      )}
+                      {metaLine && (
+                        <span className="requests-page__meta-separator" aria-hidden="true">
+                          ·
+                        </span>
+                      )}
+                      <span className="requests-page__meta-line">
+                        <Clock className="artist-icon-xs" />
+                        <span>{formattedDate}</span>
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="requests-page__body">
-                    <div className="requests-page__details">
-                      <h3
-                        className={`requests-page__item-title${hasValidMbid || isAurral ? " is-clickable" : " is-disabled"}`}
-                        onClick={() => {
-                          if (isAurral && request.href) {
-                            navigate(request.href);
-                            return;
-                          }
-                          navigateToArtist(
-                            request,
-                            isAlbum,
-                            artistMbid,
-                            artistName,
-                            displayName,
-                          );
-                        }}
-                      >
-                        {displayName}
-                      </h3>
-
-                      <div className="requests-page__meta">
-                        {(isAlbum || isAurral) && artistName && (
-                          <span className="requests-page__meta-line">
-                            <Music className="artist-icon-xs" />
-                            <span className="artist-truncate">{artistName}</span>
-                          </span>
-                        )}
-                        <span className="requests-page__meta-line">
-                          <Clock className="artist-icon-xs" />
-                          <span className="artist-truncate">
-                            {new Date(request.requestedAt).toLocaleDateString(
-                              undefined,
-                              {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                              },
+                  <div
+                    className="requests-page__status"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <RequestStatusBadge
+                      request={request}
+                      downloadStatuses={downloadStatuses}
+                    />
+                    {(isFailed || request.inQueue) && request.albumId && (
+                      <div className="requests-page__actions">
+                        {isFailed && (
+                          <button
+                            type="button"
+                            onClick={() => handleReSearchRequest(request)}
+                            className="btn btn-surface btn-icon-square requests-page__action"
+                            title="Re-search"
+                            aria-label="Re-search"
+                            disabled={isReSearching}
+                          >
+                            {isReSearching ? (
+                              <Loader className="artist-icon-xs animate-spin" />
+                            ) : (
+                              <RefreshCw className="artist-icon-xs" />
                             )}
-                          </span>
-                        </span>
+                          </button>
+                        )}
+                        {request.inQueue && (
+                          <button
+                            type="button"
+                            onClick={() => handleStopDownload(request)}
+                            className="btn btn-surface btn-icon-square requests-page__action btn--danger-text"
+                            title="Stop download"
+                            aria-label="Stop download"
+                          >
+                            <X className="artist-icon-xs" />
+                          </button>
+                        )}
                       </div>
-                    </div>
-
-                    <div className="requests-page__status">
-                      <RequestStatusBadge
-                        request={request}
-                        downloadStatuses={downloadStatuses}
-                      />
-                      {(isFailed || request.inQueue) && request.albumId && (
-                        <div className="requests-page__actions">
-                          {isFailed && (
-                            <button
-                              type="button"
-                              onClick={() => handleReSearchRequest(request)}
-                              className="btn btn-surface btn-icon-square requests-page__action"
-                              title="Re-search"
-                              aria-label="Re-search"
-                              disabled={isReSearching}
-                            >
-                              {isReSearching ? (
-                                <Loader className="artist-icon-xs animate-spin" />
-                              ) : (
-                                <RefreshCw className="artist-icon-xs" />
-                              )}
-                            </button>
-                          )}
-                          {request.inQueue && (
-                            <button
-                              type="button"
-                              onClick={() => handleStopDownload(request)}
-                              className="btn btn-surface btn-icon-square requests-page__action btn--danger-text"
-                              title="Stop download"
-                              aria-label="Stop download"
-                            >
-                              <X className="artist-icon-xs" />
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
                 </article>
               );
