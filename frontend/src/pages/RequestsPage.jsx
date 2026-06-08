@@ -21,6 +21,39 @@ import { useWebSocketChannel } from "../hooks/useWebSocket";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 function RequestStatusBadge({ request, downloadStatuses }) {
+  if (request.source === "slskd") {
+    if (request.status === "completed") {
+      return (
+        <span className="requests-page__badge requests-page__badge--success">
+          <CheckCircle2 className="artist-icon-xs" />
+          Completed
+        </span>
+      );
+    }
+    if (request.status === "failed") {
+      return (
+        <span className="requests-page__badge requests-page__badge--failed">
+          <AlertCircle className="artist-icon-xs" />
+          Failed
+        </span>
+      );
+    }
+    if (request.status === "downloading") {
+      return (
+        <span className="requests-page__badge requests-page__badge--active">
+          <Loader className="artist-icon-xs animate-spin" />
+          Downloading
+        </span>
+      );
+    }
+    return (
+      <span className="requests-page__badge requests-page__badge--pending">
+        <Clock className="artist-icon-xs" />
+        Pending
+      </span>
+    );
+  }
+
   const albumStatus = request.albumId
     ? downloadStatuses[String(request.albumId)]
     : null;
@@ -410,9 +443,18 @@ function RequestsPage() {
         !error && (
           <div className="requests-page__list">
             {requests.map((request) => {
+              const isSlskd = request.source === "slskd";
               const isAlbum = request.type === "album";
-              const displayName = isAlbum ? request.albumName : request.name;
-              const artistName = isAlbum ? request.artistName : null;
+              const displayName = isSlskd
+                ? request.title
+                : isAlbum
+                  ? request.albumName
+                  : request.name;
+              const artistName = isSlskd
+                ? String(request.subtitle || "").split(" · ")[0] || null
+                : isAlbum
+                  ? request.artistName
+                  : null;
               const artistMbid = isAlbum ? request.artistMbid : request.mbid;
               const hasValidMbid =
                 artistMbid && artistMbid !== "null" && artistMbid !== "undefined";
@@ -433,24 +475,34 @@ function RequestsPage() {
                   className="requests-page__row"
                 >
                   <div
-                    className={`artist-media-cell artist-list-cover requests-page__cover${hasValidMbid ? " is-clickable" : " is-disabled"}`}
-                    onClick={() =>
+                    className={`artist-media-cell artist-list-cover requests-page__cover${hasValidMbid || isSlskd ? " is-clickable" : " is-disabled"}`}
+                    onClick={() => {
+                      if (isSlskd && request.playlistId) {
+                        navigate(`/playlists?selected=${encodeURIComponent(request.playlistId)}`);
+                        return;
+                      }
                       navigateToArtist(
                         request,
                         isAlbum,
                         artistMbid,
                         artistName,
                         displayName,
-                      )
-                    }
+                      );
+                    }}
                   >
-                    <ArtistImage
-                      src={request.image}
-                      mbid={artistMbid}
-                      artistName={isAlbum ? artistName : displayName}
-                      alt={displayName}
-                      className="artist-image-fill"
-                    />
+                    {isSlskd ? (
+                      <div className="requests-page__cover-fallback">
+                        <Music className="artist-icon-lg" />
+                      </div>
+                    ) : (
+                      <ArtistImage
+                        src={request.image}
+                        mbid={artistMbid}
+                        artistName={isAlbum ? artistName : displayName}
+                        alt={displayName}
+                        className="artist-image-fill"
+                      />
+                    )}
                   </div>
 
                   <div className="requests-page__body">

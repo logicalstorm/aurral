@@ -34,7 +34,12 @@ const defaultSettings = {
       discoveryRecommendationsPerRefresh: 200,
       discoveryMode: "balanced",
     },
-    slskd: { url: "", apiKey: "" },
+    slskd: {
+      url: "",
+      apiKey: "",
+      preferredFormat: "flac",
+      preferredFormatStrict: false,
+    },
     ticketmaster: {
       apiKey: "",
       searchRadiusMiles: 50,

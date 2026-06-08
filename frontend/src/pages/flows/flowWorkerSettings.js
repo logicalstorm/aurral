@@ -3,11 +3,11 @@ export const DEFAULT_WORKER_SETTINGS = {
   preferredFormat: "flac",
   preferredFormatStrict: false,
   retryCycleMinutes: 15,
-  existingFileMode: "hardlink",
+  existingFileMode: "reuse",
 };
 
 export const FLOW_WORKER_RETRY_CYCLE_OPTIONS = [15, 30, 60, 360, 720, 1440];
-export const FLOW_WORKER_EXISTING_FILE_MODES = ["download", "hardlink", "copy"];
+export const FLOW_WORKER_EXISTING_FILE_MODES = ["download", "reuse"];
 
 export const normalizeRetryCycleMinutes = (value) => {
   const parsed = Number(value);
@@ -21,9 +21,15 @@ export const normalizeRetryCycleMinutes = (value) => {
 
 export const normalizeExistingFileMode = (value) => {
   const normalized = String(value || "").trim().toLowerCase();
-  return FLOW_WORKER_EXISTING_FILE_MODES.includes(normalized)
-    ? normalized
-    : DEFAULT_WORKER_SETTINGS.existingFileMode;
+  if (normalized === "download") return "download";
+  if (
+    normalized === "reuse" ||
+    normalized === "hardlink" ||
+    normalized === "copy"
+  ) {
+    return "reuse";
+  }
+  return DEFAULT_WORKER_SETTINGS.existingFileMode;
 };
 
 export const getWorkerSettingsFromStatus = (status) => {
