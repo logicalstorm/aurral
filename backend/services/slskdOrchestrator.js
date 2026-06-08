@@ -6,7 +6,8 @@ import { logger } from "./logger.js";
 import { enqueuePipelineJob } from "./honkerDb.js";
 import { downloadTracker } from "./playlistDownloadTracker.js";
 import {
-  buildFlowSearchQueries,
+  buildFlowAlbumSearchQueries,
+  buildFlowTrackFallbackSearchQueries,
   rankFlowSearchResults,
   selectRankedMatchAttempts,
   validateDownloadedTrack,
@@ -25,7 +26,8 @@ const updateSlskdMetaStmt = db.prepare(`
   WHERE id = ?
 `);
 
-const MAX_SEARCH_QUERIES = 4;
+const MAX_ALBUM_SEARCH_QUERIES = 4;
+const MAX_FALLBACK_SEARCH_QUERIES = 3;
 const MIN_SEARCH_CANDIDATES = 1;
 const MAX_EMPTY_POLL_ATTEMPTS = 60;
 const MAX_POLL_ATTEMPTS = 600;
@@ -342,33 +344,49 @@ async function handleSearch(payload) {
     .then(({ recordTrackJobSearching }) => recordTrackJobSearching(job))
     .catch(() => {});
   const resolvedTrack = buildResolvedTrack(job, payload.track);
-  const queries = buildFlowSearchQueries(resolvedTrack).slice(
+  const albumQueries = buildFlowAlbumSearchQueries(resolvedTrack).slice(
     0,
-    MAX_SEARCH_QUERIES,
+    MAX_ALBUM_SEARCH_QUERIES,
   );
+  const fallbackQueries = buildFlowTrackFallbackSearchQueries(
+    resolvedTrack,
+  ).slice(0, MAX_FALLBACK_SEARCH_QUERIES);
   const searchOptions = await getWorkerSearchOptions();
   const aggregated = [];
   const seen = new Set();
   const searchIdRef = { value: null };
-  for (const query of queries) {
-    const results = await runSearchQuery(
-      query,
-      searchIdRef,
-      resolvedTrack,
-      searchOptions,
-      aggregated,
-      seen,
-    );
-    mergeSearchResults(aggregated, seen, results);
-    if (
-      countPreDownloadValidCandidates(
-        aggregated,
+  const queries = [];
+  const runQueryBatch = async (batch) => {
+    for (const query of batch) {
+      queries.push(query);
+      const results = await runSearchQuery(
+        query,
+        searchIdRef,
         resolvedTrack,
         searchOptions,
-      ) >= MIN_SEARCH_CANDIDATES
-    ) {
-      break;
+        aggregated,
+        seen,
+      );
+      mergeSearchResults(aggregated, seen, results);
+      if (
+        countPreDownloadValidCandidates(
+          aggregated,
+          resolvedTrack,
+          searchOptions,
+        ) >= MIN_SEARCH_CANDIDATES
+      ) {
+        return true;
+      }
     }
+    return false;
+  };
+  const albumSatisfied = await runQueryBatch(albumQueries);
+  if (
+    !albumSatisfied &&
+    countPreDownloadValidCandidates(aggregated, resolvedTrack, searchOptions) <
+      MIN_SEARCH_CANDIDATES
+  ) {
+    await runQueryBatch(fallbackQueries);
   }
   if (searchIdRef.value) {
     updateSlskdMetaStmt.run(searchIdRef.value, null, null, null, job.id);

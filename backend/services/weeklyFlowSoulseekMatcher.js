@@ -171,7 +171,7 @@ function buildTrackQueryVariants(trackName) {
   return uniqueQueries(variants);
 }
 
-export function buildFlowSearchQueries(context) {
+function readFlowSearchContext(context) {
   const artistName = String(context?.artistName || "").trim();
   const trackName = String(context?.trackName || "").trim();
   const albumName = String(context?.albumName || "").trim();
@@ -189,7 +189,29 @@ export function buildFlowSearchQueries(context) {
     artistName && albumName
       ? scoreTextMatch(artistName, albumName) >= 92
       : false;
+  return {
+    artistName,
+    trackName,
+    albumName,
+    releaseYear,
+    aliases,
+    normalizedAlbum,
+    distinctiveAlbum,
+    trackVariants,
+    isSelfTitled,
+  };
+}
 
+export function buildFlowAlbumSearchQueries(context) {
+  const {
+    artistName,
+    albumName,
+    releaseYear,
+    aliases,
+    normalizedAlbum,
+    distinctiveAlbum,
+    isSelfTitled,
+  } = readFlowSearchContext(context);
   const queries = [];
   if (artistName && albumName) {
     if (isSelfTitled && releaseYear) {
@@ -202,10 +224,32 @@ export function buildFlowSearchQueries(context) {
     if (normalizedAlbum && normalizedAlbum !== normalizeTitle(albumName)) {
       queries.push(`${artistName} ${normalizedAlbum}`);
     }
-    if (distinctiveAlbum && normalizeText(distinctiveAlbum) !== normalizeText(albumName)) {
+    if (
+      distinctiveAlbum &&
+      normalizeText(distinctiveAlbum) !== normalizeText(albumName)
+    ) {
       queries.push(`${artistName} ${distinctiveAlbum}`);
     }
   }
+  for (const alias of aliases) {
+    if (albumName) queries.push(`${alias} ${albumName}`);
+    if (albumName && releaseYear) {
+      queries.push(`${alias} ${albumName} ${releaseYear}`);
+    }
+  }
+  return uniqueQueries(queries);
+}
+
+export function buildFlowTrackFallbackSearchQueries(context) {
+  const {
+    artistName,
+    albumName,
+    releaseYear,
+    aliases,
+    normalizedAlbum,
+    trackVariants,
+  } = readFlowSearchContext(context);
+  const queries = [];
   if (artistName && trackVariants.length > 0) {
     for (const trackVariant of trackVariants) {
       queries.push(`${artistName} ${trackVariant}`);
@@ -217,21 +261,24 @@ export function buildFlowSearchQueries(context) {
       if (releaseYear) {
         queries.push(`${trackVariant} ${albumName} ${releaseYear}`);
       }
-      if (
-        normalizedAlbum &&
-        normalizedAlbum !== normalizeTitle(albumName)
-      ) {
+      if (normalizedAlbum && normalizedAlbum !== normalizeTitle(albumName)) {
         queries.push(`${trackVariant} ${normalizedAlbum}`);
       }
     }
   }
   for (const alias of aliases) {
-    if (albumName) queries.push(`${alias} ${albumName}`);
     for (const trackVariant of trackVariants) {
       queries.push(`${alias} ${trackVariant}`);
     }
   }
   return uniqueQueries(queries);
+}
+
+export function buildFlowSearchQueries(context) {
+  return uniqueQueries([
+    ...buildFlowAlbumSearchQueries(context),
+    ...buildFlowTrackFallbackSearchQueries(context),
+  ]);
 }
 
 function getPathParts(filePath) {
@@ -434,19 +481,25 @@ function pickBestArtistScore(context, text) {
   );
 }
 
-function buildGroupCandidate(group, context, options = {}) {
-  const preferredFormat = options?.preferredFormat === "mp3" ? "mp3" : "flac";
-  const strictFormat = options?.strictFormat === true;
-  const isUserBlacklisted =
-    typeof options?.isUserBlacklisted === "function"
-      ? options.isUserBlacklisted
-      : () => false;
-  const getUserQueuePenalty =
-    typeof options?.getUserQueuePenalty === "function"
-      ? options.getUserQueuePenalty
-      : () => 0;
+function readMatcherOptions(options = {}) {
+  return {
+    preferredFormat: options?.preferredFormat === "mp3" ? "mp3" : "flac",
+    strictFormat: options?.strictFormat === true,
+    isUserBlacklisted:
+      typeof options?.isUserBlacklisted === "function"
+        ? options.isUserBlacklisted
+        : () => false,
+    getUserQueuePenalty:
+      typeof options?.getUserQueuePenalty === "function"
+        ? options.getUserQueuePenalty
+        : () => 0,
+  };
+}
+
+function scoreReleaseFolder(group, context, options = {}) {
+  const { isUserBlacklisted, getUserQueuePenalty } = readMatcherOptions(options);
   if (isUserBlacklisted(group.user)) {
-    return [];
+    return { blacklisted: true };
   }
   const directoryText = normalizeText(group.directoryPath);
   const albumDir = group.parts.at(-2) || "";
@@ -462,20 +515,129 @@ function buildGroupCandidate(group, context, options = {}) {
       )
     : 0;
   const yearScore = scoreYearMatch(directoryText, context?.releaseYear);
-  const audioFiles = group.audioFiles;
-  const trackCountScore = scoreTrackCount(context?.albumTrackCount, audioFiles.length);
+  const audioFiles = group.audioFiles || [];
+  const trackCountScore = scoreTrackCount(
+    context?.albumTrackCount,
+    audioFiles.length,
+  );
   const availabilityScore = audioFiles.some((item) => item?.slots) ? 8 : 0;
   const speedScore = Math.min(
     12,
     Math.round(
-      audioFiles.reduce((best, item) => Math.max(best, Number(item?.speed || 0)), 0) /
-        250000,
+      audioFiles.reduce(
+        (best, item) => Math.max(best, Number(item?.speed || 0)),
+        0,
+      ) / 250000,
     ),
   );
   const userQueuePenaltyScore = -Math.min(
     120,
     Math.round(Number(getUserQueuePenalty(group.user) || 0) / 2),
   );
+  return {
+    blacklisted: false,
+    score:
+      artistScore +
+      albumScore +
+      yearScore +
+      trackCountScore +
+      availabilityScore +
+      speedScore +
+      userQueuePenaltyScore,
+    artistScore,
+    albumScore,
+    yearScore,
+    trackCountScore,
+    availabilityScore,
+    speedScore,
+    userQueuePenaltyScore,
+  };
+}
+
+function isReleaseFolderFitting(group, context, folderScores) {
+  const albumName = String(context?.albumName || "").trim();
+  if (!albumName) return true;
+  const { artistScore, albumScore, trackCountScore } = folderScores;
+  const expectedCount = Number(context?.albumTrackCount);
+  const actualCount = group.audioFiles?.length || 0;
+  if (albumScore < 18 && trackCountScore < 18) {
+    return false;
+  }
+  if (albumScore < 18 && artistScore < 45) {
+    return false;
+  }
+  if (
+    Number.isFinite(expectedCount) &&
+    expectedCount > 0 &&
+    actualCount > 0
+  ) {
+    const diff = Math.abs(actualCount - expectedCount);
+    if (diff > 5) return false;
+    if (diff > 3 && albumScore < 35) return false;
+  }
+  if (artistScore < 35 && albumScore < 50) {
+    return false;
+  }
+  return true;
+}
+
+function groupFlowSearchResults(results) {
+  const groups = new Map();
+  for (const item of Array.isArray(results) ? results : []) {
+    const key = getDirectoryKey(item);
+    if (!key) continue;
+    const existing = groups.get(key) || {
+      key,
+      user: String(item?.user || "").trim(),
+      directoryPath: getPathParts(item?.file).slice(0, -1).join("/"),
+      parts: getPathParts(item?.file),
+      files: [],
+    };
+    existing.files.push(item);
+    groups.set(key, existing);
+  }
+  const grouped = [];
+  for (const group of groups.values()) {
+    group.audioFiles = group.files.filter(
+      (item) =>
+        !isLockedSearchResult(item) &&
+        AUDIO_EXTENSIONS.has(
+          path.extname(String(item?.file || "")).toLowerCase(),
+        ),
+    );
+    if (group.audioFiles.length === 0) continue;
+    group.audioFileCount = countAudioFiles(group.files);
+    grouped.push(group);
+  }
+  return grouped;
+}
+
+function pickBestTrackCandidate(trackCandidates) {
+  return (
+    trackCandidates.find((entry) => entry.preDownloadValid) ||
+    trackCandidates.find((entry) => entry.isLikelyMatch) ||
+    trackCandidates[0] ||
+    null
+  );
+}
+
+function buildGroupCandidate(group, context, options = {}) {
+  const { preferredFormat, strictFormat } = readMatcherOptions(options);
+  const folderScores = scoreReleaseFolder(group, context, options);
+  if (folderScores.blacklisted) {
+    return [];
+  }
+  const {
+    artistScore,
+    albumScore,
+    yearScore,
+    trackCountScore,
+    availabilityScore,
+    speedScore,
+    userQueuePenaltyScore,
+  } = folderScores;
+  const albumDir = group.parts.at(-2) || "";
+  const audioFiles = group.audioFiles;
 
   const files = strictFormat
     ? audioFiles.filter(
@@ -584,35 +746,65 @@ function buildGroupCandidate(group, context, options = {}) {
   });
 }
 
-export function rankFlowSearchResults(results, context, options = {}) {
-  const groups = new Map();
-  for (const item of Array.isArray(results) ? results : []) {
-    const key = getDirectoryKey(item);
-    if (!key) continue;
-    const existing = groups.get(key) || {
-      key,
-      user: String(item?.user || "").trim(),
-      directoryPath: getPathParts(item?.file).slice(0, -1).join("/"),
-      parts: getPathParts(item?.file),
-      files: [],
-    };
-    existing.files.push(item);
-    groups.set(key, existing);
-  }
-
+function rankFlowSearchResultsFlat(results, context, options = {}) {
   const ranked = [];
-  for (const group of groups.values()) {
-    group.audioFiles = group.files.filter(
-      (item) =>
-        !isLockedSearchResult(item) &&
-        AUDIO_EXTENSIONS.has(path.extname(String(item?.file || "")).toLowerCase()),
-    );
-    if (group.audioFiles.length === 0) continue;
-    group.audioFileCount = countAudioFiles(group.files);
+  for (const group of groupFlowSearchResults(results)) {
     ranked.push(...buildGroupCandidate(group, context, options));
   }
-
   return ranked.sort((left, right) => right.score - left.score);
+}
+
+export function rankFlowSearchResults(results, context, options = {}) {
+  const albumName = String(context?.albumName || "").trim();
+  const groups = groupFlowSearchResults(results);
+  if (!albumName) {
+    return rankFlowSearchResultsFlat(results, context, options);
+  }
+
+  const folderEntries = [];
+  for (const group of groups) {
+    const folderScores = scoreReleaseFolder(group, context, options);
+    if (folderScores.blacklisted) continue;
+    const trackCandidates = buildGroupCandidate(group, context, options);
+    if (trackCandidates.length === 0) continue;
+    folderEntries.push({
+      group,
+      folderScores,
+      fitting: isReleaseFolderFitting(group, context, folderScores),
+      trackCandidates,
+    });
+  }
+
+  const fittingFolders = folderEntries
+    .filter(
+      (entry) =>
+        entry.fitting &&
+        entry.trackCandidates.some((track) => track.preDownloadValid),
+    )
+    .sort((left, right) => {
+      const scoreDiff = right.folderScores.score - left.folderScores.score;
+      if (scoreDiff !== 0) return scoreDiff;
+      const leftTrack = pickBestTrackCandidate(left.trackCandidates);
+      const rightTrack = pickBestTrackCandidate(right.trackCandidates);
+      return Number(rightTrack?.score || 0) - Number(leftTrack?.score || 0);
+    });
+
+  const ranked = [];
+  for (const entry of fittingFolders) {
+    const best = pickBestTrackCandidate(entry.trackCandidates);
+    if (best) {
+      ranked.push({
+        ...best,
+        releaseFolderFit: true,
+        folderScore: entry.folderScores.score,
+      });
+    }
+  }
+  if (ranked.length > 0) {
+    return ranked;
+  }
+
+  return rankFlowSearchResultsFlat(results, context, options);
 }
 
 export function selectRankedMatchAttempts(matches, limit = 5) {
