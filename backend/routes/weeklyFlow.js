@@ -517,8 +517,6 @@ const filterJobsForUser = (user, jobs) =>
     canAccessPlaylistType(user, job?.playlistType),
   );
 
-const sanitizeSlskdStatus = (user, status) => status;
-
 const queueFlowEnableRefresh = (flowId, mutationVersion) => {
   weeklyFlowOperationQueue
     .enqueue(`enable:${flowId}`, async () => {
@@ -729,7 +727,7 @@ router.get("/status", noCache, (req, res) => {
   });
   res.json({
     ...snapshot,
-    slskd: sanitizeSlskdStatus(req.user, snapshot.slskd),
+    slskd: snapshot.slskd,
   });
 });
 
@@ -1636,13 +1634,7 @@ router.get("/worker/settings", requireAdmin, (req, res) => {
 });
 
 router.put("/worker/settings", requireAdmin, async (req, res) => {
-  const {
-    concurrency,
-    preferredFormat,
-    preferredFormatStrict,
-    retryCycleMinutes,
-    existingFileMode,
-  } = req.body || {};
+  const { concurrency, retryCycleMinutes, existingFileMode } = req.body || {};
   if (concurrency !== undefined) {
     const parsed = Number(concurrency);
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > 3) {
@@ -1650,22 +1642,6 @@ router.put("/worker/settings", requireAdmin, async (req, res) => {
         error: "concurrency must be an integer between 1 and 3",
       });
     }
-  }
-  if (preferredFormat !== undefined) {
-    const normalized = String(preferredFormat || "").toLowerCase();
-    if (normalized !== "flac" && normalized !== "mp3") {
-      return res.status(400).json({
-        error: "preferredFormat must be either 'flac' or 'mp3'",
-      });
-    }
-  }
-  if (
-    preferredFormatStrict !== undefined &&
-    typeof preferredFormatStrict !== "boolean"
-  ) {
-    return res.status(400).json({
-      error: "preferredFormatStrict must be a boolean",
-    });
   }
   if (retryCycleMinutes !== undefined) {
     const parsed = Number(retryCycleMinutes);
@@ -1688,8 +1664,6 @@ router.put("/worker/settings", requireAdmin, async (req, res) => {
   }
   const settings = weeklyFlowWorker.updateWorkerSettings({
     concurrency,
-    preferredFormat,
-    preferredFormatStrict,
     retryCycleMinutes,
     existingFileMode,
   });
@@ -1771,66 +1745,6 @@ router.post("/playlist/:playlistType/create", requireAdmin, async (req, res) => 
   } catch (error) {
     res.status(500).json({
       error: "Failed to ensure playlists or trigger scan",
-      message: error.message,
-    });
-  }
-});
-
-router.get("/test/slskd", requireAdmin, async (req, res) => {
-  try {
-    const result = await slskdClient.testConnection({ force: true });
-    if (!result.configured) {
-      return res.status(400).json(result);
-    }
-    if (!result.ok) {
-      return res.status(502).json(result);
-    }
-    return res.json({ success: true, ...result });
-  } catch (error) {
-    res.status(500).json({
-      error: "slskd test failed",
-      message: error.message,
-    });
-  }
-});
-
-router.post("/test/download", async (req, res) => {
-  try {
-    const { artistName, trackName } = req.body;
-
-    if (!artistName || !trackName) {
-      return res.status(400).json({
-        error: "artistName and trackName are required",
-      });
-    }
-
-    if (!slskdClient.isConfigured()) {
-      return res.status(400).json({
-        error: "slskd not configured",
-      });
-    }
-
-    const results = await slskdClient.searchQuery(`${artistName} ${trackName}`);
-    if (!results || results.length === 0) {
-      return res.status(404).json({
-        error: "No search results found",
-        artistName,
-        trackName,
-      });
-    }
-
-    res.json({
-      success: true,
-      artistName,
-      trackName,
-      resultsCount: results.length,
-      sample: results.slice(0, 3),
-      message: "Search successful",
-    });
-  } catch (error) {
-    console.error("[weekly-flow] test/download error:", error);
-    res.status(500).json({
-      error: "Download test failed",
       message: error.message,
     });
   }

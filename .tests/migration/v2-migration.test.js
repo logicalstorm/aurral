@@ -19,7 +19,9 @@ test("applyV2Migration renames weekly_flow_jobs and sets schema version", async 
       status TEXT NOT NULL,
       created_at INTEGER NOT NULL
     );
-    INSERT INTO settings (key, value) VALUES ('weeklyFlows', '{"flows":[]}');
+    INSERT INTO settings (key, value) VALUES ('weeklyFlows', '[]');
+    INSERT INTO settings (key, value) VALUES ('sharedFlowPlaylists', '[]');
+    INSERT INTO settings (key, value) VALUES ('weeklyFlowWorker', '{"concurrency":2,"preferredFormat":"flac","retryCycleMinutes":15,"existingFileMode":"reuse"}');
     INSERT INTO weekly_flow_jobs (id, artist_name, track_name, playlist_type, status, created_at)
     VALUES ('job-1', 'Artist', 'Track', 'discover', 'pending', 1);
   `);
@@ -59,6 +61,24 @@ test("applyV2Migration renames weekly_flow_jobs and sets schema version", async 
     .prepare("SELECT value FROM settings WHERE key = 'schemaVersion'")
     .get()?.value;
   assert.equal(version, "2");
+
+  const flows = migratedDb
+    .prepare("SELECT value FROM settings WHERE key = 'flows'")
+    .get()?.value;
+  assert.equal(flows, "[]");
+  assert.equal(
+    migratedDb.prepare("SELECT value FROM settings WHERE key = 'weeklyFlows'").get(),
+    undefined,
+  );
+
+  const playlistWorker = JSON.parse(
+    migratedDb
+      .prepare("SELECT value FROM settings WHERE key = 'playlistWorker'")
+      .get()?.value || "{}",
+  );
+  assert.equal(playlistWorker.concurrency, 2);
+  assert.equal(playlistWorker.existingFileMode, "reuse");
+  assert.equal(playlistWorker.preferredFormat, undefined);
 
   migratedDb.close();
 });

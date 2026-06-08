@@ -495,36 +495,12 @@ const normalizeSharedPlaylist = (playlist) => {
   };
 };
 
-const buildLegacyFlows = (settings) => {
-  const playlists = settings.weeklyFlowPlaylists || {};
-  return LEGACY_TYPES.map((type) => {
-    const legacy = playlists[type] || {};
-    const mix =
-      type === "mix"
-        ? { discover: 0, mix: 100, trending: 0 }
-        : type === "trending"
-          ? { discover: 0, mix: 0, trending: 100 }
-          : { discover: 100, mix: 0, trending: 0, focus: 0 };
-    return normalizeFlow({
-      id: randomUUID(),
-      name: titleCase(type),
-      enabled: legacy.enabled === true,
-      nextRunAt: legacy.nextRunAt ?? null,
-      size: DEFAULT_SIZE,
-      mix,
-      deepDive: false,
-      tags: {},
-      relatedArtists: {},
-    });
-  });
-};
-
 const getStoredFlows = () => {
   if (cachedFlows) {
     return cachedFlows;
   }
   const settings = dbOps.getSettings();
-  const stored = settings.weeklyFlows;
+  const stored = settings.flows;
   if (Array.isArray(stored) && stored.length > 0) {
     const idMap = new Map();
     let needsSave = false;
@@ -546,7 +522,7 @@ const getStoredFlows = () => {
     if (idMap.size > 0 || needsSave) {
       dbOps.updateSettings({
         ...settings,
-        weeklyFlows: nextFlows,
+        flows: nextFlows,
       });
       downloadTracker.migratePlaylistTypes(idMap);
     }
@@ -559,7 +535,7 @@ const getStoredFlows = () => {
   }
   dbOps.updateSettings({
     ...settings,
-    weeklyFlows: [],
+    flows: [],
   });
   cachedFlows = [];
   return cachedFlows;
@@ -570,7 +546,7 @@ const setFlows = (flows) => {
   const current = dbOps.getSettings();
   dbOps.updateSettings({
     ...current,
-    weeklyFlows: flows,
+    flows,
   });
 };
 
@@ -579,7 +555,7 @@ const getStoredSharedPlaylists = () => {
     return cachedSharedPlaylists;
   }
   const settings = dbOps.getSettings();
-  const stored = settings.sharedFlowPlaylists;
+  const stored = settings.sharedPlaylists;
   if (Array.isArray(stored)) {
     const next = stored.map(normalizeSharedPlaylist);
     const needsSave =
@@ -591,7 +567,7 @@ const getStoredSharedPlaylists = () => {
     if (needsSave) {
       dbOps.updateSettings({
         ...settings,
-        sharedFlowPlaylists: next,
+        sharedPlaylists: next,
       });
     }
     cachedSharedPlaylists = next;
@@ -599,7 +575,7 @@ const getStoredSharedPlaylists = () => {
   }
   dbOps.updateSettings({
     ...settings,
-    sharedFlowPlaylists: [],
+    sharedPlaylists: [],
   });
   cachedSharedPlaylists = [];
   return cachedSharedPlaylists;
@@ -610,7 +586,7 @@ const setSharedPlaylists = (playlists) => {
   const current = dbOps.getSettings();
   dbOps.updateSettings({
     ...current,
-    sharedFlowPlaylists: playlists,
+    sharedPlaylists: playlists,
   });
 };
 

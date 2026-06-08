@@ -9,7 +9,7 @@ import {
   rankFlowSearchResults,
   selectRankedMatchAttempts,
   validateDownloadedTrack,
-} from "./playlistSearchMatcher.js";
+} from "./weeklyFlowSoulseekMatcher.js";
 import {
   buildPlaylistDestination,
   resolvePlaylistRoot,

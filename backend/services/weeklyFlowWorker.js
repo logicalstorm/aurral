@@ -19,8 +19,6 @@ import { startSlskdOrchestratorWorker } from "./slskdOrchestratorWorker.js";
 const DEFAULT_CONCURRENCY = 3;
 const MIN_CONCURRENCY = 1;
 const MAX_CONCURRENCY = 3;
-const DEFAULT_PREFERRED_FORMAT = "flac";
-const DEFAULT_PREFERRED_FORMAT_STRICT = false;
 const FLOW_WORKER_RETRY_CYCLE_OPTIONS_MINUTES = [15, 30, 60, 360, 720, 1440];
 const DEFAULT_RETRY_CYCLE_MINUTES = 15;
 const JOB_COOLDOWN_MS = 750;
@@ -30,15 +28,6 @@ const AUTH_FAILURE_PAUSE_MS = 45000;
 const CONNECTIVITY_FAILURE_PAUSE_MS = 15000;
 const RETRYABLE_FAILURE_STREAK_THRESHOLD = 3;
 const RETRYABLE_FAILURE_STREAK_PAUSE_MS = 180000;
-const MAX_MATCH_CANDIDATES = 8;
-const RETRY_MATCH_CANDIDATES = 14;
-const MAX_RETRY_MATCH_CANDIDATES = 28;
-const STRICT_FORMAT_MATCH_CANDIDATES = 40;
-const STRICT_RETRY_MATCH_CANDIDATES = 28;
-const MAX_DOWNLOAD_ATTEMPTS_PER_JOB = 7;
-const MAX_DOWNLOAD_ATTEMPTS_PER_RETRY = 9;
-const FALLBACK_MP3_REGEX = /^[^/\\]+-[a-f0-9]{8}\.mp3$/i;
-const FALLBACK_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
 const REUSE_REPAIR_INTERVAL_MS = 30 * 60 * 1000;
 const MAX_RETRIES_PER_JOB = 1;
 const MAX_RETRIES_FOR_TIMEOUT_LOGIN = 1;
@@ -46,12 +35,10 @@ const MAX_RETRIES_FOR_QUEUED_DOWNLOAD = 2;
 const MAX_RETRIES_FOR_OFFLINE_SOURCE = 3;
 const QUEUED_RETRY_BASE_DELAY_MS = 15 * 1000;
 const QUEUED_RETRY_MAX_DELAY_MS = 45 * 1000;
-const FAST_FLAC_PRIMARY_ATTEMPTS = 2;
 const NON_RETRYABLE_ERRORS = new Set([
   "No search results found",
   "No candidate files returned",
 ]);
-const SUPPORTED_PREFERRED_FORMATS = new Set(["flac", "mp3"]);
 const WORKER_STOPPED_CODE = "WORKER_STOPPED";
 const PLAYLIST_MUTATION_CODE = "PLAYLIST_MUTATION_IN_PROGRESS";
 
@@ -62,7 +49,6 @@ export class WeeklyFlowWorker {
     this.weeklyFlowRoot = resolveWeeklyFlowRoot(weeklyFlowRoot);
     this.running = false;
     this.activeCount = 0;
-    this.lastFallbackSweepAt = 0;
     this.lastReuseRepairAt = 0;
     this.reuseRepairCursor = 0;
     this.processLoop = null;
@@ -74,11 +60,9 @@ export class WeeklyFlowWorker {
     this.currentJob = null;
     this.pausedUntil = 0;
     this.lastDequeuedPlaylistType = null;
-    this.fallbackSweepInFlight = null;
-    this.fallbackSweepTimer = null;
+    this.reuseRepairTimer = null;
     this.reuseRepairInFlight = null;
     this.lastJobMetrics = null;
-    this.sanitizeCache = new Map();
     this.incompleteRetryTimers = new Map();
     this.activeJobs = new Map();
     this.blockedPlaylistTypes = new Set();
@@ -89,32 +73,10 @@ export class WeeklyFlowWorker {
     this.playlistFinalizing = new Set();
     this.reserveBuildsInFlight = new Set();
     this.downloadMetrics = {
-      queuedFailures: 0,
-      offlineFailures: 0,
-      validationRejects: 0,
-      mp3FallbackActivations: 0,
       completedTracks: 0,
       completedTrackAttempts: 0,
       completedTrackLatencyMs: 0,
     };
-  }
-
-  _recordFailureMetric(message) {
-    if (this._isSlowSourceError(message)) {
-      this.downloadMetrics.queuedFailures += 1;
-      return;
-    }
-    if (this._isOfflineSourceError(message)) {
-      this.downloadMetrics.offlineFailures += 1;
-      return;
-    }
-    if (String(message || "").toLowerCase().includes("validation failed")) {
-      this.downloadMetrics.validationRejects += 1;
-    }
-  }
-
-  _recordMp3FallbackActivation() {
-    this.downloadMetrics.mp3FallbackActivations += 1;
   }
 
   _recordCompletedTrack(elapsedMs, attempts) {
@@ -271,7 +233,7 @@ export class WeeklyFlowWorker {
 
   _getRetryPausedPlaylistIds() {
     const settings = dbOps.getSettings();
-    const raw = settings?.weeklyFlowWorker || {};
+    const raw = settings?.playlistWorker || {};
     return this._normalizeRetryPausedPlaylistIds(raw.retryPausedPlaylistIds);
   }
 
@@ -285,7 +247,7 @@ export class WeeklyFlowWorker {
     const id = String(playlistType || "").trim();
     if (!id) return false;
     const current = dbOps.getSettings();
-    const worker = current?.weeklyFlowWorker || {};
+    const worker = current?.playlistWorker || {};
     const pausedIds = new Set(
       this._normalizeRetryPausedPlaylistIds(worker.retryPausedPlaylistIds),
     );
@@ -297,7 +259,7 @@ export class WeeklyFlowWorker {
     }
     dbOps.updateSettings({
       ...current,
-      weeklyFlowWorker: {
+      playlistWorker: {
         ...worker,
         retryPausedPlaylistIds: [...pausedIds],
       },
@@ -422,20 +384,6 @@ export class WeeklyFlowWorker {
     );
   }
 
-  _normalizePreferredFormat(value) {
-    const normalized = String(value || "")
-      .trim()
-      .toLowerCase();
-    if (SUPPORTED_PREFERRED_FORMATS.has(normalized)) {
-      return normalized;
-    }
-    return DEFAULT_PREFERRED_FORMAT;
-  }
-
-  _normalizePreferredFormatStrict(value) {
-    return value === true ? true : DEFAULT_PREFERRED_FORMAT_STRICT;
-  }
-
   _normalizeRetryCycleMinutes(value) {
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) return DEFAULT_RETRY_CYCLE_MINUTES;
@@ -454,17 +402,6 @@ export class WeeklyFlowWorker {
     const { retryCycleMinutes } = this.getWorkerSettings();
     return Math.max(1000, retryCycleMinutes * 60 * 1000);
   }
-  _getAdaptiveMatchLimit(preferredFormatStrict, retryAttempt) {
-    if (preferredFormatStrict) {
-      if (retryAttempt >= 2) return STRICT_FORMAT_MATCH_CANDIDATES;
-      if (retryAttempt >= 1) return STRICT_RETRY_MATCH_CANDIDATES;
-      return RETRY_MATCH_CANDIDATES;
-    }
-    if (retryAttempt >= 2) return MAX_RETRY_MATCH_CANDIDATES;
-    if (retryAttempt >= 1) return RETRY_MATCH_CANDIDATES;
-    return MAX_MATCH_CANDIDATES;
-  }
-
   _getNextReadyPendingJob(lastPlaylistType = null) {
     const now = Date.now();
     return downloadTracker.getNextPendingMatching((job) => {
@@ -487,13 +424,9 @@ export class WeeklyFlowWorker {
 
   getWorkerSettings() {
     const settings = dbOps.getSettings();
-    const raw = settings?.weeklyFlowWorker || {};
+    const raw = settings?.playlistWorker || {};
     return {
       concurrency: this._normalizeConcurrency(raw.concurrency),
-      preferredFormat: this._normalizePreferredFormat(raw.preferredFormat),
-      preferredFormatStrict: this._normalizePreferredFormatStrict(
-        raw.preferredFormatStrict,
-      ),
       retryCycleMinutes: this._normalizeRetryCycleMinutes(
         raw.retryCycleMinutes,
       ),
@@ -512,16 +445,6 @@ export class WeeklyFlowWorker {
         nextSettings.concurrency === undefined
           ? base.concurrency
           : this._normalizeConcurrency(nextSettings.concurrency),
-      preferredFormat:
-        nextSettings.preferredFormat === undefined
-          ? base.preferredFormat
-          : this._normalizePreferredFormat(nextSettings.preferredFormat),
-      preferredFormatStrict:
-        nextSettings.preferredFormatStrict === undefined
-          ? base.preferredFormatStrict
-          : this._normalizePreferredFormatStrict(
-              nextSettings.preferredFormatStrict,
-            ),
       retryCycleMinutes:
         nextSettings.retryCycleMinutes === undefined
           ? base.retryCycleMinutes
@@ -536,7 +459,7 @@ export class WeeklyFlowWorker {
     };
     dbOps.updateSettings({
       ...current,
-      weeklyFlowWorker: normalized,
+      playlistWorker: normalized,
     });
     if (normalized.retryCycleMinutes !== base.retryCycleMinutes) {
       this._rescheduleIncompleteRetries(
@@ -575,26 +498,6 @@ export class WeeklyFlowWorker {
       this.playlistFailureMemory.set(key, state);
     }
     return state;
-  }
-
-  _recordPlaylistCandidateFailure(playlistType, job, message, candidate = null) {
-    const state = this._getPlaylistFailureState(playlistType);
-    const text = String(message || "").toLowerCase();
-    const user = String(candidate?.raw?.user || candidate?.user || "")
-      .trim()
-      .toLowerCase();
-    if (user) {
-      if (this._isSlowSourceError(text)) {
-        state.queuedUsers.add(user);
-      }
-      if (this._isOfflineSourceError(text)) {
-        state.failedUsers.add(user);
-      }
-    }
-    if (String(text).includes("validation failed")) {
-      const key = this._trackKeyFromJob(job);
-      if (key) state.failedTrackKeys.add(key);
-    }
   }
 
   _recordPlaylistTerminalFailure(playlistType, job, message) {
@@ -990,44 +893,6 @@ export class WeeklyFlowWorker {
     return added;
   }
 
-  async moveFallbackMp3sToDir(force = false) {
-    const now = Date.now();
-    if (!force && now - this.lastFallbackSweepAt < FALLBACK_SWEEP_INTERVAL_MS) {
-      return;
-    }
-    this.lastFallbackSweepAt = now;
-    const cwd = process.cwd();
-    if (path.resolve(cwd) === path.resolve(this.weeklyFlowRoot)) return;
-    const fallbackDir = path.join(this.weeklyFlowRoot, "_fallback");
-    try {
-      const entries = await fs.readdir(cwd, { withFileTypes: true });
-      const toMove = entries.filter(
-        (e) =>
-          e.isFile() &&
-          e.name.endsWith(".mp3") &&
-          FALLBACK_MP3_REGEX.test(e.name),
-      );
-      if (toMove.length === 0) return;
-      await fs.mkdir(fallbackDir, { recursive: true });
-      for (const e of toMove) {
-        const src = path.join(cwd, e.name);
-        const dest = path.join(fallbackDir, e.name);
-        try {
-          await fs.rename(src, dest);
-        } catch {}
-      }
-    } catch {}
-  }
-
-  scheduleFallbackSweep(force = false) {
-    if (this.fallbackSweepInFlight) return;
-    this.fallbackSweepInFlight = this.moveFallbackMp3sToDir(force)
-      .catch(() => {})
-      .finally(() => {
-        this.fallbackSweepInFlight = null;
-      });
-  }
-
   async repairReusableLinks(force = false) {
     const now = Date.now();
     if (!force && now - this.lastReuseRepairAt < REUSE_REPAIR_INTERVAL_MS) {
@@ -1071,13 +936,11 @@ export class WeeklyFlowWorker {
     this.running = true;
     startSlskdOrchestratorWorker();
     console.log("[WeeklyFlowWorker] Starting worker...");
-    await this.moveFallbackMp3sToDir(true);
     this.scheduleReuseLinkRepair(true);
-    this.fallbackSweepTimer = setInterval(() => {
+    this.reuseRepairTimer = setInterval(() => {
       if (!this.running) return;
-      this.scheduleFallbackSweep(false);
       this.scheduleReuseLinkRepair(false);
-    }, FALLBACK_SWEEP_INTERVAL_MS);
+    }, REUSE_REPAIR_INTERVAL_MS);
 
     this.processLoop = () => {
       if (!this.running) return;
@@ -1212,9 +1075,9 @@ export class WeeklyFlowWorker {
       clearTimeout(this.processTimer);
       this.processTimer = null;
     }
-    if (this.fallbackSweepTimer) {
-      clearInterval(this.fallbackSweepTimer);
-      this.fallbackSweepTimer = null;
+    if (this.reuseRepairTimer) {
+      clearInterval(this.reuseRepairTimer);
+      this.reuseRepairTimer = null;
     }
     this.processLoop = null;
     this.retryAttempts.clear();
@@ -1224,7 +1087,6 @@ export class WeeklyFlowWorker {
     this.pausedUntil = 0;
     this.lastDequeuedPlaylistType = null;
     this.currentJob = null;
-    this.sanitizeCache.clear();
     this.playlistReservePools.clear();
     this.playlistRunDiagnostics.clear();
     this.playlistFailureMemory.clear();
@@ -1248,33 +1110,6 @@ export class WeeklyFlowWorker {
     await this.waitForIdle();
     downloadTracker.resetDownloadingToPending();
     this.pruneOrphanedJobState();
-  }
-
-  _normalizeAlbumName(value) {
-    const text = String(value || "")
-      .replace(/\u0000/g, "")
-      .trim();
-    return text || null;
-  }
-
-  _parseAlbumFromPath(filePath) {
-    if (!filePath || typeof filePath !== "string") return null;
-    const normalized = filePath.replace(/\\/g, "/").trim();
-    const parts = normalized.split("/").filter(Boolean);
-    if (parts.length < 2) return null;
-    return this._normalizeAlbumName(parts[parts.length - 2]);
-  }
-
-  _sanitizePathPart(value) {
-    const key = String(value || "");
-    if (this.sanitizeCache.has(key)) {
-      return this.sanitizeCache.get(key);
-    }
-    const sanitized = key.replace(/[<>:"/\\|?*]/g, "_").trim();
-    if (this.sanitizeCache.size < 1000) {
-      this.sanitizeCache.set(key, sanitized);
-    }
-    return sanitized;
   }
 
   async processJob(job, runGeneration = this.runGeneration) {
@@ -1447,11 +1282,6 @@ export class WeeklyFlowWorker {
       currentJob: this.currentJob,
       lastJobMetrics: this.lastJobMetrics,
       downloadMetrics: {
-        queuedFailures: this.downloadMetrics.queuedFailures,
-        offlineFailures: this.downloadMetrics.offlineFailures,
-        validationRejects: this.downloadMetrics.validationRejects,
-        mp3FallbackActivations:
-          this.downloadMetrics.mp3FallbackActivations,
         completedTracks,
         avgAttemptsPerTrack:
           completedTracks > 0
