@@ -2,6 +2,8 @@ import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import { applyV2Migration } from "./schema-migration-v2.js";
+import { ensurePlaylistFilesystemLayout } from "../services/playlistFilesystemMigration.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,7 +77,7 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
-  CREATE TABLE IF NOT EXISTS weekly_flow_jobs (
+  CREATE TABLE IF NOT EXISTS playlist_download_jobs (
     id TEXT PRIMARY KEY,
     artist_name TEXT NOT NULL,
     track_name TEXT NOT NULL,
@@ -87,14 +89,19 @@ db.exec(`
     release_year TEXT,
     duration_ms INTEGER,
     artist_aliases TEXT,
-    playlist_type TEXT NOT NULL,
+    playlist_id TEXT NOT NULL,
+    playlist_type TEXT,
     status TEXT NOT NULL,
     staging_path TEXT,
     final_path TEXT,
     error TEXT,
     started_at INTEGER,
     completed_at INTEGER,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    slskd_search_id TEXT,
+    slskd_batch_id TEXT,
+    remote_username TEXT,
+    remote_filename TEXT
   );
 
   CREATE TABLE IF NOT EXISTS deezer_mbid_cache (
@@ -115,8 +122,8 @@ db.exec(`
     updated_at INTEGER
   );
 
-  CREATE INDEX IF NOT EXISTS idx_weekly_flow_jobs_status ON weekly_flow_jobs(status);
-  CREATE INDEX IF NOT EXISTS idx_weekly_flow_jobs_playlist_type ON weekly_flow_jobs(playlist_type);
+  CREATE INDEX IF NOT EXISTS idx_playlist_download_jobs_status ON playlist_download_jobs(status);
+  CREATE INDEX IF NOT EXISTS idx_playlist_download_jobs_playlist_id ON playlist_download_jobs(playlist_id);
   CREATE INDEX IF NOT EXISTS idx_images_cache_cache_age ON images_cache(cache_age);
   CREATE INDEX IF NOT EXISTS idx_musicbrainz_artist_mbid_cache_updated_at ON musicbrainz_artist_mbid_cache(updated_at);
   CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
@@ -125,33 +132,36 @@ db.exec(`
 `);
 
 const tableColumns = db
-  .prepare("PRAGMA table_info(weekly_flow_jobs)")
+  .prepare("PRAGMA table_info(playlist_download_jobs)")
   .all()
   .map((column) => column.name);
 
 if (!tableColumns.includes("album_name")) {
-  tryAddColumn("ALTER TABLE weekly_flow_jobs ADD COLUMN album_name TEXT");
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN album_name TEXT");
 }
 if (!tableColumns.includes("reason")) {
-  tryAddColumn("ALTER TABLE weekly_flow_jobs ADD COLUMN reason TEXT");
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN reason TEXT");
 }
 if (!tableColumns.includes("artist_mbid")) {
-  tryAddColumn("ALTER TABLE weekly_flow_jobs ADD COLUMN artist_mbid TEXT");
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN artist_mbid TEXT");
 }
 if (!tableColumns.includes("album_mbid")) {
-  tryAddColumn("ALTER TABLE weekly_flow_jobs ADD COLUMN album_mbid TEXT");
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN album_mbid TEXT");
 }
 if (!tableColumns.includes("track_mbid")) {
-  tryAddColumn("ALTER TABLE weekly_flow_jobs ADD COLUMN track_mbid TEXT");
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN track_mbid TEXT");
 }
 if (!tableColumns.includes("release_year")) {
-  tryAddColumn("ALTER TABLE weekly_flow_jobs ADD COLUMN release_year TEXT");
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN release_year TEXT");
 }
 if (!tableColumns.includes("duration_ms")) {
-  tryAddColumn("ALTER TABLE weekly_flow_jobs ADD COLUMN duration_ms INTEGER");
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN duration_ms INTEGER");
 }
 if (!tableColumns.includes("artist_aliases")) {
-  tryAddColumn("ALTER TABLE weekly_flow_jobs ADD COLUMN artist_aliases TEXT");
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN artist_aliases TEXT");
+}
+if (!tableColumns.includes("playlist_type")) {
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN playlist_type TEXT");
 }
 
 const userColumns = db
@@ -213,5 +223,8 @@ export const dbHelpers = {
     }
   },
 };
+
+applyV2Migration(db, dbHelpers);
+ensurePlaylistFilesystemLayout();
 
 export { db };
