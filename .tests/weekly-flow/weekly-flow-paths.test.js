@@ -125,7 +125,7 @@ test("resolveExistingWeeklyFlowTrackPath resolves absolute paths outside playlis
   assert.equal(resolved?.migratedFrom, null);
 });
 
-test("resolveWeeklyFlowRoot falls back to /app/downloads for relative DOWNLOAD_FOLDER", () => {
+test("resolveWeeklyFlowRoot resolves relative DOWNLOAD_FOLDER from cwd", () => {
   const previousPlaylist = process.env.PLAYLIST_FOLDER;
   const previousWeekly = process.env.WEEKLY_FLOW_FOLDER;
   const previousDownload = process.env.DOWNLOAD_FOLDER;
@@ -133,7 +133,10 @@ test("resolveWeeklyFlowRoot falls back to /app/downloads for relative DOWNLOAD_F
   delete process.env.WEEKLY_FLOW_FOLDER;
   process.env.DOWNLOAD_FOLDER = "./data/downloads";
   try {
-    assert.equal(resolveWeeklyFlowRoot(), "/app/downloads");
+    assert.equal(
+      resolveWeeklyFlowRoot(),
+      path.resolve(process.cwd(), "./data/downloads"),
+    );
   } finally {
     if (previousPlaylist === undefined) delete process.env.PLAYLIST_FOLDER;
     else process.env.PLAYLIST_FOLDER = previousPlaylist;

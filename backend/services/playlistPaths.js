@@ -1,9 +1,22 @@
 import fs from "fs/promises";
 import path from "path";
+import { fileURLToPath } from "url";
 
 export const PLAYLIST_LIBRARY_DIR = "aurral-playlists";
 const LEGACY_LIBRARY_DIR = "aurral-weekly-flow";
-const DEFAULT_PLAYLIST_ROOT = "/app/downloads";
+const LEGACY_DOCKER_PLAYLIST_ROOT = "/app/downloads";
+const DEFAULT_DATA_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "data",
+);
+
+function defaultPlaylistRoot() {
+  const dataDir = process.env.AURRAL_DATA_DIR
+    ? path.resolve(process.env.AURRAL_DATA_DIR)
+    : path.resolve(DEFAULT_DATA_DIR);
+  return path.resolve(dataDir, "..", "downloads");
+}
 
 export function resolvePlaylistRoot(explicitRoot) {
   const override = String(explicitRoot ?? "").trim();
@@ -28,11 +41,13 @@ export function resolvePlaylistRoot(explicitRoot) {
   }
 
   const downloadFolder = String(process.env.DOWNLOAD_FOLDER || "").trim();
-  if (path.isAbsolute(downloadFolder)) {
-    return downloadFolder;
+  if (downloadFolder) {
+    return path.isAbsolute(downloadFolder)
+      ? downloadFolder
+      : path.resolve(process.cwd(), downloadFolder);
   }
 
-  return DEFAULT_PLAYLIST_ROOT;
+  return defaultPlaylistRoot();
 }
 
 export function remapLegacyPath(finalPath, playlistRoot = resolvePlaylistRoot()) {
@@ -41,7 +56,7 @@ export function remapLegacyPath(finalPath, playlistRoot = resolvePlaylistRoot())
   if (resolved === root || resolved.startsWith(`${root}${path.sep}`)) {
     return resolved;
   }
-  const legacyRoot = path.resolve(DEFAULT_PLAYLIST_ROOT);
+  const legacyRoot = path.resolve(LEGACY_DOCKER_PLAYLIST_ROOT);
   if (
     resolved === legacyRoot ||
     resolved.startsWith(`${legacyRoot}${path.sep}`)

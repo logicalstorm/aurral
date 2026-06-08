@@ -3,7 +3,6 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import { applyV2Migration } from "./schema-migration-v2.js";
-import { ensurePlaylistFilesystemLayout } from "../services/playlistFilesystemMigration.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -225,6 +224,5 @@ export const dbHelpers = {
 };
 
 applyV2Migration(db, dbHelpers);
-ensurePlaylistFilesystemLayout();
 
 export { db };
