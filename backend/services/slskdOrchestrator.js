@@ -99,6 +99,13 @@ function classifyTransferState(state) {
   return "pending";
 }
 
+function readBatchTransfers(batch) {
+  const transfers = batch?.transfers || batch?.Transfers;
+  if (Array.isArray(transfers)) return transfers;
+  if (Array.isArray(transfers?.$values)) return transfers.$values;
+  return [];
+}
+
 export function enqueueJobPipeline(jobId) {
   return downloadTracker.enqueueSlskdPipeline(jobId);
 }
@@ -117,14 +124,22 @@ export function enqueuePendingJobsWithoutBatch() {
 
 async function failJob(job, message) {
   downloadTracker.setFailed(job.id, message);
-  import("./aurralHistoryService.js")
-    .then(({ recordTrackJobFailed }) => recordTrackJobFailed(job, message))
-    .catch(() => {});
-  const { weeklyFlowWorker } = await import("./weeklyFlowWorker.js");
-  weeklyFlowWorker.wake(0);
-  await weeklyFlowWorker.checkPlaylistComplete(
-    job.playlistId || job.playlistType,
-  );
+  try {
+    const { recordTrackJobFailed } = await import("./aurralHistoryService.js");
+    recordTrackJobFailed(job, message);
+  } catch {}
+  try {
+    const { weeklyFlowWorker } = await import("./weeklyFlowWorker.js");
+    weeklyFlowWorker.wake(0);
+    await weeklyFlowWorker.checkPlaylistComplete(
+      job.playlistId || job.playlistType,
+    );
+  } catch (error) {
+    logger.slskd("warn", "Failed to run post-failure playlist checks", {
+      jobId: job.id,
+      error: error?.message || String(error),
+    });
+  }
 }
 
 export async function failPipelineJob(payload, message) {
@@ -247,6 +262,7 @@ async function runSearchQuery(query, searchIdRef) {
 async function handleSearch(payload) {
   const job = downloadTracker.getJob(payload.jobId);
   if (!job) return null;
+  if (job.status === "failed" || job.status === "done") return null;
   downloadTracker.setDownloading(job.id);
   import("./aurralHistoryService.js")
     .then(({ recordTrackJobSearching }) => recordTrackJobSearching(job))
@@ -318,6 +334,7 @@ async function handleSearch(payload) {
 async function handleDownload(payload) {
   const job = downloadTracker.getJob(payload.jobId);
   if (!job) return null;
+  if (job.status === "failed" || job.status === "done") return null;
   import("./aurralHistoryService.js")
     .then(({ recordTrackJobDownloading }) => recordTrackJobDownloading(job))
     .catch(() => {});
@@ -338,19 +355,43 @@ async function handleDownload(payload) {
     candidate.raw.file,
     job.id,
   );
-  const result = await slskdClient.enqueueBatch({
-    username: candidate.raw.user,
-    files: [
-      {
-        filename: candidate.raw.file,
-        size: Number(candidate.raw.size || 0),
+  let result;
+  try {
+    result = await slskdClient.enqueueBatch({
+      username: candidate.raw.user,
+      files: [
+        {
+          filename: candidate.raw.file,
+          size: Number(candidate.raw.size || 0),
+        },
+      ],
+      options: {
+        destination: payload.destination,
+        externalId: job.id,
+        searchId,
       },
-    ],
-    options: {
-      destination: payload.destination,
-      externalId: job.id,
-    },
-  });
+    });
+  } catch (error) {
+    const message = error?.message || String(error);
+    logger.slskd("warn", "slskd batch enqueue failed for candidate", {
+      jobId: job.id,
+      username: candidate.raw.user,
+      file: candidate.raw.file,
+      candidateIndex: index,
+      error: message,
+    });
+    const nextIndex = index + 1;
+    if (nextIndex < candidates.length) {
+      return {
+        ...payload,
+        phase: "download",
+        candidateIndex: nextIndex,
+        pollAttempts: 0,
+      };
+    }
+    await failJob(job, message);
+    return null;
+  }
   updateSlskdMetaStmt.run(null, result.batchId, null, null, job.id);
   job.slskdBatchId = result.batchId;
   return {
@@ -366,6 +407,7 @@ async function handleDownload(payload) {
 async function handlePoll(payload) {
   const job = downloadTracker.getJob(payload.jobId);
   if (!job) return null;
+  if (job.status === "failed" || job.status === "done") return null;
   const pollAttempts = Number(payload.pollAttempts || 0) + 1;
   if (pollAttempts > MAX_POLL_ATTEMPTS) {
     await failJob(job, "slskd transfer polling timed out");
@@ -375,8 +417,22 @@ async function handlePoll(payload) {
   if (!batch) {
     return { ...payload, phase: "poll", delaySeconds: 3, pollAttempts };
   }
-  const transfers = Array.isArray(batch?.transfers) ? batch.transfers : [];
+  const transfers = readBatchTransfers(batch);
   if (transfers.length === 0) {
+    const nextIndex = Number(payload.candidateIndex || 0) + 1;
+    if (pollAttempts >= 3 && nextIndex < (payload.candidates?.length || 0)) {
+      logger.slskd("warn", "slskd batch has no transfers; trying next candidate", {
+        jobId: job.id,
+        batchId: payload.batchId,
+        candidateIndex: Number(payload.candidateIndex || 0),
+      });
+      return {
+        ...payload,
+        phase: "download",
+        candidateIndex: nextIndex,
+        pollAttempts: 0,
+      };
+    }
     if (pollAttempts >= MAX_EMPTY_POLL_ATTEMPTS) {
       await failJob(job, "slskd batch returned no transfers");
       return null;
@@ -410,6 +466,7 @@ async function handlePoll(payload) {
 async function handleFinalize(payload) {
   const job = downloadTracker.getJob(payload.jobId);
   if (!job) return null;
+  if (job.status === "failed" || job.status === "done") return null;
   const playlistRoot = resolvePlaylistRoot();
   const slskdRoot = await slskdClient.getDownloadDirectory();
   const destination = String(payload.destination || "").trim();
