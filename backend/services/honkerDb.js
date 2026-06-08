@@ -45,10 +45,14 @@ export function enqueuePipelineJob(payload, options = {}) {
       : options.delaySeconds != null
         ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
         : null;
-  return queue.enqueue(payload, {
+  const jobId = queue.enqueue(payload, {
     priority: Number(options.priority || 0),
     runAt,
   });
+  import("./slskdOrchestratorWorker.js")
+    .then(({ startSlskdOrchestratorWorker }) => startSlskdOrchestratorWorker())
+    .catch(() => {});
+  return jobId;
 }
 
 export function getDiscoveryRefreshQueue() {
