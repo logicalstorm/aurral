@@ -5914,6 +5914,12 @@ textarea {
   color: var(--aurral-warning);
 }
 
+.requests-page__load-more {
+  display: flex;
+  justify-content: center;
+  padding: 1.5rem 0 0.5rem;
+}
+
 .login-page {
   display: flex;
   min-height: 100vh;
