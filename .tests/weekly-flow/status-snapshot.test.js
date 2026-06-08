@@ -27,8 +27,8 @@ test.beforeEach(() => {
   dbOps.updateSettings({
     integrations: {},
     onboardingComplete: true,
-    weeklyFlows: [],
-    sharedFlowPlaylists: [],
+    flows: [],
+    sharedPlaylists: [],
   });
 });
 
