@@ -86,7 +86,7 @@ backend/
   config/              SQLite, settings, encryption, sessions, constants
   middleware/          auth, permissions, cache, validation, URL validation
   routes/              API route groups
-  services/            Lidarr, discovery, metadata, images, flows, Soulseek, Navidrome
+  services/            Lidarr, discovery, metadata, images, flows, slskd, Navidrome
   scripts/             maintenance scripts
 frontend/
   src/

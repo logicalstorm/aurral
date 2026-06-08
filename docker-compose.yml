@@ -5,7 +5,7 @@ services:
     ports:
       - "3001:3001"
     environment:
-      - DOWNLOAD_FOLDER=${DL_FOLDER:-./data/downloads}
+      - DOWNLOAD_FOLDER=${DOWNLOAD_FOLDER:-/data/downloads/aurral}
     volumes:
-      - ${DL_FOLDER:-./data/downloads}:/app/downloads
-      - ${STORAGE:-./data}:/app/backend/data
+      - ${DATA_ROOT:-./data}:/data
+      - ${STORAGE:-./data/app}:/app/backend/data

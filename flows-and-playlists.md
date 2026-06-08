@@ -140,19 +140,20 @@ Imported playlists are separate from flows.
 
 ## Existing file reuse
 
-Aurral keeps every generated playlist entry inside its own playlist folder under `aurral-weekly-flow/<playlist-id>`. When existing file reuse is enabled, that entry can be a hardlink or copy instead of a new Soulseek download.
+Aurral keeps every generated playlist entry inside its own playlist folder under `aurral-playlists/<playlist-id>`. When existing file reuse is enabled, that entry can point at a matching completed Aurral or Lidarr file instead of a new slskd download.
 
 - `Download` always downloads a new file.
-- `Hardlink` tries to hardlink a matching completed Aurral or Lidarr file, then falls back to copying.
-- `Copy` copies matching completed Aurral or Lidarr files into the generated playlist library.
+- `Reuse existing files` uses a matching completed Aurral or Lidarr file when one is available.
 
-Aurral-global reuse prevents the same imported track from being downloaded again for another playlist. Lidarr-aware reuse requires Aurral to see Lidarr's root directory the same way Lidarr sees it. In Lidarr, find this at `Settings -> Media Management -> Root Folders -> Path`. If your Lidarr root folder is `/data`, mount that same host library path into Aurral as `/data`:
+Aurral-global reuse prevents the same imported track from being downloaded again for another playlist. Lidarr-aware reuse requires Aurral to see Lidarr's root directory the same way Lidarr sees it. In Lidarr, find this at `Settings -> Media Management -> Root Folders -> Path`. Mount that same host library path into Aurral at the same container path, and mount the shared download root used by `DOWNLOAD_FOLDER`:
 
 ```yaml
 aurral:
+  environment:
+    - DOWNLOAD_FOLDER=/data/downloads/aurral
   volumes:
-    - /srv/aurral/downloads:/app/downloads
-    - /srv/music:/data:ro
+    - /srv/aurral-shared:/data
+    - /srv/music:/music:ro
 ```
 
 ## What the importer accepts
