@@ -20,6 +20,46 @@ import { useToast } from "../contexts/ToastContext";
 import { useWebSocketChannel } from "../hooks/useWebSocket";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
+const HISTORY_TABS = [
+  { value: "all", label: "All" },
+  { value: "lidarr", label: "Lidarr" },
+  { value: "slskd", label: "slskd" },
+  { value: "aurral", label: "Aurral" },
+];
+
+const getHistorySource = (request) => {
+  if (request.source === "slskd") return "slskd";
+  if (request.source === "aurral") return "aurral";
+  if (request.source === "lidarr") return "lidarr";
+  if (request.type === "album" || request.albumId) return "lidarr";
+  return "aurral";
+};
+
+const matchesHistoryTab = (request, tab) => {
+  if (tab === "all") return true;
+  return getHistorySource(request) === tab;
+};
+
+const EMPTY_STATE_COPY = {
+  all: {
+    title: "No History Yet",
+    message: "Downloads, requests, and app activity will show up here.",
+  },
+  lidarr: {
+    title: "No Lidarr Activity",
+    message: "Album requests and downloads from Lidarr will appear here.",
+  },
+  slskd: {
+    title: "No slskd Downloads",
+    message: "Playlist track downloads from slskd will appear here.",
+  },
+  aurral: {
+    title: "No Aurral Activity",
+    message:
+      "Discovery refreshes, album requests, track searches, playlist changes, and other background work will appear here.",
+  },
+};
+
 function RequestStatusBadge({ request, downloadStatuses }) {
   if (request.source === "slskd") {
     if (request.status === "completed") {
@@ -50,6 +90,39 @@ function RequestStatusBadge({ request, downloadStatuses }) {
       <span className="requests-page__badge requests-page__badge--pending">
         <Clock className="artist-icon-xs" />
         Pending
+      </span>
+    );
+  }
+
+  if (request.source === "aurral") {
+    if (request.status === "completed") {
+      return (
+        <span className="requests-page__badge requests-page__badge--success">
+          <CheckCircle2 className="artist-icon-xs" />
+          {request.statusLabel || "Completed"}
+        </span>
+      );
+    }
+    if (request.status === "failed") {
+      return (
+        <span className="requests-page__badge requests-page__badge--failed">
+          <AlertCircle className="artist-icon-xs" />
+          {request.statusLabel || "Failed"}
+        </span>
+      );
+    }
+    if (request.status === "processing" || request.status === "pending") {
+      return (
+        <span className="requests-page__badge requests-page__badge--active">
+          <Loader className="artist-icon-xs animate-spin" />
+          {request.statusLabel || "Working"}
+        </span>
+      );
+    }
+    return (
+      <span className="requests-page__badge requests-page__badge--pending">
+        <Clock className="artist-icon-xs" />
+        {request.statusLabel || "Updated"}
       </span>
     );
   }
@@ -155,11 +228,12 @@ function RequestStatusBadge({ request, downloadStatuses }) {
   );
 }
 
-function RequestsPage() {
-  useDocumentTitle("Requests");
+function HistoryPage() {
+  useDocumentTitle("History");
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState("all");
   const [downloadStatuses, setDownloadStatuses] = useState({});
   const [reSearchingAlbumIds, setReSearchingAlbumIds] = useState({});
   const navigate = useNavigate();
@@ -197,6 +271,11 @@ function RequestsPage() {
 
   useWebSocketChannel("downloads", handleDownloadStatusMessage);
 
+  const filteredRequests = useMemo(
+    () => requests.filter((request) => matchesHistoryTab(request, activeTab)),
+    [requests, activeTab],
+  );
+
   const activeAlbumIds = useMemo(() => {
     return requests
       .filter(
@@ -225,7 +304,7 @@ function RequestsPage() {
       setRequests(data);
       setError(null);
     } catch {
-      setError("Failed to load requests history.");
+      setError("Failed to load history.");
     } finally {
       if (!silent) {
         setLoading(false);
@@ -382,13 +461,15 @@ function RequestsPage() {
     });
   };
 
+  const emptyState = EMPTY_STATE_COPY[activeTab] || EMPTY_STATE_COPY.all;
+
   if (loading) {
     return (
       <div className="requests-page">
         <header className="requests-page__header">
-          <h1 className="requests-page__title">Requests</h1>
+          <h1 className="requests-page__title">History</h1>
           <p className="requests-page__subtitle">
-            Track your album requests and their availability
+            Downloads, requests, and activity across Lidarr, slskd, and Aurral
           </p>
         </header>
         <div className="artist-loading">
@@ -401,16 +482,31 @@ function RequestsPage() {
   return (
     <div className="requests-page">
       <header className="requests-page__header">
-        <h1 className="requests-page__title">Requests</h1>
+        <h1 className="requests-page__title">History</h1>
         <p className="requests-page__subtitle">
-          Track your album requests and their availability
+          Downloads, requests, and activity across Lidarr, slskd, and Aurral
         </p>
       </header>
+
+      <div className="artist-tabs requests-page__tabs" role="tablist">
+        {HISTORY_TABS.map((tab) => (
+          <button
+            key={tab.value}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.value}
+            onClick={() => setActiveTab(tab.value)}
+            className={`artist-tab${activeTab === tab.value ? " is-active" : ""}`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
       {error && (
         <div className="artist-error-panel requests-page__error" role="alert">
           <AlertCircle className="artist-error-icon" aria-hidden="true" />
-          <h2 className="artist-error-title">Unable to load requests</h2>
+          <h2 className="artist-error-title">Unable to load history</h2>
           <p className="artist-error-copy">{error}</p>
           <button
             type="button"
@@ -422,39 +518,42 @@ function RequestsPage() {
         </div>
       )}
 
-      {!error && requests.length === 0 ? (
+      {!error && filteredRequests.length === 0 ? (
         <div className="search-empty-panel">
           <div className="search-empty-panel__icon" aria-hidden="true">
             <Music className="artist-icon-lg" />
           </div>
-          <h2 className="search-empty-panel__title">No Requests Found</h2>
-          <p className="search-empty-panel__message">
-            You haven&apos;t requested any albums yet.
-          </p>
-          <button
-            type="button"
-            onClick={() => navigate("/")}
-            className="btn btn-primary btn--bold btn-min-h requests-page__empty-action"
-          >
-            Start Discovering
-          </button>
+          <h2 className="search-empty-panel__title">{emptyState.title}</h2>
+          <p className="search-empty-panel__message">{emptyState.message}</p>
+          {activeTab === "all" && (
+            <button
+              type="button"
+              onClick={() => navigate("/")}
+              className="btn btn-primary btn--bold btn-min-h requests-page__empty-action"
+            >
+              Start Discovering
+            </button>
+          )}
         </div>
       ) : (
         !error && (
           <div className="requests-page__list">
-            {requests.map((request) => {
+            {filteredRequests.map((request) => {
               const isSlskd = request.source === "slskd";
+              const isAurral = request.source === "aurral";
               const isAlbum = request.type === "album";
-              const displayName = isSlskd
+              const displayName = isSlskd || isAurral
                 ? request.title
                 : isAlbum
                   ? request.albumName
                   : request.name;
               const artistName = isSlskd
                 ? String(request.subtitle || "").split(" · ")[0] || null
-                : isAlbum
-                  ? request.artistName
-                  : null;
+                : isAurral
+                  ? request.subtitle || null
+                  : isAlbum
+                    ? request.artistName
+                    : null;
               const artistMbid = isAlbum ? request.artistMbid : request.mbid;
               const hasValidMbid =
                 artistMbid && artistMbid !== "null" && artistMbid !== "undefined";
@@ -475,10 +574,14 @@ function RequestsPage() {
                   className="requests-page__row"
                 >
                   <div
-                    className={`artist-media-cell artist-list-cover requests-page__cover${hasValidMbid || isSlskd ? " is-clickable" : " is-disabled"}`}
+                    className={`artist-media-cell artist-list-cover requests-page__cover${hasValidMbid || isSlskd || isAurral ? " is-clickable" : " is-disabled"}`}
                     onClick={() => {
                       if (isSlskd && request.playlistId) {
                         navigate(`/playlists?selected=${encodeURIComponent(request.playlistId)}`);
+                        return;
+                      }
+                      if (isAurral && request.href) {
+                        navigate(request.href);
                         return;
                       }
                       navigateToArtist(
@@ -490,7 +593,7 @@ function RequestsPage() {
                       );
                     }}
                   >
-                    {isSlskd ? (
+                    {isSlskd || isAurral ? (
                       <div className="requests-page__cover-fallback">
                         <Music className="artist-icon-lg" />
                       </div>
@@ -508,22 +611,26 @@ function RequestsPage() {
                   <div className="requests-page__body">
                     <div className="requests-page__details">
                       <h3
-                        className={`requests-page__item-title${hasValidMbid ? " is-clickable" : " is-disabled"}`}
-                        onClick={() =>
+                        className={`requests-page__item-title${hasValidMbid || isAurral ? " is-clickable" : " is-disabled"}`}
+                        onClick={() => {
+                          if (isAurral && request.href) {
+                            navigate(request.href);
+                            return;
+                          }
                           navigateToArtist(
                             request,
                             isAlbum,
                             artistMbid,
                             artistName,
                             displayName,
-                          )
-                        }
+                          );
+                        }}
                       >
                         {displayName}
                       </h3>
 
                       <div className="requests-page__meta">
-                        {isAlbum && artistName && (
+                        {(isAlbum || isAurral) && artistName && (
                           <span className="requests-page__meta-line">
                             <Music className="artist-icon-xs" />
                             <span className="artist-truncate">{artistName}</span>
@@ -593,4 +700,4 @@ function RequestsPage() {
   );
 }
 
-export default RequestsPage;
+export default HistoryPage;

@@ -91,6 +91,9 @@ export function enqueuePendingJobsWithoutBatch() {
 
 async function failJob(job, message) {
   downloadTracker.setFailed(job.id, message);
+  import("./aurralHistoryService.js")
+    .then(({ recordTrackJobFailed }) => recordTrackJobFailed(job, message))
+    .catch(() => {});
   const { weeklyFlowWorker } = await import("./weeklyFlowWorker.js");
   weeklyFlowWorker.wake(0);
   await weeklyFlowWorker.checkPlaylistComplete(job.playlistId || job.playlistType);
@@ -208,6 +211,9 @@ async function handleSearch(payload) {
   const job = downloadTracker.getJob(payload.jobId);
   if (!job) return null;
   downloadTracker.setDownloading(job.id);
+  import("./aurralHistoryService.js")
+    .then(({ recordTrackJobSearching }) => recordTrackJobSearching(job))
+    .catch(() => {});
   const resolvedTrack = buildResolvedTrack(job);
   const queries = buildFlowSearchQueries(resolvedTrack).slice(0, MAX_SEARCH_QUERIES);
   const searchOptions = await getWorkerSearchOptions();
@@ -250,6 +256,9 @@ async function handleSearch(payload) {
 async function handleDownload(payload) {
   const job = downloadTracker.getJob(payload.jobId);
   if (!job) return null;
+  import("./aurralHistoryService.js")
+    .then(({ recordTrackJobDownloading }) => recordTrackJobDownloading(job))
+    .catch(() => {});
   const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
   const index = Number(payload.candidateIndex || 0);
   const candidate = candidates[index];
@@ -385,6 +394,9 @@ async function handleFinalize(payload) {
     finalPath,
     candidate?.resolvedAlbumName || job.albumName,
   );
+  import("./aurralHistoryService.js")
+    .then(({ recordTrackJobCompleted }) => recordTrackJobCompleted(job))
+    .catch(() => {});
   const playlistType = job.playlistId || job.playlistType;
   const { playlistManager } = await import("./weeklyFlowPlaylistManager.js");
   await playlistManager.refreshPlaylist(playlistType);

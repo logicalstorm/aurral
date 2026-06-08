@@ -103,7 +103,7 @@ function Sidebar({ appVersion, mode }) {
         permission: "accessFlow",
       },
       { path: "/blocklist", label: "Blocklist", icon: Ban },
-      { path: "/requests", label: "Requests", icon: History },
+      { path: "/history", label: "History", icon: History },
     ];
     return items.filter(
       (item) =>
@@ -230,7 +230,7 @@ function Sidebar({ appVersion, mode }) {
                 const Icon = item.icon;
                 const active = isActive(item.path);
                 const showActivityDot =
-                  item.path === "/requests" && hasRequestActivity;
+                  item.path === "/history" && hasRequestActivity;
 
                 return (
                   <Link
