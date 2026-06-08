@@ -100,6 +100,49 @@ test("flattenSearchResults reads slskd collection wrapper payloads", () => {
   assert.equal(results[0].bitrate, 1411);
 });
 
+test("createSearch sends slskd search timeout in milliseconds", async () => {
+  const originalSettings = dbOps.getSettings();
+  let requestBody = null;
+  const mock = await createMockServer(async (request, response) => {
+    let body = "";
+    request.on("data", (chunk) => {
+      body += chunk.toString();
+    });
+    request.on("end", () => {
+      if (request.method === "POST" && request.url === "/api/v0/searches") {
+        requestBody = JSON.parse(body);
+        response.writeHead(201, { "content-type": "application/json" });
+        response.end(JSON.stringify({ id: requestBody.id }));
+        return;
+      }
+      response.writeHead(404);
+      response.end();
+    });
+  });
+
+  dbOps.updateSettings({
+    ...originalSettings,
+    integrations: {
+      ...(originalSettings.integrations || {}),
+      slskd: {
+        url: mock.url,
+        apiKey: "test-key",
+      },
+    },
+  });
+
+  try {
+    await slskdClient.createSearch("Equipment Wet Mulch", {
+      id: "00000000-0000-4000-8000-000000000003",
+      searchTimeoutMs: 120000,
+    });
+    assert.equal(requestBody.searchTimeout, 120000);
+  } finally {
+    dbOps.updateSettings(originalSettings);
+    await mock.close();
+  }
+});
+
 test("enqueueBatch rejects slskd all-failed batch responses", async () => {
   const originalSettings = dbOps.getSettings();
   const mock = await createMockServer(async (request, response) => {
