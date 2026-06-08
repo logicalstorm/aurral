@@ -575,8 +575,11 @@ export const createAuthMiddleware = () => {
       /^\/api\/library\/file-stream\/[^/]+\/[^/]+$/i.test(req.path) ||
       /^\/api\/artists\/[a-f0-9-]{36}\/stream$/i.test(req.path) ||
       /^\/api\/weekly-flow\/stream\/[^/]+$/i.test(req.path) ||
+      /^\/api\/playlists\/stream\/[^/]+$/i.test(req.path) ||
       (req.method === "GET" &&
-        /^\/api\/weekly-flow\/artwork\/[^/]+$/i.test(req.path))
+        /^\/api\/weekly-flow\/artwork\/[^/]+$/i.test(req.path)) ||
+      (req.method === "GET" &&
+        /^\/api\/playlists\/artwork\/[^/]+$/i.test(req.path))
     ) {
       return next();
     }

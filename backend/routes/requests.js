@@ -83,7 +83,61 @@ const refreshRequestsCache = async (lidarrClient) => {
   return pendingRequestsRefresh;
 };
 
-const buildRequestsResponse = async (lidarrClient) => {
+const mapSlskdJobStatus = (status) => {
+  if (status === "done") return "completed";
+  if (status === "failed") return "failed";
+  if (status === "downloading") return "downloading";
+  return "pending";
+};
+
+const buildSlskdRequests = async () => {
+  const [{ downloadTracker }, { flowPlaylistConfig }] = await Promise.all([
+    import("../services/weeklyFlowDownloadTracker.js"),
+    import("../services/weeklyFlowPlaylistConfig.js"),
+  ]);
+  const playlistNames = new Map();
+  for (const flow of flowPlaylistConfig.getFlows()) {
+    playlistNames.set(String(flow.id), flow.name || flow.id);
+  }
+  for (const playlist of flowPlaylistConfig.getSharedPlaylists()) {
+    playlistNames.set(String(playlist.id), playlist.name || playlist.id);
+  }
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  return downloadTracker
+    .getAll()
+    .filter((job) => {
+      if (job.status === "pending" || job.status === "downloading") {
+        return true;
+      }
+      if (job.status === "failed") {
+        return Number(job.completedAt || 0) >= cutoff;
+      }
+      if (job.status === "done") {
+        return Number(job.completedAt || 0) >= cutoff;
+      }
+      return false;
+    })
+    .map((job) => {
+      const playlistId = String(job.playlistId || job.playlistType || "");
+      const playlistName = playlistNames.get(playlistId) || playlistId;
+      return {
+        id: `slskd-${job.id}`,
+        source: "slskd",
+        type: "track",
+        title: job.trackName,
+        subtitle: `${job.artistName} · ${playlistName}`,
+        status: mapSlskdJobStatus(job.status),
+        requestedAt: toIso(job.createdAt),
+        playlistId,
+        jobId: job.id,
+        slskdBatchId: job.slskdBatchId || null,
+        remoteUsername: job.remoteUsername || null,
+        inQueue: job.status === "pending" || job.status === "downloading",
+      };
+    });
+};
+
+const buildLidarrRequests = async (lidarrClient) => {
   const [queue, history] = await Promise.all([
     lidarrClient.getQueue().catch(() => []),
     lidarrClient.getHistory(1, 200).catch(() => ({ records: [] })),
@@ -372,15 +426,28 @@ const buildRequestsResponse = async (lidarrClient) => {
   return filterDismissedRequests(sorted);
 };
 
+const buildRequestsResponse = async (lidarrClient) => {
+  const [lidarrRequests, slskdRequests] = await Promise.all([
+    lidarrClient?.isConfigured()
+      ? buildLidarrRequests(lidarrClient)
+      : Promise.resolve([]),
+    buildSlskdRequests(),
+  ]);
+  return [...lidarrRequests, ...slskdRequests].sort(
+    (a, b) => new Date(b.requestedAt) - new Date(a.requestedAt),
+  );
+};
+
 router.get("/", requireAuth, noCache, async (req, res) => {
   try {
     pruneDismissedAlbumIds();
     const { lidarrClient } = await import("../services/lidarrClient.js");
 
     if (!lidarrClient?.isConfigured()) {
-      lastRequestsResponse = null;
-      lastRequestsAt = 0;
-      return res.json([]);
+      const slskdOnly = await buildSlskdRequests();
+      lastRequestsResponse = slskdOnly;
+      lastRequestsAt = Date.now();
+      return res.json(slskdOnly);
     }
 
     const now = Date.now();
