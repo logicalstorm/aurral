@@ -210,6 +210,24 @@ async function moveIntoPlaylistLibrary(sourcePath, targetPath) {
   }
 }
 
+async function cleanupEmptyAncestors(dir, rootBoundary) {
+  const root = path.resolve(String(rootBoundary || "").trim());
+  if (!root) return;
+  let current = path.resolve(String(dir || "").trim());
+  if (!current || current === root) return;
+  while (current.startsWith(`${root}${path.sep}`)) {
+    try {
+      const entries = await fs.readdir(current);
+      if (entries.length > 0) break;
+      await fs.rmdir(current);
+      current = path.dirname(current);
+      if (current === root) break;
+    } catch {
+      break;
+    }
+  }
+}
+
 async function locateCompletedDownload(
   slskdRoot,
   playlistRoot,
@@ -588,7 +606,15 @@ async function handleFinalize(payload) {
   const finalDir = joinUnderRoot(playlistRoot, destination);
   const finalName = `${sanitizePathPart(job.trackName, "Unknown Track")}${ext || ".mp3"}`;
   const finalPath = path.join(finalDir, finalName);
+  import("./aurralHistoryService.js")
+    .then(({ recordTrackJobMoving }) => recordTrackJobMoving(job))
+    .catch(() => {});
   await moveIntoPlaylistLibrary(sourcePath, finalPath);
+  if (slskdRoot) {
+    await cleanupEmptyAncestors(path.dirname(sourcePath), slskdRoot).catch(
+      () => {},
+    );
+  }
   const validation = await validateDownloadedTrack(
     finalPath,
     candidate,
