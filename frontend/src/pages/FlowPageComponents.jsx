@@ -24,7 +24,6 @@ import {
   Plus,
   Search,
   ChevronDown,
-  RefreshCw,
   MoreHorizontal,
   Save,
   X,
@@ -3301,7 +3300,7 @@ export function FlowWorkerSettingsModal({
             type="button"
             onClick={onCancel}
             className="btn btn-secondary"
-            disabled={saving || rotatingSoulseekCredential}
+            disabled={saving}
           >
             Cancel
           </button>
@@ -3309,7 +3308,7 @@ export function FlowWorkerSettingsModal({
             type="button"
             onClick={onSave}
             className="btn btn-primary"
-            disabled={!hasChanges || saving || rotatingSoulseekCredential}
+            disabled={!hasChanges || saving}
           >
             {saving ? (
               <Loader2 className="artist-icon-xs animate-spin" />
