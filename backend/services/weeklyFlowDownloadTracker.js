@@ -589,6 +589,7 @@ export class WeeklyFlowDownloadTracker {
   removeJob(id) {
     const job = this.jobs.get(id);
     if (!job) return false;
+    this.clearSlskdPipelineState(id);
     this.jobs.delete(id);
     this.pendingSet.delete(id);
     this.pendingRetrySet.delete(id);
