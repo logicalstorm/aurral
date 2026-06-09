@@ -1,5 +1,6 @@
 import axios from "axios";
 import sharp from "sharp";
+import { FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS } from "../config/discoverPlaylistPresets.js";
 
 const ARTWORK_SIZE = 1200;
 const TITLE_PADDING_X = 72;
@@ -48,8 +49,26 @@ const buildPaletteFromHex = (hex) => {
   };
 };
 
+const hashString = (value) => {
+  let hash = 0;
+  const input = String(value || "");
+  for (let index = 0; index < input.length; index += 1) {
+    hash = input.charCodeAt(index) + ((hash << 5) - hash);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+};
+
 export const pickRandomPhotoArtworkPalette = () => {
   const index = Math.floor(Math.random() * PHOTO_ARTWORK_COLORS.length);
+  return buildPaletteFromHex(PHOTO_ARTWORK_COLORS[index]);
+};
+
+export const pickSeededPhotoArtworkPalette = (seed) => {
+  const presetId = String(seed || "").trim();
+  const fixedHex = FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS[presetId];
+  if (fixedHex) return buildPaletteFromHex(fixedHex);
+  const index = hashString(presetId) % PHOTO_ARTWORK_COLORS.length;
   return buildPaletteFromHex(PHOTO_ARTWORK_COLORS[index]);
 };
 
@@ -150,7 +169,11 @@ export async function fetchImageBuffer(imageUrl) {
   return Buffer.from(response.data);
 }
 
-export async function renderStylizedPhotoArtwork({ imageBuffer, title }) {
+export async function renderStylizedPhotoArtwork({
+  imageBuffer,
+  title,
+  paletteSeed = null,
+}) {
   const base = sharp(imageBuffer, { animated: false })
     .resize(ARTWORK_SIZE, ARTWORK_SIZE, { fit: "cover", position: "attention" })
     .ensureAlpha();
@@ -164,7 +187,9 @@ export async function renderStylizedPhotoArtwork({ imageBuffer, title }) {
     .raw()
     .toBuffer();
 
-  const palette = pickRandomPhotoArtworkPalette();
+  const palette = paletteSeed
+    ? pickSeededPhotoArtworkPalette(paletteSeed)
+    : pickRandomPhotoArtworkPalette();
   const mappedRgb = mapToneBufferToPalette(toneMapRaw, palette);
   const mappedImage = await sharp(mappedRgb, {
     raw: { width: ARTWORK_SIZE, height: ARTWORK_SIZE, channels: 3 },

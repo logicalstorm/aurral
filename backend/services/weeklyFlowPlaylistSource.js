@@ -2217,7 +2217,9 @@ export class WeeklyFlowPlaylistSource {
     const { getRecentMissingReleases } = await import(
       "./recentReleasesService.js"
     );
-    const albums = await getRecentMissingReleases(limit);
+    const albums = await getRecentMissingReleases(limit, {
+      artists: options?.libraryArtists,
+    });
     if (albums.length === 0) return [];
 
     const tracks = [];

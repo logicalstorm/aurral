@@ -44,6 +44,7 @@ export async function buildGeneratedPlaylistArtworkBuffer({
   relatedArtists = [],
   style = null,
   rotateSourceImage = false,
+  paletteSeed = null,
 }) {
   const resolvedStyle = style || getPlaylistArtworkStyle();
   const displayTitle = String(title || "").trim() || "Untitled";
@@ -60,6 +61,7 @@ export async function buildGeneratedPlaylistArtworkBuffer({
   return renderStylizedPhotoArtwork({
     imageBuffer: sourceBuffer,
     title: displayTitle,
+    paletteSeed,
   });
 }
 
@@ -78,6 +80,7 @@ export async function writeGeneratedPlaylistArtwork({
   relatedArtists = [],
   style = null,
   rotateSourceImage = false,
+  paletteSeed = null,
 }) {
   const resolvedStyle = style || getPlaylistArtworkStyle();
   const targetPath = resolveArtworkOutputPath(outputPath, resolvedStyle);
@@ -99,6 +102,7 @@ export async function writeGeneratedPlaylistArtwork({
     relatedArtists,
     style: resolvedStyle,
     rotateSourceImage,
+    paletteSeed,
   });
   await fs.writeFile(targetPath, buffer);
   return targetPath;

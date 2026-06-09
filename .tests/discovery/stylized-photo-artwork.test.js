@@ -7,8 +7,12 @@ import { importFromRepo } from "../helpers/backendTestHarness.js";
 const {
   PHOTO_ARTWORK_COLORS,
   pickRandomPhotoArtworkPalette,
+  pickSeededPhotoArtworkPalette,
   renderStylizedPhotoArtwork,
 } = await importFromRepo("backend/services/stylizedPhotoArtwork.js");
+const { FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS } = await importFromRepo(
+  "backend/config/discoverPlaylistPresets.js",
+);
 
 test("renderStylizedPhotoArtwork returns a square JPEG cover", async () => {
   const sourceBuffer = await sharp({
@@ -32,6 +36,20 @@ test("renderStylizedPhotoArtwork returns a square JPEG cover", async () => {
   assert.equal(metadata.height, 1200);
   assert.equal(metadata.format, "jpeg");
   assert.ok(output.length > 10_000);
+});
+
+test("fixed discover playlists use stable unique seeded colors", () => {
+  const presetIds = Object.keys(FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS);
+  const seen = new Set();
+
+  for (const presetId of presetIds) {
+    const first = pickSeededPhotoArtworkPalette(presetId);
+    const second = pickSeededPhotoArtworkPalette(presetId);
+    assert.deepEqual(first, second);
+    seen.add(`${first.light.r},${first.light.g},${first.light.b}`);
+  }
+
+  assert.equal(seen.size, presetIds.length);
 });
 
 test("pickRandomPhotoArtworkPalette uses the configured distinct colors", () => {
