@@ -39,7 +39,6 @@ import {
 import { getLastfmApiKey } from "../services/apiClients.js";
 
 const router = express.Router();
-const FLOW_WORKER_RETRY_CYCLE_OPTIONS_MINUTES = [15, 30, 60, 360, 720, 1440];
 const EXISTING_FILE_MODE_OPTIONS = ["download", "reuse"];
 const AUDIO_CONTENT_TYPES = {
   ".mp3": "audio/mpeg",
@@ -1677,23 +1676,12 @@ router.get("/worker/settings", requireAdmin, (req, res) => {
 });
 
 router.put("/worker/settings", requireAdmin, async (req, res) => {
-  const { concurrency, retryCycleMinutes, existingFileMode } = req.body || {};
+  const { concurrency, existingFileMode } = req.body || {};
   if (concurrency !== undefined) {
     const parsed = Number(concurrency);
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > 3) {
       return res.status(400).json({
         error: "concurrency must be an integer between 1 and 3",
-      });
-    }
-  }
-  if (retryCycleMinutes !== undefined) {
-    const parsed = Number(retryCycleMinutes);
-    if (
-      !Number.isInteger(parsed) ||
-      !FLOW_WORKER_RETRY_CYCLE_OPTIONS_MINUTES.includes(parsed)
-    ) {
-      return res.status(400).json({
-        error: "retryCycleMinutes must be one of: 15, 30, 60, 360, 720, 1440",
       });
     }
   }
@@ -1707,7 +1695,6 @@ router.put("/worker/settings", requireAdmin, async (req, res) => {
   }
   const settings = weeklyFlowWorker.updateWorkerSettings({
     concurrency,
-    retryCycleMinutes,
     existingFileMode,
   });
   return res.json({ success: true, settings });

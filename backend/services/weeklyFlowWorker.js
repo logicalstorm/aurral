@@ -19,8 +19,7 @@ import { startSlskdOrchestratorWorker } from "./slskdOrchestratorWorker.js";
 const DEFAULT_CONCURRENCY = 3;
 const MIN_CONCURRENCY = 1;
 const MAX_CONCURRENCY = 3;
-const FLOW_WORKER_RETRY_CYCLE_OPTIONS_MINUTES = [15, 30, 60, 360, 720, 1440];
-const DEFAULT_RETRY_CYCLE_MINUTES = 15;
+const DEFAULT_RETRY_CYCLE_MINUTES = 360;
 const JOB_COOLDOWN_MS = 750;
 const RETRY_BASE_DELAY_MS = 5000;
 const RETRY_MAX_DELAY_MS = 120000;
@@ -206,20 +205,6 @@ export class WeeklyFlowWorker {
     }
   }
 
-  _rescheduleIncompleteRetries(
-    delayMs = this._getIncompleteRetryDelayMs(),
-  ) {
-    const playlistTypes = [...this.incompleteRetryTimers.keys()];
-    if (playlistTypes.length === 0) return 0;
-    for (const playlistType of playlistTypes) {
-      this.clearIncompleteRetry(playlistType);
-    }
-    for (const playlistType of playlistTypes) {
-      this._scheduleIncompleteRetry(playlistType, delayMs);
-    }
-    return playlistTypes.length;
-  }
-
   _normalizeRetryPausedPlaylistIds(value) {
     if (!Array.isArray(value)) return [];
     const out = new Set();
@@ -384,23 +369,12 @@ export class WeeklyFlowWorker {
     );
   }
 
-  _normalizeRetryCycleMinutes(value) {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return DEFAULT_RETRY_CYCLE_MINUTES;
-    const normalized = Math.floor(parsed);
-    if (FLOW_WORKER_RETRY_CYCLE_OPTIONS_MINUTES.includes(normalized)) {
-      return normalized;
-    }
-    return DEFAULT_RETRY_CYCLE_MINUTES;
-  }
-
   _normalizeExistingFileMode(value) {
     return normalizeExistingFileMode(value);
   }
 
   _getIncompleteRetryDelayMs() {
-    const { retryCycleMinutes } = this.getWorkerSettings();
-    return Math.max(1000, retryCycleMinutes * 60 * 1000);
+    return Math.max(1000, DEFAULT_RETRY_CYCLE_MINUTES * 60 * 1000);
   }
   _getNextReadyPendingJob(lastPlaylistType = null) {
     const now = Date.now();
@@ -427,9 +401,7 @@ export class WeeklyFlowWorker {
     const raw = settings?.playlistWorker || {};
     return {
       concurrency: this._normalizeConcurrency(raw.concurrency),
-      retryCycleMinutes: this._normalizeRetryCycleMinutes(
-        raw.retryCycleMinutes,
-      ),
+      retryCycleMinutes: DEFAULT_RETRY_CYCLE_MINUTES,
       retryPausedPlaylistIds: this._normalizeRetryPausedPlaylistIds(
         raw.retryPausedPlaylistIds,
       ),
@@ -445,10 +417,7 @@ export class WeeklyFlowWorker {
         nextSettings.concurrency === undefined
           ? base.concurrency
           : this._normalizeConcurrency(nextSettings.concurrency),
-      retryCycleMinutes:
-        nextSettings.retryCycleMinutes === undefined
-          ? base.retryCycleMinutes
-          : this._normalizeRetryCycleMinutes(nextSettings.retryCycleMinutes),
+      retryCycleMinutes: DEFAULT_RETRY_CYCLE_MINUTES,
       retryPausedPlaylistIds: this._normalizeRetryPausedPlaylistIds(
         base.retryPausedPlaylistIds,
       ),
@@ -459,13 +428,12 @@ export class WeeklyFlowWorker {
     };
     dbOps.updateSettings({
       ...current,
-      playlistWorker: normalized,
+      playlistWorker: {
+        concurrency: normalized.concurrency,
+        retryPausedPlaylistIds: normalized.retryPausedPlaylistIds,
+        existingFileMode: normalized.existingFileMode,
+      },
     });
-    if (normalized.retryCycleMinutes !== base.retryCycleMinutes) {
-      this._rescheduleIncompleteRetries(
-        Math.max(1000, normalized.retryCycleMinutes * 60 * 1000),
-      );
-    }
     return normalized;
   }
 
