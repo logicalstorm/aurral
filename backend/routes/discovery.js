@@ -1,8 +1,10 @@
 import express from "express";
 import {
   getDiscoveryCache,
-  updateUserDiscoveryCache,
+  getDiscoveryUpdateStatus,
+  requestUserDiscoveryRefresh,
   getUserDiscoveryCacheStaleness,
+  isGlobalDiscoveryRefreshInProgress,
   getDiscoveryAutoRefreshHours,
   getDiscoveryMode,
   getDiscoveryFeedback,
@@ -27,7 +29,13 @@ import {
   clearImageProxyCache,
 } from "../services/imageProxyService.js";
 import { defaultDiscoveryPreferences } from "../config/constants.js";
-import { requireAuth, requireAdmin } from "../middleware/requirePermission.js";
+import {
+  requireAuth,
+  requireAdmin,
+  requirePermission,
+} from "../middleware/requirePermission.js";
+import { verifyTokenAuth } from "../middleware/auth.js";
+import { noCache } from "../middleware/cache.js";
 import { getNearbyShows } from "../services/nearbyShowsService.js";
 import {
   getListenHistoryCacheNamespace,
@@ -66,7 +74,9 @@ const buildArtistKeySet = (artists) => {
       artist?.name,
       artist?.artistName,
     ].forEach((value) => {
-      const key = String(value || "").trim().toLowerCase();
+      const key = String(value || "")
+        .trim()
+        .toLowerCase();
       if (key) set.add(key);
     });
   }
@@ -149,13 +159,18 @@ router.get("/", requireAuth, async (req, res) => {
 
   const reqUser = userOps.getUserById(req.user.id);
   const listenHistoryProfile = getListenHistoryProfile(reqUser || {});
-  const userCacheNamespace = getListenHistoryCacheNamespace(listenHistoryProfile);
+  const userCacheNamespace =
+    getListenHistoryCacheNamespace(listenHistoryProfile);
   const effectiveCacheNamespace = hasLastfmKey ? userCacheNamespace : null;
 
-  if (hasListenHistoryProfile(listenHistoryProfile) && hasLastfmKey) {
+  if (
+    hasListenHistoryProfile(listenHistoryProfile) &&
+    hasLastfmKey &&
+    !isGlobalDiscoveryRefreshInProgress()
+  ) {
     const staleness = getUserDiscoveryCacheStaleness(userCacheNamespace);
     if (staleness > getDiscoveryStaleMs()) {
-      updateUserDiscoveryCache(listenHistoryProfile).catch((err) => {
+      requestUserDiscoveryRefresh(listenHistoryProfile).catch((err) => {
         console.error(
           `[Discover] On-demand refresh for ${listenHistoryProfile.listenHistoryProvider}:${listenHistoryProfile.listenHistoryUsername} failed:`,
           err.message,
@@ -175,7 +190,11 @@ router.get("/", requireAuth, async (req, res) => {
 
   let isUpdating = discoveryCache.isUpdating || false;
 
-  if (!hasLastfmKey && (!hasData || discoveryCache.provider !== DISCOVERY_PROVIDER_LISTENBRAINZ_FALLBACK)) {
+  if (
+    !hasLastfmKey &&
+    (!hasData ||
+      discoveryCache.provider !== DISCOVERY_PROVIDER_LISTENBRAINZ_FALLBACK)
+  ) {
     const fallbackData = await buildListenbrainzFallbackDiscovery({
       existingArtistKeys: buildArtistKeySet(libraryArtists),
     });
@@ -198,6 +217,7 @@ router.get("/", requireAuth, async (req, res) => {
     topTags,
     topGenres,
     fallbackGenres = [],
+    discoverPlaylists = [],
     lastUpdated,
     provider,
     capabilities,
@@ -270,12 +290,22 @@ router.get("/", requireAuth, async (req, res) => {
   }
 
   if (recommendations.length > 0 || globalTop.length > 0) {
-    res.set("Cache-Control", "private, max-age=120, stale-while-revalidate=300");
+    res.set(
+      "Cache-Control",
+      "private, max-age=120, stale-while-revalidate=300",
+    );
   } else if (isUpdating) {
     res.set("Cache-Control", "no-cache, no-store, must-revalidate");
   } else {
     res.set("Cache-Control", "private, max-age=30, stale-while-revalidate=120");
   }
+
+  const { annotateDiscoverPlaylistsForUser } =
+    await import("../services/discoverPlaylistService.js");
+  const playlists = annotateDiscoverPlaylistsForUser(
+    discoverPlaylists,
+    req.user,
+  ).filter((playlist) => playlist.trackCount > 0);
 
   res.json({
     recommendations,
@@ -284,8 +314,10 @@ router.get("/", requireAuth, async (req, res) => {
     topTags,
     topGenres,
     fallbackGenres,
+    discoverPlaylists: playlists,
     lastUpdated,
     isUpdating,
+    ...(isUpdating ? getDiscoveryUpdateStatus() : {}),
     stale: isStale,
     configured: true,
     provider,
@@ -293,6 +325,124 @@ router.get("/", requireAuth, async (req, res) => {
     discoveryMode,
   });
 });
+
+router.get("/artwork/:presetId", noCache, async (req, res) => {
+  if (!verifyTokenAuth(req)) {
+    return res.status(401).json({
+      error: "Unauthorized",
+      message: "Authentication required",
+    });
+  }
+
+  try {
+    const { ensureDiscoverArtworkForPreset } =
+      await import("../services/discoverPlaylistArtworkService.js");
+    const artwork = await ensureDiscoverArtworkForPreset(req.params.presetId, {
+      user: req.user,
+    });
+    if (!artwork) {
+      return res.status(404).json({ error: "Artwork not found" });
+    }
+    res.type(artwork.contentType);
+    res.sendFile(artwork.safePath);
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to load artwork",
+      message: error.message,
+    });
+  }
+});
+
+const handleDiscoverAdoptError = (res, error, fallbackError) => {
+  if (error?.statusCode === 400) {
+    return res.status(400).json({
+      error: error.error || "Bad Request",
+      message: error.message,
+    });
+  }
+  if (error?.statusCode === 404) {
+    return res.status(404).json({
+      error: error.error || "Playlist preview not available",
+      message: error.message,
+    });
+  }
+  if (error?.code === "FLOW_NAME_CONFLICT") {
+    return res.status(400).json({
+      error: "Flow name already exists",
+      message: error.message,
+    });
+  }
+  if (error?.code === "SHARED_PLAYLIST_NAME_CONFLICT") {
+    return res.status(400).json({
+      error: "Shared playlist name already exists",
+      message: error.message,
+    });
+  }
+  return res.status(500).json({
+    error: fallbackError,
+    message: error.message,
+  });
+};
+
+router.post(
+  "/playlists/adopt",
+  requireAuth,
+  requirePermission("accessFlow"),
+  async (req, res) => {
+    try {
+      const presetId = String(req.body?.presetId || "").trim();
+      if (!presetId) {
+        return res.status(400).json({ error: "presetId is required" });
+      }
+
+      const { slskdClient } = await import("../services/slskdClient.js");
+      if (!slskdClient.isConfigured()) {
+        return res.status(400).json({ error: "slskd not configured" });
+      }
+
+      const { adoptDiscoverPresetAsFlow } =
+        await import("../services/discoverPlaylistAdoptService.js");
+      const result = await adoptDiscoverPresetAsFlow(req.user, presetId);
+      res.json(result);
+    } catch (error) {
+      handleDiscoverAdoptError(
+        res,
+        error,
+        "Failed to adopt discover playlist",
+      );
+    }
+  },
+);
+
+router.post(
+  "/playlists/adopt-playlist",
+  requireAuth,
+  requirePermission("accessFlow"),
+  async (req, res) => {
+    try {
+      const presetId = String(req.body?.presetId || "").trim();
+      if (!presetId) {
+        return res.status(400).json({ error: "presetId is required" });
+      }
+
+      const { slskdClient } = await import("../services/slskdClient.js");
+      if (!slskdClient.isConfigured()) {
+        return res.status(400).json({ error: "slskd not configured" });
+      }
+
+      const { adoptDiscoverPresetAsPlaylist } =
+        await import("../services/discoverPlaylistAdoptService.js");
+      const result = await adoptDiscoverPresetAsPlaylist(req.user, presetId);
+      res.json(result);
+    } catch (error) {
+      handleDiscoverAdoptError(
+        res,
+        error,
+        "Failed to adopt discover playlist",
+      );
+    }
+  },
+);
 
 router.get("/related", (req, res) => {
   const discoveryCache = getDiscoveryCache();
@@ -475,16 +625,19 @@ router.get("/by-tag", async (req, res) => {
         ];
         const seen = new Set();
         const matches = pool.filter((artist) => {
-          const key = String(
-            artist?.id || artist?.mbid || artist?.name || "",
-          ).trim().toLowerCase();
+          const key = String(artist?.id || artist?.mbid || artist?.name || "")
+            .trim()
+            .toLowerCase();
           if (!key || seen.has(key)) return false;
           const artistTags = [
             ...(Array.isArray(artist?.tags) ? artist.tags : []),
             ...(Array.isArray(artist?.genres) ? artist.genres : []),
           ];
           const matched = artistTags.some(
-            (entry) => String(entry || "").trim().toLowerCase() === tagLower,
+            (entry) =>
+              String(entry || "")
+                .trim()
+                .toLowerCase() === tagLower,
           );
           if (!matched) return false;
           seen.add(key);
@@ -504,10 +657,12 @@ router.get("/by-tag", async (req, res) => {
     } else {
       const discoveryCache = getDiscoveryCache();
       const tagLower = String(tag).trim().toLowerCase();
-      const matches = (discoveryCache.recommendations || []).filter((artist) => {
-        const tags = Array.isArray(artist.tags) ? artist.tags : [];
-        return tags.some((t) => String(t).toLowerCase() === tagLower);
-      });
+      const matches = (discoveryCache.recommendations || []).filter(
+        (artist) => {
+          const tags = Array.isArray(artist.tags) ? artist.tags : [];
+          return tags.some((t) => String(t).toLowerCase() === tagLower);
+        },
+      );
       recommendations = matches.slice(offsetInt, offsetInt + limitInt);
       return res.json({
         recommendations,
@@ -626,7 +781,8 @@ router.post("/preferences", requireAuth, (req, res) => {
         lastfm: {
           ...(currentSettings.integrations?.lastfm || {}),
           discoveryMode:
-            updates.discoveryMode === "safer" || updates.discoveryMode === "deeper"
+            updates.discoveryMode === "safer" ||
+            updates.discoveryMode === "deeper"
               ? updates.discoveryMode
               : "balanced",
         },
@@ -644,13 +800,14 @@ router.post("/preferences", requireAuth, (req, res) => {
     res.json({
       success: true,
       preferences: {
-        discoveryMode: nextSettings.integrations?.lastfm?.discoveryMode || "balanced",
+        discoveryMode:
+          nextSettings.integrations?.lastfm?.discoveryMode || "balanced",
         localDiscoveryIncludeRecommendations:
-          nextSettings.integrations?.ticketmaster?.localDiscoveryIncludeRecommendations !==
-          false,
+          nextSettings.integrations?.ticketmaster
+            ?.localDiscoveryIncludeRecommendations !== false,
         localDiscoveryIncludeTrending:
-          nextSettings.integrations?.ticketmaster?.localDiscoveryIncludeTrending !==
-          false,
+          nextSettings.integrations?.ticketmaster
+            ?.localDiscoveryIncludeTrending !== false,
       },
     });
   } catch (error) {
@@ -696,7 +853,10 @@ router.get("/feedback", requireAuth, (req, res) => {
 
 router.post("/feedback", requireAuth, (req, res) => {
   try {
-    const feedback = addDiscoveryFeedback(req.user?.id || "global", req.body || {});
+    const feedback = addDiscoveryFeedback(
+      req.user?.id || "global",
+      req.body || {},
+    );
     res.json({
       success: true,
       feedback,

@@ -27,6 +27,7 @@ test.beforeEach(() => {
   resetDatabase(db);
   dbOps.updateSettings({
     integrations: {},
+    playlistArtwork: { style: "aurral" },
     onboardingComplete: true,
     flows: [],
     sharedPlaylists: [],
@@ -107,6 +108,46 @@ test("removes old sidecar artwork when a flow is renamed", async () => {
 
   await assert.rejects(() => fs.access(oldM3u));
   await assert.rejects(() => fs.access(oldWebp));
+});
+
+test("writes sidecar artwork for draft flows without m3u files", async () => {
+  flowPlaylistConfig.createFlow({
+    name: "Draft Flow",
+    enabled: false,
+  });
+
+  const manager = new WeeklyFlowPlaylistManager(process.env.WEEKLY_FLOW_FOLDER);
+  await manager.ensurePlaylists();
+
+  const playlistName = manager._getFlowPlaylistNames("Draft Flow").current;
+  const base = manager._sanitize(playlistName);
+  const m3u = path.join(manager.libraryRoot, `${base}.m3u`);
+  const webp = path.join(manager.libraryRoot, `${base}.webp`);
+
+  await assert.rejects(() => fs.access(m3u));
+  await assert.doesNotReject(() => fs.access(webp));
+});
+
+test("keeps artwork when an enabled flow is disabled", async () => {
+  const flow = flowPlaylistConfig.createFlow({
+    name: "Toggle",
+    enabled: false,
+  });
+  flowPlaylistConfig.setEnabled(flow.id, true);
+
+  const manager = new WeeklyFlowPlaylistManager(process.env.WEEKLY_FLOW_FOLDER);
+  await manager.ensurePlaylists();
+
+  const base = manager._sanitize(manager._getFlowPlaylistNames("Toggle").current);
+  const m3u = path.join(manager.libraryRoot, `${base}.m3u`);
+  const webp = path.join(manager.libraryRoot, `${base}.webp`);
+  await assert.doesNotReject(() => fs.access(m3u));
+  await assert.doesNotReject(() => fs.access(webp));
+
+  flowPlaylistConfig.setEnabled(flow.id, false);
+  await manager.ensurePlaylists();
+  await assert.rejects(() => fs.access(m3u));
+  await assert.doesNotReject(() => fs.access(webp));
 });
 
 test("does not regenerate artwork after explicit remove until generate", async () => {

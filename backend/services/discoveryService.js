@@ -1,5 +1,10 @@
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps, userOps } from "../config/db-helpers.js";
 import { GENRE_KEYWORDS } from "../config/constants.js";
+import {
+  BASE_DISCOVER_FLOW_COUNT,
+  DISCOVERY_FLOWS_DEFAULT,
+  DISCOVERY_FLOWS_MAX,
+} from "../config/discoverPlaylistPresets.js";
 import {
   lastfmRequest,
   listenbrainzRequest,
@@ -13,6 +18,7 @@ import { libraryManager } from "./libraryManager.js";
 import {
   getListenHistoryCacheNamespace,
   getListenHistoryProfile,
+  hasListenHistoryProfile,
 } from "./listeningHistory.js";
 import {
   DISCOVERY_PROVIDER_LASTFM,
@@ -85,9 +91,38 @@ export const getDiscoveryAutoRefreshHours = () => {
   return [24, 168, 720].includes(parsed) ? parsed : 168;
 };
 
+const DISCOVERY_RECOMMENDATIONS_MIN = 50;
+const DISCOVERY_RECOMMENDATIONS_MAX = 500;
+const DISCOVERY_RECOMMENDATIONS_DEFAULT = 200;
+
 export const getDiscoveryRecommendationsPerRefresh = () => {
-  return 200;
+  const settings = dbOps.getSettings();
+  const parsed = parseInt(
+    settings.integrations?.lastfm?.discoveryRecommendationsPerRefresh,
+    10,
+  );
+  if (!Number.isFinite(parsed)) return DISCOVERY_RECOMMENDATIONS_DEFAULT;
+  return Math.min(
+    DISCOVERY_RECOMMENDATIONS_MAX,
+    Math.max(DISCOVERY_RECOMMENDATIONS_MIN, parsed),
+  );
 };
+
+export const getDiscoveryFlowsPerRefresh = () => {
+  const settings = dbOps.getSettings();
+  const parsed = parseInt(
+    settings.integrations?.lastfm?.discoveryFlowsPerRefresh,
+    10,
+  );
+  if (!Number.isFinite(parsed)) return DISCOVERY_FLOWS_DEFAULT;
+  return Math.min(
+    DISCOVERY_FLOWS_MAX,
+    Math.max(BASE_DISCOVER_FLOW_COUNT, parsed),
+  );
+};
+
+export const getMaxFocusPlaylists = () =>
+  Math.max(0, getDiscoveryFlowsPerRefresh() - BASE_DISCOVER_FLOW_COUNT);
 
 export const getDiscoveryMode = () => {
   const settings = dbOps.getSettings();
@@ -103,10 +138,11 @@ export const getLocalDiscoveryPreferences = () => {
   const settings = dbOps.getSettings();
   return {
     includeRecommendations:
-      settings.integrations?.ticketmaster?.localDiscoveryIncludeRecommendations !==
-      false,
+      settings.integrations?.ticketmaster
+        ?.localDiscoveryIncludeRecommendations !== false,
     includeTrending:
-      settings.integrations?.ticketmaster?.localDiscoveryIncludeTrending !== false,
+      settings.integrations?.ticketmaster?.localDiscoveryIncludeTrending !==
+      false,
   };
 };
 
@@ -183,7 +219,9 @@ export const addDiscoveryFeedback = (userId = "global", entry = {}) => {
 
 export const removeDiscoveryFeedback = (userId = "global", feedbackId) => {
   const target = String(feedbackId || "").trim();
-  const next = getDiscoveryFeedback(userId).filter((entry) => entry.id !== target);
+  const next = getDiscoveryFeedback(userId).filter(
+    (entry) => entry.id !== target,
+  );
   dbOps.setJSONSetting(getDiscoveryFeedbackKey(userId), next);
   return next;
 };
@@ -212,7 +250,11 @@ const buildTasteProfile = ({
 } = {}) => {
   const recentIds = new Set(
     recentLibraryArtists
-      .map((artist) => String(artist?.mbid || "").trim().toLowerCase())
+      .map((artist) =>
+        String(artist?.mbid || "")
+          .trim()
+          .toLowerCase(),
+      )
       .filter(Boolean),
   );
   const bucketedLibrarySeeds = [];
@@ -244,15 +286,24 @@ const buildTasteProfile = ({
     ...artist,
     source: artist.source || "lastfm",
     profileBucket:
-      index < 12 ? "core_favorites" : index < 24 ? "recent_interest" : "exploratory_seed",
+      index < 12
+        ? "core_favorites"
+        : index < 24
+          ? "recent_interest"
+          : "exploratory_seed",
     affinityWeight:
       1.35 +
-      Math.min(1.2, Math.log10(Math.max(0, Number(artist.playcount || 0)) + 1) * 0.35),
+      Math.min(
+        1.2,
+        Math.log10(Math.max(0, Number(artist.playcount || 0)) + 1) * 0.35,
+      ),
   }));
 
   const profileTagWeights = new Map();
   for (const [tag, weight] of tagWeights.entries()) {
-    const normalized = String(tag || "").trim().toLowerCase();
+    const normalized = String(tag || "")
+      .trim()
+      .toLowerCase();
     if (!normalized) continue;
     profileTagWeights.set(normalized, Number(weight || 0));
   }
@@ -297,20 +348,51 @@ const recordLastfmResult = (health, payload) => {
   }
 };
 
+export const recordDiscoveryUpdateProgress = (
+  phase,
+  progressMessage,
+  progress,
+  extra = {},
+) => {
+  const normalizedProgress = Math.max(
+    0,
+    Math.min(100, Math.round(Number(progress) || 0)),
+  );
+  discoveryCache.updatePhase = phase || null;
+  discoveryCache.updateProgress = normalizedProgress;
+  discoveryCache.updateProgressMessage = progressMessage || "";
+  websocketService.emitDiscoveryUpdate({
+    phase: discoveryCache.updatePhase,
+    progress: discoveryCache.updateProgress,
+    progressMessage: discoveryCache.updateProgressMessage,
+    isUpdating: true,
+    configured: true,
+    ...extra,
+  });
+};
+
+export const clearDiscoveryUpdateProgress = () => {
+  discoveryCache.updatePhase = null;
+  discoveryCache.updateProgress = null;
+  discoveryCache.updateProgressMessage = null;
+};
+
+export const getDiscoveryUpdateStatus = () => ({
+  updatePhase: discoveryCache.updatePhase || null,
+  updateProgress:
+    typeof discoveryCache.updateProgress === "number"
+      ? discoveryCache.updateProgress
+      : null,
+  updateProgressMessage: discoveryCache.updateProgressMessage || null,
+});
+
 const emitDiscoveryProgress = (
   phase,
   progressMessage,
   progress,
   extra = {},
 ) => {
-  websocketService.emitDiscoveryUpdate({
-    phase,
-    progress,
-    progressMessage,
-    isUpdating: true,
-    configured: true,
-    ...extra,
-  });
+  recordDiscoveryUpdateProgress(phase, progressMessage, progress, extra);
 };
 
 const EMPTY_CACHE = {
@@ -321,10 +403,14 @@ const EMPTY_CACHE = {
   topGenres: [],
   fallbackGenres: [],
   fallbackGenrePools: {},
+  discoverPlaylists: [],
   provider: DISCOVERY_PROVIDER_LASTFM,
   capabilities: getDiscoveryCapabilities(true),
   lastUpdated: null,
   isUpdating: false,
+  updatePhase: null,
+  updateProgress: null,
+  updateProgressMessage: null,
 };
 
 let discoveryCache = { ...EMPTY_CACHE };
@@ -346,9 +432,11 @@ if (
     topGenres: dbData.topGenres || [],
     fallbackGenres: dbData.fallbackGenres || [],
     fallbackGenrePools: dbData.fallbackGenrePools || {},
+    discoverPlaylists: dbData.discoverPlaylists || [],
     provider: dbData.provider || DISCOVERY_PROVIDER_LASTFM,
     capabilities: getDiscoveryCapabilities(
-      (dbData.provider || DISCOVERY_PROVIDER_LASTFM) === DISCOVERY_PROVIDER_LASTFM,
+      (dbData.provider || DISCOVERY_PROVIDER_LASTFM) ===
+        DISCOVERY_PROVIDER_LASTFM,
     ),
     lastUpdated: dbData.lastUpdated || null,
     isUpdating: false,
@@ -363,17 +451,26 @@ export const getDiscoveryCache = (listenHistoryProfile = null) => {
   if (cacheNamespace) {
     const userDbData = dbOps.getDiscoveryCache(cacheNamespace);
     const hasUserData =
-      userDbData.recommendations?.length > 0 ||
-      userDbData.basedOn?.length > 0;
+      userDbData.recommendations?.length > 0 || userDbData.basedOn?.length > 0;
     if (hasUserData) {
       return {
         recommendations: userDbData.recommendations || [],
         globalTop: discoveryCache.globalTop || [],
         basedOn: userDbData.basedOn || [],
-        topTags: userDbData.topTags?.length > 0 ? userDbData.topTags : discoveryCache.topTags || [],
-        topGenres: userDbData.topGenres?.length > 0 ? userDbData.topGenres : discoveryCache.topGenres || [],
+        topTags:
+          userDbData.topTags?.length > 0
+            ? userDbData.topTags
+            : discoveryCache.topTags || [],
+        topGenres:
+          userDbData.topGenres?.length > 0
+            ? userDbData.topGenres
+            : discoveryCache.topGenres || [],
         fallbackGenres: discoveryCache.fallbackGenres || [],
         fallbackGenrePools: discoveryCache.fallbackGenrePools || {},
+        discoverPlaylists:
+          userDbData.discoverPlaylists?.length > 0
+            ? userDbData.discoverPlaylists
+            : discoveryCache.discoverPlaylists || [],
         provider: discoveryCache.provider || DISCOVERY_PROVIDER_LASTFM,
         capabilities:
           discoveryCache.capabilities ||
@@ -381,8 +478,15 @@ export const getDiscoveryCache = (listenHistoryProfile = null) => {
             (discoveryCache.provider || DISCOVERY_PROVIDER_LASTFM) ===
               DISCOVERY_PROVIDER_LASTFM,
           ),
-        lastUpdated: userDbData.lastUpdated || discoveryCache.lastUpdated || null,
+        lastUpdated:
+          userDbData.lastUpdated || discoveryCache.lastUpdated || null,
         isUpdating: discoveryCache.isUpdating,
+        updatePhase: discoveryCache.updatePhase || null,
+        updateProgress:
+          typeof discoveryCache.updateProgress === "number"
+            ? discoveryCache.updateProgress
+            : null,
+        updateProgressMessage: discoveryCache.updateProgressMessage || null,
       };
     }
   }
@@ -410,18 +514,97 @@ export const getDiscoveryCache = (listenHistoryProfile = null) => {
       basedOn: dbData.basedOn || discoveryCache.basedOn || [],
       topTags: dbData.topTags || discoveryCache.topTags || [],
       topGenres: dbData.topGenres || discoveryCache.topGenres || [],
-      fallbackGenres: dbData.fallbackGenres || discoveryCache.fallbackGenres || [],
+      fallbackGenres:
+        dbData.fallbackGenres || discoveryCache.fallbackGenres || [],
       fallbackGenrePools:
         dbData.fallbackGenrePools || discoveryCache.fallbackGenrePools || {},
-      provider: dbData.provider || discoveryCache.provider || DISCOVERY_PROVIDER_LASTFM,
+      discoverPlaylists:
+        dbData.discoverPlaylists || discoveryCache.discoverPlaylists || [],
+      provider:
+        dbData.provider || discoveryCache.provider || DISCOVERY_PROVIDER_LASTFM,
       capabilities: getDiscoveryCapabilities(
-        (dbData.provider || discoveryCache.provider || DISCOVERY_PROVIDER_LASTFM) ===
-          DISCOVERY_PROVIDER_LASTFM,
+        (dbData.provider ||
+          discoveryCache.provider ||
+          DISCOVERY_PROVIDER_LASTFM) === DISCOVERY_PROVIDER_LASTFM,
       ),
       lastUpdated: dbData.lastUpdated || discoveryCache.lastUpdated || null,
     });
   }
   return discoveryCache;
+};
+
+export const isGlobalDiscoveryRefreshInProgress = () =>
+  discoveryCache.isUpdating === true;
+
+const hasListeningHistoryUsers = () =>
+  userOps
+    .getAllListeningHistoryUsers()
+    .some((user) => hasListenHistoryProfile(user));
+
+const pendingUserDiscoveryProfiles = new Map();
+
+const collectListeningHistoryRefreshProfiles = () => {
+  const profiles = new Map();
+  for (const user of userOps.getAllListeningHistoryUsers()) {
+    const profile = getListenHistoryProfile(user);
+    const cacheNamespace = getListenHistoryCacheNamespace(profile);
+    if (!cacheNamespace || !hasListenHistoryProfile(profile)) continue;
+    profiles.set(cacheNamespace, profile);
+  }
+  for (const [cacheNamespace, profile] of pendingUserDiscoveryProfiles) {
+    profiles.set(cacheNamespace, profile);
+  }
+  pendingUserDiscoveryProfiles.clear();
+  return [...profiles.values()];
+};
+
+const refreshListeningHistoryUserCaches = async ({ onProgress } = {}) => {
+  const profiles = collectListeningHistoryRefreshProfiles();
+  if (profiles.length === 0) return;
+
+  let completed = 0;
+  for (const profile of profiles) {
+    try {
+      await updateUserDiscoveryCache(profile, { duringGlobalRefresh: true });
+    } catch (error) {
+      console.error(
+        `[Discovery] Per-user refresh failed for ${profile.listenHistoryProvider}:${profile.listenHistoryUsername}: ${error.message}`,
+      );
+    }
+    completed += 1;
+    onProgress?.({ completed, total: profiles.length });
+  }
+};
+
+const flushPendingUserDiscoveryRefreshes = async () => {
+  if (pendingUserDiscoveryProfiles.size === 0) return;
+  const profiles = [...pendingUserDiscoveryProfiles.values()];
+  pendingUserDiscoveryProfiles.clear();
+  for (const profile of profiles) {
+    try {
+      await updateUserDiscoveryCache(profile);
+    } catch (error) {
+      console.error(
+        `[Discovery] Deferred per-user refresh failed for ${profile.listenHistoryProvider}:${profile.listenHistoryUsername}: ${error.message}`,
+      );
+    }
+  }
+};
+
+export const requestUserDiscoveryRefresh = (listenHistoryProfile) => {
+  const profile = getListenHistoryProfile(listenHistoryProfile);
+  const cacheNamespace = getListenHistoryCacheNamespace(profile);
+  if (!cacheNamespace || !getLastfmApiKey()) {
+    return Promise.resolve(null);
+  }
+  if (isGlobalDiscoveryRefreshInProgress()) {
+    pendingUserDiscoveryProfiles.set(cacheNamespace, profile);
+    return Promise.resolve({
+      skipped: true,
+      reason: "global_refresh_in_progress",
+    });
+  }
+  return updateUserDiscoveryCache(profile);
 };
 
 const fetchListenHistoryArtists = async (
@@ -462,11 +645,15 @@ const fetchListenHistoryArtists = async (
       .filter(Boolean);
   }
 
-  const userTopArtists = await lastfmRequest("user.getTopArtists", {
-    user: profile.listenHistoryUsername,
-    limit: 50,
-    period: discoveryPeriod,
-  });
+  const userTopArtists = await lastfmRequest(
+    "user.getTopArtists",
+    {
+      user: profile.listenHistoryUsername,
+      limit: 50,
+      period: discoveryPeriod,
+    },
+    { timeoutMs: 12000, maxRetries: 2 },
+  );
   recordLastfmResult(lastfmHealth, userTopArtists);
 
   if (!userTopArtists?.topartists?.artist) {
@@ -606,14 +793,16 @@ const collectSeedTagsAndGenres = async (
           const tagWeight = parseInt(tag?.count || 0, 10) || 1;
           tagCounts.set(
             name,
-            (tagCounts.get(name) || 0) + tagWeight * Math.max(0.5, seed.weight || 1),
+            (tagCounts.get(name) || 0) +
+              tagWeight * Math.max(0.5, seed.weight || 1),
           );
           const normalized = name.toLowerCase();
           if (GENRE_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
             genreCounts.set(
               name,
               (genreCounts.get(name) || 0) +
-                Math.max(1, Math.round(tagWeight / 25)) * Math.max(0.5, seed.weight || 1),
+                Math.max(1, Math.round(tagWeight / 25)) *
+                  Math.max(0.5, seed.weight || 1),
             );
           }
         }
@@ -652,18 +841,28 @@ const resolveRecommendationCandidates = async (
     shortlist.map(async (item) => {
       if (item?.id || !item?.name) return;
       const cached = musicbrainzGetCachedArtistMbidByName(item.name);
-      const resolved = cached || (await musicbrainzResolveArtistMbidByName(item.name));
+      const resolved =
+        cached || (await musicbrainzResolveArtistMbidByName(item.name));
       if (!resolved) return;
       item.id = resolved;
       item.navigateTo = resolved;
     }),
   );
 
-  const merged = mergeResolvedRecommendations(recommendations, existingArtistKeys)
+  const merged = mergeResolvedRecommendations(
+    recommendations,
+    existingArtistKeys,
+  )
     .filter((item) => item?.id || item?.navigateTo)
     .sort((left, right) => {
-      if ((right.scoreTotal || right.score || 0) !== (left.scoreTotal || left.score || 0)) {
-        return (right.scoreTotal || right.score || 0) - (left.scoreTotal || left.score || 0);
+      if (
+        (right.scoreTotal || right.score || 0) !==
+        (left.scoreTotal || left.score || 0)
+      ) {
+        return (
+          (right.scoreTotal || right.score || 0) -
+          (left.scoreTotal || left.score || 0)
+        );
       }
       if ((right.seedCount || 0) !== (left.seedCount || 0)) {
         return (right.seedCount || 0) - (left.seedCount || 0);
@@ -671,7 +870,10 @@ const resolveRecommendationCandidates = async (
       return String(left.name || "").localeCompare(String(right.name || ""));
     });
 
-  return merged.slice(0, Math.max(120, getDiscoveryRecommendationsPerRefresh() * 4));
+  return merged.slice(
+    0,
+    Math.max(120, getDiscoveryRecommendationsPerRefresh() * 4),
+  );
 };
 
 const buildRecommendationsFromSeeds = async ({
@@ -682,8 +884,7 @@ const buildRecommendationsFromSeeds = async ({
   discoveryMode,
 }) => {
   const recommendations = new Map();
-  const maxPerSeed =
-    getLastfmFailureRatio(lastfmHealth) >= 0.3 ? 10 : 16;
+  const maxPerSeed = getLastfmFailureRatio(lastfmHealth) >= 0.3 ? 10 : 16;
 
   await Promise.all(
     seeds.map(async (seed) => {
@@ -754,7 +955,9 @@ export const updateDiscoveryCache = async (options = {}) => {
   console.log("Starting background update of discovery recommendations...");
   emitDiscoveryProgress("starting", "Preparing discovery refresh", 5);
   import("./aurralHistoryService.js")
-    .then(({ recordDiscoveryRefreshStarted }) => recordDiscoveryRefreshStarted())
+    .then(({ recordDiscoveryRefreshStarted }) =>
+      recordDiscoveryRefreshStarted(),
+    )
     .catch(() => {});
 
   try {
@@ -810,7 +1013,8 @@ export const updateDiscoveryCache = async (options = {}) => {
         progress: 100,
         progressMessage: "Discovery refresh completed",
       });
-      const { recordDiscoveryUpdated } = await import("./aurralHistoryService.js");
+      const { recordDiscoveryUpdated } =
+        await import("./aurralHistoryService.js");
       recordDiscoveryUpdated({
         recommendationCount: fallbackData.recommendations?.length || 0,
         genreCount: fallbackData.topGenres?.length || 0,
@@ -827,7 +1031,12 @@ export const updateDiscoveryCache = async (options = {}) => {
     const historyArtists = [];
     const defaultListenHistoryProfile = getDefaultListenHistoryProfile();
     const discoveryPeriod = getLastfmDiscoveryPeriod();
-    if (defaultListenHistoryProfile && discoveryPeriod !== "none") {
+    const listeningHistoryUsersConfigured = hasListeningHistoryUsers();
+    if (
+      defaultListenHistoryProfile &&
+      discoveryPeriod !== "none" &&
+      !listeningHistoryUsersConfigured
+    ) {
       try {
         const fetched = await fetchListenHistoryArtists(
           defaultListenHistoryProfile,
@@ -873,27 +1082,21 @@ export const updateDiscoveryCache = async (options = {}) => {
     console.log(
       `Sampling tags/genres from ${profileSample.length} artists (${libraryArtists.length} library, ${historyArtists.length} history)...`,
     );
-    const {
-      tagsFound,
-      topTags,
-      topGenres,
-      tagMap,
-      tagWeights,
-      genreWeights,
-    } = getLastfmApiKey()
-      ? await collectSeedTagsAndGenres(
-          profileSample,
-          lastfmHealth,
-          "building_genres",
-        )
-      : {
-          tagsFound: 0,
-          topTags: [],
-          topGenres: [],
-          tagMap: new Map(),
-          tagWeights: new Map(),
-          genreWeights: new Map(),
-        };
+    const { tagsFound, topTags, topGenres, tagMap, tagWeights, genreWeights } =
+      getLastfmApiKey()
+        ? await collectSeedTagsAndGenres(
+            profileSample,
+            lastfmHealth,
+            "building_genres",
+          )
+        : {
+            tagsFound: 0,
+            topTags: [],
+            topGenres: [],
+            tagMap: new Map(),
+            tagWeights: new Map(),
+            genreWeights: new Map(),
+          };
     const tasteProfile = buildTasteProfile({
       recentLibraryArtists,
       allLibraryArtists,
@@ -909,7 +1112,8 @@ export const updateDiscoveryCache = async (options = {}) => {
     console.log(
       `Found tags for ${tagsFound} out of ${profileSample.length} artists`,
     );
-    discoveryCache.topTags = tasteProfile.topTags.length > 0 ? tasteProfile.topTags : topTags;
+    discoveryCache.topTags =
+      tasteProfile.topTags.length > 0 ? tasteProfile.topTags : topTags;
     discoveryCache.topGenres =
       tasteProfile.topGenres.length > 0 ? tasteProfile.topGenres : topGenres;
 
@@ -940,6 +1144,16 @@ export const updateDiscoveryCache = async (options = {}) => {
             if (!artist.image) {
               artist.image = pickLastfmImage(track?.image);
             }
+            const trackName = String(track?.name || "").trim();
+            if (trackName) {
+              artist.sampleTrack = {
+                trackName,
+                albumName:
+                  String(
+                    track?.album?.title || track?.album?.["#text"] || "",
+                  ).trim() || null,
+              };
+            }
             trendingArtists.push(artist);
           }
         }
@@ -959,9 +1173,7 @@ export const updateDiscoveryCache = async (options = {}) => {
             globalTop = mergeResolvedRecommendations(
               [
                 ...globalTop,
-                ...topArtists
-                  .map(buildTrendingArtistEntry)
-                  .filter(Boolean),
+                ...topArtists.map(buildTrendingArtistEntry).filter(Boolean),
               ],
               existingArtistKeys,
             ).slice(0, 32);
@@ -1080,6 +1292,45 @@ export const updateDiscoveryCache = async (options = {}) => {
       delayMs: 50,
     });
 
+    emitDiscoveryProgress(
+      "generating_playlists",
+      "Building discover playlists",
+      92,
+    );
+    if (listeningHistoryUsersConfigured) {
+      await refreshListeningHistoryUserCaches({
+        onProgress: ({ completed, total }) => {
+          const pct = total > 0 ? 92 + Math.round((completed / total) * 4) : 92;
+          emitDiscoveryProgress(
+            "generating_playlists",
+            `Building discover playlists (${completed}/${total})`,
+            pct,
+          );
+        },
+      });
+    } else {
+      const { generateDiscoverPlaylists } =
+        await import("./discoverPlaylistService.js");
+      discoveryData.discoverPlaylists = await generateDiscoverPlaylists({
+        basedOn: discoveryData.basedOn,
+        topGenres: discoveryData.topGenres,
+        topTags: discoveryData.topTags,
+        recommendations: discoveryData.recommendations,
+        historyTopArtists: historyArtists
+          .slice(0, 3)
+          .map((artist) => artist.artistName)
+          .filter(Boolean),
+        onProgress: ({ completed, total }) => {
+          const pct = total > 0 ? 92 + Math.round((completed / total) * 4) : 92;
+          emitDiscoveryProgress(
+            "generating_playlists",
+            `Building discover playlists (${completed}/${total})`,
+            pct,
+          );
+        },
+      });
+    }
+
     Object.assign(discoveryCache, discoveryData);
     dbOps.updateDiscoveryCache(discoveryData);
     emitDiscoveryProgress(
@@ -1109,6 +1360,7 @@ export const updateDiscoveryCache = async (options = {}) => {
       topTags: discoveryData.topTags,
       topGenres: discoveryData.topGenres,
       fallbackGenres: discoveryData.fallbackGenres || [],
+      discoverPlaylists: discoveryData.discoverPlaylists || [],
       provider: discoveryData.provider,
       capabilities: discoveryData.capabilities,
       lastUpdated: discoveryData.lastUpdated,
@@ -1119,7 +1371,8 @@ export const updateDiscoveryCache = async (options = {}) => {
       progressMessage: "Discovery refresh completed",
     });
 
-    const { recordDiscoveryUpdated } = await import("./aurralHistoryService.js");
+    const { recordDiscoveryUpdated } =
+      await import("./aurralHistoryService.js");
     recordDiscoveryUpdated({
       recommendationCount: discoveryData.recommendations?.length || 0,
       genreCount: discoveryData.topGenres?.length || 0,
@@ -1153,23 +1406,49 @@ export const updateDiscoveryCache = async (options = {}) => {
       )
       .catch(() => {});
   } finally {
+    try {
+      await flushPendingUserDiscoveryRefreshes();
+    } catch (error) {
+      console.error(
+        `[Discovery] Failed to flush deferred per-user refreshes: ${error.message}`,
+      );
+    }
     discoveryCache.isUpdating = false;
+    clearDiscoveryUpdateProgress();
   }
 };
 
 const userDiscoveryLocks = new Set();
 
-export const updateUserDiscoveryCache = async (listenHistoryProfile) => {
+export const updateUserDiscoveryCache = async (
+  listenHistoryProfile,
+  options = {},
+) => {
+  const { duringGlobalRefresh = false } = options;
   const profile = getListenHistoryProfile(listenHistoryProfile);
   const cacheNamespace = getListenHistoryCacheNamespace(profile);
   if (!cacheNamespace) return null;
   if (!getLastfmApiKey()) return null;
+  if (!duringGlobalRefresh && isGlobalDiscoveryRefreshInProgress()) {
+    pendingUserDiscoveryProfiles.set(cacheNamespace, profile);
+    return { skipped: true, reason: "global_refresh_in_progress" };
+  }
   if (userDiscoveryLocks.has(cacheNamespace)) return null;
 
+  const shouldPublishRefreshState = !duringGlobalRefresh;
   userDiscoveryLocks.add(cacheNamespace);
   console.log(
     `[Discovery] Starting per-user refresh for ${profile.listenHistoryProvider} user ${profile.listenHistoryUsername}...`,
   );
+
+  if (shouldPublishRefreshState) {
+    discoveryCache.isUpdating = true;
+    emitDiscoveryProgress(
+      "generating_playlists",
+      "Building discover playlists",
+      92,
+    );
+  }
 
   try {
     const [recentLibraryArtistsRaw, allLibraryArtistsRaw] = await Promise.all([
@@ -1230,10 +1509,7 @@ export const updateUserDiscoveryCache = async (listenHistoryProfile) => {
       ).length,
     );
     const { topTags, topGenres, tagMap, tagWeights, genreWeights } =
-      await collectSeedTagsAndGenres(
-      profileSample,
-      lastfmHealth,
-    );
+      await collectSeedTagsAndGenres(profileSample, lastfmHealth);
     const tasteProfile = buildTasteProfile({
       recentLibraryArtists,
       allLibraryArtists,
@@ -1292,17 +1568,65 @@ export const updateUserDiscoveryCache = async (listenHistoryProfile) => {
         tasteProfile.topGenres.length > 0 ? tasteProfile.topGenres : topGenres,
     };
 
+    const { generateDiscoverPlaylists } =
+      await import("./discoverPlaylistService.js");
+    userData.discoverPlaylists = await generateDiscoverPlaylists({
+      listenHistoryProfile: profile,
+      basedOn: userData.basedOn,
+      topGenres: userData.topGenres,
+      topTags: userData.topTags,
+      recommendations: recommendationsArray,
+      historyTopArtists: tasteProfile.historySeeds
+        .slice(0, 3)
+        .map((artist) => artist.artistName)
+        .filter(Boolean),
+      onProgress: shouldPublishRefreshState
+        ? ({ completed, total }) => {
+            const pct =
+              total > 0 ? 92 + Math.round((completed / total) * 4) : 92;
+            emitDiscoveryProgress(
+              "generating_playlists",
+              `Building discover playlists (${completed}/${total})`,
+              pct,
+            );
+          }
+        : undefined,
+    });
+
     dbOps.updateDiscoveryCache(userData, cacheNamespace);
     console.log(
       `[Discovery] ${profile.listenHistoryProvider}:${profile.listenHistoryUsername} refresh complete: ${recommendationsArray.length} recommendations, ${topGenres.length} genres.`,
     );
+    if (shouldPublishRefreshState) {
+      websocketService.emitDiscoveryUpdate({
+        isUpdating: false,
+        configured: true,
+        phase: "completed",
+        progress: 100,
+        progressMessage: "Discovery refresh completed",
+      });
+    }
     return userData;
   } catch (error) {
     console.error(
       `[Discovery] Failed to update cache for ${profile.listenHistoryProvider}:${profile.listenHistoryUsername}: ${error.message}`,
     );
+    if (shouldPublishRefreshState) {
+      websocketService.emitDiscoveryUpdate({
+        isUpdating: false,
+        configured: true,
+        phase: "error",
+        progress: 100,
+        progressMessage: "Discovery refresh failed",
+        error: error.message,
+      });
+    }
     return null;
   } finally {
+    if (shouldPublishRefreshState) {
+      discoveryCache.isUpdating = false;
+      clearDiscoveryUpdateProgress();
+    }
     userDiscoveryLocks.delete(cacheNamespace);
   }
 };

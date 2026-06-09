@@ -1256,6 +1256,7 @@ export function SettingsIntegrationsTab({
             </fieldset>
           )}
         </div>
+
       </form>
     </div>
   );

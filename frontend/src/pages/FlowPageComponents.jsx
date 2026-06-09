@@ -2261,6 +2261,9 @@ export function FlowTracksPanel({
   onNavigateArtist,
   onReSearchTrack,
   playbackSource = null,
+  showPlaybackControls = true,
+  hideAlbumColumn = false,
+  hideStatusColumn = false,
 }) {
   const {
     playQueue,
@@ -2330,35 +2333,47 @@ export function FlowTracksPanel({
 
   return (
     <div className="flow-page__tracks">
-      <div className="flow-page__tracks-toolbar">
-        <div className="flow-page__tracks-toolbar-start">
-          <button
-            type="button"
-            onClick={handlePrimaryPlay}
-            className="btn btn-primary btn-round-lg"
-            disabled={playableTracks.length === 0}
-            aria-label={isPlaylistPlaying ? "Pause playback" : "Play all tracks"}
-          >
-            {isPlaylistPlaying ? (
-              <Pause className="artist-icon-md" />
-            ) : (
-              <Play className="artist-icon-md" />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={handleShufflePlay}
-            className={`btn btn-secondary btn-round-lg flow-page__tracks-toolbar-shuffle${isShuffleEnabled ? " is-active" : ""}`}
-            disabled={playableTracks.length === 0}
-            aria-label="Shuffle and play"
-          >
-            <Shuffle className="artist-icon-md" />
-          </button>
+      {showPlaybackControls || headerActions ? (
+        <div className="flow-page__tracks-toolbar">
+          {showPlaybackControls ? (
+            <div className="flow-page__tracks-toolbar-start">
+              <button
+                type="button"
+                onClick={handlePrimaryPlay}
+                className="btn btn-primary btn-round-lg"
+                disabled={playableTracks.length === 0}
+                aria-label={
+                  isPlaylistPlaying ? "Pause playback" : "Play all tracks"
+                }
+              >
+                {isPlaylistPlaying ? (
+                  <Pause className="artist-icon-md" />
+                ) : (
+                  <Play className="artist-icon-md" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={handleShufflePlay}
+                className={`btn btn-secondary btn-round-lg flow-page__tracks-toolbar-shuffle${isShuffleEnabled ? " is-active" : ""}`}
+                disabled={playableTracks.length === 0}
+                aria-label="Shuffle and play"
+              >
+                <Shuffle className="artist-icon-md" />
+              </button>
+            </div>
+          ) : headerActions ? (
+            <div className="flow-page__tracks-toolbar-start flow-page__tracks-toolbar-start--full">
+              {headerActions}
+            </div>
+          ) : null}
+          {showPlaybackControls && headerActions ? (
+            <div className="flow-page__tracks-toolbar-actions">
+              {headerActions}
+            </div>
+          ) : null}
         </div>
-        {headerActions ? (
-          <div className="flow-page__tracks-toolbar-actions">{headerActions}</div>
-        ) : null}
-      </div>
+      ) : null}
 
       <div className="flow-page__tracks-body">
         {loading && (
@@ -2383,17 +2398,23 @@ export function FlowTracksPanel({
           </div>
         )}
         {!loading && !error && visibleTracks.length > 0 && (
-          <table className="flow-page__tracks-table">
+          <table
+            className={`flow-page__tracks-table${hideAlbumColumn ? " flow-page__tracks-table--no-album" : ""}`}
+          >
             <thead className="flow-page__tracks-table-head">
               <tr>
                 <th className="flow-page__tracks-table-index">#</th>
-                <th>Song</th>
-                <th>Artist</th>
-                <th>Album</th>
-                <th
-                  className="flow-page__tracks-table-status-head"
-                  aria-hidden="true"
-                />
+                <th className="flow-page__tracks-table-song">Song</th>
+                <th className="flow-page__tracks-table-artist">Artist</th>
+                {hideAlbumColumn ? null : (
+                  <th className="flow-page__tracks-table-album">Album</th>
+                )}
+                {hideStatusColumn ? null : (
+                  <th
+                    className="flow-page__tracks-table-status-head"
+                    aria-hidden="true"
+                  />
+                )}
                 <th
                   className="flow-page__tracks-table-actions-head"
                   aria-hidden="true"
@@ -2402,7 +2423,10 @@ export function FlowTracksPanel({
             </thead>
             <tbody>
               {visibleTracks.map((track, index) => {
-                const canPlay = track.status === "done" && !!track.streamUrl;
+                const canPlay =
+                  showPlaybackControls &&
+                  track.status === "done" &&
+                  !!track.streamUrl;
                 const canDelete =
                   typeof onDeleteTrack === "function" && !!track.id;
                 const canReSearch =
@@ -2418,31 +2442,45 @@ export function FlowTracksPanel({
                     className={`flow-page__tracks-table-row${isCurrent ? " is-current" : ""}`}
                   >
                     <td className="flow-page__tracks-table-index">
-                      <div className="flow-page__tracks-table-index-inner">
-                        <span className="flow-page__tracks-table-index-number">
-                          {index + 1}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handlePlayTrack(track)}
-                          className="flow-page__tracks-table-index-play btn btn-secondary btn-icon btn-xs"
-                          disabled={!canPlay}
-                          aria-label={
-                            isCurrent
-                              ? `Pause ${track.trackName}`
-                              : `Play ${track.trackName}`
-                          }
-                        >
-                          {isCurrent ? (
-                            <Pause className="artist-icon-xs" />
-                          ) : (
-                            <Play className="artist-icon-xs" />
-                          )}
-                        </button>
-                      </div>
+                      {showPlaybackControls ? (
+                        <div className="flow-page__tracks-table-index-inner">
+                          <span className="flow-page__tracks-table-index-number">
+                            {index + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handlePlayTrack(track)}
+                            className="flow-page__tracks-table-index-play btn btn-secondary btn-icon btn-xs"
+                            disabled={!canPlay}
+                            aria-label={
+                              isCurrent
+                                ? `Pause ${track.trackName}`
+                                : `Play ${track.trackName}`
+                            }
+                          >
+                            {isCurrent ? (
+                              <Pause className="artist-icon-xs" />
+                            ) : (
+                              <Play className="artist-icon-xs" />
+                            )}
+                          </button>
+                        </div>
+                      ) : (
+                        index + 1
+                      )}
                     </td>
-                    <td>{track.trackName}</td>
-                    <td>
+                    <td
+                      className="flow-page__tracks-table-song"
+                      title={track.trackName}
+                    >
+                      <span className="flow-page__tracks-table-cell-text">
+                        {track.trackName}
+                      </span>
+                    </td>
+                    <td
+                      className="flow-page__tracks-table-artist"
+                      title={track.artistName}
+                    >
                       {track.artistMbid ? (
                         <button
                           type="button"
@@ -2452,13 +2490,26 @@ export function FlowTracksPanel({
                           {track.artistName}
                         </button>
                       ) : (
-                        track.artistName
+                        <span className="flow-page__tracks-table-cell-text">
+                          {track.artistName}
+                        </span>
                       )}
                     </td>
-                    <td>{track.albumName || "Unknown Album"}</td>
-                    <td className="flow-page__tracks-table-status-cell">
-                      <TrackStatusDot status={track.status} />
-                    </td>
+                    {hideAlbumColumn ? null : (
+                      <td
+                        className="flow-page__tracks-table-album"
+                        title={track.albumName || "Unknown Album"}
+                      >
+                        <span className="flow-page__tracks-table-cell-text">
+                          {track.albumName || "Unknown Album"}
+                        </span>
+                      </td>
+                    )}
+                    {hideStatusColumn ? null : (
+                      <td className="flow-page__tracks-table-status-cell">
+                        <TrackStatusDot status={track.status} />
+                      </td>
+                    )}
                     <td className="flow-page__tracks-table-actions-cell">
                       <div className="flow-page__tracks-actions">
                         <FlowTrackPlaylistMenus

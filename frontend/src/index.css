@@ -3719,6 +3719,10 @@ textarea {
   font-weight: 500;
 }
 
+.artist-discover-hero__updated--refreshing {
+  color: var(--aurral-gray-light);
+}
+
 .artist-discover-hero__updated-icon {
   width: 0.75rem;
   height: 0.75rem;
@@ -4389,6 +4393,105 @@ textarea {
 
 .artist-discover-rail__content::-webkit-scrollbar {
   display: none;
+}
+
+.discover-playlist-expanded {
+  width: 100%;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--aurral-border);
+}
+
+.discover-playlist-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+}
+
+.discover-playlist-toolbar__meta {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.discover-playlist-toolbar__title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.discover-playlist-toolbar__title {
+  margin: 0;
+  min-width: 0;
+  color: var(--aurral-white);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.discover-playlist-toolbar__track-count {
+  flex-shrink: 0;
+  color: var(--aurral-gray-light);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.discover-playlist-toolbar__actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-start;
+}
+
+.discover-playlist-add-button {
+  width: 3rem;
+  height: 3rem;
+  min-width: 3rem;
+  padding: 0;
+  border-radius: var(--aurral-radius-round);
+}
+
+.discover-playlist-add-button .artist-icon-md {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.flow-page__tracks-toolbar-start--full {
+  flex: 1;
+  min-width: 0;
+}
+
+.artist-discover-card.is-expanded .artist-discover-card__cover {
+  outline: 2px solid var(--aurral-accent);
+  outline-offset: 2px;
+}
+
+.discover-playlist-flow-meta {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.discover-playlist-flow-meta__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.discover-playlist-flow-meta__pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.65rem;
+  border-radius: var(--aurral-radius-round);
+  background: var(--aurral-overlay);
+  color: var(--aurral-white);
+  font-size: 0.75rem;
+}
+
+.discover-playlist-flow-actions {
+  margin-top: 1rem;
 }
 
 .artist-discover-shelf-card {
@@ -5579,7 +5682,11 @@ textarea {
 }
 
 .requests-page__tab--source:not(.is-active) {
-  color: color-mix(in srgb, var(--history-source-color) 72%, var(--aurral-gray-light));
+  color: color-mix(
+    in srgb,
+    var(--history-source-color) 72%,
+    var(--aurral-gray-light)
+  );
 }
 
 .requests-page__sort {
@@ -6353,6 +6460,12 @@ textarea {
   text-transform: uppercase;
 }
 
+.settings-page__discovery-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .settings-page__progress-line {
   display: flex;
   align-items: center;
@@ -6360,6 +6473,33 @@ textarea {
   margin: 0;
   color: var(--aurral-gray-light);
   font-size: 0.875rem;
+}
+
+.settings-page__progress-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-page__progress-pct {
+  flex-shrink: 0;
+  color: var(--aurral-white);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.settings-page__progress-bar {
+  width: 100%;
+  height: 0.375rem;
+  overflow: hidden;
+  background: var(--aurral-overlay);
+  border-radius: var(--aurral-radius-round);
+}
+
+.settings-page__progress-fill {
+  height: 100%;
+  background: var(--aurral-green);
+  border-radius: var(--aurral-radius-round);
+  transition: width 0.35s ease;
 }
 
 .settings-page__success-line {
@@ -7348,7 +7488,6 @@ textarea {
   flex: 1;
 }
 
-
 .flow-page__header-actions {
   display: flex;
   flex-shrink: 0;
@@ -8317,7 +8456,44 @@ textarea {
 
 .flow-page__tracks-table {
   width: 100%;
+  table-layout: fixed;
   font-size: 0.875rem;
+}
+
+.flow-page__tracks-table-head th.flow-page__tracks-table-song {
+  width: 36%;
+}
+
+.flow-page__tracks-table-head th.flow-page__tracks-table-artist {
+  width: 28%;
+}
+
+.flow-page__tracks-table-head th.flow-page__tracks-table-album {
+  width: 24%;
+}
+
+.flow-page__tracks-table--no-album th.flow-page__tracks-table-song {
+  width: 48%;
+}
+
+.flow-page__tracks-table--no-album th.flow-page__tracks-table-artist {
+  width: 42%;
+}
+
+.flow-page__tracks-table-song,
+.flow-page__tracks-table-artist,
+.flow-page__tracks-table-album {
+  overflow: hidden;
+  max-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-page__tracks-table-cell-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .flow-page__tracks-table-head {
@@ -8354,8 +8530,14 @@ textarea {
 }
 
 .flow-page__tracks-artist-link {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
   color: var(--aurral-gray-light);
   text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   transition: color 0.18s ease;
 }
 
@@ -9217,29 +9399,19 @@ textarea {
     overflow-x: hidden;
   }
 
-  .flow-page__library-inline-detail .flow-page__tracks-table {
-    table-layout: fixed;
-    width: 100%;
-  }
-
-  .flow-page__library-inline-detail .flow-page__tracks-table th:nth-child(4),
-  .flow-page__library-inline-detail .flow-page__tracks-table td:nth-child(4) {
+  .flow-page__library-inline-detail .flow-page__tracks-table-album {
     display: none;
   }
 
-  .flow-page__library-inline-detail .flow-page__tracks-table td {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .flow-page__library-inline-detail
+    .flow-page__tracks-table-head
+    th.flow-page__tracks-table-song {
+    width: 46%;
   }
 
-  .flow-page__library-inline-detail .flow-page__tracks-table th:nth-child(2),
-  .flow-page__library-inline-detail .flow-page__tracks-table td:nth-child(2) {
-    width: 42%;
-  }
-
-  .flow-page__library-inline-detail .flow-page__tracks-table th:nth-child(3),
-  .flow-page__library-inline-detail .flow-page__tracks-table td:nth-child(3) {
+  .flow-page__library-inline-detail
+    .flow-page__tracks-table-head
+    th.flow-page__tracks-table-artist {
     width: 38%;
   }
 
