@@ -15,6 +15,11 @@ import {
 } from "./weeklyFlowFileReuse.js";
 import { resolveWeeklyFlowRoot } from "./weeklyFlowPaths.js";
 import { startSlskdOrchestratorWorker } from "./slskdOrchestratorWorker.js";
+import {
+  enqueuePlaylistReserveBuildJob,
+  enqueuePlaylistRetryJob,
+  withHonkerLock,
+} from "./honkerDb.js";
 
 const DEFAULT_CONCURRENCY = 3;
 const MIN_CONCURRENCY = 1;
@@ -24,6 +29,7 @@ const JOB_COOLDOWN_MS = 750;
 const REUSE_REPAIR_INTERVAL_MS = 30 * 60 * 1000;
 const WORKER_STOPPED_CODE = "WORKER_STOPPED";
 const PLAYLIST_MUTATION_CODE = "PLAYLIST_MUTATION_IN_PROGRESS";
+const RETRY_JOB_REGISTRY_KEY = "weeklyFlowIncompleteRetryJobs";
 
 export class WeeklyFlowWorker {
   constructor(
@@ -39,10 +45,8 @@ export class WeeklyFlowWorker {
     this.backupRefillRounds = new Map();
     this.currentJob = null;
     this.lastDequeuedPlaylistType = null;
-    this.reuseRepairTimer = null;
     this.reuseRepairInFlight = null;
     this.lastJobMetrics = null;
-    this.incompleteRetryTimers = new Map();
     this.activeJobs = new Map();
     this.blockedPlaylistTypes = new Set();
     this.runGeneration = 0;
@@ -164,12 +168,29 @@ export class WeeklyFlowWorker {
     }
   }
 
+  _getRetryJobRegistry() {
+    const raw = dbOps.getJSONSetting(RETRY_JOB_REGISTRY_KEY);
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  }
+
+  _setRetryJobRegistry(registry) {
+    dbOps.setJSONSetting(RETRY_JOB_REGISTRY_KEY, registry);
+  }
+
+  getScheduledRetryJobId(playlistType) {
+    const key = String(playlistType || "").trim();
+    if (!key) return null;
+    const jobId = Number(this._getRetryJobRegistry()[key]);
+    return Number.isFinite(jobId) ? jobId : null;
+  }
+
   clearIncompleteRetry(playlistType) {
-    const timer = this.incompleteRetryTimers.get(playlistType);
-    if (timer) {
-      clearTimeout(timer);
-      this.incompleteRetryTimers.delete(playlistType);
-    }
+    const key = String(playlistType || "").trim();
+    if (!key) return;
+    const registry = this._getRetryJobRegistry();
+    if (!(key in registry)) return;
+    delete registry[key];
+    this._setRetryJobRegistry(registry);
   }
 
   _normalizeRetryPausedPlaylistIds(value) {
@@ -234,7 +255,7 @@ export class WeeklyFlowWorker {
   }
 
   getIncompleteRetryMap(playlistIds = []) {
-    const scheduled = new Set(this.incompleteRetryTimers.keys());
+    const scheduled = new Set(Object.keys(this._getRetryJobRegistry()));
     const out = {};
     for (const id of Array.isArray(playlistIds) ? playlistIds : []) {
       const key = String(id || "").trim();
@@ -401,20 +422,61 @@ export class WeeklyFlowWorker {
     return owner ? getListenHistoryProfile(owner) : null;
   }
 
+  _serializeReservePlanOptions(options = {}) {
+    const serialized = { ...options };
+    for (const field of ["excludeArtistKeys", "excludeTrackKeys"]) {
+      if (serialized[field] instanceof Set) {
+        serialized[field] = [...serialized[field]];
+      }
+    }
+    return serialized;
+  }
+
+  _rehydrateReservePlanOptions(options = {}) {
+    const rehydrated = { ...options };
+    for (const field of ["excludeArtistKeys", "excludeTrackKeys"]) {
+      const value = rehydrated[field];
+      if (value instanceof Set) continue;
+      rehydrated[field] = new Set(Array.isArray(value) ? value : []);
+    }
+    return rehydrated;
+  }
+
   _scheduleReservePlanBuild(playlistType, context) {
     const key = String(playlistType || "").trim();
     if (!key || !context?.flow) return;
     if (this.reserveBuildsInFlight.has(key)) return;
     this.reserveBuildsInFlight.add(key);
-    const flow = context.flow;
-    playlistSource
-      .buildFlowReservePlan(flow, context.primaryTracks || [], context.options || {})
-      .then((reservePlan) => {
-        const existing = this.playlistReservePools.get(key) || [];
-        const added = this._normalizeReserveTracks(
-          reservePlan?.reserveTracks || [],
-        );
-        if (added.length === 0) return;
+    enqueuePlaylistReserveBuildJob(
+      {
+        playlistType: key,
+        flow: context.flow,
+        primaryTracks: context.primaryTracks || [],
+        options: this._serializeReservePlanOptions(context.options || {}),
+        requestedAt: Date.now(),
+      },
+      { priority: 5 },
+    );
+  }
+
+  async runQueuedReserveBuild(payload = {}) {
+    const key = String(payload?.playlistType || "").trim();
+    if (!key || !payload?.flow) return { skipped: true };
+    if (!flowPlaylistConfig.getFlow(key)) {
+      this.reserveBuildsInFlight.delete(key);
+      return { skipped: true, reason: "missing_flow" };
+    }
+    try {
+      const reservePlan = await playlistSource.buildFlowReservePlan(
+        payload.flow,
+        payload.primaryTracks || [],
+        this._rehydrateReservePlanOptions(payload.options || {}),
+      );
+      const existing = this.playlistReservePools.get(key) || [];
+      const added = this._normalizeReserveTracks(
+        reservePlan?.reserveTracks || [],
+      );
+      if (added.length > 0) {
         this.playlistReservePools.set(key, [...existing, ...added]);
         const currentDiagnostics = this.playlistRunDiagnostics.get(key) || {};
         const achieved = reservePlan?.diagnostics?.achieved || {};
@@ -426,16 +488,11 @@ export class WeeklyFlowWorker {
             reserveSourceCounts: achieved.reserveSourceCounts || {},
           },
         });
-      })
-      .catch((error) => {
-        console.error(
-          `[WeeklyFlowWorker] Failed reserve build for ${key}:`,
-          error.message,
-        );
-      })
-      .finally(() => {
-        this.reserveBuildsInFlight.delete(key);
-      });
+      }
+      return { built: true, reserveTracks: added.length };
+    } finally {
+      this.reserveBuildsInFlight.delete(key);
+    }
   }
 
   async seedFlowRunWithTracks(playlistType, flow, tracks, options = {}) {
@@ -638,22 +695,42 @@ export class WeeklyFlowWorker {
       this.clearIncompleteRetry(playlistType);
       return;
     }
-    if (this.incompleteRetryTimers.has(playlistType)) return;
+    if (this.getScheduledRetryJobId(playlistType) != null) return;
     const waitMs = Math.max(
       1000,
       Math.floor(Number(delayMs) || this._getIncompleteRetryDelayMs()),
     );
-    const timer = setTimeout(() => {
-      this.incompleteRetryTimers.delete(playlistType);
-      this.retryIncompletePlaylist(playlistType).catch((error) => {
-        console.error(
-          `[WeeklyFlowWorker] Failed incomplete retry for ${playlistType}:`,
-          error.message,
-        );
-        this._scheduleIncompleteRetry(playlistType);
-      });
-    }, waitMs);
-    this.incompleteRetryTimers.set(playlistType, timer);
+    const jobId = enqueuePlaylistRetryJob(
+      {
+        playlistType,
+        requestedAt: Date.now(),
+      },
+      {
+        delaySeconds: Math.ceil(waitMs / 1000),
+      },
+    );
+    const registry = this._getRetryJobRegistry();
+    registry[String(playlistType)] = jobId;
+    this._setRetryJobRegistry(registry);
+  }
+
+  markIncompleteRetryDequeued(playlistType, jobId = null) {
+    const key = String(playlistType || "").trim();
+    if (!key) return;
+    const registry = this._getRetryJobRegistry();
+    if (!(key in registry)) return;
+    if (jobId != null && Number(registry[key]) !== Number(jobId)) return;
+    delete registry[key];
+    this._setRetryJobRegistry(registry);
+  }
+
+  restoreScheduledRetryJobId(playlistType, jobId) {
+    const key = String(playlistType || "").trim();
+    if (!key || jobId == null) return;
+    const registry = this._getRetryJobRegistry();
+    if (key in registry) return;
+    registry[key] = jobId;
+    this._setRetryJobRegistry(registry);
   }
 
   async retryIncompletePlaylist(playlistType) {
@@ -669,6 +746,10 @@ export class WeeklyFlowWorker {
     }
     if (flow && flow.enabled !== true) {
       this.clearIncompleteRetry(playlistType);
+      return 0;
+    }
+    if (this._isPlaylistBlocked(playlistType)) {
+      this._scheduleIncompleteRetry(playlistType, 60 * 1000);
       return 0;
     }
 
@@ -832,11 +913,6 @@ export class WeeklyFlowWorker {
     this.running = true;
     startSlskdOrchestratorWorker();
     console.log("[WeeklyFlowWorker] Starting worker...");
-    this.scheduleReuseLinkRepair(true);
-    this.reuseRepairTimer = setInterval(() => {
-      if (!this.running) return;
-      this.scheduleReuseLinkRepair(false);
-    }, REUSE_REPAIR_INTERVAL_MS);
 
     this.processLoop = () => {
       if (!this.running) return;
@@ -920,10 +996,6 @@ export class WeeklyFlowWorker {
     if (this.processTimer) {
       clearTimeout(this.processTimer);
       this.processTimer = null;
-    }
-    if (this.reuseRepairTimer) {
-      clearInterval(this.reuseRepairTimer);
-      this.reuseRepairTimer = null;
     }
     this.processLoop = null;
     this.backupRefillRounds.clear();
@@ -1057,61 +1129,111 @@ export class WeeklyFlowWorker {
         return;
       }
       this.playlistFinalizing.add(playlistKey);
-      this.clearIncompleteRetry(playlistType);
-      this.backupRefillRounds.delete(playlistType);
-      console.log(
-        `[WeeklyFlowWorker] All jobs complete for ${playlistType}, ensuring playlists...`,
-      );
       try {
-        await fs.rm(path.join(this.weeklyFlowRoot, "_fallback"), {
-          recursive: true,
-          force: true,
-        });
-      } catch {}
-      try {
-        playlistManager.updateConfig(false);
-        await playlistManager.ensurePlaylists();
-        await playlistManager.scheduleScanLibrary(true);
-        if (flowPlaylistConfig.isEnabled(playlistType)) {
-          flowPlaylistConfig.scheduleNextRun(playlistType);
-        }
-      } catch (error) {
-        console.error(
-          `[WeeklyFlowWorker] Failed to ensure playlists for ${playlistType}:`,
-          error.message,
-        );
-      }
+        await withHonkerLock(
+          `playlist-finalize:${playlistKey}`,
+          async () => {
+            this.clearIncompleteRetry(playlistType);
+            this.backupRefillRounds.delete(playlistType);
+            console.log(
+              `[WeeklyFlowWorker] All jobs complete for ${playlistType}, ensuring playlists...`,
+            );
+            try {
+              await fs.rm(path.join(this.weeklyFlowRoot, "_fallback"), {
+                recursive: true,
+                force: true,
+              });
+            } catch {}
+            try {
+              playlistManager.updateConfig(false);
+              await playlistManager.ensurePlaylists();
+              await playlistManager.scheduleScanLibrary(true);
+              if (flowPlaylistConfig.isEnabled(playlistType)) {
+                flowPlaylistConfig.scheduleNextRun(playlistType);
+              }
+            } catch (error) {
+              console.error(
+                `[WeeklyFlowWorker] Failed to ensure playlists for ${playlistType}:`,
+                error.message,
+              );
+            }
 
-      const flow = flowPlaylistConfig.getFlow(playlistType);
-      const completed = done;
-      const { notifyWeeklyFlowDone } = await import("./notificationService.js");
-      notifyWeeklyFlowDone(
-        playlistType,
-        { completed, failed },
-        path.join(playlistManager.libraryRoot, playlistType),
-        flow ? flow.name : playlistType,
-      ).catch((err) =>
-        console.warn(
-          "[WeeklyFlowWorker] Gotify notification failed:",
-          err.message,
-        ),
-      );
-      import("./slskdClient.js")
-        .then(({ slskdClient, isSlskdCleanupAfterRunsEnabled }) => {
-          if (!isSlskdCleanupAfterRunsEnabled()) return null;
-          const globalStats = downloadTracker.getStats();
-          if (globalStats.pending > 0 || globalStats.downloading > 0) {
-            return null;
-          }
-          return slskdClient.cleanupAfterRun();
-        })
-        .catch((err) =>
-          console.warn(
-            "[WeeklyFlowWorker] slskd cleanup failed:",
-            err?.message || err,
-          ),
+            const flow = flowPlaylistConfig.getFlow(playlistType);
+            const completed = done;
+            const { notifyWeeklyFlowDone } = await import(
+              "./notificationService.js"
+            );
+            notifyWeeklyFlowDone(
+              playlistType,
+              { completed, failed },
+              path.join(playlistManager.libraryRoot, playlistType),
+              flow ? flow.name : playlistType,
+            ).catch((err) =>
+              console.warn(
+                "[WeeklyFlowWorker] Gotify notification failed:",
+                err.message,
+              ),
+            );
+            import("./slskdClient.js")
+              .then(({ slskdClient, isSlskdCleanupAfterRunsEnabled }) => {
+                if (!isSlskdCleanupAfterRunsEnabled()) return null;
+                const globalStats = downloadTracker.getStats();
+                if (globalStats.pending > 0 || globalStats.downloading > 0) {
+                  return null;
+                }
+                return slskdClient.cleanupAfterRun();
+              })
+              .catch((err) =>
+                console.warn(
+                  "[WeeklyFlowWorker] slskd cleanup failed:",
+                  err?.message || err,
+                ),
+              );
+          },
+          {
+            ttlSeconds: 180,
+            waitTimeoutMs: 15 * 60 * 1000,
+          },
         );
-      this.playlistFinalizing.delete(playlistKey);
+      } finally {
+        this.playlistFinalizing.delete(playlistKey);
+      }
+    }
+  }
+
+  pruneOrphanedJobState() {
+    const activePlaylistIds = new Set([
+      ...flowPlaylistConfig.getFlows().map((flow) => flow.id),
+      ...flowPlaylistConfig.getSharedPlaylists().map((playlist) => playlist.id),
+    ]);
+    for (const jobId of [...this.activeJobs.keys()]) {
+      if (downloadTracker.getJob(jobId)) continue;
+      this.activeJobs.delete(jobId);
+    }
+    for (const playlistId of [...this.blockedPlaylistTypes]) {
+      if (activePlaylistIds.has(playlistId)) continue;
+      this.blockedPlaylistTypes.delete(playlistId);
+    }
+    for (const map of [
+      this.playlistReservePools,
+      this.playlistRunDiagnostics,
+      this.playlistFailureMemory,
+      this.backupRefillRounds,
+    ]) {
+      for (const playlistId of [...map.keys()]) {
+        if (activePlaylistIds.has(playlistId)) continue;
+        map.delete(playlistId);
+      }
+    }
+    for (const playlistId of Object.keys(this._getRetryJobRegistry())) {
+      if (activePlaylistIds.has(playlistId)) continue;
+      this.clearIncompleteRetry(playlistId);
+    }
+    for (const set of [this.playlistFinalizing, this.reserveBuildsInFlight]) {
+      for (const playlistId of [...set]) {
+        if (activePlaylistIds.has(playlistId)) continue;
+        set.delete(playlistId);
+      }
     }
   }
 

@@ -1,6 +1,6 @@
 import { userOps } from "../config/db-helpers.js";
+import { randomUUID } from "crypto";
 import { getLastfmApiKey } from "./apiClients.js";
-import { recordFlowTracksGenerated, recordPlaylistTracksAdded } from "./aurralHistoryService.js";
 import {
   buildFlowPayloadFromPreset,
   getCachedDiscoverPlaylist,
@@ -11,12 +11,9 @@ import {
   getListenHistoryCacheNamespace,
   getListenHistoryProfile,
 } from "./listeningHistory.js";
-import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
-import { normalizeExistingFileMode, reuseTrackForPlaylist } from "./weeklyFlowFileReuse.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { weeklyFlowOperationQueue } from "./weeklyFlowOperationQueue.js";
 import { playlistManager } from "./weeklyFlowPlaylistManager.js";
-import { weeklyFlowWorker } from "./weeklyFlowWorker.js";
 
 const resolveDiscoverAdoptContext = (user, presetId) => {
   const reqUser = userOps.getUserById(user?.id);
@@ -26,40 +23,6 @@ const resolveDiscoverAdoptContext = (user, presetId) => {
   const discoveryCache = getDiscoveryCache(effectiveCacheNamespace);
   const cachedPlaylist = getCachedDiscoverPlaylist(discoveryCache, presetId);
   return { cachedPlaylist };
-};
-
-const queueSharedPlaylistTracks = async (tracks, playlistId) => {
-  const settings = weeklyFlowWorker.getWorkerSettings();
-  const existingFileMode = normalizeExistingFileMode(settings.existingFileMode);
-  const reusedJobIds = [];
-  const tracksToQueue = [];
-  for (const track of Array.isArray(tracks) ? tracks : []) {
-    const reuse = await reuseTrackForPlaylist(track, playlistId, {
-      existingFileMode,
-      weeklyFlowRoot: weeklyFlowWorker.weeklyFlowRoot,
-      targetPlaylistType: playlistId,
-      skipHistory: true,
-    });
-    if (reuse.reused) {
-      reusedJobIds.push(reuse.jobId);
-    } else {
-      tracksToQueue.push(track);
-    }
-  }
-  const jobIds = downloadTracker.addJobs(tracksToQueue, playlistId);
-  return {
-    reusedJobIds,
-    jobIds,
-    tracksQueued: jobIds.length,
-  };
-};
-
-const wakeDownloadWorker = async () => {
-  if (!weeklyFlowWorker.running) {
-    await weeklyFlowWorker.start();
-  } else {
-    weeklyFlowWorker.wake();
-  }
 };
 
 export async function adoptDiscoverPresetAsFlow(user, presetId) {
@@ -97,24 +60,19 @@ export async function adoptDiscoverPresetAsFlow(user, presetId) {
   flowPlaylistConfig.scheduleNextRun(flow.id);
 
   const tracks = (cachedPlaylist.tracks || []).map(serializeTrack);
-  const result = await weeklyFlowOperationQueue.enqueue(
-    `adopt:${flow.id}`,
-    async () => weeklyFlowWorker.seedFlowRunWithTracks(flow.id, flow, tracks),
-  );
-
-  await wakeDownloadWorker();
-
-  recordFlowTracksGenerated({
+  const result = await weeklyFlowOperationQueue.enqueuePayload({
+    kind: "adopt-flow-seed",
+    label: `adopt:${flow.id}`,
     flowId: flow.id,
-    tracksQueued: result?.tracksQueued || tracks.length,
-    reserveTracks: 0,
+    tracks,
   });
 
   return {
     success: true,
     flowId: flow.id,
     flow,
-    tracksQueued: result?.tracksQueued || tracks.length,
+    tracksQueued: Number(result?.tracksQueued || 0),
+    queued: result?.queued === true,
     alreadyAdopted: false,
   };
 }
@@ -146,45 +104,26 @@ export async function adoptDiscoverPresetAsPlaylist(user, presetId) {
   }
 
   const tracks = (cachedPlaylist.tracks || []).map(serializeTrack);
-  const playlist = flowPlaylistConfig.createSharedPlaylist({
+  const playlistId = randomUUID();
+  const result = await weeklyFlowOperationQueue.enqueuePayload({
+    kind: "shared-playlist-create",
+    label: `adopt-playlist:${safePresetId}`,
+    playlistId,
     name: cachedPlaylist.name,
     sourceName: cachedPlaylist.name,
     tracks,
     ownerUserId: user.id,
     discoverPresetId: safePresetId,
   });
-
-  let tracksQueued = 0;
-  let tracksReused = 0;
-  if (tracks.length > 0) {
-    const queued = await queueSharedPlaylistTracks(tracks, playlist.id);
-    tracksQueued = queued.tracksQueued;
-    tracksReused = queued.reusedJobIds.length;
-    if (tracksQueued > 0) {
-      await wakeDownloadWorker();
-    }
-    if (queued.reusedJobIds.length > 0) {
-      playlistManager.scheduleScanLibrary();
-    }
-  }
-
-  playlistManager.updateConfig(false);
-  await playlistManager.ensureSmartPlaylists();
-
-  if (tracksQueued + tracksReused > 0) {
-    recordPlaylistTracksAdded({
-      playlistId: playlist.id,
-      tracksQueued,
-      tracksReused,
-    });
-  }
+  const playlist = result?.playlist || null;
 
   return {
     success: true,
-    playlistId: playlist.id,
+    playlistId: playlist?.id || playlistId,
     playlist,
-    tracksQueued,
-    tracksReused,
+    tracksQueued: Number(result?.tracksQueued || 0),
+    tracksReused: Number(result?.tracksReused || 0),
+    queued: result?.queued === true,
     alreadyAdopted: false,
   };
 }

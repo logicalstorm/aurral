@@ -10,7 +10,6 @@ import { createServer } from "http";
 import { fileURLToPath } from "url";
 
 import { createAuthMiddleware } from "./middleware/auth.js";
-import { cleanExpiredSessions } from "./config/session-helpers.js";
 import { websocketService } from "./services/websocketService.js";
 import { getAllDownloadStatuses } from "./routes/library/handlers/downloads.js";
 import { getWeeklyFlowStatusSnapshot } from "./services/weeklyFlowStatusSnapshot.js";
@@ -28,6 +27,19 @@ import weeklyFlowRouter from "./routes/weeklyFlow.js";
 import { startSlskdOrchestratorWorker } from "./services/slskdOrchestratorWorker.js";
 import { startDiscoveryRefreshWorker } from "./services/discoveryRefreshWorker.js";
 import { startDiscoveryPlaylistBuildWorker } from "./services/discoveryPlaylistBuildWorker.js";
+import { startWeeklyFlowOperationWorker } from "./services/weeklyFlowOperationWorker.js";
+import { startWeeklyFlowPlaylistRetryWorker } from "./services/weeklyFlowPlaylistRetryWorker.js";
+import { startWeeklyFlowPlaylistReserveBuildWorker } from "./services/weeklyFlowPlaylistReserveBuildWorker.js";
+import { startDiscoveryUserRefreshWorker } from "./services/discoveryUserRefreshWorker.js";
+import { startSystemTaskWorker } from "./services/systemTaskWorker.js";
+import { startLibraryScanWorker } from "./services/libraryScanWorker.js";
+import { startImagePrefetchWorker } from "./services/imagePrefetchWorker.js";
+import { startNotificationOutboxWorker } from "./services/notificationOutboxWorker.js";
+import {
+  bootstrapHonkerSchedules,
+  enqueueHonkerStartupTasks,
+  startHonkerScheduler,
+} from "./services/honkerDb.js";
 import { ensurePlaylistFilesystemLayout } from "./services/playlistFilesystemMigration.js";
 import authRouter from "./routes/auth.js";
 import imageProxyRouter from "./routes/imageProxy.js";
@@ -145,70 +157,6 @@ app.use("/api/weekly-flow", weeklyFlowRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/image-proxy", imageProxyRouter);
 
-const HOUR_MS = 60 * 60 * 1000;
-setInterval(() => {
-  import("./services/weeklyFlowScheduler.js")
-    .then((m) => m.runScheduledRefresh())
-    .catch((err) => console.error("Weekly flow scheduler error:", err.message));
-}, HOUR_MS);
-
-setInterval(() => {
-  cleanExpiredSessions();
-}, HOUR_MS);
-
-setTimeout(() => {
-  import("./services/weeklyFlowScheduler.js")
-    .then((m) => m.startWorkerIfPending())
-    .catch((err) =>
-      console.error("Weekly flow startup check error:", err.message),
-    );
-}, 5000);
-
-const REUSE_REPAIR_INTERVAL_MS = 30 * 60 * 1000;
-setInterval(() => {
-  import("./services/weeklyFlowWorker.js")
-    .then((m) => m.weeklyFlowWorker.scheduleReuseLinkRepair(false))
-    .catch((err) =>
-      console.error("Weekly flow reuse repair error:", err.message),
-    );
-}, REUSE_REPAIR_INTERVAL_MS);
-
-setTimeout(() => {
-  import("./services/weeklyFlowWorker.js")
-    .then((m) => m.weeklyFlowWorker.scheduleReuseLinkRepair(true))
-    .catch((err) =>
-      console.error("Weekly flow reuse repair startup error:", err.message),
-    );
-}, 15000);
-
-setTimeout(async () => {
-  try {
-    const [
-      { migrateLegacyWeeklyFlowPaths, resolveWeeklyFlowRoot },
-      trackerModule,
-      { playlistManager },
-    ] = await Promise.all([
-      import("./services/weeklyFlowPaths.js"),
-      import("./services/weeklyFlowDownloadTracker.js"),
-      import("./services/weeklyFlowPlaylistManager.js"),
-    ]);
-    const result = await migrateLegacyWeeklyFlowPaths(
-      resolveWeeklyFlowRoot(),
-      trackerModule.downloadTracker,
-    );
-    if (result.migrated > 0) {
-      console.log(
-        `[Playlists] Migrated ${result.migrated} legacy track paths to ${resolveWeeklyFlowRoot()}`,
-      );
-    }
-    playlistManager.updateConfig(false);
-    await playlistManager.ensurePlaylists();
-    await playlistManager.scheduleScanLibrary(true);
-  } catch (err) {
-    console.error("Playlist startup migration error:", err.message);
-  }
-}, 3000);
-
 const frontendDist = path.join(__dirname, "..", "frontend", "dist");
 const frontendFallbackRoute = /.*/;
 
@@ -241,24 +189,6 @@ app.use((err, req, res, next) => {
   }
   return res.status(500).json({ error: "Internal server error" });
 });
-
-setInterval(() => {
-  import("./services/discoveryRefreshScheduler.js")
-    .then((m) =>
-      m.enqueueDiscoveryRefreshIfNeeded({ reason: "interval" }),
-    )
-    .catch((err) => {
-      console.error("Error in scheduled discovery update:", err.message);
-    });
-}, 15 * 60 * 1000);
-
-setTimeout(() => {
-  import("./services/discoveryRefreshScheduler.js")
-    .then((m) => m.bootstrapDiscoveryRefresh())
-    .catch((err) => {
-      console.error("Error in initial discovery bootstrap:", err.message);
-    });
-}, 15000);
 
 const httpServer = createServer(app);
 websocketService.initialize(httpServer);
@@ -330,9 +260,20 @@ ensurePlaylistFilesystemLayout();
 
 httpServer.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server running on port ${PORT}`);
+  bootstrapHonkerSchedules();
+  enqueueHonkerStartupTasks();
+  startHonkerScheduler();
+  startSystemTaskWorker();
+  startLibraryScanWorker();
+  startImagePrefetchWorker();
+  startNotificationOutboxWorker();
   startSlskdOrchestratorWorker();
   startDiscoveryRefreshWorker();
   startDiscoveryPlaylistBuildWorker();
+  startDiscoveryUserRefreshWorker();
+  startWeeklyFlowOperationWorker();
+  startWeeklyFlowPlaylistRetryWorker();
+  startWeeklyFlowPlaylistReserveBuildWorker();
 });
 
 httpServer.on("error", (error) => {
