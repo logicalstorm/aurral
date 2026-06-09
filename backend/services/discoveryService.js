@@ -33,6 +33,10 @@ import {
   mergeResolvedRecommendations,
   rerankRecommendations,
 } from "./discoveryRecommendations.js";
+import {
+  enqueueDiscoveryPlaylistBuildJob,
+  withHonkerLock,
+} from "./honkerDb.js";
 
 const LASTFM_PERIODS = [
   "none",
@@ -1009,6 +1013,170 @@ const emitDiscoveryDataUpdate = (discoveryData, options = {}) => {
   );
 };
 
+const pickArray = (primary, fallback = []) =>
+  Array.isArray(primary) && primary.length > 0
+    ? primary
+    : Array.isArray(fallback)
+      ? fallback
+      : [];
+
+const normalizePlaylistBuildStringList = (value, limit = 10) => {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const entry of value) {
+    const text = String(entry || "").trim();
+    const key = text.toLowerCase();
+    if (!text || seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+    if (out.length >= limit) break;
+  }
+  return out;
+};
+
+const resolveDiscoveryDataForPlaylistBuild = (payload = {}) => {
+  const cacheNamespace = String(payload?.cacheNamespace || "").trim() || null;
+  const cached = getDiscoveryCache(cacheNamespace);
+  const fallback =
+    payload?.discoveryData && typeof payload.discoveryData === "object"
+      ? payload.discoveryData
+      : {};
+  const provider =
+    cached.provider || fallback.provider || DISCOVERY_PROVIDER_LASTFM;
+  return {
+    provider,
+    capabilities:
+      cached.capabilities ||
+      fallback.capabilities ||
+      getDiscoveryCapabilities(provider === DISCOVERY_PROVIDER_LASTFM),
+    recommendations: pickArray(
+      cached.recommendations,
+      fallback.recommendations,
+    ),
+    globalTop: pickArray(cached.globalTop, fallback.globalTop),
+    basedOn: pickArray(cached.basedOn, fallback.basedOn),
+    topTags: pickArray(cached.topTags, fallback.topTags),
+    topGenres: pickArray(cached.topGenres, fallback.topGenres),
+    fallbackGenres: pickArray(cached.fallbackGenres, fallback.fallbackGenres),
+    fallbackGenrePools:
+      cached.fallbackGenrePools &&
+      typeof cached.fallbackGenrePools === "object"
+        ? cached.fallbackGenrePools
+        : fallback.fallbackGenrePools &&
+            typeof fallback.fallbackGenrePools === "object"
+          ? fallback.fallbackGenrePools
+          : {},
+    discoverPlaylists: pickArray(
+      cached.discoverPlaylists,
+      fallback.discoverPlaylists,
+    ),
+    lastUpdated: cached.lastUpdated || fallback.lastUpdated || null,
+  };
+};
+
+export async function runQueuedDiscoverPlaylistBuild(payload = {}) {
+  const cacheNamespace = String(payload?.cacheNamespace || "").trim() || null;
+  const buildKey = getDiscoveryPlaylistBuildKey(cacheNamespace);
+  const buildToken = String(payload?.buildToken || "").trim();
+  const activeToken = discoveryPlaylistBuildTokens.get(buildKey);
+  if (activeToken && buildToken && activeToken !== buildToken) {
+    return { skipped: true, reason: "stale_build" };
+  }
+  if (!getLastfmApiKey()) {
+    return { skipped: true, reason: "lastfm_not_configured" };
+  }
+
+  return withHonkerLock(
+    `discovery-playlist-build:${buildKey}`,
+    async () => {
+      const lockedToken = discoveryPlaylistBuildTokens.get(buildKey);
+      if (lockedToken && buildToken && lockedToken !== buildToken) {
+        return { skipped: true, reason: "stale_build" };
+      }
+      try {
+        const baseDiscoveryData = resolveDiscoveryDataForPlaylistBuild(payload);
+        if (
+          baseDiscoveryData.recommendations.length === 0 &&
+          baseDiscoveryData.globalTop.length === 0
+        ) {
+          return { skipped: true, reason: "empty_discovery_data" };
+        }
+
+        const allLibraryArtistsRaw = await libraryManager.getAllArtists();
+        const allLibraryArtists = Array.isArray(allLibraryArtistsRaw)
+          ? allLibraryArtistsRaw
+          : [];
+        const existingArtistKeys = buildExistingArtistKeySet(allLibraryArtists);
+        const { generateDiscoverPlaylists } =
+          await import("./discoverPlaylistService.js");
+        const discoverPlaylists = await generateDiscoverPlaylists({
+          listenHistoryProfile: payload?.listenHistoryProfile || null,
+          discoveryCache: baseDiscoveryData,
+          basedOn: baseDiscoveryData.basedOn,
+          topGenres: baseDiscoveryData.topGenres,
+          topTags: baseDiscoveryData.topTags,
+          recommendations: baseDiscoveryData.recommendations,
+          globalTop: baseDiscoveryData.globalTop,
+          libraryArtists: allLibraryArtists,
+          libraryArtistKeys: existingArtistKeys,
+          historyTopArtists: normalizePlaylistBuildStringList(
+            payload?.historyTopArtists,
+            3,
+          ),
+        });
+
+        const currentToken = discoveryPlaylistBuildTokens.get(buildKey);
+        if (currentToken && buildToken && currentToken !== buildToken) {
+          return { skipped: true, reason: "stale_build" };
+        }
+
+        const playlistData = { discoverPlaylists };
+        if (!cacheNamespace) {
+          discoveryCache.discoverPlaylists = discoverPlaylists;
+        }
+        dbOps.updateDiscoveryCache(playlistData, cacheNamespace);
+
+        if (payload?.publishUpdate !== false) {
+          emitDiscoveryDataUpdate(
+            {
+              ...baseDiscoveryData,
+              discoverPlaylists,
+            },
+            {
+              phase: "playlists_completed",
+              progressMessage: "Discover playlists updated",
+            },
+          );
+        }
+        return { built: true, playlistCount: discoverPlaylists.length };
+      } finally {
+        if (discoveryPlaylistBuildTokens.get(buildKey) === buildToken) {
+          discoveryPlaylistBuildTokens.delete(buildKey);
+        }
+      }
+    },
+    {
+      ttlSeconds: 300,
+      waitTimeoutMs: 30 * 60 * 1000,
+      retryDelayMs: 500,
+    },
+  );
+}
+
+export function emitDiscoverPlaylistBuildFailure(payload = {}, error) {
+  if (payload?.publishUpdate === false) return;
+  const message = error?.message || String(error || "Unknown error");
+  websocketService.emitDiscoveryUpdate({
+    isUpdating: false,
+    configured: true,
+    phase: "playlists_error",
+    progress: 100,
+    progressMessage: "Discover playlists failed to update",
+    error: message,
+  });
+}
+
 const scheduleDiscoverPlaylistBuild = ({
   baseDiscoveryData,
   cacheNamespace = null,
@@ -1021,51 +1189,34 @@ const scheduleDiscoverPlaylistBuild = ({
   const buildToken = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   discoveryPlaylistBuildTokens.set(buildKey, buildToken);
 
-  setTimeout(async () => {
-    try {
-      const { generateDiscoverPlaylists } =
-        await import("./discoverPlaylistService.js");
-      const discoverPlaylists = await generateDiscoverPlaylists(playlistArgs);
-      if (discoveryPlaylistBuildTokens.get(buildKey) !== buildToken) {
-        return;
-      }
+  const payload = {
+    cacheNamespace,
+    buildToken,
+    publishUpdate,
+    requestedAt: Date.now(),
+    listenHistoryProfile: playlistArgs.listenHistoryProfile || null,
+    historyTopArtists: normalizePlaylistBuildStringList(
+      playlistArgs.historyTopArtists,
+      3,
+    ),
+    discoveryData: baseDiscoveryData,
+  };
 
-      const playlistData = { discoverPlaylists };
-      if (!cacheNamespace) {
-        discoveryCache.discoverPlaylists = discoverPlaylists;
-      }
-      dbOps.updateDiscoveryCache(playlistData, cacheNamespace);
-
-      const nextDiscoveryData = {
-        ...baseDiscoveryData,
-        discoverPlaylists,
-      };
-      if (publishUpdate) {
-        emitDiscoveryDataUpdate(nextDiscoveryData, {
-          phase: "playlists_completed",
-          progressMessage: "Discover playlists updated",
-        });
-      }
-    } catch (error) {
-      console.error(
-        `[Discovery] Background discover playlist build failed: ${error.message}`,
-      );
-      if (publishUpdate) {
-        websocketService.emitDiscoveryUpdate({
-          isUpdating: false,
-          configured: true,
-          phase: "playlists_error",
-          progress: 100,
-          progressMessage: "Discover playlists failed to update",
-          error: error.message,
-        });
-      }
-    } finally {
-      if (discoveryPlaylistBuildTokens.get(buildKey) === buildToken) {
-        discoveryPlaylistBuildTokens.delete(buildKey);
-      }
-    }
-  }, 0);
+  try {
+    enqueueDiscoveryPlaylistBuildJob(payload);
+  } catch (error) {
+    console.error(
+      `[Discovery] Failed to enqueue discover playlist build: ${error.message}`,
+    );
+    setTimeout(() => {
+      runQueuedDiscoverPlaylistBuild(payload).catch((runError) => {
+        console.error(
+          `[Discovery] Background discover playlist build failed: ${runError.message}`,
+        );
+        emitDiscoverPlaylistBuildFailure(payload, runError);
+      });
+    }, 0);
+  }
 };
 
 export const updateDiscoveryCache = async (options = {}) => {

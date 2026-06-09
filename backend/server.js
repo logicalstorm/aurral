@@ -27,6 +27,7 @@ import healthRouter from "./routes/health.js";
 import weeklyFlowRouter from "./routes/weeklyFlow.js";
 import { startSlskdOrchestratorWorker } from "./services/slskdOrchestratorWorker.js";
 import { startDiscoveryRefreshWorker } from "./services/discoveryRefreshWorker.js";
+import { startDiscoveryPlaylistBuildWorker } from "./services/discoveryPlaylistBuildWorker.js";
 import { ensurePlaylistFilesystemLayout } from "./services/playlistFilesystemMigration.js";
 import authRouter from "./routes/auth.js";
 import imageProxyRouter from "./routes/imageProxy.js";
@@ -331,6 +332,7 @@ httpServer.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server running on port ${PORT}`);
   startSlskdOrchestratorWorker();
   startDiscoveryRefreshWorker();
+  startDiscoveryPlaylistBuildWorker();
 });
 
 httpServer.on("error", (error) => {
