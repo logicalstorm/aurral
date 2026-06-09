@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { RefreshCw, Trash2, Compass, X } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
-import { SettingsSelect } from "./SettingsField";
+import { SettingsInput, SettingsSelect } from "./SettingsField";
 
 const AUTO_REFRESH_OPTIONS = [
   { value: 24, label: "Daily" },
@@ -60,6 +60,15 @@ export function SettingsDiscoverTab({
     settings.integrations?.lastfm?.discoveryAutoRefreshHours || 168;
   const discoveryMode =
     settings.integrations?.lastfm?.discoveryMode || "balanced";
+  const discoveryRecommendationsPerRefresh =
+    settings.integrations?.lastfm?.discoveryRecommendationsPerRefresh ?? 200;
+  const discoveryFlowsPerRefresh =
+    settings.integrations?.lastfm?.discoveryFlowsPerRefresh ?? 12;
+  const baseDiscoverFlowCount = 4;
+  const focusFlowCount = Math.max(
+    0,
+    discoveryFlowsPerRefresh - baseDiscoverFlowCount,
+  );
   const discoveryProvider =
     health?.discovery?.provider === "listenbrainz-fallback"
       ? "ListenBrainz fallback"
@@ -150,6 +159,77 @@ export function SettingsDiscoverTab({
               </SettingsSelect>
             </div>
             {!isListenBrainzFallback && (
+              <>
+              <div className="settings-page__field">
+                <label
+                  className="artist-field-label"
+                  htmlFor="discover-recommendations"
+                >
+                  Recommended artists per refresh
+                </label>
+                <SettingsInput
+                  id="discover-recommendations"
+                  type="number"
+                  min={50}
+                  max={500}
+                  step={10}
+                  value={discoveryRecommendationsPerRefresh}
+                  onChange={(e) => {
+                    const raw = Number(e.target.value);
+                    const value = Number.isFinite(raw)
+                      ? Math.max(50, Math.min(500, Math.floor(raw)))
+                      : 200;
+                    updateSettings({
+                      ...settings,
+                      integrations: {
+                        ...settings.integrations,
+                        lastfm: {
+                          ...(settings.integrations?.lastfm || {}),
+                          discoveryRecommendationsPerRefresh: value,
+                        },
+                      },
+                    });
+                  }}
+                />
+                <p className="settings-page__hint">
+                  How many artist recommendations to generate on each discovery
+                  refresh.
+                </p>
+              </div>
+              <div className="settings-page__field">
+                <label className="artist-field-label" htmlFor="discover-flows">
+                  Generated flows per refresh
+                </label>
+                <SettingsInput
+                  id="discover-flows"
+                  type="number"
+                  min={4}
+                  max={32}
+                  step={1}
+                  value={discoveryFlowsPerRefresh}
+                  onChange={(e) => {
+                    const raw = Number(e.target.value);
+                    const value = Number.isFinite(raw)
+                      ? Math.max(4, Math.min(32, Math.floor(raw)))
+                      : 12;
+                    updateSettings({
+                      ...settings,
+                      integrations: {
+                        ...settings.integrations,
+                        lastfm: {
+                          ...(settings.integrations?.lastfm || {}),
+                          discoveryFlowsPerRefresh: value,
+                        },
+                      },
+                    });
+                  }}
+                />
+                <p className="settings-page__hint">
+                  Includes Discover Weekly, Trending Mix, Library Blend, and
+                  Release Radar, plus {focusFlowCount} auto-generated focus
+                  playlists.
+                </p>
+              </div>
               <div className="settings-page__field">
                 <label className="artist-field-label" htmlFor="discover-mode">
                   Discovery mode
@@ -191,6 +271,7 @@ export function SettingsDiscoverTab({
                   </p>
                 </div>
               </div>
+              </>
             )}
           </fieldset>
         </div>

@@ -1,4 +1,5 @@
 import { getLastfmApiKey } from "./apiClients.js";
+import { getMaxFocusPlaylists } from "./discoveryService.js";
 import { playlistSource } from "./weeklyFlowPlaylistSource.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import {
@@ -8,9 +9,9 @@ import {
 } from "../config/discoverPlaylistPresets.js";
 
 const FOCUS_PLAYLIST_SIZE = 20;
-const MAX_FOCUS_PLAYLISTS = 5;
-const PLAYLIST_BUILD_CONCURRENCY = 2;
+const PLAYLIST_BUILD_CONCURRENCY = 1;
 const FOCUS_MIX = { discover: 0, mix: 0, trending: 0, focus: 100 };
+const LISTENING_HISTORY_PLAYLIST_ID = "focus-listening-history";
 
 const serializeTrack = (track) => ({
   artistName: track?.artistName || null,
@@ -100,20 +101,67 @@ const diversifyTasteTags = (topGenres = [], topTags = []) => {
   return out;
 };
 
+const isHistorySeedSource = (source) => {
+  const normalized = String(source || "")
+    .trim()
+    .toLowerCase();
+  return normalized.length > 0 && normalized !== "library";
+};
+
+const resolveFocusSlotBudgets = (maxFocusPlaylists) => {
+  const maxFocus = Math.max(0, Math.floor(Number(maxFocusPlaylists) || 0));
+  if (maxFocus === 0) {
+    return { maxFocus: 0, tag: 0, artist: 0, crossover: 0 };
+  }
+  const tag = Math.max(1, Math.round(maxFocus * 0.375));
+  const artist = Math.max(1, Math.round(maxFocus * 0.375));
+  const crossover = Math.max(1, maxFocus - tag - artist);
+  return { maxFocus, tag, artist, crossover };
+};
+
+const resolveHistoryTopArtists = ({
+  historyTopArtists = [],
+  basedOn = [],
+  limit = 3,
+} = {}) => {
+  const explicit = uniqueStrings(historyTopArtists, limit);
+  if (explicit.length >= limit) return explicit;
+  const fromBasedOn = uniqueStrings(
+    basedOn
+      .filter((entry) => isHistorySeedSource(entry?.source))
+      .map((entry) => entry?.name || entry?.artistName),
+    limit,
+  );
+  return uniqueStrings([...explicit, ...fromBasedOn], limit);
+};
+
 const buildFocusedPlaylistCandidates = ({
   topGenres = [],
   topTags = [],
   basedOn = [],
   recommendations = [],
+  historyTopArtists = [],
+  maxFocusPlaylists = getMaxFocusPlaylists(),
 } = {}) => {
+  const {
+    maxFocus,
+    tag: tagBudget,
+    artist: artistBudget,
+    crossover: crossoverBudget,
+  } = resolveFocusSlotBudgets(maxFocusPlaylists);
   const candidates = [];
   const seenIds = new Set();
   const usedTagPairs = new Set();
   const usedArtistKeys = new Set();
+  let tagSlots = 0;
+  let artistSlots = 0;
+  let crossoverSlots = 0;
+
+  const canAdd = () => candidates.length < maxFocus;
 
   const addCandidate = (preset) => {
     const id = String(preset?.id || "").trim();
-    if (!id || seenIds.has(id)) return false;
+    if (!id || seenIds.has(id) || !canAdd()) return false;
     const tags = uniqueStrings(preset.tags || []);
     const relatedArtists = uniqueStrings(preset.relatedArtists || []);
     if (tags.length === 0 && relatedArtists.length === 0) return false;
@@ -130,24 +178,67 @@ const buildFocusedPlaylistCandidates = ({
   };
 
   const tasteTags = diversifyTasteTags(topGenres, topTags);
-  const seedArtists = uniqueStrings(
-    basedOn.map((artist) => artist?.name || artist?.artistName),
+  const historyArtists = resolveHistoryTopArtists({
+    historyTopArtists,
+    basedOn,
+    limit: 3,
+  });
+  const historyArtistKeys = new Set(
+    historyArtists.map((artist) => slugify(artist)),
+  );
+  const librarySeedArtists = uniqueStrings(
+    basedOn
+      .filter(
+        (entry) => String(entry?.source || "").toLowerCase() === "library",
+      )
+      .map((entry) => entry?.name || entry?.artistName),
+    8,
+  );
+  const relatedSeedArtists = uniqueStrings(
+    [
+      ...librarySeedArtists,
+      ...basedOn
+        .map((entry) => entry?.name || entry?.artistName)
+        .filter((artist) => !historyArtistKeys.has(slugify(artist))),
+    ],
     8,
   );
 
-  if (tasteTags[0]) {
+  if (historyArtists.length > 0) {
+    const label = historyArtists.join(", ");
     addCandidate({
-      id: `focus-spotlight:${slugify(tasteTags[0])}`,
-      name: `${titleCase(tasteTags[0])} Spotlight`,
-      description: `A deep dive into ${tasteTags[0]}`,
+      id: LISTENING_HISTORY_PLAYLIST_ID,
+      name: "Listening History",
+      description: `Tracks related to ${label}`,
       mix: { ...FOCUS_MIX },
-      tags: [tasteTags[0]],
-      relatedArtists: [],
-      deepDive: true,
+      tags: [],
+      relatedArtists: historyArtists,
+      deepDive: false,
     });
   }
 
+  if (maxFocus === 0) {
+    return candidates;
+  }
+
+  if (tasteTags[0] && tagSlots < tagBudget) {
+    if (
+      addCandidate({
+        id: `focus-spotlight:${slugify(tasteTags[0])}`,
+        name: `${titleCase(tasteTags[0])} Spotlight`,
+        description: `A deep dive into ${tasteTags[0]}`,
+        mix: { ...FOCUS_MIX },
+        tags: [tasteTags[0]],
+        relatedArtists: [],
+        deepDive: true,
+      })
+    ) {
+      tagSlots += 1;
+    }
+  }
+
   for (let index = 0; index < tasteTags.length - 1; index += 1) {
+    if (tagSlots >= tagBudget || !canAdd()) break;
     const left = tasteTags[index];
     const right = tasteTags.find(
       (tag, tagIndex) => tagIndex > index && !areTagsSimilar(left, tag),
@@ -156,40 +247,89 @@ const buildFocusedPlaylistCandidates = ({
     const pairKey = [slugify(left), slugify(right)].sort().join("::");
     if (usedTagPairs.has(pairKey)) continue;
     usedTagPairs.add(pairKey);
-    addCandidate({
-      id: `focus-tags:${slugify(left)}-${slugify(right)}`,
-      name: `${titleCase(left)} × ${titleCase(right)}`,
-      description: `Where ${left} meets ${right}`,
-      mix: { ...FOCUS_MIX },
-      tags: [left, right],
-      relatedArtists: [],
-      deepDive: true,
-    });
-    if (candidates.length >= MAX_FOCUS_PLAYLISTS) {
-      return candidates.slice(0, MAX_FOCUS_PLAYLISTS);
+    if (
+      addCandidate({
+        id: `focus-tags:${slugify(left)}-${slugify(right)}`,
+        name: `${titleCase(left)} × ${titleCase(right)}`,
+        description: `Where ${left} meets ${right}`,
+        mix: { ...FOCUS_MIX },
+        tags: [left, right],
+        relatedArtists: [],
+        deepDive: true,
+      })
+    ) {
+      tagSlots += 1;
     }
   }
 
-  for (let index = 0; index < seedArtists.length; index += 1) {
-    const artistName = seedArtists[index];
+  for (const artistName of relatedSeedArtists) {
+    if (artistSlots >= artistBudget || !canAdd()) break;
     const artistKey = slugify(artistName);
     if (!artistKey || usedArtistKeys.has(artistKey)) continue;
-    const tag =
-      tasteTags[(index * 2 + 1) % Math.max(tasteTags.length, 1)] ||
-      tasteTags[0];
-    if (!tag) continue;
     usedArtistKeys.add(artistKey);
-    addCandidate({
-      id: `focus-cross:${slugify(tag)}-${artistKey}`,
-      name: `${titleCase(tag)} · Near ${artistName}`,
-      description: `${tag} through ${artistName}'s orbit`,
-      mix: { ...FOCUS_MIX },
-      tags: [tag],
-      relatedArtists: [artistName],
-      deepDive: false,
-    });
-    if (candidates.length >= MAX_FOCUS_PLAYLISTS) {
-      return candidates.slice(0, MAX_FOCUS_PLAYLISTS);
+    if (
+      addCandidate({
+        id: `focus-artist:${artistKey}`,
+        name: `Near ${artistName}`,
+        description: `Artists related to ${artistName}`,
+        mix: { ...FOCUS_MIX },
+        tags: [],
+        relatedArtists: [artistName],
+        deepDive: true,
+      })
+    ) {
+      artistSlots += 1;
+    }
+  }
+
+  if (
+    relatedSeedArtists.length >= 2 &&
+    artistSlots < artistBudget &&
+    canAdd()
+  ) {
+    const left = relatedSeedArtists[0];
+    const right =
+      relatedSeedArtists.find((artist) => slugify(artist) !== slugify(left)) ||
+      relatedSeedArtists[1];
+    const pairKey = [slugify(left), slugify(right)].sort().join("::");
+    if (!usedArtistKeys.has(pairKey)) {
+      if (
+        addCandidate({
+          id: `focus-artists:${slugify(left)}-${slugify(right)}`,
+          name: `${left} · ${right}`,
+          description: `Between ${left} and ${right}`,
+          mix: { ...FOCUS_MIX },
+          tags: [],
+          relatedArtists: [left, right],
+          deepDive: false,
+        })
+      ) {
+        artistSlots += 1;
+      }
+    }
+  }
+
+  for (let index = 0; index < relatedSeedArtists.length; index += 1) {
+    if (crossoverSlots >= crossoverBudget || !canAdd()) break;
+    const artistName = relatedSeedArtists[index];
+    const artistKey = slugify(artistName);
+    if (!artistKey || usedArtistKeys.has(`cross:${artistKey}`)) continue;
+    const tag =
+      tasteTags[(index + 1) % Math.max(tasteTags.length, 1)] || tasteTags[0];
+    if (!tag) continue;
+    usedArtistKeys.add(`cross:${artistKey}`);
+    if (
+      addCandidate({
+        id: `focus-cross:${slugify(tag)}-${artistKey}`,
+        name: `${titleCase(tag)} · Near ${artistName}`,
+        description: `${tag} through ${artistName}'s orbit`,
+        mix: { ...FOCUS_MIX },
+        tags: [tag],
+        relatedArtists: [artistName],
+        deepDive: false,
+      })
+    ) {
+      crossoverSlots += 1;
     }
   }
 
@@ -201,9 +341,10 @@ const buildFocusedPlaylistCandidates = ({
       ];
       return tags.length > 0;
     })
-    .slice(0, 10);
+    .slice(0, 6);
 
   for (let index = 0; index < recPool.length; index += 1) {
+    if (!canAdd()) break;
     const recommendation = recPool[index];
     const targetArtist = String(
       recommendation?.name || recommendation?.artistName || "",
@@ -231,10 +372,9 @@ const buildFocusedPlaylistCandidates = ({
     }
     if (diversifiedRecTags.length === 0) continue;
 
-    const anchorArtist =
-      seedArtists.find((artist) => slugify(artist) !== slugify(targetArtist)) ||
-      seedArtists[index % Math.max(seedArtists.length, 1)];
-
+    const anchorArtist = relatedSeedArtists.find(
+      (artist) => slugify(artist) !== slugify(targetArtist),
+    );
     const tagLabel = diversifiedRecTags
       .map((tag) => titleCase(tag))
       .join(" + ");
@@ -252,24 +392,9 @@ const buildFocusedPlaylistCandidates = ({
       relatedArtists: anchorArtist ? [anchorArtist] : [],
       deepDive: false,
     });
-    if (candidates.length >= MAX_FOCUS_PLAYLISTS) {
-      return candidates.slice(0, MAX_FOCUS_PLAYLISTS);
-    }
   }
 
-  if (tasteTags[1] && seedArtists[1]) {
-    addCandidate({
-      id: `focus-bridge:${slugify(tasteTags[1])}:${slugify(seedArtists[1])}`,
-      name: `${titleCase(tasteTags[1])} Bridge`,
-      description: `Between ${tasteTags[1]} and ${seedArtists[1]}`,
-      mix: { ...FOCUS_MIX },
-      tags: [tasteTags[1]],
-      relatedArtists: [seedArtists[1]],
-      deepDive: true,
-    });
-  }
-
-  return candidates.slice(0, MAX_FOCUS_PLAYLISTS);
+  return candidates.slice(0, maxFocus);
 };
 
 const buildFlowConfigFromPreset = (preset) => ({
@@ -332,6 +457,7 @@ export async function generateDiscoverPlaylists({
   topGenres = [],
   topTags = [],
   recommendations = [],
+  historyTopArtists = [],
   onProgress,
 } = {}) {
   if (!getLastfmApiKey()) return [];
@@ -341,6 +467,7 @@ export async function generateDiscoverPlaylists({
     topTags,
     basedOn,
     recommendations,
+    historyTopArtists,
   });
   const { playlists: presetPlaylists, totalSteps } =
     await buildPlaylistsFromPresets(
@@ -403,4 +530,9 @@ export function buildFlowPayloadFromPreset(preset, presetId) {
   };
 }
 
-export { getDiscoverPlaylistPreset, serializeTrack };
+export {
+  buildFocusedPlaylistCandidates,
+  getDiscoverPlaylistPreset,
+  resolveFocusSlotBudgets,
+  serializeTrack,
+};
