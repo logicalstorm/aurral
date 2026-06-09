@@ -2173,7 +2173,7 @@ function DiscoverPage() {
                           </button>
                           <button
                             onClick={() =>
-                              navigateToBasedOnArtist(heroBasedOn[1])
+                              navigateToBasedOnArtist(heroBasedOn[2])
                             }
                             className="artist-discover-hero__artist-tag"
                           >
@@ -2181,7 +2181,7 @@ function DiscoverPage() {
                           </button>
                           <button
                             onClick={() =>
-                              navigateToBasedOnArtist(heroBasedOn[1])
+                              navigateToBasedOnArtist(heroBasedOn[3])
                             }
                             className="artist-discover-hero__artist-tag"
                           >
@@ -2208,7 +2208,7 @@ function DiscoverPage() {
                           </button>
                           <button
                             onClick={() =>
-                              navigateToBasedOnArtist(heroBasedOn[1])
+                              navigateToBasedOnArtist(heroBasedOn[2])
                             }
                             className="artist-discover-hero__artist-tag"
                           >
@@ -2216,7 +2216,7 @@ function DiscoverPage() {
                           </button>
                           <button
                             onClick={() =>
-                              navigateToBasedOnArtist(heroBasedOn[1])
+                              navigateToBasedOnArtist(heroBasedOn[3])
                             }
                             className="artist-discover-hero__artist-tag"
                           >
