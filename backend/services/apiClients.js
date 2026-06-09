@@ -27,7 +27,7 @@ const mbCache = new NodeCache({ stdTTL: 300, checkperiod: 60, maxKeys: 500 });
 const lastfmCache = new NodeCache({
   stdTTL: 300,
   checkperiod: 60,
-  maxKeys: 500,
+  maxKeys: 5000,
 });
 const listenbrainzCache = new NodeCache({
   stdTTL: 300,
