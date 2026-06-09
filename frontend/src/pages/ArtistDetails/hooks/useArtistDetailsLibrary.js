@@ -16,8 +16,11 @@ import {
   lookupArtistInLibrary,
   getMyLidarrPreferences,
 } from "../../../utils/api";
-import { deduplicateAlbums } from "../utils";
-import { matchesReleaseTypeFilter } from "../utils";
+import {
+  deduplicateAlbums,
+  isVisibleLibraryAlbum,
+  matchesReleaseTypeFilter,
+} from "../utils";
 import { useWebSocketChannel } from "../../../hooks/useWebSocket";
 
 const DELETE_FILES_PREFERENCE_KEY = "aurral:library-delete-files";
@@ -133,23 +136,7 @@ export function useArtistDetailsLibrary({
         setRequestingAlbum(null);
       }
     }
-    setDownloadStatuses((prev) => {
-      const prevKeys = Object.keys(prev);
-      const nextKeys = Object.keys(next);
-      if (prevKeys.length !== nextKeys.length) return next;
-      for (const key of nextKeys) {
-        const prevStatus = prev[key];
-        const nextStatus = next[key];
-        if (
-          prevStatus?.status !== nextStatus?.status ||
-          prevStatus?.progress !== nextStatus?.progress ||
-          prevStatus?.updatedAt !== nextStatus?.updatedAt
-        ) {
-          return next;
-        }
-      }
-      return prev;
-    });
+    setDownloadStatuses((prev) => ({ ...prev, ...next }));
   });
 
   const handleRefreshArtist = async () => {
@@ -967,15 +954,7 @@ export function useArtistDetailsLibrary({
       (a) => a.mbid === releaseGroupId || a.foreignAlbumId === releaseGroupId,
     );
     if (!album || String(album.id ?? "").startsWith("pending-")) return false;
-    return (
-      album.monitored ||
-      (album.statistics?.percentOfTracks ?? 0) > 0 ||
-      (album.statistics?.sizeOnDisk ?? 0) > 0 ||
-      !!downloadStatuses[album.id] ||
-      (requestingAlbum &&
-        (album.mbid === requestingAlbum ||
-          album.foreignAlbumId === requestingAlbum))
-    );
+    return isVisibleLibraryAlbum(album, { requestingAlbum });
   };
 
   const handleMonitorAll = async () => {
@@ -1076,13 +1055,13 @@ export function useArtistDetailsLibrary({
   };
 
   useEffect(() => {
-    if (!libraryAlbums.length || !libraryArtist) return;
+    if (!libraryArtist) return;
     const viewedArtistId = artist?.id || null;
     const libraryArtistId = libraryArtist.id;
     const refreshTimeouts = libraryRefreshTimeoutsRef.current;
     const pollDownloadStatus = async () => {
       try {
-        const albumIds = libraryAlbums.map((a) => a.id).filter(Boolean);
+        const albumIds = libraryAlbumIdsRef.current;
         if (albumIds.length > 0) {
           const statuses = await getDownloadStatus(albumIds);
           if (requestingAlbum) {
@@ -1135,6 +1114,7 @@ export function useArtistDetailsLibrary({
           }
 
           setDownloadStatuses((prevStatuses) => {
+            const mergedStatuses = { ...prevStatuses, ...nextStatuses };
             const hasNewlyAdded = Object.keys(nextStatuses).some((albumId) => {
               const currentStatus = nextStatuses[albumId]?.status;
               const previousStatus = prevStatuses[albumId]?.status;
@@ -1181,7 +1161,7 @@ export function useArtistDetailsLibrary({
               }, hasNewlyAdded ? 2000 : 5000);
               refreshTimeouts.add(timeoutId);
             }
-            return nextStatuses;
+            return mergedStatuses;
           });
         }
       } catch (error) {
@@ -1197,7 +1177,7 @@ export function useArtistDetailsLibrary({
       }
       refreshTimeouts.clear();
     };
-  }, [artist?.id, libraryAlbums, libraryArtist, requestingAlbum, setLibraryAlbums]);
+  }, [artist?.id, libraryArtist, libraryAlbums, requestingAlbum, setLibraryAlbums]);
 
   useEffect(() => {
     if (!libraryArtist) return;

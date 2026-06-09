@@ -124,5 +124,9 @@ export const resolveAlbumSearchOutcome = (
     return { status: "failed", statusLabel: "Not found" };
   }
 
-  return { status: "searching" };
+  if (searchStartedAt > 0) {
+    return { status: "searching" };
+  }
+
+  return null;
 };
