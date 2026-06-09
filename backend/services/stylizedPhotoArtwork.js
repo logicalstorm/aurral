@@ -4,41 +4,53 @@ import sharp from "sharp";
 const ARTWORK_SIZE = 1200;
 const TITLE_PADDING_X = 72;
 
-const PHOTO_ARTWORK_PALETTES = [
-  {
-    dark: { r: 20, g: 48, b: 32 },
-    light: { r: 118, g: 176, b: 132 },
-  },
-  {
-    dark: { r: 48, g: 36, b: 12 },
-    light: { r: 196, g: 164, b: 88 },
-  },
-  {
-    dark: { r: 36, g: 20, b: 52 },
-    light: { r: 148, g: 108, b: 196 },
-  },
-  {
-    dark: { r: 14, g: 28, b: 52 },
-    light: { r: 92, g: 148, b: 196 },
-  },
-  {
-    dark: { r: 52, g: 18, b: 28 },
-    light: { r: 196, g: 108, b: 128 },
-  },
-  {
-    dark: { r: 40, g: 28, b: 18 },
-    light: { r: 176, g: 148, b: 118 },
-  },
+export const PHOTO_ARTWORK_COLORS = [
+  "#e6194B",
+  "#3cb44b",
+  "#ffe119",
+  "#4363d8",
+  "#f58231",
+  "#42d4f4",
+  "#f032e6",
+  "#fabed4",
+  "#469990",
+  "#dcbeff",
+  "#9A6324",
+  "#fffac8",
+  "#800000",
+  "#aaffc3",
+  "#000075",
 ];
 
-const hashString = (value) => {
-  let hash = 0;
-  const input = String(value || "");
-  for (let i = 0; i < input.length; i += 1) {
-    hash = input.charCodeAt(i) + ((hash << 5) - hash);
-    hash |= 0;
+const hexToRgb = (hex) => {
+  const normalized = String(hex || "")
+    .replace("#", "")
+    .trim();
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+    return { r: 67, g: 99, b: 216 };
   }
-  return Math.abs(hash);
+  return {
+    r: Number.parseInt(normalized.slice(0, 2), 16),
+    g: Number.parseInt(normalized.slice(2, 4), 16),
+    b: Number.parseInt(normalized.slice(4, 6), 16),
+  };
+};
+
+const buildPaletteFromHex = (hex) => {
+  const light = hexToRgb(hex);
+  return {
+    dark: {
+      r: Math.round(light.r * 0.16 + 10),
+      g: Math.round(light.g * 0.16 + 8),
+      b: Math.round(light.b * 0.16 + 12),
+    },
+    light,
+  };
+};
+
+export const pickRandomPhotoArtworkPalette = () => {
+  const index = Math.floor(Math.random() * PHOTO_ARTWORK_COLORS.length);
+  return buildPaletteFromHex(PHOTO_ARTWORK_COLORS[index]);
 };
 
 const escapeXml = (value) =>
@@ -48,11 +60,6 @@ const escapeXml = (value) =>
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&apos;");
-
-const pickPalette = (signature) =>
-  PHOTO_ARTWORK_PALETTES[
-    hashString(signature) % PHOTO_ARTWORK_PALETTES.length
-  ];
 
 const buildCoverTitleLines = (title) => {
   const words = String(title || "")
@@ -143,11 +150,7 @@ export async function fetchImageBuffer(imageUrl) {
   return Buffer.from(response.data);
 }
 
-export async function renderStylizedPhotoArtwork({
-  imageBuffer,
-  title,
-  signature,
-}) {
+export async function renderStylizedPhotoArtwork({ imageBuffer, title }) {
   const base = sharp(imageBuffer, { animated: false })
     .resize(ARTWORK_SIZE, ARTWORK_SIZE, { fit: "cover", position: "attention" })
     .ensureAlpha();
@@ -161,7 +164,7 @@ export async function renderStylizedPhotoArtwork({
     .raw()
     .toBuffer();
 
-  const palette = pickPalette(signature);
+  const palette = pickRandomPhotoArtworkPalette();
   const mappedRgb = mapToneBufferToPalette(toneMapRaw, palette);
   const mappedImage = await sharp(mappedRgb, {
     raw: { width: ARTWORK_SIZE, height: ARTWORK_SIZE, channels: 3 },

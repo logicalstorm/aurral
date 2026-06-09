@@ -33,13 +33,8 @@ export function getArtworkContentTypeForExtension(extension) {
   return "image/png";
 }
 
-export async function resolvePlaylistSourceImageUrl({
-  signature,
-  rotate = false,
-} = {}) {
-  const base = String(signature || "playlist").trim() || "playlist";
-  const seed = rotate ? `${base}:${randomUUID()}` : base;
-  return `https://picsum.photos/seed/${encodeURIComponent(seed)}/800/800`;
+export async function resolvePlaylistSourceImageUrl() {
+  return `https://picsum.photos/800/800?random=${randomUUID()}`;
 }
 
 export async function buildGeneratedPlaylistArtworkBuffer({
@@ -52,7 +47,6 @@ export async function buildGeneratedPlaylistArtworkBuffer({
 }) {
   const resolvedStyle = style || getPlaylistArtworkStyle();
   const displayTitle = String(title || "").trim() || "Untitled";
-  const resolvedSignature = String(signature || displayTitle).trim();
 
   if (resolvedStyle === "aurral") {
     return buildPlaylistArtworkWebpBuffer({
@@ -61,15 +55,11 @@ export async function buildGeneratedPlaylistArtworkBuffer({
     });
   }
 
-  const sourceImageUrl = await resolvePlaylistSourceImageUrl({
-    signature: resolvedSignature,
-    rotate: rotateSourceImage,
-  });
+  const sourceImageUrl = await resolvePlaylistSourceImageUrl();
   const sourceBuffer = await fetchImageBuffer(sourceImageUrl);
   return renderStylizedPhotoArtwork({
     imageBuffer: sourceBuffer,
     title: displayTitle,
-    signature: resolvedSignature,
   });
 }
 
