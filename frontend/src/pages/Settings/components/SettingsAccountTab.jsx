@@ -1,4 +1,7 @@
+import { useState } from "react";
+import { RotateCcw } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
+import { resetDiscoveryFeedback } from "../../../utils/api";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
 
 export function SettingsAccountTab({
@@ -18,7 +21,30 @@ export function SettingsAccountTab({
   saving,
   handleSave,
   hidePanelHeader = false,
+  showSuccess,
+  showError,
 }) {
+  const [resettingTastes, setResettingTastes] = useState(false);
+
+  const handleResetDiscoveryTastes = async () => {
+    if (resettingTastes) return;
+    const confirmed = window.confirm(
+      "Reset all More like this and Less like this preferences? This cannot be undone.",
+    );
+    if (!confirmed) return;
+    setResettingTastes(true);
+    try {
+      await resetDiscoveryFeedback();
+      showSuccess?.("Discovery tastes reset");
+    } catch (error) {
+      showError?.(
+        error.response?.data?.message || "Failed to reset discovery tastes",
+      );
+    } finally {
+      setResettingTastes(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="settings-page__panel">
@@ -172,6 +198,27 @@ export function SettingsAccountTab({
               defaults can be saved.
             </p>
           )}
+        </div>
+
+        <div className="settings-page__section">
+          <div className="settings-page__section-intro">
+            <h3 className="settings-page__section-title">Discovery Tastes</h3>
+            <p className="settings-page__section-note">
+              Clear your More like this and Less like this feedback so
+              recommendations start fresh.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleResetDiscoveryTastes}
+            disabled={resettingTastes}
+            className="btn btn-secondary"
+          >
+            <RotateCcw
+              className={`artist-icon-xs${resettingTastes ? " animate-spin" : ""}`}
+            />
+            {resettingTastes ? "Resetting..." : "Reset Discovery Tastes"}
+          </button>
         </div>
       </form>
     </div>

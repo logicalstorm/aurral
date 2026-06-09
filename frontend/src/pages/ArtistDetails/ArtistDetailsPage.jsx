@@ -21,6 +21,7 @@ import { DeleteArtistModal } from "./components/DeleteArtistModal";
 import { DeleteAlbumModal } from "./components/DeleteAlbumModal";
 import { AddArtistCustomizeModal } from "./components/AddArtistCustomizeModal";
 import {
+  addArtistToLibrary,
   addSharedPlaylistTracks,
   getArtistCover,
   getArtistDetails,
@@ -30,10 +31,9 @@ import {
   getSimilarArtistsForArtist,
   createSharedPlaylist,
   updateArtistOverrides,
-  getBlocklist,
-  updateBlocklist,
 } from "../../utils/api";
 import { buildDownloadTargets, getArtistPosterImage } from "./utils";
+import { useArtistTasteFeedback } from "../../hooks/useArtistTasteFeedback";
 
 const MBID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -94,8 +94,6 @@ function ArtistDetailsPage() {
   const [playlistModalLoading, setPlaylistModalLoading] = useState(false);
   const [playlistModalError, setPlaylistModalError] = useState("");
   const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
-  const [blockingArtist, setBlockingArtist] = useState(false);
-  const [artistBlocked, setArtistBlocked] = useState(false);
   const [visibleReleaseGroupCoverIds, setVisibleReleaseGroupCoverIds] = useState(
     [],
   );
@@ -118,6 +116,9 @@ function ArtistDetailsPage() {
     },
   );
   const canAddArtist = hasPermission("addArtist");
+  const { lookup: artistFeedbackLookup, getFeedbackFlags, submitFeedback } =
+    useArtistTasteFeedback();
+  const [tasteActionPending, setTasteActionPending] = useState(null);
   const canAddAlbum = hasPermission("addAlbum");
   const canChangeMonitoring = hasPermission("changeMonitoring");
   const canDeleteArtist = hasPermission("deleteArtist");
@@ -151,108 +152,69 @@ function ArtistDetailsPage() {
   const artistDisplayName = artist?.name || artistNameFromNav || "";
   useDocumentTitle(artistDisplayName);
 
-  const normalizeArtists = useCallback((artists) => {
-    const source = Array.isArray(artists) ? artists : [];
-    const seen = new Set();
-    const out = [];
-    for (const entry of source) {
-      if (!entry) continue;
-      const entryMbid =
-        typeof entry.mbid === "string" && MBID_REGEX.test(entry.mbid.trim())
-          ? entry.mbid.trim()
-          : null;
-      const entryName = String(entry.name || "").trim();
-      if (!entryMbid && !entryName) continue;
-      const key = entryMbid
-        ? `mbid:${entryMbid.toLowerCase()}`
-        : `name:${entryName.toLowerCase()}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({ mbid: entryMbid, name: entryName || null });
-    }
-    return out;
-  }, []);
+  const tasteArtist = useMemo(
+    () => ({
+      id: artist?.id || mbid,
+      name: artistDisplayName,
+      tags: artist?.tags || [],
+      genres: artist?.genres || [],
+    }),
+    [artist?.genres, artist?.id, artist?.tags, artistDisplayName, mbid],
+  );
 
-  const isBlockedByEntries = useCallback((entries) => {
-    const artistMbid = String(artist?.id || mbid || "")
-      .trim()
-      .toLowerCase();
-    const artistName = String(artist?.name || artistNameFromNav || "")
-      .trim()
-      .toLowerCase();
-    return entries.some((entry) => {
-      const mbidValue = String(entry?.mbid || "")
-        .trim()
-        .toLowerCase();
-      const nameValue = String(entry?.name || "")
-        .trim()
-        .toLowerCase();
-      if (artistMbid && mbidValue && artistMbid === mbidValue) return true;
-      if (artistName && nameValue && artistName === nameValue) return true;
-      return false;
-    });
-  }, [artist?.id, artist?.name, artistNameFromNav, mbid]);
+  const currentArtistFeedback = useMemo(
+    () => getFeedbackFlags(tasteArtist),
+    [getFeedbackFlags, tasteArtist],
+  );
 
-  const handleToggleBlockArtist = async () => {
-    if (!artist) return;
-    setBlockingArtist(true);
-    try {
-      const current = await getBlocklist();
-      const entries = normalizeArtists(current.artists);
-      const artistMbid =
-        String(artist?.id || mbid || "").trim() || null;
-      const artistName = String(artist?.name || artistNameFromNav || "").trim() || null;
-      const exists = entries.some((entry) => {
-        const entryMbid = String(entry?.mbid || "").trim().toLowerCase();
-        const entryName = String(entry?.name || "").trim().toLowerCase();
-        if (artistMbid && entryMbid && artistMbid.toLowerCase() === entryMbid) return true;
-        if (artistName && entryName && artistName.toLowerCase() === entryName) return true;
-        return false;
-      });
-      const nextArtists = exists
-        ? entries.filter((entry) => {
-            const entryMbid = String(entry?.mbid || "").trim().toLowerCase();
-            const entryName = String(entry?.name || "").trim().toLowerCase();
-            if (artistMbid && entryMbid && artistMbid.toLowerCase() === entryMbid) return false;
-            if (artistName && entryName && artistName.toLowerCase() === entryName) return false;
-            return true;
-          })
-        : [...entries, { mbid: artistMbid, name: artistName }];
-      const response = await updateBlocklist({
-        artists: nextArtists,
-        tags: current.tags || [],
-      });
-      const savedArtists = normalizeArtists(response?.blocklist?.artists || nextArtists);
-      const blocked = isBlockedByEntries(savedArtists);
-      setArtistBlocked(blocked);
-      showSuccess(blocked ? "Artist added to blocklist" : "Artist removed from blocklist");
-    } catch (err) {
-      showError(err.response?.data?.message || "Failed to update blocklist");
-    } finally {
-      setBlockingArtist(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!artist && !mbid) return;
-    let cancelled = false;
-    const run = async () => {
+  const handleArtistTasteFeedback = useCallback(
+    async (targetArtist, action, { isSelected = false } = {}) => {
+      setTasteActionPending(action);
       try {
-        const data = await getBlocklist();
-        if (cancelled) return;
-        const entries = normalizeArtists(data.artists);
-        setArtistBlocked(isBlockedByEntries(entries));
-      } catch {
-        if (!cancelled) {
-          setArtistBlocked(false);
-        }
+        return await submitFeedback(targetArtist, action, {
+          isSelected,
+          sourceContext: "artist_page",
+          seedArtistName: tasteArtist.name,
+        });
+      } finally {
+        setTasteActionPending(null);
       }
-    };
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [artist, artistNameFromNav, isBlockedByEntries, mbid, normalizeArtists]);
+    },
+    [submitFeedback, tasteArtist.name],
+  );
+
+  const handleCurrentArtistTasteFeedback = useCallback(
+    async (action) => {
+      await handleArtistTasteFeedback(tasteArtist, action, {
+        isSelected: !!currentArtistFeedback[action],
+      });
+    },
+    [currentArtistFeedback, handleArtistTasteFeedback, tasteArtist],
+  );
+
+  const handleAddSimilarArtistToLibrary = useCallback(
+    async (similarArtist) => {
+      const artistId = similarArtist?.id || similarArtist?.mbid;
+      if (!similarArtist?.name || !artistId) return false;
+      try {
+        await addArtistToLibrary({
+          foreignArtistId: artistId,
+          artistName: similarArtist.name,
+        });
+        showSuccess(`Adding ${similarArtist.name}...`);
+        return true;
+      } catch (err) {
+        showError(
+          err.response?.data?.message ||
+            err.response?.data?.error ||
+            err.message ||
+            "Failed to add artist to library",
+        );
+        return false;
+      }
+    },
+    [showError, showSuccess],
+  );
 
   const library = useArtistDetailsLibrary({
     artist,
@@ -618,9 +580,9 @@ function ArtistDetailsPage() {
         isArtistPlaybackActive={isArtistPlaybackActive}
         handlePreviewPlayAll={handlePreviewPlayAll}
         onEditIds={handleOpenEditIds}
-        onToggleBlockArtist={handleToggleBlockArtist}
-        blockingArtist={blockingArtist}
-        artistBlocked={artistBlocked}
+        onTasteFeedback={handleCurrentArtistTasteFeedback}
+        tasteFeedbackUsed={currentArtistFeedback}
+        tasteActionPending={tasteActionPending}
       />
 
       <ArtistDetailsPreviewTracks
@@ -779,6 +741,10 @@ function ArtistDetailsPage() {
               },
             })
           }
+          canAddArtist={canAddArtist}
+          onAddToLibrary={handleAddSimilarArtistToLibrary}
+          onArtistFeedback={handleArtistTasteFeedback}
+          artistFeedbackLookup={artistFeedbackLookup}
         />
       )}
 

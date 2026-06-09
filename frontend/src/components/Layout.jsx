@@ -9,7 +9,6 @@ import {
   Ellipsis,
   Ticket,
   AudioWaveform,
-  Ban,
   Settings,
   LogOut,
   User,
@@ -119,7 +118,6 @@ function Layout({ children, appVersion }) {
         icon: AudioWaveform,
         permission: "accessFlow",
       },
-      { path: "/blocklist", label: "Blocklist", icon: Ban },
       { path: "/profile", label: "Profile", icon: User },
       {
         path: "/settings",
