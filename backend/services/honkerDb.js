@@ -18,6 +18,7 @@ const DB_PATH = process.env.AURRAL_DB_PATH
 let honkerDb = null;
 let pipelineQueue = null;
 let discoveryRefreshQueue = null;
+let discoveryPlaylistBuildQueue = null;
 const WORKER_ID = `aurral-${process.pid}`;
 
 const PIPELINE_PHASE_PRIORITY = {
@@ -92,6 +93,39 @@ export function enqueueDiscoveryRefreshJob(payload, options = {}) {
     priority: Number(options.priority || 0),
     runAt,
   });
+}
+
+export function getDiscoveryPlaylistBuildQueue() {
+  if (!discoveryPlaylistBuildQueue) {
+    discoveryPlaylistBuildQueue = getHonkerDb().queue(
+      "discovery-playlist-build",
+      {
+        visibilityTimeoutS: 3600,
+        maxAttempts: 4,
+      },
+    );
+  }
+  return discoveryPlaylistBuildQueue;
+}
+
+export function enqueueDiscoveryPlaylistBuildJob(payload, options = {}) {
+  const queue = getDiscoveryPlaylistBuildQueue();
+  const runAt =
+    options.runAt != null
+      ? Math.floor(Number(options.runAt) / 1000)
+      : options.delaySeconds != null
+        ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
+        : null;
+  const jobId = queue.enqueue(payload, {
+    priority: Number(options.priority || 0),
+    runAt,
+  });
+  import("./discoveryPlaylistBuildWorker.js")
+    .then(({ startDiscoveryPlaylistBuildWorker }) =>
+      startDiscoveryPlaylistBuildWorker(),
+    )
+    .catch(() => {});
+  return jobId;
 }
 
 export function tryAcquireSlskdLock(ttlSeconds = 120) {
