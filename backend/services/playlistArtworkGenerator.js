@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { dbOps } from "../config/db-helpers.js";
@@ -32,8 +33,12 @@ export function getArtworkContentTypeForExtension(extension) {
   return "image/png";
 }
 
-export async function resolvePlaylistSourceImageUrl({ signature } = {}) {
-  const seed = String(signature || "playlist").trim() || "playlist";
+export async function resolvePlaylistSourceImageUrl({
+  signature,
+  rotate = false,
+} = {}) {
+  const base = String(signature || "playlist").trim() || "playlist";
+  const seed = rotate ? `${base}:${randomUUID()}` : base;
   return `https://picsum.photos/seed/${encodeURIComponent(seed)}/800/800`;
 }
 
@@ -43,6 +48,7 @@ export async function buildGeneratedPlaylistArtworkBuffer({
   signature,
   relatedArtists = [],
   style = null,
+  rotateSourceImage = false,
 }) {
   const resolvedStyle = style || getPlaylistArtworkStyle();
   const displayTitle = String(title || "").trim() || "Untitled";
@@ -57,6 +63,7 @@ export async function buildGeneratedPlaylistArtworkBuffer({
 
   const sourceImageUrl = await resolvePlaylistSourceImageUrl({
     signature: resolvedSignature,
+    rotate: rotateSourceImage,
   });
   const sourceBuffer = await fetchImageBuffer(sourceImageUrl);
   return renderStylizedPhotoArtwork({
@@ -80,6 +87,7 @@ export async function writeGeneratedPlaylistArtwork({
   signature,
   relatedArtists = [],
   style = null,
+  rotateSourceImage = false,
 }) {
   const resolvedStyle = style || getPlaylistArtworkStyle();
   const targetPath = resolveArtworkOutputPath(outputPath, resolvedStyle);
@@ -100,6 +108,7 @@ export async function writeGeneratedPlaylistArtwork({
     signature,
     relatedArtists,
     style: resolvedStyle,
+    rotateSourceImage,
   });
   await fs.writeFile(targetPath, buffer);
   return targetPath;
