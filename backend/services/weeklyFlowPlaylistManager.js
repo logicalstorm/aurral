@@ -576,6 +576,7 @@ export class WeeklyFlowPlaylistManager {
       kind: artworkContext?.kind || this.getArtworkKindForPlaylistId(playlistId),
       signature: artworkContext?.signature || playlistId,
       relatedArtists: artworkContext?.relatedArtists || [],
+      rotateSourceImage: true,
     });
     await this._setArtworkGenerationSuppressed(
       resolved.safeRoot,
