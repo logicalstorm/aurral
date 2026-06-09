@@ -579,7 +579,9 @@ export const createAuthMiddleware = () => {
       (req.method === "GET" &&
         /^\/api\/weekly-flow\/artwork\/[^/]+$/i.test(req.path)) ||
       (req.method === "GET" &&
-        /^\/api\/playlists\/artwork\/[^/]+$/i.test(req.path))
+        /^\/api\/playlists\/artwork\/[^/]+$/i.test(req.path)) ||
+      (req.method === "GET" &&
+        /^\/api\/discover\/artwork\/[^/]+$/i.test(req.path))
     ) {
       return next();
     }

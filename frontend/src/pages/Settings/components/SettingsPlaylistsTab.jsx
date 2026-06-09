@@ -66,9 +66,8 @@ export function SettingsPlaylistsTab({
                 ))}
               </SettingsSelect>
               <p className="settings-page__hint">
-                Applies to recommended flows, user flows, flow drafts, and
-                shared playlists. Photo texture uses a random image or
-                related-artist photo with stylized typography. Aurral generated
+                Applies to all flows and playlists. Photo texture uses a random
+                image from picsum with stylized typography. Aurral generated
                 uses abstract palette covers.
               </p>
             </div>
