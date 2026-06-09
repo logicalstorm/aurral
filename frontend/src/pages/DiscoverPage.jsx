@@ -243,6 +243,10 @@ const normalizeDiscoveryData = (value) => {
         : null,
     lastUpdated: value.lastUpdated || null,
     isUpdating: !!value.isUpdating,
+    updatePhase: value.updatePhase || null,
+    updateProgress:
+      typeof value.updateProgress === "number" ? value.updateProgress : null,
+    updateProgressMessage: value.updateProgressMessage || null,
     stale: !!value.stale,
     discoveryMode:
       value.discoveryMode === "safer" || value.discoveryMode === "deeper"
@@ -714,33 +718,100 @@ function DiscoverPage() {
   const canAddArtist = hasPermission("addArtist");
   const canAdoptPlaylist = hasPermission("accessFlow");
 
+  const applyDiscoveryData = useCallback(
+    (nextValue) => {
+      const normalizedData = normalizeDiscoveryData(nextValue);
+      if (!normalizedData) return;
+      setData(normalizedData);
+      writeStoredDiscoveryData(normalizedData, authUser?.id);
+    },
+    [authUser?.id],
+  );
+
   const { isConnected: isDiscoverySocketConnected } = useWebSocketChannel(
     "discovery",
     (msg) => {
-      if (msg.type === "discovery_update" && msg.recommendations) {
+      if (msg.type !== "discovery_update") return;
+
+      if (msg.phase === "error") {
+        setData((prev) =>
+          normalizeDiscoveryData({
+            ...(prev || {}),
+            isUpdating: false,
+            updatePhase: "error",
+            updateProgress: null,
+            updateProgressMessage:
+              msg.progressMessage || "Discovery refresh failed",
+          }),
+        );
+        return;
+      }
+
+      if (msg.isUpdating) {
         lastDiscoveryWsMessageAtRef.current = Date.now();
-        const nextData = {
-          recommendations: msg.recommendations || [],
-          globalTop: msg.globalTop || [],
-          basedOn: msg.basedOn || [],
-          topTags: msg.topTags || [],
-          topGenres: msg.topGenres || [],
-          fallbackGenres: msg.fallbackGenres || [],
-          discoverPlaylists: msg.discoverPlaylists || [],
-          provider: msg.provider || "lastfm",
-          capabilities: msg.capabilities || null,
-          lastUpdated: msg.lastUpdated || null,
-          isUpdating: false,
-          stale: false,
-          discoveryMode:
-            msg.discoveryMode === "safer" || msg.discoveryMode === "deeper"
-              ? msg.discoveryMode
-              : "balanced",
-          configured: true,
-        };
-        const normalizedData = normalizeDiscoveryData(nextData);
-        setData(normalizedData);
-        writeStoredDiscoveryData(normalizedData, authUser?.id);
+        setData((prev) =>
+          normalizeDiscoveryData({
+            ...(prev || {}),
+            isUpdating: true,
+            updatePhase: msg.phase || prev?.updatePhase || null,
+            updateProgress:
+              typeof msg.progress === "number"
+                ? msg.progress
+                : prev?.updateProgress ?? null,
+            updateProgressMessage:
+              msg.progressMessage || prev?.updateProgressMessage || null,
+            provider: msg.provider || prev?.provider || "lastfm",
+            capabilities: msg.capabilities || prev?.capabilities || null,
+            configured: true,
+            stale: false,
+          }),
+        );
+        return;
+      }
+
+      if (msg.phase === "completed" || Array.isArray(msg.recommendations)) {
+        lastDiscoveryWsMessageAtRef.current = Date.now();
+        if (Array.isArray(msg.recommendations)) {
+          applyDiscoveryData({
+            recommendations: msg.recommendations || [],
+            globalTop: msg.globalTop || [],
+            basedOn: msg.basedOn || [],
+            topTags: msg.topTags || [],
+            topGenres: msg.topGenres || [],
+            fallbackGenres: msg.fallbackGenres || [],
+            discoverPlaylists: msg.discoverPlaylists || [],
+            provider: msg.provider || "lastfm",
+            capabilities: msg.capabilities || null,
+            lastUpdated: msg.lastUpdated || null,
+            isUpdating: false,
+            updatePhase: null,
+            updateProgress: null,
+            updateProgressMessage: null,
+            stale: false,
+            discoveryMode:
+              msg.discoveryMode === "safer" || msg.discoveryMode === "deeper"
+                ? msg.discoveryMode
+                : "balanced",
+            configured: true,
+          });
+        } else {
+          setData((prev) =>
+            normalizeDiscoveryData({
+              ...(prev || {}),
+              isUpdating: false,
+              updatePhase: null,
+              updateProgress: null,
+              updateProgressMessage: null,
+              stale: false,
+            }),
+          );
+        }
+        getDiscovery(true)
+          .then((discoveryData) => {
+            applyDiscoveryData(discoveryData);
+            setError(null);
+          })
+          .catch(() => {});
       }
     },
   );
@@ -1138,6 +1209,7 @@ function DiscoverPage() {
     capabilities,
     lastUpdated,
     isUpdating,
+    updateProgressMessage,
     configured = true,
   } = data || {};
   const [adoptedFlowIds, setAdoptedFlowIds] = useState({});
@@ -1938,13 +2010,18 @@ function DiscoverPage() {
             <div className="artist-discover-hero__title-wrap">
               <div className="artist-discover-hero__title-row">
                 <h1 className="artist-discover-hero__title">Discover</h1>
-                {lastUpdated && (
-                  <span className="artist-discover-hero__updated">
-                    <Clock className="artist-discover-hero__updated-icon" />
-                    Updated {new Date(lastUpdated).toLocaleDateString()}
-                    {isUpdating && (
-                      <Loader className="artist-discover-hero__updated-spinner animate-spin" />
+                {(isUpdating || lastUpdated) && (
+                  <span
+                    className={`artist-discover-hero__updated${isUpdating ? " artist-discover-hero__updated--refreshing" : ""}`}
+                  >
+                    {isUpdating ? (
+                      <Loader className="artist-discover-hero__updated-icon animate-spin" />
+                    ) : (
+                      <Clock className="artist-discover-hero__updated-icon" />
                     )}
+                    {isUpdating
+                      ? updateProgressMessage || "Refreshing discovery..."
+                      : `Updated ${new Date(lastUpdated).toLocaleDateString()}`}
                   </span>
                 )}
               </div>
