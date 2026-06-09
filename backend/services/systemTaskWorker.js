@@ -1,7 +1,16 @@
 import { getSystemTaskQueue, getWorkerId } from "./honkerDb.js";
 import { cleanExpiredSessions } from "../config/session-helpers.js";
+import {
+  isHonkerShuttingDown,
+  markHonkerWorkerLoopEnded,
+  registerHonkerWorker,
+  withJobHeartbeat,
+} from "./honkerWorkerRuntime.js";
+
+const WORKER_NAME = "system-task";
 
 let running = false;
+let stopRequested = false;
 let loopPromise = null;
 
 async function processSystemTask(payload = {}) {
@@ -83,9 +92,9 @@ async function runLoop() {
   const workerId = getWorkerId();
   try {
     for await (const job of queue.claim(workerId, { idlePollS: 10 })) {
-      if (!running) break;
+      if (!running || stopRequested) break;
       try {
-        await processSystemTask(job.payload);
+        await withJobHeartbeat(job, queue, () => processSystemTask(job.payload));
         job.ack();
       } catch (error) {
         const message = error?.message || String(error);
@@ -101,19 +110,32 @@ async function runLoop() {
   } finally {
     running = false;
     loopPromise = null;
+    const intentional = stopRequested;
+    stopRequested = false;
+    markHonkerWorkerLoopEnded(WORKER_NAME, startSystemTaskWorker, {
+      intentional,
+    });
   }
 }
 
 export function startSystemTaskWorker() {
-  if (running) return;
+  if (running || isHonkerShuttingDown()) return;
   running = true;
+  stopRequested = false;
   loopPromise = runLoop();
 }
 
 export function stopSystemTaskWorker() {
+  stopRequested = true;
   running = false;
 }
 
 export function isSystemTaskWorkerRunning() {
   return running;
 }
+
+registerHonkerWorker(WORKER_NAME, {
+  start: startSystemTaskWorker,
+  stop: stopSystemTaskWorker,
+  isRunning: isSystemTaskWorkerRunning,
+});
