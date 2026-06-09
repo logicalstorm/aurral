@@ -6,8 +6,9 @@ import {
   CheckCircle2,
   AlertCircle,
   Music,
+  RotateCcw,
 } from "lucide-react";
-import { getRequests } from "../utils/api";
+import { getRequests, triggerAlbumSearch } from "../utils/api";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { TAG_COLORS } from "./ArtistDetails/constants";
 
@@ -163,6 +164,7 @@ function HistoryPage() {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("all");
   const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
+  const [reSearchingAlbumIds, setReSearchingAlbumIds] = useState({});
   const navigate = useNavigate();
 
   const filteredRequests = useMemo(
@@ -261,6 +263,39 @@ function HistoryPage() {
     });
   };
 
+  const handleReSearchAlbum = async (request) => {
+    const albumId = request.albumId;
+    if (!albumId || reSearchingAlbumIds[albumId]) return;
+    setReSearchingAlbumIds((prev) => ({ ...prev, [albumId]: true }));
+    try {
+      await triggerAlbumSearch(albumId);
+      setRequests((prev) =>
+        prev.map((item) =>
+          String(item.albumId) === String(albumId)
+            ? {
+                ...item,
+                status: "processing",
+                statusLabel: "Searching",
+                title: item.albumName
+                  ? `Searching Lidarr for ${item.albumName}`
+                  : item.title?.replace(/^No results for /, "Searching Lidarr for ") ||
+                    item.title,
+                canReSearch: false,
+              }
+            : item,
+        ),
+      );
+    } catch {
+      setError("Failed to trigger album search.");
+    } finally {
+      setReSearchingAlbumIds((prev) => {
+        const next = { ...prev };
+        delete next[albumId];
+        return next;
+      });
+    }
+  };
+
   const handleRowNavigate = (request, {
     isSlskd,
     isAurral,
@@ -306,6 +341,21 @@ function HistoryPage() {
     const sourceColor = HISTORY_SOURCE_COLORS[historySource];
     const sourceLabel = HISTORY_SOURCE_LABELS[historySource];
     const timelineTime = formatTimelineTime(request.requestedAt);
+    const canReSearch =
+      request.canReSearch === true &&
+      request.albumId &&
+      !reSearchingAlbumIds[request.albumId];
+    const isReSearching = Boolean(
+      request.albumId && reSearchingAlbumIds[request.albumId],
+    );
+    const displayRequest =
+      isReSearching && request.status === "failed"
+        ? {
+            ...request,
+            status: "processing",
+            statusLabel: "Searching",
+          }
+        : request;
 
     return (
       <article
@@ -347,7 +397,20 @@ function HistoryPage() {
           className="requests-page__status"
           onClick={(event) => event.stopPropagation()}
         >
-          <RequestStatusBadge request={request} />
+          {canReSearch && (
+            <div className="requests-page__actions">
+              <button
+                type="button"
+                className="btn btn-secondary btn--icon requests-page__action"
+                aria-label={`Re-search ${request.albumName || displayName}`}
+                title="Re-search"
+                onClick={() => handleReSearchAlbum(request)}
+              >
+                <RotateCcw className="artist-icon-xs" />
+              </button>
+            </div>
+          )}
+          <RequestStatusBadge request={displayRequest} />
         </div>
       </article>
     );
