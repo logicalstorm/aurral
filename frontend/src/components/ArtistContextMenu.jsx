@@ -47,22 +47,24 @@ export function ArtistContextMenu({
   const [menuPosition, setMenuPosition] = useState(null);
   const menuButtonRef = useRef(null);
   const menuRef = useRef(null);
+  const closeMenuRef = useRef(null);
   const labelName = artistName || artist?.name || artist?.artistName || "artist";
 
   const closeMenu = useCallback(() => {
     setShowMenu(false);
-    if (activeMenuCloser === closeMenu) {
+    if (activeMenuCloser === closeMenuRef.current) {
       activeMenuCloser = null;
     }
   }, []);
+  closeMenuRef.current = closeMenu;
 
   const openMenu = useCallback(() => {
-    if (activeMenuCloser && activeMenuCloser !== closeMenu) {
+    if (activeMenuCloser && activeMenuCloser !== closeMenuRef.current) {
       activeMenuCloser();
     }
-    activeMenuCloser = closeMenu;
+    activeMenuCloser = closeMenuRef.current;
     setShowMenu(true);
-  }, [closeMenu]);
+  }, []);
 
   const estimateMenuHeight = useCallback(() => {
     let items = 0;
@@ -165,11 +167,11 @@ export function ArtistContextMenu({
 
   useEffect(() => {
     return () => {
-      if (activeMenuCloser === closeMenu) {
+      if (activeMenuCloser === closeMenuRef.current) {
         activeMenuCloser = null;
       }
     };
-  }, [closeMenu]);
+  }, []);
 
   const handleAction = async (event, type, fn) => {
     event.stopPropagation();
