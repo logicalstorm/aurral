@@ -3719,6 +3719,10 @@ textarea {
   font-weight: 500;
 }
 
+.artist-discover-hero__updated--refreshing {
+  color: var(--aurral-gray-light);
+}
+
 .artist-discover-hero__updated-icon {
   width: 0.75rem;
   height: 0.75rem;
