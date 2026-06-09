@@ -63,8 +63,8 @@ export function SettingsDiscoverTab({
   const discoveryRecommendationsPerRefresh =
     settings.integrations?.lastfm?.discoveryRecommendationsPerRefresh ?? 200;
   const discoveryFlowsPerRefresh =
-    settings.integrations?.lastfm?.discoveryFlowsPerRefresh ?? 12;
-  const baseDiscoverFlowCount = 4;
+    settings.integrations?.lastfm?.discoveryFlowsPerRefresh ?? 10;
+  const baseDiscoverFlowCount = 5;
   const focusFlowCount = Math.max(
     0,
     discoveryFlowsPerRefresh - baseDiscoverFlowCount,
@@ -203,15 +203,15 @@ export function SettingsDiscoverTab({
                 <SettingsInput
                   id="discover-flows"
                   type="number"
-                  min={4}
+                  min={5}
                   max={32}
                   step={1}
                   value={discoveryFlowsPerRefresh}
                   onChange={(e) => {
                     const raw = Number(e.target.value);
                     const value = Number.isFinite(raw)
-                      ? Math.max(4, Math.min(32, Math.floor(raw)))
-                      : 12;
+                      ? Math.max(5, Math.min(32, Math.floor(raw)))
+                      : 10;
                     updateSettings({
                       ...settings,
                       integrations: {
@@ -225,9 +225,9 @@ export function SettingsDiscoverTab({
                   }}
                 />
                 <p className="settings-page__hint">
-                  Includes Discover Weekly, Trending Mix, Library Blend, and
-                  Release Radar, plus {focusFlowCount} auto-generated focus
-                  playlists.
+                  Includes Discover Weekly, Trending Mix, Library Blend,
+                  Listening History, and Release Radar, plus {focusFlowCount}{" "}
+                  auto-generated focus playlists.
                 </p>
               </div>
               <div className="settings-page__field">
