@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isFixedDiscoverPlaylistPreset } from "../config/discoverPlaylistPresets.js";
 import {
   getArtworkContentTypeForExtension,
   getArtworkExtensionForStyle,
@@ -53,6 +54,7 @@ export async function generateDiscoverPlaylistArtwork(playlist, options = {}) {
     signature: presetId,
     relatedArtists: playlist?.relatedArtists || [],
     style,
+    paletteSeed: isFixedDiscoverPlaylistPreset(presetId) ? presetId : null,
   });
 }
 

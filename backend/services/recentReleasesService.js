@@ -2,16 +2,30 @@ import { libraryManager } from "./libraryManager.js";
 
 const RECENT_RELEASE_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
 
-export async function getRecentMissingReleases(limit = 24) {
+export async function getRecentMissingReleases(limit = 24, options = {}) {
   const { lidarrClient } = await import("./lidarrClient.js");
   if (!lidarrClient.isConfigured()) {
     return [];
   }
 
-  const [artists, albums] = await Promise.all([
-    lidarrClient.request("/artist"),
-    lidarrClient.request("/album"),
-  ]);
+  const providedArtists =
+    Array.isArray(options?.artists) && options.artists.length > 0
+      ? options.artists
+      : null;
+  const providedAlbums = Array.isArray(options?.albums) ? options.albums : null;
+  let artists = providedArtists;
+  let albums = providedAlbums;
+
+  if (!artists && !albums) {
+    [artists, albums] = await Promise.all([
+      lidarrClient.request("/artist"),
+      lidarrClient.request("/album"),
+    ]);
+  } else if (!artists) {
+    artists = await lidarrClient.request("/artist");
+  } else if (!albums) {
+    albums = await lidarrClient.request("/album");
+  }
 
   if (!Array.isArray(albums) || albums.length === 0) {
     return [];
@@ -22,6 +36,7 @@ export async function getRecentMissingReleases(limit = 24) {
     artists.forEach((artist) => {
       if (artist?.id != null) {
         artistsById.set(artist.id, artist);
+        artistsById.set(String(artist.id), artist);
       }
     });
   }
@@ -31,7 +46,8 @@ export async function getRecentMissingReleases(limit = 24) {
 
   return albums
     .map((album) => {
-      const artist = artistsById.get(album.artistId);
+      const artist =
+        artistsById.get(album.artistId) || artistsById.get(String(album.artistId));
       if (!artist) return null;
       const mapped = libraryManager.mapLidarrAlbum(album, artist);
       const releaseDate = mapped.releaseDate || album.releaseDate || null;
