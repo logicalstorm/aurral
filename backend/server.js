@@ -40,6 +40,10 @@ import {
   enqueueHonkerStartupTasks,
   startHonkerScheduler,
 } from "./services/honkerDb.js";
+import {
+  registerHonkerShutdownHandler,
+  shutdownHonkerInfrastructure,
+} from "./services/honkerWorkerRuntime.js";
 import { ensurePlaylistFilesystemLayout } from "./services/playlistFilesystemMigration.js";
 import authRouter from "./routes/auth.js";
 import imageProxyRouter from "./routes/imageProxy.js";
@@ -251,10 +255,43 @@ const broadcastWeeklyFlowStatus = async () => {
   }
 };
 
+const broadcastIntervals = [];
+
 broadcastDownloadStatuses();
-setInterval(broadcastDownloadStatuses, DOWNLOAD_STATUS_INTERVAL_MS);
+broadcastIntervals.push(
+  setInterval(broadcastDownloadStatuses, DOWNLOAD_STATUS_INTERVAL_MS),
+);
 broadcastWeeklyFlowStatus();
-setInterval(broadcastWeeklyFlowStatus, WEEKLY_FLOW_STATUS_INTERVAL_MS);
+broadcastIntervals.push(
+  setInterval(broadcastWeeklyFlowStatus, WEEKLY_FLOW_STATUS_INTERVAL_MS),
+);
+
+let shuttingDown = false;
+
+const gracefulShutdown = async (signal) => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`Received ${signal}, shutting down...`);
+  for (const interval of broadcastIntervals) {
+    clearInterval(interval);
+  }
+  await shutdownHonkerInfrastructure({ timeoutMs: 30000 });
+  await new Promise((resolve) => {
+    httpServer.close(() => resolve());
+  });
+  process.exit(0);
+};
+
+registerHonkerShutdownHandler(async () => {
+  websocketService.close?.();
+});
+
+process.once("SIGTERM", () => {
+  void gracefulShutdown("SIGTERM");
+});
+process.once("SIGINT", () => {
+  void gracefulShutdown("SIGINT");
+});
 
 ensurePlaylistFilesystemLayout();
 

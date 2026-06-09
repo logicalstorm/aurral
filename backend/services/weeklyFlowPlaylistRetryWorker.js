@@ -1,7 +1,16 @@
 import { getPlaylistRetryQueue, getWorkerId, withHonkerLock } from "./honkerDb.js";
 import { weeklyFlowWorker } from "./weeklyFlowWorker.js";
+import {
+  isHonkerShuttingDown,
+  markHonkerWorkerLoopEnded,
+  registerHonkerWorker,
+  withJobHeartbeat,
+} from "./honkerWorkerRuntime.js";
+
+const WORKER_NAME = "playlist-retry";
 
 let running = false;
+let stopRequested = false;
 let loopPromise = null;
 
 async function runLoop() {
@@ -9,7 +18,7 @@ async function runLoop() {
   const workerId = getWorkerId();
   try {
     for await (const job of queue.claim(workerId, { idlePollS: 10 })) {
-      if (!running) break;
+      if (!running || stopRequested) break;
       const playlistType = String(job.payload?.playlistType || "").trim();
       const scheduledJobId = playlistType
         ? weeklyFlowWorker.getScheduledRetryJobId(playlistType)
@@ -20,13 +29,15 @@ async function runLoop() {
       }
       weeklyFlowWorker.markIncompleteRetryDequeued(playlistType, job.id);
       try {
-        await withHonkerLock(
-          `playlist-mutation:${playlistType}`,
-          () => weeklyFlowWorker.retryIncompletePlaylist(playlistType),
-          {
-            ttlSeconds: 180,
-            waitTimeoutMs: 5 * 60 * 1000,
-          },
+        await withJobHeartbeat(job, queue, () =>
+          withHonkerLock(
+            `playlist-mutation:${playlistType}`,
+            () => weeklyFlowWorker.retryIncompletePlaylist(playlistType),
+            {
+              ttlSeconds: 180,
+              waitTimeoutMs: 5 * 60 * 1000,
+            },
+          ),
         );
         job.ack();
       } catch (error) {
@@ -44,19 +55,32 @@ async function runLoop() {
   } finally {
     running = false;
     loopPromise = null;
+    const intentional = stopRequested;
+    stopRequested = false;
+    markHonkerWorkerLoopEnded(WORKER_NAME, startWeeklyFlowPlaylistRetryWorker, {
+      intentional,
+    });
   }
 }
 
 export function startWeeklyFlowPlaylistRetryWorker() {
-  if (running) return;
+  if (running || isHonkerShuttingDown()) return;
   running = true;
+  stopRequested = false;
   loopPromise = runLoop();
 }
 
 export function stopWeeklyFlowPlaylistRetryWorker() {
+  stopRequested = true;
   running = false;
 }
 
 export function isWeeklyFlowPlaylistRetryWorkerRunning() {
   return running;
 }
+
+registerHonkerWorker(WORKER_NAME, {
+  start: startWeeklyFlowPlaylistRetryWorker,
+  stop: stopWeeklyFlowPlaylistRetryWorker,
+  isRunning: isWeeklyFlowPlaylistRetryWorkerRunning,
+});

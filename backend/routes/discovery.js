@@ -2,6 +2,7 @@ import express from "express";
 import {
   getDiscoveryCache,
   getDiscoveryUpdateStatus,
+  getDiscoveryPlaylistBuildStatus,
   requestUserDiscoveryRefresh,
   getUserDiscoveryCacheStaleness,
   isGlobalDiscoveryRefreshInProgress,
@@ -307,6 +308,9 @@ router.get("/", requireAuth, async (req, res) => {
     req.user,
   ).filter((playlist) => playlist.trackCount > 0);
 
+  const playlistBuildStatus =
+    getDiscoveryPlaylistBuildStatus(effectiveCacheNamespace);
+
   res.json({
     recommendations,
     globalTop,
@@ -318,6 +322,12 @@ router.get("/", requireAuth, async (req, res) => {
     lastUpdated,
     isUpdating,
     ...(isUpdating ? getDiscoveryUpdateStatus() : {}),
+    playlistsUpdating: playlistBuildStatus.playlistsUpdating,
+    ...(playlistBuildStatus.playlistsUpdating
+      ? {
+          playlistsUpdateMessage: playlistBuildStatus.playlistsUpdateMessage,
+        }
+      : {}),
     stale: isStale,
     configured: true,
     provider,

@@ -1,9 +1,14 @@
-import { enqueueWeeklyFlowOperationJob } from "./honkerDb.js";
+import {
+  enqueueWeeklyFlowOperationJob,
+  getHonkerQueueDepth,
+} from "./honkerDb.js";
 
 const DEFAULT_OPERATION_WAIT_MS = 10 * 60 * 1000;
 
 const pendingPayloadResults = new Map();
 const completedPayloadResults = new Map();
+let workerRunning = false;
+let workerCurrentLabel = null;
 
 function rememberCompletedResult(jobId, entry) {
   completedPayloadResults.set(jobId, entry);
@@ -67,13 +72,26 @@ class WeeklyFlowOperationQueue {
   }
 
   getStatus() {
+    let pending = 0;
+    try {
+      pending = getHonkerQueueDepth("weekly-flow-operation");
+    } catch {}
     return {
-      processing: false,
-      pending: 0,
+      processing: workerRunning,
+      pending,
       durablePending: this.pendingPayloadCount,
-      currentLabel: null,
+      currentLabel: workerCurrentLabel,
     };
   }
+}
+
+export function setWeeklyFlowOperationWorkerState({
+  running = false,
+  currentLabel = null,
+} = {}) {
+  workerRunning = running === true;
+  workerCurrentLabel =
+    currentLabel == null ? null : String(currentLabel).trim() || null;
 }
 
 export const weeklyFlowOperationQueue = new WeeklyFlowOperationQueue();

@@ -393,6 +393,45 @@ export const getDiscoveryUpdateStatus = () => ({
   updateProgressMessage: discoveryCache.updateProgressMessage || null,
 });
 
+const recordDiscoverPlaylistBuildProgress = (
+  progressMessage = "Updating recommended playlists...",
+  extra = {},
+) => {
+  discoveryCache.playlistsUpdating = true;
+  discoveryCache.playlistsUpdateMessage = progressMessage || "";
+  websocketService.emitDiscoveryUpdate({
+    playlistsUpdating: true,
+    playlistsUpdateMessage: progressMessage,
+    phase: "playlists_building",
+    progress: 98,
+    progressMessage,
+    isUpdating: false,
+    configured: true,
+    ...extra,
+  });
+};
+
+export const clearDiscoverPlaylistBuildProgress = () => {
+  discoveryCache.playlistsUpdating = false;
+  discoveryCache.playlistsUpdateMessage = null;
+};
+
+export const getDiscoveryPlaylistBuildStatus = (cacheNamespace = null) => {
+  const buildKey = getDiscoveryPlaylistBuildKey(cacheNamespace);
+  const lockHeld = isHonkerLockHeld(`discovery-playlist-build:${buildKey}`);
+  const tokenPending = discoveryPlaylistBuildTokens.has(buildKey);
+  const cacheFlag = !cacheNamespace && !!discoveryCache.playlistsUpdating;
+  const updating = cacheFlag || lockHeld || tokenPending;
+  const message = cacheFlag
+    ? discoveryCache.playlistsUpdateMessage ||
+      "Updating recommended playlists..."
+    : "Updating recommended playlists...";
+  return {
+    playlistsUpdating: updating,
+    playlistsUpdateMessage: updating ? message : null,
+  };
+};
+
 const emitDiscoveryProgress = (
   phase,
   progressMessage,
@@ -418,6 +457,8 @@ const EMPTY_CACHE = {
   updatePhase: null,
   updateProgress: null,
   updateProgressMessage: null,
+  playlistsUpdating: false,
+  playlistsUpdateMessage: null,
 };
 
 let discoveryCache = { ...EMPTY_CACHE };
@@ -997,32 +1038,40 @@ const buildDiscoveryUpdatePayload = (
     progress = 100,
     progressMessage = "Discovery refresh completed",
   } = {},
-) => ({
-  recommendations: rerankCachedRecommendations({
-    recommendations: discoveryData.recommendations || [],
+) => {
+  if (phase === "playlists_completed") {
+    clearDiscoverPlaylistBuildProgress();
+  }
+  return {
+    recommendations: rerankCachedRecommendations({
+      recommendations: discoveryData.recommendations || [],
+      discoveryMode: getDiscoveryMode(),
+    }),
+    globalTop: discoveryData.globalTop || [],
+    basedOn: discoveryData.basedOn || [],
+    topTags: discoveryData.topTags || [],
+    topGenres: discoveryData.topGenres || [],
+    fallbackGenres: discoveryData.fallbackGenres || [],
+    discoverPlaylists: discoveryData.discoverPlaylists || [],
+    provider: discoveryData.provider || DISCOVERY_PROVIDER_LASTFM,
+    capabilities:
+      discoveryData.capabilities ||
+      getDiscoveryCapabilities(
+        (discoveryData.provider || DISCOVERY_PROVIDER_LASTFM) ===
+          DISCOVERY_PROVIDER_LASTFM,
+      ),
+    lastUpdated: discoveryData.lastUpdated,
+    isUpdating: false,
+    configured: true,
+    phase,
+    progress,
+    progressMessage,
     discoveryMode: getDiscoveryMode(),
-  }),
-  globalTop: discoveryData.globalTop || [],
-  basedOn: discoveryData.basedOn || [],
-  topTags: discoveryData.topTags || [],
-  topGenres: discoveryData.topGenres || [],
-  fallbackGenres: discoveryData.fallbackGenres || [],
-  discoverPlaylists: discoveryData.discoverPlaylists || [],
-  provider: discoveryData.provider || DISCOVERY_PROVIDER_LASTFM,
-  capabilities:
-    discoveryData.capabilities ||
-    getDiscoveryCapabilities(
-      (discoveryData.provider || DISCOVERY_PROVIDER_LASTFM) ===
-        DISCOVERY_PROVIDER_LASTFM,
-    ),
-  lastUpdated: discoveryData.lastUpdated,
-  isUpdating: false,
-  configured: true,
-  phase,
-  progress,
-  progressMessage,
-  discoveryMode: getDiscoveryMode(),
-});
+    ...(phase === "playlists_completed"
+      ? { playlistsUpdating: false, playlistsUpdateMessage: null }
+      : {}),
+  };
+};
 
 const emitDiscoveryDataUpdate = (discoveryData, options = {}) => {
   websocketService.emitDiscoveryUpdate(
@@ -1120,6 +1169,10 @@ export async function runQueuedDiscoverPlaylistBuild(payload = {}) {
           return { skipped: true, reason: "empty_discovery_data" };
         }
 
+        if (payload?.publishUpdate !== false) {
+          recordDiscoverPlaylistBuildProgress("Building recommended playlists...");
+        }
+
         const allLibraryArtistsRaw = await libraryManager.getAllArtists();
         const allLibraryArtists = Array.isArray(allLibraryArtistsRaw)
           ? allLibraryArtistsRaw
@@ -1184,8 +1237,11 @@ export async function runQueuedDiscoverPlaylistBuild(payload = {}) {
 export function emitDiscoverPlaylistBuildFailure(payload = {}, error) {
   if (payload?.publishUpdate === false) return;
   const message = error?.message || String(error || "Unknown error");
+  clearDiscoverPlaylistBuildProgress();
   websocketService.emitDiscoveryUpdate({
     isUpdating: false,
+    playlistsUpdating: false,
+    playlistsUpdateMessage: null,
     configured: true,
     phase: "playlists_error",
     progress: 100,
@@ -1220,6 +1276,9 @@ const scheduleDiscoverPlaylistBuild = ({
   };
 
   enqueueDiscoveryPlaylistBuildJob(payload);
+  if (publishUpdate) {
+    recordDiscoverPlaylistBuildProgress("Updating recommended playlists...");
+  }
 };
 
 export const updateDiscoveryCache = async (options = {}) => {
@@ -1602,14 +1661,11 @@ export const updateDiscoveryCache = async (options = {}) => {
     );
     discoveryCache.isUpdating = false;
     clearDiscoveryUpdateProgress();
-    emitDiscoveryDataUpdate(discoveryData, {
-      progressMessage:
-        listeningHistoryUsersConfigured
-          ? "Discovery refresh completed"
-          : "Discovery refresh completed; playlists are updating in the background",
-    });
 
     if (listeningHistoryUsersConfigured) {
+      emitDiscoveryDataUpdate(discoveryData, {
+        progressMessage: "Discovery refresh completed",
+      });
       refreshListeningHistoryUserCaches().catch((error) => {
         console.error(
           `[Discovery] Background per-user refresh failed: ${error.message}`,
@@ -1632,6 +1688,9 @@ export const updateDiscoveryCache = async (options = {}) => {
             .map((artist) => artist.artistName)
             .filter(Boolean),
         },
+      });
+      emitDiscoveryDataUpdate(discoveryData, {
+        progressMessage: "Discovery refresh completed",
       });
     }
 
