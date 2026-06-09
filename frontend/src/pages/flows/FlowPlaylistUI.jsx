@@ -338,14 +338,12 @@ export function PlaylistLibraryItem({
             <span
               className="flow-page__library-item-activity"
               title={activityHint}
+              aria-label={activityHint}
             >
               <Loader2
                 className="artist-icon-xs animate-spin"
                 aria-hidden="true"
               />
-              <span className="flow-page__library-item-activity-text">
-                {activityHint}
-              </span>
             </span>
           ) : null}
         </div>
