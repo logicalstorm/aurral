@@ -748,64 +748,6 @@ export const getDiscovery = async (cacheBust = false) => {
   return response.data;
 };
 
-let blocklistInflight = null;
-let blocklistCache = null;
-
-const invalidateBlocklistCache = () => {
-  blocklistCache = null;
-};
-
-export const getBlocklist = async () => {
-  if (blocklistCache) return blocklistCache;
-  if (blocklistInflight) return blocklistInflight;
-  blocklistInflight = api
-    .get("/discover/blocklist")
-    .then((response) => {
-      blocklistCache = response.data;
-      return blocklistCache;
-    })
-    .finally(() => {
-      blocklistInflight = null;
-    });
-  return blocklistInflight;
-};
-
-export const updateBlocklist = async ({ artists, tags }) => {
-  const response = await api.put("/discover/blocklist", {
-    artists,
-    tags,
-  });
-  blocklistCache = response.data;
-  return response.data;
-};
-
-export const addArtistToBlocklist = async ({ mbid = null, name = null } = {}) => {
-  invalidateBlocklistCache();
-  const current = await getBlocklist();
-  const nextArtists = Array.isArray(current.artists) ? [...current.artists] : [];
-  nextArtists.push({ mbid, name });
-  const response = await api.put("/discover/blocklist", {
-    artists: nextArtists,
-    tags: current.tags || [],
-  });
-  blocklistCache = response.data;
-  return response.data;
-};
-
-export const addTagToBlocklist = async (tag) => {
-  const normalized = String(tag || "").trim();
-  if (!normalized) return null;
-  invalidateBlocklistCache();
-  const current = await getBlocklist();
-  const nextTags = Array.isArray(current.tags) ? [...current.tags, normalized] : [normalized];
-  const response = await api.put("/discover/blocklist", {
-    artists: current.artists || [],
-    tags: nextTags,
-  });
-  blocklistCache = response.data;
-  return response.data;
-};
-
 export const getNearbyShows = async (zipCode = "", limit) => {
   const params = { _: Date.now() };
   if (typeof zipCode === "string" && zipCode.trim()) {
@@ -830,6 +772,11 @@ export const addDiscoveryFeedback = async (payload) => {
 
 export const removeDiscoveryFeedback = async (id) => {
   const response = await api.delete(`/discover/feedback/${encodeURIComponent(id)}`);
+  return response.data;
+};
+
+export const resetDiscoveryFeedback = async () => {
+  const response = await api.post("/discover/feedback/reset");
   return response.data;
 };
 

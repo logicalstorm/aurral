@@ -46,6 +46,8 @@ function ProfilePage() {
         loading={account.loading}
         saving={account.saving}
         handleSave={account.handleSave}
+        showSuccess={showSuccess}
+        showError={showError}
       />
     </div>
   );

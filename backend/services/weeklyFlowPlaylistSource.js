@@ -130,114 +130,6 @@ export class WeeklyFlowPlaylistSource {
     return 0;
   }
 
-  _getBlocklist() {
-    const settings = dbOps.getSettings();
-    const source =
-      settings?.blocklist && typeof settings.blocklist === "object"
-        ? settings.blocklist
-        : {};
-    const rawArtists = Array.isArray(source.artists) ? source.artists : [];
-    const seen = new Set();
-    const artists = [];
-    for (const entry of rawArtists) {
-      let mbid = null;
-      let name = null;
-      if (typeof entry === "string") {
-        const normalized = String(entry).trim();
-        if (!normalized) continue;
-        if (MBID_REGEX.test(normalized)) {
-          mbid = normalized.toLowerCase();
-        } else {
-          name = normalized;
-        }
-      } else if (entry && typeof entry === "object") {
-        const rawMbid = String(entry.mbid || entry.artistId || entry.id || "").trim();
-        if (rawMbid && MBID_REGEX.test(rawMbid)) {
-          mbid = rawMbid.toLowerCase();
-        }
-        const rawName = String(entry.name || entry.artistName || "").trim();
-        if (rawName) {
-          name = rawName;
-        }
-      }
-      if (!mbid && !name) continue;
-      const key = mbid ? `mbid:${mbid}` : `name:${this._artistKey(name)}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      artists.push({ mbid, name: name || null });
-    }
-    const tags = Array.isArray(source.tags)
-      ? [...new Set(source.tags.map((entry) => this._artistKey(entry)).filter(Boolean))]
-      : [];
-    return {
-      artists,
-      tags,
-    };
-  }
-
-  _isArtistBlockedByBlocklist(artist, blocklist) {
-    const blockedArtists = Array.isArray(blocklist?.artists) ? blocklist.artists : [];
-    if (blockedArtists.length === 0) return false;
-    const blockedMbids = new Set(
-      blockedArtists
-        .map((entry) => this._artistKey(entry?.mbid))
-        .filter((value) => MBID_REGEX.test(value)),
-    );
-    const blockedNames = new Set(
-      blockedArtists
-        .map((entry) => this._artistKey(entry?.name))
-        .filter(Boolean),
-    );
-    const keys = this._artistKeysFromArtist(artist);
-    return keys.some((key) => blockedMbids.has(key) || blockedNames.has(key));
-  }
-
-  _isTagBlockedByBlocklist(tags, blocklist) {
-    const blockedTags = new Set(blocklist?.tags || []);
-    if (blockedTags.size === 0) return false;
-    const normalized = Array.isArray(tags)
-      ? tags.map((tag) => this._artistKey(tag)).filter(Boolean)
-      : [];
-    return normalized.some((tag) => blockedTags.has(tag));
-  }
-
-  _filterArtistsByBlocklist(artists, blocklist) {
-    if (!Array.isArray(artists) || artists.length === 0) return [];
-    return artists.filter(
-      (artist) =>
-        !this._isArtistBlockedByBlocklist(artist, blocklist) &&
-        !this._isTagBlockedByBlocklist(artist?.tags, blocklist),
-    );
-  }
-
-  _filterTracksByBlocklist(tracks, blocklist) {
-    const blockedArtists = Array.isArray(blocklist?.artists) ? blocklist.artists : [];
-    const blockedMbids = new Set(
-      blockedArtists
-        .map((entry) => this._artistKey(entry?.mbid))
-        .filter((value) => MBID_REGEX.test(value)),
-    );
-    const blockedNames = new Set(
-      blockedArtists
-        .map((entry) => this._artistKey(entry?.name))
-        .filter(Boolean),
-    );
-    if (
-      !Array.isArray(tracks) ||
-      tracks.length === 0 ||
-      (blockedNames.size === 0 && blockedMbids.size === 0)
-    ) {
-      return Array.isArray(tracks) ? tracks : [];
-    }
-    return tracks.filter((track) => {
-      const artistKey = this._artistKey(track?.artistName);
-      const artistMbid = this._artistKey(track?.artistMbid);
-      if (artistMbid && blockedMbids.has(artistMbid)) return false;
-      return artistKey && !blockedNames.has(artistKey);
-    });
-  }
-
-
   _artistKey(value) {
     return String(value || "").trim().toLowerCase();
   }
@@ -475,7 +367,7 @@ export class WeeklyFlowPlaylistSource {
       }
     }
     return this._filterTracksByArtists(
-      this._filterTracksByBlocklist(tracks, options?.blocklist),
+      tracks,
       null,
       options?.excludeArtistKeys,
     );
@@ -599,7 +491,6 @@ export class WeeklyFlowPlaylistSource {
       {
         deepDive: options?.deepDive === true,
         reason: options?.reason || `From genres: ${tags.join(", ")}`,
-        blocklist: options?.blocklist,
         excludeArtistKeys: options?.excludeArtistKeys,
       },
     ).catch(() => []);
@@ -623,7 +514,6 @@ export class WeeklyFlowPlaylistSource {
       {
         deepDive: options?.deepDive === true,
         reason: options?.reason || `Similar to ${artists.join(", ")}`,
-        blocklist: options?.blocklist,
         excludeArtistKeys: options?.excludeArtistKeys,
       },
     ).catch(() => []);
@@ -904,7 +794,6 @@ export class WeeklyFlowPlaylistSource {
     if (sources.length === 0) {
       return await this.getDiscoverTracks(limit, {
         deepDive,
-        blocklist: options?.blocklist,
       });
     }
 
@@ -920,7 +809,6 @@ export class WeeklyFlowPlaylistSource {
         if (source.type === "tag") {
           const tracks = await this.getTagTracks(source.key, source.count, {
             reason: `From genre: ${source.key}`,
-            blocklist: options?.blocklist,
           });
           curated.push(...tracks);
         } else {
@@ -930,7 +818,6 @@ export class WeeklyFlowPlaylistSource {
             {
               deepDive,
               reason: `Similar to ${source.key}`,
-              blocklist: options?.blocklist,
             },
           );
           curated.push(...tracks);
@@ -946,7 +833,6 @@ export class WeeklyFlowPlaylistSource {
 
     const fallback = await this.getDiscoverTracks(limit - curated.length, {
       deepDive,
-      blocklist: options?.blocklist,
     }).catch(() => []);
     return [...curated, ...fallback];
   }
@@ -1355,7 +1241,6 @@ export class WeeklyFlowPlaylistSource {
     const tracks = await this._getTracksForRankedArtists(focusArtistPool, limit, {
       deepDive: options?.deepDive === true,
       reason: "From focus filters",
-      blocklist: options?.blocklist,
       excludeArtistKeys: options?.excludeArtistKeys,
     }).catch(() => []);
     const focusArtistMap = new Map(
@@ -1440,7 +1325,6 @@ export class WeeklyFlowPlaylistSource {
     };
     const tags = this._normalizeFocusEntries(flow?.tags);
     const relatedArtists = this._normalizeFocusEntries(flow?.relatedArtists);
-    const blocklist = this._getBlocklist();
     const excludeArtistKeys = new Set(
       Array.isArray(options?.excludeArtistKeys) ? options.excludeArtistKeys : options?.excludeArtistKeys || [],
     );
@@ -1460,7 +1344,6 @@ export class WeeklyFlowPlaylistSource {
         ? this.getDiscoverTracks(harvestLimitFor(combinedTargets.discover), {
             deepDive: flow?.deepDive === true,
             reason: "From discovery recommendations",
-            blocklist,
             excludeArtistKeys: nonLibraryExcludeArtistKeys,
             listenHistoryProfile,
           }).catch(() => [])
@@ -1469,14 +1352,12 @@ export class WeeklyFlowPlaylistSource {
         ? this.getMixTracks(harvestLimitFor(combinedTargets.mix), {
             deepDive: flow?.deepDive === true,
             reason: "From your library mix",
-            blocklist,
           }).catch(() => [])
         : [],
       combinedTargets.trending > 0
         ? this.getTrendingTracks(harvestLimitFor(combinedTargets.trending), {
             deepDive: flow?.deepDive === true,
             reason: "From trending artists",
-            blocklist,
             excludeArtistKeys: nonLibraryExcludeArtistKeys,
             listenHistoryProfile,
           }).catch(() => [])
@@ -1486,7 +1367,6 @@ export class WeeklyFlowPlaylistSource {
             tags,
             relatedArtists,
             deepDive: flow?.deepDive === true,
-            blocklist,
             excludeArtistKeys: nonLibraryExcludeArtistKeys,
             excludeTrackKeys,
           }).catch(() => [])
@@ -1605,10 +1485,7 @@ export class WeeklyFlowPlaylistSource {
     }
 
     const discoveryCache = getDiscoveryCache(options?.listenHistoryProfile);
-    const recommendations = this._filterArtistsByBlocklist(
-      discoveryCache.recommendations || [],
-      options?.blocklist,
-    );
+    const recommendations = discoveryCache.recommendations || [];
     if (!Array.isArray(recommendations) || recommendations.length === 0) {
       throw new Error(
         "No discovery recommendations available. Update discovery cache first.",
@@ -1664,7 +1541,7 @@ export class WeeklyFlowPlaylistSource {
     }
 
     return this._filterTracksByArtists(
-      this._filterTracksByBlocklist(tracks, options?.blocklist),
+      tracks,
       null,
       excludeSet,
     );
@@ -1675,10 +1552,7 @@ export class WeeklyFlowPlaylistSource {
       throw new Error("Last.fm API key not configured");
     }
     const discoveryCache = getDiscoveryCache(options?.listenHistoryProfile);
-    const globalTop = this._filterArtistsByBlocklist(
-      discoveryCache.globalTop || [],
-      options?.blocklist,
-    );
+    const globalTop = discoveryCache.globalTop || [];
     const candidates = this._filterArtistsByKeySet(
       globalTop,
       options?.excludeArtistKeys,
@@ -1735,7 +1609,7 @@ export class WeeklyFlowPlaylistSource {
     }
 
     return this._filterTracksByArtists(
-      this._filterTracksByBlocklist(tracks, options?.blocklist),
+      tracks,
       null,
       options?.excludeArtistKeys,
     );
@@ -1747,9 +1621,6 @@ export class WeeklyFlowPlaylistSource {
     }
     if (!tag || limit <= 0) return [];
     const normalizedTag = this._artistKey(tag);
-    if (normalizedTag && this._isTagBlockedByBlocklist([normalizedTag], options?.blocklist)) {
-      return [];
-    }
     const requested = Math.max(limit * 3, 50);
     const trackData = await lastfmRequest("tag.getTopTracks", {
       tag,
@@ -1785,7 +1656,7 @@ export class WeeklyFlowPlaylistSource {
       if (trackEntry) result.push(trackEntry);
     }
     return this._filterTracksByArtists(
-      this._filterTracksByBlocklist(result, options?.blocklist),
+      result,
       null,
       options?.excludeArtistKeys,
     );
@@ -1854,7 +1725,7 @@ export class WeeklyFlowPlaylistSource {
       }
     }
     return this._filterTracksByArtists(
-      this._filterTracksByBlocklist(tracks, options?.blocklist),
+      tracks,
       null,
       options?.excludeArtistKeys,
     );
@@ -1862,14 +1733,8 @@ export class WeeklyFlowPlaylistSource {
 
   async getRecommendedTracks(limit, options = {}) {
     const discoveryCache = getDiscoveryCache(options?.listenHistoryProfile);
-    const recommendations = this._filterArtistsByBlocklist(
-      discoveryCache.recommendations || [],
-      options?.blocklist,
-    );
-    const globalTop = this._filterArtistsByBlocklist(
-      discoveryCache.globalTop || [],
-      options?.blocklist,
-    );
+    const recommendations = discoveryCache.recommendations || [];
+    const globalTop = discoveryCache.globalTop || [];
 
     if (recommendations.length === 0 && globalTop.length === 0) {
       throw new Error(
@@ -1946,10 +1811,7 @@ export class WeeklyFlowPlaylistSource {
       }
     }
 
-    return this._filterTracksByBlocklist(
-      tracks.slice(0, limit),
-      options?.blocklist,
-    );
+    return tracks.slice(0, limit);
   }
 
   async getLibraryTrackTitles(libraryManager, artistId) {
@@ -1979,10 +1841,7 @@ export class WeeklyFlowPlaylistSource {
 
   async getMixTracks(limit, options = {}) {
     const { libraryManager } = await import("./libraryManager.js");
-    const artists = this._filterArtistsByBlocklist(
-      await libraryManager.getAllArtists(),
-      options?.blocklist,
-    );
+    const artists = await libraryManager.getAllArtists();
     if (artists.length === 0) {
       throw new Error("No artists in library. Add artists to enable Mix.");
     }
@@ -2063,7 +1922,7 @@ export class WeeklyFlowPlaylistSource {
       }
     }
 
-    return this._filterTracksByBlocklist(tracks, options?.blocklist);
+    return tracks;
   }
 }
 
