@@ -88,8 +88,14 @@ router.post("/slskd/test", async (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
-    const { quality, releaseTypes, integrations, rootFolderPath, security } =
-      req.body;
+    const {
+      quality,
+      releaseTypes,
+      integrations,
+      rootFolderPath,
+      security,
+      playlistArtwork,
+    } = req.body;
 
     const currentSettings = dbOps.getSettings();
     const localBypassWasEnabled =
@@ -234,6 +240,15 @@ router.post("/", async (req, res) => {
                   defaultData.settings.security.localNetworkBypass,
             }
           : currentSettings.security || defaultData.settings.security,
+      playlistArtwork:
+        playlistArtwork !== undefined
+          ? {
+              ...(currentSettings.playlistArtwork ||
+                defaultData.settings.playlistArtwork),
+              ...playlistArtwork,
+            }
+          : currentSettings.playlistArtwork ||
+            defaultData.settings.playlistArtwork,
     };
 
     if (updatedSettings?.integrations?.coverArtArchive) {

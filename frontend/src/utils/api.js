@@ -753,6 +753,24 @@ export const adoptDiscoverPlaylist = async (presetId) => {
   return response.data;
 };
 
+export const getDiscoverArtworkUrl = (presetId, version) => {
+  const base = import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
+  const { token } = getStoredAuth();
+  const params = new URLSearchParams();
+  if (token) {
+    params.set("token", token);
+  }
+  if (version != null && version !== "") {
+    params.set("v", String(version));
+  }
+  const query = params.toString();
+  let url = `${base}/discover/artwork/${encodeURIComponent(presetId)}`;
+  if (query) {
+    url += `?${query}`;
+  }
+  return url;
+};
+
 export const getNearbyShows = async (zipCode = "", limit) => {
   const params = { _: Date.now() };
   if (typeof zipCode === "string" && zipCode.trim()) {

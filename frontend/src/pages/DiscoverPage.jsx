@@ -1515,6 +1515,7 @@ function DiscoverPage() {
         <DiscoverPlaylistSection
           key="playlists"
           playlists={displayDiscoverPlaylists}
+          artworkVersion={lastUpdated}
           canAdopt={canAdoptPlaylist}
           onAdopted={handlePlaylistAdopted}
         />
