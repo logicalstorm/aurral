@@ -4002,7 +4002,7 @@ textarea {
 .artist-options-menu--discover {
   position: absolute;
   z-index: 20;
-  width: 14rem;
+  width: max-content;
   overflow: hidden;
   background: var(--aurral-overlay);
   border-radius: var(--aurral-radius-sm);
@@ -4018,9 +4018,10 @@ textarea {
   display: flex;
   width: 100%;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.625rem 0.75rem;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  white-space: nowrap;
   border-radius: var(--aurral-radius-sm);
   color: var(--aurral-gray-light);
   font-size: 0.875rem;
