@@ -6,8 +6,6 @@ import {
   Music,
   Sparkles,
   Clock,
-  ChevronLeft,
-  ChevronRight,
   LayoutTemplate,
   CheckCircle2,
 } from "lucide-react";
@@ -37,6 +35,7 @@ import NearbyLocationControl from "../components/NearbyLocationControl";
 import ShowCard from "../components/ShowCard";
 import LastfmBanner from "../components/LastfmBanner";
 import { useToast } from "../contexts/ToastContext";
+import { DiscoverRail } from "../components/DiscoverRail";
 import { DiscoverLayoutModal } from "./DiscoverLayoutModal";
 import { DiscoverPlaylistSection } from "./DiscoverPlaylistSection";
 
@@ -74,7 +73,7 @@ const DISCOVER_NEARBY_SHOWS_KEY = "discoverNearbyShows";
 
 const DEFAULT_DISCOVER_SECTIONS = [
   { id: "recentlyAdded", label: "Recently Added", enabled: true },
-  { id: "playlists", label: "Playlists", enabled: true },
+  { id: "playlists", label: "Recommended Flows", enabled: true },
   { id: "recommendedShows", label: "Shows Near You", enabled: true },
   { id: "recentReleases", label: "Recent Releases", enabled: true },
   { id: "recommended", label: "Recommended for You", enabled: true },
@@ -656,119 +655,6 @@ ViewAllCard.displayName = "ViewAllCard";
 ViewAllCard.propTypes = {
   onClick: PropTypes.func.isRequired,
   label: PropTypes.string,
-};
-
-function DiscoverRail({
-  title,
-  mobileTitle,
-  onViewAll,
-  afterTitle,
-  headerActions,
-  children,
-  className = "",
-  headerClassName = "",
-  style,
-}) {
-  const scrollRef = useRef(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
-
-  const updateScrollState = useCallback(() => {
-    const node = scrollRef.current;
-    if (!node) return;
-    const maxScrollLeft = Math.max(node.scrollWidth - node.clientWidth, 0);
-    const nextCanScrollLeft = node.scrollLeft > 2;
-    const nextCanScrollRight = node.scrollLeft < maxScrollLeft - 2;
-    setCanScrollLeft(nextCanScrollLeft);
-    setCanScrollRight(nextCanScrollRight);
-  }, []);
-
-  const scrollByAmount = useCallback((direction) => {
-    if (!scrollRef.current) return;
-    const width = scrollRef.current.clientWidth;
-    scrollRef.current.scrollBy({
-      left: direction * Math.max(width * 0.85, 280),
-      behavior: "smooth",
-    });
-  }, []);
-
-  useEffect(() => {
-    const node = scrollRef.current;
-    if (!node) return;
-    updateScrollState();
-    node.addEventListener("scroll", updateScrollState, { passive: true });
-    window.addEventListener("resize", updateScrollState);
-    return () => {
-      node.removeEventListener("scroll", updateScrollState);
-      window.removeEventListener("resize", updateScrollState);
-    };
-  }, [children, updateScrollState]);
-
-  return (
-    <section className={`artist-discover-rail ${className}`} style={style}>
-      <div className={`artist-discover-rail__header ${headerClassName}`}>
-        <div className="artist-discover-rail__title-group">
-          <h2 className="artist-section-title--discover">
-            <span className="artist-section-title--discover-mobile">
-              {mobileTitle || title}
-            </span>
-            <span className="artist-section-title--discover-desktop">
-              {title}
-            </span>
-          </h2>
-          {onViewAll && (
-            <button
-              type="button"
-              onClick={onViewAll}
-              className="btn btn-ghost btn-icon-square"
-              aria-label={`Open ${title}`}
-            >
-              →
-            </button>
-          )}
-          {afterTitle}
-        </div>
-        <div className="artist-discover-rail__actions">
-          {headerActions}
-          <button
-            type="button"
-            onClick={() => scrollByAmount(-1)}
-            className="btn btn-ghost btn-icon-square"
-            style={{ color: canScrollLeft ? "#6f7685" : "#2d3442" }}
-            aria-label={`Scroll ${title} left`}
-            disabled={!canScrollLeft}
-          >
-            <ChevronLeft className="artist-icon-lg" />
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollByAmount(1)}
-            className="btn btn-ghost btn-icon-square"
-            style={{ color: canScrollRight ? "#d1d5df" : "#2d3442" }}
-            aria-label={`Scroll ${title} right`}
-            disabled={!canScrollRight}
-          >
-            <ChevronRight className="artist-icon-lg" />
-          </button>
-        </div>
-      </div>
-      <div ref={scrollRef} className="artist-discover-rail__content">
-        {children}
-      </div>
-    </section>
-  );
-}
-
-DiscoverRail.propTypes = {
-  title: PropTypes.string.isRequired,
-  mobileTitle: PropTypes.string,
-  onViewAll: PropTypes.func,
-  afterTitle: PropTypes.node,
-  headerActions: PropTypes.node,
-  children: PropTypes.node.isRequired,
-  className: PropTypes.string,
-  headerClassName: PropTypes.string,
-  style: PropTypes.object,
 };
 
 function DiscoverPage() {
@@ -1626,28 +1512,12 @@ function DiscoverPage() {
     if (id === "playlists") {
       if (!sectionAvailability.playlists) return null;
       return (
-        <section
+        <DiscoverPlaylistSection
           key="playlists"
-          className="artist-discover-rail discover-playlists-rail"
-        >
-          <div className="artist-discover-rail__header">
-            <div className="artist-discover-rail__title-group">
-              <h2 className="artist-section-title--discover">
-                <span className="artist-section-title--discover-mobile">
-                  Playlists
-                </span>
-                <span className="artist-section-title--discover-desktop">
-                  Playlists
-                </span>
-              </h2>
-            </div>
-          </div>
-          <DiscoverPlaylistSection
-            playlists={displayDiscoverPlaylists}
-            canAdopt={canAdoptPlaylist}
-            onAdopted={handlePlaylistAdopted}
-          />
-        </section>
+          playlists={displayDiscoverPlaylists}
+          canAdopt={canAdoptPlaylist}
+          onAdopted={handlePlaylistAdopted}
+        />
       );
     }
 

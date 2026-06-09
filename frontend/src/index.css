@@ -4391,153 +4391,90 @@ textarea {
   display: none;
 }
 
-.discover-playlists-rail {
-  margin-bottom: 2.5rem;
-}
-
-.discover-playlists {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.discover-playlist-card {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.03);
-  overflow: hidden;
-}
-
-.discover-playlist-card.is-expanded {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.discover-playlist-card__header {
-  display: flex;
+.discover-playlist-expanded {
   width: 100%;
-  align-items: center;
-  gap: 0.875rem;
-  padding: 0.875rem 1rem;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--aurral-border);
 }
 
-.discover-playlist-card__icon-wrap {
+.discover-playlist-toolbar {
   display: flex;
-  width: 3rem;
-  height: 3rem;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.75rem;
-  background: linear-gradient(135deg, #5c4a72, #845336);
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
 }
 
-.discover-playlist-card__icon {
-  width: 1.25rem;
-  height: 1.25rem;
-  color: var(--aurral-white);
-}
-
-.discover-playlist-card__copy {
-  display: flex;
+.discover-playlist-toolbar__meta {
+  display: grid;
+  gap: 0.35rem;
   min-width: 0;
-  flex-direction: column;
-  gap: 0.2rem;
 }
 
-.discover-playlist-card__name {
+.discover-playlist-toolbar__title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.discover-playlist-toolbar__title {
+  margin: 0;
+  min-width: 0;
   color: var(--aurral-white);
   font-size: 1rem;
-  font-weight: 700;
+  font-weight: 800;
+  line-height: 1.3;
 }
 
-.discover-playlist-card__meta {
-  color: var(--aurral-gray);
+.discover-playlist-toolbar__track-count {
+  flex-shrink: 0;
+  color: var(--aurral-gray-light);
   font-size: 0.8125rem;
-  line-height: 1.4;
+  white-space: nowrap;
 }
 
-.discover-playlist-card__body {
+.discover-playlist-toolbar__actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.flow-page__tracks-toolbar-start--full {
+  flex: 1;
+  min-width: 0;
+}
+
+.artist-discover-card.is-expanded .artist-discover-card__cover {
+  outline: 2px solid var(--aurral-accent);
+  outline-offset: 2px;
+}
+
+.discover-playlist-flow-meta {
   display: grid;
-  gap: 1rem;
-  padding: 0 1rem 1rem;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
 }
 
-.discover-playlist-card__recipe {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.discover-playlist-card__recipe-label {
-  color: var(--aurral-gray);
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.discover-playlist-card__recipe-items {
+.discover-playlist-flow-meta__pills {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
 
-.discover-playlist-card__recipe-pill {
+.discover-playlist-flow-meta__pill {
   display: inline-flex;
   align-items: center;
   padding: 0.3rem 0.65rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--aurral-radius-round);
+  background: var(--aurral-overlay);
   color: var(--aurral-white);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
 }
 
-.discover-playlist-card__recipe-pill--focus {
-  background: rgba(132, 83, 54, 0.35);
-}
-
-.discover-playlist-card__icon-wrap--focus {
-  background: linear-gradient(135deg, #43454f, #604848);
-}
-
-.discover-playlist-card__tracks {
-  display: grid;
-  gap: 0.65rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  max-height: 18rem;
-  overflow-y: auto;
-}
-
-.discover-playlist-card__tracks li {
-  display: grid;
-  gap: 0.15rem;
-  padding-bottom: 0.65rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.discover-playlist-card__tracks li:last-child {
-  padding-bottom: 0;
-  border-bottom: 0;
-}
-
-.discover-playlist-card__track-title {
-  color: var(--aurral-white);
-  font-size: 0.9375rem;
-  font-weight: 600;
-}
-
-.discover-playlist-card__track-artist {
-  color: var(--aurral-gray);
-  font-size: 0.8125rem;
-}
-
-.discover-playlist-card__action {
-  justify-self: start;
+.discover-playlist-flow-actions {
+  margin-top: 1rem;
 }
 
 .artist-discover-shelf-card {
@@ -8502,7 +8439,44 @@ textarea {
 
 .flow-page__tracks-table {
   width: 100%;
+  table-layout: fixed;
   font-size: 0.875rem;
+}
+
+.flow-page__tracks-table-head th.flow-page__tracks-table-song {
+  width: 36%;
+}
+
+.flow-page__tracks-table-head th.flow-page__tracks-table-artist {
+  width: 28%;
+}
+
+.flow-page__tracks-table-head th.flow-page__tracks-table-album {
+  width: 24%;
+}
+
+.flow-page__tracks-table--no-album th.flow-page__tracks-table-song {
+  width: 48%;
+}
+
+.flow-page__tracks-table--no-album th.flow-page__tracks-table-artist {
+  width: 42%;
+}
+
+.flow-page__tracks-table-song,
+.flow-page__tracks-table-artist,
+.flow-page__tracks-table-album {
+  overflow: hidden;
+  max-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-page__tracks-table-cell-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .flow-page__tracks-table-head {
@@ -8539,8 +8513,14 @@ textarea {
 }
 
 .flow-page__tracks-artist-link {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
   color: var(--aurral-gray-light);
   text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   transition: color 0.18s ease;
 }
 
@@ -9402,29 +9382,19 @@ textarea {
     overflow-x: hidden;
   }
 
-  .flow-page__library-inline-detail .flow-page__tracks-table {
-    table-layout: fixed;
-    width: 100%;
-  }
-
-  .flow-page__library-inline-detail .flow-page__tracks-table th:nth-child(4),
-  .flow-page__library-inline-detail .flow-page__tracks-table td:nth-child(4) {
+  .flow-page__library-inline-detail .flow-page__tracks-table-album {
     display: none;
   }
 
-  .flow-page__library-inline-detail .flow-page__tracks-table td {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .flow-page__library-inline-detail
+    .flow-page__tracks-table-head
+    th.flow-page__tracks-table-song {
+    width: 46%;
   }
 
-  .flow-page__library-inline-detail .flow-page__tracks-table th:nth-child(2),
-  .flow-page__library-inline-detail .flow-page__tracks-table td:nth-child(2) {
-    width: 42%;
-  }
-
-  .flow-page__library-inline-detail .flow-page__tracks-table th:nth-child(3),
-  .flow-page__library-inline-detail .flow-page__tracks-table td:nth-child(3) {
+  .flow-page__library-inline-detail
+    .flow-page__tracks-table-head
+    th.flow-page__tracks-table-artist {
     width: 38%;
   }
 
