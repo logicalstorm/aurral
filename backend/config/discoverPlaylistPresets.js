@@ -26,8 +26,22 @@ export const DISCOVER_PLAYLIST_PRESETS = [
 ];
 
 export const BASE_DISCOVER_FLOW_COUNT = DISCOVER_PLAYLIST_PRESETS.length + 2;
-export const DISCOVERY_FLOWS_DEFAULT = 10;
+export const DISCOVERY_FLOWS_DEFAULT = 9;
 export const DISCOVERY_FLOWS_MAX = 32;
+
+export const FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS = {
+  "discover-weekly": "#4363d8",
+  "trending-mix": "#f032e6",
+  "library-blend": "#3cb44b",
+  "focus-listening-history": "#f58231",
+  "release-radar": "#e6194B",
+};
+
+export const isFixedDiscoverPlaylistPreset = (presetId) =>
+  Object.prototype.hasOwnProperty.call(
+    FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS,
+    String(presetId || "").trim(),
+  );
 
 export const RELEASE_RADAR_PRESET = {
   id: "release-radar",

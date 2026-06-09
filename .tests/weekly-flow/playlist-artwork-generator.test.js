@@ -9,24 +9,11 @@ const {
   resolvePlaylistSourceImageUrl,
 } = await importFromRepo("backend/services/playlistArtworkGenerator.js");
 
-test("resolvePlaylistSourceImageUrl keeps a stable seed by default", async () => {
-  const first = await resolvePlaylistSourceImageUrl({ signature: "flow-1" });
-  const second = await resolvePlaylistSourceImageUrl({ signature: "flow-1" });
-  assert.equal(first, second);
-  assert.match(first, /seed\/flow-1\//);
-});
-
-test("resolvePlaylistSourceImageUrl rotates the seed when requested", async () => {
-  const first = await resolvePlaylistSourceImageUrl({
-    signature: "flow-1",
-    rotate: true,
-  });
-  const second = await resolvePlaylistSourceImageUrl({
-    signature: "flow-1",
-    rotate: true,
-  });
+test("resolvePlaylistSourceImageUrl returns a unique random picsum URL", async () => {
+  const first = await resolvePlaylistSourceImageUrl();
+  const second = await resolvePlaylistSourceImageUrl();
   assert.notEqual(first, second);
-  assert.match(first, /seed\/flow-1%3A/);
+  assert.match(first, /^https:\/\/picsum\.photos\/800\/800\?random=/);
 });
 
 test("buildGeneratedPlaylistArtworkBuffer returns aurral WebP artwork", async () => {

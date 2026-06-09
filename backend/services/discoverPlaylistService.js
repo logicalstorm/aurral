@@ -1,5 +1,5 @@
 import { getLastfmApiKey } from "./apiClients.js";
-import { getMaxFocusPlaylists } from "./discoveryService.js";
+import { getDiscoveryCache, getMaxFocusPlaylists } from "./discoveryService.js";
 import { playlistSource } from "./weeklyFlowPlaylistSource.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import {
@@ -9,7 +9,7 @@ import {
 } from "../config/discoverPlaylistPresets.js";
 
 const FOCUS_PLAYLIST_SIZE = 20;
-const PLAYLIST_BUILD_CONCURRENCY = 1;
+const PLAYLIST_BUILD_CONCURRENCY = 3;
 const FOCUS_MIX = { discover: 0, mix: 0, trending: 0, focus: 100 };
 const LISTENING_HISTORY_PLAYLIST_ID = "focus-listening-history";
 
@@ -143,12 +143,23 @@ const buildFocusedPlaylistCandidates = ({
   historyTopArtists = [],
   maxFocusPlaylists = getMaxFocusPlaylists(),
 } = {}) => {
+  const tasteTags = diversifyTasteTags(topGenres, topTags);
+  const historyArtists = resolveHistoryTopArtists({
+    historyTopArtists,
+    basedOn,
+    limit: 3,
+  });
+  const hasListeningHistory = historyArtists.length > 0;
+  const autoFocusBudget = Math.max(
+    0,
+    Math.floor(Number(maxFocusPlaylists) || 0) + (hasListeningHistory ? 0 : 1),
+  );
   const {
     maxFocus,
     tag: tagBudget,
     artist: artistBudget,
     crossover: crossoverBudget,
-  } = resolveFocusSlotBudgets(maxFocusPlaylists);
+  } = resolveFocusSlotBudgets(autoFocusBudget);
   const candidates = [];
   const seenIds = new Set();
   const usedTagPairs = new Set();
@@ -186,12 +197,6 @@ const buildFocusedPlaylistCandidates = ({
     return pushCandidate(preset);
   };
 
-  const tasteTags = diversifyTasteTags(topGenres, topTags);
-  const historyArtists = resolveHistoryTopArtists({
-    historyTopArtists,
-    basedOn,
-    limit: 3,
-  });
   const historyArtistKeys = new Set(
     historyArtists.map((artist) => slugify(artist)),
   );
@@ -403,7 +408,7 @@ const buildFocusedPlaylistCandidates = ({
     });
   }
 
-  return candidates.slice(0, maxFocus);
+  return candidates;
 };
 
 const buildFlowConfigFromPreset = (preset) => ({
@@ -415,9 +420,11 @@ const buildFlowConfigFromPreset = (preset) => ({
   relatedArtists: preset.relatedArtists || [],
 });
 
-async function buildPlaylistFromPreset(preset, listenHistoryProfile) {
+async function buildPlaylistFromPreset(preset, options = {}) {
+  const { listenHistoryProfile = null, plannerOptions = {} } = options;
   const flow = buildFlowConfigFromPreset(preset);
   const plan = await playlistSource.buildFlowRunPlan(flow, {
+    ...plannerOptions,
     listenHistoryProfile,
     deferReserve: true,
   });
@@ -426,11 +433,7 @@ async function buildPlaylistFromPreset(preset, listenHistoryProfile) {
   return buildPlaylistPreview(preset, tracks, plan);
 }
 
-async function buildPlaylistsFromPresets(
-  presets,
-  listenHistoryProfile,
-  onProgress,
-) {
+async function buildPlaylistsFromPresets(presets, options, onProgress) {
   const playlists = [];
   const items = Array.isArray(presets) ? presets : [];
   const totalSteps = items.length + 1;
@@ -444,7 +447,7 @@ async function buildPlaylistsFromPresets(
     const batchResults = await Promise.all(
       batch.map(async (preset) => {
         try {
-          return await buildPlaylistFromPreset(preset, listenHistoryProfile);
+          return await buildPlaylistFromPreset(preset, options);
         } catch (error) {
           console.warn(
             `[DiscoverPlaylists] Failed to build ${preset.id}: ${error.message}`,
@@ -460,12 +463,36 @@ async function buildPlaylistsFromPresets(
   return { playlists, totalSteps, completedBeforeReleaseRadar: completed };
 }
 
+async function buildReleaseRadarPlaylist(options = {}) {
+  const {
+    listenHistoryProfile = null,
+    basedOn = [],
+    libraryArtists = null,
+  } = options;
+  try {
+    const tracks = await playlistSource.getReleaseRadarTracks(
+      RELEASE_RADAR_PRESET.size,
+      { listenHistoryProfile, basedOn, libraryArtists },
+    );
+    if (tracks.length > 0) {
+      return buildPlaylistPreview(RELEASE_RADAR_PRESET, tracks);
+    }
+  } catch (error) {
+    console.warn(`[DiscoverPlaylists] Release radar failed: ${error.message}`);
+  }
+  return null;
+}
+
 export async function generateDiscoverPlaylists({
   listenHistoryProfile = null,
   basedOn = [],
   topGenres = [],
   topTags = [],
   recommendations = [],
+  globalTop = [],
+  libraryArtists = null,
+  libraryArtistKeys = null,
+  discoveryCache = null,
   historyTopArtists = [],
   onProgress,
 } = {}) {
@@ -478,25 +505,41 @@ export async function generateDiscoverPlaylists({
     recommendations,
     historyTopArtists,
   });
+  const baseDiscoveryCache =
+    discoveryCache || getDiscoveryCache(listenHistoryProfile);
+  const plannerOptions = {
+    discoveryCache: {
+      ...baseDiscoveryCache,
+      basedOn,
+      topGenres,
+      topTags,
+      recommendations,
+      globalTop:
+        Array.isArray(globalTop) && globalTop.length > 0
+          ? globalTop
+          : baseDiscoveryCache?.globalTop || [],
+    },
+    libraryArtists,
+    libraryArtistKeys,
+  };
+  const playlistPresets = [...DISCOVER_PLAYLIST_PRESETS, ...focusCandidates];
+  const releaseRadarPromise = buildReleaseRadarPlaylist({
+    listenHistoryProfile,
+    basedOn,
+    libraryArtists,
+  });
   const { playlists: presetPlaylists, totalSteps } =
     await buildPlaylistsFromPresets(
-      [...DISCOVER_PLAYLIST_PRESETS, ...focusCandidates],
-      listenHistoryProfile,
+      playlistPresets,
+      { listenHistoryProfile, plannerOptions },
       onProgress,
     );
 
   const playlists = [...presetPlaylists];
 
-  try {
-    const tracks = await playlistSource.getReleaseRadarTracks(
-      RELEASE_RADAR_PRESET.size,
-      { listenHistoryProfile, basedOn },
-    );
-    if (tracks.length > 0) {
-      playlists.push(buildPlaylistPreview(RELEASE_RADAR_PRESET, tracks));
-    }
-  } catch (error) {
-    console.warn(`[DiscoverPlaylists] Release radar failed: ${error.message}`);
+  const releaseRadarPlaylist = await releaseRadarPromise;
+  if (releaseRadarPlaylist) {
+    playlists.push(releaseRadarPlaylist);
   }
 
   onProgress?.({ completed: totalSteps, total: totalSteps });

@@ -63,7 +63,7 @@ export function SettingsDiscoverTab({
   const discoveryRecommendationsPerRefresh =
     settings.integrations?.lastfm?.discoveryRecommendationsPerRefresh ?? 200;
   const discoveryFlowsPerRefresh =
-    settings.integrations?.lastfm?.discoveryFlowsPerRefresh ?? 10;
+    settings.integrations?.lastfm?.discoveryFlowsPerRefresh ?? 9;
   const baseDiscoverFlowCount = 5;
   const focusFlowCount = Math.max(
     0,
@@ -211,7 +211,7 @@ export function SettingsDiscoverTab({
                     const raw = Number(e.target.value);
                     const value = Number.isFinite(raw)
                       ? Math.max(5, Math.min(32, Math.floor(raw)))
-                      : 10;
+                      : 9;
                     updateSettings({
                       ...settings,
                       integrations: {
