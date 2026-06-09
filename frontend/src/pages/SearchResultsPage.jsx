@@ -12,10 +12,6 @@ import {
 } from "lucide-react";
 import {
   addArtistToLibrary,
-  addDiscoveryFeedback,
-  getDiscoveryFeedback,
-  removeDiscoveryFeedback,
-  getBlocklist,
   getDiscovery,
   getBootstrapStatus,
   getArtistCover,
@@ -24,18 +20,14 @@ import {
   lookupArtistsInLibraryBatch,
   requestAlbumFromSearch,
   searchCatalog,
-  updateBlocklist,
 } from "../utils/api";
 import SearchAlbumResults from "../components/SearchAlbumResults";
 import SearchArtistResults from "../components/SearchArtistResults";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { allReleaseTypes } from "./ArtistDetails/constants";
-import {
-  applyArtistDiscoveryFeedback,
-  buildArtistFeedbackLookup,
-  normalizeDiscoveryFeedbackList,
-} from "../utils/discoveryFeedback";
+import { useArtistTasteFeedback } from "../hooks/useArtistTasteFeedback";
+import { getArtistRecordId } from "../utils/artistTaste";
 
 const PAGE_SIZE = 20;
 const DEFAULT_ALBUM_SORT = "relevance";
@@ -46,9 +38,6 @@ const ALBUM_SORT_OPTIONS = [
   { value: "artistAsc", label: "Artist (A-Z)" },
   { value: "titleAsc", label: "Title (A-Z)" },
 ];
-const MBID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 const ALBUM_RELEASE_TABS = [
   { value: "all", label: "All" },
   { value: "albums", label: "Albums" },
@@ -76,14 +65,10 @@ function matchesAlbumReleaseTab(album, tab) {
   return album?.primaryType === "Album" && !isAlbumCompilation(album);
 }
 
-function getArtistId(artist) {
-  return artist?.id || artist?.mbid || artist?.foreignArtistId;
-}
-
 function dedupeArtists(artists) {
   const seen = new Set();
   return artists.filter((artist) => {
-    const artistId = getArtistId(artist);
+    const artistId = getArtistRecordId(artist);
     if (!artistId || seen.has(artistId)) return false;
     seen.add(artistId);
     return true;
@@ -102,45 +87,6 @@ function dedupeAlbums(albums) {
 const ARTIST_IMAGE_HYDRATION_CONCURRENCY = 6;
 const ALBUM_COVER_HYDRATION_CONCURRENCY = 6;
 
-function normalizeBlocklistArtists(artists) {
-  const source = Array.isArray(artists) ? artists : [];
-  const seen = new Set();
-  const out = [];
-  for (const entry of source) {
-    if (!entry) continue;
-    const entryMbid =
-      typeof entry.mbid === "string" && MBID_REGEX.test(entry.mbid.trim())
-        ? entry.mbid.trim()
-        : null;
-    const entryName = String(entry.name || "").trim();
-    if (!entryMbid && !entryName) continue;
-    const key = entryMbid
-      ? `mbid:${entryMbid.toLowerCase()}`
-      : `name:${entryName.toLowerCase()}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({ mbid: entryMbid, name: entryName || null });
-  }
-  return out;
-}
-
-function matchesBlockedArtist(target, artist) {
-  const targetId = String(target?.id || target?.mbid || target?.foreignArtistId || "")
-    .trim()
-    .toLowerCase();
-  const targetName = String(target?.name || target?.artistName || "")
-    .trim()
-    .toLowerCase();
-  const artistId = String(artist?.id || artist?.mbid || artist?.foreignArtistId || "")
-    .trim()
-    .toLowerCase();
-  const artistName = String(artist?.name || artist?.artistName || "")
-    .trim()
-    .toLowerCase();
-  return (targetId && artistId && targetId === artistId) ||
-    (targetName && artistName && targetName === artistName);
-}
-
 function SearchResultsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
@@ -158,8 +104,6 @@ function SearchResultsPage() {
   const [lastfmConfigured, setLastfmConfigured] = useState(null);
   const [libraryLookup, setLibraryLookup] = useState({});
   const [albumLibraryLookup, setAlbumLibraryLookup] = useState({});
-  const [blockedArtists, setBlockedArtists] = useState([]);
-  const [discoveryFeedback, setDiscoveryFeedback] = useState([]);
   const [pendingAlbumIds, setPendingAlbumIds] = useState({});
   const [albumOptionsOpen, setAlbumOptionsOpen] = useState(false);
   const [albumViewMode, setAlbumViewMode] = useState("grid");
@@ -194,12 +138,8 @@ function SearchResultsPage() {
   useDocumentTitle(pageTitle);
   const albumSort = searchParams.get("sort") || DEFAULT_ALBUM_SORT;
   const showTagBanner = isTagSearch && lastfmConfigured === false && !dismissedTagBanner;
-  const supportsDiscoveryFeedback =
-    normalizedType === "recommended" || isTagSearch;
-  const artistFeedbackLookup = useMemo(
-    () => buildArtistFeedbackLookup(discoveryFeedback),
-    [discoveryFeedback],
-  );
+  const { lookup: artistFeedbackLookup, submitFeedback } =
+    useArtistTasteFeedback();
   const canAddArtist = hasPermission("addArtist");
   const canAddAlbum = hasPermission("addAlbum");
 
@@ -243,42 +183,6 @@ function SearchResultsPage() {
   }, [isTagSearch]);
 
   useEffect(() => {
-    let cancelled = false;
-    const loadBlocklist = async () => {
-      try {
-        const data = await getBlocklist();
-        if (!cancelled) {
-          setBlockedArtists(normalizeBlocklistArtists(data?.artists));
-        }
-      } catch {}
-    };
-    loadBlocklist();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!supportsDiscoveryFeedback) {
-      setDiscoveryFeedback([]);
-      return;
-    }
-    let cancelled = false;
-    const loadFeedback = async () => {
-      try {
-        const payload = await getDiscoveryFeedback();
-        if (!cancelled) {
-          setDiscoveryFeedback(normalizeDiscoveryFeedbackList(payload));
-        }
-      } catch {}
-    };
-    loadFeedback();
-    return () => {
-      cancelled = true;
-    };
-  }, [supportsDiscoveryFeedback]);
-
-  useEffect(() => {
     const performSearch = async () => {
       setLibraryLookup({});
       setAlbumLibraryLookup({});
@@ -301,7 +205,7 @@ function SearchResultsPage() {
           setSearchTotalCount(list.length);
           const imagesMap = {};
           list.forEach((artist) => {
-            const artistId = getArtistId(artist);
+            const artistId = getArtistRecordId(artist);
             if ((artist.image || artist.imageUrl) && artistId) {
               imagesMap[artistId] = artist.image || artist.imageUrl;
             }
@@ -355,7 +259,7 @@ function SearchResultsPage() {
         if (!isAlbumSearch && nextResults.length > 0) {
           const imagesMap = {};
           nextResults.forEach((artist) => {
-            const artistId = getArtistId(artist);
+            const artistId = getArtistRecordId(artist);
             if ((artist.image || artist.imageUrl) && artistId) {
               imagesMap[artistId] = artist.image || artist.imageUrl;
             }
@@ -390,7 +294,7 @@ function SearchResultsPage() {
 
     let cancelled = false;
     const pendingArtists = results.filter((artist) => {
-      const artistId = getArtistId(artist);
+      const artistId = getArtistRecordId(artist);
       if (!artistId) return false;
       if (artistImages[artistId]) return false;
       if (artist.image || artist.imageUrl) return false;
@@ -415,7 +319,7 @@ function SearchResultsPage() {
         );
         const results = await Promise.allSettled(
           batch.map(async (artist) => {
-            const artistId = getArtistId(artist);
+            const artistId = getArtistRecordId(artist);
             if (!artistId) return null;
             const data = await getArtistCover(artistId, artist.name);
             const imageUrl = data?.images?.[0]?.image || null;
@@ -444,7 +348,7 @@ function SearchResultsPage() {
   useEffect(() => {
     if (isAlbumSearch) return undefined;
     let cancelled = false;
-    const ids = results.map((artist) => getArtistId(artist)).filter(Boolean);
+    const ids = results.map((artist) => getArtistRecordId(artist)).filter(Boolean);
     if (ids.length === 0) {
       if (Object.keys(libraryLookup).length > 0) {
         setLibraryLookup({});
@@ -634,7 +538,7 @@ function SearchResultsPage() {
       } else {
         setResults((prev) => dedupeArtists([...prev, ...newItems]));
         newItems.forEach((artist) => {
-          const artistId = getArtistId(artist);
+          const artistId = getArtistRecordId(artist);
           if ((artist.image || artist.imageUrl) && artistId) {
             setArtistImages((prev) => ({
               ...prev,
@@ -725,7 +629,7 @@ function SearchResultsPage() {
 
   const handleArtistAction = useCallback(
     async (artist) => {
-      const artistId = getArtistId(artist);
+      const artistId = getArtistRecordId(artist);
       if (!artist?.name || !artistId) return false;
       try {
         await addArtistToLibrary({
@@ -751,106 +655,9 @@ function SearchResultsPage() {
     [showError, showSuccess],
   );
 
-  const handleAddArtistToBlocklist = useCallback(
-    async (artist) => {
-      const artistId = getArtistId(artist);
-      if (!artist?.name && !artistId) return false;
-      try {
-        const current = await getBlocklist();
-        const nextArtists = normalizeBlocklistArtists([
-          ...(current?.artists || []),
-          {
-            mbid: artistId,
-            name: artist.name || null,
-          },
-        ]);
-        const response = await updateBlocklist({
-          artists: nextArtists,
-          tags: current?.tags || [],
-        });
-        setBlockedArtists(
-          normalizeBlocklistArtists(response?.blocklist?.artists || nextArtists),
-        );
-        setResults((prev) => prev.filter((entry) => !matchesBlockedArtist(entry, artist)));
-        setFullList((prev) =>
-          Array.isArray(prev)
-            ? prev.filter((entry) => !matchesBlockedArtist(entry, artist))
-            : prev,
-        );
-        showSuccess("Artist added to blocklist");
-        return true;
-      } catch (err) {
-        showError(
-          err.response?.data?.message || "Failed to update blocklist",
-        );
-        return false;
-      }
-    },
-    [showError, showSuccess],
-  );
-
   const handleArtistFeedback = useCallback(
-    async (artist, action, { isSelected = false } = {}) => {
-      try {
-        const payload = {
-          artistId: getArtistId(artist),
-          artistName: artist.name || null,
-          action,
-          sourceContext: artist.sourceType || artist.discoveryTier || null,
-          tagContext: artist.matchedTags || artist.tags || [],
-          seedContext: Array.isArray(artist.supportingSeeds)
-            ? artist.supportingSeeds.map((seed) => seed?.artistName).filter(Boolean)
-            : artist.sourceArtists || [],
-        };
-        const { feedbackList } = await applyArtistDiscoveryFeedback({
-          feedbackList: discoveryFeedback,
-          artist,
-          action,
-          isSelected,
-          payload,
-          addDiscoveryFeedback,
-          removeDiscoveryFeedback,
-        });
-        setDiscoveryFeedback(feedbackList);
-        if (action === "hide_for_now" && !isSelected) {
-          setResults((prev) =>
-            prev.filter((entry) => !matchesBlockedArtist(entry, artist)),
-          );
-          setFullList((prev) =>
-            Array.isArray(prev) ? prev.filter((entry) => !matchesBlockedArtist(entry, artist)) : prev,
-          );
-          setSearchTotalCount((prev) => Math.max(0, prev - 1));
-          setHasMore((prev) => {
-            if (!prev) return false;
-            if (normalizedType === "recommended" || normalizedType === "trending") {
-              const nextFullListLength = Array.isArray(fullList)
-                ? fullList.filter((entry) => !matchesBlockedArtist(entry, artist)).length
-                : 0;
-              return nextFullListLength > visibleCount;
-            }
-            return true;
-          });
-        }
-        if (!isSelected) {
-          showSuccess(
-            action === "more_like_this"
-              ? "We’ll bias future picks toward this taste"
-              : action === "less_like_this"
-                ? "We’ll show less like this"
-                : action === "already_known"
-                  ? "We’ll avoid obvious repeats like this"
-                  : "Hidden from recommendations for now",
-          );
-        }
-        return true;
-      } catch (err) {
-        showError(
-          err.response?.data?.message || "Failed to save discovery feedback",
-        );
-        return false;
-      }
-    },
-    [discoveryFeedback, fullList, normalizedType, showError, showSuccess, visibleCount],
+    (artist, action, options = {}) => submitFeedback(artist, action, options),
+    [submitFeedback],
   );
 
   const albumResultsForTab = useMemo(() => {
@@ -1093,15 +900,9 @@ function SearchResultsPage() {
                   libraryLookup={libraryLookup}
                   navigate={navigate}
                   canAddArtist={canAddArtist}
-                  blockedArtists={blockedArtists}
                   onAddArtistToLibrary={handleArtistAction}
-                  onAddArtistToBlocklist={handleAddArtistToBlocklist}
-                  onArtistFeedback={
-                    supportsDiscoveryFeedback ? handleArtistFeedback : undefined
-                  }
-                  artistFeedbackLookup={
-                    supportsDiscoveryFeedback ? artistFeedbackLookup : undefined
-                  }
+                  onArtistFeedback={handleArtistFeedback}
+                  artistFeedbackLookup={artistFeedbackLookup}
                 />
               )}
 

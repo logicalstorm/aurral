@@ -7,7 +7,6 @@ import {
   History,
   AudioWaveform,
   Ticket,
-  Ban,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { getBootstrapStatus } from "../utils/api";
@@ -102,7 +101,6 @@ function Sidebar({ appVersion, mode }) {
         icon: AudioWaveform,
         permission: "accessFlow",
       },
-      { path: "/blocklist", label: "Blocklist", icon: Ban },
       { path: "/history", label: "History", icon: History },
     ];
     return items.filter(

@@ -61,9 +61,6 @@ const clampInt = (value, fallback, min, max) => {
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(max, Math.max(min, parsed));
 };
-const MBID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 const normalizeTextList = (value) => {
   if (!Array.isArray(value)) return [];
   const seen = new Set();
@@ -77,135 +74,6 @@ const normalizeTextList = (value) => {
     out.push(normalized);
   }
   return out;
-};
-
-const normalizeBlocklist = (value) => {
-  const source = value && typeof value === "object" ? value : {};
-  const rawArtists = Array.isArray(source.artists) ? source.artists : [];
-  const seenArtistKeys = new Set();
-  const artists = [];
-  for (const entry of rawArtists) {
-    if (entry == null) continue;
-    let mbid = null;
-    let name = null;
-    if (typeof entry === "string") {
-      const normalized = entry.trim();
-      if (!normalized) continue;
-      if (MBID_REGEX.test(normalized)) {
-        mbid = normalized.toLowerCase();
-      } else {
-        name = normalized;
-      }
-    } else if (typeof entry === "object") {
-      const rawMbid = String(
-        entry.mbid || entry.artistId || entry.id || "",
-      ).trim();
-      if (rawMbid && MBID_REGEX.test(rawMbid)) {
-        mbid = rawMbid.toLowerCase();
-      }
-      const rawName = String(entry.name || entry.artistName || "").trim();
-      if (rawName) {
-        name = rawName;
-      }
-    }
-    if (!mbid && !name) continue;
-    const key = mbid
-      ? `mbid:${mbid}`
-      : `name:${String(name).trim().toLowerCase()}`;
-    if (seenArtistKeys.has(key)) continue;
-    seenArtistKeys.add(key);
-    artists.push({ mbid, name: name || null });
-  }
-  return {
-    artists,
-    tags: normalizeTextList(source.tags),
-  };
-};
-
-const getStoredBlocklist = () => {
-  const settings = dbOps.getSettings();
-  return normalizeBlocklist(settings.blocklist);
-};
-
-const isArtistBlocked = (artist, artistBlockSet) => {
-  if (!artist || !artistBlockSet) return false;
-  const mbids = [artist?.id, artist?.mbid, artist?.foreignArtistId]
-    .map((value) =>
-      String(value || "")
-        .trim()
-        .toLowerCase(),
-    )
-    .filter((value) => MBID_REGEX.test(value));
-  if (mbids.some((mbid) => artistBlockSet.mbids.has(mbid))) return true;
-  const names = [artist?.name, artist?.artistName]
-    .map((value) =>
-      String(value || "")
-        .trim()
-        .toLowerCase(),
-    )
-    .filter(Boolean);
-  return names.some((name) => artistBlockSet.names.has(name));
-};
-
-const hasBlockedTag = (artist, tagBlockSet) => {
-  if (!artist || !tagBlockSet || tagBlockSet.size === 0) return false;
-  const tags = Array.isArray(artist.tags) ? artist.tags : [];
-  return tags.some((tag) =>
-    tagBlockSet.has(
-      String(tag || "")
-        .trim()
-        .toLowerCase(),
-    ),
-  );
-};
-
-const applyBlocklistToArtistCollection = (artists, blocklist) => {
-  const list = Array.isArray(artists) ? artists : [];
-  if (list.length === 0) return [];
-  const artistEntries = Array.isArray(blocklist.artists)
-    ? blocklist.artists
-    : [];
-  const artistBlockSet = {
-    mbids: new Set(
-      artistEntries
-        .map((entry) =>
-          String(entry?.mbid || "")
-            .trim()
-            .toLowerCase(),
-        )
-        .filter((value) => MBID_REGEX.test(value)),
-    ),
-    names: new Set(
-      artistEntries
-        .map((entry) =>
-          String(entry?.name || "")
-            .trim()
-            .toLowerCase(),
-        )
-        .filter(Boolean),
-    ),
-  };
-  const tagBlockSet = new Set(blocklist.tags || []);
-  return list.filter(
-    (artist) =>
-      !isArtistBlocked(artist, artistBlockSet) &&
-      !hasBlockedTag(artist, tagBlockSet),
-  );
-};
-
-const applyBlocklistToTagList = (tags, blocklist) => {
-  const list = Array.isArray(tags) ? tags : [];
-  if (list.length === 0) return [];
-  const blockedTags = new Set(blocklist.tags || []);
-  if (blockedTags.size === 0) return list;
-  return list.filter(
-    (tag) =>
-      !blockedTags.has(
-        String(tag || "")
-          .trim()
-          .toLowerCase(),
-      ),
-  );
 };
 
 export const getDiscoveryAutoRefreshHours = () => {
@@ -249,14 +117,7 @@ const normalizeFeedbackAction = (value) => {
   const action = String(value || "")
     .trim()
     .toLowerCase();
-  return [
-    "more_like_this",
-    "less_like_this",
-    "already_known",
-    "hide_for_now",
-  ].includes(action)
-    ? action
-    : null;
+  return ["more_like_this", "less_like_this"].includes(action) ? action : null;
 };
 
 const normalizeFeedbackList = (value) =>
@@ -294,10 +155,6 @@ export const addDiscoveryFeedback = (userId = "global", entry = {}) => {
 
   const existing = getDiscoveryFeedback(userId);
   const now = new Date();
-  const expiresAt =
-    action === "hide_for_now"
-      ? new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString()
-      : null;
   const normalizedEntry = {
     id:
       String(entry.id || "").trim() ||
@@ -309,7 +166,7 @@ export const addDiscoveryFeedback = (userId = "global", entry = {}) => {
     tagContext: normalizeTextList(entry.tagContext).slice(0, 8),
     seedContext: normalizeTextList(entry.seedContext).slice(0, 8),
     createdAt: now.toISOString(),
-    expiresAt,
+    expiresAt: null,
   };
   const deduped = existing.filter((item) => {
     const sameArtist =
@@ -329,6 +186,11 @@ export const removeDiscoveryFeedback = (userId = "global", feedbackId) => {
   const next = getDiscoveryFeedback(userId).filter((entry) => entry.id !== target);
   dbOps.setJSONSetting(getDiscoveryFeedbackKey(userId), next);
   return next;
+};
+
+export const resetDiscoveryFeedback = (userId = "global") => {
+  dbOps.setJSONSetting(getDiscoveryFeedbackKey(userId), []);
+  return [];
 };
 
 const buildWeightedTopList = (map, limit) =>
@@ -415,8 +277,6 @@ export const rerankCachedRecommendations = ({
     feedback,
     discoveryMode,
   });
-
-export { applyBlocklistToArtistCollection, applyBlocklistToTagList };
 
 const createLastfmHealth = () => ({
   success: 0,
@@ -931,7 +791,6 @@ export const updateDiscoveryCache = async (options = {}) => {
       );
       const fallbackData = await buildListenbrainzFallbackDiscovery({
         existingArtistKeys: buildExistingArtistKeySet(allLibraryArtists),
-        blocklist: getStoredBlocklist(),
         onProgress: ({ phase, progress, progressMessage }) =>
           emitDiscoveryProgress(phase, progressMessage, progress, {
             provider: "listenbrainz-fallback",
@@ -1240,22 +1099,15 @@ export const updateDiscoveryCache = async (options = {}) => {
     console.log(
       `Summary: ${recommendationsArray.length} recommendations, ${discoveryCache.topGenres.length} genres, ${discoveryCache.globalTop.length} trending artists`,
     );
-    const blocklist = getStoredBlocklist();
     websocketService.emitDiscoveryUpdate({
       recommendations: rerankCachedRecommendations({
-        recommendations: applyBlocklistToArtistCollection(
-          discoveryData.recommendations,
-          blocklist,
-        ),
+        recommendations: discoveryData.recommendations,
         discoveryMode: getDiscoveryMode(),
       }),
-      globalTop: applyBlocklistToArtistCollection(
-        discoveryData.globalTop,
-        blocklist,
-      ),
+      globalTop: discoveryData.globalTop,
       basedOn: discoveryData.basedOn,
-      topTags: applyBlocklistToTagList(discoveryData.topTags, blocklist),
-      topGenres: applyBlocklistToTagList(discoveryData.topGenres, blocklist),
+      topTags: discoveryData.topTags,
+      topGenres: discoveryData.topGenres,
       fallbackGenres: discoveryData.fallbackGenres || [],
       provider: discoveryData.provider,
       capabilities: discoveryData.capabilities,

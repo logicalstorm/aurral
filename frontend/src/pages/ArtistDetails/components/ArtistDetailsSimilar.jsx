@@ -2,25 +2,29 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import PropTypes from "prop-types";
 import { Loader, ChevronLeft, ChevronRight, CheckCircle2 } from "lucide-react";
 import ArtistImage from "../../../components/ArtistImage";
+import { ArtistContextMenu } from "../../../components/ArtistContextMenu";
 import {
   lookupArtistsInLibraryBatch,
   readLibraryLookupCache,
 } from "../../../utils/api";
-
-const getArtistId = (artist) =>
-  artist?.id || artist?.mbid || artist?.foreignArtistId;
+import { getArtistFeedbackFlags } from "../../../utils/discoveryFeedback";
+import { getArtistRecordId } from "../../../utils/artistTaste";
 
 export function ArtistDetailsSimilar({
   loadingSimilar,
   similarArtists,
   similarArtistsScrollRef,
   onArtistClick,
+  canAddArtist = false,
+  onAddToLibrary,
+  onArtistFeedback,
+  artistFeedbackLookup,
 }) {
   const [libraryLookup, setLibraryLookup] = useState({});
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
   const artistIds = useMemo(
-    () => similarArtists.map(getArtistId).filter(Boolean),
+    () => similarArtists.map(getArtistRecordId).filter(Boolean),
     [similarArtists],
   );
 
@@ -89,9 +93,7 @@ export function ArtistDetailsSimilar({
         <h2 className="artist-section-title">
           Fans Also Like
           {loadingSimilar && (
-            <Loader
-              className="artist-icon-sm animate-spin"
-            />
+            <Loader className="artist-icon-sm animate-spin" />
           )}
         </h2>
         <div className="artist-scroll-controls">
@@ -130,23 +132,20 @@ export function ArtistDetailsSimilar({
             }}
           >
             {similarArtists.map((similar) => {
-              const artistId = getArtistId(similar);
+              const artistId = getArtistRecordId(similar);
               return (
-                <div
-                  key={similar.id}
-                  className="artist-similar-card"
-                  onClick={() =>
-                    onArtistClick(
-                      similar.id,
-                      similar.name,
-                      typeof libraryLookup[artistId] === "boolean"
-                        ? libraryLookup[artistId]
-                        : undefined,
-                    )
-                  }
-                >
+                <div key={similar.id} className="artist-similar-card">
                   <div
                     className="artist-similar-avatar"
+                    onClick={() =>
+                      onArtistClick(
+                        similar.id,
+                        similar.name,
+                        typeof libraryLookup[artistId] === "boolean"
+                          ? libraryLookup[artistId]
+                          : undefined,
+                      )
+                    }
                   >
                     <ArtistImage
                       src={similar.image}
@@ -163,12 +162,36 @@ export function ArtistDetailsSimilar({
                     )}
                   </div>
                   <div className="artist-similar-name-row">
-                    <h3 className="artist-similar-name">
-                      {similar.name}
-                    </h3>
-                    {artistId && libraryLookup[artistId] && (
-                      <CheckCircle2 className="artist-library-check" />
-                    )}
+                    <div
+                      className="artist-similar-name-block"
+                      onClick={() =>
+                        onArtistClick(
+                          similar.id,
+                          similar.name,
+                          typeof libraryLookup[artistId] === "boolean"
+                            ? libraryLookup[artistId]
+                            : undefined,
+                        )
+                      }
+                    >
+                      <h3 className="artist-similar-name">{similar.name}</h3>
+                      {artistId && libraryLookup[artistId] && (
+                        <CheckCircle2 className="artist-library-check" />
+                      )}
+                    </div>
+                    <ArtistContextMenu
+                      artist={similar}
+                      isInLibrary={!!libraryLookup[artistId]}
+                      canAddArtist={canAddArtist}
+                      onAddToLibrary={onAddToLibrary}
+                      onFeedback={onArtistFeedback}
+                      feedbackUsed={
+                        artistFeedbackLookup
+                          ? getArtistFeedbackFlags(artistFeedbackLookup, similar)
+                          : undefined
+                      }
+                      buttonClassName="btn btn-ghost btn-icon-square"
+                    />
                   </div>
                 </div>
               );
@@ -188,11 +211,15 @@ ArtistDetailsSimilar.propTypes = {
       name: PropTypes.string,
       image: PropTypes.string,
       match: PropTypes.number,
-    })
+    }),
   ),
   similarArtistsScrollRef: PropTypes.oneOfType([
     PropTypes.func,
     PropTypes.shape({ current: PropTypes.instanceOf(Element) }),
   ]),
   onArtistClick: PropTypes.func,
+  canAddArtist: PropTypes.bool,
+  onAddToLibrary: PropTypes.func,
+  onArtistFeedback: PropTypes.func,
+  artistFeedbackLookup: PropTypes.instanceOf(Map),
 };
