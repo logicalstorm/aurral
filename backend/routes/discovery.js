@@ -35,6 +35,7 @@ import {
   requirePermission,
 } from "../middleware/requirePermission.js";
 import { verifyTokenAuth } from "../middleware/auth.js";
+import { noCache } from "../middleware/cache.js";
 import { getNearbyShows } from "../services/nearbyShowsService.js";
 import {
   getListenHistoryCacheNamespace,
@@ -325,7 +326,7 @@ router.get("/", requireAuth, async (req, res) => {
   });
 });
 
-router.get("/artwork/:presetId", async (req, res) => {
+router.get("/artwork/:presetId", noCache, async (req, res) => {
   if (!verifyTokenAuth(req)) {
     return res.status(401).json({
       error: "Unauthorized",
@@ -334,9 +335,11 @@ router.get("/artwork/:presetId", async (req, res) => {
   }
 
   try {
-    const { resolveDiscoverArtworkFile } =
+    const { ensureDiscoverArtworkForPreset } =
       await import("../services/discoverPlaylistArtworkService.js");
-    const artwork = await resolveDiscoverArtworkFile(req.params.presetId);
+    const artwork = await ensureDiscoverArtworkForPreset(req.params.presetId, {
+      user: req.user,
+    });
     if (!artwork) {
       return res.status(404).json({ error: "Artwork not found" });
     }

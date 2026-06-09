@@ -400,7 +400,7 @@ export function DiscoverPlaylistSection({
         const sourceLine = getPlaylistSourceLine(playlist);
         const isExpanded = expandedId === playlist.presetId;
         const showArtwork =
-          playlist.hasArtwork !== false &&
+          Number(playlist.trackCount) > 0 &&
           !failedArtworkIds[playlist.presetId];
 
         return (

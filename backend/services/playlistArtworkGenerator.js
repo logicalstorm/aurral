@@ -1,7 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { dbOps } from "../config/db-helpers.js";
-import { lastfmGetArtistImageUrlByName } from "./apiClients.js";
 import { buildPlaylistArtworkWebpBuffer } from "./playlistArtwork.js";
 import {
   fetchImageBuffer,
@@ -33,16 +32,7 @@ export function getArtworkContentTypeForExtension(extension) {
   return "image/png";
 }
 
-export async function resolvePlaylistSourceImageUrl({
-  signature,
-  relatedArtists = [],
-} = {}) {
-  const artists = Array.isArray(relatedArtists) ? relatedArtists : [];
-  const artistName = String(artists[0] || "").trim();
-  if (artistName) {
-    const artistImageUrl = await lastfmGetArtistImageUrlByName(artistName);
-    if (artistImageUrl) return artistImageUrl;
-  }
+export async function resolvePlaylistSourceImageUrl({ signature } = {}) {
   const seed = String(signature || "playlist").trim() || "playlist";
   return `https://picsum.photos/seed/${encodeURIComponent(seed)}/800/800`;
 }
@@ -67,7 +57,6 @@ export async function buildGeneratedPlaylistArtworkBuffer({
 
   const sourceImageUrl = await resolvePlaylistSourceImageUrl({
     signature: resolvedSignature,
-    relatedArtists,
   });
   const sourceBuffer = await fetchImageBuffer(sourceImageUrl);
   return renderStylizedPhotoArtwork({
@@ -100,7 +89,9 @@ export async function writeGeneratedPlaylistArtwork({
 
   for (const extension of [".jpg", ".webp", ".png"]) {
     if (extension === keepExtension) continue;
-    await fs.unlink(path.join(directory, `${baseName}${extension}`)).catch(() => {});
+    await fs
+      .unlink(path.join(directory, `${baseName}${extension}`))
+      .catch(() => {});
   }
 
   const buffer = await buildGeneratedPlaylistArtworkBuffer({

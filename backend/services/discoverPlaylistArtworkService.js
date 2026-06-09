@@ -115,3 +115,28 @@ export async function resolveDiscoverArtworkFile(presetId) {
 
   return null;
 }
+
+export async function ensureDiscoverArtworkForPreset(presetId, { user } = {}) {
+  const existing = await resolveDiscoverArtworkFile(presetId);
+  if (existing) return existing;
+
+  const { getDiscoveryCache } = await import("./discoveryService.js");
+  const { getListenHistoryProfile } = await import("./listeningHistory.js");
+  const { getCachedDiscoverPlaylist } =
+    await import("./discoverPlaylistService.js");
+
+  const profile = user ? getListenHistoryProfile(user) : null;
+  const cache = getDiscoveryCache(profile);
+  const playlist = getCachedDiscoverPlaylist(cache, presetId);
+  if (!playlist || playlist.trackCount <= 0) return null;
+
+  try {
+    await generateDiscoverPlaylistArtwork(playlist);
+    return resolveDiscoverArtworkFile(presetId);
+  } catch (error) {
+    console.warn(
+      `[DiscoverArtwork] Lazy generate failed for ${presetId}: ${error.message}`,
+    );
+    return null;
+  }
+}
