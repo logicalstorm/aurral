@@ -16,6 +16,7 @@ export class WeeklyFlowPlaylistSource {
     this.artistTopTracksCache = new Map();
     this.libraryOwnershipCache = new Map();
     this.libraryArtistKeysCache = null;
+    this.libraryAlbumMbidCache = null;
   }
 
   _deepDiveRanges(deepDive) {
@@ -277,6 +278,37 @@ export class WeeklyFlowPlaylistSource {
     return key || null;
   }
 
+  _normalizeArtistKeySet(value) {
+    if (value instanceof Set) {
+      return new Set(
+        [...value].map((entry) => this._artistKey(entry)).filter(Boolean),
+      );
+    }
+    if (Array.isArray(value)) {
+      return new Set(
+        value.map((entry) => this._artistKey(entry)).filter(Boolean),
+      );
+    }
+    return null;
+  }
+
+  _buildArtistKeySet(artists = []) {
+    const set = new Set();
+    for (const artist of Array.isArray(artists) ? artists : []) {
+      for (const key of this._artistKeysFromArtist(artist)) {
+        set.add(key);
+      }
+    }
+    return set;
+  }
+
+  _resolveDiscoveryCache(options = {}) {
+    if (options?.discoveryCache && typeof options.discoveryCache === "object") {
+      return options.discoveryCache;
+    }
+    return getDiscoveryCache(options?.listenHistoryProfile);
+  }
+
   _normalizeTrackReason(value, fallback = "Flow selection") {
     const text = String(value || "").trim();
     return text || fallback;
@@ -396,7 +428,13 @@ export class WeeklyFlowPlaylistSource {
     });
   }
 
-  async _getLibraryArtistKeySet() {
+  async _getLibraryArtistKeySet(options = {}) {
+    const providedSet = this._normalizeArtistKeySet(options?.libraryArtistKeys);
+    if (providedSet) return providedSet;
+    if (Array.isArray(options?.libraryArtists)) {
+      return this._buildArtistKeySet(options.libraryArtists);
+    }
+
     const now = Date.now();
     if (
       this.libraryArtistKeysCache?.set &&
@@ -404,19 +442,27 @@ export class WeeklyFlowPlaylistSource {
     ) {
       return this.libraryArtistKeysCache.set;
     }
-    const { libraryManager } = await import("./libraryManager.js");
-    const artists = await libraryManager.getAllArtists();
-    const set = new Set();
-    for (const artist of artists) {
-      for (const key of this._artistKeysFromArtist(artist)) {
-        set.add(key);
-      }
+    if (this.libraryArtistKeysCache?.promise) {
+      return this.libraryArtistKeysCache.promise;
     }
-    this.libraryArtistKeysCache = {
-      set,
-      expiresAt: now + LIBRARY_ARTIST_KEYS_CACHE_TTL_MS,
-    };
-    return set;
+
+    const promise = (async () => {
+      const { libraryManager } = await import("./libraryManager.js");
+      const artists = await libraryManager.getAllArtists();
+      return this._buildArtistKeySet(artists);
+    })();
+    this.libraryArtistKeysCache = { promise };
+    try {
+      const set = await promise;
+      this.libraryArtistKeysCache = {
+        set,
+        expiresAt: Date.now() + LIBRARY_ARTIST_KEYS_CACHE_TTL_MS,
+      };
+      return set;
+    } catch (error) {
+      this.libraryArtistKeysCache = null;
+      throw error;
+    }
   }
 
   async _getTopTrackForArtist(artistName, options = {}) {
@@ -976,6 +1022,7 @@ export class WeeklyFlowPlaylistSource {
 
     if (sources.length === 0) {
       return await this.getDiscoverTracks(limit, {
+        ...options,
         deepDive,
       });
     }
@@ -1015,6 +1062,7 @@ export class WeeklyFlowPlaylistSource {
     }
 
     const fallback = await this.getDiscoverTracks(limit - curated.length, {
+      ...options,
       deepDive,
     }).catch(() => []);
     return [...curated, ...fallback];
@@ -1502,7 +1550,9 @@ export class WeeklyFlowPlaylistSource {
         ? options.excludeTrackKeys
         : options?.excludeTrackKeys || [],
     );
-    const libraryArtistKeys = await this._getLibraryArtistKeySet().catch(() => new Set());
+    const libraryArtistKeys = await this._getLibraryArtistKeySet(options).catch(
+      () => new Set(),
+    );
     const nonLibraryExcludeArtistKeys = new Set(excludeArtistKeys);
     for (const entry of libraryArtistKeys) {
       nonLibraryExcludeArtistKeys.add(entry);
@@ -1511,6 +1561,7 @@ export class WeeklyFlowPlaylistSource {
     const [discoverTracks, mixTracks, trendingTracks, focusCandidates] = await Promise.all([
       harvestTargets.discover > 0
         ? this.getDiscoverTracks(this._harvestLimitFor(harvestTargets.discover), {
+            ...options,
             deepDive: flow?.deepDive === true,
             reason: "From discovery recommendations",
             excludeArtistKeys: nonLibraryExcludeArtistKeys,
@@ -1519,12 +1570,14 @@ export class WeeklyFlowPlaylistSource {
         : [],
       harvestTargets.mix > 0
         ? this.getMixTracks(this._harvestLimitFor(harvestTargets.mix), {
+            ...options,
             deepDive: flow?.deepDive === true,
             reason: "From your library mix",
           }).catch(() => [])
         : [],
       harvestTargets.trending > 0
         ? this.getTrendingTracks(this._harvestLimitFor(harvestTargets.trending), {
+            ...options,
             deepDive: flow?.deepDive === true,
             reason: "From trending artists",
             excludeArtistKeys: nonLibraryExcludeArtistKeys,
@@ -1673,13 +1726,12 @@ export class WeeklyFlowPlaylistSource {
         ? Math.round(requestedSize)
         : 30;
     if (flow?.discoverPresetId === "release-radar") {
-      const listenHistoryProfile = options?.listenHistoryProfile || null;
       const basedOn =
         options?.basedOn ||
-        getDiscoveryCache(listenHistoryProfile)?.basedOn ||
+        this._resolveDiscoveryCache(options)?.basedOn ||
         [];
       const primaryTracks = await this.getReleaseRadarTracks(targetSize, {
-        listenHistoryProfile,
+        listenHistoryProfile: options?.listenHistoryProfile || null,
         basedOn,
       });
       return {
@@ -1790,7 +1842,7 @@ export class WeeklyFlowPlaylistSource {
   }
 
   async getDiscoverTracks(limit, options = {}) {
-    const discoveryCache = getDiscoveryCache(options?.listenHistoryProfile);
+    const discoveryCache = this._resolveDiscoveryCache(options);
     const recommendations = discoveryCache.recommendations || [];
     if (!Array.isArray(recommendations) || recommendations.length === 0) {
       throw new Error(
@@ -1807,7 +1859,7 @@ export class WeeklyFlowPlaylistSource {
     if (!getLastfmApiKey()) {
       throw new Error("Last.fm API key not configured");
     }
-    const discoveryCache = getDiscoveryCache(options?.listenHistoryProfile);
+    const discoveryCache = this._resolveDiscoveryCache(options);
     const globalTop = discoveryCache.globalTop || [];
     const candidates = this._filterArtistsByKeySet(
       globalTop,
@@ -1903,7 +1955,7 @@ export class WeeklyFlowPlaylistSource {
   }
 
   async getRecommendedTracks(limit, options = {}) {
-    const discoveryCache = getDiscoveryCache(options?.listenHistoryProfile);
+    const discoveryCache = this._resolveDiscoveryCache(options);
     const recommendations = discoveryCache.recommendations || [];
     const globalTop = discoveryCache.globalTop || [];
 
@@ -1945,9 +1997,10 @@ export class WeeklyFlowPlaylistSource {
     if (cached?.data && cached.expiresAt > Date.now()) {
       return cached.data;
     }
+    const albums = await libraryManager.getAlbums(artistId);
     const [ownedTitles, ownedAlbums] = await Promise.all([
-      this.getLibraryTrackTitles(libraryManager, artistId),
-      this.getLibraryAlbumNames(libraryManager, artistId),
+      this.getLibraryTrackTitles(libraryManager, artistId, albums),
+      this.getLibraryAlbumNames(libraryManager, artistId, albums),
     ]);
     const data = { ownedTitles, ownedAlbums };
     this.libraryOwnershipCache.set(key, {
@@ -1957,8 +2010,10 @@ export class WeeklyFlowPlaylistSource {
     return data;
   }
 
-  async getLibraryTrackTitles(libraryManager, artistId) {
-    const albums = await libraryManager.getAlbums(artistId);
+  async getLibraryTrackTitles(libraryManager, artistId, knownAlbums = null) {
+    const albums = Array.isArray(knownAlbums)
+      ? knownAlbums
+      : await libraryManager.getAlbums(artistId);
     const titles = new Set();
     const maxAlbums = 30;
     const trackLists = await Promise.all(
@@ -1973,8 +2028,10 @@ export class WeeklyFlowPlaylistSource {
     return titles;
   }
 
-  async getLibraryAlbumNames(libraryManager, artistId) {
-    const albums = await libraryManager.getAlbums(artistId);
+  async getLibraryAlbumNames(libraryManager, artistId, knownAlbums = null) {
+    const albums = Array.isArray(knownAlbums)
+      ? knownAlbums
+      : await libraryManager.getAlbums(artistId);
     const names = new Set();
     const maxAlbums = 40;
     for (const album of albums.slice(0, maxAlbums)) {
@@ -1986,7 +2043,9 @@ export class WeeklyFlowPlaylistSource {
 
   async getMixTracks(limit, options = {}) {
     const { libraryManager } = await import("./libraryManager.js");
-    const artists = await libraryManager.getAllArtists();
+    const artists = Array.isArray(options?.libraryArtists)
+      ? options.libraryArtists
+      : await libraryManager.getAllArtists();
     if (artists.length === 0) {
       throw new Error("No artists in library. Add artists to enable Mix.");
     }

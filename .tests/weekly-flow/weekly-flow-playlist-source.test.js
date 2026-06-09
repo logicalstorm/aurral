@@ -26,3 +26,37 @@ test("mix album pick prefers top track list metadata before track.getInfo", () =
   assert.equal(picked?.pick?.name, "Fresh Track");
   assert.equal(picked?.albumName, "New Album");
 });
+
+test("discover tracks use injected discovery cache when provided", async () => {
+  const source = new WeeklyFlowPlaylistSource();
+  source._harvestTopTracksFromArtists = async (artists) =>
+    artists.map((artist) => ({
+      artistName: artist.name,
+      trackName: "Preview",
+    }));
+
+  const tracks = await source.getDiscoverTracks(1, {
+    discoveryCache: {
+      recommendations: [{ name: "Injected Artist" }],
+    },
+  });
+
+  assert.equal(tracks[0]?.artistName, "Injected Artist");
+});
+
+test("library artist key set can be built from preloaded artists", async () => {
+  const source = new WeeklyFlowPlaylistSource();
+  const keys = await source._getLibraryArtistKeySet({
+    libraryArtists: [
+      {
+        id: "artist-id",
+        mbid: "artist-mbid",
+        artistName: "Library Artist",
+      },
+    ],
+  });
+
+  assert.ok(keys.has("artist-id"));
+  assert.ok(keys.has("artist-mbid"));
+  assert.ok(keys.has("library artist"));
+});

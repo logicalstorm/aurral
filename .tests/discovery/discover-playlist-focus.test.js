@@ -49,3 +49,57 @@ test("focus candidates include tag, artist, crossover, and listening history pla
     ),
   );
 });
+
+test("default flow budget keeps listening history and five auto focus playlists", () => {
+  const candidates = buildFocusedPlaylistCandidates({
+    maxFocusPlaylists: 5,
+    topGenres: ["shoegaze", "dream pop", "indie rock", "post-punk"],
+    topTags: ["shoegaze", "dream pop", "indie rock", "post-punk", "noise pop"],
+    basedOn: [
+      { name: "Slowdive", source: "library" },
+      { name: "Beach House", source: "library" },
+      { name: "Radiohead", source: "lastfm" },
+    ],
+    historyTopArtists: ["Radiohead", "Bjork", "Portishead"],
+    recommendations: [
+      {
+        name: "Whirr",
+        matchedTags: ["shoegaze"],
+        tags: ["noise pop"],
+      },
+    ],
+  });
+
+  assert.ok(
+    candidates.some((playlist) => playlist.id === "focus-listening-history"),
+  );
+  const autoFocusCount = candidates.filter(
+    (playlist) => playlist.id !== "focus-listening-history",
+  ).length;
+  assert.equal(autoFocusCount, 5);
+  assert.equal(candidates.length, 6);
+});
+
+test("missing listening history backfills the auto focus budget", () => {
+  const candidates = buildFocusedPlaylistCandidates({
+    maxFocusPlaylists: 5,
+    topGenres: ["shoegaze", "dream pop", "indie rock", "post-punk"],
+    topTags: ["shoegaze", "dream pop", "indie rock", "post-punk", "noise pop"],
+    basedOn: [
+      { name: "Slowdive", source: "library" },
+      { name: "Beach House", source: "library" },
+    ],
+    recommendations: [
+      {
+        name: "Whirr",
+        matchedTags: ["shoegaze"],
+        tags: ["noise pop"],
+      },
+    ],
+  });
+
+  assert.ok(
+    !candidates.some((playlist) => playlist.id === "focus-listening-history"),
+  );
+  assert.equal(candidates.length, 6);
+});
