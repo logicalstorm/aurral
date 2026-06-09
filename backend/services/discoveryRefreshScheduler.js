@@ -1,11 +1,11 @@
 import { dbOps } from "../config/db-helpers.js";
 import { getLastfmApiKey } from "./apiClients.js";
 import { libraryManager } from "./libraryManager.js";
-import { websocketService } from "./websocketService.js";
 import { enqueueDiscoveryRefreshJob } from "./honkerDb.js";
 import {
   getDiscoveryAutoRefreshHours,
   getDiscoveryCache,
+  recordDiscoveryUpdateProgress,
 } from "./discoveryService.js";
 
 let refreshPending = false;
@@ -42,14 +42,12 @@ export function discoveryNeedsRefresh(cache = getDiscoveryCache()) {
 }
 
 function emitDiscoveryQueued(reason) {
-  websocketService.emitDiscoveryUpdate({
-    isUpdating: true,
-    configured: true,
-    phase: "queued",
-    progress: 1,
-    progressMessage: "Discovery refresh queued",
-    reason,
-  });
+  recordDiscoveryUpdateProgress(
+    "queued",
+    "Discovery refresh queued",
+    1,
+    { reason },
+  );
 }
 
 export function enqueueDiscoveryRefresh(options = {}) {
@@ -64,6 +62,9 @@ export function enqueueDiscoveryRefresh(options = {}) {
 
   if (!scheduleOnly) {
     if (cache.isUpdating) {
+      if (force) {
+        return { enqueued: true, reason: "already_updating" };
+      }
       return { enqueued: false, reason: "updating" };
     }
     if (!force && refreshPending) {
@@ -156,7 +157,7 @@ export async function bootstrapDiscoveryRefresh() {
   }
 }
 
-export async function requestDiscoveryRefresh(options = {}) {
+export function requestDiscoveryRefresh(options = {}) {
   return enqueueDiscoveryRefresh({
     ...options,
     reason: options.reason || "manual",

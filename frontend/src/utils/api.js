@@ -748,6 +748,11 @@ export const getDiscovery = async (cacheBust = false) => {
   return response.data;
 };
 
+export const adoptDiscoverPlaylist = async (presetId) => {
+  const response = await api.post("/discover/playlists/adopt", { presetId });
+  return response.data;
+};
+
 export const getNearbyShows = async (zipCode = "", limit) => {
   const params = { _: Date.now() };
   if (typeof zipCode === "string" && zipCode.trim()) {

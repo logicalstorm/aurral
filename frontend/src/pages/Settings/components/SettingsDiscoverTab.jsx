@@ -47,6 +47,7 @@ export function SettingsDiscoverTab({
   saving,
   handleSaveSettings,
   refreshingDiscovery,
+  discoveryProgress,
   discoveryProgressMessage,
   clearingCache,
   handleRefreshDiscovery,
@@ -225,10 +226,33 @@ export function SettingsDiscoverTab({
                 </div>
               </dl>
               {(health?.discovery?.isUpdating || refreshingDiscovery) && (
-                <p className="settings-page__progress-line">
-                  <RefreshCw className="artist-icon-xs animate-spin" />
-                  {discoveryProgressMessage || "Refreshing discovery"}
-                </p>
+                <div className="settings-page__discovery-progress">
+                  <p className="settings-page__progress-line">
+                    <RefreshCw className="artist-icon-xs animate-spin" />
+                    <span className="settings-page__progress-text">
+                      {discoveryProgressMessage ||
+                        health?.discovery?.updateProgressMessage ||
+                        "Refreshing discovery"}
+                    </span>
+                    {typeof (discoveryProgress ??
+                      health?.discovery?.updateProgress) === "number" && (
+                      <span className="settings-page__progress-pct">
+                        {discoveryProgress ?? health?.discovery?.updateProgress}%
+                      </span>
+                    )}
+                  </p>
+                  {typeof (discoveryProgress ??
+                    health?.discovery?.updateProgress) === "number" && (
+                    <div className="settings-page__progress-bar">
+                      <div
+                        className="settings-page__progress-fill"
+                        style={{
+                          width: `${discoveryProgress ?? health?.discovery?.updateProgress}%`,
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
               )}
               {!refreshingDiscovery &&
                 !health?.discovery?.isUpdating &&

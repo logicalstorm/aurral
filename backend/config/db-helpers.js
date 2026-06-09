@@ -577,6 +577,9 @@ export const dbOps = {
     const fallbackGenrePools = dbHelpers.parseJSON(
       getDiscoveryCacheStmt.get(`${prefix}fallbackGenrePools`)?.value
     );
+    const discoverPlaylists = dbHelpers.parseJSON(
+      getDiscoveryCacheStmt.get(`${prefix}discoverPlaylists`)?.value
+    );
     const provider =
       getDiscoveryCacheStmt.get(`${prefix}provider`)?.value || null;
     const lastUpdated = cacheNamespace
@@ -594,6 +597,7 @@ export const dbOps = {
         fallbackGenrePools && typeof fallbackGenrePools === "object"
           ? fallbackGenrePools
           : {},
+      discoverPlaylists: discoverPlaylists || [],
       provider,
       lastUpdated,
     };
@@ -649,6 +653,13 @@ export const dbOps = {
         upsertDiscoveryCacheStmt.run(
           `${prefix}fallbackGenrePools`,
           dbHelpers.stringifyJSON(discovery.fallbackGenrePools),
+          now
+        );
+      }
+      if (discovery.discoverPlaylists) {
+        upsertDiscoveryCacheStmt.run(
+          `${prefix}discoverPlaylists`,
+          dbHelpers.stringifyJSON(discovery.discoverPlaylists),
           now
         );
       }

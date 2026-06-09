@@ -438,6 +438,32 @@ export class WeeklyFlowWorker {
       });
   }
 
+  async seedFlowRunWithTracks(playlistType, flow, tracks, options = {}) {
+    const key = String(playlistType || "").trim();
+    if (!key || !flow) {
+      return { tracksQueued: 0, jobIds: [], reserveTracks: 0 };
+    }
+    const primaryTracks = Array.isArray(tracks) ? tracks : [];
+    const plan = {
+      primaryTracks,
+      reserveTracks: [],
+      diagnostics: {
+        targets: { adopted: primaryTracks.length },
+        achieved: { primary: primaryTracks.length, reserve: 0 },
+      },
+    };
+    this.clearPlaylistRunState(key);
+    this.setPlaylistRunPlan(key, plan);
+    flowPlaylistConfig.markLastRunAt(key);
+    const jobIds = downloadTracker.addJobs(primaryTracks, key);
+    return {
+      tracksQueued: primaryTracks.length,
+      jobIds,
+      reserveTracks: 0,
+      reservePending: false,
+    };
+  }
+
   async seedFlowRun(playlistType, flow, options = {}) {
     const key = String(playlistType || "").trim();
     if (!key || !flow) {
