@@ -6,8 +6,17 @@ import {
   failPipelineJob,
 } from "./slskdOrchestrator.js";
 import { slskdClient } from "./slskdClient.js";
+import {
+  isHonkerShuttingDown,
+  markHonkerWorkerLoopEnded,
+  registerHonkerWorker,
+  withJobHeartbeat,
+} from "./honkerWorkerRuntime.js";
+
+const WORKER_NAME = "slskd-pipeline";
 
 let running = false;
+let stopRequested = false;
 let loopPromise = null;
 
 async function runLoop() {
@@ -19,9 +28,11 @@ async function runLoop() {
   const workerId = getWorkerId();
   try {
     for await (const job of queue.claim(workerId, { idlePollS: 2 })) {
-      if (!running) break;
+      if (!running || stopRequested) break;
       try {
-        const nextPayload = await processPipelinePayload(job.payload);
+        const nextPayload = await withJobHeartbeat(job, queue, () =>
+          processPipelinePayload(job.payload),
+        );
         await continuePipeline(nextPayload);
         job.ack();
       } catch (error) {
@@ -39,21 +50,35 @@ async function runLoop() {
   } finally {
     running = false;
     loopPromise = null;
+    const intentional = stopRequested;
+    stopRequested = false;
+    markHonkerWorkerLoopEnded(WORKER_NAME, startSlskdOrchestratorWorker, {
+      intentional,
+      shouldRestart: () => slskdClient.isConfigured(),
+    });
   }
 }
 
 export function startSlskdOrchestratorWorker() {
-  if (running) return;
+  if (running || isHonkerShuttingDown()) return;
   if (!slskdClient.isConfigured()) return;
   running = true;
+  stopRequested = false;
   enqueuePendingJobsWithoutBatch();
   loopPromise = runLoop();
 }
 
 export function stopSlskdOrchestratorWorker() {
+  stopRequested = true;
   running = false;
 }
 
 export function isSlskdOrchestratorRunning() {
   return running;
 }
+
+registerHonkerWorker(WORKER_NAME, {
+  start: startSlskdOrchestratorWorker,
+  stop: stopSlskdOrchestratorWorker,
+  isRunning: isSlskdOrchestratorRunning,
+});

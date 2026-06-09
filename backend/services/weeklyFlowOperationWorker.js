@@ -5,7 +5,16 @@ import {
 import {
   rejectWeeklyFlowOperationResult,
   resolveWeeklyFlowOperationResult,
+  setWeeklyFlowOperationWorkerState,
 } from "./weeklyFlowOperationQueue.js";
+import {
+  isHonkerShuttingDown,
+  markHonkerWorkerLoopEnded,
+  registerHonkerWorker,
+  withJobHeartbeat,
+} from "./honkerWorkerRuntime.js";
+
+const WORKER_NAME = "weekly-flow-operation";
 
 const PERMANENT_ERROR_CODES = new Set([
   "SHARED_PLAYLIST_NAME_CONFLICT",
@@ -13,18 +22,29 @@ const PERMANENT_ERROR_CODES = new Set([
 ]);
 
 let running = false;
+let stopRequested = false;
 let loopPromise = null;
 let currentLabel = null;
+
+function syncWorkerState() {
+  setWeeklyFlowOperationWorkerState({
+    running,
+    currentLabel,
+  });
+}
 
 async function runLoop() {
   const queue = getWeeklyFlowOperationQueue();
   const workerId = getWorkerId();
   try {
     for await (const job of queue.claim(workerId, { idlePollS: 5 })) {
-      if (!running) break;
+      if (!running || stopRequested) break;
       currentLabel = job.payload?.label || job.payload?.kind || null;
+      syncWorkerState();
       try {
-        const result = await processWeeklyFlowOperation(job.payload);
+        const result = await withJobHeartbeat(job, queue, () =>
+          processWeeklyFlowOperation(job.payload),
+        );
         job.ack();
         resolveWeeklyFlowOperationResult(job.id, result);
       } catch (error) {
@@ -38,6 +58,7 @@ async function runLoop() {
         }
       } finally {
         currentLabel = null;
+        syncWorkerState();
       }
     }
   } catch (error) {
@@ -46,17 +67,27 @@ async function runLoop() {
     running = false;
     loopPromise = null;
     currentLabel = null;
+    syncWorkerState();
+    const intentional = stopRequested;
+    stopRequested = false;
+    markHonkerWorkerLoopEnded(WORKER_NAME, startWeeklyFlowOperationWorker, {
+      intentional,
+    });
   }
 }
 
 export function startWeeklyFlowOperationWorker() {
-  if (running) return;
+  if (running || isHonkerShuttingDown()) return;
   running = true;
+  stopRequested = false;
+  syncWorkerState();
   loopPromise = runLoop();
 }
 
 export function stopWeeklyFlowOperationWorker() {
+  stopRequested = true;
   running = false;
+  syncWorkerState();
 }
 
 export function isWeeklyFlowOperationWorkerRunning() {
@@ -69,3 +100,9 @@ export function getWeeklyFlowOperationWorkerStatus() {
     currentLabel,
   };
 }
+
+registerHonkerWorker(WORKER_NAME, {
+  start: startWeeklyFlowOperationWorker,
+  stop: stopWeeklyFlowOperationWorker,
+  isRunning: isWeeklyFlowOperationWorkerRunning,
+});

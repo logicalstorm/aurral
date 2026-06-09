@@ -247,6 +247,8 @@ const normalizeDiscoveryData = (value) => {
     updateProgress:
       typeof value.updateProgress === "number" ? value.updateProgress : null,
     updateProgressMessage: value.updateProgressMessage || null,
+    playlistsUpdating: !!value.playlistsUpdating,
+    playlistsUpdateMessage: value.playlistsUpdateMessage || null,
     stale: !!value.stale,
     discoveryMode:
       value.discoveryMode === "safer" || value.discoveryMode === "deeper"
@@ -747,6 +749,59 @@ function DiscoverPage() {
         return;
       }
 
+      if (msg.playlistsUpdating || msg.phase === "playlists_building") {
+        lastDiscoveryWsMessageAtRef.current = Date.now();
+        setData((prev) =>
+          normalizeDiscoveryData({
+            ...(prev || {}),
+            playlistsUpdating: true,
+            playlistsUpdateMessage:
+              msg.playlistsUpdateMessage ||
+              msg.progressMessage ||
+              "Updating recommended playlists...",
+            isUpdating: false,
+            configured: true,
+            stale: false,
+          }),
+        );
+        return;
+      }
+
+      if (msg.phase === "playlists_completed") {
+        lastDiscoveryWsMessageAtRef.current = Date.now();
+        setData((prev) =>
+          normalizeDiscoveryData({
+            ...(prev || {}),
+            discoverPlaylists: Array.isArray(msg.discoverPlaylists)
+              ? msg.discoverPlaylists
+              : prev?.discoverPlaylists || [],
+            playlistsUpdating: false,
+            playlistsUpdateMessage: null,
+            lastUpdated: msg.lastUpdated || prev?.lastUpdated || null,
+            configured: true,
+            stale: false,
+          }),
+        );
+        getDiscovery(true)
+          .then((discoveryData) => {
+            applyDiscoveryData(discoveryData);
+            setError(null);
+          })
+          .catch(() => {});
+        return;
+      }
+
+      if (msg.phase === "playlists_error") {
+        setData((prev) =>
+          normalizeDiscoveryData({
+            ...(prev || {}),
+            playlistsUpdating: false,
+            playlistsUpdateMessage: null,
+          }),
+        );
+        return;
+      }
+
       if (msg.isUpdating) {
         lastDiscoveryWsMessageAtRef.current = Date.now();
         setData((prev) =>
@@ -772,27 +827,39 @@ function DiscoverPage() {
       if (msg.phase === "completed" || Array.isArray(msg.recommendations)) {
         lastDiscoveryWsMessageAtRef.current = Date.now();
         if (Array.isArray(msg.recommendations)) {
-          applyDiscoveryData({
-            recommendations: msg.recommendations || [],
-            globalTop: msg.globalTop || [],
-            basedOn: msg.basedOn || [],
-            topTags: msg.topTags || [],
-            topGenres: msg.topGenres || [],
-            fallbackGenres: msg.fallbackGenres || [],
-            discoverPlaylists: msg.discoverPlaylists || [],
-            provider: msg.provider || "lastfm",
-            capabilities: msg.capabilities || null,
-            lastUpdated: msg.lastUpdated || null,
-            isUpdating: false,
-            updatePhase: null,
-            updateProgress: null,
-            updateProgressMessage: null,
-            stale: false,
-            discoveryMode:
-              msg.discoveryMode === "safer" || msg.discoveryMode === "deeper"
-                ? msg.discoveryMode
-                : "balanced",
-            configured: true,
+          setData((prev) => {
+            const normalized = normalizeDiscoveryData({
+              recommendations: msg.recommendations || [],
+              globalTop: msg.globalTop || [],
+              basedOn: msg.basedOn || [],
+              topTags: msg.topTags || [],
+              topGenres: msg.topGenres || [],
+              fallbackGenres: msg.fallbackGenres || [],
+              discoverPlaylists: msg.discoverPlaylists || [],
+              provider: msg.provider || "lastfm",
+              capabilities: msg.capabilities || null,
+              lastUpdated: msg.lastUpdated || null,
+              isUpdating: false,
+              updatePhase: null,
+              updateProgress: null,
+              updateProgressMessage: null,
+              playlistsUpdating:
+                typeof msg.playlistsUpdating === "boolean"
+                  ? msg.playlistsUpdating
+                  : prev?.playlistsUpdating,
+              playlistsUpdateMessage:
+                msg.playlistsUpdateMessage ??
+                prev?.playlistsUpdateMessage ??
+                null,
+              stale: false,
+              discoveryMode:
+                msg.discoveryMode === "safer" || msg.discoveryMode === "deeper"
+                  ? msg.discoveryMode
+                  : "balanced",
+              configured: true,
+            });
+            writeStoredDiscoveryData(normalized, authUser?.id);
+            return normalized;
           });
         } else {
           setData((prev) =>
@@ -802,6 +869,12 @@ function DiscoverPage() {
               updatePhase: null,
               updateProgress: null,
               updateProgressMessage: null,
+              playlistsUpdating:
+                typeof msg.playlistsUpdating === "boolean"
+                  ? msg.playlistsUpdating
+                  : prev?.playlistsUpdating,
+              playlistsUpdateMessage:
+                msg.playlistsUpdateMessage ?? prev?.playlistsUpdateMessage ?? null,
               stale: false,
             }),
           );
@@ -828,6 +901,19 @@ function DiscoverPage() {
       })
       .catch(() => {});
   }, [authUser?.id, isDiscoverySocketConnected, data?.isUpdating, data?.stale]);
+
+  useEffect(() => {
+    if (!isDiscoverySocketConnected) return;
+    if (!data?.playlistsUpdating) return;
+    getDiscovery(true)
+      .then((discoveryData) => {
+        const normalizedData = normalizeDiscoveryData(discoveryData);
+        setData(normalizedData);
+        writeStoredDiscoveryData(normalizedData, authUser?.id);
+        setError(null);
+      })
+      .catch(() => {});
+  }, [authUser?.id, isDiscoverySocketConnected, data?.playlistsUpdating]);
 
   useEffect(() => {
     if (!data?.isUpdating) return;
@@ -1210,6 +1296,8 @@ function DiscoverPage() {
     lastUpdated,
     isUpdating,
     updateProgressMessage,
+    playlistsUpdating,
+    playlistsUpdateMessage,
     configured = true,
   } = data || {};
   const [adoptedFlowIds, setAdoptedFlowIds] = useState({});
@@ -1251,7 +1339,7 @@ function DiscoverPage() {
   const sectionAvailability = useMemo(
     () => ({
       recentlyAdded: recentlyAdded.length > 0,
-      playlists: displayDiscoverPlaylists.length > 0,
+      playlists: displayDiscoverPlaylists.length > 0 || !!playlistsUpdating,
       recentReleases: recentReleases.length > 0,
       recommended:
         !isListenBrainzFallback &&
@@ -1265,6 +1353,7 @@ function DiscoverPage() {
     [
       recentlyAdded,
       displayDiscoverPlaylists,
+      playlistsUpdating,
       recentReleases,
       globalTop,
       genreSections,
@@ -1600,6 +1689,8 @@ function DiscoverPage() {
           playlists={displayDiscoverPlaylists}
           artworkVersion={lastUpdated}
           canAdopt={canAdoptPlaylist}
+          playlistsUpdating={playlistsUpdating}
+          playlistsUpdateMessage={playlistsUpdateMessage}
           onFlowAdopted={handleFlowAdopted}
           onPlaylistAdopted={handleStaticPlaylistAdopted}
         />

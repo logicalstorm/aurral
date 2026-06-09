@@ -1,6 +1,13 @@
 import { dbOps } from "../config/db-helpers.js";
 import { enqueueLibraryScanJob, getLibraryScanQueue, getWorkerId } from "./honkerDb.js";
+import {
+  isHonkerShuttingDown,
+  markHonkerWorkerLoopEnded,
+  registerHonkerWorker,
+  withJobHeartbeat,
+} from "./honkerWorkerRuntime.js";
 
+const WORKER_NAME = "library-scan";
 const LIBRARY_SCAN_REGISTRY_KEY = "pendingLibraryScanJob";
 const SCAN_DEBOUNCE_SECONDS = 30;
 
@@ -48,6 +55,7 @@ export function scheduleLibraryScan(force = false) {
 }
 
 let running = false;
+let stopRequested = false;
 let loopPromise = null;
 
 async function runLoop() {
@@ -55,7 +63,7 @@ async function runLoop() {
   const workerId = getWorkerId();
   try {
     for await (const job of queue.claim(workerId, { idlePollS: 10 })) {
-      if (!running) break;
+      if (!running || stopRequested) break;
       const scheduledJobId = getScheduledLibraryScanJobId();
       if (scheduledJobId != null && scheduledJobId !== job.id) {
         job.ack();
@@ -63,8 +71,10 @@ async function runLoop() {
       }
       clearScheduledLibraryScan(job.id);
       try {
-        const { playlistManager } = await import("./weeklyFlowPlaylistManager.js");
-        await playlistManager.scanLibrary();
+        await withJobHeartbeat(job, queue, async () => {
+          const { playlistManager } = await import("./weeklyFlowPlaylistManager.js");
+          await playlistManager.scanLibrary();
+        });
         job.ack();
       } catch (error) {
         const message = error?.message || String(error);
@@ -81,19 +91,32 @@ async function runLoop() {
   } finally {
     running = false;
     loopPromise = null;
+    const intentional = stopRequested;
+    stopRequested = false;
+    markHonkerWorkerLoopEnded(WORKER_NAME, startLibraryScanWorker, {
+      intentional,
+    });
   }
 }
 
 export function startLibraryScanWorker() {
-  if (running) return;
+  if (running || isHonkerShuttingDown()) return;
   running = true;
+  stopRequested = false;
   loopPromise = runLoop();
 }
 
 export function stopLibraryScanWorker() {
+  stopRequested = true;
   running = false;
 }
 
 export function isLibraryScanWorkerRunning() {
   return running;
 }
+
+registerHonkerWorker(WORKER_NAME, {
+  start: startLibraryScanWorker,
+  stop: stopLibraryScanWorker,
+  isRunning: isLibraryScanWorkerRunning,
+});

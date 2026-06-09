@@ -1,7 +1,7 @@
 import path from "path";
 import { fileURLToPath } from "url";
 import honker from "@russellthehippo/honker-node";
-import { db as sqliteDb } from "../config/db-sqlite.js";
+import { scheduleHonkerComponentRestart } from "./honkerWorkerRuntime.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -379,11 +379,15 @@ export function getNotificationOutbox() {
   if (!notificationOutbox) {
     notificationOutbox = getHonkerDb().outbox(
       "notifications",
-      async (payload) => {
+      async (payload, job) => {
         const { deliverQueuedNotification } = await import(
           "./notificationService.js"
         );
-        await deliverQueuedNotification(payload);
+        const { withJobHeartbeat } = await import("./honkerWorkerRuntime.js");
+        const outbox = getNotificationOutbox();
+        await withJobHeartbeat(job, outbox.queue, () =>
+          deliverQueuedNotification(payload),
+        );
       },
       {
         visibilityTimeoutS: 120,
@@ -444,6 +448,7 @@ export function startHonkerScheduler() {
       console.error("[honkerScheduler] loop error:", error);
       honkerSchedulerStarted = false;
       honkerSchedulerAbort = null;
+      scheduleHonkerComponentRestart("scheduler", startHonkerScheduler);
     });
 }
 
@@ -452,6 +457,33 @@ export function stopHonkerScheduler() {
   honkerSchedulerAbort.abort();
   honkerSchedulerAbort = null;
   honkerSchedulerStarted = false;
+}
+
+export function closeHonkerDb() {
+  stopHonkerScheduler();
+  if (discoveryRefreshQueueLock) {
+    try {
+      discoveryRefreshQueueLock.release();
+    } catch {}
+    discoveryRefreshQueueLock = null;
+  }
+  if (honkerDb) {
+    try {
+      honkerDb.close();
+    } catch {}
+  }
+  honkerDb = null;
+  pipelineQueue = null;
+  discoveryRefreshQueue = null;
+  discoveryPlaylistBuildQueue = null;
+  discoveryUserRefreshQueue = null;
+  weeklyFlowOperationQueue = null;
+  playlistRetryQueue = null;
+  playlistReserveBuildQueue = null;
+  systemTaskQueue = null;
+  libraryScanQueue = null;
+  imagePrefetchQueue = null;
+  notificationOutbox = null;
 }
 
 const DISCOVERY_REFRESH_QUEUE_LOCK = "discovery-refresh-queue";
@@ -495,10 +527,6 @@ export function isDiscoveryRefreshQueueLocked() {
     discoveryRefreshQueueLock != null ||
     isHonkerLockHeld(DISCOVERY_REFRESH_QUEUE_LOCK)
   );
-}
-
-export function tryAcquireSlskdLock(ttlSeconds = 120) {
-  return getHonkerDb().tryLock("slskd-api", WORKER_ID, ttlSeconds);
 }
 
 const inProcessLockTails = new Map();
@@ -581,7 +609,17 @@ export function getWorkerId() {
   return WORKER_ID;
 }
 
-export function withBetterSqliteTransaction(fn) {
-  const tx = sqliteDb.transaction(fn);
-  return tx();
+export function getHonkerQueueDepth(queueName) {
+  const safeQueue = String(queueName || "").trim();
+  if (!safeQueue) return 0;
+  const now = Math.floor(Date.now() / 1000);
+  const row = getHonkerDb().query(
+    `SELECT COUNT(*) AS count
+     FROM _honker_live
+     WHERE queue = ?
+       AND state = 'pending'
+       AND run_at <= ?`,
+    [safeQueue, now],
+  )[0];
+  return Number(row?.count) || 0;
 }
