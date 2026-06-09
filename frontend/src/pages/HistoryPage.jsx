@@ -273,7 +273,7 @@ function HistoryPage() {
       navigate(`/playlists?selected=${encodeURIComponent(request.playlistId)}`);
       return;
     }
-    if (isAurral && request.href) {
+    if (request.href && (isAurral || request.type === "activity")) {
       navigate(request.href);
       return;
     }
@@ -283,20 +283,22 @@ function HistoryPage() {
   const renderRequestRow = (request, rowIndex = 0) => {
     const isSlskd = request.source === "slskd" || request.kind === "track_download";
     const isAurral = request.source === "aurral" && !isSlskd;
+    const isActivity = request.type === "activity";
     const isAlbum = request.type === "album";
-    const displayName = isSlskd || isAurral
+    const usesTitleSubtitle = isSlskd || isAurral || isActivity;
+    const displayName = usesTitleSubtitle
       ? request.title
       : isAlbum
         ? request.albumName
         : request.name;
     const artistName = isAlbum ? request.artistName : null;
-    const metaLine = isSlskd || isAurral
+    const metaLine = usesTitleSubtitle
       ? request.subtitle || null
       : artistName;
     const artistMbid = isAlbum ? request.artistMbid : request.mbid;
     const canNavigate =
       (isSlskd && request.playlistId) ||
-      (isAurral && request.href) ||
+      ((isAurral || isActivity) && request.href) ||
       (artistMbid &&
         artistMbid !== "null" &&
         artistMbid !== "undefined");
