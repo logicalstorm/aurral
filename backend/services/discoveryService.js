@@ -940,6 +940,16 @@ export const updateDiscoveryCache = async (options = {}) => {
             if (!artist.image) {
               artist.image = pickLastfmImage(track?.image);
             }
+            const trackName = String(track?.name || "").trim();
+            if (trackName) {
+              artist.sampleTrack = {
+                trackName,
+                albumName:
+                  String(
+                    track?.album?.title || track?.album?.["#text"] || "",
+                  ).trim() || null,
+              };
+            }
             trendingArtists.push(artist);
           }
         }
