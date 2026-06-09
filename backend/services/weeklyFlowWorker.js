@@ -401,6 +401,43 @@ export class WeeklyFlowWorker {
     return owner ? getListenHistoryProfile(owner) : null;
   }
 
+  _scheduleReservePlanBuild(playlistType, context) {
+    const key = String(playlistType || "").trim();
+    if (!key || !context?.flow) return;
+    if (this.reserveBuildsInFlight.has(key)) return;
+    this.reserveBuildsInFlight.add(key);
+    const flow = context.flow;
+    playlistSource
+      .buildFlowReservePlan(flow, context.primaryTracks || [], context.options || {})
+      .then((reservePlan) => {
+        const existing = this.playlistReservePools.get(key) || [];
+        const added = this._normalizeReserveTracks(
+          reservePlan?.reserveTracks || [],
+        );
+        if (added.length === 0) return;
+        this.playlistReservePools.set(key, [...existing, ...added]);
+        const currentDiagnostics = this.playlistRunDiagnostics.get(key) || {};
+        const achieved = reservePlan?.diagnostics?.achieved || {};
+        this.playlistRunDiagnostics.set(key, {
+          ...currentDiagnostics,
+          achieved: {
+            ...(currentDiagnostics.achieved || {}),
+            reserve: Number(achieved.reserve || added.length),
+            reserveSourceCounts: achieved.reserveSourceCounts || {},
+          },
+        });
+      })
+      .catch((error) => {
+        console.error(
+          `[WeeklyFlowWorker] Failed reserve build for ${key}:`,
+          error.message,
+        );
+      })
+      .finally(() => {
+        this.reserveBuildsInFlight.delete(key);
+      });
+  }
+
   async seedFlowRun(playlistType, flow, options = {}) {
     const key = String(playlistType || "").trim();
     if (!key || !flow) {
@@ -410,10 +447,12 @@ export class WeeklyFlowWorker {
       Number.isFinite(Number(options?.size)) && Number(options.size) > 0
         ? Math.round(Number(options.size))
         : null;
+    const deferReserve = options.deferReserve !== false;
     const plan = await playlistSource.buildFlowRunPlan(
       sizeOverride ? { ...flow, size: sizeOverride } : flow,
       {
         listenHistoryProfile: this._getFlowListenHistoryProfile(flow),
+        deferReserve,
       },
     );
     this.clearPlaylistRunState(key);
@@ -423,12 +462,16 @@ export class WeeklyFlowWorker {
       : [];
     flowPlaylistConfig.markLastRunAt(key);
     const jobIds = downloadTracker.addJobs(primaryTracks, key);
+    if (plan?.reservePlanContext) {
+      this._scheduleReservePlanBuild(key, plan.reservePlanContext);
+    }
     return {
       tracksQueued: primaryTracks.length,
       jobIds,
       reserveTracks: Array.isArray(plan?.reserveTracks)
         ? plan.reserveTracks.length
         : 0,
+      reservePending: !!plan?.reservePlanContext,
     };
   }
 
