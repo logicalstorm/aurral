@@ -204,6 +204,68 @@ export const recordAlbumSearchStarted = ({
     searching: true,
   });
 
+export const recordAlbumSearchFailed = ({
+  albumId,
+  albumName,
+  artistName,
+  artistMbid,
+  statusLabel = "Not found",
+} = {}) => {
+  const name = String(albumName || "").trim() || "Album";
+  const artist = String(artistName || "").trim();
+  const ref = String(albumId || artistMbid || name).trim();
+  if (!ref) return null;
+  return upsertAurralHistory({
+    referenceId: ref,
+    kind: "album_requested",
+    title: `No results for ${name}`,
+    subtitle: artist || null,
+    status: "failed",
+    statusLabel,
+    href: buildArtistHref(artistMbid),
+    metadata: { albumId, albumName: name, artistName: artist, artistMbid },
+  });
+};
+
+export const syncAlbumSearchHistory = async (lidarrClient) => {
+  if (!lidarrClient?.isConfigured()) return;
+
+  const cutoff = Date.now() - MAX_AGE_MS;
+  const pendingEntries = dbOps
+    .getAurralHistory({ since: cutoff, limit: 300 })
+    .filter(
+      (entry) =>
+        entry.kind === "album_requested" && entry.status === "processing",
+    );
+  if (!pendingEntries.length) return;
+
+  const { parseLidarrSearchContext, resolveAlbumSearchOutcome } = await import(
+    "./albumSearchState.js"
+  );
+  const [queue, history, commands] = await Promise.all([
+    lidarrClient.getQueue().catch(() => []),
+    lidarrClient.getHistory(1, 200).catch(() => ({ records: [] })),
+    lidarrClient.request("/command").catch(() => []),
+  ]);
+  const context = parseLidarrSearchContext({ queue, history, commands });
+
+  for (const entry of pendingEntries) {
+    const albumId = entry.metadata?.albumId;
+    if (!albumId) continue;
+    const outcome = resolveAlbumSearchOutcome(albumId, context, {
+      searchStartedAt: entry.createdAt,
+    });
+    if (!outcome || outcome.status !== "failed") continue;
+    recordAlbumSearchFailed({
+      albumId,
+      albumName: entry.metadata?.albumName,
+      artistName: entry.metadata?.artistName,
+      artistMbid: entry.metadata?.artistMbid,
+      statusLabel: outcome.statusLabel,
+    });
+  }
+};
+
 export const recordFlowGenerationStarted = ({ flowId } = {}) => {
   const id = String(flowId || "").trim();
   if (!id) return null;
@@ -410,10 +472,17 @@ export const toHistoryRequestItem = (entry) => {
     jobId: entry.metadata?.jobId || null,
     albumId: entry.metadata?.albumId ? String(entry.metadata.albumId) : null,
     inQueue: entry.status === "processing" || entry.status === "pending",
+    canReSearch:
+      entry.kind === "album_requested" &&
+      entry.status === "failed" &&
+      Boolean(entry.metadata?.albumId),
   };
 };
 
-export const getAurralHistoryRequests = async () => {
+export const getAurralHistoryRequests = async (lidarrClient = null) => {
+  if (lidarrClient) {
+    await syncAlbumSearchHistory(lidarrClient);
+  }
   const cutoff = Date.now() - MAX_AGE_MS;
   const entries = dbOps.getAurralHistory({ since: cutoff, limit: 300 });
   return entries.map(toHistoryRequestItem);

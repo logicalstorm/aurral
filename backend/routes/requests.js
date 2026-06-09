@@ -168,11 +168,13 @@ const buildLidarrRequests = async (lidarrClient) => {
       artistMbid,
       artistName,
       status,
+      statusLabel: isFailed ? "Failed" : "Downloading",
       requestedAt: toIso(item?.added),
       mbid: artistMbid,
       name: albumName,
       image: null,
       inQueue: true,
+      canReSearch: isFailed,
     });
   }
 
@@ -260,6 +262,14 @@ const buildLidarrRequests = async (lidarrClient) => {
           : isGrabbed
             ? "processing"
             : "processing";
+    const statusLabel =
+      status === "available"
+        ? "Complete"
+        : status === "failed"
+          ? "Failed"
+          : isGrabbed
+            ? "Downloading"
+            : "In progress";
 
     requestsByAlbumId.set(String(albumId), {
       id: `lidarr-history-${record.id ?? albumId}`,
@@ -272,11 +282,13 @@ const buildLidarrRequests = async (lidarrClient) => {
       artistMbid,
       artistName,
       status,
+      statusLabel,
       requestedAt: toIso(record?.date || record?.eventDate),
       mbid: artistMbid,
       name: albumName,
       image: null,
       inQueue: false,
+      canReSearch: status === "failed",
     });
   }
 
@@ -389,11 +401,11 @@ const buildLidarrRequests = async (lidarrClient) => {
   return filterDismissedRequests(sorted);
 };
 
-const buildAurralRequests = async () => {
+const buildAurralRequests = async (lidarrClient = null) => {
   const { getAurralHistoryRequests } = await import(
     "../services/aurralHistoryService.js"
   );
-  return getAurralHistoryRequests();
+  return getAurralHistoryRequests(lidarrClient);
 };
 
 const buildRequestsResponse = async (lidarrClient) => {
@@ -401,7 +413,7 @@ const buildRequestsResponse = async (lidarrClient) => {
     lidarrClient?.isConfigured()
       ? buildLidarrRequests(lidarrClient)
       : Promise.resolve([]),
-    buildAurralRequests(),
+    buildAurralRequests(lidarrClient),
   ]);
   const filteredAurral = filterRedundantAurralRequests(
     aurralRequests,
