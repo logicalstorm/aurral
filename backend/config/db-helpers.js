@@ -15,7 +15,7 @@ const upsertSettingStmt = db.prepare(
 );
 const deleteSettingStmt = db.prepare("DELETE FROM settings WHERE key = ?");
 
-const PLAYLIST_WORKER_RETRY_CYCLE_MINUTES = [15, 30, 60, 360, 720, 1440];
+const PLAYLIST_WORKER_RETRY_CYCLE_MINUTES = 360;
 
 function readStoredSettingJson(primaryKey, legacyKeys = []) {
   const primary = dbHelpers.parseJSON(getSettingStmt.get(primaryKey)?.value);
@@ -40,14 +40,7 @@ function normalizePlaylistWorkerSettings(raw) {
     Number.isFinite(parsedConcurrency) && parsedConcurrency >= 1
       ? Math.min(3, Math.floor(parsedConcurrency))
       : 2;
-  const parsedRetryCycleMinutes = Number(worker.retryCycleMinutes);
-  const retryCycleMinutes =
-    Number.isFinite(parsedRetryCycleMinutes) &&
-    PLAYLIST_WORKER_RETRY_CYCLE_MINUTES.includes(
-      Math.floor(parsedRetryCycleMinutes),
-    )
-      ? Math.floor(parsedRetryCycleMinutes)
-      : 15;
+  const retryCycleMinutes = PLAYLIST_WORKER_RETRY_CYCLE_MINUTES;
   const retryPausedPlaylistIds = Array.isArray(worker.retryPausedPlaylistIds)
     ? [
         ...new Set(

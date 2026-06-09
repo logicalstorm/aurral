@@ -43,14 +43,7 @@ function buildPlaylistWorkerSettings(weeklyFlowWorker, playlistWorker) {
     Number.isFinite(parsedConcurrency) && parsedConcurrency >= 1
       ? Math.min(3, Math.floor(parsedConcurrency))
       : 2;
-  const parsedRetryCycleMinutes = Number(
-    current.retryCycleMinutes ?? legacy.retryCycleMinutes,
-  );
-  const retryCycleMinutes =
-    Number.isFinite(parsedRetryCycleMinutes) &&
-    [15, 30, 60, 360, 720, 1440].includes(Math.floor(parsedRetryCycleMinutes))
-      ? Math.floor(parsedRetryCycleMinutes)
-      : 15;
+  const retryCycleMinutes = 360;
   const retryPausedPlaylistIds = Array.isArray(current.retryPausedPlaylistIds)
     ? current.retryPausedPlaylistIds
     : Array.isArray(legacy.retryPausedPlaylistIds)

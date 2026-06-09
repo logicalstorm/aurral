@@ -242,7 +242,7 @@ export const defaultData = {
     },
     playlistWorker: {
       concurrency: 2,
-      retryCycleMinutes: 15,
+      retryCycleMinutes: 360,
       existingFileMode: "reuse",
     },
   },
