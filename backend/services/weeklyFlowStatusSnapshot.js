@@ -2,6 +2,7 @@ import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { weeklyFlowWorker } from "./weeklyFlowWorker.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { weeklyFlowOperationQueue } from "./weeklyFlowOperationQueue.js";
+import { getWeeklyFlowOperationWorkerStatus } from "./weeklyFlowOperationWorker.js";
 import { slskdClient } from "./slskdClient.js";
 import { userOps } from "../config/db-helpers.js";
 import { getFlowCapabilities } from "./listenbrainzDiscoveryFallback.js";
@@ -117,10 +118,13 @@ export function getWeeklyFlowStatusSnapshot({
   const sharedStats = aggregateStats(scopedStats, sharedPlaylistIds);
   const nextRunMessage = formatNextRunMessage(flowsWithOwners);
   const operationQueue = weeklyFlowOperationQueue.getStatus();
-  const queueLabel = String(operationQueue?.currentLabel || "");
+  const operationWorker = getWeeklyFlowOperationWorkerStatus();
+  const queueLabel = String(
+    operationQueue?.currentLabel || operationWorker?.currentLabel || "",
+  );
   let phase = "idle";
   let message = "Idle";
-  if (operationQueue?.processing) {
+  if (operationQueue?.processing || operationWorker?.currentLabel) {
     phase = "preparing";
     if (
       queueLabel.startsWith("enable:") ||
@@ -198,6 +202,7 @@ export function getWeeklyFlowStatusSnapshot({
     retryCyclePausedByPlaylist,
     retryCycleScheduledByPlaylist,
     operationQueue,
+    operationWorker,
     hint: {
       phase,
       message,

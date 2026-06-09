@@ -5,6 +5,7 @@ import {
   CheckCircle,
   Crosshair,
   ListMusic,
+  Loader,
   Sparkles,
 } from "lucide-react";
 import { DiscoverPlaylistContextMenu } from "../components/DiscoverPlaylistContextMenu";
@@ -118,6 +119,8 @@ export function DiscoverPlaylistSection({
   playlists = [],
   artworkVersion = null,
   canAdopt = false,
+  playlistsUpdating = false,
+  playlistsUpdateMessage = null,
   onFlowAdopted,
   onPlaylistAdopted,
 }) {
@@ -316,7 +319,7 @@ export function DiscoverPlaylistSection({
     [navigate, onPlaylistAdopted, showError, showSuccess],
   );
 
-  if (visiblePlaylists.length === 0) {
+  if (visiblePlaylists.length === 0 && !playlistsUpdating) {
     return null;
   }
 
@@ -390,6 +393,14 @@ export function DiscoverPlaylistSection({
   return (
     <DiscoverRail
       title="Playlists for you"
+      afterTitle={
+        playlistsUpdating ? (
+          <span className="artist-discover-hero__updated artist-discover-hero__updated--refreshing">
+            <Loader className="artist-discover-hero__updated-icon animate-spin" />
+            {playlistsUpdateMessage || "Updating playlists..."}
+          </span>
+        ) : null
+      }
       footer={
         expandedPlaylist ? (
           <div className="discover-playlist-expanded">
@@ -507,6 +518,8 @@ DiscoverPlaylistSection.propTypes = {
   playlists: PropTypes.arrayOf(PropTypes.object),
   artworkVersion: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   canAdopt: PropTypes.bool,
+  playlistsUpdating: PropTypes.bool,
+  playlistsUpdateMessage: PropTypes.string,
   onFlowAdopted: PropTypes.func,
   onPlaylistAdopted: PropTypes.func,
 };

@@ -10,7 +10,17 @@ import {
   markDiscoveryRefreshDequeued,
   scheduleNextDiscoveryRefresh,
 } from "./discoveryRefreshScheduler.js";
+import {
+  isHonkerShuttingDown,
+  markHonkerWorkerLoopEnded,
+  registerHonkerWorker,
+  withJobHeartbeat,
+} from "./honkerWorkerRuntime.js";
+
+const WORKER_NAME = "discovery-refresh";
+
 let running = false;
+let stopRequested = false;
 let loopPromise = null;
 
 async function runDiscoveryRefresh(payload) {
@@ -31,7 +41,7 @@ async function runDiscoveryRefresh(payload) {
     );
   }
 
-  await updateDiscoveryCache({ skipBusyGuard: true });
+  await updateDiscoveryCache();
 }
 
 async function runLoop() {
@@ -39,10 +49,10 @@ async function runLoop() {
   const workerId = getWorkerId();
   try {
     for await (const job of queue.claim(workerId, { idlePollS: 5 })) {
-      if (!running) break;
+      if (!running || stopRequested) break;
       markDiscoveryRefreshDequeued();
       try {
-        await runDiscoveryRefresh(job.payload);
+        await withJobHeartbeat(job, queue, () => runDiscoveryRefresh(job.payload));
         job.ack();
         scheduleNextDiscoveryRefresh();
       } catch (error) {
@@ -61,19 +71,32 @@ async function runLoop() {
   } finally {
     running = false;
     loopPromise = null;
+    const intentional = stopRequested;
+    stopRequested = false;
+    markHonkerWorkerLoopEnded(WORKER_NAME, startDiscoveryRefreshWorker, {
+      intentional,
+    });
   }
 }
 
 export function startDiscoveryRefreshWorker() {
-  if (running) return;
+  if (running || isHonkerShuttingDown()) return;
   running = true;
+  stopRequested = false;
   loopPromise = runLoop();
 }
 
 export function stopDiscoveryRefreshWorker() {
+  stopRequested = true;
   running = false;
 }
 
 export function isDiscoveryRefreshWorkerRunning() {
   return running;
 }
+
+registerHonkerWorker(WORKER_NAME, {
+  start: startDiscoveryRefreshWorker,
+  stop: stopDiscoveryRefreshWorker,
+  isRunning: isDiscoveryRefreshWorkerRunning,
+});

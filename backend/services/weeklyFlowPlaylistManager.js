@@ -15,11 +15,11 @@ import {
   resolvePlaylistRoot,
 } from "./playlistPaths.js";
 import { buildM3uContent, collectPlaylistM3uEntries } from "./playlistM3u.js";
+import { scheduleLibraryScan } from "./libraryScanWorker.js";
 
 const ARTWORK_FILE_EXTENSIONS = [".webp", ".jpg", ".png"];
 const ARTWORK_SUPPRESS_SUFFIX = ".no-artwork";
 const PLAYLIST_FILE_EXTENSIONS = [".m3u", ".nsp"];
-const SCAN_DEBOUNCE_MS = 30000;
 
 export class WeeklyFlowPlaylistManager {
   constructor(
@@ -36,7 +36,6 @@ export class WeeklyFlowPlaylistManager {
     this._navidromeConfigKey = "";
     this._ensureInFlight = null;
     this._refreshInFlight = new Map();
-    this._scanTimer = null;
     this.updateConfig(triggerEnsureOnInit);
   }
 
@@ -163,26 +162,7 @@ export class WeeklyFlowPlaylistManager {
   }
 
   scheduleScanLibrary(force = false) {
-    if (force) {
-      if (this._scanTimer) {
-        clearTimeout(this._scanTimer);
-        this._scanTimer = null;
-      }
-      return this.scanLibrary();
-    }
-    if (this._scanTimer) {
-      return null;
-    }
-    this._scanTimer = setTimeout(() => {
-      this._scanTimer = null;
-      this.scanLibrary().catch((error) => {
-        console.warn(
-          "[WeeklyFlowPlaylistManager] scanLibrary failed:",
-          error?.message,
-        );
-      });
-    }, SCAN_DEBOUNCE_MS);
-    return null;
+    return scheduleLibraryScan(force);
   }
 
   async _ensureFlowArtwork(playlistType, playlistName, artworkKind) {

@@ -35,6 +35,9 @@ import {
 } from "./discoveryRecommendations.js";
 import {
   enqueueDiscoveryPlaylistBuildJob,
+  enqueueDiscoveryUserRefreshJob,
+  isDiscoveryRefreshQueueLocked,
+  isHonkerLockHeld,
   withHonkerLock,
 } from "./honkerDb.js";
 
@@ -390,6 +393,45 @@ export const getDiscoveryUpdateStatus = () => ({
   updateProgressMessage: discoveryCache.updateProgressMessage || null,
 });
 
+const recordDiscoverPlaylistBuildProgress = (
+  progressMessage = "Updating recommended playlists...",
+  extra = {},
+) => {
+  discoveryCache.playlistsUpdating = true;
+  discoveryCache.playlistsUpdateMessage = progressMessage || "";
+  websocketService.emitDiscoveryUpdate({
+    playlistsUpdating: true,
+    playlistsUpdateMessage: progressMessage,
+    phase: "playlists_building",
+    progress: 98,
+    progressMessage,
+    isUpdating: false,
+    configured: true,
+    ...extra,
+  });
+};
+
+export const clearDiscoverPlaylistBuildProgress = () => {
+  discoveryCache.playlistsUpdating = false;
+  discoveryCache.playlistsUpdateMessage = null;
+};
+
+export const getDiscoveryPlaylistBuildStatus = (cacheNamespace = null) => {
+  const buildKey = getDiscoveryPlaylistBuildKey(cacheNamespace);
+  const lockHeld = isHonkerLockHeld(`discovery-playlist-build:${buildKey}`);
+  const tokenPending = discoveryPlaylistBuildTokens.has(buildKey);
+  const cacheFlag = !cacheNamespace && !!discoveryCache.playlistsUpdating;
+  const updating = cacheFlag || lockHeld || tokenPending;
+  const message = cacheFlag
+    ? discoveryCache.playlistsUpdateMessage ||
+      "Updating recommended playlists..."
+    : "Updating recommended playlists...";
+  return {
+    playlistsUpdating: updating,
+    playlistsUpdateMessage: updating ? message : null,
+  };
+};
+
 const emitDiscoveryProgress = (
   phase,
   progressMessage,
@@ -415,6 +457,8 @@ const EMPTY_CACHE = {
   updatePhase: null,
   updateProgress: null,
   updateProgressMessage: null,
+  playlistsUpdating: false,
+  playlistsUpdateMessage: null,
 };
 
 let discoveryCache = { ...EMPTY_CACHE };
@@ -538,7 +582,8 @@ export const getDiscoveryCache = (listenHistoryProfile = null) => {
 };
 
 export const isGlobalDiscoveryRefreshInProgress = () =>
-  discoveryCache.isUpdating === true;
+  isHonkerLockHeld("discovery-global-refresh") ||
+  isDiscoveryRefreshQueueLocked();
 
 const hasListeningHistoryUsers = () =>
   userOps
@@ -603,12 +648,25 @@ export const requestUserDiscoveryRefresh = (listenHistoryProfile) => {
   }
   if (isGlobalDiscoveryRefreshInProgress()) {
     pendingUserDiscoveryProfiles.set(cacheNamespace, profile);
+    enqueueDiscoveryUserRefreshJob(
+      {
+        listenHistoryProfile: profile,
+        requestedAt: Date.now(),
+        reason: "global_refresh_in_progress",
+      },
+      { delaySeconds: 300 },
+    );
     return Promise.resolve({
-      skipped: true,
+      enqueued: true,
       reason: "global_refresh_in_progress",
     });
   }
-  return updateUserDiscoveryCache(profile);
+  const operationId = enqueueDiscoveryUserRefreshJob({
+    listenHistoryProfile: profile,
+    requestedAt: Date.now(),
+    reason: "manual",
+  });
+  return Promise.resolve({ enqueued: true, operationId });
 };
 
 const fetchListenHistoryArtists = async (
@@ -980,32 +1038,40 @@ const buildDiscoveryUpdatePayload = (
     progress = 100,
     progressMessage = "Discovery refresh completed",
   } = {},
-) => ({
-  recommendations: rerankCachedRecommendations({
-    recommendations: discoveryData.recommendations || [],
+) => {
+  if (phase === "playlists_completed") {
+    clearDiscoverPlaylistBuildProgress();
+  }
+  return {
+    recommendations: rerankCachedRecommendations({
+      recommendations: discoveryData.recommendations || [],
+      discoveryMode: getDiscoveryMode(),
+    }),
+    globalTop: discoveryData.globalTop || [],
+    basedOn: discoveryData.basedOn || [],
+    topTags: discoveryData.topTags || [],
+    topGenres: discoveryData.topGenres || [],
+    fallbackGenres: discoveryData.fallbackGenres || [],
+    discoverPlaylists: discoveryData.discoverPlaylists || [],
+    provider: discoveryData.provider || DISCOVERY_PROVIDER_LASTFM,
+    capabilities:
+      discoveryData.capabilities ||
+      getDiscoveryCapabilities(
+        (discoveryData.provider || DISCOVERY_PROVIDER_LASTFM) ===
+          DISCOVERY_PROVIDER_LASTFM,
+      ),
+    lastUpdated: discoveryData.lastUpdated,
+    isUpdating: false,
+    configured: true,
+    phase,
+    progress,
+    progressMessage,
     discoveryMode: getDiscoveryMode(),
-  }),
-  globalTop: discoveryData.globalTop || [],
-  basedOn: discoveryData.basedOn || [],
-  topTags: discoveryData.topTags || [],
-  topGenres: discoveryData.topGenres || [],
-  fallbackGenres: discoveryData.fallbackGenres || [],
-  discoverPlaylists: discoveryData.discoverPlaylists || [],
-  provider: discoveryData.provider || DISCOVERY_PROVIDER_LASTFM,
-  capabilities:
-    discoveryData.capabilities ||
-    getDiscoveryCapabilities(
-      (discoveryData.provider || DISCOVERY_PROVIDER_LASTFM) ===
-        DISCOVERY_PROVIDER_LASTFM,
-    ),
-  lastUpdated: discoveryData.lastUpdated,
-  isUpdating: false,
-  configured: true,
-  phase,
-  progress,
-  progressMessage,
-  discoveryMode: getDiscoveryMode(),
-});
+    ...(phase === "playlists_completed"
+      ? { playlistsUpdating: false, playlistsUpdateMessage: null }
+      : {}),
+  };
+};
 
 const emitDiscoveryDataUpdate = (discoveryData, options = {}) => {
   websocketService.emitDiscoveryUpdate(
@@ -1103,6 +1169,10 @@ export async function runQueuedDiscoverPlaylistBuild(payload = {}) {
           return { skipped: true, reason: "empty_discovery_data" };
         }
 
+        if (payload?.publishUpdate !== false) {
+          recordDiscoverPlaylistBuildProgress("Building recommended playlists...");
+        }
+
         const allLibraryArtistsRaw = await libraryManager.getAllArtists();
         const allLibraryArtists = Array.isArray(allLibraryArtistsRaw)
           ? allLibraryArtistsRaw
@@ -1167,8 +1237,11 @@ export async function runQueuedDiscoverPlaylistBuild(payload = {}) {
 export function emitDiscoverPlaylistBuildFailure(payload = {}, error) {
   if (payload?.publishUpdate === false) return;
   const message = error?.message || String(error || "Unknown error");
+  clearDiscoverPlaylistBuildProgress();
   websocketService.emitDiscoveryUpdate({
     isUpdating: false,
+    playlistsUpdating: false,
+    playlistsUpdateMessage: null,
     configured: true,
     phase: "playlists_error",
     progress: 100,
@@ -1202,32 +1275,29 @@ const scheduleDiscoverPlaylistBuild = ({
     discoveryData: baseDiscoveryData,
   };
 
-  try {
-    enqueueDiscoveryPlaylistBuildJob(payload);
-  } catch (error) {
-    console.error(
-      `[Discovery] Failed to enqueue discover playlist build: ${error.message}`,
-    );
-    setTimeout(() => {
-      runQueuedDiscoverPlaylistBuild(payload).catch((runError) => {
-        console.error(
-          `[Discovery] Background discover playlist build failed: ${runError.message}`,
-        );
-        emitDiscoverPlaylistBuildFailure(payload, runError);
-      });
-    }, 0);
+  enqueueDiscoveryPlaylistBuildJob(payload);
+  if (publishUpdate) {
+    recordDiscoverPlaylistBuildProgress("Updating recommended playlists...");
   }
 };
 
 export const updateDiscoveryCache = async (options = {}) => {
-  const skipBusyGuard = options.skipBusyGuard === true;
-  if (!skipBusyGuard && discoveryCache.isUpdating) {
-    console.log("Discovery update already in progress, skipping...");
-    return { skipped: true };
+  if (options.skipHonkerLock !== true) {
+    return withHonkerLock(
+      "discovery-global-refresh",
+      () =>
+        updateDiscoveryCache({
+          ...options,
+          skipHonkerLock: true,
+        }),
+      {
+        ttlSeconds: 3600,
+        waitTimeoutMs: 30 * 60 * 1000,
+        retryDelayMs: 500,
+      },
+    );
   }
-  if (!discoveryCache.isUpdating) {
-    discoveryCache.isUpdating = true;
-  }
+  discoveryCache.isUpdating = true;
   console.log("Starting background update of discovery recommendations...");
   emitDiscoveryProgress("starting", "Preparing discovery refresh", 5);
   import("./aurralHistoryService.js")
@@ -1591,14 +1661,11 @@ export const updateDiscoveryCache = async (options = {}) => {
     );
     discoveryCache.isUpdating = false;
     clearDiscoveryUpdateProgress();
-    emitDiscoveryDataUpdate(discoveryData, {
-      progressMessage:
-        listeningHistoryUsersConfigured
-          ? "Discovery refresh completed"
-          : "Discovery refresh completed; playlists are updating in the background",
-    });
 
     if (listeningHistoryUsersConfigured) {
+      emitDiscoveryDataUpdate(discoveryData, {
+        progressMessage: "Discovery refresh completed",
+      });
       refreshListeningHistoryUserCaches().catch((error) => {
         console.error(
           `[Discovery] Background per-user refresh failed: ${error.message}`,
@@ -1621,6 +1688,9 @@ export const updateDiscoveryCache = async (options = {}) => {
             .map((artist) => artist.artistName)
             .filter(Boolean),
         },
+      });
+      emitDiscoveryDataUpdate(discoveryData, {
+        progressMessage: "Discovery refresh completed",
       });
     }
 
@@ -1671,8 +1741,6 @@ export const updateDiscoveryCache = async (options = {}) => {
   }
 };
 
-const userDiscoveryLocks = new Set();
-
 export const updateUserDiscoveryCache = async (
   listenHistoryProfile,
   options = {},
@@ -1682,14 +1750,34 @@ export const updateUserDiscoveryCache = async (
   const cacheNamespace = getListenHistoryCacheNamespace(profile);
   if (!cacheNamespace) return null;
   if (!getLastfmApiKey()) return null;
+  if (options.skipHonkerLock !== true) {
+    return withHonkerLock(
+      `discovery-user-refresh:${cacheNamespace}`,
+      () =>
+        updateUserDiscoveryCache(profile, {
+          ...options,
+          skipHonkerLock: true,
+        }),
+      {
+        ttlSeconds: 300,
+        waitTimeoutMs: 30 * 60 * 1000,
+        retryDelayMs: 500,
+      },
+    );
+  }
   if (!duringGlobalRefresh && isGlobalDiscoveryRefreshInProgress()) {
     pendingUserDiscoveryProfiles.set(cacheNamespace, profile);
+    enqueueDiscoveryUserRefreshJob(
+      {
+        listenHistoryProfile: profile,
+        requestedAt: Date.now(),
+        reason: "global_refresh_in_progress",
+      },
+      { delaySeconds: 300 },
+    );
     return { skipped: true, reason: "global_refresh_in_progress" };
   }
-  if (userDiscoveryLocks.has(cacheNamespace)) return null;
-
   const shouldPublishRefreshState = !duringGlobalRefresh;
-  userDiscoveryLocks.add(cacheNamespace);
   console.log(
     `[Discovery] Starting per-user refresh for ${profile.listenHistoryProvider} user ${profile.listenHistoryUsername}...`,
   );
@@ -1888,7 +1976,6 @@ export const updateUserDiscoveryCache = async (
       discoveryCache.isUpdating = false;
       clearDiscoveryUpdateProgress();
     }
-    userDiscoveryLocks.delete(cacheNamespace);
   }
 };
 
