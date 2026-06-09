@@ -877,6 +877,7 @@ export const flowPlaylistConfig = {
   },
 
   createSharedPlaylist({
+    id = null,
     name,
     sourceName,
     sourceFlowId,
@@ -887,7 +888,7 @@ export const flowPlaylistConfig = {
     const playlists = getStoredSharedPlaylists();
     assertUniqueSharedPlaylistName(playlists, name);
     const playlist = normalizeSharedPlaylist({
-      id: randomUUID(),
+      id: String(id || "").trim() || randomUUID(),
       name,
       ownerUserId,
       sourceName,

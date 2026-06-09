@@ -1,21 +1,27 @@
 import { dbOps } from "../config/db-helpers.js";
 import { getLastfmApiKey } from "./apiClients.js";
 import { libraryManager } from "./libraryManager.js";
-import { enqueueDiscoveryRefreshJob } from "./honkerDb.js";
+import {
+  enqueueDiscoveryRefreshJob,
+  isDiscoveryRefreshQueueLocked,
+  isHonkerLockHeld,
+  tryAcquireDiscoveryRefreshQueueLock,
+  releaseDiscoveryRefreshQueueLock,
+} from "./honkerDb.js";
 import {
   getDiscoveryAutoRefreshHours,
   getDiscoveryCache,
   recordDiscoveryUpdateProgress,
 } from "./discoveryService.js";
 
-let refreshPending = false;
+const DISCOVERY_GLOBAL_REFRESH_LOCK = "discovery-global-refresh";
 
 export function isDiscoveryRefreshPending() {
-  return refreshPending;
+  return isDiscoveryRefreshQueueLocked();
 }
 
 export function markDiscoveryRefreshDequeued() {
-  refreshPending = false;
+  releaseDiscoveryRefreshQueueLock();
 }
 
 export async function isDiscoveryRefreshConfigured() {
@@ -61,30 +67,40 @@ export function enqueueDiscoveryRefresh(options = {}) {
   const cache = getDiscoveryCache();
 
   if (!scheduleOnly) {
-    if (cache.isUpdating) {
+    if (isHonkerLockHeld(DISCOVERY_GLOBAL_REFRESH_LOCK)) {
       if (force) {
         return { enqueued: true, reason: "already_updating" };
       }
       return { enqueued: false, reason: "updating" };
     }
-    if (!force && refreshPending) {
+    if (!force && isDiscoveryRefreshQueueLocked()) {
       return { enqueued: false, reason: "queued" };
     }
-    refreshPending = true;
+    if (!tryAcquireDiscoveryRefreshQueueLock()) {
+      return { enqueued: false, reason: "queued" };
+    }
     if (!cache.isUpdating) {
       cache.isUpdating = true;
       emitDiscoveryQueued(reason);
     }
   }
 
-  enqueueDiscoveryRefreshJob(
-    {
-      reason,
-      requestedAt: Date.now(),
-      scheduleOnly: scheduleOnly === true,
-    },
-    { runAt, delaySeconds },
-  );
+  try {
+    enqueueDiscoveryRefreshJob(
+      {
+        reason,
+        requestedAt: Date.now(),
+        scheduleOnly: scheduleOnly === true,
+      },
+      { runAt, delaySeconds },
+    );
+  } catch (error) {
+    if (!scheduleOnly) {
+      releaseDiscoveryRefreshQueueLock();
+      cache.isUpdating = false;
+    }
+    throw error;
+  }
   return { enqueued: true, reason };
 }
 
@@ -118,7 +134,7 @@ export async function enqueueDiscoveryRefreshIfNeeded(options = {}) {
 export async function bootstrapDiscoveryRefresh() {
   if (!(await isDiscoveryRefreshConfigured())) {
     console.log(
-      "Discovery not configured (no Last.fm key and no artists). Clearing cache.",
+      "Discovery not configured (no Last.fm API key and no artists). Clearing cache.",
     );
     try {
       dbOps.updateDiscoveryCache({
