@@ -3,9 +3,44 @@ import assert from "node:assert/strict";
 
 import { importFromRepo } from "../helpers/backendTestHarness.js";
 
-const [{ buildFlowSearchQueries, rankFlowSearchResults, selectRankedMatchAttempts, validateDownloadedTrack }] = await Promise.all([
+const [
+  {
+    buildFlowSearchQueries,
+    buildFlowAlbumSearchQueries,
+    buildFlowTrackFallbackSearchQueries,
+    rankFlowSearchResults,
+    selectRankedMatchAttempts,
+    validateDownloadedTrack,
+  },
+] = await Promise.all([
   importFromRepo("backend/services/weeklyFlowSoulseekMatcher.js"),
 ]);
+
+test("buildFlowAlbumSearchQueries keeps album-only searches separate from track fallbacks", () => {
+  const albumQueries = buildFlowAlbumSearchQueries({
+    artistName: "Massive Attack",
+    trackName: "Teardrop",
+    albumName: "Mezzanine",
+    releaseYear: "1998",
+    artistAliases: ["Massive Attk"],
+  });
+  const fallbackQueries = buildFlowTrackFallbackSearchQueries({
+    artistName: "Massive Attack",
+    trackName: "Teardrop",
+    albumName: "Mezzanine",
+    releaseYear: "1998",
+    artistAliases: ["Massive Attk"],
+  });
+
+  assert.deepEqual(albumQueries.slice(0, 2), [
+    "Massive Attack Mezzanine",
+    "Massive Attack Mezzanine 1998",
+  ]);
+  assert.ok(albumQueries.includes("Massive Attk Mezzanine"));
+  assert.ok(!albumQueries.includes("Massive Attack Teardrop"));
+  assert.ok(fallbackQueries.includes("Massive Attack Teardrop"));
+  assert.ok(fallbackQueries.includes("Massive Attk Teardrop"));
+});
 
 test("buildFlowSearchQueries generates album-first and fallback track searches", () => {
   const queries = buildFlowSearchQueries({
@@ -19,9 +54,9 @@ test("buildFlowSearchQueries generates album-first and fallback track searches",
   assert.deepEqual(queries.slice(0, 3), [
     "Massive Attack Mezzanine",
     "Massive Attack Mezzanine 1998",
-    "Massive Attack Teardrop",
+    "Massive Attk Mezzanine",
   ]);
-  assert.ok(queries.includes("Massive Attk Mezzanine"));
+  assert.ok(queries.includes("Massive Attack Teardrop"));
   assert.ok(queries.includes("Massive Attk Teardrop"));
 });
 
@@ -65,6 +100,56 @@ test("buildFlowSearchQueries adds simplified variants for parenthetical and slas
   );
   assert.ok(slashQueries.includes("LOVING A long slow little wave"));
   assert.ok(slashQueries.includes("LOVING citizen, an activity"));
+});
+
+test("rankFlowSearchResults prefers the fitting album folder over a higher-scoring wrong-album file", () => {
+  const ranked = rankFlowSearchResults(
+    [
+      {
+        user: "wrongAlbumUser",
+        file: "Dashboard Confessional\\2001 The Places You Have Come to Fear the Most\\0101 - The Brilliant Dance (FLAC).flac",
+        size: 100,
+        slots: true,
+        bitrate: 900,
+        speed: 900000,
+      },
+      {
+        user: "rentalsUser",
+        file: "The Rentals\\Return Of The Rentals [1995]\\07 - The Rentals - Brilliant Boy.flac",
+        size: 100,
+        slots: true,
+        bitrate: 900,
+        speed: 700000,
+      },
+      {
+        user: "rentalsUser",
+        file: "The Rentals\\Return Of The Rentals [1995]\\01 - The Rentals - Warm.flac",
+        size: 100,
+        slots: true,
+        bitrate: 900,
+        speed: 700000,
+      },
+    ],
+    {
+      artistName: "The Rentals",
+      trackName: "Brilliant Boy",
+      albumName: "Return of the Rentals",
+      releaseYear: "1995",
+      artistAliases: [],
+      albumTrackCount: 2,
+      albumTrackTitles: ["Warm", "Brilliant Boy"],
+      trackNumber: 2,
+    },
+    {
+      preferredFormat: "flac",
+      strictFormat: false,
+    },
+  );
+
+  assert.ok(ranked.length > 0);
+  assert.match(ranked[0].raw.file, /Brilliant Boy\.flac$/);
+  assert.equal(ranked[0].releaseFolderFit, true);
+  assert.match(ranked[0].raw.file, /Return Of The Rentals/);
 });
 
 test("rankFlowSearchResults prefers album-matching directories with the target track", () => {
@@ -116,7 +201,7 @@ test("rankFlowSearchResults prefers album-matching directories with the target t
   assert.ok(ranked[0].score > ranked[ranked.length - 1].score);
 });
 
-test("rankFlowSearchResults prefers the intended track over another album track in a better-matched directory", () => {
+test("rankFlowSearchResults falls back to a valid track outside the album folder when the album folder lacks it", () => {
   const ranked = rankFlowSearchResults(
     [
       {
@@ -154,8 +239,9 @@ test("rankFlowSearchResults prefers the intended track over another album track 
 
   assert.ok(ranked.length > 0);
   assert.match(ranked[0].raw.file, /Correct Track\.mp3$/);
-  assert.ok(
-    ranked[0].score > ranked.find((entry) => /Other Song/.test(entry.raw.file)).score,
+  assert.equal(
+    ranked.some((entry) => /Other Song/.test(entry.raw.file)),
+    false,
   );
 });
 
