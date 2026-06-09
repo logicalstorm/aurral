@@ -482,6 +482,7 @@ const normalizeSharedPlaylist = (playlist) => {
         : null,
     sourceName: String(playlist?.sourceName || "").trim() || null,
     sourceFlowId: String(playlist?.sourceFlowId || "").trim() || null,
+    discoverPresetId: String(playlist?.discoverPresetId || "").trim() || null,
     importedAt:
       playlist?.importedAt != null &&
       Number.isFinite(Number(playlist.importedAt))
@@ -879,6 +880,7 @@ export const flowPlaylistConfig = {
     name,
     sourceName,
     sourceFlowId,
+    discoverPresetId = null,
     tracks = [],
     ownerUserId = null,
   }) {
@@ -890,6 +892,7 @@ export const flowPlaylistConfig = {
       ownerUserId,
       sourceName,
       sourceFlowId,
+      discoverPresetId,
       tracks,
       importedAt: Date.now(),
       createdAt: Date.now(),
@@ -928,6 +931,7 @@ export const flowPlaylistConfig = {
       name: nextName,
       sourceName: updates?.sourceName ?? current.sourceName,
       sourceFlowId: updates?.sourceFlowId ?? current.sourceFlowId,
+      discoverPresetId: updates?.discoverPresetId ?? current.discoverPresetId,
       tracks: Array.isArray(updates?.tracks) ? updates.tracks : current.tracks,
       importedAt: current.importedAt,
       createdAt: current.createdAt,

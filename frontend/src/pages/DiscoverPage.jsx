@@ -73,7 +73,7 @@ const DISCOVER_NEARBY_SHOWS_KEY = "discoverNearbyShows";
 
 const DEFAULT_DISCOVER_SECTIONS = [
   { id: "recentlyAdded", label: "Recently Added", enabled: true },
-  { id: "playlists", label: "Recommended Flows", enabled: true },
+  { id: "playlists", label: "Playlists for you", enabled: true },
   { id: "recommendedShows", label: "Shows Near You", enabled: true },
   { id: "recentReleases", label: "Recent Releases", enabled: true },
   { id: "recommended", label: "Recommended for You", enabled: true },
@@ -1140,7 +1140,8 @@ function DiscoverPage() {
     isUpdating,
     configured = true,
   } = data || {};
-  const [adoptedPlaylistIds, setAdoptedPlaylistIds] = useState({});
+  const [adoptedFlowIds, setAdoptedFlowIds] = useState({});
+  const [adoptedStaticPlaylistIds, setAdoptedStaticPlaylistIds] = useState({});
   const isListenBrainzFallback = provider === "listenbrainz-fallback";
 
   const nearbyShows = nearbyShowsData?.shows || [];
@@ -1153,16 +1154,26 @@ function DiscoverPage() {
       discoverPlaylists.map((playlist) => ({
         ...playlist,
         adoptedFlowId:
-          adoptedPlaylistIds[playlist.presetId] ||
-          playlist.adoptedFlowId ||
+          adoptedFlowIds[playlist.presetId] || playlist.adoptedFlowId || null,
+        adoptedPlaylistId:
+          adoptedStaticPlaylistIds[playlist.presetId] ||
+          playlist.adoptedPlaylistId ||
           null,
       })),
-    [adoptedPlaylistIds, discoverPlaylists],
+    [adoptedFlowIds, adoptedStaticPlaylistIds, discoverPlaylists],
   );
 
-  const handlePlaylistAdopted = useCallback((presetId, flowId) => {
+  const handleFlowAdopted = useCallback((presetId, flowId) => {
     if (!presetId || !flowId) return;
-    setAdoptedPlaylistIds((prev) => ({ ...prev, [presetId]: flowId }));
+    setAdoptedFlowIds((prev) => ({ ...prev, [presetId]: flowId }));
+  }, []);
+
+  const handleStaticPlaylistAdopted = useCallback((presetId, playlistId) => {
+    if (!presetId || !playlistId) return;
+    setAdoptedStaticPlaylistIds((prev) => ({
+      ...prev,
+      [presetId]: playlistId,
+    }));
   }, []);
 
   const sectionAvailability = useMemo(
@@ -1517,7 +1528,8 @@ function DiscoverPage() {
           playlists={displayDiscoverPlaylists}
           artworkVersion={lastUpdated}
           canAdopt={canAdoptPlaylist}
-          onAdopted={handlePlaylistAdopted}
+          onFlowAdopted={handleFlowAdopted}
+          onPlaylistAdopted={handleStaticPlaylistAdopted}
         />
       );
     }

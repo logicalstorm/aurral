@@ -4438,7 +4438,20 @@ textarea {
 .discover-playlist-toolbar__actions {
   display: flex;
   flex-shrink: 0;
-  align-items: center;
+  align-items: flex-start;
+}
+
+.discover-playlist-add-button {
+  width: 3rem;
+  height: 3rem;
+  min-width: 3rem;
+  padding: 0;
+  border-radius: var(--aurral-radius-round);
+}
+
+.discover-playlist-add-button .artist-icon-md {
+  width: 1.5rem;
+  height: 1.5rem;
 }
 
 .flow-page__tracks-toolbar-start--full {
