@@ -7034,6 +7034,32 @@ textarea {
   font-weight: 700;
 }
 
+.flow-page__library-item-title-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.flow-page__library-item-title-button:hover {
+  opacity: 0.85;
+}
+
+.flow-page__library-item-title-button:focus-visible {
+  outline: 2px solid var(--aurral-green);
+  outline-offset: 2px;
+}
+
+.flow-page__library-item-trailing {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.375rem;
+}
+
 .flow-page__library-item-meta {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -7065,6 +7091,20 @@ textarea {
 
 .flow-page__detail--hidden-mobile {
   display: none;
+}
+
+.flow-page__library-row {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.flow-page__library-inline-detail {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.75rem;
+  overflow-x: hidden;
 }
 
 .flow-page__detail-hero {
@@ -9107,6 +9147,154 @@ textarea {
   }
 }
 
+@media (max-width: 767px) {
+  .flow-page__shell {
+    min-height: 0;
+  }
+
+  .flow-page__library {
+    flex: none;
+  }
+
+  .flow-page__library-list {
+    flex: none;
+    gap: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+
+  .flow-page__library-row:not(.is-expanded) .flow-page__library-item {
+    margin-inline: 0.375rem;
+  }
+
+  .flow-page__library-row.is-expanded {
+    margin-inline: 0.375rem;
+    margin-bottom: 0.25rem;
+    overflow: hidden;
+    border-radius: var(--aurral-radius-sm);
+  }
+
+  .flow-page__library-row.is-expanded .flow-page__library-item {
+    margin-inline: 0;
+    margin-bottom: 0;
+    border-radius: 0;
+  }
+
+  .flow-page__library-item.is-expanded {
+    align-items: flex-start;
+  }
+
+  .flow-page__library-item.is-expanded .flow-page__library-item-trailing {
+    align-self: center;
+  }
+
+  .flow-page__library-inline-detail {
+    width: 100%;
+    min-width: 0;
+    padding-bottom: 0.75rem;
+    background: var(--aurral-surface-mid);
+    border-top: 1px solid var(--aurral-overlay);
+  }
+
+  .flow-page__library-inline-detail .flow-page__detail-tabs {
+    width: auto;
+    margin-inline: 0.625rem;
+    max-width: calc(100% - 1.25rem);
+  }
+
+  .flow-page__library-inline-detail .flow-page__detail-panel {
+    min-width: 0;
+  }
+
+  .flow-page__library-inline-detail .flow-page__tracks {
+    width: 100%;
+    min-width: 0;
+    border-radius: 0;
+  }
+
+  .flow-page__library-inline-detail .flow-page__tracks-body {
+    max-height: none;
+    overflow-x: hidden;
+  }
+
+  .flow-page__library-inline-detail .flow-page__tracks-table {
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  .flow-page__library-inline-detail .flow-page__tracks-table th:nth-child(4),
+  .flow-page__library-inline-detail .flow-page__tracks-table td:nth-child(4) {
+    display: none;
+  }
+
+  .flow-page__library-inline-detail .flow-page__tracks-table td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .flow-page__library-inline-detail .flow-page__tracks-table th:nth-child(2),
+  .flow-page__library-inline-detail .flow-page__tracks-table td:nth-child(2) {
+    width: 42%;
+  }
+
+  .flow-page__library-inline-detail .flow-page__tracks-table th:nth-child(3),
+  .flow-page__library-inline-detail .flow-page__tracks-table td:nth-child(3) {
+    width: 38%;
+  }
+
+  .flow-page__tracks-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .flow-page__track-menu-dropdown {
+    width: min(16rem, calc(100vw - 1.5rem));
+  }
+
+  .flow-page__track-menu-dropdown .artist-menu-submenu {
+    position: static;
+  }
+
+  .flow-page__track-menu-dropdown .artist-menu-submenu__panel {
+    position: static;
+    width: 100%;
+    margin-top: 0.125rem;
+    padding-top: 0.125rem;
+    background: transparent;
+    border-top: 1px solid var(--aurral-surface);
+  }
+
+  .flow-page__track-menu-dropdown
+    .artist-menu-submenu:hover
+    .artist-menu-submenu__panel,
+  .flow-page__track-menu-dropdown
+    .artist-menu-submenu:focus-within
+    .artist-menu-submenu__panel {
+    display: none;
+  }
+
+  .flow-page__track-menu-dropdown
+    .artist-menu-submenu.is-open
+    .artist-menu-submenu__panel {
+    display: block;
+  }
+
+  .flow-page__track-menu-dropdown
+    .artist-menu-submenu.is-open
+    .artist-menu-submenu__trigger {
+    background-color: var(--aurral-gray);
+    color: var(--aurral-white);
+  }
+
+  .flow-page__track-menu-dropdown
+    .artist-menu-submenu.is-open
+    .artist-menu-submenu__trigger
+    .artist-chevron--open {
+    transform: rotate(90deg);
+  }
+}
+
 @media (max-width: 639px) {
   .flow-page__card-main {
     cursor: pointer;
@@ -10094,19 +10282,57 @@ textarea {
 }
 
 @media (max-width: 767px) {
+  .app-content {
+    --global-player-mobile-height: 4.5rem;
+    --global-player-mobile-gap: 0.5rem;
+    --mobile-nav-height: 76px;
+  }
+
   .global-player {
     position: fixed;
     right: 0.5rem;
-    bottom: calc(76px + 0.5rem);
+    bottom: calc(var(--mobile-nav-height) + var(--global-player-mobile-gap));
     left: 0.5rem;
+    z-index: 38;
     margin-top: 0;
+    overflow: hidden;
   }
 
   .global-player__inner {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.75rem;
-    min-height: 4rem;
-    padding: 0.75rem 0.85rem 0.65rem;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "controls track side";
+    gap: 0.65rem;
+    min-height: var(--global-player-mobile-height);
+    padding: 0.7rem 0.85rem 0.65rem;
+  }
+
+  .global-player__track {
+    grid-area: track;
+    align-self: center;
+  }
+
+  .global-player__controls {
+    grid-area: controls;
+    justify-content: flex-start;
+    flex-shrink: 0;
+  }
+
+  .global-player__side {
+    grid-area: side;
+    flex-shrink: 0;
+  }
+
+  .global-player__title {
+    font-size: 0.875rem;
+  }
+
+  .global-player__subtitle {
+    font-size: 0.72rem;
+  }
+
+  .global-player__control--primary {
+    width: 2.35rem;
+    height: 2.35rem;
   }
 
   .global-player__volume,
@@ -10117,6 +10343,13 @@ textarea {
   }
 
   .app-content--player-active {
-    padding-bottom: calc(76px + 5.5rem);
+    padding-bottom: calc(
+      var(--mobile-nav-height) + var(--global-player-mobile-gap) +
+        var(--global-player-mobile-height) + 0.75rem
+    );
+  }
+
+  .app-main--player-active {
+    scroll-padding-bottom: 0.75rem;
   }
 }
