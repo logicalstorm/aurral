@@ -10,7 +10,7 @@ import {
   Trash2,
   RefreshCw,
 } from "lucide-react";
-import { getPopularityScale } from "../utils";
+import { getPopularityScale, isVisibleLibraryAlbum } from "../utils";
 import { TrackPlaylistMenu } from "./TrackPlaylistMenu";
 import { TrackPlayButton } from "./TrackPlayButton";
 import { ArtistTrackListToolbar } from "./ArtistTrackListToolbar";
@@ -56,18 +56,9 @@ export function ArtistDetailsLibraryAlbums({
   const [completionFilter, setCompletionFilter] = useState("all");
   const [activePlaylistTrackKey, setActivePlaylistTrackKey] = useState(null);
   const [dropdownPosition, setDropdownPosition] = useState(null);
-  const downloadedAlbums = libraryAlbums.filter((album) => {
-    if (String(album.id ?? "").startsWith("pending-")) return false;
-    return (
-      album.monitored ||
-      album.statistics?.percentOfTracks > 0 ||
-      album.statistics?.sizeOnDisk > 0 ||
-      downloadStatuses[album.id] ||
-      (requestingAlbum &&
-        (album.mbid === requestingAlbum ||
-          album.foreignAlbumId === requestingAlbum))
-    );
-  });
+  const downloadedAlbums = libraryAlbums.filter((album) =>
+    isVisibleLibraryAlbum(album, { requestingAlbum }),
+  );
 
   const releaseGroups = artist?.["release-groups"] || [];
   getPopularityScale(releaseGroups);
