@@ -4,9 +4,11 @@ import sharp from "sharp";
 
 import { importFromRepo } from "../helpers/backendTestHarness.js";
 
-const { renderStylizedPhotoArtwork } = await importFromRepo(
-  "backend/services/stylizedPhotoArtwork.js",
-);
+const {
+  PHOTO_ARTWORK_COLORS,
+  pickRandomPhotoArtworkPalette,
+  renderStylizedPhotoArtwork,
+} = await importFromRepo("backend/services/stylizedPhotoArtwork.js");
 
 test("renderStylizedPhotoArtwork returns a square JPEG cover", async () => {
   const sourceBuffer = await sharp({
@@ -23,7 +25,6 @@ test("renderStylizedPhotoArtwork returns a square JPEG cover", async () => {
   const output = await renderStylizedPhotoArtwork({
     imageBuffer: sourceBuffer,
     title: "Discover Weekly",
-    signature: "discover-weekly",
   });
 
   const metadata = await sharp(output).metadata();
@@ -31,4 +32,14 @@ test("renderStylizedPhotoArtwork returns a square JPEG cover", async () => {
   assert.equal(metadata.height, 1200);
   assert.equal(metadata.format, "jpeg");
   assert.ok(output.length > 10_000);
+});
+
+test("pickRandomPhotoArtworkPalette uses the configured distinct colors", () => {
+  const seen = new Set();
+  for (let index = 0; index < 40; index += 1) {
+    const palette = pickRandomPhotoArtworkPalette();
+    seen.add(`${palette.light.r},${palette.light.g},${palette.light.b}`);
+  }
+  assert.equal(PHOTO_ARTWORK_COLORS.length, 15);
+  assert.ok(seen.size > 1);
 });

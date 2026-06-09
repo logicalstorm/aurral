@@ -32,7 +32,7 @@ const defaultSettings = {
       discoveryPeriod: "1month",
       discoveryAutoRefreshHours: 168,
       discoveryRecommendationsPerRefresh: 200,
-      discoveryFlowsPerRefresh: 10,
+      discoveryFlowsPerRefresh: 9,
       discoveryMode: "balanced",
     },
     slskd: {

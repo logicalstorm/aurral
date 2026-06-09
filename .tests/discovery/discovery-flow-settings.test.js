@@ -26,8 +26,8 @@ test.after(async () => {
 
 test("discovery flow settings use defaults when unset", () => {
   assert.equal(getDiscoveryRecommendationsPerRefresh(), 200);
-  assert.equal(getDiscoveryFlowsPerRefresh(), 10);
-  assert.equal(getMaxFocusPlaylists(), 5);
+  assert.equal(getDiscoveryFlowsPerRefresh(), 9);
+  assert.equal(getMaxFocusPlaylists(), 4);
 });
 
 test("discovery flow settings clamp configured values", () => {
