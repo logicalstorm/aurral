@@ -1,6 +1,11 @@
 import { dbOps, userOps } from "../config/db-helpers.js";
 import { GENRE_KEYWORDS } from "../config/constants.js";
 import {
+  BASE_DISCOVER_FLOW_COUNT,
+  DISCOVERY_FLOWS_DEFAULT,
+  DISCOVERY_FLOWS_MAX,
+} from "../config/discoverPlaylistPresets.js";
+import {
   lastfmRequest,
   listenbrainzRequest,
   getLastfmApiKey,
@@ -86,9 +91,38 @@ export const getDiscoveryAutoRefreshHours = () => {
   return [24, 168, 720].includes(parsed) ? parsed : 168;
 };
 
+const DISCOVERY_RECOMMENDATIONS_MIN = 50;
+const DISCOVERY_RECOMMENDATIONS_MAX = 500;
+const DISCOVERY_RECOMMENDATIONS_DEFAULT = 200;
+
 export const getDiscoveryRecommendationsPerRefresh = () => {
-  return 200;
+  const settings = dbOps.getSettings();
+  const parsed = parseInt(
+    settings.integrations?.lastfm?.discoveryRecommendationsPerRefresh,
+    10,
+  );
+  if (!Number.isFinite(parsed)) return DISCOVERY_RECOMMENDATIONS_DEFAULT;
+  return Math.min(
+    DISCOVERY_RECOMMENDATIONS_MAX,
+    Math.max(DISCOVERY_RECOMMENDATIONS_MIN, parsed),
+  );
 };
+
+export const getDiscoveryFlowsPerRefresh = () => {
+  const settings = dbOps.getSettings();
+  const parsed = parseInt(
+    settings.integrations?.lastfm?.discoveryFlowsPerRefresh,
+    10,
+  );
+  if (!Number.isFinite(parsed)) return DISCOVERY_FLOWS_DEFAULT;
+  return Math.min(
+    DISCOVERY_FLOWS_MAX,
+    Math.max(BASE_DISCOVER_FLOW_COUNT, parsed),
+  );
+};
+
+export const getMaxFocusPlaylists = () =>
+  Math.max(0, getDiscoveryFlowsPerRefresh() - BASE_DISCOVER_FLOW_COUNT);
 
 export const getDiscoveryMode = () => {
   const settings = dbOps.getSettings();
@@ -1238,6 +1272,10 @@ export const updateDiscoveryCache = async (options = {}) => {
         topGenres: discoveryData.topGenres,
         topTags: discoveryData.topTags,
         recommendations: discoveryData.recommendations,
+        historyTopArtists: historyArtists
+          .slice(0, 3)
+          .map((artist) => artist.artistName)
+          .filter(Boolean),
         onProgress: ({ completed, total }) => {
           const pct =
             total > 0 ? 92 + Math.round((completed / total) * 4) : 92;
@@ -1479,6 +1517,10 @@ export const updateUserDiscoveryCache = async (listenHistoryProfile) => {
       topGenres: userData.topGenres,
       topTags: userData.topTags,
       recommendations: recommendationsArray,
+      historyTopArtists: tasteProfile.historySeeds
+        .slice(0, 3)
+        .map((artist) => artist.artistName)
+        .filter(Boolean),
     });
 
     dbOps.updateDiscoveryCache(userData, cacheNamespace);

@@ -19,6 +19,19 @@ export const normalizeSettings = (savedSettings) => {
   )
     ? parsedAutoRefreshHours
     : 168;
+  const parsedRecommendationsPerRefresh = parseInt(
+    lastfm.discoveryRecommendationsPerRefresh,
+    10,
+  );
+  const normalizedRecommendationsPerRefresh = Number.isFinite(
+    parsedRecommendationsPerRefresh,
+  )
+    ? Math.min(500, Math.max(50, parsedRecommendationsPerRefresh))
+    : 200;
+  const parsedFlowsPerRefresh = parseInt(lastfm.discoveryFlowsPerRefresh, 10);
+  const normalizedFlowsPerRefresh = Number.isFinite(parsedFlowsPerRefresh)
+    ? Math.min(32, Math.max(4, parsedFlowsPerRefresh))
+    : 12;
   return {
     ...savedSettings,
     releaseTypes: savedSettings.releaseTypes || allReleaseTypes,
@@ -59,7 +72,8 @@ export const normalizeSettings = (savedSettings) => {
         username: "",
         discoveryPeriod: "1month",
         discoveryAutoRefreshHours: normalizedAutoRefreshHours,
-        discoveryRecommendationsPerRefresh: 200,
+        discoveryRecommendationsPerRefresh: normalizedRecommendationsPerRefresh,
+        discoveryFlowsPerRefresh: normalizedFlowsPerRefresh,
         discoveryMode:
           lastfm.discoveryMode === "safer" || lastfm.discoveryMode === "deeper"
             ? lastfm.discoveryMode
