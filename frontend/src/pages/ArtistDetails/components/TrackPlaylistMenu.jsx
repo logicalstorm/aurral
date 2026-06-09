@@ -95,25 +95,43 @@ export function TrackPlaylistSubmenu({
   excludedPlaylistIds = [],
   onSelect,
   onClose,
+  toggleOnClick = false,
+  isOpen = false,
+  onToggle,
 }) {
   const handleSelect = async (target) => {
     await onSelect?.(target);
     onClose?.();
   };
 
+  const handleTriggerClick = (event) => {
+    event.stopPropagation();
+    if (toggleOnClick) {
+      onToggle?.();
+    }
+  };
+
   return (
-    <div className="artist-menu-submenu">
-      <div
+    <div
+      className={`artist-menu-submenu${toggleOnClick && isOpen ? " is-open" : ""}`}
+    >
+      <button
+        type="button"
         className="artist-menu-item artist-menu-submenu__trigger"
         role="menuitem"
-        tabIndex={0}
+        tabIndex={toggleOnClick ? undefined : 0}
+        aria-expanded={toggleOnClick ? isOpen : undefined}
+        onClick={toggleOnClick ? handleTriggerClick : undefined}
       >
         <span className="artist-menu-item__main">
           <Icon className="artist-icon-sm" />
           {label}
         </span>
-        <ChevronRight className="artist-icon-sm" aria-hidden="true" />
-      </div>
+        <ChevronRight
+          className={`artist-icon-sm${toggleOnClick && isOpen ? " artist-chevron--open" : ""}`}
+          aria-hidden="true"
+        />
+      </button>
       <div className="artist-menu-submenu__panel">
         <TrackPlaylistPickerContent
           playlists={playlists}
@@ -303,6 +321,9 @@ TrackPlaylistSubmenu.propTypes = {
   excludedPlaylistIds: PropTypes.array,
   onSelect: PropTypes.func,
   onClose: PropTypes.func,
+  toggleOnClick: PropTypes.bool,
+  isOpen: PropTypes.bool,
+  onToggle: PropTypes.func,
 };
 
 TrackPlaylistMenu.propTypes = {

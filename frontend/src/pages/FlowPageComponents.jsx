@@ -893,14 +893,18 @@ function FlowTrackKebabMenu({
   playlistMenuProps = null,
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [openSubmenu, setOpenSubmenu] = useState(null);
   const [menuPosition, setMenuPosition] = useState(null);
   const menuRef = useRef(null);
   const triggerRef = useRef(null);
+  const onLoadPlaylistsRef = useRef(playlistMenuProps?.onLoadPlaylists);
+  onLoadPlaylistsRef.current = playlistMenuProps?.onLoadPlaylists;
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
         setIsOpen(false);
+        setOpenSubmenu(null);
         setMenuPosition(null);
       }
     };
@@ -912,11 +916,12 @@ function FlowTrackKebabMenu({
 
   useEffect(() => {
     if (!isOpen) return;
-    playlistMenuProps?.onLoadPlaylists?.();
-  }, [isOpen, playlistMenuProps]);
+    onLoadPlaylistsRef.current?.();
+  }, [isOpen]);
 
   const close = () => {
     setIsOpen(false);
+    setOpenSubmenu(null);
     setMenuPosition(null);
   };
   const trackLabel = track?.trackName || "track";
@@ -1008,6 +1013,13 @@ function FlowTrackKebabMenu({
                 excludedPlaylistIds={playlistMenuProps.excludedPlaylistIds}
                 onSelect={playlistMenuProps.onAddTrackToPlaylist}
                 onClose={close}
+                toggleOnClick
+                isOpen={openSubmenu === "add"}
+                onToggle={() =>
+                  setOpenSubmenu((current) =>
+                    current === "add" ? null : "add",
+                  )
+                }
               />
             ) : null}
             {playlistMenuProps?.onMoveTrackToPlaylist ? (
@@ -1022,6 +1034,13 @@ function FlowTrackKebabMenu({
                 excludedPlaylistIds={playlistMenuProps.excludedPlaylistIds}
                 onSelect={playlistMenuProps.onMoveTrackToPlaylist}
                 onClose={close}
+                toggleOnClick
+                isOpen={openSubmenu === "move"}
+                onToggle={() =>
+                  setOpenSubmenu((current) =>
+                    current === "move" ? null : "move",
+                  )
+                }
               />
             ) : null}
             {canDelete ? (

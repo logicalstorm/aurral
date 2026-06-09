@@ -8,7 +8,6 @@ import {
 import { createPortal } from "react-dom";
 import {
   ArrowRight,
-  ChevronLeft,
   Clock,
   ExternalLink,
   ListMusic,
@@ -281,11 +280,14 @@ export function PlaylistLibraryItem({
   entry,
   artworkUrl,
   isActive,
+  expanded = false,
   stats,
   activityHint = null,
   collapsed = false,
   onSelect,
   onArtworkClick,
+  onTitleClick,
+  trailing = null,
 }) {
   const trackCount =
     entry.kind === "flow"
@@ -301,10 +303,11 @@ export function PlaylistLibraryItem({
 
   return (
     <div
-      className={`flow-page__library-item${isActive ? " is-active" : ""}`}
+      className={`flow-page__library-item${isActive ? " is-active" : ""}${expanded ? " is-expanded" : ""}`}
       role="button"
       tabIndex={0}
       aria-current={isActive ? "true" : undefined}
+      aria-expanded={expanded ? "true" : undefined}
       aria-label={collapsed ? entry.name : undefined}
       title={collapsed ? entry.name : undefined}
       onClick={() => onSelect?.(entry)}
@@ -347,13 +350,35 @@ export function PlaylistLibraryItem({
             </span>
           ) : null}
         </div>
-        <span className="flow-page__library-item-title" title={entry.name}>
-          {entry.name}
-        </span>
+        {onTitleClick ? (
+          <button
+            type="button"
+            className="flow-page__library-item-title flow-page__library-item-title-button"
+            title={entry.name}
+            onClick={(event) => {
+              event.stopPropagation();
+              onTitleClick(entry);
+            }}
+          >
+            {entry.name}
+          </button>
+        ) : (
+          <span className="flow-page__library-item-title" title={entry.name}>
+            {entry.name}
+          </span>
+        )}
         <span className="flow-page__library-item-meta" title={trackLabel}>
           {trackLabel}
         </span>
       </div>
+      {trailing ? (
+        <div
+          className="flow-page__library-item-trailing"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {trailing}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -422,8 +447,6 @@ export function PlaylistDetailHero({
   enabled,
   togglingId,
   onToggleEnabled,
-  onBack,
-  showBack,
   onRenameTitle,
   onArtworkClick,
   primaryActions,
@@ -438,17 +461,6 @@ export function PlaylistDetailHero({
 
   return (
     <div className="flow-page__detail-hero">
-      {showBack ? (
-        <button
-          type="button"
-          className="flow-page__detail-back btn btn-secondary btn-sm"
-          onClick={onBack}
-          aria-label="Back to library"
-        >
-          <ChevronLeft className="artist-icon-sm" />
-          Library
-        </button>
-      ) : null}
       <div className="flow-page__detail-hero-main">
         <div className="flow-page__detail-hero-copy">
           <PlaylistArtworkThumb

@@ -100,24 +100,29 @@ function Layout({ children, appVersion }) {
     [location.pathname],
   );
 
-  const mobilePrimaryItems = useMemo(
-    () => [
+  const mobilePrimaryItems = useMemo(() => {
+    const items = [
       { path: "/discover", label: "Discover", icon: Sparkles },
       { path: "/library", label: "Library", icon: Library },
-      { path: "/history", label: "History", icon: History },
-    ],
-    [],
-  );
-
-  const mobileOverflowItems = useMemo(() => {
-    const items = [
-      { path: "/shows", label: "Shows", icon: Ticket },
       {
         path: "/playlists",
         label: "Playlists",
         icon: AudioWaveform,
         permission: "accessFlow",
       },
+    ];
+    return items.filter(
+      (item) =>
+        !item.permission ||
+        user?.role === "admin" ||
+        !!user?.permissions?.[item.permission],
+    );
+  }, [user]);
+
+  const mobileOverflowItems = useMemo(() => {
+    const items = [
+      { path: "/shows", label: "Shows", icon: Ticket },
+      { path: "/history", label: "History", icon: History },
       { path: "/profile", label: "Profile", icon: User },
       {
         path: "/settings",
