@@ -508,15 +508,23 @@ export async function generateDiscoverPlaylists({
 
 export function annotateDiscoverPlaylistsForUser(playlists, user) {
   const flows = flowPlaylistConfig.getFlowsForUser(user);
-  const adoptedByPresetId = new Map();
+  const adoptedFlowByPresetId = new Map();
   for (const flow of flows) {
     const presetId = String(flow?.discoverPresetId || "").trim();
     if (!presetId) continue;
-    adoptedByPresetId.set(presetId, flow.id);
+    adoptedFlowByPresetId.set(presetId, flow.id);
+  }
+  const adoptedPlaylistByPresetId = new Map();
+  for (const playlist of flowPlaylistConfig.getSharedPlaylistsForUser(user)) {
+    const presetId = String(playlist?.discoverPresetId || "").trim();
+    if (!presetId) continue;
+    adoptedPlaylistByPresetId.set(presetId, playlist.id);
   }
   return (Array.isArray(playlists) ? playlists : []).map((playlist) => ({
     ...playlist,
-    adoptedFlowId: adoptedByPresetId.get(playlist.presetId) || null,
+    adoptedFlowId: adoptedFlowByPresetId.get(playlist.presetId) || null,
+    adoptedPlaylistId:
+      adoptedPlaylistByPresetId.get(playlist.presetId) || null,
   }));
 }
 

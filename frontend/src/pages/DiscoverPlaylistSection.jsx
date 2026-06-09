@@ -5,13 +5,14 @@ import {
   CheckCircle,
   Crosshair,
   ListMusic,
-  Loader2,
   Sparkles,
 } from "lucide-react";
+import { DiscoverPlaylistContextMenu } from "../components/DiscoverPlaylistContextMenu";
 import { DiscoverRail } from "../components/DiscoverRail";
 import { FlowTracksPanel } from "./FlowPageComponents";
 import {
-  adoptDiscoverPlaylist,
+  adoptDiscoverPlaylistAsFlow,
+  adoptDiscoverPlaylistAsStatic,
   addSharedPlaylistTracks,
   createSharedPlaylist,
   getDiscoverArtworkUrl,
@@ -117,10 +118,12 @@ export function DiscoverPlaylistSection({
   playlists = [],
   artworkVersion = null,
   canAdopt = false,
-  onAdopted,
+  onFlowAdopted,
+  onPlaylistAdopted,
 }) {
   const [expandedId, setExpandedId] = useState(null);
-  const [adoptingId, setAdoptingId] = useState(null);
+  const [adoptingFlowId, setAdoptingFlowId] = useState(null);
+  const [adoptingPlaylistId, setAdoptingPlaylistId] = useState(null);
   const [failedArtworkIds, setFailedArtworkIds] = useState({});
   const [sharedPlaylists, setSharedPlaylists] = useState([]);
   const [playlistsLoading, setPlaylistsLoading] = useState(false);
@@ -243,23 +246,23 @@ export function DiscoverPlaylistSection({
     [navigate],
   );
 
-  const handleAdopt = useCallback(
-    async (playlist, openExisting) => {
-      if (openExisting && playlist.adoptedFlowId) {
+  const handleAdoptFlow = useCallback(
+    async (playlist) => {
+      if (playlist.adoptedFlowId) {
         navigate(
           `/playlists?selected=${encodeURIComponent(playlist.adoptedFlowId)}`,
         );
         return;
       }
-      setAdoptingId(playlist.presetId);
+      setAdoptingFlowId(playlist.presetId);
       try {
-        const result = await adoptDiscoverPlaylist(playlist.presetId);
+        const result = await adoptDiscoverPlaylistAsFlow(playlist.presetId);
         const flowId = result?.flowId;
-        onAdopted?.(playlist.presetId, flowId);
+        onFlowAdopted?.(playlist.presetId, flowId);
         showSuccess(
           result?.alreadyAdopted
             ? `Opened ${playlist.name}`
-            : `Added ${playlist.name} and started downloads`,
+            : `Added ${playlist.name} as a rotating flow`,
         );
         if (flowId) {
           navigate(`/playlists?selected=${encodeURIComponent(flowId)}`);
@@ -269,13 +272,48 @@ export function DiscoverPlaylistSection({
           error.response?.data?.message ||
             error.response?.data?.error ||
             error.message ||
-            "Failed to add playlist flow",
+            "Failed to add rotating flow",
         );
       } finally {
-        setAdoptingId(null);
+        setAdoptingFlowId(null);
       }
     },
-    [navigate, onAdopted, showError, showSuccess],
+    [navigate, onFlowAdopted, showError, showSuccess],
+  );
+
+  const handleAdoptPlaylist = useCallback(
+    async (playlist) => {
+      if (playlist.adoptedPlaylistId) {
+        navigate(
+          `/playlists?selected=${encodeURIComponent(playlist.adoptedPlaylistId)}`,
+        );
+        return;
+      }
+      setAdoptingPlaylistId(playlist.presetId);
+      try {
+        const result = await adoptDiscoverPlaylistAsStatic(playlist.presetId);
+        const playlistId = result?.playlistId;
+        onPlaylistAdopted?.(playlist.presetId, playlistId);
+        showSuccess(
+          result?.alreadyAdopted
+            ? `Opened ${playlist.name}`
+            : `Added ${playlist.name} as a static playlist`,
+        );
+        if (playlistId) {
+          navigate(`/playlists?selected=${encodeURIComponent(playlistId)}`);
+        }
+      } catch (error) {
+        showError(
+          error.response?.data?.message ||
+            error.response?.data?.error ||
+            error.message ||
+            "Failed to add static playlist",
+        );
+      } finally {
+        setAdoptingPlaylistId(null);
+      }
+    },
+    [navigate, onPlaylistAdopted, showError, showSuccess],
   );
 
   if (visiblePlaylists.length === 0) {
@@ -336,41 +374,22 @@ export function DiscoverPlaylistSection({
           </div>
         )}
       </div>
-      {canAdopt ? (
-        <div className="discover-playlist-toolbar__actions">
-          {expandedPlaylist.adoptedFlowId ? (
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => handleAdopt(expandedPlaylist, true)}
-            >
-              Open flow
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={adoptingId === expandedPlaylist.presetId}
-              onClick={() => handleAdopt(expandedPlaylist, false)}
-            >
-              {adoptingId === expandedPlaylist.presetId ? (
-                <>
-                  <Loader2 className="artist-icon-sm animate-spin" />
-                  Adding flow...
-                </>
-              ) : (
-                "Add flow & download"
-              )}
-            </button>
-          )}
-        </div>
-      ) : null}
+      <DiscoverPlaylistContextMenu
+        playlist={expandedPlaylist}
+        canAdopt={canAdopt}
+        adoptingFlowId={adoptingFlowId}
+        adoptingPlaylistId={adoptingPlaylistId}
+        onAdoptFlow={handleAdoptFlow}
+        onAdoptPlaylist={handleAdoptPlaylist}
+        triggerVariant="add"
+        className="discover-playlist-toolbar__actions"
+      />
     </div>
   ) : null;
 
   return (
     <DiscoverRail
-      title="Recommended Flows"
+      title="Playlists for you"
       footer={
         expandedPlaylist ? (
           <div className="discover-playlist-expanded">
@@ -404,15 +423,14 @@ export function DiscoverPlaylistSection({
           !failedArtworkIds[playlist.presetId];
 
         return (
-          <div
-            key={playlist.presetId}
-            className="artist-discover-shelf-card"
-          >
-            <article
+          <div key={playlist.presetId} className="artist-discover-shelf-card">
+            <div
               className={`artist-discover-card${isExpanded ? " is-expanded" : ""}`}
-              onClick={() => handleToggle(playlist.presetId)}
             >
-              <div className="artist-discover-card__cover">
+              <div
+                className="artist-discover-card__cover"
+                onClick={() => handleToggle(playlist.presetId)}
+              >
                 {showArtwork ? (
                   <img
                     src={getDiscoverArtworkUrl(
@@ -441,13 +459,20 @@ export function DiscoverPlaylistSection({
                     <h3
                       className="artist-card-title--discover"
                       title={playlist.name}
+                      onClick={() => handleToggle(playlist.presetId)}
                     >
                       {playlist.name}
                     </h3>
                     {playlist.adoptedFlowId ? (
                       <CheckCircle
                         className="artist-library-check--discover"
-                        title="Added to flows"
+                        title="Added as rotating flow"
+                      />
+                    ) : null}
+                    {playlist.adoptedPlaylistId ? (
+                      <CheckCircle
+                        className="artist-library-check--discover"
+                        title="Added as static playlist"
                       />
                     ) : null}
                   </div>
@@ -460,8 +485,17 @@ export function DiscoverPlaylistSection({
                     </p>
                   ) : null}
                 </div>
+                <DiscoverPlaylistContextMenu
+                  playlist={playlist}
+                  canAdopt={canAdopt}
+                  adoptingFlowId={adoptingFlowId}
+                  adoptingPlaylistId={adoptingPlaylistId}
+                  onAdoptFlow={handleAdoptFlow}
+                  onAdoptPlaylist={handleAdoptPlaylist}
+                  triggerVariant="icon"
+                />
               </div>
-            </article>
+            </div>
           </div>
         );
       })}
@@ -473,5 +507,6 @@ DiscoverPlaylistSection.propTypes = {
   playlists: PropTypes.arrayOf(PropTypes.object),
   artworkVersion: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   canAdopt: PropTypes.bool,
-  onAdopted: PropTypes.func,
+  onFlowAdopted: PropTypes.func,
+  onPlaylistAdopted: PropTypes.func,
 };

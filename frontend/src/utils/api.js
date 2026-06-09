@@ -748,8 +748,15 @@ export const getDiscovery = async (cacheBust = false) => {
   return response.data;
 };
 
-export const adoptDiscoverPlaylist = async (presetId) => {
+export const adoptDiscoverPlaylistAsFlow = async (presetId) => {
   const response = await api.post("/discover/playlists/adopt", { presetId });
+  return response.data;
+};
+
+export const adoptDiscoverPlaylistAsStatic = async (presetId) => {
+  const response = await api.post("/discover/playlists/adopt-playlist", {
+    presetId,
+  });
   return response.data;
 };
 
