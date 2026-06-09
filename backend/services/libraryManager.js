@@ -17,7 +17,6 @@ const PLAYBACK_QUEUE_CACHE_TTL_MS = 120000;
 let lidarrClient = null;
 let _cachedArtists = [];
 let _lastLidarrFailureAt = 0;
-let _retryTimeoutId = null;
 let _lastFullArtistFetchAt = 0;
 const _tracksCache = new Map();
 let _playbackQueueCache = null;
@@ -116,12 +115,12 @@ async function getLidarrClient() {
   return lidarrClient;
 }
 
-function scheduleLidarrRetry(instance) {
-  if (_retryTimeoutId) return;
-  _retryTimeoutId = setTimeout(() => {
-    _retryTimeoutId = null;
-    instance.getAllArtists().catch(() => {});
-  }, LIDARR_RETRY_MS);
+function scheduleLidarrRetry() {
+  import("./honkerDb.js")
+    .then(({ enqueueSystemTaskJob }) => {
+      enqueueSystemTaskJob({ kind: "lidarr-retry" }, { delaySeconds: 60 });
+    })
+    .catch(() => {});
 }
 
 export function getCachedArtistCount() {
@@ -782,7 +781,7 @@ export class LibraryManager {
         _lastLidarrFailureAt &&
         Date.now() - _lastLidarrFailureAt < LIDARR_RETRY_MS
       ) {
-        scheduleLidarrRetry(this);
+        scheduleLidarrRetry();
         return _cachedArtists;
       }
       try {
@@ -796,7 +795,7 @@ export class LibraryManager {
       } catch (error) {
         const wasHealthy = _lastLidarrFailureAt === 0;
         _lastLidarrFailureAt = Date.now();
-        scheduleLidarrRetry(this);
+        scheduleLidarrRetry();
         if (wasHealthy) {
           const msg = (error && error.message) || String(error);
           console.warn(
@@ -824,7 +823,7 @@ export class LibraryManager {
         _lastLidarrFailureAt &&
         Date.now() - _lastLidarrFailureAt < LIDARR_RETRY_MS
       ) {
-        scheduleLidarrRetry(this);
+        scheduleLidarrRetry();
         return Array.isArray(_cachedArtists)
           ? _cachedArtists.slice(0, limit)
           : [];

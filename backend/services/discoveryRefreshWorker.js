@@ -31,7 +31,7 @@ async function runDiscoveryRefresh(payload) {
     );
   }
 
-  await updateDiscoveryCache({ skipBusyGuard: true });
+  await updateDiscoveryCache();
 }
 
 async function runLoop() {
