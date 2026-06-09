@@ -543,6 +543,39 @@ const hasListeningHistoryUsers = () =>
 
 const pendingUserDiscoveryProfiles = new Map();
 
+const collectListeningHistoryRefreshProfiles = () => {
+  const profiles = new Map();
+  for (const user of userOps.getAllListeningHistoryUsers()) {
+    const profile = getListenHistoryProfile(user);
+    const cacheNamespace = getListenHistoryCacheNamespace(profile);
+    if (!cacheNamespace || !hasListenHistoryProfile(profile)) continue;
+    profiles.set(cacheNamespace, profile);
+  }
+  for (const [cacheNamespace, profile] of pendingUserDiscoveryProfiles) {
+    profiles.set(cacheNamespace, profile);
+  }
+  pendingUserDiscoveryProfiles.clear();
+  return [...profiles.values()];
+};
+
+const refreshListeningHistoryUserCaches = async ({ onProgress } = {}) => {
+  const profiles = collectListeningHistoryRefreshProfiles();
+  if (profiles.length === 0) return;
+
+  let completed = 0;
+  for (const profile of profiles) {
+    try {
+      await updateUserDiscoveryCache(profile, { duringGlobalRefresh: true });
+    } catch (error) {
+      console.error(
+        `[Discovery] Per-user refresh failed for ${profile.listenHistoryProvider}:${profile.listenHistoryUsername}: ${error.message}`,
+      );
+    }
+    completed += 1;
+    onProgress?.({ completed, total: profiles.length });
+  }
+};
+
 const flushPendingUserDiscoveryRefreshes = async () => {
   if (pendingUserDiscoveryProfiles.size === 0) return;
   const profiles = [...pendingUserDiscoveryProfiles.values()];
@@ -1259,12 +1292,23 @@ export const updateDiscoveryCache = async (options = {}) => {
       delayMs: 50,
     });
 
-    if (!listeningHistoryUsersConfigured) {
-      emitDiscoveryProgress(
-        "generating_playlists",
-        "Building discover playlists",
-        92,
-      );
+    emitDiscoveryProgress(
+      "generating_playlists",
+      "Building discover playlists",
+      92,
+    );
+    if (listeningHistoryUsersConfigured) {
+      await refreshListeningHistoryUserCaches({
+        onProgress: ({ completed, total }) => {
+          const pct = total > 0 ? 92 + Math.round((completed / total) * 4) : 92;
+          emitDiscoveryProgress(
+            "generating_playlists",
+            `Building discover playlists (${completed}/${total})`,
+            pct,
+          );
+        },
+      });
+    } else {
       const { generateDiscoverPlaylists } =
         await import("./discoverPlaylistService.js");
       discoveryData.discoverPlaylists = await generateDiscoverPlaylists({
@@ -1362,33 +1406,49 @@ export const updateDiscoveryCache = async (options = {}) => {
       )
       .catch(() => {});
   } finally {
-    discoveryCache.isUpdating = false;
-    clearDiscoveryUpdateProgress();
-    flushPendingUserDiscoveryRefreshes().catch((error) => {
+    try {
+      await flushPendingUserDiscoveryRefreshes();
+    } catch (error) {
       console.error(
         `[Discovery] Failed to flush deferred per-user refreshes: ${error.message}`,
       );
-    });
+    }
+    discoveryCache.isUpdating = false;
+    clearDiscoveryUpdateProgress();
   }
 };
 
 const userDiscoveryLocks = new Set();
 
-export const updateUserDiscoveryCache = async (listenHistoryProfile) => {
+export const updateUserDiscoveryCache = async (
+  listenHistoryProfile,
+  options = {},
+) => {
+  const { duringGlobalRefresh = false } = options;
   const profile = getListenHistoryProfile(listenHistoryProfile);
   const cacheNamespace = getListenHistoryCacheNamespace(profile);
   if (!cacheNamespace) return null;
   if (!getLastfmApiKey()) return null;
-  if (isGlobalDiscoveryRefreshInProgress()) {
+  if (!duringGlobalRefresh && isGlobalDiscoveryRefreshInProgress()) {
     pendingUserDiscoveryProfiles.set(cacheNamespace, profile);
     return { skipped: true, reason: "global_refresh_in_progress" };
   }
   if (userDiscoveryLocks.has(cacheNamespace)) return null;
 
+  const shouldPublishRefreshState = !duringGlobalRefresh;
   userDiscoveryLocks.add(cacheNamespace);
   console.log(
     `[Discovery] Starting per-user refresh for ${profile.listenHistoryProvider} user ${profile.listenHistoryUsername}...`,
   );
+
+  if (shouldPublishRefreshState) {
+    discoveryCache.isUpdating = true;
+    emitDiscoveryProgress(
+      "generating_playlists",
+      "Building discover playlists",
+      92,
+    );
+  }
 
   try {
     const [recentLibraryArtistsRaw, allLibraryArtistsRaw] = await Promise.all([
@@ -1520,19 +1580,53 @@ export const updateUserDiscoveryCache = async (listenHistoryProfile) => {
         .slice(0, 3)
         .map((artist) => artist.artistName)
         .filter(Boolean),
+      onProgress: shouldPublishRefreshState
+        ? ({ completed, total }) => {
+            const pct =
+              total > 0 ? 92 + Math.round((completed / total) * 4) : 92;
+            emitDiscoveryProgress(
+              "generating_playlists",
+              `Building discover playlists (${completed}/${total})`,
+              pct,
+            );
+          }
+        : undefined,
     });
 
     dbOps.updateDiscoveryCache(userData, cacheNamespace);
     console.log(
       `[Discovery] ${profile.listenHistoryProvider}:${profile.listenHistoryUsername} refresh complete: ${recommendationsArray.length} recommendations, ${topGenres.length} genres.`,
     );
+    if (shouldPublishRefreshState) {
+      websocketService.emitDiscoveryUpdate({
+        isUpdating: false,
+        configured: true,
+        phase: "completed",
+        progress: 100,
+        progressMessage: "Discovery refresh completed",
+      });
+    }
     return userData;
   } catch (error) {
     console.error(
       `[Discovery] Failed to update cache for ${profile.listenHistoryProvider}:${profile.listenHistoryUsername}: ${error.message}`,
     );
+    if (shouldPublishRefreshState) {
+      websocketService.emitDiscoveryUpdate({
+        isUpdating: false,
+        configured: true,
+        phase: "error",
+        progress: 100,
+        progressMessage: "Discovery refresh failed",
+        error: error.message,
+      });
+    }
     return null;
   } finally {
+    if (shouldPublishRefreshState) {
+      discoveryCache.isUpdating = false;
+      clearDiscoveryUpdateProgress();
+    }
     userDiscoveryLocks.delete(cacheNamespace);
   }
 };
