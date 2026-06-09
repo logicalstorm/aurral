@@ -14,6 +14,7 @@ import {
   adoptDiscoverPlaylist,
   addSharedPlaylistTracks,
   createSharedPlaylist,
+  getDiscoverArtworkUrl,
   getFlowStatus,
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
@@ -114,11 +115,13 @@ const formatRecipeMeta = (playlist) => {
 
 export function DiscoverPlaylistSection({
   playlists = [],
+  artworkVersion = null,
   canAdopt = false,
   onAdopted,
 }) {
   const [expandedId, setExpandedId] = useState(null);
   const [adoptingId, setAdoptingId] = useState(null);
+  const [failedArtworkIds, setFailedArtworkIds] = useState({});
   const [sharedPlaylists, setSharedPlaylists] = useState([]);
   const [playlistsLoading, setPlaylistsLoading] = useState(false);
   const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
@@ -396,6 +399,9 @@ export function DiscoverPlaylistSection({
         const CoverIcon = getPlaylistCoverIcon(playlist);
         const sourceLine = getPlaylistSourceLine(playlist);
         const isExpanded = expandedId === playlist.presetId;
+        const showArtwork =
+          playlist.hasArtwork !== false &&
+          !failedArtworkIds[playlist.presetId];
 
         return (
           <div
@@ -407,9 +413,27 @@ export function DiscoverPlaylistSection({
               onClick={() => handleToggle(playlist.presetId)}
             >
               <div className="artist-discover-card__cover">
-                <div className="artist-media-placeholder--discover">
-                  <CoverIcon className="artist-icon-lg" />
-                </div>
+                {showArtwork ? (
+                  <img
+                    src={getDiscoverArtworkUrl(
+                      playlist.presetId,
+                      artworkVersion,
+                    )}
+                    alt=""
+                    className="artist-discover-card__image"
+                    loading="lazy"
+                    onError={() =>
+                      setFailedArtworkIds((current) => ({
+                        ...current,
+                        [playlist.presetId]: true,
+                      }))
+                    }
+                  />
+                ) : (
+                  <div className="artist-media-placeholder--discover">
+                    <CoverIcon className="artist-icon-lg" />
+                  </div>
+                )}
               </div>
               <div className="artist-discover-card__content">
                 <div className="artist-discover-card__text">
@@ -447,6 +471,7 @@ export function DiscoverPlaylistSection({
 
 DiscoverPlaylistSection.propTypes = {
   playlists: PropTypes.arrayOf(PropTypes.object),
+  artworkVersion: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   canAdopt: PropTypes.bool,
   onAdopted: PropTypes.func,
 };

@@ -33,6 +33,14 @@ function deleteStoredSettingKeys(keys) {
   }
 }
 
+function normalizePlaylistArtworkSettings(raw) {
+  const artwork = raw && typeof raw === "object" ? raw : {};
+  const style = String(artwork.style || "photo").trim().toLowerCase();
+  return {
+    style: style === "aurral" ? "aurral" : "photo",
+  };
+}
+
 function normalizePlaylistWorkerSettings(raw) {
   const worker = raw && typeof raw === "object" ? raw : {};
   const parsedConcurrency = Number(worker.concurrency);
@@ -446,6 +454,9 @@ export const dbOps = {
     const playlistWorker = normalizePlaylistWorkerSettings(
       readStoredSettingJson("playlistWorker", ["weeklyFlowWorker"]),
     );
+    const playlistArtwork = normalizePlaylistArtworkSettings(
+      readStoredSettingJson("playlistArtwork"),
+    );
     const blocklist = dbHelpers.parseJSON(
       getSettingStmt.get("blocklist")?.value
     );
@@ -465,6 +476,7 @@ export const dbOps = {
       flows: flows || null,
       sharedPlaylists: sharedPlaylists || null,
       playlistWorker,
+      playlistArtwork,
       blocklist:
         blocklist && typeof blocklist === "object"
           ? blocklist
@@ -537,6 +549,14 @@ export const dbOps = {
           ),
         );
         deleteStoredSettingKeys(["weeklyFlowWorker"]);
+      }
+      if (settings.playlistArtwork !== undefined) {
+        upsertSettingStmt.run(
+          "playlistArtwork",
+          dbHelpers.stringifyJSON(
+            normalizePlaylistArtworkSettings(settings.playlistArtwork),
+          ),
+        );
       }
       if (settings.blocklist !== undefined) {
         upsertSettingStmt.run(

@@ -492,7 +492,9 @@ export async function generateDiscoverPlaylists({
 
   onProgress?.({ completed: totalSteps, total: totalSteps });
 
-  return playlists;
+  const { attachArtworkToDiscoverPlaylists } =
+    await import("./discoverPlaylistArtworkService.js");
+  return attachArtworkToDiscoverPlaylists(playlists);
 }
 
 export function annotateDiscoverPlaylistsForUser(playlists, user) {

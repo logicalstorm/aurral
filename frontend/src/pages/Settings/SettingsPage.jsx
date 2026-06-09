@@ -10,6 +10,7 @@ import { useSettingsUsers } from "./hooks/useSettingsUsers";
 import { UnsavedModal } from "./components/UnsavedModal";
 import { CommunityGuideModal } from "./components/CommunityGuideModal";
 import { SettingsIntegrationsTab } from "./components/SettingsIntegrationsTab";
+import { SettingsPlaylistsTab } from "./components/SettingsPlaylistsTab";
 import { SettingsDiscoverTab } from "./components/SettingsDiscoverTab";
 import { SettingsNotificationsTab } from "./components/SettingsNotificationsTab";
 import { SettingsUsersTab } from "./components/SettingsUsersTab";
@@ -79,6 +80,16 @@ function SettingsPage() {
             showSuccess={showSuccess}
             showError={showError}
             showInfo={showInfo}
+          />
+        );
+      case "playlists":
+        return (
+          <SettingsPlaylistsTab
+            settings={data.settings}
+            updateSettings={data.updateSettings}
+            hasUnsavedChanges={data.hasUnsavedChanges}
+            saving={data.saving}
+            handleSaveSettings={data.handleSaveSettings}
           />
         );
       case "discover":

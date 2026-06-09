@@ -77,6 +77,9 @@ const defaultSettings = {
       notifyWeeklyFlowDone: false,
     },
   },
+  playlistArtwork: {
+    style: "photo",
+  },
   security: {
     localNetworkBypass: {
       enabled: false,

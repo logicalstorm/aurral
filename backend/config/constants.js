@@ -246,6 +246,9 @@ export const defaultData = {
       retryCycleMinutes: 360,
       existingFileMode: "reuse",
     },
+    playlistArtwork: {
+      style: "photo",
+    },
   },
   blocklist: [],
   activityLog: [],
