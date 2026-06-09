@@ -221,7 +221,7 @@ function Layout({ children, appVersion }) {
 
         <div className="app-main-wrap">
           <main
-            className={`app-main${isArtistDetailsRoute ? " app-main--artist-details" : ""}`}
+            className={`app-main${isArtistDetailsRoute ? " app-main--artist-details" : ""}${isPlayerActive ? " app-main--player-active" : ""}`}
             ref={mainScrollRef}
             onScroll={() => {
               updateMainScrollbar();
