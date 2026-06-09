@@ -26,8 +26,8 @@ test.after(async () => {
 
 test("discovery flow settings use defaults when unset", () => {
   assert.equal(getDiscoveryRecommendationsPerRefresh(), 200);
-  assert.equal(getDiscoveryFlowsPerRefresh(), 12);
-  assert.equal(getMaxFocusPlaylists(), 8);
+  assert.equal(getDiscoveryFlowsPerRefresh(), 10);
+  assert.equal(getMaxFocusPlaylists(), 5);
 });
 
 test("discovery flow settings clamp configured values", () => {
@@ -45,7 +45,7 @@ test("discovery flow settings clamp configured values", () => {
   });
   assert.equal(getDiscoveryRecommendationsPerRefresh(), 500);
   assert.equal(getDiscoveryFlowsPerRefresh(), 32);
-  assert.equal(getMaxFocusPlaylists(), 28);
+  assert.equal(getMaxFocusPlaylists(), 27);
 });
 
 test("resolveFocusSlotBudgets scales with max focus playlists", () => {

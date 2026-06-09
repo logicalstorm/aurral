@@ -157,11 +157,15 @@ const buildFocusedPlaylistCandidates = ({
   let artistSlots = 0;
   let crossoverSlots = 0;
 
-  const canAdd = () => candidates.length < maxFocus;
+  const autoFocusCount = () =>
+    candidates.filter((entry) => entry.id !== LISTENING_HISTORY_PLAYLIST_ID)
+      .length;
 
-  const addCandidate = (preset) => {
+  const canAddAutoFocus = () => autoFocusCount() < maxFocus;
+
+  const pushCandidate = (preset) => {
     const id = String(preset?.id || "").trim();
-    if (!id || seenIds.has(id) || !canAdd()) return false;
+    if (!id || seenIds.has(id)) return false;
     const tags = uniqueStrings(preset.tags || []);
     const relatedArtists = uniqueStrings(preset.relatedArtists || []);
     if (tags.length === 0 && relatedArtists.length === 0) return false;
@@ -175,6 +179,11 @@ const buildFocusedPlaylistCandidates = ({
       type: "focus",
     });
     return true;
+  };
+
+  const addAutoFocusCandidate = (preset) => {
+    if (!canAddAutoFocus()) return false;
+    return pushCandidate(preset);
   };
 
   const tasteTags = diversifyTasteTags(topGenres, topTags);
@@ -206,7 +215,7 @@ const buildFocusedPlaylistCandidates = ({
 
   if (historyArtists.length > 0) {
     const label = historyArtists.join(", ");
-    addCandidate({
+    pushCandidate({
       id: LISTENING_HISTORY_PLAYLIST_ID,
       name: "Listening History",
       description: `Tracks related to ${label}`,
@@ -223,7 +232,7 @@ const buildFocusedPlaylistCandidates = ({
 
   if (tasteTags[0] && tagSlots < tagBudget) {
     if (
-      addCandidate({
+      addAutoFocusCandidate({
         id: `focus-spotlight:${slugify(tasteTags[0])}`,
         name: `${titleCase(tasteTags[0])} Spotlight`,
         description: `A deep dive into ${tasteTags[0]}`,
@@ -238,7 +247,7 @@ const buildFocusedPlaylistCandidates = ({
   }
 
   for (let index = 0; index < tasteTags.length - 1; index += 1) {
-    if (tagSlots >= tagBudget || !canAdd()) break;
+    if (tagSlots >= tagBudget || !canAddAutoFocus()) break;
     const left = tasteTags[index];
     const right = tasteTags.find(
       (tag, tagIndex) => tagIndex > index && !areTagsSimilar(left, tag),
@@ -248,7 +257,7 @@ const buildFocusedPlaylistCandidates = ({
     if (usedTagPairs.has(pairKey)) continue;
     usedTagPairs.add(pairKey);
     if (
-      addCandidate({
+      addAutoFocusCandidate({
         id: `focus-tags:${slugify(left)}-${slugify(right)}`,
         name: `${titleCase(left)} × ${titleCase(right)}`,
         description: `Where ${left} meets ${right}`,
@@ -263,12 +272,12 @@ const buildFocusedPlaylistCandidates = ({
   }
 
   for (const artistName of relatedSeedArtists) {
-    if (artistSlots >= artistBudget || !canAdd()) break;
+    if (artistSlots >= artistBudget || !canAddAutoFocus()) break;
     const artistKey = slugify(artistName);
     if (!artistKey || usedArtistKeys.has(artistKey)) continue;
     usedArtistKeys.add(artistKey);
     if (
-      addCandidate({
+      addAutoFocusCandidate({
         id: `focus-artist:${artistKey}`,
         name: `Near ${artistName}`,
         description: `Artists related to ${artistName}`,
@@ -285,7 +294,7 @@ const buildFocusedPlaylistCandidates = ({
   if (
     relatedSeedArtists.length >= 2 &&
     artistSlots < artistBudget &&
-    canAdd()
+    canAddAutoFocus()
   ) {
     const left = relatedSeedArtists[0];
     const right =
@@ -294,7 +303,7 @@ const buildFocusedPlaylistCandidates = ({
     const pairKey = [slugify(left), slugify(right)].sort().join("::");
     if (!usedArtistKeys.has(pairKey)) {
       if (
-        addCandidate({
+        addAutoFocusCandidate({
           id: `focus-artists:${slugify(left)}-${slugify(right)}`,
           name: `${left} · ${right}`,
           description: `Between ${left} and ${right}`,
@@ -310,7 +319,7 @@ const buildFocusedPlaylistCandidates = ({
   }
 
   for (let index = 0; index < relatedSeedArtists.length; index += 1) {
-    if (crossoverSlots >= crossoverBudget || !canAdd()) break;
+    if (crossoverSlots >= crossoverBudget || !canAddAutoFocus()) break;
     const artistName = relatedSeedArtists[index];
     const artistKey = slugify(artistName);
     if (!artistKey || usedArtistKeys.has(`cross:${artistKey}`)) continue;
@@ -319,7 +328,7 @@ const buildFocusedPlaylistCandidates = ({
     if (!tag) continue;
     usedArtistKeys.add(`cross:${artistKey}`);
     if (
-      addCandidate({
+      addAutoFocusCandidate({
         id: `focus-cross:${slugify(tag)}-${artistKey}`,
         name: `${titleCase(tag)} · Near ${artistName}`,
         description: `${tag} through ${artistName}'s orbit`,
@@ -344,7 +353,7 @@ const buildFocusedPlaylistCandidates = ({
     .slice(0, 6);
 
   for (let index = 0; index < recPool.length; index += 1) {
-    if (!canAdd()) break;
+    if (!canAddAutoFocus()) break;
     const recommendation = recPool[index];
     const targetArtist = String(
       recommendation?.name || recommendation?.artistName || "",
@@ -378,7 +387,7 @@ const buildFocusedPlaylistCandidates = ({
     const tagLabel = diversifiedRecTags
       .map((tag) => titleCase(tag))
       .join(" + ");
-    addCandidate({
+    addAutoFocusCandidate({
       id: `focus-path:${slugify(targetArtist)}:${slugify(diversifiedRecTags.join("-"))}`,
       name:
         diversifiedRecTags.length > 1

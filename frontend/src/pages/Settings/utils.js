@@ -30,8 +30,8 @@ export const normalizeSettings = (savedSettings) => {
     : 200;
   const parsedFlowsPerRefresh = parseInt(lastfm.discoveryFlowsPerRefresh, 10);
   const normalizedFlowsPerRefresh = Number.isFinite(parsedFlowsPerRefresh)
-    ? Math.min(32, Math.max(4, parsedFlowsPerRefresh))
-    : 12;
+    ? Math.min(32, Math.max(5, parsedFlowsPerRefresh))
+    : 10;
   const playlistArtwork = savedSettings.playlistArtwork || {};
   const playlistArtworkStyle =
     playlistArtwork.style === "aurral" || lastfm.discoverFlowArtworkStyle === "aurral"
