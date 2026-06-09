@@ -353,6 +353,37 @@ router.get("/artwork/:presetId", noCache, async (req, res) => {
   }
 });
 
+const handleDiscoverAdoptError = (res, error, fallbackError) => {
+  if (error?.statusCode === 400) {
+    return res.status(400).json({
+      error: error.error || "Bad Request",
+      message: error.message,
+    });
+  }
+  if (error?.statusCode === 404) {
+    return res.status(404).json({
+      error: error.error || "Playlist preview not available",
+      message: error.message,
+    });
+  }
+  if (error?.code === "FLOW_NAME_CONFLICT") {
+    return res.status(400).json({
+      error: "Flow name already exists",
+      message: error.message,
+    });
+  }
+  if (error?.code === "SHARED_PLAYLIST_NAME_CONFLICT") {
+    return res.status(400).json({
+      error: "Shared playlist name already exists",
+      message: error.message,
+    });
+  }
+  return res.status(500).json({
+    error: fallbackError,
+    message: error.message,
+  });
+};
+
 router.post(
   "/playlists/adopt",
   requireAuth,
@@ -369,98 +400,46 @@ router.post(
         return res.status(400).json({ error: "slskd not configured" });
       }
 
-      const reqUser = userOps.getUserById(req.user.id);
-      const listenHistoryProfile = getListenHistoryProfile(reqUser || {});
-      const userCacheNamespace =
-        getListenHistoryCacheNamespace(listenHistoryProfile);
-      const effectiveCacheNamespace = getLastfmApiKey()
-        ? userCacheNamespace
-        : null;
-      const discoveryCache = getDiscoveryCache(effectiveCacheNamespace);
-      const {
-        getCachedDiscoverPlaylist,
-        buildFlowPayloadFromPreset,
-        serializeTrack,
-      } = await import("../services/discoverPlaylistService.js");
-      const { flowPlaylistConfig } =
-        await import("../services/weeklyFlowPlaylistConfig.js");
-      const { playlistManager } =
-        await import("../services/weeklyFlowPlaylistManager.js");
-      const { weeklyFlowWorker } =
-        await import("../services/weeklyFlowWorker.js");
-      const { weeklyFlowOperationQueue } =
-        await import("../services/weeklyFlowOperationQueue.js");
-      const { recordFlowTracksGenerated } =
-        await import("../services/aurralHistoryService.js");
-
-      const existingFlow = flowPlaylistConfig
-        .getFlowsForUser(req.user)
-        .find((flow) => flow.discoverPresetId === presetId);
-      if (existingFlow) {
-        return res.json({
-          success: true,
-          flowId: existingFlow.id,
-          flow: existingFlow,
-          alreadyAdopted: true,
-        });
-      }
-
-      const cachedPlaylist = getCachedDiscoverPlaylist(
-        discoveryCache,
-        presetId,
-      );
-      if (!cachedPlaylist || cachedPlaylist.trackCount <= 0) {
-        return res.status(404).json({
-          error: "Playlist preview not available",
-          message: "Run discovery refresh to generate this playlist first",
-        });
-      }
-
-      const flow = flowPlaylistConfig.createFlow({
-        ...buildFlowPayloadFromPreset(cachedPlaylist, presetId),
-        ownerUserId: req.user.id,
-      });
-      await playlistManager.ensureSmartPlaylists();
-      flowPlaylistConfig.setEnabled(flow.id, true);
-      flowPlaylistConfig.scheduleNextRun(flow.id);
-
-      const tracks = (cachedPlaylist.tracks || []).map(serializeTrack);
-      const result = await weeklyFlowOperationQueue.enqueue(
-        `adopt:${flow.id}`,
-        async () =>
-          weeklyFlowWorker.seedFlowRunWithTracks(flow.id, flow, tracks),
-      );
-
-      if (!weeklyFlowWorker.running) {
-        await weeklyFlowWorker.start();
-      } else {
-        weeklyFlowWorker.wake();
-      }
-
-      recordFlowTracksGenerated({
-        flowId: flow.id,
-        tracksQueued: result?.tracksQueued || tracks.length,
-        reserveTracks: 0,
-      });
-
-      res.json({
-        success: true,
-        flowId: flow.id,
-        flow,
-        tracksQueued: result?.tracksQueued || tracks.length,
-        alreadyAdopted: false,
-      });
+      const { adoptDiscoverPresetAsFlow } =
+        await import("../services/discoverPlaylistAdoptService.js");
+      const result = await adoptDiscoverPresetAsFlow(req.user, presetId);
+      res.json(result);
     } catch (error) {
-      if (error?.code === "FLOW_NAME_CONFLICT") {
-        return res.status(400).json({
-          error: "Flow name already exists",
-          message: error.message,
-        });
+      handleDiscoverAdoptError(
+        res,
+        error,
+        "Failed to adopt discover playlist",
+      );
+    }
+  },
+);
+
+router.post(
+  "/playlists/adopt-playlist",
+  requireAuth,
+  requirePermission("accessFlow"),
+  async (req, res) => {
+    try {
+      const presetId = String(req.body?.presetId || "").trim();
+      if (!presetId) {
+        return res.status(400).json({ error: "presetId is required" });
       }
-      res.status(500).json({
-        error: "Failed to adopt discover playlist",
-        message: error.message,
-      });
+
+      const { slskdClient } = await import("../services/slskdClient.js");
+      if (!slskdClient.isConfigured()) {
+        return res.status(400).json({ error: "slskd not configured" });
+      }
+
+      const { adoptDiscoverPresetAsPlaylist } =
+        await import("../services/discoverPlaylistAdoptService.js");
+      const result = await adoptDiscoverPresetAsPlaylist(req.user, presetId);
+      res.json(result);
+    } catch (error) {
+      handleDiscoverAdoptError(
+        res,
+        error,
+        "Failed to adopt discover playlist",
+      );
     }
   },
 );
