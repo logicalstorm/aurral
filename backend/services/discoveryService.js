@@ -537,9 +537,9 @@ export const isGlobalDiscoveryRefreshInProgress = () =>
   discoveryCache.isUpdating === true;
 
 const hasListeningHistoryUsers = () =>
-  userOps.getAllListeningHistoryUsers().some((user) =>
-    hasListenHistoryProfile(user),
-  );
+  userOps
+    .getAllListeningHistoryUsers()
+    .some((user) => hasListenHistoryProfile(user));
 
 const pendingUserDiscoveryProfiles = new Map();
 
@@ -1277,8 +1277,7 @@ export const updateDiscoveryCache = async (options = {}) => {
           .map((artist) => artist.artistName)
           .filter(Boolean),
         onProgress: ({ completed, total }) => {
-          const pct =
-            total > 0 ? 92 + Math.round((completed / total) * 4) : 92;
+          const pct = total > 0 ? 92 + Math.round((completed / total) * 4) : 92;
           emitDiscoveryProgress(
             "generating_playlists",
             `Building discover playlists (${completed}/${total})`,
