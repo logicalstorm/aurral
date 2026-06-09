@@ -1,36 +1,34 @@
 import { getDiscoveryRefreshQueue, getWorkerId } from "./honkerDb.js";
-import { updateDiscoveryCache, getDiscoveryCache } from "./discoveryService.js";
+import {
+  clearDiscoveryUpdateProgress,
+  getDiscoveryCache,
+  recordDiscoveryUpdateProgress,
+  updateDiscoveryCache,
+} from "./discoveryService.js";
 import {
   isDiscoveryRefreshConfigured,
   markDiscoveryRefreshDequeued,
   scheduleNextDiscoveryRefresh,
 } from "./discoveryRefreshScheduler.js";
-import { websocketService } from "./websocketService.js";
-
 let running = false;
 let loopPromise = null;
 
 async function runDiscoveryRefresh(payload) {
   if (!(await isDiscoveryRefreshConfigured())) {
     getDiscoveryCache().isUpdating = false;
-    websocketService.emitDiscoveryUpdate({
-      isUpdating: false,
-      configured: false,
-    });
+    clearDiscoveryUpdateProgress();
     return;
   }
 
   const cache = getDiscoveryCache();
   if (!cache.isUpdating) {
     cache.isUpdating = true;
-    websocketService.emitDiscoveryUpdate({
-      isUpdating: true,
-      configured: true,
-      phase: "starting",
-      progress: 2,
-      progressMessage: "Starting discovery refresh",
-      reason: payload?.reason || "scheduled",
-    });
+    recordDiscoveryUpdateProgress(
+      "starting",
+      "Starting discovery refresh",
+      2,
+      { reason: payload?.reason || "scheduled" },
+    );
   }
 
   await updateDiscoveryCache({ skipBusyGuard: true });
@@ -50,6 +48,7 @@ async function runLoop() {
       } catch (error) {
         const message = error?.message || String(error);
         getDiscoveryCache().isUpdating = false;
+        clearDiscoveryUpdateProgress();
         if (job.attempts >= 3) {
           job.fail(message);
         } else {

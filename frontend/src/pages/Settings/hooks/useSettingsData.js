@@ -91,6 +91,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
   const [saving, setSaving] = useState(false);
   const [refreshingDiscovery, setRefreshingDiscovery] = useState(false);
   const [discoveryProgressMessage, setDiscoveryProgressMessage] = useState("");
+  const [discoveryProgress, setDiscoveryProgress] = useState(null);
   const [clearingCache, setClearingCache] = useState(false);
   const [lidarrProfiles, setLidarrProfiles] = useState([]);
   const [loadingLidarrProfiles, setLoadingLidarrProfiles] = useState(false);
@@ -110,10 +111,15 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     if (healthData?.discovery?.isUpdating) {
       setRefreshingDiscovery(true);
       setDiscoveryProgressMessage(
-        (current) => current || "Discovery refresh is running",
+        healthData.discovery.updateProgressMessage ||
+          "Discovery refresh is running",
       );
+      if (typeof healthData.discovery.updateProgress === "number") {
+        setDiscoveryProgress(healthData.discovery.updateProgress);
+      }
     } else {
       setRefreshingDiscovery(false);
+      setDiscoveryProgress(null);
     }
   }, []);
 
@@ -132,6 +138,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
 
     if (msg.phase === "error") {
       setRefreshingDiscovery(false);
+      setDiscoveryProgress(null);
       setDiscoveryProgressMessage(
         msg.progressMessage || "Discovery refresh failed",
       );
@@ -140,14 +147,18 @@ export function useSettingsData(showSuccess, showError, showInfo) {
 
     if (msg.isUpdating) {
       setRefreshingDiscovery(true);
-      setDiscoveryProgressMessage(
-        msg.progressMessage || "Discovery refresh is running",
-      );
+      if (msg.progressMessage) {
+        setDiscoveryProgressMessage(msg.progressMessage);
+      }
+      if (typeof msg.progress === "number") {
+        setDiscoveryProgress(msg.progress);
+      }
       return;
     }
 
     if (msg.phase === "completed" || Array.isArray(msg.recommendations)) {
       setRefreshingDiscovery(false);
+      setDiscoveryProgress(100);
       setDiscoveryProgressMessage(
         msg.progressMessage || "Discovery refresh completed",
       );
@@ -214,7 +225,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     };
 
     pollHealth();
-    const intervalId = setInterval(pollHealth, 8000);
+    const intervalId = setInterval(pollHealth, 3000);
     return () => clearInterval(intervalId);
   }, [refreshingDiscovery, refreshHealth]);
 
@@ -264,6 +275,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
       await refreshHealth();
     } catch (err) {
       setRefreshingDiscovery(false);
+      setDiscoveryProgress(null);
       setDiscoveryProgressMessage("");
       showError(
         "Failed to start refresh: " +
@@ -380,6 +392,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     fetchSettings,
     refreshHealth,
     refreshingDiscovery,
+    discoveryProgress,
     discoveryProgressMessage,
     clearingCache,
     handleRefreshDiscovery,

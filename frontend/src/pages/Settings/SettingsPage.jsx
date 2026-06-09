@@ -91,6 +91,7 @@ function SettingsPage() {
             saving={data.saving}
             handleSaveSettings={data.handleSaveSettings}
             refreshingDiscovery={data.refreshingDiscovery}
+            discoveryProgress={data.discoveryProgress}
             discoveryProgressMessage={data.discoveryProgressMessage}
             clearingCache={data.clearingCache}
             handleRefreshDiscovery={data.handleRefreshDiscovery}
