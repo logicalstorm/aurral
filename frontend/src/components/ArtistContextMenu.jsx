@@ -15,6 +15,22 @@ const MAIN_CONTENT_PORTAL_SELECTOR = ".app-main-wrap";
 const getMainContentPortalRoot = () =>
   document.querySelector(MAIN_CONTENT_PORTAL_SELECTOR);
 
+const getMenuHorizontalAnchorRect = (button) => {
+  const discoverCard = button.closest(".artist-discover-card");
+  if (discoverCard) {
+    const cover = discoverCard.querySelector(".artist-discover-card__cover");
+    if (cover) return cover.getBoundingClientRect();
+  }
+  const similarCard = button.closest(".artist-similar-card");
+  if (similarCard) {
+    const avatar = similarCard.querySelector(".artist-similar-avatar");
+    if (avatar) return avatar.getBoundingClientRect();
+  }
+  return button.getBoundingClientRect();
+};
+
+let activeMenuCloser = null;
+
 export function ArtistContextMenu({
   artist,
   artistName,
@@ -32,6 +48,21 @@ export function ArtistContextMenu({
   const menuButtonRef = useRef(null);
   const menuRef = useRef(null);
   const labelName = artistName || artist?.name || artist?.artistName || "artist";
+
+  const closeMenu = useCallback(() => {
+    setShowMenu(false);
+    if (activeMenuCloser === closeMenu) {
+      activeMenuCloser = null;
+    }
+  }, []);
+
+  const openMenu = useCallback(() => {
+    if (activeMenuCloser && activeMenuCloser !== closeMenu) {
+      activeMenuCloser();
+    }
+    activeMenuCloser = closeMenu;
+    setShowMenu(true);
+  }, [closeMenu]);
 
   const estimateMenuHeight = useCallback(() => {
     let items = 0;
@@ -61,19 +92,30 @@ export function ArtistContextMenu({
       placement === "below"
         ? rect.bottom - wrapRect.top + gap
         : rect.top - wrapRect.top - gap;
-    const left = Math.max(rect.right - wrapRect.left - 176, 12);
+    const anchorRect = getMenuHorizontalAnchorRect(button);
+    const right = wrapRect.right - anchorRect.right;
     setMenuPosition((prev) => {
       if (
         prev &&
         prev.top === top &&
-        prev.left === left &&
+        prev.right === right &&
         prev.placement === placement
       ) {
         return prev;
       }
-      return { top, left, placement };
+      return { top, right, placement };
     });
   }, [estimateMenuHeight]);
+
+  const setMenuRef = useCallback(
+    (node) => {
+      menuRef.current = node;
+      if (node && showMenu) {
+        updateMenuPosition();
+      }
+    },
+    [showMenu, updateMenuPosition],
+  );
 
   useEffect(() => {
     if (!showMenu) {
@@ -97,12 +139,44 @@ export function ArtistContextMenu({
     updateMenuPosition();
   }, [showMenu, updateMenuPosition]);
 
+  useEffect(() => {
+    if (!showMenu) return undefined;
+    const handlePointerDown = (event) => {
+      if (
+        menuButtonRef.current?.contains(event.target) ||
+        menuRef.current?.contains(event.target)
+      ) {
+        return;
+      }
+      closeMenu();
+    };
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        closeMenu();
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [showMenu, closeMenu]);
+
+  useEffect(() => {
+    return () => {
+      if (activeMenuCloser === closeMenu) {
+        activeMenuCloser = null;
+      }
+    };
+  }, [closeMenu]);
+
   const handleAction = async (event, type, fn) => {
     event.stopPropagation();
     if (!fn || pendingAction) return;
     setPendingAction(type);
     const success = await fn(artist);
-    if (success) setShowMenu(false);
+    if (success) closeMenu();
     setPendingAction(null);
   };
 
@@ -132,7 +206,11 @@ export function ArtistContextMenu({
         type="button"
         onClick={(event) => {
           event.stopPropagation();
-          setShowMenu((prev) => !prev);
+          if (showMenu) {
+            closeMenu();
+          } else {
+            openMenu();
+          }
         }}
         className={buttonClassName}
         aria-label={`Artist options for ${labelName}`}
@@ -142,11 +220,11 @@ export function ArtistContextMenu({
       {showMenu && menuPosition && getMainContentPortalRoot()
         ? createPortal(
             <div
-              ref={menuRef}
+              ref={setMenuRef}
               className={`artist-options-menu--discover${menuPosition.placement === "below" ? " is-below" : ""}`}
               style={{
                 top: menuPosition.top,
-                left: menuPosition.left,
+                right: menuPosition.right,
               }}
               onClick={(event) => event.stopPropagation()}
             >
