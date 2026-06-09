@@ -397,6 +397,7 @@ function HistoryPage() {
           className="requests-page__status"
           onClick={(event) => event.stopPropagation()}
         >
+          <RequestStatusBadge request={displayRequest} />
           {canReSearch && (
             <div className="requests-page__actions">
               <button
@@ -410,7 +411,6 @@ function HistoryPage() {
               </button>
             </div>
           )}
-          <RequestStatusBadge request={displayRequest} />
         </div>
       </article>
     );
