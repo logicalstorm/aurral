@@ -1672,6 +1672,25 @@ export class WeeklyFlowPlaylistSource {
       Number.isFinite(requestedSize) && requestedSize > 0
         ? Math.round(requestedSize)
         : 30;
+    if (flow?.discoverPresetId === "release-radar") {
+      const listenHistoryProfile = options?.listenHistoryProfile || null;
+      const basedOn =
+        options?.basedOn ||
+        getDiscoveryCache(listenHistoryProfile)?.basedOn ||
+        [];
+      const primaryTracks = await this.getReleaseRadarTracks(targetSize, {
+        listenHistoryProfile,
+        basedOn,
+      });
+      return {
+        primaryTracks,
+        reserveTracks: [],
+        diagnostics: {
+          targets: { releaseRadar: targetSize },
+          achieved: { primary: primaryTracks.length, reserve: 0 },
+        },
+      };
+    }
     const reserveSize =
       Number.isFinite(Number(options?.reserveSize)) && Number(options.reserveSize) >= 0
         ? Math.round(Number(options.reserveSize))
@@ -2038,6 +2057,130 @@ export class WeeklyFlowPlaylistSource {
         tracks.push(trackEntry);
         if (tracks.length >= limit) break;
       }
+    }
+
+    return tracks;
+  }
+
+  async _getLibraryAlbumMbidSet() {
+    const now = Date.now();
+    if (
+      this.libraryAlbumMbidCache?.set &&
+      this.libraryAlbumMbidCache.expiresAt > now
+    ) {
+      return this.libraryAlbumMbidCache.set;
+    }
+    const set = new Set();
+    try {
+      const { lidarrClient } = await import("./lidarrClient.js");
+      if (lidarrClient.isConfigured()) {
+        const albums = await lidarrClient.request("/album");
+        for (const album of Array.isArray(albums) ? albums : []) {
+          const mbid = String(album?.foreignAlbumId || "").trim().toLowerCase();
+          if (mbid) set.add(mbid);
+        }
+      }
+    } catch {}
+    this.libraryAlbumMbidCache = {
+      set,
+      expiresAt: now + LIBRARY_ARTIST_KEYS_CACHE_TTL_MS,
+    };
+    return set;
+  }
+
+  _pickTopAlbumTrack(trackList) {
+    const entries = Array.isArray(trackList) ? trackList : [trackList];
+    const ranked = [...entries]
+      .map((entry) => {
+        const trackName = String(entry?.name || "").trim();
+        if (!trackName) return null;
+        const rank = Number(entry?.["@attr"]?.rank ?? entry?.attr?.rank ?? NaN);
+        return {
+          trackName,
+          rank: Number.isFinite(rank) ? rank : Number.MAX_SAFE_INTEGER,
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => left.rank - right.rank);
+    return ranked[0]?.trackName || null;
+  }
+
+  async _pickTrackFromRelease({
+    artistName,
+    albumTitle,
+    albumMbid = null,
+    artistMbid = null,
+    releaseYear = null,
+  }) {
+    const normalizedArtist = String(artistName || "").trim();
+    const normalizedAlbum = String(albumTitle || "").trim();
+    if (!normalizedArtist || !normalizedAlbum) return null;
+
+    let trackName = null;
+    try {
+      const data = await lastfmRequest("album.getInfo", {
+        artist: normalizedArtist,
+        album: normalizedAlbum,
+      });
+      trackName = this._pickTopAlbumTrack(data?.album?.tracks?.track);
+    } catch {}
+
+    if (!trackName && getLastfmApiKey()) {
+      try {
+        const trackList = await this._getArtistTopTrackList(normalizedArtist);
+        const albumKey = this._artistKey(normalizedAlbum);
+        const albumMatch = trackList.find((entry) => {
+          const candidateAlbum = String(
+            entry?.album?.title || entry?.album?.["#text"] || "",
+          ).trim();
+          return candidateAlbum && this._artistKey(candidateAlbum) === albumKey;
+        });
+        trackName = String(
+          albumMatch?.name || trackList[0]?.name || "",
+        ).trim();
+      } catch {}
+    }
+
+    if (!trackName) return null;
+    return this._buildTrackEntry({
+      artistName: normalizedArtist,
+      trackName,
+      albumName: normalizedAlbum,
+      artistMbid: artistMbid || null,
+      albumMbid,
+      releaseYear,
+      reason: "New release from an artist in your library",
+    });
+  }
+
+  async getReleaseRadarTracks(limit, options = {}) {
+    if (limit <= 0) return [];
+    const { getRecentMissingReleases } = await import(
+      "./recentReleasesService.js"
+    );
+    const albums = await getRecentMissingReleases(limit);
+    if (albums.length === 0) return [];
+
+    const tracks = [];
+    const seenAlbums = new Set();
+
+    for (const album of albums) {
+      if (tracks.length >= limit) break;
+      const albumKey = String(album.mbid || album.foreignAlbumId || "")
+        .trim()
+        .toLowerCase();
+      if (albumKey && seenAlbums.has(albumKey)) continue;
+      const releaseDate = String(album.releaseDate || "").trim();
+      const trackEntry = await this._pickTrackFromRelease({
+        artistName: album.artistName,
+        albumTitle: album.albumName,
+        albumMbid: album.mbid || album.foreignAlbumId || null,
+        artistMbid: album.artistMbid || album.foreignArtistId || null,
+        releaseYear: releaseDate ? releaseDate.slice(0, 4) : null,
+      });
+      if (!trackEntry) continue;
+      if (albumKey) seenAlbums.add(albumKey);
+      tracks.push(trackEntry);
     }
 
     return tracks;

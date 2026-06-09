@@ -1,11 +1,4 @@
-import {
-  useState,
-  useEffect,
-  useMemo,
-  memo,
-  useCallback,
-  useRef,
-} from "react";
+import { useState, useEffect, useMemo, memo, useCallback, useRef } from "react";
 import PropTypes from "prop-types";
 import { useNavigate } from "react-router-dom";
 import {
@@ -45,6 +38,7 @@ import ShowCard from "../components/ShowCard";
 import LastfmBanner from "../components/LastfmBanner";
 import { useToast } from "../contexts/ToastContext";
 import { DiscoverLayoutModal } from "./DiscoverLayoutModal";
+import { DiscoverPlaylistSection } from "./DiscoverPlaylistSection";
 
 const TAG_COLORS = [
   "#845336",
@@ -80,6 +74,7 @@ const DISCOVER_NEARBY_SHOWS_KEY = "discoverNearbyShows";
 
 const DEFAULT_DISCOVER_SECTIONS = [
   { id: "recentlyAdded", label: "Recently Added", enabled: true },
+  { id: "playlists", label: "Playlists", enabled: true },
   { id: "recommendedShows", label: "Shows Near You", enabled: true },
   { id: "recentReleases", label: "Recent Releases", enabled: true },
   { id: "recommended", label: "Recommended for You", enabled: true },
@@ -238,6 +233,9 @@ const normalizeDiscoveryData = (value) => {
     topGenres: Array.isArray(value.topGenres) ? value.topGenres : [],
     fallbackGenres: Array.isArray(value.fallbackGenres)
       ? value.fallbackGenres
+      : [],
+    discoverPlaylists: Array.isArray(value.discoverPlaylists)
+      ? value.discoverPlaylists
       : [],
     provider: value.provider || "lastfm",
     capabilities:
@@ -828,6 +826,7 @@ function DiscoverPage() {
   const navigate = useNavigate();
   const { showSuccess, showError } = useToast();
   const canAddArtist = hasPermission("addArtist");
+  const canAdoptPlaylist = hasPermission("accessFlow");
 
   const { isConnected: isDiscoverySocketConnected } = useWebSocketChannel(
     "discovery",
@@ -841,6 +840,7 @@ function DiscoverPage() {
           topTags: msg.topTags || [],
           topGenres: msg.topGenres || [],
           fallbackGenres: msg.fallbackGenres || [],
+          discoverPlaylists: msg.discoverPlaylists || [],
           provider: msg.provider || "lastfm",
           capabilities: msg.capabilities || null,
           lastUpdated: msg.lastUpdated || null,
@@ -1247,12 +1247,14 @@ function DiscoverPage() {
     topGenres = [],
     topTags = [],
     basedOn = [],
+    discoverPlaylists = [],
     provider = "lastfm",
     capabilities,
     lastUpdated,
     isUpdating,
     configured = true,
   } = data || {};
+  const [adoptedPlaylistIds, setAdoptedPlaylistIds] = useState({});
   const isListenBrainzFallback = provider === "listenbrainz-fallback";
 
   const nearbyShows = nearbyShowsData?.shows || [];
@@ -1260,9 +1262,27 @@ function DiscoverPage() {
     nearbyShowsData?.location?.label ||
     nearbyShowsData?.location?.postalCode ||
     "your area";
+  const displayDiscoverPlaylists = useMemo(
+    () =>
+      discoverPlaylists.map((playlist) => ({
+        ...playlist,
+        adoptedFlowId:
+          adoptedPlaylistIds[playlist.presetId] ||
+          playlist.adoptedFlowId ||
+          null,
+      })),
+    [adoptedPlaylistIds, discoverPlaylists],
+  );
+
+  const handlePlaylistAdopted = useCallback((presetId, flowId) => {
+    if (!presetId || !flowId) return;
+    setAdoptedPlaylistIds((prev) => ({ ...prev, [presetId]: flowId }));
+  }, []);
+
   const sectionAvailability = useMemo(
     () => ({
       recentlyAdded: recentlyAdded.length > 0,
+      playlists: displayDiscoverPlaylists.length > 0,
       recentReleases: recentReleases.length > 0,
       recommended:
         !isListenBrainzFallback &&
@@ -1275,6 +1295,7 @@ function DiscoverPage() {
     }),
     [
       recentlyAdded,
+      displayDiscoverPlaylists,
       recentReleases,
       globalTop,
       genreSections,
@@ -1599,6 +1620,34 @@ function DiscoverPage() {
               })}
           </>
         </DiscoverRail>
+      );
+    }
+
+    if (id === "playlists") {
+      if (!sectionAvailability.playlists) return null;
+      return (
+        <section
+          key="playlists"
+          className="artist-discover-rail discover-playlists-rail"
+        >
+          <div className="artist-discover-rail__header">
+            <div className="artist-discover-rail__title-group">
+              <h2 className="artist-section-title--discover">
+                <span className="artist-section-title--discover-mobile">
+                  Playlists
+                </span>
+                <span className="artist-section-title--discover-desktop">
+                  Playlists
+                </span>
+              </h2>
+            </div>
+          </div>
+          <DiscoverPlaylistSection
+            playlists={displayDiscoverPlaylists}
+            canAdopt={canAdoptPlaylist}
+            onAdopted={handlePlaylistAdopted}
+          />
+        </section>
       );
     }
 
