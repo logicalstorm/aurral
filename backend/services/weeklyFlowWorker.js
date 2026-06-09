@@ -19,26 +19,9 @@ import { startSlskdOrchestratorWorker } from "./slskdOrchestratorWorker.js";
 const DEFAULT_CONCURRENCY = 3;
 const MIN_CONCURRENCY = 1;
 const MAX_CONCURRENCY = 3;
-const FLOW_WORKER_RETRY_CYCLE_OPTIONS_MINUTES = [15, 30, 60, 360, 720, 1440];
-const DEFAULT_RETRY_CYCLE_MINUTES = 15;
+const DEFAULT_RETRY_CYCLE_MINUTES = 360;
 const JOB_COOLDOWN_MS = 750;
-const RETRY_BASE_DELAY_MS = 5000;
-const RETRY_MAX_DELAY_MS = 120000;
-const AUTH_FAILURE_PAUSE_MS = 45000;
-const CONNECTIVITY_FAILURE_PAUSE_MS = 15000;
-const RETRYABLE_FAILURE_STREAK_THRESHOLD = 3;
-const RETRYABLE_FAILURE_STREAK_PAUSE_MS = 180000;
 const REUSE_REPAIR_INTERVAL_MS = 30 * 60 * 1000;
-const MAX_RETRIES_PER_JOB = 1;
-const MAX_RETRIES_FOR_TIMEOUT_LOGIN = 1;
-const MAX_RETRIES_FOR_QUEUED_DOWNLOAD = 2;
-const MAX_RETRIES_FOR_OFFLINE_SOURCE = 3;
-const QUEUED_RETRY_BASE_DELAY_MS = 15 * 1000;
-const QUEUED_RETRY_MAX_DELAY_MS = 45 * 1000;
-const NON_RETRYABLE_ERRORS = new Set([
-  "No search results found",
-  "No candidate files returned",
-]);
 const WORKER_STOPPED_CODE = "WORKER_STOPPED";
 const PLAYLIST_MUTATION_CODE = "PLAYLIST_MUTATION_IN_PROGRESS";
 
@@ -53,12 +36,8 @@ export class WeeklyFlowWorker {
     this.reuseRepairCursor = 0;
     this.processLoop = null;
     this.processTimer = null;
-    this.retryAttempts = new Map();
-    this.retryNotBefore = new Map();
-    this.retryableFailureStreak = 0;
     this.backupRefillRounds = new Map();
     this.currentJob = null;
-    this.pausedUntil = 0;
     this.lastDequeuedPlaylistType = null;
     this.reuseRepairTimer = null;
     this.reuseRepairInFlight = null;
@@ -185,39 +164,12 @@ export class WeeklyFlowWorker {
     }
   }
 
-  pruneOrphanedJobState() {
-    for (const jobId of [...this.retryAttempts.keys()]) {
-      if (!downloadTracker.getJob(jobId)) {
-        this.retryAttempts.delete(jobId);
-      }
-    }
-    for (const jobId of [...this.retryNotBefore.keys()]) {
-      if (!downloadTracker.getJob(jobId)) {
-        this.retryNotBefore.delete(jobId);
-      }
-    }
-  }
-
   clearIncompleteRetry(playlistType) {
     const timer = this.incompleteRetryTimers.get(playlistType);
     if (timer) {
       clearTimeout(timer);
       this.incompleteRetryTimers.delete(playlistType);
     }
-  }
-
-  _rescheduleIncompleteRetries(
-    delayMs = this._getIncompleteRetryDelayMs(),
-  ) {
-    const playlistTypes = [...this.incompleteRetryTimers.keys()];
-    if (playlistTypes.length === 0) return 0;
-    for (const playlistType of playlistTypes) {
-      this.clearIncompleteRetry(playlistType);
-    }
-    for (const playlistType of playlistTypes) {
-      this._scheduleIncompleteRetry(playlistType, delayMs);
-    }
-    return playlistTypes.length;
   }
 
   _normalizeRetryPausedPlaylistIds(value) {
@@ -292,89 +244,6 @@ export class WeeklyFlowWorker {
     return out;
   }
 
-  _isAuthFailure(message) {
-    const text = String(message || "").toLowerCase();
-    return text.includes("timeout login") || text.includes("invalidpass");
-  }
-
-  _isConnectivityFailure(message) {
-    const text = String(message || "").toLowerCase();
-    return (
-      text.includes("download timeout") ||
-      text.includes("download stalled") ||
-      text.includes("econnreset") ||
-      text.includes("etimedout") ||
-      text.includes("socket hang up")
-    );
-  }
-
-  _isSlowSourceError(message) {
-    const text = String(message || "").toLowerCase();
-    return (
-      text.includes("download queued") ||
-      text.includes("download stalled (no bytes received)")
-    );
-  }
-
-  _isOfflineSourceError(message) {
-    const lower = String(message || "").toLowerCase();
-    return lower.includes("user not exist") || lower.includes("user offline");
-  }
-
-  _isNonRetryableError(message) {
-    const text = String(message || "").trim();
-    if (!text) return false;
-    if (NON_RETRYABLE_ERRORS.has(text)) return true;
-    return false;
-  }
-
-  _getRetryLimitForError(message) {
-    if (this._isSlowSourceError(message)) return MAX_RETRIES_FOR_QUEUED_DOWNLOAD;
-    if (this._isOfflineSourceError(message)) return MAX_RETRIES_FOR_OFFLINE_SOURCE;
-    if (this._isAuthFailure(message)) return MAX_RETRIES_FOR_TIMEOUT_LOGIN;
-    return MAX_RETRIES_PER_JOB;
-  }
-
-  _getRetryDelayMs(attempt, message) {
-    if (this._isSlowSourceError(message)) {
-      return Number(attempt) <= 1
-        ? QUEUED_RETRY_BASE_DELAY_MS
-        : QUEUED_RETRY_MAX_DELAY_MS;
-    }
-    if (this._isOfflineSourceError(message)) {
-      return Math.min(
-        RETRY_MAX_DELAY_MS,
-        5000 * 2 ** Math.max(0, Number(attempt) - 1),
-      );
-    }
-    const exp = Math.max(0, Number(attempt) - 1);
-    const base = Math.min(RETRY_MAX_DELAY_MS, RETRY_BASE_DELAY_MS * 2 ** exp);
-    if (this._isAuthFailure(message)) {
-      return Math.max(base, AUTH_FAILURE_PAUSE_MS);
-    }
-    if (this._isConnectivityFailure(message)) {
-      return Math.max(base, CONNECTIVITY_FAILURE_PAUSE_MS);
-    }
-    return base;
-  }
-
-  _pauseWorker(ms) {
-    const until = Date.now() + Math.max(0, Number(ms) || 0);
-    this.pausedUntil = Math.max(this.pausedUntil, until);
-  }
-
-  _recordRetryableFailure() {
-    this.retryableFailureStreak += 1;
-    if (this.retryableFailureStreak >= RETRYABLE_FAILURE_STREAK_THRESHOLD) {
-      this._pauseWorker(RETRYABLE_FAILURE_STREAK_PAUSE_MS);
-      this.retryableFailureStreak = 0;
-    }
-  }
-
-  _resetFailureStreak() {
-    this.retryableFailureStreak = 0;
-  }
-
   _normalizeConcurrency(value) {
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) return DEFAULT_CONCURRENCY;
@@ -384,42 +253,15 @@ export class WeeklyFlowWorker {
     );
   }
 
-  _normalizeRetryCycleMinutes(value) {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return DEFAULT_RETRY_CYCLE_MINUTES;
-    const normalized = Math.floor(parsed);
-    if (FLOW_WORKER_RETRY_CYCLE_OPTIONS_MINUTES.includes(normalized)) {
-      return normalized;
-    }
-    return DEFAULT_RETRY_CYCLE_MINUTES;
-  }
-
   _normalizeExistingFileMode(value) {
     return normalizeExistingFileMode(value);
   }
 
   _getIncompleteRetryDelayMs() {
-    const { retryCycleMinutes } = this.getWorkerSettings();
-    return Math.max(1000, retryCycleMinutes * 60 * 1000);
+    return Math.max(1000, DEFAULT_RETRY_CYCLE_MINUTES * 60 * 1000);
   }
   _getNextReadyPendingJob(lastPlaylistType = null) {
-    const now = Date.now();
-    return downloadTracker.getNextPendingMatching((job) => {
-      const notBefore = Number(this.retryNotBefore.get(job.id) || 0);
-      return notBefore <= now;
-    }, lastPlaylistType);
-  }
-
-  _getNextPendingWakeDelayMs() {
-    const now = Date.now();
-    let nextDelay = null;
-    for (const job of downloadTracker.getByStatus("pending")) {
-      const notBefore = Number(this.retryNotBefore.get(job.id) || 0);
-      if (notBefore <= now) return 0;
-      const delay = Math.max(250, notBefore - now);
-      nextDelay = nextDelay == null ? delay : Math.min(nextDelay, delay);
-    }
-    return nextDelay;
+    return downloadTracker.getNextPendingMatching(() => true, lastPlaylistType);
   }
 
   getWorkerSettings() {
@@ -427,9 +269,7 @@ export class WeeklyFlowWorker {
     const raw = settings?.playlistWorker || {};
     return {
       concurrency: this._normalizeConcurrency(raw.concurrency),
-      retryCycleMinutes: this._normalizeRetryCycleMinutes(
-        raw.retryCycleMinutes,
-      ),
+      retryCycleMinutes: DEFAULT_RETRY_CYCLE_MINUTES,
       retryPausedPlaylistIds: this._normalizeRetryPausedPlaylistIds(
         raw.retryPausedPlaylistIds,
       ),
@@ -445,10 +285,7 @@ export class WeeklyFlowWorker {
         nextSettings.concurrency === undefined
           ? base.concurrency
           : this._normalizeConcurrency(nextSettings.concurrency),
-      retryCycleMinutes:
-        nextSettings.retryCycleMinutes === undefined
-          ? base.retryCycleMinutes
-          : this._normalizeRetryCycleMinutes(nextSettings.retryCycleMinutes),
+      retryCycleMinutes: DEFAULT_RETRY_CYCLE_MINUTES,
       retryPausedPlaylistIds: this._normalizeRetryPausedPlaylistIds(
         base.retryPausedPlaylistIds,
       ),
@@ -459,13 +296,12 @@ export class WeeklyFlowWorker {
     };
     dbOps.updateSettings({
       ...current,
-      playlistWorker: normalized,
+      playlistWorker: {
+        concurrency: normalized.concurrency,
+        retryPausedPlaylistIds: normalized.retryPausedPlaylistIds,
+        existingFileMode: normalized.existingFileMode,
+      },
     });
-    if (normalized.retryCycleMinutes !== base.retryCycleMinutes) {
-      this._rescheduleIncompleteRetries(
-        Math.max(1000, normalized.retryCycleMinutes * 60 * 1000),
-      );
-    }
     return normalized;
   }
 
@@ -500,17 +336,12 @@ export class WeeklyFlowWorker {
     return state;
   }
 
-  _recordPlaylistTerminalFailure(playlistType, job, message) {
+  _recordPlaylistTerminalFailure(playlistType, job) {
     const state = this._getPlaylistFailureState(playlistType);
     state.terminalFailures += 1;
     const key = this._trackKeyFromJob(job);
     if (key) {
       state.failedTrackKeys.add(key);
-    }
-    const lower = String(message || "").toLowerCase();
-    if (this._isOfflineSourceError(lower)) {
-      const user = String(job?.lastFailedUser || "").trim().toLowerCase();
-      if (user) state.failedUsers.add(user);
     }
   }
 
@@ -695,8 +526,6 @@ export class WeeklyFlowWorker {
     for (const job of jobs) {
       if (job.status === "done") continue;
       if (downloadTracker.removeJob(job.id)) {
-        this.retryAttempts.delete(job.id);
-        this.retryNotBefore.delete(job.id);
         removed += 1;
       }
     }
@@ -709,8 +538,6 @@ export class WeeklyFlowWorker {
     let requeued = 0;
     for (const job of jobs) {
       if (job.status !== "failed") continue;
-      this.retryAttempts.delete(job.id);
-      this.retryNotBefore.delete(job.id);
       const priorError = String(job?.error || "").trim();
       const retryReason = [String(reason || "").trim(), priorError]
         .filter(Boolean)
@@ -944,21 +771,12 @@ export class WeeklyFlowWorker {
 
     this.processLoop = () => {
       if (!this.running) return;
-      const now = Date.now();
-      if (this.pausedUntil > now) {
-        this._scheduleProcessIn(this.pausedUntil - now);
-        return;
-      }
       const { concurrency } = this.getWorkerSettings();
       while (this.activeCount < concurrency) {
         const job = this._getNextReadyPendingJob(
           this.lastDequeuedPlaylistType,
         );
         if (!job) {
-          const waitMs = this._getNextPendingWakeDelayMs();
-          if (waitMs != null) {
-            this._scheduleProcessIn(waitMs);
-          }
           break;
         }
         this.lastDequeuedPlaylistType = job.playlistType;
@@ -995,54 +813,13 @@ export class WeeklyFlowWorker {
               this._isPlaylistBlocked(job.playlistType) ||
               this._isControlFlowError(error)
             ) {
-              this.retryAttempts.delete(job.id);
-              this.retryNotBefore.delete(job.id);
               return;
             }
-            const attempts = Number(this.retryAttempts.get(job.id) || 0);
-            const message = String(error?.message || "");
-            const retryable = !this._isNonRetryableError(message);
-            const retryLimit = this._getRetryLimitForError(message);
-            if (retryable && attempts < retryLimit) {
-              const retryAttempt = attempts + 1;
-              this.retryAttempts.set(job.id, retryAttempt);
-              const slowSourceError = this._isSlowSourceError(message);
-              if (!slowSourceError) {
-                this._recordRetryableFailure();
-              }
-              const retryDelayMs = this._getRetryDelayMs(retryAttempt, message);
-              this.retryNotBefore.set(job.id, Date.now() + retryDelayMs);
-              console.warn(
-                `[WeeklyFlowWorker] Requeueing job ${job.id}: ${message} (attempt ${retryAttempt}/${retryLimit} in ${Math.ceil(retryDelayMs / 1000)}s)`,
-              );
-              if (this._isAuthFailure(message)) {
-                this._pauseWorker(AUTH_FAILURE_PAUSE_MS);
-              } else if (!slowSourceError && this._isConnectivityFailure(message)) {
-                this._pauseWorker(CONNECTIVITY_FAILURE_PAUSE_MS);
-              }
-              downloadTracker.setPending(
-                job.id,
-                slowSourceError
-                  ? `Remote source slow; retrying in ${Math.ceil(retryDelayMs / 1000)}s (attempt ${retryAttempt}/${retryLimit})`
-                  : `${message} (retry ${retryAttempt}/${retryLimit} in ${Math.ceil(retryDelayMs / 1000)}s)`,
-                {
-                  asRetryCycle: true,
-                },
-              );
-              return;
-            }
-            this._resetFailureStreak();
-            this.retryAttempts.delete(job.id);
-            this.retryNotBefore.delete(job.id);
             console.error(
               `[WeeklyFlowWorker] Error processing job ${job.id}:`,
               error.message,
             );
-            this._recordPlaylistTerminalFailure(
-              job.playlistType,
-              job,
-              error.message,
-            );
+            this._recordPlaylistTerminalFailure(job.playlistType, job);
             downloadTracker.setFailed(job.id, error.message);
             await this.checkPlaylistComplete(job.playlistType);
           })
@@ -1080,11 +857,7 @@ export class WeeklyFlowWorker {
       this.reuseRepairTimer = null;
     }
     this.processLoop = null;
-    this.retryAttempts.clear();
-    this.retryNotBefore.clear();
-    this.retryableFailureStreak = 0;
     this.backupRefillRounds.clear();
-    this.pausedUntil = 0;
     this.lastDequeuedPlaylistType = null;
     this.currentJob = null;
     this.playlistReservePools.clear();
@@ -1102,14 +875,12 @@ export class WeeklyFlowWorker {
       return;
     }
     downloadTracker.resetDownloadingToPending();
-    this.pruneOrphanedJobState();
   }
 
   async stopAndDrain() {
     this._requestStop();
     await this.waitForIdle();
     downloadTracker.resetDownloadingToPending();
-    this.pruneOrphanedJobState();
   }
 
   async processJob(job, runGeneration = this.runGeneration) {
@@ -1139,9 +910,6 @@ export class WeeklyFlowWorker {
           excludeJobIds: [job.id],
         });
         if (reuse.reused) {
-          this._resetFailureStreak();
-          this.retryAttempts.delete(job.id);
-          this.retryNotBefore.delete(job.id);
           this.backupRefillRounds.delete(job.playlistType);
           this._dropOverflowPendingJobs(job.playlistType);
           this._recordCompletedTrack(
