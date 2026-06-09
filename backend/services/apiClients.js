@@ -1814,6 +1814,22 @@ export async function lastfmGetArtistNameByMbid(mbid) {
   return name && typeof name === "string" ? name.trim() : null;
 }
 
+export async function lastfmGetArtistImageUrlByName(artistName) {
+  const name = String(artistName || "").trim();
+  if (!name) return null;
+  try {
+    const data = await lastfmRequest("artist.getInfo", { artist: name });
+    const images = Array.isArray(data?.artist?.image) ? data.artist.image : [];
+    for (let index = images.length - 1; index >= 0; index -= 1) {
+      const url = String(images[index]?.["#text"] || "").trim();
+      if (url) return url;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function musicbrainzGetArtistNameByMbid(mbid) {
   if (!mbid) return null;
   const cached = musicbrainzArtistNameCache.get(mbid);

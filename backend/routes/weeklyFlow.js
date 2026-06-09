@@ -374,7 +374,9 @@ router.get("/artwork/:playlistId", noCache, async (req, res) => {
     return res.status(404).json({ error: "Playlist artwork not found" });
   }
 
-  res.type(artwork.extension === ".webp" ? "webp" : "png");
+  const { getArtworkContentTypeForExtension } =
+    await import("../services/playlistArtworkGenerator.js");
+  res.type(getArtworkContentTypeForExtension(artwork.extension));
   res.sendFile(artwork.safePath);
 });
 
