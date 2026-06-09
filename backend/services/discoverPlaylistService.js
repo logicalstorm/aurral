@@ -464,11 +464,15 @@ async function buildPlaylistsFromPresets(presets, options, onProgress) {
 }
 
 async function buildReleaseRadarPlaylist(options = {}) {
-  const { listenHistoryProfile = null, basedOn = [] } = options;
+  const {
+    listenHistoryProfile = null,
+    basedOn = [],
+    libraryArtists = null,
+  } = options;
   try {
     const tracks = await playlistSource.getReleaseRadarTracks(
       RELEASE_RADAR_PRESET.size,
-      { listenHistoryProfile, basedOn },
+      { listenHistoryProfile, basedOn, libraryArtists },
     );
     if (tracks.length > 0) {
       return buildPlaylistPreview(RELEASE_RADAR_PRESET, tracks);
@@ -522,6 +526,7 @@ export async function generateDiscoverPlaylists({
   const releaseRadarPromise = buildReleaseRadarPlaylist({
     listenHistoryProfile,
     basedOn,
+    libraryArtists,
   });
   const { playlists: presetPlaylists, totalSteps } =
     await buildPlaylistsFromPresets(
