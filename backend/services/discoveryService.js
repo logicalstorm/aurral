@@ -1312,10 +1312,14 @@ export const updateDiscoveryCache = async (options = {}) => {
       const { generateDiscoverPlaylists } =
         await import("./discoverPlaylistService.js");
       discoveryData.discoverPlaylists = await generateDiscoverPlaylists({
+        discoveryCache: discoveryData,
         basedOn: discoveryData.basedOn,
         topGenres: discoveryData.topGenres,
         topTags: discoveryData.topTags,
         recommendations: discoveryData.recommendations,
+        globalTop: discoveryData.globalTop,
+        libraryArtists: allLibraryArtists,
+        libraryArtistKeys: existingArtistKeys,
         historyTopArtists: historyArtists
           .slice(0, 3)
           .map((artist) => artist.artistName)
@@ -1572,10 +1576,17 @@ export const updateUserDiscoveryCache = async (
       await import("./discoverPlaylistService.js");
     userData.discoverPlaylists = await generateDiscoverPlaylists({
       listenHistoryProfile: profile,
+      discoveryCache: {
+        ...getDiscoveryCache(profile),
+        ...userData,
+        recommendations: recommendationsArray,
+      },
       basedOn: userData.basedOn,
       topGenres: userData.topGenres,
       topTags: userData.topTags,
       recommendations: recommendationsArray,
+      libraryArtists: allLibraryArtists,
+      libraryArtistKeys: existingArtistKeys,
       historyTopArtists: tasteProfile.historySeeds
         .slice(0, 3)
         .map((artist) => artist.artistName)
