@@ -1,21 +1,13 @@
 export const DEFAULT_WORKER_SETTINGS = {
   concurrency: 2,
-  retryCycleMinutes: 15,
+  retryCycleMinutes: 360,
   existingFileMode: "reuse",
 };
 
-export const FLOW_WORKER_RETRY_CYCLE_OPTIONS = [15, 30, 60, 360, 720, 1440];
 export const FLOW_WORKER_EXISTING_FILE_MODES = ["download", "reuse"];
 
-export const normalizeRetryCycleMinutes = (value) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return DEFAULT_WORKER_SETTINGS.retryCycleMinutes;
-  const normalized = Math.floor(parsed);
-  if (FLOW_WORKER_RETRY_CYCLE_OPTIONS.includes(normalized)) {
-    return normalized;
-  }
-  return DEFAULT_WORKER_SETTINGS.retryCycleMinutes;
-};
+export const normalizeRetryCycleMinutes = () =>
+  DEFAULT_WORKER_SETTINGS.retryCycleMinutes;
 
 export const normalizeExistingFileMode = (value) => {
   const normalized = String(value || "").trim().toLowerCase();
@@ -37,7 +29,7 @@ export const getWorkerSettingsFromStatus = (status) => {
     Number.isFinite(parsedConcurrency) && parsedConcurrency >= 1
       ? Math.min(3, Math.floor(parsedConcurrency))
       : DEFAULT_WORKER_SETTINGS.concurrency;
-  const retryCycleMinutes = normalizeRetryCycleMinutes(raw.retryCycleMinutes);
+  const retryCycleMinutes = normalizeRetryCycleMinutes();
   const existingFileMode = normalizeExistingFileMode(raw.existingFileMode);
   return {
     concurrency,
