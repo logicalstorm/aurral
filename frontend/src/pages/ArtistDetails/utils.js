@@ -39,6 +39,19 @@ export const segmentsFromScale = (count, pivot, totalSegments = 10) => {
   return Math.round(clamped * totalSegments);
 };
 
+export const isVisibleLibraryAlbum = (
+  album,
+  { requestingAlbum = null } = {},
+) => {
+  if (!album || String(album.id ?? "").startsWith("pending-")) return false;
+  if (album.monitored) return true;
+  return (
+    !!requestingAlbum &&
+    (album.mbid === requestingAlbum ||
+      album.foreignAlbumId === requestingAlbum)
+  );
+};
+
 export const deduplicateAlbums = (albums) => {
   const seen = new Map();
   return albums.filter((album) => {
