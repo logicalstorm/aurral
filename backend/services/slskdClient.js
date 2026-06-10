@@ -41,20 +41,85 @@ export function isSlskdCleanupAfterRunsEnabled() {
   return slskd.cleanupAfterRuns === true;
 }
 
-function buildClient() {
-  const { url, apiKey } = getSettings();
-  if (!url || !apiKey) {
+function buildClientFromCredentials(url, apiKey) {
+  const trimmedUrl = String(url || "")
+    .trim()
+    .replace(/\/+$/, "");
+  const trimmedKey = String(apiKey || "").trim();
+  if (!trimmedUrl || !trimmedKey) {
     throw new Error("slskd not configured");
   }
   return axios.create({
-    baseURL: url,
+    baseURL: trimmedUrl,
     timeout: 60000,
     headers: {
-      "X-API-KEY": apiKey,
+      "X-API-KEY": trimmedKey,
       Accept: "application/json",
     },
     validateStatus: () => true,
   });
+}
+
+function buildClient() {
+  const { url, apiKey } = getSettings();
+  return buildClientFromCredentials(url, apiKey);
+}
+
+export async function testSlskdWithCredentials(url, apiKey) {
+  const trimmedUrl = String(url || "")
+    .trim()
+    .replace(/\/+$/, "");
+  const trimmedKey = String(apiKey || "").trim();
+  if (!trimmedUrl || !trimmedKey) {
+    return {
+      ok: false,
+      configured: false,
+      connected: false,
+      message: "slskd URL and API key are required",
+    };
+  }
+  const client = buildClientFromCredentials(trimmedUrl, trimmedKey);
+  try {
+    const [appRes, optionsRes] = await Promise.all([
+      client.get("/api/v0/application"),
+      client.get("/api/v0/options"),
+    ]);
+    if (appRes.status !== 200) {
+      return {
+        ok: false,
+        configured: true,
+        connected: false,
+        message: `slskd returned HTTP ${appRes.status}`,
+      };
+    }
+    const server = appRes.data?.server || {};
+    const serverState = String(server.state || "");
+    const soulseekConnected =
+      server.isConnected === true || serverState.includes("Connected");
+    const downloadPath =
+      optionsRes.data?.directories?.downloads ||
+      optionsRes.data?.directories?.download ||
+      null;
+    return {
+      ok: true,
+      configured: true,
+      connected: soulseekConnected,
+      soulseekConnected,
+      warning: !soulseekConnected,
+      serverState,
+      downloadPath,
+      message: soulseekConnected
+        ? "slskd is connected"
+        : `Aurral reached slskd, but Soulseek is ${serverState || "disconnected"}. Open slskd, log in, and connect to the Soulseek server.`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      configured: true,
+      connected: false,
+      message: error?.message || "Failed to reach slskd",
+    };
+  }
 }
 
 function calculateQuadraticDelay(progress) {
