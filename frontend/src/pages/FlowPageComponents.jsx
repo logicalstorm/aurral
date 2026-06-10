@@ -448,6 +448,7 @@ export function FlowScheduleFields({
   inputClassName = "flow-page__field-control",
   onDraftChange,
   onClearError,
+  sizeLabel = "Tracks",
 }) {
   const updateDraft = (updater) => {
     onDraftChange((prev) => updater(prev));
@@ -465,7 +466,7 @@ export function FlowScheduleFields({
       <div className="flow-page__schedule-row">
         <div className="flow-page__field">
           <label className="flow-page__field-label">
-            Tracks
+            {sizeLabel}
           </label>
           <div className="flow-page__field-round">
             <input
@@ -568,7 +569,8 @@ export function ReleaseRadarRecipeFields({
         <p className="flow-page__preset-recipe-label">New releases</p>
         <p className="flow-page__preset-recipe-desc">
           Finds recent albums from artists in your library that you do not have
-          yet, then picks a standout track from each release. The playlist
+          yet, then picks a standout track from each release. The track limit is
+          a maximum; if fewer albums qualify, the playlist will be shorter. It
           refreshes on your schedule below.
         </p>
       </div>
@@ -577,6 +579,7 @@ export function ReleaseRadarRecipeFields({
         inputClassName={inputClassName}
         onDraftChange={onDraftChange}
         onClearError={onClearError}
+        sizeLabel="Max tracks"
       />
       {errorMessage ? (
         <div className="flow-page__error-text">{errorMessage}</div>

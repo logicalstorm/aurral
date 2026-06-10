@@ -426,7 +426,6 @@ async function buildPlaylistFromPreset(preset, options = {}) {
   const plan = await playlistSource.buildFlowRunPlan(flow, {
     ...plannerOptions,
     listenHistoryProfile,
-    deferReserve: true,
   });
   const tracks = Array.isArray(plan?.primaryTracks) ? plan.primaryTracks : [];
   if (tracks.length === 0) return null;
