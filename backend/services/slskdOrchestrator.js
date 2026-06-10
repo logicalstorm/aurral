@@ -35,6 +35,51 @@ const MAX_FALLBACK_SEARCH_QUERIES = 3;
 const MAX_WILDCARD_FALLBACK_SEARCH_QUERIES = 2;
 const MAX_ARTIST_ONLY_SEARCH_QUERIES = 2;
 const MIN_SEARCH_CANDIDATES = 1;
+const MIN_RAW_RESULTS_TO_STOP_SEARCHING = 50;
+
+export function buildSlskdSearchTierGroups(resolvedTrack) {
+  return {
+    plain: [
+      buildFlowAlbumSearchQueries(resolvedTrack).slice(
+        0,
+        MAX_ALBUM_SEARCH_QUERIES,
+      ),
+      buildFlowTrackFallbackSearchQueries(resolvedTrack).slice(
+        0,
+        MAX_FALLBACK_SEARCH_QUERIES,
+      ),
+    ],
+    wildcard: [
+      buildFlowWildcardAlbumSearchQueries(resolvedTrack).slice(
+        0,
+        MAX_WILDCARD_ALBUM_SEARCH_QUERIES,
+      ),
+      buildFlowWildcardTrackFallbackSearchQueries(resolvedTrack).slice(
+        0,
+        MAX_WILDCARD_FALLBACK_SEARCH_QUERIES,
+      ),
+      buildFlowArtistOnlySearchQueries(resolvedTrack).slice(
+        0,
+        MAX_ARTIST_ONLY_SEARCH_QUERIES,
+      ),
+    ],
+  };
+}
+
+export function shouldStopSlskdSearching(
+  aggregated,
+  resolvedTrack,
+  searchOptions,
+) {
+  if (
+    countPreDownloadValidCandidates(aggregated, resolvedTrack, searchOptions) >=
+    MIN_SEARCH_CANDIDATES
+  ) {
+    return true;
+  }
+  return aggregated.length >= MIN_RAW_RESULTS_TO_STOP_SEARCHING;
+}
+
 const MAX_EMPTY_POLL_ATTEMPTS = 60;
 const MAX_POLL_ATTEMPTS = 600;
 
@@ -295,13 +340,7 @@ function mergeSearchResults(aggregated, seen, results) {
   }
 }
 
-function hasEnoughSearchCandidates(
-  aggregated,
-  queryResults,
-  seen,
-  resolvedTrack,
-  searchOptions,
-) {
+function probeAggregatedResults(aggregated, queryResults, seen) {
   const probe = aggregated.slice();
   const probeSeen = new Set(seen);
   for (const result of queryResults) {
@@ -310,10 +349,7 @@ function hasEnoughSearchCandidates(
     probeSeen.add(key);
     probe.push(result);
   }
-  return (
-    countPreDownloadValidCandidates(probe, resolvedTrack, searchOptions) >=
-    MIN_SEARCH_CANDIDATES
-  );
+  return probe;
 }
 
 async function runSearchQuery(
@@ -330,10 +366,12 @@ async function runSearchQuery(
   }
   const completed = await slskdClient.waitForSearch(created.id, undefined, {
     earlyExitWhen: (data) =>
-      hasEnoughSearchCandidates(
-        aggregated,
-        slskdClient.flattenSearchResults(data),
-        seen,
+      shouldStopSlskdSearching(
+        probeAggregatedResults(
+          aggregated,
+          slskdClient.flattenSearchResults(data),
+          seen,
+        ),
         resolvedTrack,
         searchOptions,
       ),
@@ -350,28 +388,8 @@ async function handleSearch(payload) {
     .then(({ recordTrackJobSearching }) => recordTrackJobSearching(job))
     .catch(() => {});
   const resolvedTrack = buildResolvedTrack(job, payload.track);
-  const searchTiers = [
-    buildFlowAlbumSearchQueries(resolvedTrack).slice(
-      0,
-      MAX_ALBUM_SEARCH_QUERIES,
-    ),
-    buildFlowWildcardAlbumSearchQueries(resolvedTrack).slice(
-      0,
-      MAX_WILDCARD_ALBUM_SEARCH_QUERIES,
-    ),
-    buildFlowTrackFallbackSearchQueries(resolvedTrack).slice(
-      0,
-      MAX_FALLBACK_SEARCH_QUERIES,
-    ),
-    buildFlowWildcardTrackFallbackSearchQueries(resolvedTrack).slice(
-      0,
-      MAX_WILDCARD_FALLBACK_SEARCH_QUERIES,
-    ),
-    buildFlowArtistOnlySearchQueries(resolvedTrack).slice(
-      0,
-      MAX_ARTIST_ONLY_SEARCH_QUERIES,
-    ),
-  ];
+  const { plain: plainSearchTiers, wildcard: wildcardSearchTiers } =
+    buildSlskdSearchTierGroups(resolvedTrack);
   const searchOptions = await getWorkerSearchOptions();
   const aggregated = [];
   const seen = new Set();
@@ -389,31 +407,28 @@ async function handleSearch(payload) {
         seen,
       );
       mergeSearchResults(aggregated, seen, results);
-      if (
-        countPreDownloadValidCandidates(
-          aggregated,
-          resolvedTrack,
-          searchOptions,
-        ) >= MIN_SEARCH_CANDIDATES
-      ) {
+      if (shouldStopSlskdSearching(aggregated, resolvedTrack, searchOptions)) {
         return true;
       }
     }
     return false;
   };
-  for (const tier of searchTiers) {
-    if (tier.length === 0) continue;
-    const satisfied = await runQueryBatch(tier);
-    if (satisfied) break;
-    if (
-      countPreDownloadValidCandidates(
-        aggregated,
-        resolvedTrack,
-        searchOptions,
-      ) >= MIN_SEARCH_CANDIDATES
-    ) {
-      break;
+  const runTierGroups = async (tierGroups) => {
+    for (const tier of tierGroups) {
+      if (tier.length === 0) continue;
+      if (shouldStopSlskdSearching(aggregated, resolvedTrack, searchOptions)) {
+        break;
+      }
+      const satisfied = await runQueryBatch(tier);
+      if (satisfied) break;
     }
+  };
+  await runTierGroups(plainSearchTiers);
+  if (
+    aggregated.length === 0 &&
+    !shouldStopSlskdSearching(aggregated, resolvedTrack, searchOptions)
+  ) {
+    await runTierGroups(wildcardSearchTiers);
   }
   if (searchIdRef.value) {
     updateSlskdMetaStmt.run(searchIdRef.value, null, null, null, job.id);
