@@ -449,7 +449,8 @@ export const buildImageProxyUrl = (sourceUrl) => {
   }
 
   const cached = getCachedEntry(normalized);
-  return cached?.localUrl || null;
+  if (cached?.localUrl) return cached.localUrl;
+  return `${IMAGE_PROXY_ROUTE}?src=${encodeURIComponent(normalized)}`;
 };
 
 export const handleImageProxyRequest = async (req, res) => {
