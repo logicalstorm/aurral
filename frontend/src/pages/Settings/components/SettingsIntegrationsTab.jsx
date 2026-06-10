@@ -890,13 +890,13 @@ export function SettingsIntegrationsTab({
                   step={5}
 
                   value={
-                    settings.integrations?.ticketmaster?.searchRadiusMiles ?? 50
+                    settings.integrations?.ticketmaster?.searchRadiusMiles ?? 250
                   }
                   onChange={(e) => {
                     const raw = Number(e.target.value);
                     const value = Number.isFinite(raw)
                       ? Math.max(5, Math.min(250, Math.floor(raw)))
-                      : 50;
+                      : 250;
                     updateSettings({
                       ...settings,
                       integrations: {
