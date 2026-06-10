@@ -53,9 +53,15 @@ import {
   ConfirmDisableModal,
   FlowImportReviewModal,
   FlowFormFields,
+  ReleaseRadarRecipeFields,
   FlowTracksPanel,
   MoreMenu,
 } from "./FlowPageComponents";
+
+const RELEASE_RADAR_PRESET_ID = "release-radar";
+
+const isReleaseRadarFlow = (flow) =>
+  String(flow?.discoverPresetId || "").trim() === RELEASE_RADAR_PRESET_ID;
 
 function formatNextRun(nextRunAt, now = Date.now()) {
   if (!nextRunAt) return null;
@@ -389,6 +395,39 @@ const isFlowDirty = (flow, draft) => {
   const base = normalizeDraftForCompare(flowToForm(flow));
   const next = normalizeDraftForCompare(draft);
   return JSON.stringify(base) !== JSON.stringify(next);
+};
+
+const normalizeScheduleDraftForCompare = (draft) => ({
+  size: Number(draft?.size ?? 0),
+  scheduleDays: normalizeScheduleDays(draft?.scheduleDays),
+  scheduleTime: normalizeScheduleTime(draft?.scheduleTime),
+});
+
+const isReleaseRadarFlowDirty = (flow, draft) => {
+  const base = normalizeScheduleDraftForCompare(flowToForm(flow));
+  const next = normalizeScheduleDraftForCompare(draft);
+  return JSON.stringify(base) !== JSON.stringify(next);
+};
+
+const buildReleaseRadarFlowFromForm = (flow, draft) => {
+  const sizeValue = Number(draft?.size);
+  if (!Number.isFinite(sizeValue) || sizeValue <= 0) {
+    throw new Error("Total tracks must be a positive number");
+  }
+  const scheduleDays = normalizeScheduleDays(draft?.scheduleDays);
+  if (scheduleDays.length === 0) {
+    throw new Error("Select at least one day for this flow schedule");
+  }
+  return {
+    name: String(flow?.name ?? "").trim(),
+    size: Math.round(sizeValue),
+    mix: flow?.mix || DEFAULT_MIX,
+    tags: normalizeFlowEntryList(flow?.tags),
+    relatedArtists: normalizeFlowEntryList(flow?.relatedArtists),
+    deepDive: flow?.deepDive === true,
+    scheduleDays,
+    scheduleTime: normalizeScheduleTime(draft?.scheduleTime),
+  };
 };
 
 const normalizeSharedTrackEntry = (track) => {
@@ -732,14 +771,18 @@ function FlowPage() {
     });
     try {
       const draft = simpleDrafts[flow.id] || flowToForm(flow);
-      const sourceError = getUnavailableFlowSourceMessage(
-        draft,
-        disabledFlowSources,
-      );
-      if (sourceError) {
-        throw new Error(sourceError);
+      if (!isReleaseRadarFlow(flow)) {
+        const sourceError = getUnavailableFlowSourceMessage(
+          draft,
+          disabledFlowSources,
+        );
+        if (sourceError) {
+          throw new Error(sourceError);
+        }
       }
-      const payload = buildFlowFromForm(draft);
+      const payload = isReleaseRadarFlow(flow)
+        ? buildReleaseRadarFlowFromForm(flow, draft)
+        : buildFlowFromForm(draft);
       const response = await updateFlow(flow.id, payload);
       const updatedFlow = response?.flow || {
         ...flow,
@@ -772,21 +815,28 @@ function FlowPage() {
     });
     try {
       const currentDraft = simpleDrafts[flow.id] ?? flowToForm(flow);
-      const sourceError = getUnavailableFlowSourceMessage(
-        currentDraft,
-        disabledFlowSources,
-      );
-      if (sourceError) {
-        throw new Error(sourceError);
+      if (!isReleaseRadarFlow(flow)) {
+        const sourceError = getUnavailableFlowSourceMessage(
+          currentDraft,
+          disabledFlowSources,
+        );
+        if (sourceError) {
+          throw new Error(sourceError);
+        }
       }
       const nextName =
         nameOverride !== undefined
           ? String(nameOverride).trim()
           : String(currentDraft?.name ?? flow.name ?? "").trim();
-      const payload = buildFlowFromForm({
-        ...flowToForm(flow),
-        name: nextName,
-      });
+      const payload = isReleaseRadarFlow(flow)
+        ? {
+            ...buildReleaseRadarFlowFromForm(flow, currentDraft),
+            name: nextName,
+          }
+        : buildFlowFromForm({
+            ...flowToForm(flow),
+            name: nextName,
+          });
       const response = await updateFlow(flow.id, payload);
       const updatedFlow = response?.flow || {
         ...flow,
@@ -1793,7 +1843,9 @@ function FlowPage() {
   const simpleError = selectedFlow ? simpleErrors[selectedFlow.id] : null;
   const flowHasChanges =
     selectedFlow && simpleDraft
-      ? isFlowDirty(selectedFlow, simpleDraft)
+      ? isReleaseRadarFlow(selectedFlow)
+        ? isReleaseRadarFlowDirty(selectedFlow, simpleDraft)
+        : isFlowDirty(selectedFlow, simpleDraft)
       : false;
   const flowCanExport = Number(selectedStats?.total || 0) > 0;
   const flowCanConvert = Number(selectedStats?.done || 0) > 0;
@@ -1989,33 +2041,60 @@ function FlowPage() {
         ) : null}
         {detailTab === "recipe" && selectedIsFlow && simpleDraft ? (
           <div className="flow-page__form flow-page__detail-recipe">
-            <FlowFormFields
-              draft={simpleDraft}
-              remaining={Number(simpleDraft.size || 0)}
-              inputClassName="flow-page__field-control"
-              errorMessage={simpleError}
-              onDraftChange={(updater) =>
-                setSimpleDrafts((prev) => {
-                  const base =
-                    prev[selectedFlow.id] ?? flowToForm(selectedFlow);
-                  return {
-                    ...prev,
-                    [selectedFlow.id]: updater(base),
-                  };
-                })
-              }
-              onClearError={() => {
-                if (simpleErrors[selectedFlow.id]) {
-                  setSimpleErrors((prev) => {
-                    const next = { ...prev };
-                    delete next[selectedFlow.id];
-                    return next;
-                  });
+            {isReleaseRadarFlow(selectedFlow) ? (
+              <ReleaseRadarRecipeFields
+                draft={simpleDraft}
+                inputClassName="flow-page__field-control"
+                errorMessage={simpleError}
+                onDraftChange={(updater) =>
+                  setSimpleDrafts((prev) => {
+                    const base =
+                      prev[selectedFlow.id] ?? flowToForm(selectedFlow);
+                    return {
+                      ...prev,
+                      [selectedFlow.id]: updater(base),
+                    };
+                  })
                 }
-              }}
-              normalizeMixPercent={normalizeMixPercent}
-              disabledSources={disabledFlowSources}
-            />
+                onClearError={() => {
+                  if (simpleErrors[selectedFlow.id]) {
+                    setSimpleErrors((prev) => {
+                      const next = { ...prev };
+                      delete next[selectedFlow.id];
+                      return next;
+                    });
+                  }
+                }}
+              />
+            ) : (
+              <FlowFormFields
+                draft={simpleDraft}
+                remaining={Number(simpleDraft.size || 0)}
+                inputClassName="flow-page__field-control"
+                errorMessage={simpleError}
+                onDraftChange={(updater) =>
+                  setSimpleDrafts((prev) => {
+                    const base =
+                      prev[selectedFlow.id] ?? flowToForm(selectedFlow);
+                    return {
+                      ...prev,
+                      [selectedFlow.id]: updater(base),
+                    };
+                  })
+                }
+                onClearError={() => {
+                  if (simpleErrors[selectedFlow.id]) {
+                    setSimpleErrors((prev) => {
+                      const next = { ...prev };
+                      delete next[selectedFlow.id];
+                      return next;
+                    });
+                  }
+                }}
+                normalizeMixPercent={normalizeMixPercent}
+                disabledSources={disabledFlowSources}
+              />
+            )}
             <div className="flow-page__recipe-actions">
               <button
                 type="button"
