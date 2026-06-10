@@ -621,6 +621,27 @@ test("validateDownloadedTrack accepts candidates that pass pre-download threshol
   assert.ok(validation.scores.title >= 82);
 });
 
+test("validateDownloadedTrack trusts preDownloadValid candidates without re-scoring tags", async () => {
+  const validation = await validateDownloadedTrack(
+    "/tmp/does-not-exist.flac",
+    {
+      preDownloadValid: true,
+      raw: {
+        file: "Of Mice & Men\\Of Mice & Men\\03 - Second & Sebring.flac",
+      },
+    },
+    {
+      artistName: "Of Mice & Men",
+      trackName: "Second & Sebring",
+      albumName: "Of Mice & Men",
+      trackNumber: 3,
+    },
+  );
+
+  assert.equal(validation.valid, true);
+  assert.equal(validation.scores.matchReason, "pre-download-trusted");
+});
+
 test("rankFlowSearchResults accepts soulseek backslash paths for albums with live in the title", () => {
   const ranked = rankFlowSearchResults(
     [
