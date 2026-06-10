@@ -170,6 +170,42 @@ test("waitForSearch keeps polling after files appear until active timeout", asyn
   });
 });
 
+test("settleSearch waits until slskd marks the search complete", async () => {
+  await withStubbedSearchWaits(async () => {
+    let calls = 0;
+    slskdClient.getSearch = async () => {
+      calls += 1;
+      if (calls < 3) {
+        return { state: "InProgress", fileCount: 0, responses: [] };
+      }
+      return { state: "Completed", fileCount: 0, responses: [] };
+    };
+    const started = Date.now();
+    const result = await slskdClient.settleSearch("search-settle", {
+      maxWaitMs: 5000,
+    });
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed >= 1500);
+    assert.equal(result?.state, "Completed");
+    assert.ok(calls >= 3);
+  });
+});
+
+test("settleSearch cancels in-progress searches when requested", async () => {
+  const originalDeleteSearch = slskdClient.deleteSearch.bind(slskdClient);
+  let deletedId = null;
+  try {
+    slskdClient.deleteSearch = async (searchId) => {
+      deletedId = searchId;
+      return true;
+    };
+    await slskdClient.settleSearch("search-cancel", { cancel: true });
+    assert.equal(deletedId, "search-cancel");
+  } finally {
+    slskdClient.deleteSearch = originalDeleteSearch;
+  }
+});
+
 test("createSearch sends slskd search timeout in milliseconds", async () => {
   const originalSettings = dbOps.getSettings();
   let requestBody = null;

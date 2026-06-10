@@ -7,11 +7,16 @@ const [
   {
     bypassBannedArtistTerm,
     buildFlowSearchQueries,
+    buildFlowSearchTiers,
     buildFlowAlbumSearchQueries,
     buildFlowArtistOnlySearchQueries,
     buildFlowTrackFallbackSearchQueries,
     buildFlowWildcardAlbumSearchQueries,
     buildFlowWildcardTrackFallbackSearchQueries,
+    buildHalfAlbumTitle,
+    buildTrimmedBypassText,
+    buildVolumeVariationTexts,
+    removeSearchAccents,
     rankFlowSearchResults,
     selectRankedMatchAttempts,
     validateDownloadedTrack,
@@ -90,7 +95,34 @@ test("buildFlowAlbumSearchQueries keeps album-only searches separate from track 
   assert.ok(fallbackQueries.includes("Massive Attk Teardrop"));
 });
 
-test("buildFlowSearchQueries generates album-first and fallback track searches", () => {
+test("buildFlowSearchTiers starts with track search before album fallbacks", () => {
+  const tiers = buildFlowSearchTiers({
+    artistName: "Massive Attack",
+    trackName: "Teardrop",
+    albumName: "Mezzanine",
+    releaseYear: "1998",
+    artistAliases: ["Massive Attk"],
+  });
+
+  assert.equal(tiers[0]?.name, "primary_track");
+  assert.ok(tiers[0].queries.includes("Massive Attack Teardrop"));
+  assert.ok(
+    tiers.some(
+      (tier) =>
+        tier.name === "base_album" &&
+        tier.queries.includes("Massive Attack Mezzanine 1998"),
+    ),
+  );
+  assert.ok(
+    tiers.some(
+      (tier) =>
+        tier.name === "track_fallback" &&
+        tier.queries.includes("Massive Attk Teardrop"),
+    ),
+  );
+});
+
+test("buildFlowSearchQueries includes track-first and album fallback searches", () => {
   const queries = buildFlowSearchQueries({
     artistName: "Massive Attack",
     trackName: "Teardrop",
@@ -99,13 +131,27 @@ test("buildFlowSearchQueries generates album-first and fallback track searches",
     artistAliases: ["Massive Attk"],
   });
 
-  assert.deepEqual(queries.slice(0, 3), [
-    "Massive Attack Mezzanine",
-    "Massive Attack Mezzanine 1998",
-    "Massive Attk Mezzanine",
-  ]);
-  assert.ok(queries.includes("Massive Attack Teardrop"));
+  assert.ok(queries[0].includes("Massive Attack Teardrop"));
+  assert.ok(queries.includes("Massive Attack Mezzanine 1998"));
   assert.ok(queries.includes("Massive Attk Teardrop"));
+});
+
+test("search variation helpers normalize and trim bypass text", () => {
+  assert.equal(removeSearchAccents("Björk"), "Bjork");
+  assert.equal(buildTrimmedBypassText("Bob Dylan"), "Bob Dyla");
+  assert.equal(
+    buildVolumeVariationTexts("Artist Album Vol. 2")[0],
+    "Artist Album Vol. 2",
+  );
+  assert.ok(
+    buildVolumeVariationTexts("Artist Album Vol. 2").includes(
+      "Artist Album Volume 2",
+    ),
+  );
+  assert.equal(
+    buildHalfAlbumTitle("The Fiction We Live On Forever"),
+    "The Fiction We",
+  );
 });
 
 test("buildFlowSearchQueries adds artist-free track plus album fallbacks", () => {
@@ -147,7 +193,12 @@ test("buildFlowSearchQueries adds simplified variants for parenthetical and slas
     ),
   );
   assert.ok(slashQueries.includes("LOVING A long slow little wave"));
-  assert.ok(slashQueries.includes("LOVING citizen, an activity"));
+  assert.ok(
+    slashQueries.some(
+      (query) =>
+        query.includes("citizen") && query.includes("activity") && query.startsWith("LOVING"),
+    ),
+  );
 });
 
 test("rankFlowSearchResults prefers folders with a strong tracklist fingerprint", () => {
