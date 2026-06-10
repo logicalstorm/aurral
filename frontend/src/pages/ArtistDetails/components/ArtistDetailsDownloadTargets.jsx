@@ -223,9 +223,7 @@ export function ArtistDetailsDownloadTargets({
                 <div className="artist-pick-panel__track-grid">
                 {tracks.map((track, index) => {
                   const currentTrackId = String(
-                    track.id ??
-                      track.mbid ??
-                      `${missingReleasePick.releaseGroupId}-${index}`,
+                    track.id ?? track.mbid ?? `pick-${index}`,
                   );
                   const isPlaying = isTrackPlaying(currentTrackId);
                   const isLoadingPreview = isTrackLoading(currentTrackId);
