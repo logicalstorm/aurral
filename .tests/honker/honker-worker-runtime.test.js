@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import fs from "fs";
 import {
   createIsolatedStateDir,
   applyIsolatedBackendEnv,
@@ -10,7 +9,6 @@ import {
 
 const isolatedState = await createIsolatedStateDir("honker-worker-runtime");
 applyIsolatedBackendEnv(isolatedState);
-fs.mkdirSync(isolatedState.dataDir, { recursive: true });
 
 await importFromRepo("backend/config/db-sqlite.js");
 
@@ -21,7 +19,6 @@ const operationQueueModule = await importFromRepo(
 );
 
 test.after(async () => {
-  honkerDb.closeHonkerDb();
   await cleanupIsolatedState(isolatedState);
 });
 
