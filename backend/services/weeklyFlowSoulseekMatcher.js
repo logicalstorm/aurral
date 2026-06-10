@@ -1282,12 +1282,27 @@ export async function validateDownloadedTrack(filePath, candidate, context) {
     Number.isFinite(Number(parsed.common.track.no))
       ? Number(parsed.common.track.no)
       : extractTrackNumber(remoteBaseName);
-  const trackNumberValid =
-    !Number.isFinite(Number(context?.trackNumber)) ||
-    !Number.isFinite(Number(actualTrackNumber)) ||
-    Number(context.trackNumber) <= 0 ||
-    Number(actualTrackNumber) <= 0 ||
-    Number(context.trackNumber) === Number(actualTrackNumber);
+  const trackNumberMismatch =
+    Number.isFinite(Number(context?.trackNumber)) &&
+    Number(context?.trackNumber) > 0 &&
+    Number.isFinite(Number(actualTrackNumber)) &&
+    Number(actualTrackNumber) > 0 &&
+    Number(context?.trackNumber) !== Number(actualTrackNumber);
+  const siblingTrackPenalty = scoreSiblingTrackConflict(
+    remoteBaseName,
+    context,
+    titleScore,
+  );
+  const matchCheck = isStrongEnoughCandidate({
+    titleScore,
+    artistScore,
+    albumScore,
+    variantMatch,
+    trackCountScore: 18,
+    trackNumberMismatch,
+    siblingTrackPenalty,
+    context,
+  });
   const durationSeconds = Number(parsed?.format?.duration || 0);
   const actualDurationMs =
     durationSeconds > 0 ? Math.round(durationSeconds * 1000) : null;
@@ -1299,29 +1314,23 @@ export async function validateDownloadedTrack(filePath, candidate, context) {
     durationDiffMs == null ||
     durationDiffMs <= 25000 ||
     durationDiffMs <= Math.max(12000, expectedDuration * 0.18);
-
-  const valid =
-    titleScore >= 82 &&
-    artistScore >= 60 &&
-    durationValid &&
-    !variantMatch.hardMismatch &&
-    (trackNumberValid || (titleScore >= 98 && artistScore >= 90)) &&
-    (!context?.albumName ||
-      albumScore >= 28 ||
-      (titleScore >= 90 && artistScore >= 90));
+  const valid = matchCheck.valid && durationValid;
 
   return {
     valid,
     reason: valid
       ? null
-      : `title=${titleScore}, artist=${artistScore}, album=${albumScore}, durationValid=${durationValid}, variantScore=${variantMatch.score}, trackNumberValid=${trackNumberValid}`,
+      : !matchCheck.valid
+        ? `${matchCheck.reason}: title=${titleScore}, artist=${artistScore}, album=${albumScore}, variantScore=${variantMatch.score}, trackNumberMismatch=${trackNumberMismatch}`
+        : `duration-mismatch: title=${titleScore}, artist=${artistScore}, album=${albumScore}, durationValid=${durationValid}`,
     scores: {
       title: titleScore,
       artist: artistScore,
       album: albumScore,
       durationValid,
       variant: variantMatch.score,
-      trackNumberValid,
+      trackNumberMismatch,
+      matchReason: matchCheck.reason,
     },
     actualDurationMs,
     remoteFilename,

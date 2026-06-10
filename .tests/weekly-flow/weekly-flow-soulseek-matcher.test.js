@@ -597,8 +597,28 @@ test("validateDownloadedTrack rejects obvious live mismatches from the remote fi
   );
 
   assert.equal(validation.valid, false);
-  assert.equal(validation.scores.trackNumberValid, true);
+  assert.equal(validation.scores.trackNumberMismatch, false);
   assert.ok(validation.scores.variant < 0);
+});
+
+test("validateDownloadedTrack accepts candidates that pass pre-download thresholds", async () => {
+  const validation = await validateDownloadedTrack(
+    "/tmp/does-not-exist.flac",
+    {
+      raw: {
+        file: "Of Mice & Men\\Of Mice & Men\\03 - Second & Sebring.flac",
+      },
+    },
+    {
+      artistName: "Of Mice & Men",
+      trackName: "Second & Sebring",
+      albumName: "Of Mice & Men",
+      trackNumber: 3,
+    },
+  );
+
+  assert.equal(validation.valid, true);
+  assert.ok(validation.scores.title >= 82);
 });
 
 test("rankFlowSearchResults accepts soulseek backslash paths for albums with live in the title", () => {
