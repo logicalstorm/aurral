@@ -111,6 +111,27 @@ export function useArtistDetailsStream(
   const [loadingReleases, setLoadingReleases] = useState(false);
   const [appSettings, setAppSettings] = useState(null);
   const [albumCovers, setAlbumCovers] = useState({});
+  const releaseGroupIdsKey = useMemo(() => {
+    const releaseGroupIds =
+      [
+        ...(artist?.["release-groups"] || []),
+        ...(artist?.["appears-on-release-groups"] || []),
+      ]
+        ?.filter((rg) =>
+          matchesReleaseTypeFilter(rg, selectedReleaseTypes),
+        )
+        .map((rg) => rg.id)
+        .filter(Boolean) || [];
+    const libraryMbids = (libraryAlbums || [])
+      .map((album) => album.mbid || album.foreignAlbumId)
+      .filter(Boolean);
+    return [...new Set([...releaseGroupIds, ...libraryMbids])].join("\0");
+  }, [
+    artist?.["release-groups"],
+    artist?.["appears-on-release-groups"],
+    libraryAlbums,
+    selectedReleaseTypesKey,
+  ]);
   const requestedAlbumCoversRef = useRef(new Set());
   const artistMbidRef = useRef(mbid);
   const artistNameRef = useRef(artistNameFromNav || "");
@@ -381,6 +402,26 @@ export function useArtistDetailsStream(
         coverReceived = true;
         if (coverData.images && coverData.images.length > 0) {
           setCoverImages(coverData.images);
+          setLoadingCover(false);
+          return;
+        }
+        const nameForCover =
+          artistNameRef.current || artistNameFromNav || "";
+        if (nameForCover) {
+          getArtistCover(mbid, nameForCover, true)
+            .then((refreshedCover) => {
+              if (!isCurrentRequest()) return;
+              if (refreshedCover?.images?.length) {
+                setCoverImages(refreshedCover.images);
+              }
+            })
+            .catch(() => {})
+            .finally(() => {
+              if (isCurrentRequest()) {
+                setLoadingCover(false);
+              }
+            });
+          return;
         }
         setLoadingCover(false);
       } catch (err) {
@@ -645,10 +686,8 @@ export function useArtistDetailsStream(
     };
   }, [
     mbid,
-    artist,
-    libraryAlbums,
+    releaseGroupIdsKey,
     albumCovers,
-    selectedReleaseTypesKey,
     visibleCoverIdsKey,
   ]);
 
