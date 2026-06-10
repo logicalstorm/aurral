@@ -221,9 +221,12 @@ const writeStoredNearbyShows = (value, userId, locationMode, zip) => {
 };
 
 const stripDiscoverPlaylistAdoptionFields = (playlists) =>
-  (Array.isArray(playlists) ? playlists : []).map(
-    ({ adoptedFlowId, adoptedPlaylistId, ...playlist }) => playlist,
-  );
+  (Array.isArray(playlists) ? playlists : []).map((playlist) => {
+    const rest = { ...playlist };
+    delete rest.adoptedFlowId;
+    delete rest.adoptedPlaylistId;
+    return rest;
+  });
 
 const normalizeDiscoveryData = (value) => {
   if (!value || typeof value !== "object") return null;
