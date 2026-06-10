@@ -1,3 +1,4 @@
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import honker from "@russellthehippo/honker-node";
@@ -6,16 +7,19 @@ import { scheduleHonkerComponentRestart } from "./honkerWorkerRuntime.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const DB_PATH = process.env.AURRAL_DB_PATH
-  ? path.resolve(process.env.AURRAL_DB_PATH)
-  : path.join(
-      process.env.AURRAL_DATA_DIR
-        ? path.resolve(process.env.AURRAL_DATA_DIR)
-        : path.join(__dirname, "..", "data"),
-      "aurral.db",
-    );
+function resolveHonkerDbPath() {
+  return process.env.AURRAL_DB_PATH
+    ? path.resolve(process.env.AURRAL_DB_PATH)
+    : path.join(
+        process.env.AURRAL_DATA_DIR
+          ? path.resolve(process.env.AURRAL_DATA_DIR)
+          : path.join(__dirname, "..", "data"),
+        "aurral.db",
+      );
+}
 
 let honkerDb = null;
+let openedHonkerDbPath = null;
 let pipelineQueue = null;
 let discoveryRefreshQueue = null;
 let discoveryPlaylistBuildQueue = null;
@@ -70,8 +74,17 @@ export function getPipelinePriorityForPhase(phase) {
 }
 
 export function getHonkerDb() {
+  const dbPath = resolveHonkerDbPath();
+  if (honkerDb && openedHonkerDbPath !== dbPath) {
+    closeHonkerDb();
+  }
   if (!honkerDb) {
-    honkerDb = honker.open(DB_PATH);
+    const dataDir = path.dirname(dbPath);
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    honkerDb = honker.open(dbPath);
+    openedHonkerDbPath = dbPath;
   }
   return honkerDb;
 }
@@ -473,6 +486,7 @@ export function closeHonkerDb() {
     } catch {}
   }
   honkerDb = null;
+  openedHonkerDbPath = null;
   pipelineQueue = null;
   discoveryRefreshQueue = null;
   discoveryPlaylistBuildQueue = null;
