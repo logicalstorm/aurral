@@ -1202,10 +1202,6 @@ function DiscoverPage() {
         (img) => img.coverType === "poster" || img.coverType === "fanart",
       );
       const image = posterImage || artist.images[0];
-
-      if (image && artist.id) {
-        return null;
-      }
       return image?.remoteUrl || image?.url || null;
     }
     return null;

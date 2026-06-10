@@ -255,6 +255,52 @@ const typeRank = (primaryType) => {
   return 3;
 };
 
+const buildArtistCoverFromUrl = (imageUrl, types = ["Front"]) => ({
+  url: imageUrl,
+  images: [
+    {
+      image: imageUrl,
+      front: true,
+      types,
+    },
+  ],
+});
+
+const recoverArtistCoverFromCachedReleaseGroups = async (resolvedMbid) => {
+  const rgCacheKey = `artist_rg:${resolvedMbid}`;
+  const cachedRgId = dbOps.getDeezerMbidCache(rgCacheKey);
+  if (cachedRgId && cachedRgId !== "NOT_FOUND") {
+    const cachedUrl = getCachedUrl(`rg:${cachedRgId}`);
+    if (cachedUrl) {
+      return buildArtistCoverFromUrl(cachedUrl);
+    }
+  }
+
+  const releaseGroups = await musicbrainzGetArtistReleaseGroupsPreview(
+    resolvedMbid,
+    30,
+  ).catch(() => []);
+  const ordered = releaseGroups
+    .filter((rg) => rg?.id)
+    .sort((a, b) => {
+      const rankDiff = typeRank(a["primary-type"]) - typeRank(b["primary-type"]);
+      if (rankDiff !== 0) return rankDiff;
+      const dateA = a["first-release-date"] || "";
+      const dateB = b["first-release-date"] || "";
+      return dateB.localeCompare(dateA);
+    });
+
+  for (const rg of ordered) {
+    const cachedUrl = getCachedUrl(`rg:${rg.id}`);
+    if (cachedUrl) {
+      dbOps.setDeezerMbidCache(rgCacheKey, rg.id);
+      return buildArtistCoverFromUrl(cachedUrl);
+    }
+  }
+
+  return null;
+};
+
 const normalizeGetArtistImageOptions = (forceRefreshOrOptions, artistNameHint) => {
   if (
     forceRefreshOrOptions &&
@@ -316,6 +362,14 @@ export const getArtistImage = async (
     ((cachedImage && cachedImage.imageUrl === "NOT_FOUND") ||
       hasFreshNegativeCache(mbid))
   ) {
+    const override = dbOps.getArtistOverride(mbid);
+    const resolvedMbid = override?.musicbrainzId || mbid;
+    const recovered = await recoverArtistCoverFromCachedReleaseGroups(resolvedMbid);
+    if (recovered?.url) {
+      negativeImageCache.delete(mbid);
+      dbOps.setImage(mbid, recovered.url);
+      return recovered;
+    }
     return { url: null, images: [], notFound: true };
   }
 

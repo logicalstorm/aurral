@@ -1,4 +1,5 @@
 import { getImagePrefetchQueue, getWorkerId } from "./honkerDb.js";
+import { dbOps } from "../config/db-helpers.js";
 import { getArtistImage } from "./imageService.js";
 import {
   isHonkerShuttingDown,
@@ -24,12 +25,14 @@ async function processImagePrefetch(payload = {}) {
       ? payload.artistNames
       : {};
   await Promise.allSettled(
-    mbids.map((mbid) =>
-      getArtistImage(mbid, {
+    mbids.map((mbid) => {
+      const cached = dbOps.getImage(mbid);
+      return getArtistImage(mbid, {
         artistName:
           typeof artistNames[mbid] === "string" ? artistNames[mbid] : null,
-      }),
-    ),
+        forceRefresh: cached?.imageUrl === "NOT_FOUND",
+      });
+    }),
   );
   return { prefetched: mbids.length };
 }

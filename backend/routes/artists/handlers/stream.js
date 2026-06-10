@@ -374,8 +374,11 @@ export default function registerStream(router) {
 
             const artistName =
               (await namePromise.catch(() => null)) || streamArtistName || null;
+            const shouldForceRefresh =
+              cachedImage?.imageUrl === "NOT_FOUND" && !!artistName;
             const cover = await getArtistImage(mbid, {
               artistName,
+              forceRefresh: shouldForceRefresh,
             });
             if (cover?.images?.length) {
               sendSSE(res, "cover", {
