@@ -10,6 +10,7 @@ import {
 const isolatedState = await createIsolatedStateDir("discovery-refresh-scheduler");
 applyIsolatedBackendEnv(isolatedState);
 
+const honkerDbModule = await importFromRepo("backend/services/honkerDb.js");
 const {
   discoveryNeedsRefresh,
   enqueueDiscoveryRefresh,
@@ -19,7 +20,34 @@ const {
 } = await importFromRepo("backend/services/discoveryRefreshScheduler.js");
 const { getDiscoveryCache } = await importFromRepo("backend/services/discoveryService.js");
 
+let heldGlobalRefreshLock = null;
+
+function holdGlobalRefreshLock() {
+  heldGlobalRefreshLock = honkerDbModule.getHonkerDb().tryLock(
+    "discovery-global-refresh",
+    "discovery-refresh-scheduler-test",
+    3600,
+  );
+  assert.ok(heldGlobalRefreshLock);
+}
+
+function releaseHeldGlobalRefreshLock() {
+  if (!heldGlobalRefreshLock) return;
+  try {
+    heldGlobalRefreshLock.release();
+  } catch {}
+  heldGlobalRefreshLock = null;
+}
+
+test.beforeEach(() => {
+  markDiscoveryRefreshDequeued();
+  getDiscoveryCache().isUpdating = false;
+  releaseHeldGlobalRefreshLock();
+});
+
 test.after(async () => {
+  releaseHeldGlobalRefreshLock();
+  markDiscoveryRefreshDequeued();
   await cleanupIsolatedState(isolatedState);
 });
 
@@ -46,8 +74,7 @@ test("discoveryNeedsRefresh returns false for fresh populated cache", () => {
 });
 
 test("enqueueDiscoveryRefresh deduplicates active refresh requests", () => {
-  const cache = getDiscoveryCache();
-  cache.isUpdating = true;
+  holdGlobalRefreshLock();
   const result = enqueueDiscoveryRefresh({ reason: "manual" });
   assert.equal(result.enqueued, false);
   assert.equal(result.reason, "updating");
@@ -62,11 +89,28 @@ test("requestDiscoveryRefresh returns a plain result object", () => {
 });
 
 test("enqueueDiscoveryRefresh treats force as success when already updating", () => {
-  const cache = getDiscoveryCache();
-  cache.isUpdating = true;
+  holdGlobalRefreshLock();
   const result = enqueueDiscoveryRefresh({ reason: "manual", force: true });
   assert.equal(result.enqueued, true);
   assert.equal(result.reason, "already_updating");
+});
+
+test("enqueueDiscoveryRefresh deduplicates when refresh queue lock is held", () => {
+  const first = enqueueDiscoveryRefresh({ reason: "manual" });
+  assert.equal(first.enqueued, true);
+
+  const second = enqueueDiscoveryRefresh({ reason: "manual" });
+  assert.equal(second.enqueued, false);
+  assert.equal(second.reason, "queued");
+});
+
+test("enqueueDiscoveryRefresh does not treat cache.isUpdating alone as in-progress", () => {
+  const cache = getDiscoveryCache();
+  cache.isUpdating = true;
+
+  const result = enqueueDiscoveryRefresh({ reason: "manual" });
+  assert.equal(result.enqueued, true);
+  assert.equal(result.reason, "manual");
 });
 
 test("enqueueDiscoveryRefresh queues immediate refresh", () => {
