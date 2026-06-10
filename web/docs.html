@@ -91,6 +91,7 @@
         <aside class="guide-rail" aria-label="Guide contents">
           <a href="#before-you-start">Before you start</a>
           <a href="#docker-setup">Docker setup</a>
+          <a href="#shared-storage">Shared storage</a>
           <a href="#first-run">First run</a>
           <a href="#app-sections">App sections</a>
           <a href="#discovery">Discovery</a>
@@ -209,6 +210,116 @@ STORAGE=/srv/aurral/data</code></pre>
             playlists are written inside the shared mount.
           </p>
         </div>
+
+        <p>
+          For Lidarr, slskd, and Navidrome together, use
+          <a href="https://github.com/lklynet/aurral/blob/main/docker-compose.example.yml">docker-compose.example.yml</a>
+          as a starting point.
+        </p>
+      </section>
+
+      <section id="shared-storage" class="content-section">
+        <h2>Shared Storage Layout</h2>
+        <p>
+          Aurral only needs Lidarr to start, but flows, slskd downloads, Lidarr
+          file reuse, and Navidrome playback all work best when
+          <strong>Aurral, Lidarr, slskd, and Navidrome mount the same host folder
+          at the same container path</strong>. This guide uses <code>/data</code>.
+        </p>
+        <p>
+          Docker only exposes mounted paths. Aurral uses the literal filesystem
+          paths Lidarr and slskd report over their APIs. If Lidarr stores a file
+          at <code>/data/music/...</code> but Aurral does not have
+          <code>/data/music</code> mounted, library checks and reuse will fail
+          even when the API connection works.
+        </p>
+
+        <h3>Recommended host layout</h3>
+        <pre><code>/srv/media/
+├── music/                              # Lidarr root folder
+└── downloads/
+    ├── slskd/
+    │   └── complete/                   # slskd finished downloads
+    └── aurral/                         # Aurral DOWNLOAD_FOLDER
+        └── aurral-playlists/           # created by Aurral</code></pre>
+
+        <h3>Paths each service should use</h3>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th>Mount</th>
+                <th>Path inside container</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Lidarr</td>
+                <td><code>/srv/media:/data</code></td>
+                <td>Root folder <code>/data/music</code></td>
+              </tr>
+              <tr>
+                <td>slskd</td>
+                <td><code>/srv/media:/data</code></td>
+                <td>Downloads <code>/data/downloads/slskd/complete</code></td>
+              </tr>
+              <tr>
+                <td>Aurral</td>
+                <td><code>/srv/media:/data</code></td>
+                <td><code>DOWNLOAD_FOLDER=/data/downloads/aurral</code></td>
+              </tr>
+              <tr>
+                <td>Navidrome</td>
+                <td><code>/srv/media:/data:ro</code></td>
+                <td>Scan <code>/data/music</code> and <code>/data/downloads/aurral</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Example compose mounts</h3>
+        <pre><code>services:
+  aurral:
+    environment:
+      - DOWNLOAD_FOLDER=/data/downloads/aurral
+    volumes:
+      - /srv/media:/data
+      - ./data/app:/app/backend/data
+
+  lidarr:
+    volumes:
+      - /srv/media:/data
+
+  slskd:
+    volumes:
+      - /srv/media:/data
+
+  navidrome:
+    environment:
+      - ND_SCANNER_PURGEMISSING=always
+      - ND_DATA=/config
+    volumes:
+      - /srv/media:/data:ro
+      - ./data/navidrome:/config</code></pre>
+
+        <p>After startup:</p>
+        <ol>
+          <li>In Lidarr, set the root folder to <code>/data/music</code>.</li>
+          <li>In slskd, set downloads to <code>/data/downloads/slskd/complete</code>.</li>
+          <li>In Aurral, keep <code>DOWNLOAD_FOLDER=/data/downloads/aurral</code>.</li>
+          <li>In Navidrome, add <code>/data/music</code> and <code>/data/downloads/aurral</code> as music folders.</li>
+        </ol>
+
+        <div class="doc-callout">
+          <h3 class="doc-callout-title">Do not mount only <code>/data/music</code></h3>
+          <p class="doc-callout-copy">
+            A music-only mount is enough for Lidarr API connectivity, but Aurral
+            cannot see <code>/data/downloads/...</code> unless that tree is mounted
+            too. Mount the parent shared root, for example
+            <code>/srv/media:/data</code>.
+          </p>
+        </div>
       </section>
 
       <section id="first-run" class="content-section">
@@ -220,10 +331,9 @@ STORAGE=/srv/aurral/data</code></pre>
 
         <ol>
           <li>Create your first admin account.</li>
-          <li>Connect Lidarr and test the connection.</li>
-          <li>Optionally connect Navidrome.</li>
-          <li>Optionally add a Last.fm username and API key.</li>
-          <li>Sign in and finish your defaults.</li>
+          <li>Connect Lidarr, test library access, and choose default profiles.</li>
+          <li>Optionally connect Navidrome, Last.fm, slskd, and Ticketmaster.</li>
+          <li>Sign in and finish anything you skipped in Settings.</li>
         </ol>
 
         <h3>Good first settings</h3>
@@ -448,10 +558,9 @@ STORAGE=/srv/aurral/data</code></pre>
 
         <h3>Recommended setup</h3>
         <ol>
-          <li>Mount the same shared root into Aurral, Navidrome, and slskd, for example <code>/data:/data</code>.</li>
-          <li>Set <code>DOWNLOAD_FOLDER</code> to the path inside that shared root where Aurral should write downloads, for example <code>/data/downloads/aurral</code>.</li>
+          <li>Follow <a href="#shared-storage">Shared Storage Layout</a> so Aurral, Navidrome, slskd, and Lidarr all mount the same <code>/data</code> tree.</li>
           <li>Connect Navidrome in Aurral's Integrations settings.</li>
-          <li>Let Aurral write the flow library and playlist files.</li>
+          <li>Let Aurral write the flow library and playlist files under <code>aurral-playlists</code>.</li>
         </ol>
 
         <pre><code>ND_SCANNER_PURGEMISSING=always</code></pre>
@@ -496,19 +605,12 @@ STORAGE=/srv/aurral/data</code></pre>
         </div>
 
         <p>
-          Lidarr-aware reuse requires Aurral to see Lidarr's root directory the
-          same way Lidarr sees it. In Lidarr, find this at
-          <strong>Settings -&gt; Media Management -&gt; Root Folders -&gt; Path</strong>.
-          Mount that same host library path into Aurral at the same container
-          path, and mount the shared download root used by
+          Lidarr-aware reuse requires the shared mount described in
+          <a href="#shared-storage">Shared Storage Layout</a>. Aurral must see
+          Lidarr's root folder at the same container path Lidarr uses (for
+          example <code>/data/music</code>), and must also mount
           <code>DOWNLOAD_FOLDER</code>.
         </p>
-
-        <pre><code>environment:
-  - DOWNLOAD_FOLDER=/data/downloads/aurral
-volumes:
-  - /srv/aurral-shared:/data
-  - /srv/music:/music:ro</code></pre>
       </section>
 
       <section id="users" class="content-section">
@@ -539,7 +641,9 @@ volumes:
       <section id="storage" class="content-section">
         <h2>Storage And Backups</h2>
         <p>
-          Aurral keeps app state and generated music separate.
+          Aurral keeps app state and generated music separate. For how Lidarr,
+          slskd, Navidrome, and Aurral should share mounts, read
+          <a href="#shared-storage">Shared Storage Layout</a>.
         </p>
 
         <div class="doc-table-wrap">
@@ -553,7 +657,11 @@ volumes:
             <tbody>
               <tr>
                 <td><code>/app/backend/data</code></td>
-                <td>Database, settings, users, sessions, cache state, flow jobs.</td>
+                <td>Database, settings, users, sessions, cache state, flow jobs. Mount with <code>STORAGE</code>; not shared with other apps.</td>
+              </tr>
+              <tr>
+                <td><code>/data</code> shared mount</td>
+                <td>Library (<code>/data/music</code>), slskd completes, and Aurral output (<code>DOWNLOAD_FOLDER</code>).</td>
               </tr>
               <tr>
                 <td><code>DOWNLOAD_FOLDER</code></td>

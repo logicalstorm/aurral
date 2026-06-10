@@ -1014,6 +1014,46 @@ export const testLidarrLibraryAccessOnboarding = async (url, apiKey) => {
   return response.data;
 };
 
+export const getLidarrProfilesOnboarding = async (url, apiKey) => {
+  const params = new URLSearchParams();
+  if (url) params.append("url", url);
+  if (apiKey) params.append("apiKey", apiKey);
+  const queryString = params.toString();
+  const endpoint = `/onboarding/lidarr/profiles${
+    queryString ? `?${queryString}` : ""
+  }`;
+  const response = await api.get(endpoint);
+  return response.data;
+};
+
+export const getLidarrMetadataProfilesOnboarding = async (url, apiKey) => {
+  const params = new URLSearchParams();
+  if (url) params.append("url", url);
+  if (apiKey) params.append("apiKey", apiKey);
+  const queryString = params.toString();
+  const endpoint = `/onboarding/lidarr/metadata-profiles${
+    queryString ? `?${queryString}` : ""
+  }`;
+  const response = await api.get(endpoint);
+  return response.data;
+};
+
+export const applyLidarrCommunityGuideOnboarding = async (url, apiKey) => {
+  const response = await api.post("/onboarding/lidarr/apply-community-guide", {
+    url: url?.replace(/\/+$/, ""),
+    apiKey,
+  });
+  return response.data;
+};
+
+export const testSlskdOnboarding = async (url, apiKey) => {
+  const response = await api.post("/onboarding/slskd/test", {
+    url: url?.replace(/\/+$/, ""),
+    apiKey,
+  });
+  return response.data;
+};
+
 export const testGotifyConnection = async (url, token) => {
   const response = await api.post("/settings/gotify/test", { url, token });
   return response.data;
