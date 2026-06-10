@@ -421,9 +421,16 @@
     environment:
       - DOWNLOAD_FOLDER=/data/downloads/aurral
     volumes:
+      - /srv/media:/data
       - /srv/aurral/data:/app/backend/data
-      - /srv/aurral-shared:/data
-      - /srv/music/library:/music:ro
+
+  lidarr:
+    volumes:
+      - /srv/media:/data
+
+  slskd:
+    volumes:
+      - /srv/media:/data
 
   navidrome:
     image: deluan/navidrome:latest
@@ -432,14 +439,19 @@
       - "4533:4533"
     environment:
       - ND_SCANNER_PURGEMISSING=always
+      - ND_DATA=/config
     volumes:
-      - /srv/navidrome/data:/data
-      - /srv/music:/music:ro</code></pre>
+      - /srv/media:/data:ro
+      - /srv/navidrome/data:/config</code></pre>
             </div>
 
             <p>
-              If you run slskd, add <code>/srv/music/aurral</code> or the
-              equivalent host path to your slskd shared folders.
+              Mount the same host tree at <code>/data</code> in Aurral, Lidarr,
+              and slskd. Set Lidarr's root folder to
+              <code>/data/music</code>, slskd downloads to
+              <code>/data/downloads/slskd/complete</code>, and scan
+              <code>/data/music</code> plus
+              <code>/data/downloads/aurral</code> in Navidrome.
             </p>
 
             <div class="guide-card-grid guide-card-grid-three">
