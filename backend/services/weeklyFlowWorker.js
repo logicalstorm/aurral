@@ -15,11 +15,7 @@ import {
 } from "./weeklyFlowFileReuse.js";
 import { resolveWeeklyFlowRoot } from "./weeklyFlowPaths.js";
 import { startSlskdOrchestratorWorker } from "./slskdOrchestratorWorker.js";
-import {
-  enqueuePlaylistReserveBuildJob,
-  enqueuePlaylistRetryJob,
-  withHonkerLock,
-} from "./honkerDb.js";
+import { enqueuePlaylistRetryJob, withHonkerLock } from "./honkerDb.js";
 
 const DEFAULT_CONCURRENCY = 3;
 const MIN_CONCURRENCY = 1;
@@ -42,7 +38,6 @@ export class WeeklyFlowWorker {
     this.reuseRepairCursor = 0;
     this.processLoop = null;
     this.processTimer = null;
-    this.backupRefillRounds = new Map();
     this.currentJob = null;
     this.lastDequeuedPlaylistType = null;
     this.reuseRepairInFlight = null;
@@ -327,8 +322,19 @@ export class WeeklyFlowWorker {
   }
 
   _getPlaylistTargetCount(playlistType) {
-    const flow = flowPlaylistConfig.getFlow(playlistType);
-    const sharedPlaylist = flowPlaylistConfig.getSharedPlaylist(playlistType);
+    const key = String(playlistType || "").trim();
+    const flow = flowPlaylistConfig.getFlow(key);
+    const sharedPlaylist = flowPlaylistConfig.getSharedPlaylist(key);
+    const achievedPrimary = Number(
+      this.playlistRunDiagnostics.get(key)?.achieved?.primary,
+    );
+    if (Number.isFinite(achievedPrimary) && achievedPrimary > 0) {
+      return Math.max(1, Math.floor(achievedPrimary));
+    }
+    const jobCount = downloadTracker.getByPlaylistType(key).length;
+    if (jobCount > 0) {
+      return jobCount;
+    }
     const raw = Number(flow?.size || sharedPlaylist?.trackCount || 0);
     if (!Number.isFinite(raw) || raw <= 0) return null;
     return Math.max(1, Math.floor(raw));
@@ -422,77 +428,8 @@ export class WeeklyFlowWorker {
     return owner ? getListenHistoryProfile(owner) : null;
   }
 
-  _serializeReservePlanOptions(options = {}) {
-    const serialized = { ...options };
-    for (const field of ["excludeArtistKeys", "excludeTrackKeys"]) {
-      if (serialized[field] instanceof Set) {
-        serialized[field] = [...serialized[field]];
-      }
-    }
-    return serialized;
-  }
-
-  _rehydrateReservePlanOptions(options = {}) {
-    const rehydrated = { ...options };
-    for (const field of ["excludeArtistKeys", "excludeTrackKeys"]) {
-      const value = rehydrated[field];
-      if (value instanceof Set) continue;
-      rehydrated[field] = new Set(Array.isArray(value) ? value : []);
-    }
-    return rehydrated;
-  }
-
-  _scheduleReservePlanBuild(playlistType, context) {
-    const key = String(playlistType || "").trim();
-    if (!key || !context?.flow) return;
-    if (this.reserveBuildsInFlight.has(key)) return;
-    this.reserveBuildsInFlight.add(key);
-    enqueuePlaylistReserveBuildJob(
-      {
-        playlistType: key,
-        flow: context.flow,
-        primaryTracks: context.primaryTracks || [],
-        options: this._serializeReservePlanOptions(context.options || {}),
-        requestedAt: Date.now(),
-      },
-      { priority: 5 },
-    );
-  }
-
-  async runQueuedReserveBuild(payload = {}) {
-    const key = String(payload?.playlistType || "").trim();
-    if (!key || !payload?.flow) return { skipped: true };
-    if (!flowPlaylistConfig.getFlow(key)) {
-      this.reserveBuildsInFlight.delete(key);
-      return { skipped: true, reason: "missing_flow" };
-    }
-    try {
-      const reservePlan = await playlistSource.buildFlowReservePlan(
-        payload.flow,
-        payload.primaryTracks || [],
-        this._rehydrateReservePlanOptions(payload.options || {}),
-      );
-      const existing = this.playlistReservePools.get(key) || [];
-      const added = this._normalizeReserveTracks(
-        reservePlan?.reserveTracks || [],
-      );
-      if (added.length > 0) {
-        this.playlistReservePools.set(key, [...existing, ...added]);
-        const currentDiagnostics = this.playlistRunDiagnostics.get(key) || {};
-        const achieved = reservePlan?.diagnostics?.achieved || {};
-        this.playlistRunDiagnostics.set(key, {
-          ...currentDiagnostics,
-          achieved: {
-            ...(currentDiagnostics.achieved || {}),
-            reserve: Number(achieved.reserve || added.length),
-            reserveSourceCounts: achieved.reserveSourceCounts || {},
-          },
-        });
-      }
-      return { built: true, reserveTracks: added.length };
-    } finally {
-      this.reserveBuildsInFlight.delete(key);
-    }
+  async runQueuedReserveBuild() {
+    return { skipped: true };
   }
 
   async seedFlowRunWithTracks(playlistType, flow, tracks, options = {}) {
@@ -530,12 +467,10 @@ export class WeeklyFlowWorker {
       Number.isFinite(Number(options?.size)) && Number(options.size) > 0
         ? Math.round(Number(options.size))
         : null;
-    const deferReserve = options.deferReserve !== false;
     const plan = await playlistSource.buildFlowRunPlan(
       sizeOverride ? { ...flow, size: sizeOverride } : flow,
       {
         listenHistoryProfile: this._getFlowListenHistoryProfile(flow),
-        deferReserve,
       },
     );
     this.clearPlaylistRunState(key);
@@ -545,55 +480,12 @@ export class WeeklyFlowWorker {
       : [];
     flowPlaylistConfig.markLastRunAt(key);
     const jobIds = downloadTracker.addJobs(primaryTracks, key);
-    if (plan?.reservePlanContext) {
-      this._scheduleReservePlanBuild(key, plan.reservePlanContext);
-    }
     return {
       tracksQueued: primaryTracks.length,
       jobIds,
-      reserveTracks: Array.isArray(plan?.reserveTracks)
-        ? plan.reserveTracks.length
-        : 0,
-      reservePending: !!plan?.reservePlanContext,
+      reserveTracks: 0,
+      reservePending: false,
     };
-  }
-
-  _consumeReserveTracks(playlistType, shortfall) {
-    const key = String(playlistType || "").trim();
-    const reserves = this.playlistReservePools.get(key) || [];
-    if (!key || reserves.length === 0 || shortfall <= 0) return [];
-    const existingTrackKeys = new Set(
-      downloadTracker
-        .getByPlaylistType(key)
-        .map((job) => this._trackKeyFromJob(job))
-        .filter(Boolean),
-    );
-    const existingArtistKeys = new Set(
-      downloadTracker
-        .getByPlaylistType(key)
-        .map((job) => this._artistKeyFromJob(job))
-        .filter(Boolean),
-    );
-    const picked = [];
-    const remaining = [];
-    for (const track of reserves) {
-      const trackKey = this._trackKeyFromTrack(track);
-      const artistKey = this._artistKeyFromTrack(track);
-      if (
-        picked.length < shortfall &&
-        trackKey &&
-        !existingTrackKeys.has(trackKey) &&
-        (!artistKey || !existingArtistKeys.has(artistKey))
-      ) {
-        picked.push(track);
-        existingTrackKeys.add(trackKey);
-        if (artistKey) existingArtistKeys.add(artistKey);
-      } else {
-        remaining.push(track);
-      }
-    }
-    this.playlistReservePools.set(key, remaining);
-    return picked;
   }
 
   _maybeStopWhenIdle() {
@@ -768,14 +660,7 @@ export class WeeklyFlowWorker {
       return 0;
     }
 
-    let changed = 0;
-    if (flow) {
-      const shortfall = Math.max(0, target - Number(stats.done || 0));
-      if (shortfall > 0) {
-        changed += await this._enqueueBackupJobs(playlistType, shortfall);
-      }
-    }
-    changed += this._requeueFailedJobs(
+    const changed = this._requeueFailedJobs(
       playlistType,
       "Retrying incomplete playlist",
     );
@@ -791,83 +676,6 @@ export class WeeklyFlowWorker {
 
     this._scheduleIncompleteRetry(playlistType);
     return 0;
-  }
-
-  async _enqueueBackupJobs(playlistType, shortfall) {
-    const target = this._getPlaylistTargetCount(playlistType);
-    const flow = flowPlaylistConfig.getFlow(playlistType);
-    if (!target || !flow || shortfall <= 0) return 0;
-    let added = 0;
-    const reserveTracks = this._consumeReserveTracks(playlistType, shortfall);
-    if (reserveTracks.length > 0) {
-      added += downloadTracker.addJobs(reserveTracks, playlistType).length;
-    }
-    const remainingShortfall = Math.max(0, shortfall - added);
-    if (remainingShortfall <= 0) {
-      return added;
-    }
-    const rounds = Number(this.backupRefillRounds.get(playlistType) || 0);
-    const requestSize = Math.max(remainingShortfall, Math.min(target, Math.max(remainingShortfall * 2, 8)));
-    const existingKeys = new Set(
-      downloadTracker
-        .getByPlaylistType(playlistType)
-        .map((job) => this._trackKeyFromJob(job))
-        .filter(Boolean),
-    );
-    const existingArtistKeys = new Set(
-      downloadTracker
-        .getByPlaylistType(playlistType)
-        .map((job) => this._artistKeyFromJob(job))
-        .filter(Boolean),
-    );
-    const failures = this._getPlaylistFailureState(playlistType);
-    for (const failedTrackKey of failures.failedTrackKeys) {
-      existingKeys.add(failedTrackKey);
-    }
-    this.reserveBuildsInFlight.add(String(playlistType));
-    const plan = await playlistSource
-      .buildFlowRunPlan(
-        { ...flow, size: requestSize },
-        {
-          reserveSize: Math.max(Math.ceil(target * 0.25), 4),
-          excludeArtistKeys: existingArtistKeys,
-          excludeTrackKeys: existingKeys,
-          listenHistoryProfile: this._getFlowListenHistoryProfile(flow),
-        },
-      )
-      .catch(() => null)
-      .finally(() => {
-        this.reserveBuildsInFlight.delete(String(playlistType));
-      });
-    const unique = Array.isArray(plan?.primaryTracks) ? plan.primaryTracks : [];
-    const reserve = Array.isArray(plan?.reserveTracks) ? plan.reserveTracks : [];
-    if (plan) {
-      const currentReserve = this.playlistReservePools.get(String(playlistType)) || [];
-      this.playlistReservePools.set(
-        String(playlistType),
-        [
-          ...currentReserve,
-          ...reserve.filter((track) => {
-            const key = this._trackKeyFromTrack(track);
-            const artistKey = this._artistKeyFromTrack(track);
-            if (!key || existingKeys.has(key)) return false;
-            if (artistKey && existingArtistKeys.has(artistKey)) return false;
-            existingKeys.add(key);
-            if (artistKey) existingArtistKeys.add(artistKey);
-            return true;
-          }),
-        ],
-      );
-      this.playlistRunDiagnostics.set(String(playlistType), plan?.diagnostics || null);
-    }
-    if (unique.length === 0) return added;
-    added += downloadTracker.addJobs(unique, playlistType).length;
-    if (added > 0) {
-      console.log(
-        `[WeeklyFlowWorker] Enqueued ${added} replacement tracks for ${playlistType} (shortfall ${shortfall})`,
-      );
-    }
-    return added;
   }
 
   async repairReusableLinks(force = false) {
@@ -998,7 +806,6 @@ export class WeeklyFlowWorker {
       this.processTimer = null;
     }
     this.processLoop = null;
-    this.backupRefillRounds.clear();
     this.lastDequeuedPlaylistType = null;
     this.currentJob = null;
     this.playlistReservePools.clear();
@@ -1051,7 +858,6 @@ export class WeeklyFlowWorker {
           excludeJobIds: [job.id],
         });
         if (reuse.reused) {
-          this.backupRefillRounds.delete(job.playlistType);
           this._dropOverflowPendingJobs(job.playlistType);
           this._recordCompletedTrack(
             Number(process.hrtime.bigint() - perfStartHr) / 1e6,
@@ -1110,20 +916,6 @@ export class WeeklyFlowWorker {
     const allSettled = total > 0 && pending === 0 && downloading === 0;
     const hasDone = done > 0;
 
-    const target = this._getPlaylistTargetCount(playlistType);
-    if (allSettled && target && done < target) {
-      const shortfall = target - done;
-      const rounds = Number(this.backupRefillRounds.get(playlistType) || 0) + 1;
-      this.backupRefillRounds.set(playlistType, rounds);
-      const enqueued = await this._enqueueBackupJobs(playlistType, shortfall);
-      if (enqueued > 0) {
-        this.wake();
-        return;
-      }
-      this._scheduleIncompleteRetry(playlistType);
-      return;
-    }
-
     if (allSettled && hasDone) {
       if (this.playlistFinalizing.has(playlistKey)) {
         return;
@@ -1134,7 +926,6 @@ export class WeeklyFlowWorker {
           `playlist-finalize:${playlistKey}`,
           async () => {
             this.clearIncompleteRetry(playlistType);
-            this.backupRefillRounds.delete(playlistType);
             console.log(
               `[WeeklyFlowWorker] All jobs complete for ${playlistType}, ensuring playlists...`,
             );
@@ -1218,7 +1009,6 @@ export class WeeklyFlowWorker {
       this.playlistReservePools,
       this.playlistRunDiagnostics,
       this.playlistFailureMemory,
-      this.backupRefillRounds,
     ]) {
       for (const playlistId of [...map.keys()]) {
         if (activePlaylistIds.has(playlistId)) continue;

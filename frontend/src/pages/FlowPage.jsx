@@ -38,7 +38,11 @@ import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useFlowStatus } from "./flows/useFlowStatus";
-import { formatTrackCountLabel } from "./flows/flowStats";
+import {
+  formatTrackCountLabel,
+  getFlowDisplayTrackCount,
+  isReleaseRadarFlow,
+} from "./flows/flowStats";
 import { getPlaylistRunActivity } from "./flows/flowRunActivity";
 import {
   PlaylistLibraryItem,
@@ -57,11 +61,6 @@ import {
   FlowTracksPanel,
   MoreMenu,
 } from "./FlowPageComponents";
-
-const RELEASE_RADAR_PRESET_ID = "release-radar";
-
-const isReleaseRadarFlow = (flow) =>
-  String(flow?.discoverPresetId || "").trim() === RELEASE_RADAR_PRESET_ID;
 
 function formatNextRun(nextRunAt, now = Date.now()) {
   if (!nextRunAt) return null;
@@ -412,7 +411,7 @@ const isReleaseRadarFlowDirty = (flow, draft) => {
 const buildReleaseRadarFlowFromForm = (flow, draft) => {
   const sizeValue = Number(draft?.size);
   if (!Number.isFinite(sizeValue) || sizeValue <= 0) {
-    throw new Error("Total tracks must be a positive number");
+    throw new Error("Max tracks must be a positive number");
   }
   const scheduleDays = normalizeScheduleDays(draft?.scheduleDays);
   if (scheduleDays.length === 0) {
@@ -1791,12 +1790,15 @@ function FlowPage() {
     selectedEntry?.ownerUsername || user?.username || null;
   const selectedEntryTotalTracks = (() => {
     if (!selectedEntry) return 0;
-    const fromEntry =
-      selectedEntry.kind === "flow"
-        ? Number(selectedFlow?.size || 0)
-        : Number(selectedPlaylist?.trackCount || 0);
+    if (selectedEntry.kind === "flow") {
+      return getFlowDisplayTrackCount(
+        selectedFlow,
+        selectedStats,
+        selectedTracks.length,
+      );
+    }
     return Math.max(
-      fromEntry,
+      Number(selectedPlaylist?.trackCount || 0),
       selectedTracks.length,
       Number(selectedStats?.total || 0),
     );

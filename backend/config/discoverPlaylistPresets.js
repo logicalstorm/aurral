@@ -46,7 +46,7 @@ export const isFixedDiscoverPlaylistPreset = (presetId) =>
 export const RELEASE_RADAR_PRESET = {
   id: "release-radar",
   name: "Release Radar",
-  description: "Top tracks from recent albums missing in your library",
+  description: "Up to one track from each recent album missing in your library",
   mix: { discover: 100, mix: 0, trending: 0, focus: 0 },
   size: 30,
   deepDive: false,
