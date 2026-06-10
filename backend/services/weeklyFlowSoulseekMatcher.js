@@ -1245,8 +1245,24 @@ function bestArtistTag(common) {
   return values.filter(Boolean).join(" ");
 }
 
+function readDownloadDurationValidation(parsed, expectedDuration) {
+  const durationSeconds = Number(parsed?.format?.duration || 0);
+  const actualDurationMs =
+    durationSeconds > 0 ? Math.round(durationSeconds * 1000) : null;
+  const durationDiffMs =
+    expectedDuration > 0 && actualDurationMs != null
+      ? Math.abs(actualDurationMs - expectedDuration)
+      : null;
+  const durationValid =
+    durationDiffMs == null ||
+    durationDiffMs <= 25000 ||
+    durationDiffMs <= Math.max(12000, expectedDuration * 0.18);
+  return { actualDurationMs, durationValid };
+}
+
 export async function validateDownloadedTrack(filePath, candidate, context) {
   const remoteFilename = getRemoteFilename(candidate);
+  const remoteBaseName = getFileBaseName(remoteFilename);
   const expectedDuration = Number(context?.durationMs || 0);
   let metadata = null;
   let parsed = null;
@@ -1254,6 +1270,25 @@ export async function validateDownloadedTrack(filePath, candidate, context) {
     parsed = await parseFile(filePath, { duration: true });
     metadata = parsed?.common || null;
   } catch {}
+
+  if (candidate?.preDownloadValid) {
+    const { actualDurationMs, durationValid } = readDownloadDurationValidation(
+      parsed,
+      expectedDuration,
+    );
+    return {
+      valid: durationValid,
+      reason: durationValid
+        ? null
+        : `duration-mismatch: durationValid=${durationValid}`,
+      scores: {
+        durationValid,
+        matchReason: "pre-download-trusted",
+      },
+      actualDurationMs,
+      remoteFilename,
+    };
+  }
 
   const titleFromTags = metadata?.title || "";
   const artistFromTags = bestArtistTag(metadata);
@@ -1272,16 +1307,18 @@ export async function validateDownloadedTrack(filePath, candidate, context) {
         scoreTextMatch(remoteFilename, context.albumName),
       )
     : 0;
-  const remoteBaseName = getFileBaseName(remoteFilename);
   const variantMatch = scoreVariantCompatibility(
     context?.trackName,
-    titleFromTags || remoteBaseName,
+    remoteBaseName,
   );
+  const filenameTrackNumber = extractTrackNumber(remoteBaseName);
   const actualTrackNumber =
-    parsed?.common?.track?.no != null &&
-    Number.isFinite(Number(parsed.common.track.no))
-      ? Number(parsed.common.track.no)
-      : extractTrackNumber(remoteBaseName);
+    filenameTrackNumber != null
+      ? filenameTrackNumber
+      : parsed?.common?.track?.no != null &&
+          Number.isFinite(Number(parsed.common.track.no))
+        ? Number(parsed.common.track.no)
+        : null;
   const trackNumberMismatch =
     Number.isFinite(Number(context?.trackNumber)) &&
     Number(context?.trackNumber) > 0 &&
@@ -1303,17 +1340,10 @@ export async function validateDownloadedTrack(filePath, candidate, context) {
     siblingTrackPenalty,
     context,
   });
-  const durationSeconds = Number(parsed?.format?.duration || 0);
-  const actualDurationMs =
-    durationSeconds > 0 ? Math.round(durationSeconds * 1000) : null;
-  const durationDiffMs =
-    expectedDuration > 0 && actualDurationMs != null
-      ? Math.abs(actualDurationMs - expectedDuration)
-      : null;
-  const durationValid =
-    durationDiffMs == null ||
-    durationDiffMs <= 25000 ||
-    durationDiffMs <= Math.max(12000, expectedDuration * 0.18);
+  const { actualDurationMs, durationValid } = readDownloadDurationValidation(
+    parsed,
+    expectedDuration,
+  );
   const valid = matchCheck.valid && durationValid;
 
   return {
