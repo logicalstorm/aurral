@@ -5,9 +5,13 @@ import { importFromRepo } from "../helpers/backendTestHarness.js";
 
 const [
   {
+    bypassBannedArtistTerm,
     buildFlowSearchQueries,
     buildFlowAlbumSearchQueries,
+    buildFlowArtistOnlySearchQueries,
     buildFlowTrackFallbackSearchQueries,
+    buildFlowWildcardAlbumSearchQueries,
+    buildFlowWildcardTrackFallbackSearchQueries,
     rankFlowSearchResults,
     selectRankedMatchAttempts,
     validateDownloadedTrack,
@@ -15,6 +19,50 @@ const [
 ] = await Promise.all([
   importFromRepo("backend/services/weeklyFlowSoulseekMatcher.js"),
 ]);
+
+test("bypassBannedArtistTerm replaces the first artist character with a wildcard", () => {
+  assert.equal(bypassBannedArtistTerm("Franz Ferdinand"), "*ranz Ferdinand");
+  assert.equal(bypassBannedArtistTerm("*ranz Ferdinand"), "*ranz Ferdinand");
+  assert.equal(bypassBannedArtistTerm("A"), "A");
+  assert.equal(bypassBannedArtistTerm(""), "");
+});
+
+test("buildFlowWildcardAlbumSearchQueries uses wildcard artist terms", () => {
+  const queries = buildFlowWildcardAlbumSearchQueries({
+    artistName: "Franz Ferdinand",
+    trackName: "Take Me Out",
+    albumName: "Franz Ferdinand",
+    releaseYear: "2004",
+    artistAliases: [],
+  });
+
+  assert.ok(queries.includes("*ranz Ferdinand Franz Ferdinand"));
+  assert.ok(queries.includes("*ranz Ferdinand Franz Ferdinand 2004"));
+  assert.ok(!queries.includes("Franz Ferdinand Franz Ferdinand"));
+});
+
+test("buildFlowArtistOnlySearchQueries returns wildcard artist-only searches", () => {
+  const queries = buildFlowArtistOnlySearchQueries({
+    artistName: "Franz Ferdinand",
+    trackName: "Take Me Out",
+    albumName: "Franz Ferdinand",
+    artistAliases: ["Franz F."],
+  });
+
+  assert.deepEqual(queries, ["*ranz Ferdinand", "*ranz F."]);
+});
+
+test("buildFlowWildcardTrackFallbackSearchQueries wildcard-prefixes artist track searches", () => {
+  const queries = buildFlowWildcardTrackFallbackSearchQueries({
+    artistName: "Franz Ferdinand",
+    trackName: "Take Me Out",
+    albumName: "Franz Ferdinand",
+    artistAliases: [],
+  });
+
+  assert.ok(queries.includes("*ranz Ferdinand Take Me Out"));
+  assert.ok(queries.includes("Take Me Out Franz Ferdinand"));
+});
 
 test("buildFlowAlbumSearchQueries keeps album-only searches separate from track fallbacks", () => {
   const albumQueries = buildFlowAlbumSearchQueries({
@@ -100,6 +148,63 @@ test("buildFlowSearchQueries adds simplified variants for parenthetical and slas
   );
   assert.ok(slashQueries.includes("LOVING A long slow little wave"));
   assert.ok(slashQueries.includes("LOVING citizen, an activity"));
+});
+
+test("rankFlowSearchResults prefers folders with a strong tracklist fingerprint", () => {
+  const ranked = rankFlowSearchResults(
+    [
+      {
+        user: "weakUser",
+        file: "Franz Ferdinand\\Misc\\01 - Take Me Out.flac",
+        size: 100,
+        slots: true,
+        bitrate: 900,
+        speed: 900000,
+      },
+      {
+        user: "albumUser",
+        file: "Franz Ferdinand\\Franz Ferdinand (2004)\\01 - Jacqueline.flac",
+        size: 100,
+        slots: true,
+        bitrate: 900,
+        speed: 700000,
+      },
+      {
+        user: "albumUser",
+        file: "Franz Ferdinand\\Franz Ferdinand (2004)\\02 - Tell Her Tonight.flac",
+        size: 100,
+        slots: true,
+        bitrate: 900,
+        speed: 700000,
+      },
+      {
+        user: "albumUser",
+        file: "Franz Ferdinand\\Franz Ferdinand (2004)\\03 - Take Me Out.flac",
+        size: 100,
+        slots: true,
+        bitrate: 900,
+        speed: 700000,
+      },
+    ],
+    {
+      artistName: "Franz Ferdinand",
+      trackName: "Take Me Out",
+      albumName: "Franz Ferdinand",
+      releaseYear: "2004",
+      artistAliases: [],
+      albumTrackCount: 3,
+      albumTrackTitles: ["Jacqueline", "Tell Her Tonight", "Take Me Out"],
+      trackNumber: 3,
+    },
+    {
+      preferredFormat: "flac",
+      strictFormat: false,
+    },
+  );
+
+  assert.ok(ranked.length > 0);
+  assert.match(ranked[0].raw.file, /03 - Take Me Out\.flac$/);
+  assert.equal(ranked[0].releaseFolderFit, true);
 });
 
 test("rankFlowSearchResults prefers the fitting album folder over a higher-scoring wrong-album file", () => {
