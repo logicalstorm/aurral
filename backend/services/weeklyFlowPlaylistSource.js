@@ -1738,73 +1738,27 @@ export class WeeklyFlowPlaylistSource {
         primaryTracks,
         reserveTracks: [],
         diagnostics: {
-          targets: { releaseRadar: targetSize },
+          targets: { releaseRadar: targetSize, maxSize: targetSize },
           achieved: { primary: primaryTracks.length, reserve: 0 },
         },
       };
     }
-    const reserveSize =
-      Number.isFinite(Number(options?.reserveSize)) && Number(options.reserveSize) >= 0
-        ? Math.round(Number(options.reserveSize))
-        : Math.max(Math.ceil(targetSize * 0.75), 8);
     const mix = flow?.mix || { discover: 34, mix: 33, trending: 33, focus: 0 };
     const sourceTargets = this._buildSourceTargets(targetSize, mix);
-    const reserveTargets = this._buildSourceTargets(reserveSize, mix);
-    const deferReserve = options.deferReserve === true;
-    const harvestTargets = deferReserve
-      ? sourceTargets
-      : {
-          discover:
-            Number(sourceTargets.discover || 0) + Number(reserveTargets.discover || 0),
-          mix: Number(sourceTargets.mix || 0) + Number(reserveTargets.mix || 0),
-          trending:
-            Number(sourceTargets.trending || 0) + Number(reserveTargets.trending || 0),
-          focus: Number(sourceTargets.focus || 0) + Number(reserveTargets.focus || 0),
-        };
     const { candidateMap, excludeArtistKeys } = await this._harvestFlowSources(
       flow,
-      harvestTargets,
+      sourceTargets,
       options,
     );
-    const plan = this._assembleFlowPlan({
+    return this._assembleFlowPlan({
       candidateMap,
       excludeArtistKeys,
       targetSize,
-      reserveSize,
+      reserveSize: 0,
       sourceTargets,
-      reserveTargets,
-      includeReserve: !deferReserve,
+      reserveTargets: { discover: 0, mix: 0, trending: 0, focus: 0 },
+      includeReserve: false,
     });
-    if (deferReserve) {
-      plan.reservePlanContext = {
-        flow,
-        primaryTracks: plan.primaryTracks,
-        options: {
-          ...options,
-          reserveSize,
-          excludeArtistKeys: new Set([
-            ...excludeArtistKeys,
-            ...plan.primaryTracks
-              .map((track) => this._trackArtistKey(track))
-              .filter(Boolean),
-          ]),
-          excludeTrackKeys: new Set(
-            plan.primaryTracks
-              .map((track) => {
-                const artist = String(track?.artistName || "")
-                  .trim()
-                  .toLowerCase();
-                const name = String(track?.trackName || "")
-                  .trim()
-                  .toLowerCase();
-                return artist && name ? `${artist}::${name}` : "";
-              })
-              .filter(Boolean),
-          ),
-        },
-      };
-    }
-    return plan;
   }
 
   async buildFlowReservePlan(flow, primaryTracks, options = {}) {
