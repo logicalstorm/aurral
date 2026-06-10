@@ -53,6 +53,7 @@ import {
 } from "./flows/FlowPlaylistUI";
 import {
   FlowEmptyState,
+  FlowDetailPlaceholder,
   ConfirmDeleteModal,
   ConfirmDisableModal,
   FlowImportReviewModal,
@@ -2217,6 +2218,12 @@ function FlowPage() {
               <FlowEmptyState
                 canCreate={canCreateGeneratedFlow}
                 libraryFilter={libraryFilter}
+                variant={isMobileLayout ? "full" : "compact"}
+                onImport={handleOpenImportPicker}
+                onNewPlaylist={handleOpenCreatePlaylist}
+                onNewFlow={handleCreateInline}
+                creatingPlaylist={creatingPlaylist}
+                creatingFlow={creating}
               />
             ) : (
               filteredCollection.map((entry) => {
@@ -2287,11 +2294,20 @@ function FlowPage() {
             className={`flow-page__detail${!selectedEntry ? " flow-page__detail--empty" : ""}`}
           >
             {!selectedEntry ? (
-              <div className="artist-empty-panel flow-page__detail-empty">
-                <p className="artist-empty-message">
-                  Select a playlist or flow to view tracks and settings.
-                </p>
-              </div>
+              filteredCollection.length === 0 ? (
+                <FlowEmptyState
+                  canCreate={canCreateGeneratedFlow}
+                  libraryFilter={libraryFilter}
+                  variant="full"
+                  onImport={handleOpenImportPicker}
+                  onNewPlaylist={handleOpenCreatePlaylist}
+                  onNewFlow={handleCreateInline}
+                  creatingPlaylist={creatingPlaylist}
+                  creatingFlow={creating}
+                />
+              ) : (
+                <FlowDetailPlaceholder />
+              )
             ) : (
               selectedDetailContent
             )}
