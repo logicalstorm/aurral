@@ -220,7 +220,7 @@ test("rankFlowSearchResults prefers the fitting album folder over a higher-scori
       },
       {
         user: "rentalsUser",
-        file: "The Rentals\\Return Of The Rentals [1995]\\07 - The Rentals - Brilliant Boy.flac",
+        file: "The Rentals\\Return Of The Rentals [1995]\\02 - The Rentals - Brilliant Boy.flac",
         size: 100,
         slots: true,
         bitrate: 900,
@@ -548,4 +548,68 @@ test("validateDownloadedTrack rejects obvious live mismatches from the remote fi
   assert.equal(validation.valid, false);
   assert.equal(validation.scores.trackNumberValid, true);
   assert.ok(validation.scores.variant < 0);
+});
+
+test("rankFlowSearchResults accepts soulseek backslash paths for albums with live in the title", () => {
+  const ranked = rankFlowSearchResults(
+    [
+      {
+        user: "deveng",
+        file: "music\\From Autumn To Ashes\\The Fiction We Live\\01 The After Dinner Payback.flac",
+        slots: 1,
+        speed: 7440000,
+      },
+      {
+        user: "PassOnTheTorch",
+        file: "music\\From Autumn to Ashes\\The Fiction We Live\\01 The After Dinner Payback.flac",
+        slots: 1,
+        speed: 6000000,
+      },
+    ],
+    {
+      artistName: "From Autumn to Ashes",
+      trackName: "The After Dinner Payback",
+      albumName: "The Fiction We Live",
+      releaseYear: "2003",
+      trackNumber: 1,
+      albumTrackCount: 12,
+    },
+    {
+      preferredFormat: "flac",
+      strictFormat: false,
+    },
+  );
+
+  assert.ok(ranked.length > 0);
+  assert.equal(ranked[0].preDownloadValid, true);
+  assert.equal(ranked[0].preDownloadRejectReason, null);
+  assert.match(ranked[0].raw.file, /After Dinner Payback\.flac$/);
+});
+
+test("rankFlowSearchResults does not treat live as a variant in ordinary title words", () => {
+  const ranked = rankFlowSearchResults(
+    [
+      {
+        user: "albumUser",
+        file: "Artist\\The Fiction We Live\\03 - The Fiction We Live.flac",
+        slots: 1,
+        speed: 700000,
+      },
+    ],
+    {
+      artistName: "From Autumn to Ashes",
+      trackName: "The Fiction We Live",
+      albumName: "The Fiction We Live",
+      releaseYear: "2003",
+      trackNumber: 3,
+    },
+    {
+      preferredFormat: "flac",
+      strictFormat: false,
+    },
+  );
+
+  assert.ok(ranked.length > 0);
+  assert.equal(ranked[0].preDownloadValid, true);
+  assert.equal(ranked[0].breakdown.variantHardMismatch, false);
 });

@@ -32,6 +32,9 @@ const MIX_VARIANT_PATTERNS = [
   { value: "remix", pattern: /\b(?:remix|mix|rework|bootleg|vip|mashup)\b/ },
 ];
 
+const LIVE_VARIANT_PATTERN =
+  /\((?:live\b|live at[^)]*)\)|\[(?:live\b|live at[^\]]*)\]|\b(?:live at|live from|live version|live recording)\b|(?: - | – )\s*live\b/i;
+
 function normalizeText(value) {
   return String(value || "")
     .toLowerCase()
@@ -63,11 +66,12 @@ function normalizeTitle(value) {
 }
 
 function extractVariantProfile(value) {
+  const rawText = String(value || "").toLowerCase();
   const text = normalizeVariantText(value);
   const mixVariant =
     MIX_VARIANT_PATTERNS.find((entry) => entry.pattern.test(text))?.value || null;
   return {
-    live: /\blive\b/.test(text),
+    live: LIVE_VARIANT_PATTERN.test(rawText),
     acoustic: /\bacoustic\b/.test(text),
     demo: /\bdemo\b/.test(text),
     instrumental: /\binstrumental\b/.test(text),
@@ -355,6 +359,24 @@ function getPathParts(filePath) {
     .filter(Boolean);
 }
 
+function getFileName(filePath) {
+  const parts = getPathParts(filePath);
+  return parts.length > 0 ? parts[parts.length - 1] : "";
+}
+
+function getFileExtension(filePath) {
+  const fileName = getFileName(filePath);
+  const dot = fileName.lastIndexOf(".");
+  if (dot <= 0) return "";
+  return fileName.slice(dot).toLowerCase();
+}
+
+function getFileBaseName(filePath) {
+  const fileName = getFileName(filePath);
+  const ext = getFileExtension(filePath);
+  return ext ? fileName.slice(0, -ext.length) : fileName;
+}
+
 function getDirectoryKey(item) {
   const parts = getPathParts(item?.file);
   if (parts.length === 0) return null;
@@ -398,10 +420,9 @@ function scoreTracklistMatch(audioFiles, context) {
   if (titles.length === 0) {
     return { score: 0, matchedCount: 0, ratio: 0 };
   }
-  const fileNames = (audioFiles || []).map((item) => {
-    const ext = path.extname(String(item?.file || "")).toLowerCase();
-    return path.basename(String(item?.file || ""), ext);
-  });
+  const fileNames = (audioFiles || []).map((item) =>
+    getFileBaseName(String(item?.file || "")),
+  );
   if (fileNames.length === 0) {
     return { score: 0, matchedCount: 0, ratio: 0 };
   }
@@ -776,11 +797,11 @@ function buildGroupCandidate(group, context, options = {}) {
     : audioFiles;
   const candidates = [];
   for (const item of files) {
-    const ext = path.extname(String(item?.file || "")).toLowerCase();
-    const baseName = path.basename(String(item?.file || ""), ext);
+    const ext = getFileExtension(String(item?.file || ""));
+    const baseName = getFileBaseName(String(item?.file || ""));
     const titleScore = Math.max(
       scoreTextMatch(baseName, context?.trackName),
-      scoreTextMatch(path.basename(String(item?.file || "")), context?.trackName),
+      scoreTextMatch(getFileName(String(item?.file || "")), context?.trackName),
     );
     const variantMatch = scoreVariantCompatibility(
       context?.trackName,
@@ -1017,15 +1038,16 @@ export async function validateDownloadedTrack(filePath, candidate, context) {
         scoreTextMatch(remoteFilename, context.albumName),
       )
     : 0;
+  const remoteBaseName = getFileBaseName(remoteFilename);
   const variantMatch = scoreVariantCompatibility(
     context?.trackName,
-    titleFromTags || remoteFilename,
+    titleFromTags || remoteBaseName,
   );
   const actualTrackNumber =
     parsed?.common?.track?.no != null &&
     Number.isFinite(Number(parsed.common.track.no))
       ? Number(parsed.common.track.no)
-      : extractTrackNumber(path.basename(remoteFilename));
+      : extractTrackNumber(remoteBaseName);
   const trackNumberValid =
     !Number.isFinite(Number(context?.trackNumber)) ||
     !Number.isFinite(Number(actualTrackNumber)) ||
