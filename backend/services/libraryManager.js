@@ -146,14 +146,31 @@ function getMetadataProfileTypeName(item) {
   return "";
 }
 
-function getTrackFileTrackIds(file) {
-  if (Array.isArray(file?.trackIds) && file.trackIds.length > 0) {
-    return file.trackIds;
-  }
-  if (file?.trackId != null) {
-    return [file.trackId];
-  }
-  return [];
+async function fetchTracksForArtistsWithFiles(lidarr, rawTrackFiles) {
+  const artistIds = [
+    ...new Set(
+      (Array.isArray(rawTrackFiles) ? rawTrackFiles : [])
+        .map((file) => file?.artistId)
+        .filter((id) => id != null),
+    ),
+  ];
+  if (artistIds.length === 0) return [];
+
+  const batches = await Promise.all(
+    artistIds.map(async (artistId) => {
+      try {
+        const result = await lidarr.request(`/track?artistId=${artistId}`);
+        if (Array.isArray(result)) return result;
+        if (result?.records && Array.isArray(result.records)) {
+          return result.records;
+        }
+        return [];
+      } catch {
+        return [];
+      }
+    }),
+  );
+  return batches.flat();
 }
 
 export function buildPlaybackQueueFromLidarrData({
@@ -165,7 +182,7 @@ export function buildPlaybackQueueFromLidarrData({
   const artistNameById = new Map(
     artists.map((artist) => [
       String(artist.id),
-      artist.artistName || "Unknown Artist",
+      artist.artistName || artist.name || "Unknown Artist",
     ]),
   );
 
@@ -180,46 +197,48 @@ export function buildPlaybackQueueFromLidarrData({
     });
   }
 
-  const trackMetaById = new Map();
-  for (const track of Array.isArray(rawTracks) ? rawTracks : []) {
-    trackMetaById.set(String(track.id), {
-      title: track.title || track.trackTitle || "Unknown Track",
-      albumId: String(track.albumId),
-      trackNumber: track.trackNumber || 0,
-    });
-  }
-
+  const trackFileById = buildTrackFileIndex(rawTrackFiles);
   const queue = [];
-  for (const file of Array.isArray(rawTrackFiles) ? rawTrackFiles : []) {
-    if (!file.path) continue;
-    const albumId = String(file.albumId);
+  const seen = new Set();
+
+  for (const track of Array.isArray(rawTracks) ? rawTracks : []) {
+    if (
+      track?.hasFile !== true &&
+      !Number.isFinite(Number(track?.trackFileId))
+    ) {
+      continue;
+    }
+
+    const enriched = enrichLidarrTrackWithFiles(track, trackFileById);
+    const filePath = enriched.path || enriched.trackFile?.path || null;
+    if (!filePath) continue;
+
+    const albumId = String(track.albumId);
     const albumMeta = albumMetaById.get(albumId);
     if (!albumMeta) continue;
 
-    for (const rawTrackId of getTrackFileTrackIds(file)) {
-      const trackId = String(rawTrackId);
-      const trackMeta = trackMetaById.get(trackId);
-      if (!trackMeta) continue;
+    const trackId = String(track.id);
+    if (seen.has(trackId)) continue;
+    seen.add(trackId);
 
-      const streamFormat = path
-        .extname(file.path)
-        .replace(/^\./, "")
-        .toLowerCase();
+    const streamFormat = path
+      .extname(filePath)
+      .replace(/^\./, "")
+      .toLowerCase();
 
-      queue.push({
-        id: `lib-${albumMeta.artistId}-${albumId}-${trackId}`,
-        title: trackMeta.title,
-        artist: albumMeta.artistName,
-        album: albumMeta.title,
-        streamPath: `/library/file-stream/${encodeURIComponent(albumId)}/${encodeURIComponent(trackId)}`,
-        streamFormat: streamFormat || null,
-        quality:
-          file.quality?.quality?.name ||
-          file.mediaInfo?.audioFormat ||
-          null,
-        trackNumber: trackMeta.trackNumber,
-      });
-    }
+    queue.push({
+      id: `lib-${albumMeta.artistId}-${albumId}-${trackId}`,
+      title: track.title || track.trackTitle || "Unknown Track",
+      artist: albumMeta.artistName,
+      album: albumMeta.title,
+      streamPath: `/library/file-stream/${encodeURIComponent(albumId)}/${encodeURIComponent(trackId)}`,
+      streamFormat: streamFormat || null,
+      quality:
+        enriched.trackFile?.quality?.quality?.name ||
+        enriched.trackFile?.mediaInfo?.audioFormat ||
+        null,
+      trackNumber: track.trackNumber || track.absoluteTrackNumber || 0,
+    });
   }
 
   queue.sort((a, b) => {
@@ -1598,19 +1617,33 @@ export class LibraryManager {
     }
 
     try {
-      const [artists, rawAlbums, rawTracks, rawTrackFiles] = await Promise.all([
+      const [artists, rawAlbums, rawTrackFiles] = await Promise.all([
         this.getAllArtists(),
         lidarr.request("/album"),
-        lidarr.getAllTracks(),
         lidarr.getAllTrackFiles(),
       ]);
 
-      const queue = buildPlaybackQueueFromLidarrData({
+      let rawTracks = await lidarr.getAllTracks();
+      if (!Array.isArray(rawTracks)) {
+        rawTracks = [];
+      }
+
+      let queue = buildPlaybackQueueFromLidarrData({
         artists,
         rawAlbums,
         rawTracks,
         rawTrackFiles,
       });
+
+      if (queue.length === 0 && rawTrackFiles.length > 0) {
+        rawTracks = await fetchTracksForArtistsWithFiles(lidarr, rawTrackFiles);
+        queue = buildPlaybackQueueFromLidarrData({
+          artists,
+          rawAlbums,
+          rawTracks,
+          rawTrackFiles,
+        });
+      }
 
       if (queue.length > 0) {
         _playbackQueueCache = {
