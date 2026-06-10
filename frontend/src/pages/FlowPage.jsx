@@ -963,7 +963,7 @@ function FlowPage() {
   };
 
   const fetchFlowTracks = useCallback(
-    async (flowId, { showSpinner = true, includeFailed = false } = {}) => {
+    async (flowId, { showSpinner = true } = {}) => {
       if (!flowId) return;
       if (showSpinner) {
         setTracksLoadingByFlowId((prev) => ({ ...prev, [flowId]: true }));
@@ -972,7 +972,6 @@ function FlowPage() {
       try {
         const jobs = await getFlowJobs(flowId, 500);
         const normalized = (Array.isArray(jobs) ? jobs : [])
-          .filter((job) => includeFailed || job?.status !== "failed")
           .map((job) => ({
             ...job,
             albumName: job?.albumName || null,
@@ -1035,10 +1034,7 @@ function FlowPage() {
       );
       await fetchStatus();
       if (selectedId === flow.id) {
-        await fetchFlowTracks(flow.id, {
-          showSpinner: false,
-          includeFailed: true,
-        });
+        await fetchFlowTracks(flow.id, { showSpinner: false });
       }
     } catch (err) {
       showError(
@@ -1167,12 +1163,10 @@ function FlowPage() {
     selectedId,
   ]);
 
-  const selectedIncludeFailed = selectedEntry?.kind === "shared";
-
   useEffect(() => {
     if (!selectedId) return;
-    fetchFlowTracks(selectedId, { includeFailed: selectedIncludeFailed });
-  }, [selectedId, selectedIncludeFailed, fetchFlowTracks]);
+    fetchFlowTracks(selectedId);
+  }, [selectedId, fetchFlowTracks]);
 
   const selectPlaylist = (entry) => {
     if (
@@ -1513,10 +1507,7 @@ function FlowPage() {
       }
       await fetchStatus();
       if (selectedId) {
-        await fetchFlowTracks(selectedId, {
-          showSpinner: false,
-          includeFailed: true,
-        });
+        await fetchFlowTracks(selectedId, { showSpinner: false });
       }
     } catch (err) {
       const message =
@@ -1670,10 +1661,7 @@ function FlowPage() {
       await deleteSharedPlaylistTrack(playlistId, jobId);
       showSuccess(`Removed ${track.trackName || "track"}`);
       await fetchStatus();
-      await fetchFlowTracks(playlistId, {
-        showSpinner: false,
-        includeFailed: true,
-      });
+      await fetchFlowTracks(playlistId, { showSpinner: false });
     } catch (err) {
       showError(
         err.response?.data?.message ||
@@ -1713,10 +1701,7 @@ function FlowPage() {
       await reSearchSharedPlaylistTrack(playlistId, jobId);
       showSuccess(`Re-searching ${track.trackName}`);
       await fetchStatus();
-      await fetchFlowTracks(playlistId, {
-        showSpinner: false,
-        includeFailed: true,
-      });
+      await fetchFlowTracks(playlistId, { showSpinner: false });
     } catch (err) {
       const message =
         err.response?.data?.message ||
@@ -1724,10 +1709,7 @@ function FlowPage() {
         err.message ||
         "Failed to re-search track";
       showError(message);
-      await fetchFlowTracks(playlistId, {
-        showSpinner: false,
-        includeFailed: true,
-      });
+      await fetchFlowTracks(playlistId, { showSpinner: false });
     } finally {
       setReSearchingTrackIds((prev) => {
         const next = { ...prev };
