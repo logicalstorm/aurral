@@ -547,11 +547,19 @@ async function handlePoll(payload) {
     if (state !== "success") {
       return { ...payload, phase: "poll", delaySeconds: 3, pollAttempts };
     }
+    const candidateIndex = Number(payload.candidateIndex || 0);
+    const candidate =
+      payload.candidate ||
+      (Array.isArray(payload.candidates)
+        ? payload.candidates[candidateIndex]
+        : null);
     return {
       ...payload,
       phase: "finalize",
       batch: { transfers: [transfer] },
       pollAttempts,
+      candidate,
+      candidateIndex,
     };
   }
   const batch = await slskdClient.getBatch(payload.batchId);
@@ -601,7 +609,20 @@ async function handlePoll(payload) {
   if (!allSuccess) {
     return { ...payload, phase: "poll", delaySeconds: 3, pollAttempts };
   }
-  return { ...payload, phase: "finalize", batch, pollAttempts };
+  const candidateIndex = Number(payload.candidateIndex || 0);
+  const candidate =
+    payload.candidate ||
+    (Array.isArray(payload.candidates)
+      ? payload.candidates[candidateIndex]
+      : null);
+  return {
+    ...payload,
+    phase: "finalize",
+    batch,
+    pollAttempts,
+    candidate,
+    candidateIndex,
+  };
 }
 
 async function handleFinalize(payload) {
@@ -611,7 +632,12 @@ async function handleFinalize(payload) {
   const playlistRoot = resolvePlaylistRoot();
   const slskdRoot = await slskdClient.getDownloadDirectory();
   const destination = String(payload.destination || "").trim();
-  const candidate = payload.candidate;
+  const candidateIndex = Number(payload.candidateIndex || 0);
+  const candidate =
+    payload.candidate ||
+    (Array.isArray(payload.candidates)
+      ? payload.candidates[candidateIndex]
+      : null);
   const remoteFile = String(candidate?.raw?.file || "");
   const fileName = path.basename(remoteFile.replace(/\\/g, "/"));
   const sourcePath = await locateCompletedDownload(
@@ -646,8 +672,20 @@ async function handleFinalize(payload) {
     buildResolvedTrack(job, payload.track),
   );
   if (!validation.valid) {
+    logger.slskd("warn", "slskd download validation failed", {
+      jobId: job.id,
+      artistName: job.artistName,
+      trackName: job.trackName,
+      candidateIndex,
+      preDownloadValid: candidate?.preDownloadValid === true,
+      expectedDurationMs: buildResolvedTrack(job, payload.track).durationMs,
+      actualDurationMs: validation.actualDurationMs ?? null,
+      reason: validation.reason,
+      remoteFile,
+      finalPath,
+    });
     await fs.rm(finalPath, { force: true }).catch(() => {});
-    const nextIndex = Number(payload.candidateIndex || 0) + 1;
+    const nextIndex = candidateIndex + 1;
     if (nextIndex < (payload.candidates?.length || 0)) {
       return {
         ...payload,
