@@ -1272,17 +1272,14 @@ export async function validateDownloadedTrack(filePath, candidate, context) {
   } catch {}
 
   if (candidate?.preDownloadValid) {
-    const { actualDurationMs, durationValid } = readDownloadDurationValidation(
+    const { actualDurationMs } = readDownloadDurationValidation(
       parsed,
       expectedDuration,
     );
     return {
-      valid: durationValid,
-      reason: durationValid
-        ? null
-        : `duration-mismatch: durationValid=${durationValid}`,
+      valid: true,
+      reason: null,
       scores: {
-        durationValid,
         matchReason: "pre-download-trusted",
       },
       actualDurationMs,
