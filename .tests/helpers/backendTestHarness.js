@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "fs/promises";
+import { mkdir, mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import path from "path";
 import { dirname, join } from "path";
@@ -19,6 +19,7 @@ export async function createIsolatedStateDir(name = "test") {
   );
   const dataDir = path.join(baseDir, "data");
   const dbPath = path.join(dataDir, "aurral.test.db");
+  await mkdir(dataDir, { recursive: true });
   return {
     baseDir,
     dataDir,
@@ -37,6 +38,10 @@ export function applyIsolatedBackendEnv(paths) {
 
 export async function cleanupIsolatedState(paths) {
   if (!paths?.baseDir) return;
+  try {
+    const honkerDb = await importFromRepo("backend/services/honkerDb.js");
+    honkerDb.closeHonkerDb();
+  } catch {}
   await rm(paths.baseDir, { recursive: true, force: true });
 }
 
