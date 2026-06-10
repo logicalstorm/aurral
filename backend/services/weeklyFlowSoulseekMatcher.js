@@ -341,15 +341,249 @@ export function buildFlowArtistOnlySearchQueries(context) {
 
 export function buildFlowSearchQueries(context) {
   return uniqueQueries(
-    [
-      ...buildFlowAlbumSearchQueries(context),
-      ...buildFlowWildcardAlbumSearchQueries(context),
-      ...buildFlowTrackFallbackSearchQueries(context),
-      ...buildFlowWildcardTrackFallbackSearchQueries(context),
-      ...buildFlowArtistOnlySearchQueries(context),
-    ],
-    24,
+    buildFlowSearchTiers(context).flatMap((tier) => tier.queries),
+    32,
   );
+}
+
+export function removeSearchAccents(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+}
+
+export function stripSearchPunctuation(value) {
+  return String(value || "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function buildTrimmedBypassText(value) {
+  return String(value || "")
+    .trim()
+    .split(/\s+/)
+    .map((word) => (word.length >= 4 ? word.slice(0, -1) : word))
+    .join(" ");
+}
+
+function toVolumeDigit(token) {
+  const raw = String(token || "").trim();
+  if (/^\d+$/.test(raw)) return raw;
+  const romanMap = { i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10 };
+  const mapped = romanMap[raw.toLowerCase()];
+  return mapped != null ? String(mapped) : raw;
+}
+
+export function buildVolumeVariationTexts(value) {
+  const text = String(value || "").trim();
+  if (!text) return [];
+  const match = text.match(/\b(?:vol\.?|volume)\s*([ivx\d]+)\b/i);
+  if (!match) return [];
+  const digit = toVolumeDigit(match[1]);
+  const prefix = text.slice(0, match.index).trim();
+  const suffix = text.slice(match.index + match[0].length).trim();
+  const forms = [
+    `Vol. ${digit}`,
+    `Vol ${digit}`,
+    `Volume ${digit}`,
+    `Volume ${match[1].toUpperCase()}`,
+  ];
+  return uniqueQueries(
+    forms.map((form) => [prefix, form, suffix].filter(Boolean).join(" ")),
+    6,
+  );
+}
+
+export function buildHalfAlbumTitle(albumName) {
+  const words = String(albumName || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length < 5) return "";
+  return words.slice(0, Math.ceil(words.length / 2)).join(" ");
+}
+
+function joinSearchParts(...parts) {
+  return parts
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
+function buildPrimaryTrackTierQueries(ctx) {
+  const queries = [];
+  const primaryTrack = ctx.trackVariants[0] || ctx.trackName;
+  if (!ctx.artistName || !primaryTrack) return queries;
+  queries.push(joinSearchParts(ctx.artistName, primaryTrack));
+  if (ctx.releaseYear) {
+    queries.push(joinSearchParts(ctx.artistName, primaryTrack, ctx.releaseYear));
+  }
+  return uniqueQueries(queries, 4);
+}
+
+function buildBaseAlbumTierQueries(ctx) {
+  const queries = [];
+  if (!ctx.artistName || !ctx.albumName) return queries;
+  if (ctx.isSelfTitled && ctx.releaseYear) {
+    queries.push(joinSearchParts(ctx.artistName, ctx.releaseYear));
+  }
+  queries.push(joinSearchParts(ctx.artistName, ctx.albumName));
+  if (ctx.releaseYear) {
+    queries.push(joinSearchParts(ctx.artistName, ctx.albumName, ctx.releaseYear));
+  }
+  return uniqueQueries(queries, 4);
+}
+
+function buildVariationTierQueries(ctx) {
+  const queries = [];
+  const primaryTrack = ctx.trackVariants[0] || ctx.trackName;
+  const artistForms = uniqueQueries(
+    [ctx.artistName, removeSearchAccents(ctx.artistName), stripSearchPunctuation(ctx.artistName)].filter(Boolean),
+    3,
+  );
+  const trackForms = uniqueQueries(
+    [
+      primaryTrack,
+      removeSearchAccents(primaryTrack),
+      stripSearchPunctuation(primaryTrack),
+      ...ctx.trackVariants.slice(1, 2),
+    ].filter(Boolean),
+    4,
+  );
+  const albumForms = uniqueQueries(
+    [
+      ctx.albumName,
+      removeSearchAccents(ctx.albumName),
+      stripSearchPunctuation(ctx.albumName),
+      ctx.normalizedAlbum,
+    ].filter(Boolean),
+    4,
+  );
+  for (const artist of artistForms) {
+    for (const track of trackForms) {
+      queries.push(joinSearchParts(artist, track));
+    }
+    for (const album of albumForms) {
+      queries.push(joinSearchParts(artist, album));
+      for (const volumeText of buildVolumeVariationTexts(album)) {
+        queries.push(joinSearchParts(artist, volumeText));
+      }
+      if (ctx.releaseYear) {
+        queries.push(joinSearchParts(artist, album, ctx.releaseYear));
+      }
+    }
+  }
+  return uniqueQueries(queries, 10);
+}
+
+function buildTrimmedTierQueries(ctx) {
+  const queries = [];
+  const primaryTrack = ctx.trackVariants[0] || ctx.trackName;
+  const trimmedArtist = buildTrimmedBypassText(ctx.artistName);
+  const trimmedTrack = buildTrimmedBypassText(primaryTrack);
+  const trimmedAlbum = buildTrimmedBypassText(ctx.albumName);
+  if (trimmedArtist && trimmedTrack) {
+    queries.push(joinSearchParts(trimmedArtist, trimmedTrack));
+  }
+  if (trimmedArtist && trimmedAlbum) {
+    queries.push(joinSearchParts(trimmedArtist, trimmedAlbum));
+    if (ctx.releaseYear) {
+      queries.push(joinSearchParts(trimmedArtist, trimmedAlbum, ctx.releaseYear));
+    }
+  }
+  if (ctx.artistName && primaryTrack) {
+    queries.push(joinSearchParts(bypassBannedArtistTerm(ctx.artistName), primaryTrack));
+  }
+  if (ctx.artistName && ctx.albumName) {
+    queries.push(joinSearchParts(bypassBannedArtistTerm(ctx.artistName), ctx.albumName));
+  }
+  return uniqueQueries(queries, 6);
+}
+
+function buildSpecialCaseTierQueries(ctx) {
+  const queries = [];
+  const primaryTrack = ctx.trackVariants[0] || ctx.trackName;
+  for (const alias of ctx.aliases) {
+    if (!alias) continue;
+    if (primaryTrack) {
+      queries.push(joinSearchParts(alias, primaryTrack));
+    }
+    if (ctx.albumName) {
+      queries.push(joinSearchParts(alias, ctx.albumName));
+      if (ctx.releaseYear) {
+        queries.push(joinSearchParts(alias, ctx.albumName, ctx.releaseYear));
+      }
+    }
+    queries.push(bypassBannedArtistTerm(alias));
+  }
+  const halfAlbum = buildHalfAlbumTitle(ctx.albumName);
+  if (ctx.artistName && halfAlbum) {
+    queries.push(joinSearchParts(ctx.artistName, halfAlbum));
+  }
+  if (ctx.artistName) {
+    queries.push(bypassBannedArtistTerm(ctx.artistName));
+  }
+  if (ctx.albumName) {
+    queries.push(ctx.albumName);
+    if (ctx.distinctiveAlbum && ctx.distinctiveAlbum !== ctx.albumName) {
+      queries.push(ctx.distinctiveAlbum);
+    }
+  }
+  return uniqueQueries(queries, 10);
+}
+
+function buildTrackFallbackTierQueries(ctx) {
+  const queries = [];
+  const trackVariants = uniqueQueries(ctx.trackVariants, 6);
+  for (const trackVariant of trackVariants) {
+    if (ctx.artistName) {
+      queries.push(joinSearchParts(ctx.artistName, trackVariant));
+      queries.push(joinSearchParts(bypassBannedArtistTerm(ctx.artistName), trackVariant));
+    }
+    if (ctx.albumName) {
+      queries.push(joinSearchParts(trackVariant, ctx.albumName));
+      if (ctx.releaseYear) {
+        queries.push(joinSearchParts(trackVariant, ctx.albumName, ctx.releaseYear));
+      }
+    }
+  }
+  for (const alias of ctx.aliases) {
+    for (const trackVariant of trackVariants.slice(0, 2)) {
+      queries.push(joinSearchParts(alias, trackVariant));
+    }
+  }
+  return uniqueQueries(queries, 8);
+}
+
+export function buildFlowSearchTiers(context) {
+  const ctx = readFlowSearchContext(context);
+  const tiers = [];
+  const primaryTrack = buildPrimaryTrackTierQueries(ctx);
+  if (primaryTrack.length > 0) {
+    tiers.push({ tier: 0, name: "primary_track", queries: primaryTrack });
+  }
+  const baseAlbum = buildBaseAlbumTierQueries(ctx);
+  if (baseAlbum.length > 0) {
+    tiers.push({ tier: 1, name: "base_album", queries: baseAlbum });
+  }
+  const variations = buildVariationTierQueries(ctx);
+  if (variations.length > 0) {
+    tiers.push({ tier: 2, name: "variations", queries: variations });
+  }
+  const trimmed = buildTrimmedTierQueries(ctx);
+  if (trimmed.length > 0) {
+    tiers.push({ tier: 3, name: "trimmed", queries: trimmed });
+  }
+  const special = buildSpecialCaseTierQueries(ctx);
+  if (special.length > 0) {
+    tiers.push({ tier: 4, name: "special", queries: special });
+  }
+  const trackFallback = buildTrackFallbackTierQueries(ctx);
+  if (trackFallback.length > 0) {
+    tiers.push({ tier: 5, name: "track_fallback", queries: trackFallback });
+  }
+  return tiers;
 }
 
 function getPathParts(filePath) {
