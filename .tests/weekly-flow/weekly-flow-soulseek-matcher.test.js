@@ -635,6 +635,7 @@ test("validateDownloadedTrack trusts preDownloadValid candidates without re-scor
       trackName: "Second & Sebring",
       albumName: "Of Mice & Men",
       trackNumber: 3,
+      durationMs: 433000,
     },
   );
 
