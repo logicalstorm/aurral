@@ -9869,11 +9869,11 @@ textarea {
   border-radius: calc(var(--aurral-radius) + 1px);
   background: conic-gradient(
     from var(--onboarding-glow-angle),
-    color-mix(in srgb, var(--aurral-green) 75%, #1a2e0a) 0deg,
-    color-mix(in srgb, var(--aurral-green) 25%, var(--aurral-surface)) 95deg,
-    color-mix(in srgb, var(--aurral-green) 75%, #1a2e0a) 180deg,
-    color-mix(in srgb, var(--aurral-green) 25%, var(--aurral-surface)) 275deg,
-    color-mix(in srgb, var(--aurral-green) 75%, #1a2e0a) 360deg
+    color-mix(in srgb, var(--aurral-green) 30%, #1a2e0a) 0deg,
+    color-mix(in srgb, var(--aurral-green) 20%, var(--aurral-surface)) 95deg,
+    color-mix(in srgb, #fbbf24 30%, #1a2e0a) 180deg,
+    color-mix(in srgb, #fbbf24 20%, var(--aurral-surface)) 275deg,
+    color-mix(in srgb, var(--aurral-green) 30%, #1a2e0a) 360deg
   );
   animation: onboarding-glow-border 10s linear infinite;
 }
