@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import PropTypes from "prop-types";
 import { useNavigate } from "react-router-dom";
 import {
-  CheckCircle,
+  CheckCircle2,
   Crosshair,
   ListMusic,
   Loader,
@@ -475,13 +475,13 @@ export function DiscoverPlaylistSection({
                       {playlist.name}
                     </h3>
                     {playlist.adoptedFlowId ? (
-                      <CheckCircle
+                      <CheckCircle2
                         className="artist-library-check--discover"
                         title="Added as rotating flow"
                       />
                     ) : null}
                     {playlist.adoptedPlaylistId ? (
-                      <CheckCircle
+                      <CheckCircle2
                         className="artist-library-check--discover"
                         title="Added as static playlist"
                       />

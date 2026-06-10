@@ -7,7 +7,10 @@ import { enqueuePipelineJob } from "./honkerDb.js";
 import { downloadTracker } from "./playlistDownloadTracker.js";
 import {
   buildFlowAlbumSearchQueries,
+  buildFlowArtistOnlySearchQueries,
   buildFlowTrackFallbackSearchQueries,
+  buildFlowWildcardAlbumSearchQueries,
+  buildFlowWildcardTrackFallbackSearchQueries,
   rankFlowSearchResults,
   selectRankedMatchAttempts,
   validateDownloadedTrack,
@@ -27,7 +30,10 @@ const updateSlskdMetaStmt = db.prepare(`
 `);
 
 const MAX_ALBUM_SEARCH_QUERIES = 4;
+const MAX_WILDCARD_ALBUM_SEARCH_QUERIES = 3;
 const MAX_FALLBACK_SEARCH_QUERIES = 3;
+const MAX_WILDCARD_FALLBACK_SEARCH_QUERIES = 2;
+const MAX_ARTIST_ONLY_SEARCH_QUERIES = 2;
 const MIN_SEARCH_CANDIDATES = 1;
 const MAX_EMPTY_POLL_ATTEMPTS = 60;
 const MAX_POLL_ATTEMPTS = 600;
@@ -344,13 +350,28 @@ async function handleSearch(payload) {
     .then(({ recordTrackJobSearching }) => recordTrackJobSearching(job))
     .catch(() => {});
   const resolvedTrack = buildResolvedTrack(job, payload.track);
-  const albumQueries = buildFlowAlbumSearchQueries(resolvedTrack).slice(
-    0,
-    MAX_ALBUM_SEARCH_QUERIES,
-  );
-  const fallbackQueries = buildFlowTrackFallbackSearchQueries(
-    resolvedTrack,
-  ).slice(0, MAX_FALLBACK_SEARCH_QUERIES);
+  const searchTiers = [
+    buildFlowAlbumSearchQueries(resolvedTrack).slice(
+      0,
+      MAX_ALBUM_SEARCH_QUERIES,
+    ),
+    buildFlowWildcardAlbumSearchQueries(resolvedTrack).slice(
+      0,
+      MAX_WILDCARD_ALBUM_SEARCH_QUERIES,
+    ),
+    buildFlowTrackFallbackSearchQueries(resolvedTrack).slice(
+      0,
+      MAX_FALLBACK_SEARCH_QUERIES,
+    ),
+    buildFlowWildcardTrackFallbackSearchQueries(resolvedTrack).slice(
+      0,
+      MAX_WILDCARD_FALLBACK_SEARCH_QUERIES,
+    ),
+    buildFlowArtistOnlySearchQueries(resolvedTrack).slice(
+      0,
+      MAX_ARTIST_ONLY_SEARCH_QUERIES,
+    ),
+  ];
   const searchOptions = await getWorkerSearchOptions();
   const aggregated = [];
   const seen = new Set();
@@ -380,13 +401,19 @@ async function handleSearch(payload) {
     }
     return false;
   };
-  const albumSatisfied = await runQueryBatch(albumQueries);
-  if (
-    !albumSatisfied &&
-    countPreDownloadValidCandidates(aggregated, resolvedTrack, searchOptions) <
-      MIN_SEARCH_CANDIDATES
-  ) {
-    await runQueryBatch(fallbackQueries);
+  for (const tier of searchTiers) {
+    if (tier.length === 0) continue;
+    const satisfied = await runQueryBatch(tier);
+    if (satisfied) break;
+    if (
+      countPreDownloadValidCandidates(
+        aggregated,
+        resolvedTrack,
+        searchOptions,
+      ) >= MIN_SEARCH_CANDIDATES
+    ) {
+      break;
+    }
   }
   if (searchIdRef.value) {
     updateSlskdMetaStmt.run(searchIdRef.value, null, null, null, job.id);
