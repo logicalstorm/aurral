@@ -443,6 +443,148 @@ function CommaTokenInput({
   );
 }
 
+export function FlowScheduleFields({
+  draft,
+  inputClassName = "flow-page__field-control",
+  onDraftChange,
+  onClearError,
+}) {
+  const updateDraft = (updater) => {
+    onDraftChange((prev) => updater(prev));
+    if (onClearError) onClearError();
+  };
+  const scheduleDays = Array.isArray(draft?.scheduleDays)
+    ? [...new Set(draft.scheduleDays.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry >= 0 && entry <= 6))].sort(
+        (a, b) => a - b
+      )
+    : [];
+  const scheduleTime = String(draft?.scheduleTime || "00:00");
+
+  return (
+    <div className="flow-page__form-section">
+      <div className="flow-page__schedule-row">
+        <div className="flow-page__field">
+          <label className="flow-page__field-label">
+            Tracks
+          </label>
+          <div className="flow-page__field-round">
+            <input
+              type="number"
+              min="1"
+              max="100"
+              className={`${inputClassName} flow-page__field-input--size`}
+              value={draft.size}
+              onChange={(event) => {
+                const value = event.target.value;
+                updateDraft((prev) => ({ ...prev, size: value }));
+              }}
+            />
+          </div>
+        </div>
+        <div className="flow-page__field">
+          <label className="flow-page__field-label">
+            Update hour
+          </label>
+          <div className="flow-page__field-round flow-page__field-round--select">
+            <select
+              className={`${inputClassName} flow-page__field-select`}
+              value={scheduleTime}
+              onChange={(event) =>
+                updateDraft((prev) => ({
+                  ...prev,
+                  scheduleTime: event.target.value || "00:00",
+                }))
+              }
+            >
+              {SCHEDULE_HOUR_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="flow-page__select-icon" />
+          </div>
+        </div>
+        <div className="flow-page__field flow-page__field--schedule-days">
+          <label className="flow-page__field-label">
+            Update days
+          </label>
+          <div className="flow-page__weekday-grid">
+            {WEEKDAY_OPTIONS.map((day) => {
+              const checked = scheduleDays.includes(day.id);
+              return (
+                <label
+                  key={day.id}
+                  className={`flow-page__weekday${checked ? " is-active" : ""}`}
+                  title={day.full}
+                >
+                  <input
+                    type="checkbox"
+                    className="flow-page__weekday-input"
+                    checked={checked}
+                    disabled={checked && scheduleDays.length === 1}
+                    onChange={() =>
+                      updateDraft((prev) => {
+                        const current = Array.isArray(prev?.scheduleDays)
+                          ? prev.scheduleDays
+                          : [];
+                        const normalized = [...new Set(current
+                          .map((entry) => Number(entry))
+                          .filter((entry) => Number.isFinite(entry) && entry >= 0 && entry <= 6))];
+                        if (checked && normalized.length === 1) {
+                          return prev;
+                        }
+                        const next = checked
+                          ? normalized.filter((entry) => entry !== day.id)
+                          : [...normalized, day.id];
+                        return {
+                          ...prev,
+                          scheduleDays: next.sort((a, b) => a - b),
+                        };
+                      })
+                    }
+                  />
+                  <span>{day.short}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ReleaseRadarRecipeFields({
+  draft,
+  inputClassName = "flow-page__field-control",
+  errorMessage,
+  onDraftChange,
+  onClearError,
+}) {
+  return (
+    <div className="flow-page__form">
+      <div className="flow-page__preset-recipe">
+        <p className="flow-page__preset-recipe-label">New releases</p>
+        <p className="flow-page__preset-recipe-desc">
+          Finds recent albums from artists in your library that you do not have
+          yet, then picks a standout track from each release. The playlist
+          refreshes on your schedule below.
+        </p>
+      </div>
+      <FlowScheduleFields
+        draft={draft}
+        inputClassName={inputClassName}
+        onDraftChange={onDraftChange}
+        onClearError={onClearError}
+      />
+      {errorMessage ? (
+        <div className="flow-page__error-text">{errorMessage}</div>
+      ) : null}
+    </div>
+  );
+}
+
 export function FlowFormFields({
   draft,
   remaining,
@@ -459,12 +601,6 @@ export function FlowFormFields({
   };
   const normalizedMix = normalizeMixPercent(draft?.mix);
   const totalSize = Number.isFinite(Number(remaining)) && Number(remaining) > 0 ? Math.round(Number(remaining)) : 0;
-  const scheduleDays = Array.isArray(draft?.scheduleDays)
-    ? [...new Set(draft.scheduleDays.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry >= 0 && entry <= 6))].sort(
-        (a, b) => a - b
-      )
-    : [];
-  const scheduleTime = String(draft?.scheduleTime || "00:00");
   const { focusEnabled, focusValidationError } = getFocusDraftValidation(
     draft,
     normalizeMixPercent,
@@ -499,97 +635,12 @@ export function FlowFormFields({
 
   return (
     <div className="flow-page__form">
-      <div className="flow-page__form-section">
-        <div className="flow-page__schedule-row">
-          <div className="flow-page__field">
-            <label className="flow-page__field-label">
-              Tracks
-            </label>
-            <div className="flow-page__field-round">
-              <input
-                type="number"
-                min="1"
-                max="100"
-                className={`${inputClassName} flow-page__field-input--size`}
-                value={draft.size}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  updateDraft((prev) => ({ ...prev, size: value }));
-                }}
-              />
-            </div>
-          </div>
-          <div className="flow-page__field">
-            <label className="flow-page__field-label">
-              Update hour
-            </label>
-            <div className="flow-page__field-round flow-page__field-round--select">
-              <select
-                className={`${inputClassName} flow-page__field-select`}
-                value={scheduleTime}
-                onChange={(event) =>
-                  updateDraft((prev) => ({
-                    ...prev,
-                    scheduleTime: event.target.value || "00:00",
-                  }))
-                }
-              >
-                {SCHEDULE_HOUR_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="flow-page__select-icon" />
-            </div>
-          </div>
-          <div className="flow-page__field flow-page__field--schedule-days">
-            <label className="flow-page__field-label">
-              Update days
-            </label>
-            <div className="flow-page__weekday-grid">
-              {WEEKDAY_OPTIONS.map((day) => {
-                const checked = scheduleDays.includes(day.id);
-                return (
-                  <label
-                    key={day.id}
-                    className={`flow-page__weekday${checked ? " is-active" : ""}`}
-                    title={day.full}
-                  >
-                    <input
-                      type="checkbox"
-                      className="flow-page__weekday-input"
-                      checked={checked}
-                      disabled={checked && scheduleDays.length === 1}
-                      onChange={() =>
-                        updateDraft((prev) => {
-                          const current = Array.isArray(prev?.scheduleDays)
-                            ? prev.scheduleDays
-                            : [];
-                          const normalized = [...new Set(current
-                            .map((entry) => Number(entry))
-                            .filter((entry) => Number.isFinite(entry) && entry >= 0 && entry <= 6))];
-                          if (checked && normalized.length === 1) {
-                            return prev;
-                          }
-                          const next = checked
-                            ? normalized.filter((entry) => entry !== day.id)
-                            : [...normalized, day.id];
-                          return {
-                            ...prev,
-                            scheduleDays: next.sort((a, b) => a - b),
-                          };
-                        })
-                      }
-                    />
-                    <span>{day.short}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
+      <FlowScheduleFields
+        draft={draft}
+        inputClassName={inputClassName}
+        onDraftChange={onDraftChange}
+        onClearError={onClearError}
+      />
 
       <div className="flow-page__form-section">
         <div className="flow-page__field-label flow-page__field-label--section">

@@ -4,7 +4,7 @@ import { dbOps } from "../config/db-helpers.js";
 import { withHonkerLock } from "./honkerDb.js";
 import { logger } from "./logger.js";
 
-const DEFAULT_SEARCH_TIMEOUT_MS = 120000;
+const DEFAULT_SEARCH_TIMEOUT_MS = 30000;
 const DEFAULT_FILE_LIMIT = 1000;
 const DEFAULT_RESPONSE_LIMIT = 150;
 const DEFAULT_MAX_PEER_QUEUE = 150;
