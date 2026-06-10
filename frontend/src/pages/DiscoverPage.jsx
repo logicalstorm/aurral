@@ -1398,6 +1398,7 @@ function DiscoverPage() {
       recommended:
         !isListenBrainzFallback &&
         (recommendations.length > 0 ||
+          isUpdating ||
           capabilities?.personalizedRecommendations !== false),
       recommendedShows: ticketmasterConfigured,
       globalTop: globalTop.length > 0,
@@ -1415,6 +1416,7 @@ function DiscoverPage() {
       recommendations,
       capabilities,
       isListenBrainzFallback,
+      isUpdating,
       ticketmasterConfigured,
     ],
   );
@@ -1778,13 +1780,13 @@ function DiscoverPage() {
 
     if (id === "recommended") {
       if (!sectionAvailability.recommended) return null;
-      return (
-        <DiscoverRail
-          key="recommended"
-          title="Recommended for You"
-          onViewAll={() => navigate("/search?type=recommended")}
-        >
-          {recommendations.length > 0 ? (
+      if (recommendations.length > 0) {
+        return (
+          <DiscoverRail
+            key="recommended"
+            title="Recommended for You"
+            onViewAll={() => navigate("/search?type=recommended")}
+          >
             <>
               {recommendations
                 .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT)
@@ -1810,19 +1812,69 @@ function DiscoverPage() {
                 />
               </div>
             </>
-          ) : (
-            <div className="artist-nearby-status artist-nearby-status--loading">
-              <Music className="artist-media-placeholder--discover-icon" />
-              <p className="discover-not-configured__text">
-                Not enough data to generate recommendations yet.
-              </p>
-              <p className="discover-loading__text">
-                If you just set up Last.fm, the first scan may take up to 10
-                minutes.
-              </p>
-            </div>
-          )}
-        </DiscoverRail>
+          </DiscoverRail>
+        );
+      }
+
+      const recommendedStatusTitle = isUpdating
+        ? "Building your recommendations"
+        : "Not enough listening data yet";
+      const recommendedStatusMessage = isUpdating
+        ? updateProgressMessage ||
+          "Scanning your library and Last.fm history. The first setup can take up to 10 minutes."
+        : provider === "lastfm"
+          ? "Add artists to your library or keep scrobbling on Last.fm. Recommendations improve as Aurral learns your taste."
+          : "Add artists to your library or connect Last.fm in Settings to unlock personalized recommendations.";
+
+      return (
+        <section key="recommended" className="artist-discover-section">
+          <h2 className="artist-section-title--discover discover-recommended-status__title">
+            <span className="artist-section-title--discover-mobile">
+              Recommended
+            </span>
+            <span className="artist-section-title--discover-desktop">
+              Recommended for You
+            </span>
+          </h2>
+          <div
+            className={`discover-recommended-status${isUpdating ? " discover-recommended-status--loading" : ""}`}
+          >
+            {isUpdating ? (
+              <Loader className="discover-recommended-status__spinner animate-spin" />
+            ) : (
+              <div
+                className="discover-recommended-status__icon"
+                aria-hidden="true"
+              >
+                <Music className="artist-icon-lg" />
+              </div>
+            )}
+            <h3 className="discover-recommended-status__heading">
+              {recommendedStatusTitle}
+            </h3>
+            <p className="discover-recommended-status__message">
+              {recommendedStatusMessage}
+            </p>
+            {!isUpdating ? (
+              <div className="discover-recommended-status__actions">
+                <button
+                  type="button"
+                  onClick={() => navigate("/search")}
+                  className="btn btn-primary btn--bold btn-min-h"
+                >
+                  Search Artists
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate("/library")}
+                  className="btn btn-secondary btn--bold btn-min-h"
+                >
+                  Browse Library
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </section>
       );
     }
 

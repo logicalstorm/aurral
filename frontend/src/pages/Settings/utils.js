@@ -99,7 +99,7 @@ export const normalizeSettings = (savedSettings) => {
       },
       ticketmaster: {
         apiKey: "",
-        searchRadiusMiles: 50,
+        searchRadiusMiles: 250,
         localDiscoveryIncludeRecommendations: true,
         localDiscoveryIncludeTrending: true,
         ...(savedSettings.integrations?.ticketmaster || {}),

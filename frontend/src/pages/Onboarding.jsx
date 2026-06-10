@@ -60,6 +60,8 @@ function Onboarding() {
   const [slskdUrl, setSlskdUrl] = useState("");
   const [slskdApiKey, setSlskdApiKey] = useState("");
   const [ticketmasterApiKey, setTicketmasterApiKey] = useState("");
+  const [ticketmasterSearchRadiusMiles, setTicketmasterSearchRadiusMiles] =
+    useState(250);
   const [lidarrTestSuccess, setLidarrTestSuccess] = useState(false);
   const [testingLidarr, setTestingLidarr] = useState(false);
   const [testingLidarrLibraryAccess, setTestingLidarrLibraryAccess] =
@@ -325,7 +327,13 @@ function Onboarding() {
               }
             : undefined,
         ticketmaster: hasTicketmaster
-          ? { apiKey: ticketmasterApiKey.trim() }
+          ? {
+              apiKey: ticketmasterApiKey.trim(),
+              searchRadiusMiles: Math.max(
+                5,
+                Math.min(250, Math.floor(ticketmasterSearchRadiusMiles)),
+              ),
+            }
           : undefined,
       });
       await refreshAuth();
@@ -855,6 +863,28 @@ function Onboarding() {
                 value={ticketmasterApiKey}
                 onChange={(e) => setTicketmasterApiKey(e.target.value)}
               />
+              <div>
+                <label className="onboarding-label">Search radius (miles)</label>
+                <input
+                  type="number"
+                  min={5}
+                  max={250}
+                  step={5}
+                  className="onboarding-input"
+                  value={ticketmasterSearchRadiusMiles}
+                  onChange={(e) => {
+                    const raw = Number(e.target.value);
+                    setTicketmasterSearchRadiusMiles(
+                      Number.isFinite(raw)
+                        ? Math.max(5, Math.min(250, Math.floor(raw)))
+                        : 250,
+                    );
+                  }}
+                />
+                <p className="onboarding-copy onboarding-copy--xs">
+                  How far from your location to search for nearby shows.
+                </p>
+              </div>
             </div>
           </>
         )}

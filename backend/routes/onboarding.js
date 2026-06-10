@@ -348,7 +348,7 @@ router.post("/complete", async (req, res) => {
                         Math.floor(Number(ticketmaster.searchRadiusMiles)),
                       ),
                     )
-                  : current.integrations?.ticketmaster?.searchRadiusMiles ?? 50,
+                  : current.integrations?.ticketmaster?.searchRadiusMiles ?? 250,
             }
           : current.integrations?.ticketmaster,
     };
