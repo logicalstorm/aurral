@@ -220,6 +220,11 @@ const writeStoredNearbyShows = (value, userId, locationMode, zip) => {
   } catch {}
 };
 
+const stripDiscoverPlaylistAdoptionFields = (playlists) =>
+  (Array.isArray(playlists) ? playlists : []).map(
+    ({ adoptedFlowId, adoptedPlaylistId, ...playlist }) => playlist,
+  );
+
 const normalizeDiscoveryData = (value) => {
   if (!value || typeof value !== "object") return null;
   return {
@@ -259,14 +264,24 @@ const normalizeDiscoveryData = (value) => {
 };
 
 const readStoredDiscoveryData = (userId) => {
+  const fromStorage = (raw) => {
+    const normalized = normalizeDiscoveryData(raw);
+    if (!normalized) return null;
+    return {
+      ...normalized,
+      discoverPlaylists: stripDiscoverPlaylistAdoptionFields(
+        normalized.discoverPlaylists,
+      ),
+    };
+  };
   try {
     const primaryKey = getDiscoveryCacheStorageKey(userId);
-    const primary = normalizeDiscoveryData(
+    const primary = fromStorage(
       JSON.parse(localStorage.getItem(primaryKey) || "null"),
     );
     if (primary) return primary;
     if (primaryKey === DISCOVERY_CACHE_KEY) return null;
-    return normalizeDiscoveryData(
+    return fromStorage(
       JSON.parse(localStorage.getItem(DISCOVERY_CACHE_KEY) || "null"),
     );
   } catch {
@@ -280,7 +295,12 @@ const writeStoredDiscoveryData = (value, userId) => {
   try {
     localStorage.setItem(
       getDiscoveryCacheStorageKey(userId),
-      JSON.stringify(normalized),
+      JSON.stringify({
+        ...normalized,
+        discoverPlaylists: stripDiscoverPlaylistAdoptionFields(
+          normalized.discoverPlaylists,
+        ),
+      }),
     );
   } catch {}
 };
@@ -959,7 +979,7 @@ function DiscoverPage() {
   }, [data, data?.isUpdating, data?.stale]);
 
   useEffect(() => {
-    getDiscovery()
+    getDiscovery(true)
       .then((discoveryData) => {
         const normalizedData = normalizeDiscoveryData(discoveryData);
         setData(normalizedData);
@@ -1310,14 +1330,49 @@ function DiscoverPage() {
       discoverPlaylists.map((playlist) => ({
         ...playlist,
         adoptedFlowId:
-          adoptedFlowIds[playlist.presetId] || playlist.adoptedFlowId || null,
+          playlist.adoptedFlowId || adoptedFlowIds[playlist.presetId] || null,
         adoptedPlaylistId:
-          adoptedStaticPlaylistIds[playlist.presetId] ||
           playlist.adoptedPlaylistId ||
+          adoptedStaticPlaylistIds[playlist.presetId] ||
           null,
       })),
     [adoptedFlowIds, adoptedStaticPlaylistIds, discoverPlaylists],
   );
+
+  useEffect(() => {
+    setAdoptedFlowIds((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const playlist of discoverPlaylists) {
+        if (playlist.adoptedFlowId) {
+          if (next[playlist.presetId] !== playlist.adoptedFlowId) {
+            next[playlist.presetId] = playlist.adoptedFlowId;
+            changed = true;
+          }
+        } else if (next[playlist.presetId]) {
+          delete next[playlist.presetId];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    setAdoptedStaticPlaylistIds((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const playlist of discoverPlaylists) {
+        if (playlist.adoptedPlaylistId) {
+          if (next[playlist.presetId] !== playlist.adoptedPlaylistId) {
+            next[playlist.presetId] = playlist.adoptedPlaylistId;
+            changed = true;
+          }
+        } else if (next[playlist.presetId]) {
+          delete next[playlist.presetId];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [discoverPlaylists]);
 
   const handleFlowAdopted = useCallback((presetId, flowId) => {
     if (!presetId || !flowId) return;

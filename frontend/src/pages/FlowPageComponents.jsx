@@ -2297,7 +2297,6 @@ export function FlowTracksPanel({
   error,
   activityHint = null,
   emptyMessage = "No tracks generated for this flow yet.",
-  hideFailedTracks = false,
   headerActions = null,
   deletingTrackId = null,
   reSearchingTrackIds = {},
@@ -2332,14 +2331,6 @@ export function FlowTracksPanel({
   const playableTracks = useMemo(
     () => tracks.filter((track) => track.status === "done" && track.streamUrl),
     [tracks],
-  );
-
-  const visibleTracks = useMemo(
-    () =>
-      hideFailedTracks
-        ? tracks.filter((track) => track.status !== "failed")
-        : tracks,
-    [hideFailedTracks, tracks],
   );
 
   const isSourceActive = matchesSource(playbackSource);
@@ -2439,7 +2430,7 @@ export function FlowTracksPanel({
         {!loading && error && (
           <div className="flow-page__tracks-error">{error}</div>
         )}
-        {!loading && !error && visibleTracks.length === 0 && (
+        {!loading && !error && tracks.length === 0 && (
           <div className="flow-page__tracks-empty">
             {activityHint ? (
               <>
@@ -2451,7 +2442,7 @@ export function FlowTracksPanel({
             )}
           </div>
         )}
-        {!loading && !error && visibleTracks.length > 0 && (
+        {!loading && !error && tracks.length > 0 && (
           <table
             className={`flow-page__tracks-table${hideAlbumColumn ? " flow-page__tracks-table--no-album" : ""}`}
           >
@@ -2476,7 +2467,7 @@ export function FlowTracksPanel({
               </tr>
             </thead>
             <tbody>
-              {visibleTracks.map((track, index) => {
+              {tracks.map((track, index) => {
                 const canPlay =
                   showPlaybackControls &&
                   track.status === "done" &&
@@ -3010,7 +3001,6 @@ export function SharedPlaylistCard({
               error={tracksError}
               emptyMessage="No tracks in this static playlist yet."
               editable={false}
-              hideFailedTracks={true}
               playbackSource={{
                 type: "playlist",
                 id: playlist.id,

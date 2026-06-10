@@ -4,7 +4,7 @@ import { dbOps } from "../config/db-helpers.js";
 import { withHonkerLock } from "./honkerDb.js";
 import { logger } from "./logger.js";
 
-const DEFAULT_SEARCH_TIMEOUT_MS = 30000;
+const DEFAULT_SEARCH_TIMEOUT_MS = 60000;
 const DEFAULT_EMPTY_SEARCH_TIMEOUT_MS = 10000;
 const DEFAULT_SEARCH_GRACE_PERIOD_MS = 20000;
 const DEFAULT_FILE_LIMIT = 1000;
@@ -102,16 +102,27 @@ function readSearchResponses(searchData) {
   return normalizeArrayPayload(responses);
 }
 
-function normalizeSearchFile(file, user, response = null, fromLockedList = false) {
+function normalizeSearchFile(
+  file,
+  user,
+  response = null,
+  fromLockedList = false,
+) {
   const filename = String(
     readProperty(file, "filename", "Filename", "file", "File") || "",
   ).trim();
-  const size = Number(readProperty(file, "size", "Size", "length", "Length") || 0);
+  const size = Number(
+    readProperty(file, "size", "Size", "length", "Length") || 0,
+  );
   const responseUser = readProperty(response, "username", "Username");
   const resolvedUser = String(
     user || responseUser || readProperty(file, "user", "User") || "",
   ).trim();
-  const responseSlots = readProperty(response, "hasFreeUploadSlot", "HasFreeUploadSlot");
+  const responseSlots = readProperty(
+    response,
+    "hasFreeUploadSlot",
+    "HasFreeUploadSlot",
+  );
   const locked =
     fromLockedList ||
     readProperty(file, "isLocked", "IsLocked", "locked", "Locked") === true;
@@ -277,7 +288,9 @@ export class SlskdClient {
       const id = String(options.id || randomUUID());
       const searchTimeoutMs = Math.max(
         5000,
-        Math.floor(Number(options.searchTimeoutMs || DEFAULT_SEARCH_TIMEOUT_MS)),
+        Math.floor(
+          Number(options.searchTimeoutMs || DEFAULT_SEARCH_TIMEOUT_MS),
+        ),
       );
       const body = {
         id,
@@ -451,6 +464,26 @@ export class SlskdClient {
     }
   }
 
+  async settleSearch(searchId, { cancel = false, maxWaitMs = 120000 } = {}) {
+    const id = String(searchId || "").trim();
+    if (!id) return null;
+    if (cancel) {
+      await this.deleteSearch(id);
+      return null;
+    }
+    const deadline = Date.now() + Math.max(1000, Number(maxWaitMs) || 120000);
+    let lastData = null;
+    while (Date.now() < deadline) {
+      lastData = await this.getSearch(id);
+      if (!isSearchInProgress(lastData)) {
+        return lastData;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    await this.deleteSearch(id);
+    return lastData;
+  }
+
   flattenSearchResults(searchData) {
     const results = [];
     const seen = new Set();
@@ -494,6 +527,7 @@ export class SlskdClient {
       created.id,
       Number(options.timeoutMs || DEFAULT_SEARCH_TIMEOUT_MS),
     );
+    await this.settleSearch(created.id);
     return this.flattenSearchResults(completed);
   }
 
@@ -639,7 +673,9 @@ export class SlskdClient {
     const id = String(searchId || "").trim();
     if (!id) return false;
     const client = buildClient();
-    const response = await client.delete(`/api/v0/searches/${encodeURIComponent(id)}`);
+    const response = await client.delete(
+      `/api/v0/searches/${encodeURIComponent(id)}`,
+    );
     return [200, 204, 404].includes(response.status);
   }
 
