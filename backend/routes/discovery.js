@@ -241,20 +241,32 @@ router.get("/", requireAuth, async (req, res) => {
   );
   globalTop = globalTop.filter((artist) => !existingArtistIds.has(artist.id));
   recommendations = await hydrateArtistImages(recommendations, {
-    limit: Math.min(recommendations.length, 12),
-    batchSize: 6,
-    delayMs: 15,
+    limit: Math.min(recommendations.length, 36),
+    batchSize: 8,
+    delayMs: 10,
   });
   globalTop = await hydrateArtistImages(globalTop, {
-    limit: Math.min(globalTop.length, 12),
-    batchSize: 6,
-    delayMs: 15,
+    limit: Math.min(globalTop.length, 36),
+    batchSize: 8,
+    delayMs: 10,
   });
   basedOn = await hydrateArtistImages(basedOn, {
-    limit: Math.min(basedOn.length, 8),
-    batchSize: 4,
-    delayMs: 15,
+    limit: Math.min(basedOn.length, 24),
+    batchSize: 6,
+    delayMs: 10,
   });
+  if (Array.isArray(fallbackGenres) && fallbackGenres.length > 0) {
+    for (const section of fallbackGenres) {
+      if (!Array.isArray(section?.artists) || section.artists.length === 0) {
+        continue;
+      }
+      section.artists = await hydrateArtistImages(section.artists, {
+        limit: Math.min(section.artists.length, 24),
+        batchSize: 6,
+        delayMs: 10,
+      });
+    }
+  }
 
   recommendations = rerankCachedRecommendations({
     recommendations,

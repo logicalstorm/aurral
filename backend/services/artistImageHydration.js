@@ -37,7 +37,9 @@ const applyCachedImages = (artists = []) => {
     if (artist.image || artist.imageUrl) return withProxiedImageFields(artist);
 
     const cachedImage = cachedImages[getArtistId(artist)]?.imageUrl;
-    if (!cachedImage || cachedImage === "NOT_FOUND") return artist;
+    if (!cachedImage || cachedImage === "NOT_FOUND") {
+      return artist;
+    }
     return withProxiedImageFields({
       ...artist,
       image: cachedImage,
@@ -67,8 +69,10 @@ export const hydrateArtistImages = async (
     await Promise.all(
       batch.map(async ({ artist, id }) => {
         try {
+          const cached = dbOps.getImage(id);
           const cover = await getArtistImage(id, {
             artistName: artist.name || artist.sortName || null,
+            forceRefresh: cached?.imageUrl === "NOT_FOUND",
           });
           if (!cover?.url) return;
           const proxiedImage = buildImageProxyUrl(cover.url) || cover.url;
