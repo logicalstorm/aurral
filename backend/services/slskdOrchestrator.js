@@ -409,6 +409,7 @@ async function handleSearch(payload) {
     raw: entry.raw,
     score: entry.score,
     resolvedAlbumName: entry.resolvedAlbumName,
+    preDownloadValid: entry.preDownloadValid === true,
   }));
   if (candidates.length === 0) {
     logger.slskd("warn", "No slskd download candidates after search", {
