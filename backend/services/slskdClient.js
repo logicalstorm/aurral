@@ -5,6 +5,8 @@ import { withHonkerLock } from "./honkerDb.js";
 import { logger } from "./logger.js";
 
 const DEFAULT_SEARCH_TIMEOUT_MS = 30000;
+const DEFAULT_EMPTY_SEARCH_TIMEOUT_MS = 10000;
+const DEFAULT_SEARCH_GRACE_PERIOD_MS = 20000;
 const DEFAULT_FILE_LIMIT = 1000;
 const DEFAULT_RESPONSE_LIMIT = 150;
 const DEFAULT_MAX_PEER_QUEUE = 150;
@@ -382,14 +384,31 @@ export class SlskdClient {
       typeof options.earlyExitWhen === "function"
         ? options.earlyExitWhen
         : null;
+    const emptyTimeoutMs = Math.max(
+      0,
+      Number(options.emptyTimeoutMs ?? DEFAULT_EMPTY_SEARCH_TIMEOUT_MS),
+    );
+    const activeTimeoutMs =
+      Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0
+        ? Number(timeoutMs)
+        : DEFAULT_SEARCH_TIMEOUT_MS;
+    const gracePeriodMs = Math.max(
+      0,
+      Number(options.gracePeriodMs ?? DEFAULT_SEARCH_GRACE_PERIOD_MS),
+    );
     const start = Date.now();
     let grace = false;
     let graceUntil = 0;
     let totalFiles = 0;
+    let hasSeenFiles = false;
     while (true) {
       const data = await this.getSearch(searchId);
+      const flattenedCount = this.flattenSearchResults(data).length;
       const fileCount = Number(data?.fileCount || data?.FileCount || 0);
-      totalFiles = Math.max(totalFiles, fileCount);
+      totalFiles = Math.max(totalFiles, fileCount, flattenedCount);
+      if (totalFiles > 0) {
+        hasSeenFiles = true;
+      }
       if (earlyExitWhen?.(data)) {
         return await this.hydrateCompletedSearch(searchId, data);
       }
@@ -400,15 +419,35 @@ export class SlskdClient {
         return await this.hydrateCompletedSearch(searchId, data);
       }
       const elapsed = Date.now() - start;
-      if (elapsed > timeoutMs && !grace) {
+      if (!hasSeenFiles && elapsed >= emptyTimeoutMs) {
+        return await this.hydrateCompletedSearch(searchId, data);
+      }
+      if (hasSeenFiles && elapsed > activeTimeoutMs && !grace) {
         grace = true;
-        graceUntil = Date.now() + 20000;
-      } else if (grace && Date.now() > graceUntil) {
+        graceUntil = Date.now() + gracePeriodMs;
+      } else if (hasSeenFiles && grace && Date.now() > graceUntil) {
         return await this.hydrateCompletedSearch(searchId, data);
       }
       const progress = Math.min(1, totalFiles / DEFAULT_FILE_LIMIT);
-      const waitSeconds = grace ? 1 : calculateQuadraticDelay(progress);
-      await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+      let waitMs = (grace ? 1 : calculateQuadraticDelay(progress)) * 1000;
+      if (!hasSeenFiles) {
+        const remainingEmptyMs = emptyTimeoutMs - elapsed;
+        if (remainingEmptyMs <= 0) {
+          return await this.hydrateCompletedSearch(searchId, data);
+        }
+        waitMs = Math.min(waitMs, remainingEmptyMs);
+      } else if (!grace) {
+        const remainingActiveMs = activeTimeoutMs - elapsed;
+        if (remainingActiveMs > 0) {
+          waitMs = Math.min(waitMs, remainingActiveMs);
+        }
+      } else {
+        const remainingGraceMs = graceUntil - Date.now();
+        if (remainingGraceMs > 0) {
+          waitMs = Math.min(waitMs, remainingGraceMs);
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
     }
   }
 
