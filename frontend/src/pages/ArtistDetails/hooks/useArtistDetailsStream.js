@@ -111,26 +111,28 @@ export function useArtistDetailsStream(
   const [loadingReleases, setLoadingReleases] = useState(false);
   const [appSettings, setAppSettings] = useState(null);
   const [albumCovers, setAlbumCovers] = useState({});
+  const artistReleaseGroups = artist?.["release-groups"];
+  const artistAppearsOnReleaseGroups = artist?.["appears-on-release-groups"];
   const releaseGroupIdsKey = useMemo(() => {
     const releaseGroupIds =
       [
-        ...(artist?.["release-groups"] || []),
-        ...(artist?.["appears-on-release-groups"] || []),
+        ...(artistReleaseGroups || []),
+        ...(artistAppearsOnReleaseGroups || []),
       ]
-        ?.filter((rg) =>
+        .filter((rg) =>
           matchesReleaseTypeFilter(rg, selectedReleaseTypes),
         )
         .map((rg) => rg.id)
-        .filter(Boolean) || [];
+        .filter(Boolean);
     const libraryMbids = (libraryAlbums || [])
       .map((album) => album.mbid || album.foreignAlbumId)
       .filter(Boolean);
     return [...new Set([...releaseGroupIds, ...libraryMbids])].join("\0");
   }, [
-    artist?.["release-groups"],
-    artist?.["appears-on-release-groups"],
+    artistReleaseGroups,
+    artistAppearsOnReleaseGroups,
     libraryAlbums,
-    selectedReleaseTypesKey,
+    selectedReleaseTypes,
   ]);
   const requestedAlbumCoversRef = useRef(new Set());
   const artistMbidRef = useRef(mbid);
@@ -689,6 +691,8 @@ export function useArtistDetailsStream(
     releaseGroupIdsKey,
     albumCovers,
     visibleCoverIdsKey,
+    artist,
+    libraryAlbums,
   ]);
 
   return {
