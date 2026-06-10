@@ -105,6 +105,71 @@ test("flattenSearchResults reads slskd collection wrapper payloads", () => {
   assert.equal(results[0].bitrate, 1411);
 });
 
+async function withStubbedSearchWaits(run) {
+  const originalGetSearch = slskdClient.getSearch.bind(slskdClient);
+  const originalHydrate = slskdClient.hydrateCompletedSearch.bind(slskdClient);
+  try {
+    return await run();
+  } finally {
+    slskdClient.getSearch = originalGetSearch;
+    slskdClient.hydrateCompletedSearch = originalHydrate;
+  }
+}
+
+test("waitForSearch stops quickly when no files appear", async () => {
+  await withStubbedSearchWaits(async () => {
+    let calls = 0;
+    slskdClient.getSearch = async () => {
+      calls += 1;
+      return { state: "InProgress", fileCount: 0, responses: [] };
+    };
+    slskdClient.hydrateCompletedSearch = async (_searchId, data) => data;
+    const started = Date.now();
+    const result = await slskdClient.waitForSearch("search-empty", 300, {
+      emptyTimeoutMs: 60,
+      gracePeriodMs: 0,
+    });
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed >= 50);
+    assert.ok(elapsed < 500);
+    assert.ok(calls >= 1);
+    assert.equal(result.fileCount, 0);
+  });
+});
+
+test("waitForSearch keeps polling after files appear until active timeout", async () => {
+  await withStubbedSearchWaits(async () => {
+    let calls = 0;
+    slskdClient.getSearch = async () => {
+      calls += 1;
+      return {
+        state: "InProgress",
+        fileCount: calls >= 1 ? 1 : 0,
+        responses: [
+          {
+            username: "peerOne",
+            files: [
+              {
+                filename: "Artist\\Album\\01 - Track.flac",
+                size: 123,
+              },
+            ],
+          },
+        ],
+      };
+    };
+    slskdClient.hydrateCompletedSearch = async (_searchId, data) => data;
+    const started = Date.now();
+    await slskdClient.waitForSearch("search-active", 180, {
+      emptyTimeoutMs: 60,
+      gracePeriodMs: 0,
+    });
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed >= 150);
+    assert.ok(calls >= 2);
+  });
+});
+
 test("createSearch sends slskd search timeout in milliseconds", async () => {
   const originalSettings = dbOps.getSettings();
   let requestBody = null;
