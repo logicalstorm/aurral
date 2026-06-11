@@ -39,8 +39,7 @@ function MetadataProvidersPage() {
         <header className="settings-page__header">
           <h1 className="settings-page__title">Metadata Providers</h1>
           <p className="settings-page__subtitle">
-            Configure the BrainzMash-native metadata backend used for local
-            testing.
+            Configure metadata hydration and the Aurral Search catalog backend.
           </p>
         </header>
 
