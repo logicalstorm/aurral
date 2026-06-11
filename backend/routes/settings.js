@@ -2,6 +2,7 @@ import express from "express";
 import { dbOps } from "../config/db-helpers.js";
 import {
   DEFAULT_METADATA_BASE_URL,
+  DEFAULT_SEARCH_URL,
   LEGACY_METADATA_BASE_URL,
   defaultData,
 } from "../config/constants.js";
@@ -28,6 +29,17 @@ router.get("/", noCache, (req, res) => {
     }
     if (settings?.integrations?.musicbrainz) {
       delete settings.integrations.musicbrainz;
+    }
+    if (!settings?.integrations?.search) {
+      settings.integrations.search = {
+        url: DEFAULT_SEARCH_URL,
+        apiKey: "",
+      };
+    } else {
+      settings.integrations.search = {
+        url: settings.integrations.search.url || DEFAULT_SEARCH_URL,
+        apiKey: settings.integrations.search.apiKey || "",
+      };
     }
     if (!settings?.integrations?.metadata) {
       const legacyMusicbrainz = dbOps.getSettings()?.integrations?.musicbrainz || {};
@@ -114,6 +126,27 @@ router.post("/", async (req, res) => {
       }
     }
 
+    if (integrations?.search) {
+      const nextSearch = {
+        ...(currentSettings.integrations?.search || {}),
+        ...integrations.search,
+      };
+      const trimmedSearchUrl = String(nextSearch.url || "").trim();
+      if (trimmedSearchUrl) {
+        const urlValidation = validateExternalUrl(trimmedSearchUrl);
+        if (!urlValidation.valid) {
+          return res.status(400).json({
+            error: `Invalid search URL: ${urlValidation.error}`,
+          });
+        }
+        nextSearch.url = urlValidation.url.replace(/\/+$/, "");
+      } else {
+        nextSearch.url = "";
+      }
+      nextSearch.apiKey =
+        typeof nextSearch.apiKey === "string" ? nextSearch.apiKey.trim() : "";
+      integrations.search = nextSearch;
+    }
     if (integrations?.metadata) {
       const nextMetadata = {
         ...(currentSettings.integrations?.metadata || {}),
@@ -181,6 +214,12 @@ router.post("/", async (req, res) => {
               ...integrations.metadata,
             }
           : mergedIntegrations.metadata,
+        search: integrations.search
+          ? {
+              ...(mergedIntegrations.search || {}),
+              ...integrations.search,
+            }
+          : mergedIntegrations.search,
         general: integrations.general
           ? {
               ...(mergedIntegrations.general || {}),

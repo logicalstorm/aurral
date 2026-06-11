@@ -8,13 +8,10 @@ import {
   Loader,
   Music,
   AlertCircle,
-  Play,
   Search,
 } from "lucide-react";
 import { getLibraryArtists } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
-import { useAudioQueue } from "../hooks/useAudioQueue";
-import { buildLibraryPlaybackQueue } from "../utils/buildLibraryPlaybackQueue";
 
 const PAGE_SIZE = 48;
 const SORT_OPTIONS = [
@@ -51,8 +48,6 @@ function LibraryPage() {
   const sentinelRef = useRef(null);
   const toolbarRef = useRef(null);
   const navigate = useNavigate();
-  const { playQueue } = useAudioQueue();
-  const [buildingPlaybackQueue, setBuildingPlaybackQueue] = useState(false);
 
   useDocumentTitle("Library");
 
@@ -154,41 +149,10 @@ function LibraryPage() {
     ? "Loading..."
     : `${artists.length} artist${artists.length !== 1 ? "s" : ""} in your collection`;
 
-  const handlePlayLibrary = async () => {
-    if (buildingPlaybackQueue || loading || artists.length === 0) return;
-    setBuildingPlaybackQueue(true);
-    try {
-      const tracks = await buildLibraryPlaybackQueue();
-      if (tracks.length === 0) return;
-      playQueue(tracks, {
-        source: { type: "library", id: "library", label: "Your Library" },
-        shuffle: true,
-      });
-    } finally {
-      setBuildingPlaybackQueue(false);
-    }
-  };
-
   return (
     <div className="library-page">
       <header className="library-page__header">
-        <div className="library-page__title-row">
-          <h1 className="library-page__title">Your Library</h1>
-          <button
-            type="button"
-            onClick={handlePlayLibrary}
-            disabled={loading || artists.length === 0 || buildingPlaybackQueue}
-            className="btn btn-primary btn-round-lg library-page__play-button"
-            aria-label="Play library"
-            title="Play library"
-          >
-            {buildingPlaybackQueue ? (
-              <Loader className="artist-icon-md animate-spin" />
-            ) : (
-              <Play className="artist-icon-md" />
-            )}
-          </button>
-        </div>
+        <h1 className="library-page__title">Your Library</h1>
         <p className="library-page__subtitle">{artistCountLabel}</p>
 
         <div ref={toolbarRef} className="library-page__toolbar global-search">

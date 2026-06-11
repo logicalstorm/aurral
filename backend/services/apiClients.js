@@ -1991,6 +1991,58 @@ export async function youtubeFindTopSongVideo(artistName, trackTitle) {
   }
 }
 
+function toLastfmResultList(value) {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+export async function lastfmSearchArtists(query, { limit = 5 } = {}) {
+  const trimmed = String(query || "").trim();
+  if (!trimmed || !getLastfmApiKey()) return [];
+  const data = await lastfmRequest("artist.search", {
+    artist: trimmed,
+    limit: Math.min(30, Math.max(1, limit)),
+  });
+  return toLastfmResultList(data?.results?.artistmatches?.artist);
+}
+
+export async function lastfmSearchAlbums(query, { limit = 5 } = {}) {
+  const trimmed = String(query || "").trim();
+  if (!trimmed || !getLastfmApiKey()) return [];
+  const data = await lastfmRequest("album.search", {
+    album: trimmed,
+    limit: Math.min(30, Math.max(1, limit)),
+  });
+  return toLastfmResultList(data?.results?.albummatches?.album);
+}
+
+export async function lastfmSearchTracks(query, { limit = 5 } = {}) {
+  const trimmed = String(query || "").trim();
+  if (!trimmed || !getLastfmApiKey()) return [];
+  const data = await lastfmRequest("track.search", {
+    track: trimmed,
+    limit: Math.min(30, Math.max(1, limit)),
+  });
+  return toLastfmResultList(data?.results?.trackmatches?.track);
+}
+
+export async function searchMusicbrainzRecordings(query, { limit = 5 } = {}) {
+  const trimmed = String(query || "").trim();
+  if (!trimmed) return [];
+  try {
+    const data = await mbLimiter.schedule(() =>
+      musicbrainzRequestWithRetry("/recording", {
+        query: trimmed,
+        limit: Math.min(25, Math.max(1, limit)),
+        inc: "artist-credits+releases",
+      }),
+    );
+    return Array.isArray(data?.recordings) ? data.recordings : [];
+  } catch {
+    return [];
+  }
+}
+
 export function clearApiCaches() {
   mbCache.flushAll();
   lastfmCache.flushAll();

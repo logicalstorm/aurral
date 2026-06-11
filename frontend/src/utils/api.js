@@ -253,6 +253,21 @@ export const searchArtists = async (query, limit = 24, offset = 0) => {
   return response.data;
 };
 
+export const searchUnified = async (
+  query,
+  { mode = "suggest", limit } = {},
+) => {
+  const params = { q: query, mode };
+  if (limit != null) {
+    params.limit = limit;
+  }
+  const key = `search-unified:${JSON.stringify(params)}`;
+  return fetchInflightOnce(searchInflightRequests, key, async () => {
+    const response = await api.get("/search/unified", { params });
+    return response.data;
+  });
+};
+
 export const searchCatalog = async (
   query,
   scope = "artist",

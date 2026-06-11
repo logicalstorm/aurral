@@ -13,6 +13,7 @@ const FULL_LIST_FALLBACK_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 const TRACKS_CACHE_TTL_MS = 120000;
 const TRACKS_CACHE_MAX = 300;
 const PLAYBACK_QUEUE_CACHE_TTL_MS = 120000;
+const LIDARR_ARTIST_FETCH_BATCH = 20;
 
 let lidarrClient = null;
 let _cachedArtists = [];
@@ -146,31 +147,38 @@ function getMetadataProfileTypeName(item) {
   return "";
 }
 
-async function fetchTracksForArtistsWithFiles(lidarr, rawTrackFiles) {
-  const artistIds = [
+async function fetchLidarrCollectionForArtistIds(lidarr, artistIds, endpoint) {
+  const uniqueIds = [
     ...new Set(
-      (Array.isArray(rawTrackFiles) ? rawTrackFiles : [])
-        .map((file) => file?.artistId)
-        .filter((id) => id != null),
+      (Array.isArray(artistIds) ? artistIds : [])
+        .map((id) => Number(id))
+        .filter((id) => Number.isFinite(id)),
     ),
   ];
-  if (artistIds.length === 0) return [];
+  if (uniqueIds.length === 0) return [];
 
-  const batches = await Promise.all(
-    artistIds.map(async (artistId) => {
-      try {
-        const result = await lidarr.request(`/track?artistId=${artistId}`);
-        if (Array.isArray(result)) return result;
-        if (result?.records && Array.isArray(result.records)) {
-          return result.records;
+  const results = [];
+  for (let i = 0; i < uniqueIds.length; i += LIDARR_ARTIST_FETCH_BATCH) {
+    const batch = uniqueIds.slice(i, i + LIDARR_ARTIST_FETCH_BATCH);
+    const batchResults = await Promise.all(
+      batch.map(async (artistId) => {
+        try {
+          const result = await lidarr.request(
+            `${endpoint}?artistId=${artistId}`,
+          );
+          if (Array.isArray(result)) return result;
+          if (result?.records && Array.isArray(result.records)) {
+            return result.records;
+          }
+          return [];
+        } catch {
+          return [];
         }
-        return [];
-      } catch {
-        return [];
-      }
-    }),
-  );
-  return batches.flat();
+      }),
+    );
+    results.push(...batchResults.flat());
+  }
+  return results;
 }
 
 export function buildPlaybackQueueFromLidarrData({
@@ -1617,33 +1625,23 @@ export class LibraryManager {
     }
 
     try {
-      const [artists, rawAlbums, rawTrackFiles] = await Promise.all([
+      const [artists, rawAlbums] = await Promise.all([
         this.getAllArtists(),
         lidarr.request("/album"),
-        lidarr.getAllTrackFiles(),
       ]);
 
-      let rawTracks = await lidarr.getAllTracks();
-      if (!Array.isArray(rawTracks)) {
-        rawTracks = [];
-      }
+      const artistIds = artists.map((artist) => artist.id);
+      const [rawTracks, rawTrackFiles] = await Promise.all([
+        fetchLidarrCollectionForArtistIds(lidarr, artistIds, "/track"),
+        fetchLidarrCollectionForArtistIds(lidarr, artistIds, "/trackfile"),
+      ]);
 
-      let queue = buildPlaybackQueueFromLidarrData({
+      const queue = buildPlaybackQueueFromLidarrData({
         artists,
         rawAlbums,
         rawTracks,
         rawTrackFiles,
       });
-
-      if (queue.length === 0 && rawTrackFiles.length > 0) {
-        rawTracks = await fetchTracksForArtistsWithFiles(lidarr, rawTrackFiles);
-        queue = buildPlaybackQueueFromLidarrData({
-          artists,
-          rawAlbums,
-          rawTracks,
-          rawTrackFiles,
-        });
-      }
 
       if (queue.length > 0) {
         _playbackQueueCache = {
