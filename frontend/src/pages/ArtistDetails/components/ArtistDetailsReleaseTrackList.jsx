@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import PropTypes from "prop-types";
 import { Loader } from "lucide-react";
 import { TrackPlayButton } from "./TrackPlayButton";
@@ -23,7 +23,9 @@ export function ArtistDetailsReleaseTrackList({
   playlistError,
   getDefaultPlaylistName,
   onLoadPlaylists,
+  highlightTrackId = null,
 }) {
+  const rowRefs = useRef({});
   const normalizeTrack = useCallback(
     (track, index) =>
       normalizePreviewTrack(
@@ -70,6 +72,28 @@ export function ArtistDetailsReleaseTrackList({
     handlePlay(track, { source: playbackSource, queue }, index);
   };
 
+  useEffect(() => {
+    if (!highlightTrackId || loading || !tracks?.length) return;
+    const normalizedHighlight = String(highlightTrackId);
+    const matchIndex = tracks.findIndex((track, index) => {
+      const trackId = String(track.id ?? track.mbid ?? `${trackKey}-${index}`);
+      return trackId === normalizedHighlight;
+    });
+    if (matchIndex < 0) return;
+    const track = tracks[matchIndex];
+    const trackId = String(
+      track.id ?? track.mbid ?? `${trackKey}-${matchIndex}`,
+    );
+    const row = rowRefs.current[trackId];
+    if (!row) return;
+    row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    row.classList.add("is-search-focused");
+    const timeout = window.setTimeout(() => {
+      row.classList.remove("is-search-focused");
+    }, 2400);
+    return () => window.clearTimeout(timeout);
+  }, [highlightTrackId, loading, trackKey, tracks]);
+
   if (!release) return null;
 
   return (
@@ -115,6 +139,9 @@ export function ArtistDetailsReleaseTrackList({
             return (
               <div
                 key={currentTrackId}
+                ref={(node) => {
+                  if (node) rowRefs.current[currentTrackId] = node;
+                }}
                 className="artist-track-row"
               >
                 <span className="artist-track-number">
@@ -184,4 +211,5 @@ ArtistDetailsReleaseTrackList.propTypes = {
   playlistError: PropTypes.string,
   getDefaultPlaylistName: PropTypes.func,
   onLoadPlaylists: PropTypes.func,
+  highlightTrackId: PropTypes.string,
 };

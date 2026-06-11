@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowDown,
   ArrowUp,
@@ -18,6 +18,7 @@ import { useToast } from "../../contexts/ToastContext";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { useArtistDetailsStream } from "./hooks/useArtistDetailsStream";
 import { useArtistDetailsLibrary } from "./hooks/useArtistDetailsLibrary";
+import { useArtistSearchFocus } from "./hooks/useArtistSearchFocus";
 import { allReleaseTypes } from "./constants";
 import { ArtistDetailsReleaseTrackList } from "./components/ArtistDetailsReleaseTrackList";
 import {
@@ -122,6 +123,7 @@ const getGridColumnCount = () => {
 function ArtistAppearsOnPage() {
   const { mbid } = useParams();
   const { state } = useLocation();
+  const navigate = useNavigate();
   const { showSuccess, showError } = useToast();
   const { hasPermission } = useAuth();
   const [selectedTab, setSelectedTab] = useState("all");
@@ -200,6 +202,31 @@ function ArtistAppearsOnPage() {
       ),
     [releaseGroups, selectedTab, sortDirection, sortKey],
   );
+
+  const prepareForFocus = useCallback(
+    (releaseGroup) => {
+      if (matchesReleaseTab(releaseGroup, selectedTab)) return true;
+      if (selectedTab !== "all") {
+        setSelectedTab("all");
+        return false;
+      }
+      return true;
+    },
+    [selectedTab],
+  );
+
+  const { highlightTrackId } = useArtistSearchFocus({
+    artist,
+    loading,
+    loadingReleases,
+    library,
+    libraryAlbums,
+    navigate,
+    mbid,
+    locationState: state,
+    pageContext: "appears-on",
+    prepareForFocus,
+  });
 
   useEffect(() => {
     setVisibleCoverIds(filteredReleaseGroups.map((item) => item.id).filter(Boolean));
@@ -642,6 +669,7 @@ function ArtistAppearsOnPage() {
                   playlistError={playlistModalError}
                   getDefaultPlaylistName={getDefaultTrackPlaylistName}
                   onLoadPlaylists={loadSharedPlaylists}
+                  highlightTrackId={highlightTrackId}
                 />
               </div>
             )}

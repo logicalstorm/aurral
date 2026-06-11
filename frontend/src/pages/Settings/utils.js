@@ -2,6 +2,7 @@ import { allReleaseTypes } from "./constants";
 
 export const LEGACY_METADATA_BASE_URL = "https://brainzmash.kell.ly";
 export const DEFAULT_METADATA_BASE_URL = "https://lidarrapi.brainzmash.cc";
+export const DEFAULT_SEARCH_URL = "https://aurral-search.kell.ly";
 
 export const normalizeMetadataBaseUrl = (baseUrl) => {
   const trimmed = String(baseUrl || "").trim().replace(/\/+$/, "");
@@ -13,6 +14,7 @@ export const normalizeSettings = (savedSettings) => {
   const lastfm = savedSettings.integrations?.lastfm || {};
   const legacyMusicbrainz = savedSettings.integrations?.musicbrainz || {};
   const metadata = savedSettings.integrations?.metadata || {};
+  const search = savedSettings.integrations?.search || {};
   const parsedAutoRefreshHours = parseInt(lastfm.discoveryAutoRefreshHours, 10);
   const normalizedAutoRefreshHours = [24, 168, 720].includes(
     parsedAutoRefreshHours,
@@ -116,6 +118,11 @@ export const normalizeSettings = (savedSettings) => {
         userAgentSuffix: "",
         enableNarrowFallbacks: true,
         ...metadata,
+      },
+      search: {
+        ...search,
+        url: search.url ?? DEFAULT_SEARCH_URL,
+        apiKey: search.apiKey || "",
       },
       general: {
         authUser: "",

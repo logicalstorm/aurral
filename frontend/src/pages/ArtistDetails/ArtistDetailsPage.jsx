@@ -7,6 +7,7 @@ import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { useArtistDetailsStream } from "./hooks/useArtistDetailsStream";
 import { usePreviewPlayer } from "./hooks/usePreviewPlayer";
 import { useArtistDetailsLibrary } from "./hooks/useArtistDetailsLibrary";
+import { useArtistSearchFocus } from "./hooks/useArtistSearchFocus";
 import { allReleaseTypes } from "./constants";
 import { ArtistDetailsHero } from "./components/ArtistDetailsHero";
 import { ArtistDetailsActionBar } from "./components/ArtistDetailsActionBar";
@@ -228,6 +229,18 @@ function ArtistDetailsPage() {
     showSuccess,
     showError,
     selectedReleaseTypes,
+  });
+
+  useArtistSearchFocus({
+    artist,
+    loading,
+    loadingReleases,
+    library,
+    libraryAlbums,
+    navigate,
+    mbid,
+    locationState,
+    pageContext: "artist",
   });
 
   const preview = usePreviewPlayer(mbid, artistNameFromNav, artist, {
