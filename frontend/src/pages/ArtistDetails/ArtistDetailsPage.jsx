@@ -609,6 +609,7 @@ function ArtistDetailsPage() {
         isArtistPlaybackActive={isArtistPlaybackActive}
         handlePreviewPlay={handlePreviewPlay}
         onAddTrackToPlaylist={handlePreviewTrackAdd}
+        resolveMembershipTrack={buildPreviewTrackPayload}
         playlists={sharedPlaylists}
         playlistsLoading={playlistModalLoading}
         playlistSavingKey={playlistMenuSavingKey}
@@ -628,6 +629,7 @@ function ArtistDetailsPage() {
         playbackSource={playbackSource}
         artistName={artistDisplayName}
         onAddTrackToPlaylist={handleReleaseTrackAdd}
+        resolveMembershipTrack={buildReleaseTrackPayload}
         playlists={sharedPlaylists}
         playlistsLoading={playlistModalLoading}
         playlistSavingKey={playlistMenuSavingKey}
@@ -658,6 +660,7 @@ function ArtistDetailsPage() {
           handleReSearchAlbum={library.handleReSearchAlbum}
           handleReSearchMissingDownloads={library.handleReSearchMissingDownloads}
           onAddTrackToPlaylist={handleLibraryTrackAdd}
+          resolveMembershipTrack={buildLibraryTrackPayload}
           playlists={sharedPlaylists}
           playlistsLoading={playlistModalLoading}
           playlistSavingKey={playlistMenuSavingKey}
@@ -688,6 +691,7 @@ function ArtistDetailsPage() {
           playbackSource={playbackSource}
           artistName={artistDisplayName}
           onAddTrackToPlaylist={handleReleaseTrackAdd}
+          resolveMembershipTrack={buildReleaseTrackPayload}
           playlists={sharedPlaylists}
           playlistsLoading={playlistModalLoading}
           playlistSavingKey={playlistMenuSavingKey}
@@ -722,6 +726,7 @@ function ArtistDetailsPage() {
             playbackSource={playbackSource}
             artistName={artistDisplayName}
             onAddTrackToPlaylist={handleReleaseTrackAdd}
+            resolveMembershipTrack={buildReleaseTrackPayload}
             playlists={sharedPlaylists}
             playlistsLoading={playlistModalLoading}
             playlistSavingKey={playlistMenuSavingKey}

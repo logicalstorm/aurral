@@ -244,7 +244,9 @@ export function DiscoverPlaylistSection({
   const handleNavigateArtist = useCallback(
     (track) => {
       if (!track?.artistMbid) return;
-      navigate(`/artists/${encodeURIComponent(track.artistMbid)}`);
+      navigate(`/artist/${encodeURIComponent(track.artistMbid)}`, {
+        state: { artistName: track.artistName },
+      });
     },
     [navigate],
   );

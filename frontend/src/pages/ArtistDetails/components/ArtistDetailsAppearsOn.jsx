@@ -33,6 +33,7 @@ export function ArtistDetailsAppearsOn({
   playbackSource,
   artistName,
   onAddTrackToPlaylist,
+  resolveMembershipTrack,
   playlists,
   playlistsLoading,
   playlistSavingKey,
@@ -181,6 +182,7 @@ export function ArtistDetailsAppearsOn({
                   playbackSource={playbackSource}
                   artistName={artistName}
                   onAddTrackToPlaylist={onAddTrackToPlaylist}
+                  resolveMembershipTrack={resolveMembershipTrack}
                   playlists={playlists}
                   playlistsLoading={playlistsLoading}
                   playlistSavingKey={playlistSavingKey}
