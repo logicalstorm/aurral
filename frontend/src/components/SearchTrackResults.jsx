@@ -118,6 +118,7 @@ function SearchTrackResults({
                   onClick={(event) => event.stopPropagation()}
                 >
                   <TrackPlaylistMenu
+                    track={track}
                     triggerVariant="compact"
                     triggerLabel="Add to playlist"
                     playlists={playlists}

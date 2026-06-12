@@ -8,6 +8,7 @@ import {
 } from "react";
 import PropTypes from "prop-types";
 import { Check, ChevronRight, Loader, Plus } from "lucide-react";
+import { playlistContainsTrack } from "../../../utils/sharedTrackIdentity";
 
 function useAvailablePlaylists(playlists, excludedPlaylistIds) {
   return useMemo(() => {
@@ -23,6 +24,7 @@ function useAvailablePlaylists(playlists, excludedPlaylistIds) {
 }
 
 export function TrackPlaylistPickerContent({
+  track = null,
   playlists = [],
   loading = false,
   saving = false,
@@ -60,23 +62,37 @@ export function TrackPlaylistPickerContent({
       </button>
       {availablePlaylists.length > 0 ? (
         <div className="artist-playlist-menu__scroll">
-          {availablePlaylists.map((playlist) => (
-            <button
-              key={playlist.id}
-              type="button"
-              className="artist-menu-item"
-              onClick={() =>
-                onSelect?.({
-                  mode: "existing",
-                  playlistId: playlist.id,
-                })
-              }
-              disabled={saving}
-            >
-              <span className="artist-track-title">{playlist.name}</span>
-              <Check className="artist-icon-sm" aria-hidden="true" />
-            </button>
-          ))}
+          {availablePlaylists.map((playlist) => {
+            const alreadyAdded = playlistContainsTrack(playlist, track);
+            return (
+              <button
+                key={playlist.id}
+                type="button"
+                className="artist-menu-item"
+                onClick={() =>
+                  onSelect?.({
+                    mode: "existing",
+                    playlistId: playlist.id,
+                  })
+                }
+                disabled={saving || alreadyAdded}
+                title={alreadyAdded ? `Already in ${playlist.name}` : undefined}
+                aria-label={
+                  alreadyAdded
+                    ? `${playlist.name}, already added`
+                    : `Add to ${playlist.name}`
+                }
+              >
+                <span className="artist-track-title">{playlist.name}</span>
+                {alreadyAdded ? (
+                  <Check
+                    className="artist-icon-sm artist-playlist-menu__check"
+                    aria-hidden="true"
+                  />
+                ) : null}
+              </button>
+            );
+          })}
         </div>
       ) : null}
       {error ? <div className="artist-error-text">{error}</div> : null}
@@ -87,6 +103,7 @@ export function TrackPlaylistPickerContent({
 export function TrackPlaylistSubmenu({
   label,
   icon: Icon = Plus,
+  track = null,
   playlists = [],
   loading = false,
   saving = false,
@@ -134,6 +151,7 @@ export function TrackPlaylistSubmenu({
       </button>
       <div className="artist-menu-submenu__panel">
         <TrackPlaylistPickerContent
+          track={track}
           playlists={playlists}
           loading={loading}
           saving={saving}
@@ -149,6 +167,7 @@ export function TrackPlaylistSubmenu({
 
 export const TrackPlaylistMenu = forwardRef(function TrackPlaylistMenu(
   {
+    track = null,
     playlists = [],
     loading = false,
     saving = false,
@@ -286,6 +305,7 @@ export const TrackPlaylistMenu = forwardRef(function TrackPlaylistMenu(
           onClick={(event) => event.stopPropagation()}
         >
           <TrackPlaylistPickerContent
+            track={track}
             playlists={playlists}
             loading={loading}
             saving={saving}
@@ -301,6 +321,7 @@ export const TrackPlaylistMenu = forwardRef(function TrackPlaylistMenu(
 });
 
 TrackPlaylistPickerContent.propTypes = {
+  track: PropTypes.object,
   playlists: PropTypes.array,
   loading: PropTypes.bool,
   saving: PropTypes.bool,
@@ -313,6 +334,7 @@ TrackPlaylistPickerContent.propTypes = {
 TrackPlaylistSubmenu.propTypes = {
   label: PropTypes.string.isRequired,
   icon: PropTypes.elementType,
+  track: PropTypes.object,
   playlists: PropTypes.array,
   loading: PropTypes.bool,
   saving: PropTypes.bool,
@@ -327,6 +349,7 @@ TrackPlaylistSubmenu.propTypes = {
 };
 
 TrackPlaylistMenu.propTypes = {
+  track: PropTypes.object,
   playlists: PropTypes.array,
   loading: PropTypes.bool,
   saving: PropTypes.bool,

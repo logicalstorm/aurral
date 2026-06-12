@@ -3844,6 +3844,11 @@ textarea {
   padding-top: 0.25rem;
 }
 
+.artist-playlist-menu__check {
+  flex-shrink: 0;
+  color: var(--aurral-green);
+}
+
 .artist-playlist-menu__sub {
   display: block;
   overflow: hidden;
@@ -8135,9 +8140,7 @@ textarea {
 }
 
 .flow-page__detail-recipe .flow-page__field-label,
-.flow-page__detail-recipe .flow-page__tracks-table-head th,
-.flow-page__detail-recipe .flow-page__editor-table-head th,
-.flow-page__detail-recipe .flow-page__editor-mobile-header {
+.flow-page__detail-recipe .flow-page__tracks-table-head th {
   text-transform: none;
   letter-spacing: normal;
 }
@@ -8979,31 +8982,12 @@ textarea {
   max-width: 28rem;
 }
 
-.flow-page__editor-input {
-  width: 100%;
-  min-width: 0;
-}
-
 .flow-page__form-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 0.5rem;
-}
-
-.flow-page__editor-field-stack {
-  display: grid;
-  gap: 0.25rem;
-}
-
-.flow-page__editor-field-wide {
-  min-width: 11.25rem;
-}
-
-.flow-page__editor-actions-cell {
-  display: flex;
-  justify-content: flex-end;
 }
 
 .flow-page__tracks-table-index {
@@ -9267,6 +9251,29 @@ textarea {
   text-transform: uppercase;
 }
 
+.flow-page__tracks-sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.flow-page__tracks-sort-button:hover,
+.flow-page__tracks-sort-button.is-active {
+  color: var(--aurral-text);
+}
+
+.flow-page__tracks-table-status-head .flow-page__tracks-sort-button {
+  justify-content: flex-start;
+}
+
 .flow-page__tracks-table-row {
   color: var(--aurral-gray-light);
 }
@@ -9298,185 +9305,6 @@ textarea {
 .flow-page__tracks-artist-link:hover {
   color: var(--aurral-white);
   text-decoration: underline;
-}
-
-.flow-page__track-status {
-  display: inline-flex;
-  width: 1.5rem;
-  height: 1.5rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--aurral-radius-round);
-}
-
-.flow-page__track-status--done {
-  background: rgba(132, 204, 22, 0.15);
-  color: var(--aurral-green);
-}
-
-.flow-page__track-status--pending {
-  background: rgba(200, 180, 145, 0.15);
-  color: var(--aurral-warning);
-}
-
-.flow-page__track-status--delete {
-  background: rgba(248, 113, 113, 0.15);
-  color: var(--aurral-danger);
-}
-
-.flow-page__track-status--compact {
-  width: 1rem;
-  height: 1rem;
-}
-
-.flow-page__editor {
-  overflow: hidden;
-  background: var(--aurral-surface-mid);
-  border-radius: var(--aurral-radius);
-}
-
-.flow-page__editor-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.75rem;
-}
-
-.flow-page__editor-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--aurral-gray-light);
-  font-size: 0.75rem;
-}
-
-.flow-page__editor-meta-mark {
-  color: var(--aurral-warning);
-}
-
-.flow-page__editor-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-
-.flow-page__editor-body {
-  overflow: auto;
-  max-height: 60vh;
-}
-
-.flow-page__editor-empty {
-  padding: 1.5rem;
-  color: var(--aurral-gray-light);
-  font-size: 0.875rem;
-}
-
-.flow-page__editor-mobile {
-  display: grid;
-  gap: 0.5rem;
-  padding: 0.75rem;
-}
-
-.flow-page__editor-mobile-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.5rem;
-  padding-inline: 0.625rem;
-  color: var(--aurral-gray-light);
-  font-size: 0.625rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.flow-page__editor-mobile-row {
-  padding: 0.625rem;
-  background: var(--aurral-surface);
-  color: var(--aurral-gray-light);
-  border-radius: var(--aurral-radius-sm);
-}
-
-.flow-page__editor-mobile-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 0.5rem;
-}
-
-.flow-page__editor-mobile-cell {
-  min-width: 0;
-}
-
-.flow-page__editor-mobile-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.875rem;
-}
-
-.flow-page__editor-mobile-text.is-struck {
-  text-decoration: line-through;
-}
-
-.flow-page__editor-error {
-  padding: 0.5rem 0.75rem;
-  color: var(--aurral-danger);
-  font-size: 0.75rem;
-}
-
-.flow-page__editor-table {
-  display: none;
-  width: 100%;
-  font-size: 0.875rem;
-}
-
-.flow-page__editor-table-head {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  background: var(--aurral-surface);
-}
-
-.flow-page__editor-table-head th {
-  padding: 0.5rem 0.75rem;
-  color: var(--aurral-gray-light);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-align: left;
-  text-transform: uppercase;
-}
-
-.flow-page__editor-table-row {
-  color: var(--aurral-gray-light);
-}
-
-.flow-page__editor-table-row td {
-  padding: 0.5rem 0.75rem;
-  vertical-align: top;
-}
-
-.flow-page__editor-table-row:nth-child(even) {
-  background: var(--aurral-surface-mid);
-}
-
-.flow-page__editor-table-row:nth-child(odd) {
-  background: var(--aurral-surface);
-}
-
-.flow-page__editor-table-row.is-struck {
-  opacity: 0.5;
-}
-
-.flow-page__editor-track-error {
-  color: var(--aurral-danger);
-  font-size: 0.6875rem;
 }
 
 .flow-page__worker-card {
@@ -9742,11 +9570,6 @@ textarea {
 
 .flow-page__toggle-spinner {
   color: var(--aurral-gray);
-}
-
-.flow-page__track-status-icon--compact {
-  width: 0.625rem;
-  height: 0.625rem;
 }
 
 .flow-page__field-input {
@@ -10053,14 +9876,6 @@ textarea {
 
   .flow-page__tracks-table-head .flow-page__tracks-table-index {
     display: table-cell;
-  }
-
-  .flow-page__editor-mobile {
-    display: none;
-  }
-
-  .flow-page__editor-table {
-    display: table;
   }
 
   .flow-page__page-header {

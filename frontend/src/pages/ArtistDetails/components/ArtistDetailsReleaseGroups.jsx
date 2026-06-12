@@ -79,6 +79,7 @@ export function ArtistDetailsReleaseGroups({
   playbackSource,
   artistName,
   onAddTrackToPlaylist,
+  resolveMembershipTrack,
   playlists,
   playlistsLoading,
   playlistSavingKey,
@@ -235,6 +236,7 @@ export function ArtistDetailsReleaseGroups({
                   playbackSource={playbackSource}
                   artistName={artistName}
                   onAddTrackToPlaylist={onAddTrackToPlaylist}
+                  resolveMembershipTrack={resolveMembershipTrack}
                   playlists={playlists}
                   playlistsLoading={playlistsLoading}
                   playlistSavingKey={playlistSavingKey}

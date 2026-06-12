@@ -1,6 +1,9 @@
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { weeklyFlowWorker } from "./weeklyFlowWorker.js";
-import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
+import {
+  buildSharedTrackIdentity,
+  flowPlaylistConfig,
+} from "./weeklyFlowPlaylistConfig.js";
 import { weeklyFlowOperationQueue } from "./weeklyFlowOperationQueue.js";
 import { getWeeklyFlowOperationWorkerStatus } from "./weeklyFlowOperationWorker.js";
 import { slskdClient } from "./slskdClient.js";
@@ -55,6 +58,25 @@ function aggregateStats(statsByType, ids) {
   return base;
 }
 
+function collectPlaylistTrackIdentities(playlistId) {
+  const seen = new Set();
+  const identities = [];
+  const addIdentity = (track) => {
+    const identity = buildSharedTrackIdentity(track);
+    if (!identity || seen.has(identity)) return;
+    seen.add(identity);
+    identities.push(identity);
+  };
+  for (const job of downloadTracker.getByPlaylistType(playlistId)) {
+    addIdentity(job);
+  }
+  const playlist = flowPlaylistConfig.getSharedPlaylist(playlistId);
+  for (const track of Array.isArray(playlist?.tracks) ? playlist.tracks : []) {
+    addIdentity(track);
+  }
+  return identities;
+}
+
 function buildOwnerMap(flows, sharedPlaylists) {
   const ownerIds = new Set();
   for (const item of [...(Array.isArray(flows) ? flows : []), ...(Array.isArray(sharedPlaylists) ? sharedPlaylists : [])]) {
@@ -96,6 +118,7 @@ export function getWeeklyFlowStatusSnapshot({
     importedAt: playlist.importedAt,
     createdAt: playlist.createdAt,
     trackCount: playlist.trackCount,
+    trackIdentities: collectPlaylistTrackIdentities(playlist.id),
   }));
   const ownerMap = buildOwnerMap(flows, sharedPlaylists);
   const flowsWithOwners = flows.map((flow) => ({

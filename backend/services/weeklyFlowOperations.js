@@ -13,9 +13,9 @@ import {
   remapLegacyWeeklyFlowPath,
 } from "./weeklyFlowPaths.js";
 import {
-  buildSharedTrackIdentity,
   filterMissingSharedTracks,
   flowPlaylistConfig,
+  tracksShareMembership,
 } from "./weeklyFlowPlaylistConfig.js";
 import { normalizeExistingFileMode, reuseTrackForPlaylist } from "./weeklyFlowFileReuse.js";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
@@ -163,16 +163,15 @@ const reuseTracksForPlaylist = async (tracks, playlistId) => {
 };
 
 const filterTracksMissingDownloadJobs = (tracks, playlistId) => {
-  const existing = new Set(
-    downloadTracker
-      .getByPlaylistType(playlistId)
-      .map((job) => buildSharedTrackIdentity(job)),
-  );
+  const existingJobs = downloadTracker.getByPlaylistType(playlistId);
   const missing = [];
+  const queued = [];
   for (const track of normalizeTrackList(tracks)) {
-    const identity = buildSharedTrackIdentity(track);
-    if (existing.has(identity)) continue;
-    existing.add(identity);
+    const duplicate =
+      existingJobs.some((job) => tracksShareMembership(job, track)) ||
+      queued.some((entry) => tracksShareMembership(entry, track));
+    if (duplicate) continue;
+    queued.push(track);
     missing.push(track);
   }
   return missing;
