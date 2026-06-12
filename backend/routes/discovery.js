@@ -466,7 +466,7 @@ router.post(
   },
 );
 
-router.get("/related", (req, res) => {
+router.get("/related", requireAuth, (req, res) => {
   const discoveryCache = getDiscoveryCache();
   res.json({
     recommendations: discoveryCache.recommendations,
@@ -475,7 +475,7 @@ router.get("/related", (req, res) => {
   });
 });
 
-router.get("/similar", (req, res) => {
+router.get("/similar", requireAuth, (req, res) => {
   const discoveryCache = getDiscoveryCache();
   res.json({
     topTags: discoveryCache.topTags,
