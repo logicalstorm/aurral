@@ -373,6 +373,39 @@ export const getArtistCover = async (mbid, artistName, refresh = false) => {
   );
 };
 
+export const getReleaseGroupCoversBatch = async (items = []) => {
+  const normalizedItems = (Array.isArray(items) ? items : [])
+    .map((item) => ({
+      mbid: String(item?.mbid || item?.id || "").trim(),
+      artistName:
+        typeof item?.artistName === "string" ? item.artistName.trim() : "",
+      albumTitle:
+        typeof item?.albumTitle === "string" ? item.albumTitle.trim() : "",
+    }))
+    .filter((item) => item.mbid);
+  if (!normalizedItems.length) {
+    return {};
+  }
+  const batchKey = normalizedItems
+    .map(
+      (item) =>
+        `${item.mbid}:${item.artistName.toLowerCase()}:${item.albumTitle.toLowerCase()}`,
+    )
+    .sort()
+    .join("\0");
+  if (coverInflightRequests.has(batchKey)) {
+    return coverInflightRequests.get(batchKey);
+  }
+  const request = api
+    .post("/artists/release-groups/covers", { items: normalizedItems })
+    .then((response) => response.data?.covers || {})
+    .finally(() => {
+      coverInflightRequests.delete(batchKey);
+    });
+  coverInflightRequests.set(batchKey, request);
+  return request;
+};
+
 export const getReleaseGroupCover = async (
   mbid,
   { artistName = "", albumTitle = "", bypassCache = false } = {},

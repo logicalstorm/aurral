@@ -7,12 +7,34 @@ import {
   getLibraryArtist,
   getSimilarArtistsForArtist,
   getAppSettings,
-  getReleaseGroupCover,
+  getReleaseGroupCoversBatch,
   getStoredAuth,
   readLibraryLookupCache,
 } from "../../../utils/api";
 import { emptyArtistShape } from "../constants";
-import { matchesReleaseTypeFilter } from "../utils";
+
+const buildReleaseGroupCoverRequest = (
+  rgId,
+  artist,
+  libraryAlbums,
+  pageArtistName,
+) => {
+  const releaseGroup =
+    artist?.["release-groups"]?.find((item) => item?.id === rgId) ||
+    artist?.["appears-on-release-groups"]?.find((item) => item?.id === rgId);
+  const libraryAlbum = libraryAlbums?.find(
+    (album) => (album.mbid || album.foreignAlbumId) === rgId,
+  );
+  const appearsOnArtist =
+    releaseGroup?.["artist-credit"]?.[0]?.name ||
+    releaseGroup?.["artist-credit"]?.[0]?.artist?.name ||
+    "";
+  return {
+    mbid: rgId,
+    artistName: appearsOnArtist || pageArtistName || "",
+    albumTitle: releaseGroup?.title || libraryAlbum?.albumName || "",
+  };
+};
 
 const buildInitialArtist = (mbid, artistNameFromNav) =>
   mbid
@@ -112,29 +134,6 @@ export function useArtistDetailsStream(
   const [loadingAppearsOn, setLoadingAppearsOn] = useState(!!mbid);
   const [appSettings, setAppSettings] = useState(null);
   const [albumCovers, setAlbumCovers] = useState({});
-  const artistReleaseGroups = artist?.["release-groups"];
-  const artistAppearsOnReleaseGroups = artist?.["appears-on-release-groups"];
-  const releaseGroupIdsKey = useMemo(() => {
-    const releaseGroupIds =
-      [
-        ...(artistReleaseGroups || []),
-        ...(artistAppearsOnReleaseGroups || []),
-      ]
-        .filter((rg) =>
-          matchesReleaseTypeFilter(rg, selectedReleaseTypes),
-        )
-        .map((rg) => rg.id)
-        .filter(Boolean);
-    const libraryMbids = (libraryAlbums || [])
-      .map((album) => album.mbid || album.foreignAlbumId)
-      .filter(Boolean);
-    return [...new Set([...releaseGroupIds, ...libraryMbids])].join("\0");
-  }, [
-    artistReleaseGroups,
-    artistAppearsOnReleaseGroups,
-    libraryAlbums,
-    selectedReleaseTypes,
-  ]);
   const requestedAlbumCoversRef = useRef(new Set());
   const artistMbidRef = useRef(mbid);
   const artistNameRef = useRef(artistNameFromNav || "");
@@ -626,97 +625,55 @@ export function useArtistDetailsStream(
   useEffect(() => {
     if (!mbid) return;
 
-    const releaseGroupIds =
-      [
-        ...(artist?.["release-groups"] || []),
-        ...(artist?.["appears-on-release-groups"] || []),
-      ]
-        ?.filter((rg) =>
-          matchesReleaseTypeFilter(rg, selectedReleaseTypesRef.current),
-        )
-        .map((rg) => rg.id)
-        .filter(Boolean) || [];
-    const libraryMbids = (libraryAlbums || [])
-      .map((album) => album.mbid || album.foreignAlbumId)
-      .filter(Boolean);
-    const needed = [...new Set([...releaseGroupIds, ...libraryMbids])];
-    if (!needed.length) return;
-
     const nextVisibleCoverIds = Array.isArray(visibleCoverIdsRef.current)
-      ? visibleCoverIdsRef.current
+      ? visibleCoverIdsRef.current.filter(Boolean)
       : [];
-    const prioritized = nextVisibleCoverIds.length
-      ? nextVisibleCoverIds.filter((id) => needed.includes(id))
-      : needed.slice(0, 8);
-    const missing = prioritized.filter(
+    if (!nextVisibleCoverIds.length) return;
+
+    const missing = nextVisibleCoverIds.filter(
       (id) => !albumCovers[id] && !requestedAlbumCoversRef.current.has(id),
     );
     if (!missing.length) return;
 
     let cancelled = false;
+    missing.forEach((id) => requestedAlbumCoversRef.current.add(id));
 
-    const run = async () => {
-      const BATCH_SIZE = 6;
-      for (let i = 0; i < missing.length; i += BATCH_SIZE) {
+    const pageArtistName = artistNameRef.current || artist?.name || "";
+    const items = missing.map((rgId) =>
+      buildReleaseGroupCoverRequest(
+        rgId,
+        artist,
+        libraryAlbums,
+        pageArtistName,
+      ),
+    );
+
+    getReleaseGroupCoversBatch(items)
+      .then((covers) => {
         if (cancelled) return;
-        const batch = missing.slice(i, i + BATCH_SIZE);
-        const batchResults = await Promise.allSettled(
-          batch.map(async (rgId) => {
-            requestedAlbumCoversRef.current.add(rgId);
-            try {
-              const releaseGroup = artist?.["release-groups"]?.find(
-                (item) => item?.id === rgId,
-              ) || artist?.["appears-on-release-groups"]?.find(
-                (item) => item?.id === rgId,
-              );
-              const data = await getReleaseGroupCover(rgId, {
-                artistName: artistNameRef.current || artist?.name || "",
-                albumTitle:
-                  releaseGroup?.title ||
-                  libraryAlbums?.find(
-                    (album) => (album.mbid || album.foreignAlbumId) === rgId,
-                  )?.albumName ||
-                  "",
-              });
-              if (cancelled || !data?.images?.length) return;
-              const front =
-                data.images.find((img) => img.front) || data.images[0];
-              const url = front?.image;
-              if (url) {
-                return [rgId, url];
-              }
-            } catch {
-            } finally {
-              requestedAlbumCoversRef.current.delete(rgId);
-            }
-            return null;
-          }),
-        );
-        if (cancelled) return;
-        const nextBatch = Object.fromEntries(
-          batchResults.filter(
-            (entry) => Array.isArray(entry.value) && entry.value[0] && entry.value[1],
-          ).map((entry) => entry.value),
-        );
+        const nextBatch = {};
+        for (const rgId of missing) {
+          const entry = covers?.[rgId];
+          if (entry?.image) {
+            nextBatch[rgId] = entry.image;
+          }
+        }
         if (Object.keys(nextBatch).length > 0) {
           setAlbumCovers((prev) => ({ ...prev, ...nextBatch }));
         }
-      }
-    };
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) {
+          missing.forEach((id) => requestedAlbumCoversRef.current.delete(id));
+        }
+      });
 
-    const timer = setTimeout(run, 50);
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      missing.forEach((id) => requestedAlbumCoversRef.current.delete(id));
     };
-  }, [
-    mbid,
-    releaseGroupIdsKey,
-    albumCovers,
-    visibleCoverIdsKey,
-    artist,
-    libraryAlbums,
-  ]);
+  }, [mbid, visibleCoverIdsKey, artist, libraryAlbums, albumCovers]);
 
   return {
     artist,

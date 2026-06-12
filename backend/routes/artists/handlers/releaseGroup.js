@@ -1,7 +1,10 @@
 import { UUID_REGEX } from "../../../config/constants.js";
 import { dbOps } from "../../../config/db-helpers.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
-import { fetchReleaseGroupCoverUrl } from "../../../services/imageService.js";
+import {
+  fetchReleaseGroupCoverUrl,
+  resolveReleaseGroupCoversBatch,
+} from "../../../services/releaseGroupCoverService.js";
 import { enrichTracksWithDeezerPreviews } from "../../../services/apiClients.js";
 import {
   getArtistByMbid,
@@ -21,6 +24,29 @@ function extractDeezerArtistIdFromLinks(links = []) {
 }
 
 export default function registerReleaseGroup(router) {
+  router.post("/release-groups/covers", async (req, res) => {
+    try {
+      const items = Array.isArray(req.body?.items) ? req.body.items : [];
+      if (!items.length) {
+        return res.json({ covers: {} });
+      }
+      const covers = await resolveReleaseGroupCoversBatch(items);
+      const hasTransientError = Object.values(covers).some(
+        (entry) => entry?.transientError,
+      );
+      if (hasTransientError) {
+        res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+      } else {
+        res.set("Cache-Control", "public, max-age=31536000, immutable");
+      }
+      return res.json({ covers });
+    } catch (error) {
+      console.error("Error in release-groups covers batch route:", error.message);
+      res.set("Cache-Control", "public, max-age=60");
+      return res.json({ covers: {} });
+    }
+  });
+
   router.get("/release-group/:mbid/cover", async (req, res) => {
     try {
       const { mbid } = req.params;
