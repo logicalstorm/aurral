@@ -18,12 +18,6 @@ const HISTORY_SOURCE_COLORS = {
   aurral: TAG_COLORS[12],
 };
 
-const HISTORY_SOURCE_LABELS = {
-  lidarr: "Lidarr",
-  slskd: "slskd",
-  aurral: "Aurral",
-};
-
 const HISTORY_TABS = [
   { value: "all", label: "All" },
   { value: "lidarr", label: "Lidarr", source: "lidarr" },
@@ -326,7 +320,6 @@ function HistoryPage() {
         artistMbid !== "undefined");
     const historySource = getHistorySource(request);
     const sourceColor = HISTORY_SOURCE_COLORS[historySource];
-    const sourceLabel = HISTORY_SOURCE_LABELS[historySource];
     const timelineTime = formatTimelineTime(request.requestedAt);
     const canReSearch =
       request.canReSearch === true &&
@@ -361,21 +354,28 @@ function HistoryPage() {
           });
         }}
       >
-        <div className="requests-page__time" aria-label={timelineTime}>
-          {timelineTime}
-        </div>
-
         <div className="requests-page__details">
-          <div className="requests-page__title-row">
-            <span className="requests-page__source">{sourceLabel}</span>
-            <h3 className="requests-page__item-title">{displayName}</h3>
-          </div>
-          {metaLine && (
+          <h3 className="requests-page__item-title" title={displayName}>
+            {displayName}
+          </h3>
+          {(timelineTime || metaLine) && (
             <div className="requests-page__meta">
-              <span className="requests-page__meta-line">
-                <Music className="artist-icon-xs requests-page__meta-icon" />
+              {timelineTime && (
+                <time
+                  className="requests-page__meta-time"
+                  dateTime={request.requestedAt}
+                >
+                  {timelineTime}
+                </time>
+              )}
+              {timelineTime && metaLine && (
+                <span className="requests-page__meta-separator" aria-hidden="true">
+                  ·
+                </span>
+              )}
+              {metaLine && (
                 <span className="artist-truncate">{metaLine}</span>
-              </span>
+              )}
             </div>
           )}
         </div>
@@ -410,9 +410,6 @@ function HistoryPage() {
       <div className="requests-page">
         <header className="requests-page__header">
           <h1 className="requests-page__title">History</h1>
-          <p className="requests-page__subtitle">
-            A chronological log of requests and activity
-          </p>
         </header>
         <div className="artist-loading">
           <Loader className="artist-spinner artist-spinner--large animate-spin" />
@@ -425,13 +422,17 @@ function HistoryPage() {
     <div className="requests-page">
       <header className="requests-page__header">
         <h1 className="requests-page__title">History</h1>
-        <p className="requests-page__subtitle">
+        <p className="requests-page__subtitle requests-page__subtitle--desktop">
           A chronological log of requests and activity
         </p>
       </header>
 
       <div className="requests-page__toolbar">
-        <div className="artist-tabs requests-page__tabs" role="tablist">
+        <div
+          className="artist-tabs requests-page__tabs"
+          role="tablist"
+          aria-label="Filter history by source"
+        >
           {HISTORY_TABS.map((tab) => (
             <button
               key={tab.value}
