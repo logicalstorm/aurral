@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import PropTypes from "prop-types";
-import { ArrowRight, CheckCircle, Music, Star } from "lucide-react";
+import { ArrowRight, CheckCircle, Loader, Music, Star } from "lucide-react";
 import AddAlbumButton from "../../../components/AddAlbumButton";
 import {
   getArtistReleaseGridColumnCount,
@@ -19,6 +19,7 @@ const sortLatest = (items) =>
 
 export function ArtistDetailsAppearsOn({
   artist,
+  loadingAppearsOn = false,
   albumCovers,
   artistCoverImage,
   expandedReleaseGroup,
@@ -83,13 +84,16 @@ export function ArtistDetailsAppearsOn({
     gridColumnCount,
   );
 
-  if (releaseGroups.length === 0) return null;
+  if (releaseGroups.length === 0 && !loadingAppearsOn) return null;
 
   return (
     <section className="artist-section">
       <div className="artist-heading-row">
         <div className="artist-min-0">
-          <h2 className="artist-section-title">Appears On</h2>
+          <div className="artist-controls-row">
+            <h2 className="artist-section-title">Appears On</h2>
+            {loadingAppearsOn && <Loader className="artist-icon-sm animate-spin" />}
+          </div>
         </div>
         {onViewAll ? (
           <button
@@ -196,6 +200,7 @@ export function ArtistDetailsAppearsOn({
 
 ArtistDetailsAppearsOn.propTypes = {
   artist: PropTypes.object.isRequired,
+  loadingAppearsOn: PropTypes.bool,
   albumCovers: PropTypes.object,
   artistCoverImage: PropTypes.string,
   expandedReleaseGroup: PropTypes.string,

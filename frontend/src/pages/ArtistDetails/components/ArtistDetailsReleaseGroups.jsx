@@ -131,7 +131,7 @@ export function ArtistDetailsReleaseGroups({
     gridColumnCount,
   );
 
-  if (releaseGroups.length === 0) return null;
+  if (releaseGroups.length === 0 && !loadingReleases) return null;
 
   return (
     <section className="artist-section">

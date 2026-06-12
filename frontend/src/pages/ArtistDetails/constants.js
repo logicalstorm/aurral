@@ -43,3 +43,4 @@ export const emptyArtistShape = {
 };
 
 export const ARTIST_DETAILS_FILTER_KEY = "artistDetailsFilterSettings";
+export const ARTIST_DETAILS_APPEARS_ON_LIMIT = 6;
