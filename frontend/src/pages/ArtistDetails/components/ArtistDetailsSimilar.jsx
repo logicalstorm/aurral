@@ -149,10 +149,11 @@ export function ArtistDetailsSimilar({
                   >
                     <ArtistImage
                       src={similar.image}
-                      mbid={similar.id}
+                      mbid={getArtistRecordId(similar)}
                       artistName={similar.name}
                       alt={similar.name}
                       className=""
+                      loading="eager"
                     />
 
                     {similar.match && (

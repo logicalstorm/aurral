@@ -140,13 +140,51 @@ const normalizeBatchItem = (item) => {
   };
 };
 
+export const attachCachedCoverUrls = (releaseGroups = [], limit = null) => {
+  if (!Array.isArray(releaseGroups) || releaseGroups.length === 0) {
+    return releaseGroups;
+  }
+  const targets =
+    typeof limit === "number" && limit > 0
+      ? releaseGroups.slice(0, limit)
+      : releaseGroups;
+  const targetIds = new Set(
+    targets.map((releaseGroup) => releaseGroup?.id).filter(Boolean),
+  );
+  if (targetIds.size === 0) {
+    return releaseGroups;
+  }
+  const cachedEntries = dbOps.getImages(
+    [...targetIds].map((id) => `${RG_CACHE_PREFIX}${id}`),
+  );
+  return releaseGroups.map((releaseGroup) => {
+    if (!releaseGroup?.id || !targetIds.has(releaseGroup.id)) {
+      return releaseGroup;
+    }
+    const cached = cachedEntries[`${RG_CACHE_PREFIX}${releaseGroup.id}`];
+    if (!cached?.imageUrl || cached.imageUrl === "NOT_FOUND") {
+      return releaseGroup;
+    }
+    const coverUrl = toPublicCoverUrl(cached.imageUrl);
+    if (!coverUrl) {
+      return releaseGroup;
+    }
+    return { ...releaseGroup, coverUrl };
+  });
+};
+
 export const resolveReleaseGroupCoversBatch = async (
   items = [],
   { concurrency = 6 } = {},
 ) => {
+  const seen = new Set();
   const normalized = items
     .map(normalizeBatchItem)
-    .filter(Boolean)
+    .filter((item) => {
+      if (!item || seen.has(item.mbid)) return false;
+      seen.add(item.mbid);
+      return true;
+    })
     .slice(0, 24);
   if (!normalized.length) {
     return {};
