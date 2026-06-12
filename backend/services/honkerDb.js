@@ -1,21 +1,13 @@
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 import honker from "@russellthehippo/honker-node";
+import { resolveAurralDataDir } from "../config/data-dir.js";
 import { scheduleHonkerComponentRestart } from "./honkerWorkerRuntime.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 function resolveHonkerDbPath() {
   return process.env.AURRAL_DB_PATH
     ? path.resolve(process.env.AURRAL_DB_PATH)
-    : path.join(
-        process.env.AURRAL_DATA_DIR
-          ? path.resolve(process.env.AURRAL_DATA_DIR)
-          : path.join(__dirname, "..", "data"),
-        "aurral.db",
-      );
+    : path.join(resolveAurralDataDir(), "aurral.db");
 }
 
 let honkerDb = null;
@@ -393,9 +385,8 @@ export function getNotificationOutbox() {
     notificationOutbox = getHonkerDb().outbox(
       "notifications",
       async (payload, job) => {
-        const { deliverQueuedNotification } = await import(
-          "./notificationService.js"
-        );
+        const { deliverQueuedNotification } =
+          await import("./notificationService.js");
         const { withJobHeartbeat } = await import("./honkerWorkerRuntime.js");
         const outbox = getNotificationOutbox();
         await withJobHeartbeat(job, outbox.queue, () =>
@@ -415,7 +406,9 @@ export function getNotificationOutbox() {
 export function enqueueNotification(payload) {
   const jobId = getNotificationOutbox().enqueue(payload);
   import("./notificationOutboxWorker.js")
-    .then(({ startNotificationOutboxWorker }) => startNotificationOutboxWorker())
+    .then(({ startNotificationOutboxWorker }) =>
+      startNotificationOutboxWorker(),
+    )
     .catch(() => {});
   return jobId;
 }
@@ -548,11 +541,7 @@ const inProcessLockTails = new Map();
 export async function withHonkerLock(
   name,
   fn,
-  {
-    ttlSeconds = 120,
-    waitTimeoutMs = 300000,
-    retryDelayMs = 250,
-  } = {},
+  { ttlSeconds = 120, waitTimeoutMs = 300000, retryDelayMs = 250 } = {},
 ) {
   const safeName = String(name || "").trim();
   if (!safeName) {

@@ -8,6 +8,10 @@ import {
 } from "../config/constants.js";
 import { validateExternalUrl } from "../middleware/urlValidator.js";
 import { requirePasswordStrength } from "../middleware/validation.js";
+import {
+  getSuggestedDownloadFolderPath,
+  validateDownloadFolderPath,
+} from "../services/downloadFolderConfig.js";
 
 const router = express.Router();
 
@@ -248,6 +252,7 @@ router.post("/complete", async (req, res) => {
       lastfm,
       slskd,
       ticketmaster,
+      downloadFolderPath,
     } = req.body;
     if (authPassword != null && String(authPassword).length > 0) {
       const passwordValidation = requirePasswordStrength(authPassword);
@@ -353,11 +358,42 @@ router.post("/complete", async (req, res) => {
           : current.integrations?.ticketmaster,
     };
 
-    dbOps.updateSettings({
+    const nextSettings = {
       ...current,
       integrations,
       onboardingComplete: true,
-    });
+    };
+    if (downloadFolderPath !== undefined) {
+      const validation = validateDownloadFolderPath(downloadFolderPath, undefined, {
+        create: true,
+      });
+      if (!validation.valid) {
+        return res.status(400).json({
+          error: validation.error,
+          message: validation.error,
+        });
+      }
+      nextSettings.downloadFolderPath = validation.path;
+    } else if (!current.downloadFolderPath) {
+      const validation = validateDownloadFolderPath(
+        getSuggestedDownloadFolderPath(),
+        undefined,
+        { create: true },
+      );
+      if (!validation.valid) {
+        return res.status(400).json({
+          error: "download_folder_required",
+          message:
+            "Choose a downloads folder before completing onboarding.",
+        });
+      }
+      nextSettings.downloadFolderPath = validation.path;
+    }
+    dbOps.updateSettings(nextSettings);
+    const { refreshPlaylistRuntimeRoots } = await import(
+      "../services/playlistRuntime.js"
+    );
+    await refreshPlaylistRuntimeRoots();
 
     const authUserFinal = integrations?.general?.authUser || "admin";
     const authPasswordFinal = integrations?.general?.authPassword || "";

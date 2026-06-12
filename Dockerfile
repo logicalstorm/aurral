@@ -33,7 +33,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 1001 nodejs \
     && useradd --uid 1001 --gid nodejs --shell /usr/sbin/nologin --create-home nodejs \
-    && mkdir -p /app/backend/data \
+    && mkdir -p /app/backend/data /config \
     && chown -R nodejs:nodejs /app
 
 COPY package*.json ./

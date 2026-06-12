@@ -105,6 +105,7 @@ router.post("/", async (req, res) => {
       releaseTypes,
       integrations,
       rootFolderPath,
+      downloadFolderPath,
       security,
       playlistArtwork,
     } = req.body;
@@ -256,6 +257,10 @@ router.post("/", async (req, res) => {
         rootFolderPath !== undefined
           ? rootFolderPath
           : currentSettings.rootFolderPath || null,
+      downloadFolderPath:
+        downloadFolderPath !== undefined
+          ? downloadFolderPath
+          : currentSettings.downloadFolderPath || null,
       releaseTypes:
         releaseTypes !== undefined
           ? releaseTypes
@@ -298,6 +303,12 @@ router.post("/", async (req, res) => {
     }
 
     dbOps.updateSettings(updatedSettings);
+    if (downloadFolderPath !== undefined) {
+      const { refreshPlaylistRuntimeRoots } = await import(
+        "../services/playlistRuntime.js"
+      );
+      await refreshPlaylistRuntimeRoots();
+    }
     const reconciled = reconcileLocalNetworkBypassSetting().settings;
     if (
       localBypassWasEnabled &&
