@@ -131,6 +131,10 @@ export function useArtistDetailsStream(
       : null;
 
   const [artist, setArtist] = useState(initialArtist);
+  const artistId = artist?.id;
+  const artistName = artist?.name;
+  const artistReleaseGroups = artist?.["release-groups"];
+  const artistAppearsOnReleaseGroups = artist?.["appears-on-release-groups"];
   const [coverImages, setCoverImages] = useState([]);
   const [libraryArtist, setLibraryArtist] = useState(seededLibraryArtist);
   const [libraryAlbums, setLibraryAlbums] = useState([]);
@@ -194,8 +198,8 @@ export function useArtistDetailsStream(
   }, [libraryAlbums]);
 
   useEffect(() => {
-    if (artist?.name) artistNameRef.current = artist.name;
-  }, [artist?.name]);
+    if (artistName) artistNameRef.current = artistName;
+  }, [artistName]);
 
   useEffect(() => {
     selectedReleaseTypesRef.current = selectedReleaseTypes;
@@ -588,7 +592,7 @@ export function useArtistDetailsStream(
   ]);
 
   useEffect(() => {
-    if (!mbid || !artist?.id) return;
+    if (!mbid || !artistId) return;
 
     const requestedReleaseTypes = normalizeReleaseTypesSelection(
       selectedReleaseTypesRef.current,
@@ -608,7 +612,7 @@ export function useArtistDetailsStream(
 
     getArtistDetails(
       mbid,
-      artistNameRef.current || artist?.name || artistNameFromNav || "",
+      artistNameRef.current || artistName || artistNameFromNav || "",
       {
         mode: normalizedAppearsOnLimit ? "full" : "core",
         releaseTypes: requestedReleaseTypes,
@@ -657,8 +661,8 @@ export function useArtistDetailsStream(
     };
   }, [
     mbid,
-    artist?.id,
-    artist?.name,
+    artistId,
+    artistName,
     artistNameFromNav,
     selectedReleaseTypesKey,
     appearsOnLimitKey,
@@ -666,10 +670,10 @@ export function useArtistDetailsStream(
   ]);
 
   useEffect(() => {
-    if (!artist?.id) return;
+    if (!artistId) return;
     const releaseGroups = [
-      ...(artist["release-groups"] || []),
-      ...(artist["appears-on-release-groups"] || []),
+      ...(artistReleaseGroups || []),
+      ...(artistAppearsOnReleaseGroups || []),
     ];
     const seeded = {};
     for (const releaseGroup of releaseGroups) {
@@ -701,11 +705,7 @@ export function useArtistDetailsStream(
       }
       return changed ? next : prev;
     });
-  }, [
-    artist?.id,
-    artist?.["release-groups"],
-    artist?.["appears-on-release-groups"],
-  ]);
+  }, [artistId, artistReleaseGroups, artistAppearsOnReleaseGroups]);
 
   useEffect(() => {
     if (!mbid) return undefined;
@@ -841,7 +841,7 @@ export function useArtistDetailsStream(
     loadingReleases,
     loadingAppearsOn,
     normalizedAppearsOnLimit,
-    artist?.["appears-on-release-groups"],
+    artistAppearsOnReleaseGroups,
   ]);
 
   return {
