@@ -23,6 +23,7 @@ const [{ db }, trackerModule, reuseModule] = await Promise.all([
 const { downloadTracker } = trackerModule;
 const {
   normalizeExistingFileMode,
+  pathsShareDevice,
   reuseTrackForPlaylist,
   repairCompletedTrackLink,
   repairReusableTrackLinks,
@@ -47,6 +48,19 @@ test("normalizeExistingFileMode accepts supported modes and maps legacy values",
   assert.equal(normalizeExistingFileMode("copy"), "reuse");
   assert.equal(normalizeExistingFileMode(""), "reuse");
   assert.equal(normalizeExistingFileMode("unsupported"), "reuse");
+});
+
+test("pathsShareDevice compares directory roots without ascending to filesystem root", async () => {
+  const sharedRoot = path.join(isolatedState.baseDir, "media");
+  const musicDir = path.join(sharedRoot, "music", "Artist", "Album");
+  const downloadsDir = path.join(sharedRoot, "downloads", "aurral");
+  const trackPath = path.join(musicDir, "Artist_Album_01_Track.mp3");
+  await fs.mkdir(musicDir, { recursive: true });
+  await fs.mkdir(downloadsDir, { recursive: true });
+  await fs.writeFile(trackPath, "audio");
+
+  assert.equal(await pathsShareDevice(trackPath, downloadsDir), true);
+  assert.equal(await pathsShareDevice(trackPath, path.join(sharedRoot, "downloads")), true);
 });
 
 test("reuseTrackForPlaylist references a completed Aurral track path", async () => {
