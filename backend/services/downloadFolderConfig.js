@@ -29,16 +29,22 @@ export function resolveEnvDownloadFolder() {
   return null;
 }
 
-function defaultPlaylistRoot() {
-  return path.resolve(resolveAurralDataDir(), "..", "downloads");
+export function resolveDefaultPlaylistDownloadRoot() {
+  const envDownloadFolder = resolveEnvDownloadFolder();
+  if (envDownloadFolder) {
+    return envDownloadFolder;
+  }
+  if (fs.existsSync("/data")) {
+    return "/data/downloads/aurral";
+  }
+  return path.join(
+    path.resolve(resolveAurralDataDir(), "..", "downloads"),
+    "aurral",
+  );
 }
 
 export function getSuggestedDownloadFolderPath() {
-  return (
-    resolveEnvDownloadFolder() ||
-    (fs.existsSync("/data") ? "/data/downloads/aurral" : null) ||
-    path.join(defaultPlaylistRoot(), "aurral")
-  );
+  return resolveDefaultPlaylistDownloadRoot();
 }
 
 function isExistingDirectory(targetPath) {
