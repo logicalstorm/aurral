@@ -4,13 +4,10 @@ import {
   useCallback,
   useMemo,
   useState,
-  useImperativeHandle,
-  forwardRef,
 } from "react";
 import {
   Loader2,
   Check,
-  CircleDashed,
   Clock,
   Trash2,
   Pencil,
@@ -28,7 +25,10 @@ import {
   MoreHorizontal,
   Save,
   X,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
+import { sortFlowTracks } from "../utils/flowTrackSort";
 import { Link } from "react-router-dom";
 import PillToggle from "../components/PillToggle";
 import FlipSaveButton from "../components/FlipSaveButton";
@@ -896,6 +896,7 @@ function FlowTrackPlaylistMenus({
   const defaultNewPlaylistName =
     getDefaultPlaylistName?.(track) || "Playlist";
   const sharedMenuProps = {
+    track,
     playlists,
     loading: playlistsLoading,
     saving,
@@ -1060,6 +1061,7 @@ function FlowTrackKebabMenu({
               <TrackPlaylistSubmenu
                 label="Add to playlist"
                 icon={Plus}
+                track={playlistMenuProps.track}
                 playlists={playlistMenuProps.playlists}
                 loading={playlistMenuProps.loading}
                 saving={playlistMenuProps.saving}
@@ -1081,6 +1083,7 @@ function FlowTrackKebabMenu({
               <TrackPlaylistSubmenu
                 label="Move to playlist"
                 icon={ListMusic}
+                track={playlistMenuProps.track}
                 playlists={playlistMenuProps.playlists}
                 loading={playlistMenuProps.loading}
                 saving={playlistMenuProps.saving}
@@ -1173,35 +1176,6 @@ export function MoreMenu({ children, activeButtonClass = "btn-primary" }) {
   );
 }
 
-function buildEditableTrackRows(tracks) {
-  return (Array.isArray(tracks) ? tracks : []).map((track, index) => ({
-    rowId:
-      track?.id ||
-      `track-${index}-${Math.random().toString(36).slice(2, 10)}`,
-    persistedTrackId: track?.id || null,
-    artistName: String(track?.artistName || ""),
-    trackName: String(track?.trackName || ""),
-    albumName: String(track?.albumName || ""),
-    artistMbid: String(track?.artistMbid || ""),
-    albumMbid: String(track?.albumMbid || ""),
-    trackMbid: String(track?.trackMbid || ""),
-    releaseYear: String(track?.releaseYear || ""),
-    durationMs:
-      track?.durationMs != null && Number.isFinite(Number(track.durationMs))
-        ? Math.max(0, Math.round(Number(track.durationMs)))
-        : null,
-    artistAliases: Array.isArray(track?.artistAliases)
-      ? track.artistAliases
-          .map((entry) => String(entry || "").trim())
-          .filter(Boolean)
-      : [],
-    reason: String(track?.reason || ""),
-    status: String(track?.status || "draft"),
-    error: String(track?.error || ""),
-    isMarkedForDeletion: false,
-  }));
-}
-
 function getTrackStatusMeta(status) {
   switch (String(status || "").toLowerCase()) {
     case "done":
@@ -1242,488 +1216,6 @@ function TrackStatusDot({ status }) {
     />
   );
 }
-
-function TrackStatusBadge({ status, pendingDelete = false, compact = false }) {
-  const isDownloaded = status === "done";
-  const label = pendingDelete
-    ? "Pending Delete"
-    : isDownloaded
-      ? "Downloaded"
-      : "Not Downloaded";
-  const statusClass = pendingDelete
-    ? "flow-page__track-status--delete"
-    : isDownloaded
-      ? "flow-page__track-status--done"
-      : "flow-page__track-status--pending";
-  return (
-    <span
-      className={`flow-page__track-status ${statusClass}${compact ? " flow-page__track-status--compact" : ""}`}
-      title={label}
-      aria-label={label}
-    >
-      {pendingDelete ? (
-        <X className={`artist-icon-xs${compact ? " flow-page__track-status-icon--compact" : ""}`} />
-      ) : isDownloaded ? (
-        <Check className={`artist-icon-xs${compact ? " flow-page__track-status-icon--compact" : ""}`} />
-      ) : (
-        <CircleDashed className={`artist-icon-xs${compact ? " flow-page__track-status-icon--compact" : ""}`} />
-      )}
-    </span>
-  );
-}
-
-function buildTrackSavePayload(tracks) {
-  const nextTracks = [];
-  for (const track of Array.isArray(tracks) ? tracks : []) {
-    if (track?.isMarkedForDeletion) {
-      continue;
-    }
-    const artistName = String(track?.artistName || "").trim();
-    const trackName = String(track?.trackName || "").trim();
-    const albumName = String(track?.albumName || "").trim();
-    const artistMbid = String(track?.artistMbid || "").trim();
-    const albumMbid = String(track?.albumMbid || "").trim();
-    const trackMbid = String(track?.trackMbid || "").trim();
-    const releaseYear = String(track?.releaseYear || "").trim();
-    const reason = String(track?.reason || "").trim();
-    const durationMs =
-      track?.durationMs != null && Number.isFinite(Number(track.durationMs))
-        ? Math.max(0, Math.round(Number(track.durationMs)))
-        : null;
-    const artistAliases = Array.isArray(track?.artistAliases)
-      ? track.artistAliases
-          .map((entry) => String(entry || "").trim())
-          .filter(Boolean)
-      : [];
-    if (
-      !artistName &&
-      !trackName &&
-      !albumName &&
-      !artistMbid &&
-      !albumMbid &&
-      !trackMbid &&
-      !releaseYear &&
-      !reason
-    ) {
-      continue;
-    }
-    if (!artistName || !trackName) {
-      throw new Error("Each edited track needs both an artist and song name");
-    }
-    nextTracks.push({
-      artistName,
-      trackName,
-      albumName: albumName || null,
-      artistMbid: artistMbid || null,
-      albumMbid: albumMbid || null,
-      trackMbid: trackMbid || null,
-      releaseYear: releaseYear || null,
-      durationMs,
-      artistAliases,
-      reason: reason || null,
-    });
-  }
-  return nextTracks;
-}
-
-export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrackEditor({
-  tracks,
-  loading,
-  error,
-  saving,
-  headerActions = null,
-  onSave,
-}, ref) {
-  const [draftTracks, setDraftTracks] = useState(() => buildEditableTrackRows(tracks));
-  const [editorError, setEditorError] = useState("");
-  const [missingOnly, setMissingOnly] = useState(false);
-
-  useEffect(() => {
-    setDraftTracks(buildEditableTrackRows(tracks));
-    setEditorError("");
-    setMissingOnly(false);
-  }, [tracks]);
-
-  const missingCount = draftTracks.filter(
-    (track) => track.status === "failed" && !track.isMarkedForDeletion,
-  ).length;
-  const pendingDeletionCount = draftTracks.filter(
-    (track) => track.isMarkedForDeletion,
-  ).length;
-  const visibleTracks = missingOnly
-    ? draftTracks.filter(
-        (track) => track.isMarkedForDeletion || track.status === "failed",
-      )
-    : draftTracks;
-  const initialPayload = useMemo(() => {
-    try {
-      return JSON.stringify(buildTrackSavePayload(buildEditableTrackRows(tracks)));
-    } catch {
-      return "";
-    }
-  }, [tracks]);
-
-  const updateTrack = (rowId, key, value) => {
-    setDraftTracks((prev) =>
-      prev.map((track) =>
-        track.rowId === rowId ? { ...track, [key]: value } : track,
-      ),
-    );
-    if (editorError) {
-      setEditorError("");
-    }
-  };
-
-  const toggleTrackDeletion = (rowId) => {
-    setDraftTracks((prev) => {
-      const target = prev.find((track) => track.rowId === rowId);
-      if (!target) return prev;
-      if (!target.persistedTrackId && target.status === "draft") {
-        return prev.filter((track) => track.rowId !== rowId);
-      }
-      return prev.map((track) =>
-        track.rowId === rowId
-          ? { ...track, isMarkedForDeletion: !track.isMarkedForDeletion }
-          : track,
-      );
-    });
-    if (editorError) {
-      setEditorError("");
-    }
-  };
-
-  const handleAddTrack = () => {
-    setDraftTracks((prev) => [
-      ...prev,
-      {
-        rowId: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        persistedTrackId: null,
-        artistName: "",
-        trackName: "",
-        albumName: "",
-        artistMbid: "",
-        albumMbid: "",
-        trackMbid: "",
-        releaseYear: "",
-        durationMs: null,
-        artistAliases: [],
-        reason: "",
-        status: "draft",
-        error: "",
-        isMarkedForDeletion: false,
-      },
-    ]);
-    setMissingOnly(false);
-  };
-
-  const buildPayload = () => {
-    return buildTrackSavePayload(draftTracks);
-  };
-
-  const handleSave = async () => {
-    try {
-      const payload = buildPayload();
-      const currentPayload = JSON.stringify(payload);
-      if (currentPayload === initialPayload) {
-        setEditorError("");
-        return "unchanged";
-      }
-      setEditorError("");
-      await onSave?.(payload);
-      return "saved";
-    } catch (saveError) {
-      setEditorError(saveError?.message || "Failed to save tracklist");
-      return "error";
-    }
-  };
-
-  useImperativeHandle(ref, () => ({
-    save: handleSave,
-  }));
-
-  if (loading) {
-    return (
-      <div className="flow-page__editor flow-page__tracks-loading">
-        <Loader2 className="artist-icon-sm animate-spin" />
-        Loading tracks...
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flow-page__editor flow-page__tracks-error">
-        {error}
-      </div>
-    );
-  }
-
-  return (
-    <div className="flow-page__editor">
-      <div className="flow-page__editor-header">
-        <div className="flow-page__editor-meta">
-          <span>{draftTracks.length} tracks</span>
-          {missingCount > 0 ? (
-            <>
-              <span className="flow-page__card-meta-dot">•</span>
-              <span>{missingCount} missing</span>
-            </>
-          ) : null}
-          {pendingDeletionCount > 0 ? (
-            <>
-              <span className="flow-page__card-meta-dot">•</span>
-              <span className="flow-page__editor-meta-mark">
-                {pendingDeletionCount} marked for deletion
-              </span>
-            </>
-          ) : null}
-        </div>
-        <div className="flow-page__editor-actions">
-          {headerActions}
-          {missingCount > 0 ? (
-            <button
-              type="button"
-              onClick={() => setMissingOnly((prev) => !prev)}
-              className={`btn btn-secondary btn-xs${missingOnly ? " btn-neutral-active" : ""}`}
-            >
-              {missingOnly ? "Show All" : "Missing Only"}
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={handleAddTrack}
-            className="btn btn-secondary btn-xs"
-            disabled={saving}
-          >
-            <Plus className="artist-icon-xs" />
-            Add Track
-          </button>
-        </div>
-      </div>
-      <div className="flow-page__editor-body">
-        {visibleTracks.length === 0 ? (
-          <div className="flow-page__editor-empty">
-            {missingOnly ? "No missing tracks right now." : "No tracks in this playlist yet."}
-          </div>
-        ) : (
-          <>
-            <div className="flow-page__editor-mobile">
-              <div className="flow-page__editor-mobile-header">
-                <div>Song</div>
-                <div>Artist</div>
-                <div>Album</div>
-                <div />
-              </div>
-              {visibleTracks.map((track) => {
-                const isLocked = track.status === "done";
-                const isMarkedForDeletion = track.isMarkedForDeletion === true;
-                const showStaticValues = isLocked || isMarkedForDeletion;
-                return (
-                  <div key={track.rowId} className={isMarkedForDeletion ? "flow-page__editor-table-row is-struck" : ""}>
-                    <div className="flow-page__editor-mobile-row">
-                      <div className="flow-page__editor-mobile-grid">
-                        <div className="flow-page__editor-mobile-cell">
-                          {showStaticValues ? (
-                            <div className={`flow-page__editor-mobile-text${isMarkedForDeletion ? " is-struck" : ""}`}>
-                              {track.trackName || "Untitled Song"}
-                            </div>
-                          ) : (
-                            <div className="flow-page__editor-field-stack">
-                              <input
-                                type="text"
-                                className="input input-xs flow-page__editor-input"
-                                value={track.trackName}
-                                onChange={(event) =>
-                                  updateTrack(track.rowId, "trackName", event.target.value)
-                                }
-                                placeholder="Song name"
-                              />
-                              {track.error ? (
-                                <span className="flow-page__editor-track-error">
-                                  {track.error}
-                                </span>
-                              ) : null}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flow-page__editor-mobile-cell">
-                          {showStaticValues ? (
-                            <div className={`flow-page__editor-mobile-text${isMarkedForDeletion ? " is-struck" : ""}`}>
-                              {track.artistName || "Unknown Artist"}
-                            </div>
-                          ) : (
-                            <input
-                              type="text"
-                              className="input input-xs flow-page__editor-input"
-                              value={track.artistName}
-                              onChange={(event) =>
-                                updateTrack(track.rowId, "artistName", event.target.value)
-                              }
-                              placeholder="Artist name"
-                            />
-                          )}
-                        </div>
-                        <div className="flow-page__editor-mobile-cell">
-                          {showStaticValues ? (
-                            <div className={`flow-page__editor-mobile-text${isMarkedForDeletion ? " is-struck" : ""}`}>
-                              {track.albumName || "Unknown Album"}
-                            </div>
-                          ) : (
-                            <input
-                              type="text"
-                              className="input input-xs flow-page__editor-input"
-                              value={track.albumName}
-                              onChange={(event) =>
-                                updateTrack(track.rowId, "albumName", event.target.value)
-                              }
-                              placeholder="Album name"
-                            />
-                          )}
-                        </div>
-                        <div className="flow-page__editor-actions-cell">
-                          {isMarkedForDeletion ? (
-                            <button
-                              type="button"
-                              onClick={() => toggleTrackDeletion(track.rowId)}
-                              className="btn btn-secondary btn-xs"
-                            >
-                              Undo
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => toggleTrackDeletion(track.rowId)}
-                              className="btn btn-ghost-danger btn-xs"
-                            >
-                              <Trash2 className="artist-icon-xs" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <table className="flow-page__editor-table">
-              <thead className="flow-page__editor-table-head">
-                <tr>
-                  <th>Status</th>
-                  <th>Song</th>
-                  <th>Artist</th>
-                  <th>Album</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleTracks.map((track) => {
-                  const isLocked = track.status === "done";
-                  const isMarkedForDeletion = track.isMarkedForDeletion === true;
-                  const showStaticValues = isLocked || isMarkedForDeletion;
-                  return (
-                    <tr
-                      key={track.rowId}
-                      className={`flow-page__editor-table-row${isMarkedForDeletion ? " is-struck" : ""}`}
-                    >
-                      <td>
-                        <TrackStatusBadge
-                          status={track.status}
-                          pendingDelete={isMarkedForDeletion}
-                        />
-                      </td>
-                      <td>
-                        {showStaticValues ? (
-                          <div className={`flow-page__editor-field-wide${isMarkedForDeletion ? " flow-page__editor-mobile-text is-struck" : ""}`}>
-                            {track.trackName || "Untitled Song"}
-                          </div>
-                        ) : (
-                          <div className="flow-page__editor-field-stack flow-page__editor-field-wide">
-                            <input
-                              type="text"
-                              className="input input-xs"
-                              value={track.trackName}
-                              onChange={(event) =>
-                                updateTrack(track.rowId, "trackName", event.target.value)
-                              }
-                              placeholder="Song name"
-                            />
-                            {track.error ? (
-                              <span className="flow-page__editor-track-error">
-                                {track.error}
-                              </span>
-                            ) : null}
-                          </div>
-                        )}
-                      </td>
-                      <td>
-                        {showStaticValues ? (
-                          <div className={`flow-page__editor-field-wide${isMarkedForDeletion ? " flow-page__editor-mobile-text is-struck" : ""}`}>
-                            {track.artistName || "Unknown Artist"}
-                          </div>
-                        ) : (
-                          <input
-                            type="text"
-                            className="input input-xs flow-page__editor-field-wide"
-                            value={track.artistName}
-                            onChange={(event) =>
-                              updateTrack(track.rowId, "artistName", event.target.value)
-                            }
-                            placeholder="Artist name"
-                          />
-                        )}
-                      </td>
-                      <td>
-                        {showStaticValues ? (
-                          <div className={`flow-page__editor-field-wide${isMarkedForDeletion ? " flow-page__editor-mobile-text is-struck" : ""}`}>
-                            {track.albumName || "Unknown Album"}
-                          </div>
-                        ) : (
-                          <input
-                            type="text"
-                            className="input input-xs flow-page__editor-field-wide"
-                            value={track.albumName}
-                            onChange={(event) =>
-                              updateTrack(track.rowId, "albumName", event.target.value)
-                            }
-                            placeholder="Album name"
-                          />
-                        )}
-                      </td>
-                      <td>
-                        {isMarkedForDeletion ? (
-                          <button
-                            type="button"
-                            onClick={() => toggleTrackDeletion(track.rowId)}
-                            className="btn btn-secondary btn-xs"
-                          >
-                            Undo
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => toggleTrackDeletion(track.rowId)}
-                            className="btn btn-ghost-danger btn-xs"
-                          >
-                            <Trash2 className="artist-icon-xs" />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </>
-        )}
-      </div>
-      {editorError ? (
-        <div className="flow-page__editor-error">
-          {editorError}
-        </div>
-      ) : null}
-    </div>
-  );
-});
 
 export function PlaylistArtworkThumb({
   artworkUrl,
@@ -2292,6 +1784,39 @@ export function FlowCard({
   );
 }
 
+function FlowTracksSortHeader({
+  label,
+  sortKey,
+  activeSortKey,
+  sortDirection,
+  onSort,
+  className = "",
+}) {
+  const active = activeSortKey === sortKey;
+  const DirectionIcon = sortDirection === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <th className={className}>
+      <button
+        type="button"
+        className={`flow-page__tracks-sort-button${active ? " is-active" : ""}`}
+        onClick={() => onSort(sortKey)}
+        aria-sort={
+          active
+            ? sortDirection === "asc"
+              ? "ascending"
+              : "descending"
+            : "none"
+        }
+      >
+        <span>{label}</span>
+        {active ? (
+          <DirectionIcon className="artist-icon-xs" aria-hidden="true" />
+        ) : null}
+      </button>
+    </th>
+  );
+}
+
 export function FlowTracksPanel({
   tracks,
   loading,
@@ -2319,6 +1844,18 @@ export function FlowTracksPanel({
   hideAlbumColumn = false,
   hideStatusColumn = false,
 }) {
+  const [sortKey, setSortKey] = useState("index");
+  const [sortDirection, setSortDirection] = useState("asc");
+  const trackOrderKey = useMemo(
+    () => tracks.map((track) => track.id).join("\n"),
+    [tracks],
+  );
+
+  useEffect(() => {
+    setSortKey("index");
+    setSortDirection("asc");
+  }, [trackOrderKey]);
+
   const {
     playQueue,
     playTrack,
@@ -2329,10 +1866,27 @@ export function FlowTracksPanel({
     currentTrack: activeTrack,
   } = useAudioQueue();
 
-  const playableTracks = useMemo(
-    () => tracks.filter((track) => track.status === "done" && track.streamUrl),
-    [tracks],
+  const sortedTracks = useMemo(
+    () => sortFlowTracks(tracks, sortKey, sortDirection),
+    [tracks, sortKey, sortDirection],
   );
+
+  const playableTracks = useMemo(
+    () =>
+      sortedTracks.filter(
+        (track) => track.status === "done" && track.streamUrl,
+      ),
+    [sortedTracks],
+  );
+
+  const handleSort = (nextSortKey) => {
+    if (sortKey === nextSortKey) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(nextSortKey);
+    setSortDirection("asc");
+  };
 
   const isSourceActive = matchesSource(playbackSource);
   const currentTrackId =
@@ -2449,16 +2003,48 @@ export function FlowTracksPanel({
           >
             <thead className="flow-page__tracks-table-head">
               <tr>
-                <th className="flow-page__tracks-table-index">#</th>
-                <th className="flow-page__tracks-table-song">Song</th>
-                <th className="flow-page__tracks-table-artist">Artist</th>
+                <FlowTracksSortHeader
+                  label="#"
+                  sortKey="index"
+                  activeSortKey={sortKey}
+                  sortDirection={sortDirection}
+                  onSort={handleSort}
+                  className="flow-page__tracks-table-index"
+                />
+                <FlowTracksSortHeader
+                  label="Song"
+                  sortKey="song"
+                  activeSortKey={sortKey}
+                  sortDirection={sortDirection}
+                  onSort={handleSort}
+                  className="flow-page__tracks-table-song"
+                />
+                <FlowTracksSortHeader
+                  label="Artist"
+                  sortKey="artist"
+                  activeSortKey={sortKey}
+                  sortDirection={sortDirection}
+                  onSort={handleSort}
+                  className="flow-page__tracks-table-artist"
+                />
                 {hideAlbumColumn ? null : (
-                  <th className="flow-page__tracks-table-album">Album</th>
+                  <FlowTracksSortHeader
+                    label="Album"
+                    sortKey="album"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                    className="flow-page__tracks-table-album"
+                  />
                 )}
                 {hideStatusColumn ? null : (
-                  <th
+                  <FlowTracksSortHeader
+                    label="Status"
+                    sortKey="status"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
                     className="flow-page__tracks-table-status-head"
-                    aria-hidden="true"
                   />
                 )}
                 <th
@@ -2468,7 +2054,7 @@ export function FlowTracksPanel({
               </tr>
             </thead>
             <tbody>
-              {tracks.map((track, index) => {
+              {sortedTracks.map((track, index) => {
                 const canPlay =
                   showPlaybackControls &&
                   track.status === "done" &&
@@ -2757,393 +2343,6 @@ export function FlowDetailPlaceholder() {
       <p className="flow-page__detail-placeholder__message">
         Select a playlist or flow to view tracks and settings.
       </p>
-    </div>
-  );
-}
-
-export function SharedPlaylistCard({
-  playlist,
-  isAdminView = false,
-  stats,
-  currentJob,
-  artworkUrl,
-  isEditing,
-  isTrackEditing,
-  isTracksOpen,
-  tracks,
-  tracksLoading,
-  tracksError,
-  nameDraft,
-  nameError,
-  isApplyingName,
-  isApplyingTracks,
-  deletingId,
-  onToggleEditing,
-  onNameChange,
-  onCancelEdit,
-  onApplyEdit,
-  onToggleTrackEditing,
-  onSaveTracks,
-  onDelete,
-  onExport,
-  onViewTracks,
-  onAddTrackToPlaylist,
-  onNavigateArtist,
-  reSearchingTrackIds,
-  onReSearchTrack,
-  retryCyclePaused,
-  retryCycleScheduled,
-  retryActionInFlight,
-  onSetRetryCyclePaused,
-}) {
-  const trackEditorRef = useRef(null);
-  const pending = Number(stats?.pending || 0);
-  const downloading = Number(stats?.downloading || 0);
-  const done = Number(stats?.done || 0);
-  const failed = Number(stats?.failed || 0);
-  const total = Math.max(Number(playlist?.trackCount || 0), pending + downloading + done);
-  const progressPct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
-  const waitingForRetryCycle =
-    retryCycleScheduled === true &&
-    pending === 0 &&
-    downloading === 0 &&
-    done < Number(playlist?.trackCount || 0);
-  const isCurrentJob =
-    currentJob?.playlistType === playlist.id &&
-    currentJob?.artistName &&
-    currentJob?.trackName;
-  const ownerLabel = isAdminView && playlist?.ownerUsername
-    ? `Owner: ${playlist.ownerUsername}`
-    : null;
-
-  const handleMobileTrackToggle = (event) => {
-    if (!shouldHandleMobileCardTap(event)) return;
-    onViewTracks?.();
-  };
-
-  return (
-    <div className="flow-page__card">
-      <div className="flow-page__card-body">
-        <div
-          className="flow-page__card-main"
-          onClick={handleMobileTrackToggle}
-        >
-          <PlaylistArtworkThumb artworkUrl={artworkUrl} name={playlist.name} />
-          <div className="flow-page__card-content">
-            <div className="flow-page__card-top">
-              <div className="flow-page__card-badges">
-                <span className="flow-page__badge flow-page__badge--type">
-                  Playlist
-                </span>
-                <span className="flow-page__badge flow-page__badge--count">
-                  {playlist.trackCount} tracks
-                </span>
-                {ownerLabel ? (
-                  <span className="flow-page__badge flow-page__badge--owner">
-                    {ownerLabel}
-                  </span>
-                ) : null}
-              </div>
-              <div className="flow-page__card-actions">
-                <button
-                  type="button"
-                  onClick={onViewTracks}
-                  className={`btn btn--hide-mobile btn-sm btn--toolbar ${isTracksOpen ? "btn-neutral-active" : "btn-secondary"}`}
-                  aria-label={isTracksOpen ? `Close ${playlist.name} tracks` : `View ${playlist.name} tracks`}
-                  title={isTracksOpen ? `Close ${playlist.name} tracks` : `View ${playlist.name} tracks`}
-                  aria-pressed={isTracksOpen}
-                >
-                  <ListMusic className="artist-icon-sm" />
-                  <span className="flow-page__btn-label--md">Tracks</span>
-                </button>
-                <MoreMenu activeButtonClass="btn-neutral-active">
-                  <button
-                    type="button"
-                    onClick={onViewTracks}
-                    className="artist-menu-item flow-page__menu-item--mobile-only"
-                    aria-pressed={isTracksOpen}
-                  >
-                    <span className="artist-menu-item__main">
-                      <ListMusic className="artist-icon-sm" />
-                      {isTracksOpen ? "Hide Tracks" : "View Tracks"}
-                    </span>
-                  </button>
-                  {isEditing ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={onApplyEdit}
-                        className="artist-menu-item flow-page__menu-item--mobile-only"
-                        disabled={isApplyingName}
-                      >
-                        <span className="artist-menu-item__main">
-                          {isApplyingName ? (
-                            <Loader2 className="artist-icon-sm animate-spin" />
-                          ) : (
-                            <Check className="artist-icon-sm" />
-                          )}
-                          Save Title
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onCancelEdit}
-                        className="artist-menu-item flow-page__menu-item--mobile-only"
-                        disabled={isApplyingName}
-                      >
-                        <span className="artist-menu-item__main">
-                          <X className="artist-icon-sm" />
-                          Cancel Rename
-                        </span>
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={onToggleEditing}
-                      className="artist-menu-item flow-page__menu-item--mobile-only"
-                    >
-                      <span className="artist-menu-item__main">
-                        <Pencil className="artist-icon-sm" />
-                        Rename Title
-                      </span>
-                    </button>
-                  )}
-                  <div className="flow-page__menu-divider flow-page__menu-divider--mobile-only" />
-                  <button
-                    type="button"
-                    onClick={onExport}
-                    className="artist-menu-item"
-                  >
-                    <span className="artist-menu-item__main">
-                      <Download className="artist-icon-sm" />
-                      Download JSON
-                    </span>
-                  </button>
-                  <div className="flow-page__menu-divider" />
-                  <button
-                    type="button"
-                    onClick={() => onSetRetryCyclePaused?.(!retryCyclePaused)}
-                    className="artist-menu-item"
-                    disabled={retryActionInFlight}
-                  >
-                    <span className="artist-menu-item__main">
-                      {retryActionInFlight ? (
-                        <Loader2 className="artist-icon-sm animate-spin" />
-                      ) : retryCyclePaused ? (
-                        <Play className="artist-icon-sm" />
-                      ) : (
-                        <Pause className="artist-icon-sm" />
-                      )}
-                      {retryCyclePaused ? "Resume Retry Cycle" : "Pause Retry Cycle"}
-                    </span>
-                  </button>
-                  <div className="flow-page__menu-divider" />
-                  <button
-                    type="button"
-                    onClick={onDelete}
-                    className="artist-menu-item artist-menu-item--danger"
-                    disabled={deletingId === playlist.id}
-                  >
-                    <span className="artist-menu-item__main">
-                      {deletingId === playlist.id ? <Loader2 className="artist-icon-sm animate-spin" /> : <Trash2 className="artist-icon-sm" />}
-                      Delete Playlist
-                    </span>
-                  </button>
-                </MoreMenu>
-              </div>
-            </div>
-            <div className="flow-page__card-title-row">
-              <div className="flow-page__card-title-row">
-                {isEditing ? (
-                  <input
-                    type="text"
-                    className="input input-sm flow-page__card-title-input"
-                    value={nameDraft ?? ""}
-                    onChange={(event) => onNameChange(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        onApplyEdit();
-                      }
-                      if (event.key === "Escape") {
-                        event.preventDefault();
-                        onCancelEdit();
-                      }
-                    }}
-                    aria-label={`Edit ${playlist.name} name`}
-                  />
-                ) : (
-                  <h3 className="flow-page__card-title">
-                    {playlist.name}
-                  </h3>
-                )}
-                <div className="flow-page__card-title-actions">
-                  <button
-                    type="button"
-                    onClick={isEditing ? onApplyEdit : onToggleEditing}
-                    className={`btn ${isEditing ? "btn-primary" : "btn-ghost"} btn-xs`}
-                    aria-label={isEditing ? `Save ${playlist.name}` : `Edit ${playlist.name}`}
-                    title={isEditing ? `Save ${playlist.name}` : `Edit ${playlist.name}`}
-                    disabled={isApplyingName}
-                  >
-                    {isApplyingName ? (
-                      <Loader2 className="artist-icon-xs animate-spin" />
-                    ) : isEditing ? (
-                      <Check className="artist-icon-xs" />
-                    ) : (
-                      <Pencil className="artist-icon-xs" />
-                    )}
-                  </button>
-                  {isEditing ? (
-                    <button
-                      type="button"
-                      onClick={onCancelEdit}
-                      className="btn btn-ghost btn-xs"
-                      aria-label={`Cancel editing ${playlist.name}`}
-                      title={`Cancel editing ${playlist.name}`}
-                      disabled={isApplyingName}
-                    >
-                      <X className="artist-icon-xs" />
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-              {nameError ? (
-                <p className="flow-page__error-text">
-                  {nameError}
-                </p>
-              ) : null}
-              {isCurrentJob ? (
-                <p className="flow-page__card-status">
-                  Downloading {currentJob.trackName}
-                </p>
-              ) : null}
-              {waitingForRetryCycle ? (
-                <p className="flow-page__warning-text">
-                  Waiting for next retry cycle
-                </p>
-              ) : null}
-              <p className="flow-page__card-hint flow-page__card-hint--mobile">
-                {isTracksOpen ? "Tap card to hide tracks" : "Tap card to view tracks"}
-              </p>
-            </div>
-            <div className="flow-page__progress">
-              <div className="flow-page__progress-bar">
-                <div
-                  className="flow-page__progress-fill"
-                  style={{ width: `${progressPct}%` }}
-                />
-              </div>
-              <div className="flow-page__progress-stats-mobile">{progressPct}% complete</div>
-              <div className="flow-page__progress-stats">
-                <span>{progressPct}% complete</span>
-                <span className="flow-page__card-meta-dot">•</span>
-                <span>Pending {pending}</span>
-                <span className="flow-page__card-meta-dot">•</span>
-                <span>Downloading {downloading}</span>
-                <span className="flow-page__card-meta-dot">•</span>
-                <span>Done {done}</span>
-                <span className="flow-page__card-meta-dot">•</span>
-                <span>Stalled {failed}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {isTracksOpen && (
-        <div className="flow-page__card-expanded">
-          <div className="flow-page__card-expanded-separator" />
-          {isTrackEditing ? (
-            <SharedPlaylistTrackEditor
-              ref={trackEditorRef}
-              tracks={tracks}
-              loading={tracksLoading}
-              error={tracksError}
-              saving={isApplyingTracks}
-              headerActions={
-                <>
-                  <button
-                    type="button"
-                    onClick={onToggleTrackEditing}
-                    className="btn btn-ghost btn-icon btn-xs"
-                    aria-label={`Cancel editing ${playlist.name} tracklist`}
-                    title={`Cancel editing ${playlist.name} tracklist`}
-                    disabled={isApplyingTracks}
-                  >
-                    <X className="artist-icon-xs" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const result = await trackEditorRef.current?.save?.();
-                      if (result === "unchanged") {
-                        onToggleTrackEditing();
-                      }
-                    }}
-                    className="btn btn-primary btn-icon btn-xs"
-                    aria-label={`Save ${playlist.name} tracklist`}
-                    title={`Save ${playlist.name} tracklist`}
-                    disabled={isApplyingTracks}
-                  >
-                    {isApplyingTracks ? (
-                      <Loader2 className="artist-icon-xs animate-spin" />
-                    ) : (
-                      <Check className="artist-icon-xs" />
-                    )}
-                  </button>
-                </>
-              }
-              onSave={onSaveTracks}
-            />
-          ) : (
-            <FlowTracksPanel
-              tracks={tracks}
-              loading={tracksLoading}
-              error={tracksError}
-              emptyMessage="No tracks in this static playlist yet."
-              editable={false}
-              playbackSource={{
-                type: "playlist",
-                id: playlist.id,
-                label: playlist.name,
-              }}
-              headerActions={
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (isTrackEditing) {
-                      const result = await trackEditorRef.current?.save?.();
-                      if (result === "unchanged") {
-                        onToggleTrackEditing();
-                      }
-                      return;
-                    }
-                    onToggleTrackEditing();
-                  }}
-                  className={`btn ${isTrackEditing ? "btn-primary" : "btn-secondary"} btn-icon btn-xs`}
-                  aria-label={isTrackEditing ? `Save ${playlist.name} tracklist` : `Edit ${playlist.name} tracklist`}
-                  title={isTrackEditing ? `Save ${playlist.name} tracklist` : `Edit ${playlist.name} tracklist`}
-                  disabled={isApplyingTracks}
-                >
-                  {isApplyingTracks ? (
-                    <Loader2 className="artist-icon-xs animate-spin" />
-                  ) : isTrackEditing ? (
-                    <Check className="artist-icon-xs" />
-                  ) : (
-                    <Pencil className="artist-icon-xs" />
-                  )}
-                </button>
-              }
-              onAddTrackToPlaylist={onAddTrackToPlaylist}
-              onNavigateArtist={onNavigateArtist}
-              reSearchingTrackIds={reSearchingTrackIds}
-              onReSearchTrack={onReSearchTrack}
-            />
-          )}
-        </div>
-      )}
     </div>
   );
 }

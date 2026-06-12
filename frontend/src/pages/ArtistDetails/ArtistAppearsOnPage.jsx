@@ -663,6 +663,7 @@ function ArtistAppearsOnPage() {
                   }}
                   artistName={artistDisplayName}
                   onAddTrackToPlaylist={handleReleaseTrackAdd}
+                  resolveMembershipTrack={buildReleaseTrackPayload}
                   playlists={sharedPlaylists}
                   playlistsLoading={playlistModalLoading}
                   playlistSavingKey={playlistMenuSavingKey}

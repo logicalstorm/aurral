@@ -437,6 +437,22 @@ export const buildSharedTrackIdentity = (track) =>
     String(track?.releaseYear || "").trim(),
   ].join("\u0001");
 
+export const buildCoreTrackIdentity = (track) => {
+  const artistName = String(track?.artistName || "").trim().toLocaleLowerCase();
+  const trackName = String(track?.trackName || "").trim().toLocaleLowerCase();
+  if (!artistName || !trackName) return "";
+  return `${artistName}\u0001${trackName}`;
+};
+
+export const tracksShareMembership = (left, right) => {
+  if (buildSharedTrackIdentity(left) === buildSharedTrackIdentity(right)) {
+    return true;
+  }
+  const leftCore = buildCoreTrackIdentity(left);
+  const rightCore = buildCoreTrackIdentity(right);
+  return Boolean(leftCore) && leftCore === rightCore;
+};
+
 export const dedupeSharedTracks = (tracks) => {
   const seen = new Set();
   const uniqueTracks = [];

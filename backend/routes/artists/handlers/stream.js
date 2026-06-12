@@ -16,6 +16,10 @@ import {
 } from "../utils.js";
 import { getArtistImage } from "../../../services/imageService.js";
 import { buildImageProxyUrl } from "../../../services/imageProxyService.js";
+import {
+  attachCachedCoverUrls,
+  resolveReleaseGroupCoversBatch,
+} from "../../../services/releaseGroupCoverService.js";
 import { getArtistByMbid } from "../../../services/metadataProvider.js";
 
 export default function registerStream(router) {
@@ -305,13 +309,30 @@ export default function registerStream(router) {
             releaseGroupsPromise,
           ]).then(async ([metadataArtist, name, releaseGroups]) => {
             if (!isClientConnected()) return null;
+            const releaseGroupsWithCovers = attachCachedCoverUrls(
+              releaseGroups,
+              12,
+            );
             sendArtist({
               ...buildArtistBase(name, metadataArtist),
-              "release-groups": releaseGroups,
-              "release-group-count": releaseGroups.length,
-              "release-count": releaseGroups.length,
+              "release-groups": releaseGroupsWithCovers,
+              "release-group-count": releaseGroupsWithCovers.length,
+              "release-count": releaseGroupsWithCovers.length,
             });
-            return { metadataArtist, name, releaseGroups };
+            const prefetchItems = releaseGroupsWithCovers
+              .filter((releaseGroup) => releaseGroup?.id && !releaseGroup.coverUrl)
+              .slice(0, 6)
+              .map((releaseGroup) => ({
+                mbid: releaseGroup.id,
+                artistName: name || "",
+                albumTitle: releaseGroup.title || "",
+              }));
+            if (prefetchItems.length) {
+              resolveReleaseGroupCoversBatch(prefetchItems, {
+                concurrency: 6,
+              }).catch(() => {});
+            }
+            return { metadataArtist, name, releaseGroups: releaseGroupsWithCovers };
           });
           tasks.push(discographyTask);
 
@@ -324,11 +345,38 @@ export default function registerStream(router) {
                 { limit: appearsOnLimit },
               ).catch(() => []);
             if (!isClientConnected()) return appearsOnReleaseGroups;
+            const appearsOnWithCovers = attachCachedCoverUrls(
+              appearsOnReleaseGroups,
+              appearsOnLimit || 6,
+            );
             sendArtist({
               id: resolvedMbid,
-              "appears-on-release-groups": appearsOnReleaseGroups,
+              "appears-on-release-groups": appearsOnWithCovers,
             });
-            return appearsOnReleaseGroups;
+            const prefetchAppearsOnItems = [...appearsOnWithCovers]
+              .sort((a, b) =>
+                String(b["first-release-date"] || "").localeCompare(
+                  String(a["first-release-date"] || ""),
+                ),
+              )
+              .filter(
+                (releaseGroup) => releaseGroup?.id && !releaseGroup.coverUrl,
+              )
+              .slice(0, appearsOnLimit || 6)
+              .map((releaseGroup) => ({
+                mbid: releaseGroup.id,
+                artistName:
+                  releaseGroup["artist-credit"]?.[0]?.name ||
+                  releaseGroup["artist-credit"]?.[0]?.artist?.name ||
+                  "",
+                albumTitle: releaseGroup.title || "",
+              }));
+            if (prefetchAppearsOnItems.length) {
+              resolveReleaseGroupCoversBatch(prefetchAppearsOnItems, {
+                concurrency: 6,
+              }).catch(() => {});
+            }
+            return appearsOnWithCovers;
           });
           tasks.push(appearsOnTask);
 
