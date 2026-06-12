@@ -1,8 +1,8 @@
 import fs from "fs/promises";
 import path from "path";
-import { resolveAurralDataDir } from "../config/data-dir.js";
 import {
   getStoredDownloadFolderPath,
+  resolveDefaultPlaylistDownloadRoot,
   resolveEnvDownloadFolder,
 } from "./downloadFolderConfig.js";
 
@@ -11,7 +11,7 @@ const LEGACY_LIBRARY_DIR = "aurral-weekly-flow";
 const LEGACY_DOCKER_PLAYLIST_ROOT = "/app/downloads";
 
 function defaultPlaylistRoot() {
-  return path.resolve(resolveAurralDataDir(), "..", "downloads");
+  return resolveDefaultPlaylistDownloadRoot();
 }
 
 export function resolvePlaylistRoot(explicitRoot) {

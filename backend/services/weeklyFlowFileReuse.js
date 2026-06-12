@@ -33,11 +33,35 @@ function normalizeText(value) {
     .trim();
 }
 
+async function statFilesystemLocation(targetPath) {
+  const resolved = path.resolve(String(targetPath || ""));
+  if (!resolved) {
+    throw new Error("empty path");
+  }
+
+  let current = resolved;
+  while (true) {
+    try {
+      const stat = await fs.stat(current);
+      if (stat.isFile()) {
+        return fs.stat(path.dirname(current));
+      }
+      return stat;
+    } catch {
+      const parent = path.dirname(current);
+      if (parent === current) {
+        throw new Error(`Path not found: ${resolved}`);
+      }
+      current = parent;
+    }
+  }
+}
+
 export async function pathsShareDevice(leftPath, rightPath) {
   try {
     const [leftStat, rightStat] = await Promise.all([
-      fs.stat(path.dirname(path.resolve(leftPath))),
-      fs.stat(path.dirname(path.resolve(rightPath))),
+      statFilesystemLocation(leftPath),
+      statFilesystemLocation(rightPath),
     ]);
     return leftStat.dev === rightStat.dev;
   } catch {
