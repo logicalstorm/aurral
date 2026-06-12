@@ -8,7 +8,7 @@ import { useArtistDetailsStream } from "./hooks/useArtistDetailsStream";
 import { usePreviewPlayer } from "./hooks/usePreviewPlayer";
 import { useArtistDetailsLibrary } from "./hooks/useArtistDetailsLibrary";
 import { useArtistSearchFocus } from "./hooks/useArtistSearchFocus";
-import { allReleaseTypes } from "./constants";
+import { allReleaseTypes, ARTIST_DETAILS_APPEARS_ON_LIMIT } from "./constants";
 import { ArtistDetailsHero } from "./components/ArtistDetailsHero";
 import { ArtistDetailsActionBar } from "./components/ArtistDetailsActionBar";
 import { ArtistDetailsDownloadTargets } from "./components/ArtistDetailsDownloadTargets";
@@ -114,6 +114,7 @@ function ArtistDetailsPage() {
         ...visibleLibraryCoverIds,
       ],
       initialLibraryHint,
+      appearsOnLimit: ARTIST_DETAILS_APPEARS_ON_LIMIT,
     },
   );
   const canAddArtist = hasPermission("addArtist");
@@ -142,6 +143,7 @@ function ArtistDetailsPage() {
     setLoadingSimilar,
     loadingLibrary,
     loadingReleases,
+    loadingAppearsOn,
     existsInLibrary,
     setExistsInLibrary,
     appSettings,
@@ -668,7 +670,8 @@ function ArtistDetailsPage() {
         />
       )}
 
-      {artist["release-groups"] && artist["release-groups"].length > 0 && (
+      {(loadingReleases ||
+        (artist["release-groups"] && artist["release-groups"].length > 0)) && (
         <ArtistDetailsReleaseGroups
           artist={artist}
           loadingReleases={loadingReleases}
@@ -700,10 +703,12 @@ function ArtistDetailsPage() {
         />
       )}
 
-      {artist["appears-on-release-groups"] &&
-        artist["appears-on-release-groups"].length > 0 && (
+      {(loadingAppearsOn ||
+        (artist["appears-on-release-groups"] &&
+          artist["appears-on-release-groups"].length > 0)) && (
           <ArtistDetailsAppearsOn
             artist={artist}
+            loadingAppearsOn={loadingAppearsOn}
             albumCovers={albumCovers}
             artistCoverImage={artistCoverImage}
             expandedReleaseGroup={library.expandedReleaseGroup}

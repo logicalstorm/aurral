@@ -1416,14 +1416,15 @@ function buildArtistReleaseGroupQuery(mbid, primaryTypes, secondaryTypes) {
 export async function musicbrainzGetArtistReleaseGroups(
   mbid,
   selectedReleaseTypes = null,
+  { includeTrackCounts = true } = {},
 ) {
-  const cacheKey = `full:${mbid}:${JSON.stringify(selectedReleaseTypes || [])}`;
+  const cacheKey = `full:${mbid}:${JSON.stringify(selectedReleaseTypes || [])}:${includeTrackCounts ? "hydrated" : "basic"}`;
   const cached = musicbrainzReleaseGroupsCache.get(cacheKey);
   if (cached) return cached;
   try {
     const items = await listMetadataArtistAlbums(mbid, {
       releaseTypes: selectedReleaseTypes || [],
-      includeTrackCounts: true,
+      includeTrackCounts,
     });
     const mapped = items.map((item) => ({
       id: item.id,

@@ -150,9 +150,6 @@ export default function registerStream(router) {
         ...buildArtistBase(initialName),
         tags: [],
         genres: [],
-        "release-groups": [],
-        "release-group-count": 0,
-        "release-count": 0,
       });
 
       try {
@@ -296,43 +293,65 @@ export default function registerStream(router) {
         }
 
         if (!pendingPromise) {
+          const includeTrackCounts = !appearsOnLimit;
           const releaseGroupsPromise = musicbrainzGetArtistReleaseGroups(
             resolvedMbid,
             selectedReleaseTypes,
+            { includeTrackCounts },
           ).catch(() => []);
-          const metadataCorePromise = Promise.all([
+          const discographyTask = Promise.all([
             metadataArtistPromise,
             namePromise,
             releaseGroupsPromise,
           ]).then(async ([metadataArtist, name, releaseGroups]) => {
+            if (!isClientConnected()) return null;
+            sendArtist({
+              ...buildArtistBase(name, metadataArtist),
+              "release-groups": releaseGroups,
+              "release-group-count": releaseGroups.length,
+              "release-count": releaseGroups.length,
+            });
+            return { metadataArtist, name, releaseGroups };
+          });
+          tasks.push(discographyTask);
+
+          const appearsOnTask = discographyTask.then(async (ctx) => {
+            if (!ctx) return [];
             const appearsOnReleaseGroups =
               await musicbrainzGetArtistAppearsOnReleaseGroups(
                 resolvedMbid,
-                releaseGroups,
+                ctx.releaseGroups,
                 { limit: appearsOnLimit },
               ).catch(() => []);
+            if (!isClientConnected()) return appearsOnReleaseGroups;
+            sendArtist({
+              id: resolvedMbid,
+              "appears-on-release-groups": appearsOnReleaseGroups,
+            });
+            return appearsOnReleaseGroups;
+          });
+          tasks.push(appearsOnTask);
+
+          const metadataCorePromise = Promise.all([
+            discographyTask,
+            appearsOnTask,
+          ]).then(async ([ctx, appearsOnReleaseGroups]) => {
+            if (!ctx) return null;
             const tagPayload = await getArtistTagPayload(
               resolvedMbid,
-              name,
-              metadataArtist,
+              ctx.name,
+              ctx.metadataArtist,
             );
             return {
-              ...buildArtistBase(name, metadataArtist),
+              ...buildArtistBase(ctx.name, ctx.metadataArtist),
               tags: tagPayload.tags,
               genres: tagPayload.genres,
-              "release-groups": releaseGroups,
+              "release-groups": ctx.releaseGroups,
               "appears-on-release-groups": appearsOnReleaseGroups,
-              "release-group-count": releaseGroups.length,
-              "release-count": releaseGroups.length,
+              "release-group-count": ctx.releaseGroups.length,
+              "release-count": ctx.releaseGroups.length,
             };
           });
-
-          tasks.push(
-            metadataCorePromise.then((artistPayload) => {
-              if (!isClientConnected()) return;
-              sendArtist(artistPayload);
-            }),
-          );
 
           fullArtistPromise = metadataCorePromise
             .then((artistPayload) => artistPayload)
