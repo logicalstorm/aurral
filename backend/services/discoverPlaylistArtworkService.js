@@ -1,6 +1,5 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { isFixedDiscoverPlaylistPreset } from "../config/discoverPlaylistPresets.js";
 import {
   getArtworkContentTypeForExtension,
@@ -8,12 +7,9 @@ import {
   getPlaylistArtworkStyle,
   writeGeneratedPlaylistArtwork,
 } from "./playlistArtworkGenerator.js";
+import { resolveAurralDataDir } from "../config/data-dir.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_DATA_DIR = path.join(__dirname, "..", "data");
-const DATA_DIR = process.env.AURRAL_DATA_DIR
-  ? path.resolve(process.env.AURRAL_DATA_DIR)
-  : DEFAULT_DATA_DIR;
+const DATA_DIR = resolveAurralDataDir();
 const DISCOVER_ARTWORK_DIR = path.join(DATA_DIR, "discover-artwork");
 
 const sanitizePresetId = (presetId) =>

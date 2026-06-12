@@ -10,6 +10,7 @@ import { createServer } from "http";
 import { fileURLToPath } from "url";
 
 import { createAuthMiddleware } from "./middleware/auth.js";
+import { createMigrationGateMiddleware } from "./middleware/migrationGate.js";
 import { websocketService } from "./services/websocketService.js";
 import { getAllDownloadStatuses } from "./routes/library/handlers/downloads.js";
 import { getWeeklyFlowStatusSnapshot } from "./services/weeklyFlowStatusSnapshot.js";
@@ -23,28 +24,14 @@ import libraryRouter from "./routes/library.js";
 import discoveryRouter from "./routes/discovery.js";
 import requestsRouter from "./routes/requests.js";
 import healthRouter from "./routes/health.js";
+import filesystemRouter from "./routes/filesystem.js";
 import weeklyFlowRouter from "./routes/weeklyFlow.js";
-import { startSlskdOrchestratorWorker } from "./services/slskdOrchestratorWorker.js";
-import { startDiscoveryRefreshWorker } from "./services/discoveryRefreshWorker.js";
-import { startDiscoveryPlaylistBuildWorker } from "./services/discoveryPlaylistBuildWorker.js";
-import { startWeeklyFlowOperationWorker } from "./services/weeklyFlowOperationWorker.js";
-import { startWeeklyFlowPlaylistRetryWorker } from "./services/weeklyFlowPlaylistRetryWorker.js";
-import { startWeeklyFlowPlaylistReserveBuildWorker } from "./services/weeklyFlowPlaylistReserveBuildWorker.js";
-import { startDiscoveryUserRefreshWorker } from "./services/discoveryUserRefreshWorker.js";
-import { startSystemTaskWorker } from "./services/systemTaskWorker.js";
-import { startLibraryScanWorker } from "./services/libraryScanWorker.js";
-import { startImagePrefetchWorker } from "./services/imagePrefetchWorker.js";
-import { startNotificationOutboxWorker } from "./services/notificationOutboxWorker.js";
-import {
-  bootstrapHonkerSchedules,
-  enqueueHonkerStartupTasks,
-  startHonkerScheduler,
-} from "./services/honkerDb.js";
+import { bootstrapHonkerSchedules } from "./services/honkerDb.js";
+import { initializeAppRuntime } from "./services/appRuntime.js";
 import {
   registerHonkerShutdownHandler,
   shutdownHonkerInfrastructure,
 } from "./services/honkerWorkerRuntime.js";
-import { ensurePlaylistFilesystemLayout } from "./services/playlistFilesystemMigration.js";
 import authRouter from "./routes/auth.js";
 import imageProxyRouter from "./routes/imageProxy.js";
 
@@ -132,6 +119,7 @@ app.use(
 );
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
+app.use(createMigrationGateMiddleware());
 app.use(createAuthMiddleware());
 
 const authLimiter = rateLimit({
@@ -156,6 +144,7 @@ app.use("/api/library", libraryRouter);
 app.use("/api/discover", discoveryRouter);
 app.use("/api/requests", requestsRouter);
 app.use("/api/health", healthRouter);
+app.use("/api/filesystem", filesystemRouter);
 app.use("/api/playlists", weeklyFlowRouter);
 app.use("/api/weekly-flow", weeklyFlowRouter);
 app.use("/api/auth", authRouter);
@@ -293,24 +282,10 @@ process.once("SIGINT", () => {
   void gracefulShutdown("SIGINT");
 });
 
-ensurePlaylistFilesystemLayout();
-
 httpServer.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server running on port ${PORT}`);
   bootstrapHonkerSchedules();
-  enqueueHonkerStartupTasks();
-  startHonkerScheduler();
-  startSystemTaskWorker();
-  startLibraryScanWorker();
-  startImagePrefetchWorker();
-  startNotificationOutboxWorker();
-  startSlskdOrchestratorWorker();
-  startDiscoveryRefreshWorker();
-  startDiscoveryPlaylistBuildWorker();
-  startDiscoveryUserRefreshWorker();
-  startWeeklyFlowOperationWorker();
-  startWeeklyFlowPlaylistRetryWorker();
-  startWeeklyFlowPlaylistReserveBuildWorker();
+  initializeAppRuntime({ logger: console });
 });
 
 httpServer.on("error", (error) => {

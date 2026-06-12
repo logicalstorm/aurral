@@ -4,8 +4,5 @@ services:
     restart: unless-stopped
     ports:
       - "3001:3001"
-    environment:
-      - DOWNLOAD_FOLDER=${DOWNLOAD_FOLDER:-/data/downloads/aurral}
     volumes:
-      - ${DATA_ROOT:-./data}:/data
-      - ${STORAGE:-./data/app}:/app/backend/data
+      - ./config:/config

@@ -397,13 +397,29 @@ function SearchResultsPage() {
   }, [isUnifiedSearch, unifiedResults, libraryLookup]);
 
   useEffect(() => {
-    if (isAlbumSearch || isUnifiedSearch || results.length === 0) return undefined;
+    if (isAlbumSearch) return undefined;
 
     let cancelled = false;
-    const pendingArtists = results.filter((artist) => {
+    const artists = isUnifiedSearch
+      ? [
+          ...(unifiedResults?.library?.artists || []),
+          ...(unifiedResults?.catalog?.artists || []),
+        ]
+      : results;
+
+    if (isUnifiedSearch && !unifiedResults) {
+      return undefined;
+    }
+    if (!artists.length) {
+      return undefined;
+    }
+
+    const seenArtistIds = new Set();
+    const pendingArtists = artists.filter((artist) => {
       const artistId = getArtistRecordId(artist);
-      if (!artistId) return false;
-      if (artistImages[artistId]) return false;
+      if (!artistId || seenArtistIds.has(artistId)) return false;
+      seenArtistIds.add(artistId);
+      if (artistImages[artistId] !== undefined) return false;
       if (artist.image || artist.imageUrl) return false;
       return true;
     });
@@ -424,21 +440,26 @@ function SearchResultsPage() {
           index,
           index + ARTIST_IMAGE_HYDRATION_CONCURRENCY,
         );
-        const results = await Promise.allSettled(
+        const coverResults = await Promise.allSettled(
           batch.map(async (artist) => {
             const artistId = getArtistRecordId(artist);
-            if (!artistId) return null;
+            if (!artistId) return [null, null];
             const data = await getArtistCover(artistId, artist.name);
             const imageUrl = data?.images?.[0]?.image || null;
-            return imageUrl ? [artistId, imageUrl] : null;
+            return [artistId, imageUrl];
           }),
         );
         if (cancelled) return;
-        const nextBatch = Object.fromEntries(
-          results.filter(
-            (entry) => Array.isArray(entry.value) && entry.value[0] && entry.value[1],
-          ).map((entry) => entry.value),
-        );
+        const nextBatch = {};
+        batch.forEach((artist, batchIndex) => {
+          const artistId = getArtistRecordId(artist);
+          const entry = coverResults[batchIndex];
+          if (entry?.status === "fulfilled" && artistId) {
+            nextBatch[artistId] = entry.value?.[1] ?? null;
+          } else if (artistId) {
+            nextBatch[artistId] = null;
+          }
+        });
         if (Object.keys(nextBatch).length > 0) {
           setArtistImages((prev) => ({ ...prev, ...nextBatch }));
         }
@@ -450,7 +471,7 @@ function SearchResultsPage() {
     return () => {
       cancelled = true;
     };
-  }, [artistImages, isAlbumSearch, results]);
+  }, [artistImages, isAlbumSearch, isUnifiedSearch, results, unifiedResults]);
 
   useEffect(() => {
     if (isAlbumSearch || isUnifiedSearch) return undefined;
@@ -524,16 +545,15 @@ function SearchResultsPage() {
           }),
         );
         if (cancelled) return;
-        const nextBatch = Object.fromEntries(
-          coverResults
-            .filter(
-              (entry) =>
-                Array.isArray(entry.value) &&
-                entry.value[0] &&
-                entry.value[1] !== undefined,
-            )
-            .map((entry) => entry.value),
-        );
+        const nextBatch = {};
+        batch.forEach((id, batchIndex) => {
+          const entry = coverResults[batchIndex];
+          if (entry?.status === "fulfilled") {
+            nextBatch[id] = entry.value?.[1] ?? null;
+          } else {
+            nextBatch[id] = null;
+          }
+        });
         if (Object.keys(nextBatch).length > 0) {
           setAlbumCovers((prev) => ({
             ...prev,
@@ -662,16 +682,15 @@ function SearchResultsPage() {
           }),
         );
         if (cancelled) return;
-        const nextBatch = Object.fromEntries(
-          coverResults
-            .filter(
-              (entry) =>
-                Array.isArray(entry.value) &&
-                entry.value[0] &&
-                entry.value[1] !== undefined,
-            )
-            .map((entry) => entry.value),
-        );
+        const nextBatch = {};
+        batch.forEach((id, batchIndex) => {
+          const entry = coverResults[batchIndex];
+          if (entry?.status === "fulfilled") {
+            nextBatch[id] = entry.value?.[1] ?? null;
+          } else {
+            nextBatch[id] = null;
+          }
+        });
         if (Object.keys(nextBatch).length > 0) {
           setAlbumCovers((prev) => ({
             ...prev,

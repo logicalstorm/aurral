@@ -25,6 +25,7 @@ import {
   SettingsInput,
   SettingsSelect,
 } from "./Settings/components/SettingsField";
+import DownloadFolderField from "../components/DownloadFolderField";
 
 function OnboardingStep({ centered = false, children }) {
   return (
@@ -87,6 +88,7 @@ const ONBOARDING_COMPACT_LOGO_SIZE = 28;
 const STEPS = [
   "welcome",
   "admin",
+  "downloads",
   "lidarr-connect",
   "lidarr-library",
   "lidarr-davo",
@@ -104,6 +106,7 @@ function Onboarding() {
   const [authUser, setAuthUser] = useState("admin");
   const [authPassword, setAuthPassword] = useState("");
   const [authPasswordConfirm, setAuthPasswordConfirm] = useState("");
+  const [downloadFolderPath, setDownloadFolderPath] = useState("");
   const [lidarrUrl, setLidarrUrl] = useState("");
   const [lidarrApiKey, setLidarrApiKey] = useState("");
   const [lidarrQualityProfileId, setLidarrQualityProfileId] = useState("");
@@ -161,6 +164,7 @@ function Onboarding() {
     authPassword &&
     !passwordTooShort &&
     authPassword === authPasswordConfirm;
+  const downloadsComplete = !!downloadFolderPath.trim();
   const lidarrPreferencesComplete =
     !!lidarrQualityProfileId && !!lidarrMetadataProfileId;
 
@@ -457,6 +461,7 @@ function Onboarding() {
               ),
             }
           : undefined,
+        downloadFolderPath: downloadFolderPath.trim(),
       });
       await refreshAuth();
       showSuccess("Setup complete. Sign in with your admin account.");
@@ -470,6 +475,7 @@ function Onboarding() {
   const isPrimaryDisabled = (() => {
     if (currentStep === "brainzmash") return submitting;
     if (currentStep === "admin") return !adminComplete;
+    if (currentStep === "downloads") return !downloadsComplete;
     if (currentStep === "lidarr-connect") {
       return (
         !lidarrTestSuccess &&
@@ -634,6 +640,24 @@ function Onboarding() {
                   <OnboardingHint>
                     Password must be at least 8 characters long.
                   </OnboardingHint>
+                </div>
+              </OnboardingStep>
+            )}
+
+            {currentStep === "downloads" && (
+              <OnboardingStep>
+                <OnboardingStepHeader
+                  title="Downloads folder"
+                  copy="Choose where Aurral writes generated flows and imported playlists. Mount this path into Navidrome and slskd as well."
+                />
+                <div className="onboarding-fields">
+                  <OnboardingFieldGroup label="Path">
+                    <DownloadFolderField
+                      value={downloadFolderPath}
+                      onChange={setDownloadFolderPath}
+                      helperText="Folder where Aurral writes generated flows and imported playlists. Use the same mounted path in Navidrome and slskd."
+                    />
+                  </OnboardingFieldGroup>
                 </div>
               </OnboardingStep>
             )}
