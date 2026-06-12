@@ -575,8 +575,8 @@ export const generateFlowArtwork = async (playlistId) => {
   return response.data;
 };
 
-export const getLibraryArtists = async () => {
-  const response = await api.get("/library/artists");
+export const getLibraryArtists = async (options = {}) => {
+  const response = await api.get("/library/artists", options);
   return response.data;
 };
 
