@@ -134,8 +134,16 @@ export function useArtistDetailsStream(
   const [loadingAppearsOn, setLoadingAppearsOn] = useState(!!mbid);
   const [appSettings, setAppSettings] = useState(null);
   const [albumCovers, setAlbumCovers] = useState({});
+  const [fulfilledCoverIds, setFulfilledCoverIds] = useState(() => new Set());
+  const albumCoversRef = useRef(albumCovers);
+  const fulfilledCoverIdsRef = useRef(fulfilledCoverIds);
   const requestedAlbumCoversRef = useRef(new Set());
+  const pendingCoverIdsRef = useRef(new Set());
+  const coverBatchTimerRef = useRef(null);
+  const coverBatchInFlightRef = useRef(false);
   const artistMbidRef = useRef(mbid);
+  const artistRef = useRef(artist);
+  const libraryAlbumsRef = useRef(libraryAlbums);
   const artistNameRef = useRef(artistNameFromNav || "");
   const selectedReleaseTypesRef = useRef(selectedReleaseTypes);
   const visibleCoverIdsRef = useRef(visibleCoverIds);
@@ -148,11 +156,29 @@ export function useArtistDetailsStream(
   if (artistMbidRef.current !== mbid) {
     artistMbidRef.current = mbid;
     requestedAlbumCoversRef.current = new Set();
+    pendingCoverIdsRef.current = new Set();
+    coverBatchInFlightRef.current = false;
   }
+
+  useEffect(() => {
+    albumCoversRef.current = albumCovers;
+  }, [albumCovers]);
+
+  useEffect(() => {
+    fulfilledCoverIdsRef.current = fulfilledCoverIds;
+  }, [fulfilledCoverIds]);
 
   useEffect(() => {
     if (artistNameFromNav) artistNameRef.current = artistNameFromNav;
   }, [artistNameFromNav]);
+
+  useEffect(() => {
+    artistRef.current = artist;
+  }, [artist]);
+
+  useEffect(() => {
+    libraryAlbumsRef.current = libraryAlbums;
+  }, [libraryAlbums]);
 
   useEffect(() => {
     if (artist?.name) artistNameRef.current = artist.name;
@@ -183,6 +209,11 @@ export function useArtistDetailsStream(
     setArtist(buildInitialArtist(mbid, artistNameFromNav));
     setCoverImages([]);
     setAlbumCovers({});
+    const emptyFulfilled = new Set();
+    setFulfilledCoverIds(emptyFulfilled);
+    fulfilledCoverIdsRef.current = emptyFulfilled;
+    pendingCoverIdsRef.current = new Set();
+    coverBatchInFlightRef.current = false;
     setSimilarArtists([]);
     setLoading(!mbid);
     setError(null);
@@ -623,36 +654,84 @@ export function useArtistDetailsStream(
   ]);
 
   useEffect(() => {
-    if (!mbid) return;
+    if (!artist?.id) return;
+    const releaseGroups = [
+      ...(artist["release-groups"] || []),
+      ...(artist["appears-on-release-groups"] || []),
+    ];
+    const seeded = {};
+    for (const releaseGroup of releaseGroups) {
+      const coverUrl = releaseGroup?.coverUrl || releaseGroup?._coverUrl;
+      if (releaseGroup?.id && coverUrl) {
+        seeded[releaseGroup.id] = coverUrl;
+      }
+    }
+    if (!Object.keys(seeded).length) return;
+    setAlbumCovers((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [id, url] of Object.entries(seeded)) {
+        if (!next[id]) {
+          next[id] = url;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    setFulfilledCoverIds((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const id of Object.keys(seeded)) {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [
+    artist?.id,
+    artist?.["release-groups"],
+    artist?.["appears-on-release-groups"],
+  ]);
 
-    const nextVisibleCoverIds = Array.isArray(visibleCoverIdsRef.current)
-      ? visibleCoverIdsRef.current.filter(Boolean)
-      : [];
-    if (!nextVisibleCoverIds.length) return;
+  useEffect(() => {
+    if (!mbid) return undefined;
 
-    const missing = nextVisibleCoverIds.filter(
-      (id) => !albumCovers[id] && !requestedAlbumCoversRef.current.has(id),
-    );
-    if (!missing.length) return;
+    let scheduleCancelled = false;
 
-    let cancelled = false;
-    missing.forEach((id) => requestedAlbumCoversRef.current.add(id));
+    const flushCoverBatch = async () => {
+      if (coverBatchInFlightRef.current) return;
 
-    const pageArtistName = artistNameRef.current || artist?.name || "";
-    const items = missing.map((rgId) =>
-      buildReleaseGroupCoverRequest(
-        rgId,
-        artist,
-        libraryAlbums,
-        pageArtistName,
-      ),
-    );
+      const toFetch = [...pendingCoverIdsRef.current].filter(
+        (id) =>
+          !albumCoversRef.current[id] &&
+          !fulfilledCoverIdsRef.current.has(id) &&
+          !requestedAlbumCoversRef.current.has(id),
+      );
+      pendingCoverIdsRef.current.clear();
+      if (!toFetch.length) return;
 
-    getReleaseGroupCoversBatch(items)
-      .then((covers) => {
-        if (cancelled) return;
+      const batchMbid = artistMbidRef.current;
+      coverBatchInFlightRef.current = true;
+      toFetch.forEach((id) => requestedAlbumCoversRef.current.add(id));
+
+      const pageArtistName =
+        artistNameRef.current || artistRef.current?.name || "";
+      const items = toFetch.map((rgId) =>
+        buildReleaseGroupCoverRequest(
+          rgId,
+          artistRef.current,
+          libraryAlbumsRef.current,
+          pageArtistName,
+        ),
+      );
+
+      try {
+        const covers = await getReleaseGroupCoversBatch(items);
+        if (artistMbidRef.current !== batchMbid) return;
         const nextBatch = {};
-        for (const rgId of missing) {
+        for (const rgId of toFetch) {
           const entry = covers?.[rgId];
           if (entry?.image) {
             nextBatch[rgId] = entry.image;
@@ -661,19 +740,67 @@ export function useArtistDetailsStream(
         if (Object.keys(nextBatch).length > 0) {
           setAlbumCovers((prev) => ({ ...prev, ...nextBatch }));
         }
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) {
-          missing.forEach((id) => requestedAlbumCoversRef.current.delete(id));
+        setFulfilledCoverIds((prev) => {
+          const next = new Set(prev);
+          toFetch.forEach((id) => next.add(id));
+          return next;
+        });
+      } catch {
+        if (artistMbidRef.current === batchMbid) {
+          setFulfilledCoverIds((prev) => {
+            const next = new Set(prev);
+            toFetch.forEach((id) => next.delete(id));
+            return next;
+          });
         }
-      });
+      } finally {
+        toFetch.forEach((id) => requestedAlbumCoversRef.current.delete(id));
+        coverBatchInFlightRef.current = false;
+        if (artistMbidRef.current === batchMbid && pendingCoverIdsRef.current.size > 0) {
+          flushCoverBatch();
+        }
+      }
+    };
+
+    const scheduleCoverBatch = () => {
+      clearTimeout(coverBatchTimerRef.current);
+      coverBatchTimerRef.current = setTimeout(() => {
+        if (scheduleCancelled) return;
+        if (normalizedAppearsOnLimit) {
+          if (loadingReleases || loadingAppearsOn) return;
+        } else if (loadingReleases) {
+          return;
+        }
+
+        const visible = [
+          ...new Set((visibleCoverIdsRef.current || []).filter(Boolean)),
+        ];
+        if (!visible.length) return;
+
+        const missing = visible.filter(
+          (id) =>
+            !albumCoversRef.current[id] &&
+            !fulfilledCoverIdsRef.current.has(id) &&
+            !requestedAlbumCoversRef.current.has(id),
+        );
+        missing.forEach((id) => pendingCoverIdsRef.current.add(id));
+        flushCoverBatch();
+      }, 150);
+    };
+
+    scheduleCoverBatch();
 
     return () => {
-      cancelled = true;
-      missing.forEach((id) => requestedAlbumCoversRef.current.delete(id));
+      scheduleCancelled = true;
+      clearTimeout(coverBatchTimerRef.current);
     };
-  }, [mbid, visibleCoverIdsKey, artist, libraryAlbums, albumCovers]);
+  }, [
+    mbid,
+    visibleCoverIdsKey,
+    loadingReleases,
+    loadingAppearsOn,
+    normalizedAppearsOnLimit,
+  ]);
 
   return {
     artist,

@@ -16,6 +16,7 @@ import {
 } from "../utils.js";
 import { getArtistImage } from "../../../services/imageService.js";
 import { buildImageProxyUrl } from "../../../services/imageProxyService.js";
+import { attachCachedCoverUrls } from "../../../services/releaseGroupCoverService.js";
 import { getArtistByMbid } from "../../../services/metadataProvider.js";
 
 export default function registerStream(router) {
@@ -305,13 +306,17 @@ export default function registerStream(router) {
             releaseGroupsPromise,
           ]).then(async ([metadataArtist, name, releaseGroups]) => {
             if (!isClientConnected()) return null;
+            const releaseGroupsWithCovers = attachCachedCoverUrls(
+              releaseGroups,
+              12,
+            );
             sendArtist({
               ...buildArtistBase(name, metadataArtist),
-              "release-groups": releaseGroups,
-              "release-group-count": releaseGroups.length,
-              "release-count": releaseGroups.length,
+              "release-groups": releaseGroupsWithCovers,
+              "release-group-count": releaseGroupsWithCovers.length,
+              "release-count": releaseGroupsWithCovers.length,
             });
-            return { metadataArtist, name, releaseGroups };
+            return { metadataArtist, name, releaseGroups: releaseGroupsWithCovers };
           });
           tasks.push(discographyTask);
 
@@ -324,11 +329,15 @@ export default function registerStream(router) {
                 { limit: appearsOnLimit },
               ).catch(() => []);
             if (!isClientConnected()) return appearsOnReleaseGroups;
+            const appearsOnWithCovers = attachCachedCoverUrls(
+              appearsOnReleaseGroups,
+              appearsOnLimit || 6,
+            );
             sendArtist({
               id: resolvedMbid,
-              "appears-on-release-groups": appearsOnReleaseGroups,
+              "appears-on-release-groups": appearsOnWithCovers,
             });
-            return appearsOnReleaseGroups;
+            return appearsOnWithCovers;
           });
           tasks.push(appearsOnTask);
 
