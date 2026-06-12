@@ -64,6 +64,21 @@ const normalizePositiveLimit = (value) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 };
 
+const sortAppearsOnReleaseGroups = (items = []) =>
+  [...items].sort((a, b) =>
+    String(b["first-release-date"] || "").localeCompare(
+      String(a["first-release-date"] || ""),
+    ),
+  );
+
+const getAppearsOnCoverIds = (releaseGroups, limit) => {
+  if (!limit || !releaseGroups?.length) return [];
+  return sortAppearsOnReleaseGroups(releaseGroups)
+    .slice(0, limit)
+    .map((releaseGroup) => releaseGroup?.id)
+    .filter(Boolean);
+};
+
 const isReleaseTypeSelectionCovered = (
   selectedReleaseTypes = [],
   fetchedReleaseTypes = [],
@@ -140,7 +155,6 @@ export function useArtistDetailsStream(
   const requestedAlbumCoversRef = useRef(new Set());
   const pendingCoverIdsRef = useRef(new Set());
   const coverBatchTimerRef = useRef(null);
-  const coverBatchInFlightRef = useRef(false);
   const artistMbidRef = useRef(mbid);
   const artistRef = useRef(artist);
   const libraryAlbumsRef = useRef(libraryAlbums);
@@ -157,7 +171,6 @@ export function useArtistDetailsStream(
     artistMbidRef.current = mbid;
     requestedAlbumCoversRef.current = new Set();
     pendingCoverIdsRef.current = new Set();
-    coverBatchInFlightRef.current = false;
   }
 
   useEffect(() => {
@@ -213,7 +226,6 @@ export function useArtistDetailsStream(
     setFulfilledCoverIds(emptyFulfilled);
     fulfilledCoverIdsRef.current = emptyFulfilled;
     pendingCoverIdsRef.current = new Set();
-    coverBatchInFlightRef.current = false;
     setSimilarArtists([]);
     setLoading(!mbid);
     setError(null);
@@ -701,8 +713,6 @@ export function useArtistDetailsStream(
     let scheduleCancelled = false;
 
     const flushCoverBatch = async () => {
-      if (coverBatchInFlightRef.current) return;
-
       const toFetch = [...pendingCoverIdsRef.current].filter(
         (id) =>
           !albumCoversRef.current[id] &&
@@ -710,10 +720,14 @@ export function useArtistDetailsStream(
           !requestedAlbumCoversRef.current.has(id),
       );
       pendingCoverIdsRef.current.clear();
-      if (!toFetch.length) return;
+      if (!toFetch.length) {
+        if (pendingCoverIdsRef.current.size > 0) {
+          flushCoverBatch();
+        }
+        return;
+      }
 
       const batchMbid = artistMbidRef.current;
-      coverBatchInFlightRef.current = true;
       toFetch.forEach((id) => requestedAlbumCoversRef.current.add(id));
 
       const pageArtistName =
@@ -755,29 +769,56 @@ export function useArtistDetailsStream(
         }
       } finally {
         toFetch.forEach((id) => requestedAlbumCoversRef.current.delete(id));
-        coverBatchInFlightRef.current = false;
         if (artistMbidRef.current === batchMbid && pendingCoverIdsRef.current.size > 0) {
           flushCoverBatch();
         }
       }
     };
 
+    const getEligibleVisibleCoverIds = () => {
+      if (loadingReleases) {
+        return [];
+      }
+      const fromVisible = [
+        ...new Set((visibleCoverIdsRef.current || []).filter(Boolean)),
+      ];
+      const appearsOnIds = !loadingAppearsOn
+        ? getAppearsOnCoverIds(
+            artistRef.current?.["appears-on-release-groups"],
+            normalizedAppearsOnLimit,
+          )
+        : [];
+      const visible = [...new Set([...fromVisible, ...appearsOnIds])];
+      if (!visible.length) {
+        return [];
+      }
+      if (!normalizedAppearsOnLimit || !loadingAppearsOn) {
+        return visible;
+      }
+      const discographyIds = new Set(
+        (artistRef.current?.["release-groups"] || [])
+          .map((releaseGroup) => releaseGroup?.id)
+          .filter(Boolean),
+      );
+      const libraryIds = new Set(
+        (libraryAlbumsRef.current || [])
+          .map((album) => album.mbid || album.foreignAlbumId)
+          .filter(Boolean),
+      );
+      return visible.filter(
+        (id) => discographyIds.has(id) || libraryIds.has(id),
+      );
+    };
+
     const scheduleCoverBatch = () => {
       clearTimeout(coverBatchTimerRef.current);
       coverBatchTimerRef.current = setTimeout(() => {
         if (scheduleCancelled) return;
-        if (normalizedAppearsOnLimit) {
-          if (loadingReleases || loadingAppearsOn) return;
-        } else if (loadingReleases) {
-          return;
-        }
 
-        const visible = [
-          ...new Set((visibleCoverIdsRef.current || []).filter(Boolean)),
-        ];
-        if (!visible.length) return;
+        const eligible = getEligibleVisibleCoverIds();
+        if (!eligible.length) return;
 
-        const missing = visible.filter(
+        const missing = eligible.filter(
           (id) =>
             !albumCoversRef.current[id] &&
             !fulfilledCoverIdsRef.current.has(id) &&
@@ -785,7 +826,7 @@ export function useArtistDetailsStream(
         );
         missing.forEach((id) => pendingCoverIdsRef.current.add(id));
         flushCoverBatch();
-      }, 150);
+      }, 0);
     };
 
     scheduleCoverBatch();
@@ -800,6 +841,7 @@ export function useArtistDetailsStream(
     loadingReleases,
     loadingAppearsOn,
     normalizedAppearsOnLimit,
+    artist?.["appears-on-release-groups"],
   ]);
 
   return {
