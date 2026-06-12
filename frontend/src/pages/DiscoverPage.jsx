@@ -1,5 +1,4 @@
-import { useState, useEffect, useMemo, memo, useCallback, useRef } from "react";
-import PropTypes from "prop-types";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Loader,
@@ -7,7 +6,6 @@ import {
   Sparkles,
   Clock,
   LayoutTemplate,
-  CheckCircle2,
 } from "lucide-react";
 import {
   addArtistToLibrary,
@@ -29,8 +27,6 @@ import { useAuth } from "../contexts/AuthContext";
 import { getArtistFeedbackFlags } from "../utils/discoveryFeedback";
 import { useArtistTasteFeedback } from "../hooks/useArtistTasteFeedback";
 import { getArtistRecordId } from "../utils/artistTaste";
-import ArtistImage from "../components/ArtistImage";
-import { ArtistContextMenu } from "../components/ArtistContextMenu";
 import NearbyLocationControl from "../components/NearbyLocationControl";
 import ShowCard from "../components/ShowCard";
 import LastfmBanner from "../components/LastfmBanner";
@@ -38,6 +34,8 @@ import { useToast } from "../contexts/ToastContext";
 import { DiscoverRail } from "../components/DiscoverRail";
 import { DiscoverLayoutModal } from "./DiscoverLayoutModal";
 import { DiscoverPlaylistSection } from "./DiscoverPlaylistSection";
+import { AlbumCard, ArtistCard, ViewAllCard } from "./DiscoverCards";
+import { useDiscoverLayoutState } from "./useDiscoverLayoutState";
 
 const TAG_COLORS = [
   "#845336",
@@ -368,324 +366,6 @@ const writeStoredDiscoverLayout = (layout, userId) => {
   } catch {}
 };
 
-const parseCalendarDate = (value) => {
-  if (!value) return null;
-  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (match) {
-    const [, year, month, day] = match;
-    return new Date(Number(year), Number(month) - 1, Number(day));
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
-};
-
-const formatReleaseStatus = (releaseDate) => {
-  const date = parseCalendarDate(releaseDate);
-  if (!date) return null;
-  const today = new Date();
-  const todayStart = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate(),
-  );
-  const formattedDate = date.toLocaleDateString();
-  if (date.getTime() === todayStart.getTime()) {
-    return "Released today";
-  }
-  if (date < todayStart) {
-    return `Released ${formattedDate}`;
-  }
-  return `Releasing ${formattedDate}`;
-};
-
-const getRecommendationReason = (artist) => {
-  if (artist?.metaText !== undefined) return artist.metaText;
-  const seedNames = Array.isArray(artist?.supportingSeeds)
-    ? artist.supportingSeeds
-        .map((seed) => seed?.artistName)
-        .filter(Boolean)
-        .slice(0, 2)
-    : [];
-  const matchedTags = Array.isArray(artist?.matchedTags)
-    ? artist.matchedTags.filter(Boolean).slice(0, 2)
-    : [];
-  if (matchedTags.length >= 2) {
-    return `${matchedTags[0]} + ${matchedTags[1]}`;
-  }
-  if (matchedTags.length === 1) {
-    return matchedTags[0];
-  }
-  if (seedNames.length >= 2) {
-    return `Because you listen to ${seedNames[0]} and ${seedNames[1]}`;
-  }
-  if (seedNames.length === 1) {
-    return `Because you listen to ${seedNames[0]}`;
-  }
-  if (artist?.sourceArtist) {
-    return `Similar to ${artist.sourceArtist}`;
-  }
-  return artist?.discoveryTier === "deeper"
-    ? "A deeper discovery pick"
-    : "Picked for your profile";
-};
-
-const ArtistCard = memo(
-  ({
-    artist,
-    isInLibrary,
-    canAddArtist,
-    onNavigate,
-    onAddToLibrary,
-    onFeedback,
-    feedbackUsed = {},
-  }) => {
-    const navigateTo = artist.navigateTo || artist.id;
-    const hasValidMbid =
-      navigateTo && navigateTo !== "null" && navigateTo !== "undefined";
-    const artistMetaText = getRecommendationReason(artist);
-    const handleClick = useCallback(() => {
-      if (hasValidMbid) {
-        onNavigate(`/artist/${navigateTo}`, {
-          state: {
-            artistName: artist.name,
-            inLibrary: isInLibrary,
-          },
-        });
-      }
-    }, [navigateTo, hasValidMbid, artist.name, isInLibrary, onNavigate]);
-
-    return (
-      <div className="artist-discover-card">
-        <div
-          onClick={handleClick}
-          className={`artist-discover-card__cover${hasValidMbid ? "" : " is-disabled"}`}
-        >
-          <ArtistImage
-            src={artist.image || artist.imageUrl}
-            mbid={artist.id}
-            artistName={artist.name}
-            alt={artist.name}
-            className="artist-discover-card__image"
-            showLoading={false}
-          />
-        </div>
-
-        <div className="artist-discover-card__content">
-          <div className="artist-discover-card__text">
-            <div className="artist-card-title-row--discover">
-              <h3
-                onClick={handleClick}
-                className={`artist-card-title--discover${hasValidMbid ? "" : " is-disabled"}`}
-                title={artist.name}
-              >
-                {artist.name}
-              </h3>
-              {isInLibrary && (
-                <CheckCircle2 className="artist-library-check--discover" />
-              )}
-            </div>
-            {artistMetaText ? (
-              <p
-                className="artist-card-meta--discover"
-                title={artistMetaText || undefined}
-              >
-                {artistMetaText}
-              </p>
-            ) : null}
-            {artist.subtitle && (
-              <p className="artist-card-meta--discover" title={artist.subtitle}>
-                {artist.subtitle}
-              </p>
-            )}
-          </div>
-          <ArtistContextMenu
-            artist={artist}
-            isInLibrary={isInLibrary}
-            canAddArtist={canAddArtist}
-            onAddToLibrary={onAddToLibrary}
-            onFeedback={onFeedback}
-            feedbackUsed={feedbackUsed}
-          />
-        </div>
-      </div>
-    );
-  },
-  (prevProps, nextProps) => {
-    return (
-      prevProps.artist.id === nextProps.artist.id &&
-      prevProps.artist.image === nextProps.artist.image &&
-      prevProps.artist.imageUrl === nextProps.artist.imageUrl &&
-      prevProps.artist.name === nextProps.artist.name &&
-      prevProps.status === nextProps.status &&
-      prevProps.isInLibrary === nextProps.isInLibrary &&
-      prevProps.canAddArtist === nextProps.canAddArtist &&
-      prevProps.feedbackUsed?.more_like_this ===
-        nextProps.feedbackUsed?.more_like_this &&
-      prevProps.feedbackUsed?.less_like_this ===
-        nextProps.feedbackUsed?.less_like_this &&
-      prevProps.onNavigate === nextProps.onNavigate &&
-      prevProps.onAddToLibrary === nextProps.onAddToLibrary &&
-      prevProps.onFeedback === nextProps.onFeedback
-    );
-  },
-);
-
-ArtistCard.displayName = "ArtistCard";
-ArtistCard.propTypes = {
-  artist: PropTypes.shape({
-    id: PropTypes.string,
-    name: PropTypes.string.isRequired,
-    image: PropTypes.string,
-    imageUrl: PropTypes.string,
-    type: PropTypes.string,
-    sourceArtist: PropTypes.string,
-    metaText: PropTypes.string,
-    subtitle: PropTypes.string,
-    navigateTo: PropTypes.string,
-    matchedTags: PropTypes.arrayOf(PropTypes.string),
-    reasonCodes: PropTypes.arrayOf(PropTypes.string),
-    discoveryTier: PropTypes.string,
-    supportingSeeds: PropTypes.arrayOf(
-      PropTypes.shape({
-        artistName: PropTypes.string,
-      }),
-    ),
-  }).isRequired,
-  status: PropTypes.string,
-  isInLibrary: PropTypes.bool,
-  canAddArtist: PropTypes.bool,
-  onNavigate: PropTypes.func.isRequired,
-  onAddToLibrary: PropTypes.func,
-  onFeedback: PropTypes.func,
-  feedbackUsed: PropTypes.shape({
-    more_like_this: PropTypes.bool,
-    less_like_this: PropTypes.bool,
-  }),
-};
-
-const AlbumCard = memo(
-  ({ album, releaseCovers, artistCovers, onNavigate }) => {
-    const coverId = album.mbid || album.foreignAlbumId;
-    const releaseCover = coverId ? releaseCovers[coverId] : null;
-    const artistId = album.artistMbid || album.foreignArtistId;
-    const artistCover = artistId ? artistCovers[artistId] : null;
-    const coverUrl = album.coverUrl || releaseCover || artistCover;
-    const navigateTo = album.artistMbid || album.foreignArtistId;
-    const hasValidMbid =
-      navigateTo && navigateTo !== "null" && navigateTo !== "undefined";
-    const albumArtistText = album.artistName || "Unknown Artist";
-    const albumReleaseText = formatReleaseStatus(album.releaseDate);
-    const handleClick = useCallback(() => {
-      if (hasValidMbid) {
-        onNavigate(`/artist/${navigateTo}`, {
-          state: { artistName: album.artistName },
-        });
-      }
-    }, [navigateTo, hasValidMbid, album.artistName, onNavigate]);
-
-    return (
-      <div className="artist-discover-card">
-        <div
-          onClick={handleClick}
-          className={`artist-discover-card__cover${hasValidMbid ? "" : " is-disabled"}`}
-        >
-          {coverUrl ? (
-            <img
-              src={coverUrl}
-              alt={album.albumName}
-              className="artist-discover-card__image"
-              loading="lazy"
-              decoding="async"
-            />
-          ) : (
-            <div className="artist-media-placeholder--discover">
-              <Music className="artist-icon-lg" />
-            </div>
-          )}
-        </div>
-
-        <div className="artist-discover-card__content">
-          <div className="artist-discover-card__text">
-            <div className="artist-card-title-row--discover">
-              <h3
-                onClick={handleClick}
-                className={`artist-card-title--discover${hasValidMbid ? "" : " is-disabled"}`}
-                title={album.albumName}
-              >
-                {album.albumName}
-              </h3>
-            </div>
-            <p className="artist-card-meta--discover" title={albumArtistText}>
-              {albumArtistText}
-            </p>
-            {albumReleaseText && (
-              <p
-                className="artist-card-meta--discover"
-                title={albumReleaseText}
-              >
-                {albumReleaseText}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  },
-  (prevProps, nextProps) => {
-    const prevId = prevProps.album.mbid || prevProps.album.foreignAlbumId;
-    const nextId = nextProps.album.mbid || nextProps.album.foreignAlbumId;
-    return (
-      prevId === nextId &&
-      prevProps.album.albumName === nextProps.album.albumName &&
-      prevProps.album.artistName === nextProps.album.artistName &&
-      prevProps.album.coverUrl === nextProps.album.coverUrl &&
-      prevProps.album.releaseDate === nextProps.album.releaseDate &&
-      prevProps.onNavigate === nextProps.onNavigate &&
-      prevProps.releaseCovers === nextProps.releaseCovers &&
-      prevProps.artistCovers === nextProps.artistCovers
-    );
-  },
-);
-
-AlbumCard.displayName = "AlbumCard";
-AlbumCard.propTypes = {
-  album: PropTypes.shape({
-    id: PropTypes.string,
-    mbid: PropTypes.string,
-    foreignAlbumId: PropTypes.string,
-    albumName: PropTypes.string.isRequired,
-    artistName: PropTypes.string,
-    artistMbid: PropTypes.string,
-    foreignArtistId: PropTypes.string,
-    releaseDate: PropTypes.string,
-    coverUrl: PropTypes.string,
-  }).isRequired,
-  releaseCovers: PropTypes.object.isRequired,
-  artistCovers: PropTypes.object.isRequired,
-  onNavigate: PropTypes.func.isRequired,
-};
-
-const ViewAllCard = memo(({ onClick, label = "View All" }) => {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="artist-view-all-card--discover"
-    >
-      <div className="artist-media-cell">
-        <span className="artist-card-title">{label}</span>
-      </div>
-    </button>
-  );
-});
-
-ViewAllCard.displayName = "ViewAllCard";
-ViewAllCard.propTypes = {
-  onClick: PropTypes.func.isRequired,
-  label: PropTypes.string,
-};
-
 function DiscoverPage() {
   useDocumentTitle("Discover");
   const { user: authUser, hasPermission } = useAuth();
@@ -699,14 +379,6 @@ function DiscoverPage() {
   );
   const [releaseCovers, setReleaseCovers] = useState({});
   const [artistCovers, setArtistCovers] = useState({});
-  const [discoverSections, setDiscoverSections] = useState(
-    DEFAULT_DISCOVER_SECTIONS.map((item) => ({ ...item })),
-  );
-  const [draftSections, setDraftSections] = useState(
-    DEFAULT_DISCOVER_SECTIONS.map((item) => ({ ...item })),
-  );
-  const [showDiscoverModal, setShowDiscoverModal] = useState(false);
-  const [isSavingDiscoverLayout, setIsSavingDiscoverLayout] = useState(false);
   const [error, setError] = useState(null);
   const [libraryLookup, setLibraryLookup] = useState({});
   const { lookup: artistFeedbackLookup, submitFeedback } =
@@ -742,6 +414,25 @@ function DiscoverPage() {
   const { showSuccess, showError } = useToast();
   const canAddArtist = hasPermission("addArtist");
   const canAdoptPlaylist = hasPermission("accessFlow");
+  const {
+    discoverSections,
+    draftSections,
+    setDraftSections,
+    showDiscoverModal,
+    setShowDiscoverModal,
+    isSavingDiscoverLayout,
+    saveDiscoverLayout,
+  } = useDiscoverLayoutState({
+    defaultSections: DEFAULT_DISCOVER_SECTIONS,
+    userId: authUser?.id,
+    normalizeLayout: normalizeDiscoverLayout,
+    readStoredLayout: readStoredDiscoverLayout,
+    writeStoredLayout: writeStoredDiscoverLayout,
+    loadServerLayout: getMyDiscoverLayout,
+    saveServerLayout: updateMyDiscoverLayout,
+    showSuccess,
+    showError,
+  });
 
   const applyDiscoveryData = useCallback(
     (nextValue) => {
@@ -982,7 +673,7 @@ function DiscoverPage() {
   }, [data, data?.isUpdating, data?.stale]);
 
   useEffect(() => {
-    getDiscovery(true)
+    getDiscovery()
       .then((discoveryData) => {
         const normalizedData = normalizeDiscoveryData(discoveryData);
         setData(normalizedData);
@@ -1117,39 +808,6 @@ function DiscoverPage() {
     appliedNearbyZip,
     ticketmasterConfigured,
   ]);
-
-  useEffect(() => {
-    const stored = readStoredDiscoverLayout(authUser?.id);
-    if (stored) {
-      setDiscoverSections(stored);
-    }
-  }, [authUser?.id]);
-
-  useEffect(() => {
-    if (!authUser?.id) return;
-    let cancelled = false;
-    const loadDiscoverLayout = async () => {
-      try {
-        const response = await getMyDiscoverLayout();
-        if (cancelled) return;
-        const serverLayout = normalizeDiscoverLayout(response?.layout);
-        if (serverLayout) {
-          setDiscoverSections(serverLayout);
-          writeStoredDiscoverLayout(serverLayout, authUser.id);
-          return;
-        }
-      } catch {
-        const localLayout = readStoredDiscoverLayout(authUser.id);
-        if (!cancelled && localLayout) {
-          setDiscoverSections(localLayout);
-        }
-      }
-    };
-    loadDiscoverLayout();
-    return () => {
-      cancelled = true;
-    };
-  }, [authUser?.id]);
 
   useEffect(() => {
     const ids = recentReleases
@@ -1307,7 +965,6 @@ function DiscoverPage() {
     recommendations = [],
     globalTop = [],
     topGenres = [],
-    topTags = [],
     basedOn = [],
     discoverPlaylists = [],
     provider = "lastfm",
@@ -1403,7 +1060,6 @@ function DiscoverPage() {
       recommendedShows: ticketmasterConfigured,
       globalTop: globalTop.length > 0,
       genreSections: genreSections.length > 0,
-      topTags: topTags.length > 0,
     }),
     [
       recentlyAdded,
@@ -1412,7 +1068,6 @@ function DiscoverPage() {
       recentReleases,
       globalTop,
       genreSections,
-      topTags,
       recommendations,
       capabilities,
       isListenBrainzFallback,
@@ -1485,10 +1140,7 @@ function DiscoverPage() {
           section.enabled,
       }));
 
-    const insertionIndex =
-      lastGenreIndex >= 0
-        ? lastGenreIndex + 1
-        : nextSections.findIndex((item) => item.id === "topTags");
+    const insertionIndex = lastGenreIndex >= 0 ? lastGenreIndex + 1 : -1;
     nextSections.splice(
       insertionIndex === -1 ? nextSections.length : insertionIndex,
       0,
@@ -1580,27 +1232,7 @@ function DiscoverPage() {
   };
 
   const handleDiscoverSave = () => {
-    const nextLayout = draftSections.map((item) => ({ ...item }));
-    setDiscoverSections(nextLayout);
-    writeStoredDiscoverLayout(nextLayout, authUser?.id);
-    setIsSavingDiscoverLayout(true);
-    updateMyDiscoverLayout(nextLayout)
-      .then((response) => {
-        const savedLayout =
-          normalizeDiscoverLayout(response?.layout) || nextLayout;
-        setDiscoverSections(savedLayout);
-        writeStoredDiscoverLayout(savedLayout, authUser?.id);
-        showSuccess("Discover layout saved");
-        setShowDiscoverModal(false);
-      })
-      .catch((err) => {
-        showError(
-          err.response?.data?.message || "Failed to save discover layout",
-        );
-      })
-      .finally(() => {
-        setIsSavingDiscoverLayout(false);
-      });
+    saveDiscoverLayout(draftSections).catch(() => {});
   };
 
   const handleDiscoverReset = () => {
@@ -2105,11 +1737,6 @@ function DiscoverPage() {
       );
     }
 
-    if (id === "topTags") {
-      // Disabled since all tags are now shown in the hero section
-      return null;
-    }
-
     return null;
   };
 
@@ -2382,7 +2009,7 @@ function DiscoverPage() {
         </div>
       </section>
 
-      {discoverSections
+      {displayDiscoverSections
         .filter((section) => section.enabled)
         .map((section) => renderSection(section.id))}
 
