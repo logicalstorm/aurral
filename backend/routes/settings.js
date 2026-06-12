@@ -11,6 +11,7 @@ import { noCache } from "../middleware/cache.js";
 import { requireAuth, requireAdmin } from "../middleware/requirePermission.js";
 import { validateExternalUrl } from "../middleware/urlValidator.js";
 import { websocketService } from "../services/websocketService.js";
+import { resolvePlaylistRoot } from "../services/playlistPaths.js";
 
 const router = express.Router();
 router.use(requireAuth);
@@ -66,7 +67,11 @@ router.get("/", noCache, (req, res) => {
         enabled: settings?.security?.localNetworkBypass?.enabled === true,
       },
     };
-    res.json(settings);
+    res.json({
+      ...settings,
+      downloadFolderPath:
+        settings.downloadFolderPath || resolvePlaylistRoot(),
+    });
   } catch (error) {
     console.error("Settings GET error:", error);
     res

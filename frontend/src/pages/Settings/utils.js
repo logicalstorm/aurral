@@ -41,6 +41,7 @@ export const normalizeSettings = (savedSettings) => {
       : "photo";
   return {
     ...savedSettings,
+    downloadFolderPath: String(savedSettings.downloadFolderPath || "").trim(),
     playlistArtwork: {
       ...playlistArtwork,
       style: playlistArtworkStyle,
