@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import PropTypes from "prop-types";
 import { Disc3, Music } from "lucide-react";
+import SearchLibraryCheck from "./SearchLibraryCheck";
 import {
   getSearchResultKey,
   navigateFromSearchResult,
@@ -108,9 +109,7 @@ function SearchTrackResults({
                     </span>
                   )}
                 </span>
-                {track.inLibrary && (
-                  <span className="search-track-results__badge">In library</span>
-                )}
+                {track.inLibrary && <SearchLibraryCheck />}
               </button>
               {onAddTrackToPlaylist ? (
                 <div

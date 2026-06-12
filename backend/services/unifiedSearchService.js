@@ -10,6 +10,9 @@ import {
   searchRemoteCatalog,
 } from "./aurralSearchClient.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
+import { libraryManager } from "./libraryManager.js";
+import { compareSearchResults, getLocalMatchThreshold } from "./searchRanking.js";
+import { enrichCatalogArtists } from "./searchInference.js";
 
 const unifiedSearchCache = new NodeCache({
   stdTTL: 60,
@@ -20,6 +23,24 @@ const unifiedSearchCache = new NodeCache({
 const SUGGEST_LIMIT = 5;
 const FULL_LIMIT = 20;
 const EXACT_MATCH_BOOST = 15;
+const LOCAL_MATCH_THRESHOLD = 16;
+
+function isLocalMatch(score, query) {
+  return Number(score) > getLocalMatchThreshold(query);
+}
+
+function dedupeCatalogArtists(artists) {
+  const bestByName = new Map();
+  for (const artist of artists) {
+    const key = getNormalizedText(artist.name);
+    if (!key) continue;
+    const existing = bestByName.get(key);
+    if (!existing || compareSearchResults(existing, artist) > 0) {
+      bestByName.set(key, artist);
+    }
+  }
+  return Array.from(bestByName.values()).sort(compareSearchResults);
+}
 
 function parsePositiveInt(value, fallback) {
   const parsed = Number.parseInt(value, 10);
@@ -74,7 +95,13 @@ async function searchCatalog(query, { mode, limit }) {
   if (isRemoteSearchConfigured()) {
     const remoteCatalog = await searchRemoteCatalog(query, { mode, limit });
     if (remoteCatalog) {
-      return remoteCatalog;
+      const hasResults =
+        remoteCatalog.artists.length > 0 ||
+        remoteCatalog.albums.length > 0 ||
+        remoteCatalog.tracks.length > 0;
+      if (hasResults) {
+        return remoteCatalog;
+      }
     }
   }
   return searchBrainzmashArtistCatalog(query, limit);
@@ -82,7 +109,7 @@ async function searchCatalog(query, { mode, limit }) {
 
 export function searchLocalFromData(
   query,
-  { playlists = [] } = {},
+  { playlists = [], artists = [], tracks = [] } = {},
   limit = SUGGEST_LIMIT,
 ) {
   const normalizedQuery = getNormalizedText(query);
@@ -105,7 +132,7 @@ export function searchLocalFromData(
       const bestTrackScore = trackScores.length > 0 ? Math.max(...trackScores) : 0;
       const nameScore = scoreTextMatch(query, name);
       const score = Math.max(nameScore, bestTrackScore);
-      if (score <= 15) return null;
+      if (!isLocalMatch(score, query)) return null;
       return {
         type: "playlist",
         source: "library",
@@ -118,34 +145,115 @@ export function searchLocalFromData(
       };
     })
     .filter(Boolean)
-    .sort((left, right) => right.score - left.score)
+    .sort(compareSearchResults)
+    .slice(0, limit);
+
+  const artistResults = artists
+    .map((artist) => {
+      const name = String(artist?.artistName || artist?.name || "").trim();
+      const mbid = artist?.mbid || artist?.foreignArtistId || null;
+      if (!name || !mbid) return null;
+      const score = scoreTextMatch(query, name);
+      if (!isLocalMatch(score, query)) return null;
+      return {
+        type: "artist",
+        source: "library",
+        id: mbid,
+        key: `library-artist:${mbid}`,
+        name,
+        sortName: name,
+        inLibrary: true,
+        hasMbid: true,
+        score,
+      };
+    })
+    .filter(Boolean)
+    .sort(compareSearchResults)
+    .slice(0, limit);
+
+  const trackResults = tracks
+    .map((track) => {
+      const title = String(track?.title || "").trim();
+      const artistName = String(track?.artist || track?.artistName || "").trim();
+      const albumTitle = String(track?.album || track?.albumTitle || "").trim();
+      if (!title) return null;
+      const score = scoreTextMatch(
+        query,
+        `${artistName} ${title} ${albumTitle}`,
+      );
+      if (!isLocalMatch(score, query)) return null;
+      return {
+        type: "track",
+        source: "library",
+        id: track.id,
+        key: track.id,
+        title,
+        artistName: artistName || "Unknown Artist",
+        albumTitle: albumTitle || null,
+        streamPath: track.streamPath || null,
+        inLibrary: true,
+        score,
+      };
+    })
+    .filter(Boolean)
+    .sort(compareSearchResults)
     .slice(0, limit);
 
   return {
-    artists: [],
-    tracks: [],
+    artists: artistResults,
+    tracks: trackResults,
     playlists: playlistResults,
   };
 }
 
 function pickTopResult({ library, catalog }) {
+  const catalogArtists = dedupeCatalogArtists(catalog?.artists || []);
   const candidates = [
     ...(library?.playlists || []),
+    ...(library?.tracks || []),
+    ...(library?.artists || []),
+    ...catalogArtists,
     ...(catalog?.tracks || []),
-    ...(catalog?.artists || []),
     ...(catalog?.albums || []),
   ]
     .filter(Boolean)
-    .sort((left, right) => (right.score || 0) - (left.score || 0));
+    .sort(compareSearchResults);
   return candidates[0] || null;
 }
 
-function searchLocalLibrary(query, limit, user, mode) {
-  const playlists =
-    user && mode === "full"
-      ? flowPlaylistConfig.getSharedPlaylistsForUser(user)
-      : [];
-  return searchLocalFromData(query, { playlists }, limit);
+async function searchLocalLibrary(query, limit, user, mode = "suggest") {
+  const playlists = user
+    ? flowPlaylistConfig.getSharedPlaylistsForUser(user)
+    : [];
+  const isSuggest = normalizeMode(mode) === "suggest";
+  const timeoutMs = isSuggest ? 2500 : 8000;
+
+  const withTimeout = (promise, label) =>
+    Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs);
+      }),
+    ]);
+
+  try {
+    const artistsPromise = withTimeout(
+      libraryManager.getAllArtists(),
+      "Library artists",
+    );
+    const tracksPromise = isSuggest
+      ? Promise.resolve([])
+      : withTimeout(libraryManager.getPlaybackQueue(), "Library tracks");
+    const [artists, tracks] = await Promise.all([artistsPromise, tracksPromise]);
+    return searchLocalFromData(
+      query,
+      { playlists, artists, tracks },
+      limit,
+    );
+  } catch (error) {
+    console.warn("[UnifiedSearch] Local library search failed:", error.message);
+    return searchLocalFromData(query, { playlists }, limit);
+  }
 }
 
 export async function searchUnified(
@@ -169,15 +277,31 @@ export async function searchUnified(
     };
   }
 
-  const cacheKey = `${normalizedMode}:${perBucketLimit}:${trimmed.toLowerCase()}`;
+  const cacheKey = `${normalizedMode}:${perBucketLimit}:${trimmed.toLowerCase()}:${user?.id || "anon"}`;
   const cached = unifiedSearchCache.get(cacheKey);
   if (cached) return cached;
 
-  const catalog = await searchCatalog(trimmed, {
-    mode: normalizedMode,
-    limit: perBucketLimit,
-  });
-  const library = searchLocalLibrary(trimmed, perBucketLimit, user, normalizedMode);
+  const [rawCatalog, library] = await Promise.all([
+    searchCatalog(trimmed, {
+      mode: normalizedMode,
+      limit: perBucketLimit,
+    }),
+    searchLocalLibrary(trimmed, perBucketLimit, user, normalizedMode),
+  ]);
+  const catalog = {
+    artists: dedupeCatalogArtists(
+      enrichCatalogArtists(
+        {
+          artists: rawCatalog.artists || [],
+          albums: rawCatalog.albums || [],
+          tracks: rawCatalog.tracks || [],
+        },
+        trimmed,
+      ),
+    ),
+    albums: rawCatalog.albums || [],
+    tracks: rawCatalog.tracks || [],
+  };
 
   const response = {
     query: trimmed,
@@ -191,11 +315,7 @@ export async function searchUnified(
       tracks: library.tracks,
       playlists: library.playlists,
     },
-    catalog: {
-      artists: catalog.artists,
-      albums: catalog.albums,
-      tracks: catalog.tracks,
-    },
+    catalog,
     localSearchConfigured: catalogSearchConfigured,
     filters: ["all", "artists", "albums", "tracks", "library", "playlists"],
   };
