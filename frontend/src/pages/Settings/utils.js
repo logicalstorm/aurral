@@ -2,7 +2,7 @@ import { allReleaseTypes } from "./constants";
 
 export const LEGACY_METADATA_BASE_URL = "https://brainzmash.kell.ly";
 export const DEFAULT_METADATA_BASE_URL = "https://lidarrapi.brainzmash.cc";
-export const DEFAULT_SEARCH_URL = "https://aurral-search.kell.ly";
+export const DEFAULT_SEARCH_URL = "https://search.aurral.org";
 
 export const normalizeMetadataBaseUrl = (baseUrl) => {
   const trimmed = String(baseUrl || "").trim().replace(/\/+$/, "");
