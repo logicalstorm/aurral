@@ -19,7 +19,11 @@ import { startWeeklyFlowPlaylistReserveBuildWorker } from "./weeklyFlowPlaylistR
 let backgroundWorkersStarted = false;
 
 export function startBackgroundWorkers({ logger = console } = {}) {
-  if (backgroundWorkersStarted || isV2MigrationPending()) {
+  if (
+    backgroundWorkersStarted ||
+    isV2MigrationPending() ||
+    process.env.AURRAL_TEST_SERVER === "1"
+  ) {
     return false;
   }
   backgroundWorkersStarted = true;
