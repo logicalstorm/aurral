@@ -162,6 +162,7 @@ export const defaultData = {
   customFormats: [],
   settings: {
     rootFolderPath: null,
+    downloadFolderPath: null,
     quality: "standard",
     releaseTypes: [
       "Album",

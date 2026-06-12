@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Loader2, Search } from "lucide-react";
+import { Clock, Loader2, Search } from "lucide-react";
 import {
   getBootstrapStatus,
   getTagSuggestions,
@@ -12,6 +12,11 @@ import {
   getSearchResultLabel,
   navigateFromSearchResult,
 } from "../utils/searchNavigation";
+import {
+  addRecentSearch,
+  clearRecentSearches,
+  readRecentSearches,
+} from "../utils/recentSearches";
 
 const AUTOCOMPLETE_DEBOUNCE_MS = 250;
 const SUGGEST_LIMIT = 5;
@@ -32,6 +37,8 @@ function GlobalSearch() {
   const [suggestionMode, setSuggestionMode] = useState(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [suggestionIndex, setSuggestionIndex] = useState(-1);
+  const [inputFocused, setInputFocused] = useState(false);
+  const [recentSearches, setRecentSearches] = useState(() => readRecentSearches());
   const searchContainerRef = useRef(null);
   const inputRef = useRef(null);
   const debounceRef = useRef(null);
@@ -42,6 +49,41 @@ function GlobalSearch() {
     if (suggestionMode === "tag") return suggestionRows;
     return suggestionRows.filter((row) => row.kind === "item");
   }, [suggestionRows, suggestionMode]);
+
+  const showRecentSearches = useMemo(
+    () =>
+      inputFocused &&
+      searchQuery.trim().length < 2 &&
+      recentSearches.length > 0 &&
+      !loadingSuggestions &&
+      suggestionRows.length === 0,
+    [
+      inputFocused,
+      loadingSuggestions,
+      recentSearches.length,
+      searchQuery,
+      suggestionRows.length,
+    ],
+  );
+
+  const recentSelectableRows = useMemo(
+    () =>
+      showRecentSearches
+        ? recentSearches.map((query, index) => ({
+            kind: "recent",
+            key: `recent:${query}:${index}`,
+            query,
+          }))
+        : [],
+    [recentSearches, showRecentSearches],
+  );
+
+  const keyboardRows = showRecentSearches ? recentSelectableRows : selectableRows;
+
+  const rememberSearch = useCallback((rawQuery) => {
+    const next = addRecentSearch(rawQuery);
+    setRecentSearches(next);
+  }, []);
 
   const closeAutocomplete = useCallback(() => {
     setSuggestionRows([]);
@@ -199,6 +241,7 @@ function GlobalSearch() {
     (rawQuery) => {
       const trimmed = String(rawQuery || "").trim();
       if (!trimmed) return;
+      rememberSearch(trimmed);
       if (trimmed.startsWith("#")) {
         navigate(`/search?q=${encodeURIComponent(trimmed.slice(1))}&type=tag`);
       } else {
@@ -206,8 +249,9 @@ function GlobalSearch() {
       }
       setSearchQuery("");
       closeAutocomplete();
+      setInputFocused(false);
     },
-    [navigate, closeAutocomplete],
+    [navigate, closeAutocomplete, rememberSearch],
   );
 
   const handleSubmit = (event) => {
@@ -219,43 +263,58 @@ function GlobalSearch() {
     (selection) => {
       if (!selection) return;
 
+      if (selection.kind === "recent") {
+        navigateToSearch(selection.query);
+        return;
+      }
+
       if (selection.kind === "tag") {
+        rememberSearch(`#${selection.tagName}`);
         navigate(
           `/search?q=${encodeURIComponent(selection.tagName)}&type=tag`,
         );
         setSearchQuery("");
         closeAutocomplete();
+        setInputFocused(false);
         return;
       }
 
       if (selection.kind === "item") {
-        navigateFromSearchResult(navigate, selection.item, {
-          query: searchQuery.trim(),
-        });
+        const query = searchQuery.trim();
+        if (query) rememberSearch(query);
+        navigateFromSearchResult(navigate, selection.item, { query });
         setSearchQuery("");
         closeAutocomplete();
+        setInputFocused(false);
       }
     },
-    [navigate, searchQuery, closeAutocomplete],
+    [navigate, navigateToSearch, rememberSearch, searchQuery, closeAutocomplete],
   );
+
+  const handleClearRecentSearches = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setRecentSearches(clearRecentSearches());
+    setSuggestionIndex(-1);
+  }, []);
 
   const handleKeyDown = (event) => {
     if (event.key === "Escape") {
       closeAutocomplete();
       return;
     }
-    if (selectableRows.length === 0) return;
+    if (keyboardRows.length === 0) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setSuggestionIndex((current) =>
-        current < selectableRows.length - 1 ? current + 1 : current,
+        current < keyboardRows.length - 1 ? current + 1 : current,
       );
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setSuggestionIndex((current) => (current > 0 ? current - 1 : -1));
     } else if (event.key === "Enter" && suggestionIndex >= 0) {
       event.preventDefault();
-      handleSuggestionSelect(selectableRows[suggestionIndex]);
+      handleSuggestionSelect(keyboardRows[suggestionIndex]);
     }
   };
 
@@ -275,6 +334,13 @@ function GlobalSearch() {
             type="text"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
+            onFocus={() => {
+              setInputFocused(true);
+              setSuggestionIndex(-1);
+            }}
+            onBlur={() => {
+              window.setTimeout(() => setInputFocused(false), 120);
+            }}
             onKeyDown={handleKeyDown}
             placeholder=""
             className="global-search__input"
@@ -310,6 +376,36 @@ function GlobalSearch() {
             </div>
           </div>
         )}
+
+      {showRecentSearches && (
+        <div className="global-search__suggestions global-search__suggestions--grouped global-search__suggestions--recent">
+          <div className="global-search__recent-header">
+            <span className="global-search__recent-label">Recent searches</span>
+            <button
+              type="button"
+              className="global-search__recent-clear"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={handleClearRecentSearches}
+            >
+              Clear
+            </button>
+          </div>
+          {recentSelectableRows.map((row, index) => (
+            <button
+              key={row.key}
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => handleSuggestionSelect(row)}
+              className={`global-search__suggestion global-search__suggestion--recent${
+                index === suggestionIndex ? " is-highlighted" : ""
+              }`}
+            >
+              <Clock className="global-search__recent-icon" aria-hidden="true" />
+              <span className="global-search__recent-query">{row.query}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {!loadingSuggestions && suggestionRows.length > 0 && (
         <div className="global-search__suggestions global-search__suggestions--grouped">

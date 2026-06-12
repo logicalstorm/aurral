@@ -202,6 +202,25 @@ export const getBootstrapStatus = async () => {
   return response.data;
 };
 
+export const confirmV2Migration = async () => {
+  const response = await api.post("/health/migrate-v2");
+  return response.data;
+};
+
+export const browseFilesystem = async (pathValue) => {
+  const response = await api.get("/filesystem/browse", {
+    params: pathValue ? { path: pathValue } : undefined,
+  });
+  return response.data;
+};
+
+export const ensureFilesystemPath = async (pathValue) => {
+  const response = await api.post("/filesystem/ensure", {
+    path: pathValue,
+  });
+  return response.data;
+};
+
 export const loginApi = async (username, password) => {
   const response = await api.post("/auth/login", { username, password });
   return response.data;

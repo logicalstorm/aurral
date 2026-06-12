@@ -131,12 +131,12 @@ Create one shared tree on the host, for example `/srv/media`:
 
 ### Paths each service should use
 
-| Service   | Container mount        | Path inside the container              | Purpose                                      |
-| --------- | ---------------------- | -------------------------------------- | -------------------------------------------- |
-| Lidarr    | `/srv/media:/data`     | Root folder `/data/music`              | Permanent library                            |
-| slskd     | `/srv/media:/data`     | Download dir `/data/downloads/slskd/complete` | Soulseek downloads for flows/playlists |
-| Aurral    | `/srv/media:/data`     | `DOWNLOAD_FOLDER=/data/downloads/aurral` | Generated flows and imported playlists   |
-| Navidrome | `/srv/media:/data`     | Scan `/data/music` and `/data/downloads/aurral` | Stream library + Aurral output       |
+| Service   | Container mount    | Path inside the container                       | Purpose                                |
+| --------- | ------------------ | ----------------------------------------------- | -------------------------------------- |
+| Lidarr    | `/srv/media:/data` | Root folder `/data/music`                       | Permanent library                      |
+| slskd     | `/srv/media:/data` | Download dir `/data/downloads/slskd/complete`   | Soulseek downloads for flows/playlists |
+| Aurral    | `/srv/media:/data` | `DOWNLOAD_FOLDER=/data/downloads/aurral`        | Generated flows and imported playlists |
+| Navidrome | `/srv/media:/data` | Scan `/data/music` and `/data/downloads/aurral` | Stream library + Aurral output         |
 
 Aurral app state (database, settings, users) stays separate at `/app/backend/data` via the `STORAGE` mount. That folder does not need to be shared with the other apps.
 
@@ -179,12 +179,12 @@ After the containers are up:
 
 ### What the shared mount enables
 
-| Feature                         | Why the shared path matters                                              |
-| ------------------------------- | ------------------------------------------------------------------------ |
-| Lidarr library reuse / playback | Aurral must read files at the same paths Lidarr stores in its database.   |
+| Feature                         | Why the shared path matters                                                                         |
+| ------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Lidarr library reuse / playback | Aurral must read files at the same paths Lidarr stores in its database.                             |
 | slskd → Aurral downloads        | Aurral picks up completed files from slskd's download path, then moves them into `DOWNLOAD_FOLDER`. |
-| Navidrome flow playback         | Navidrome must scan the same `aurral-playlists` tree Aurral writes.      |
-| Efficient reuse                 | Hardlinks and reuse work best when library and downloads share a filesystem. |
+| Navidrome flow playback         | Navidrome must scan the same `aurral-playlists` tree Aurral writes.                                 |
+| Efficient reuse                 | Hardlinks and reuse work best when library and downloads share a filesystem.                        |
 
 ### Common mistake: mounting only `/data/music`
 
@@ -323,8 +323,8 @@ Aurral can avoid redownloading tracks it already has or tracks Lidarr already ha
 
 Worker setting:
 
-| Mode                 | Meaning                                                       |
-| -------------------- | ------------------------------------------------------------- |
+| Mode                 | Meaning                                                        |
+| -------------------- | -------------------------------------------------------------- |
 | Download             | Always download a fresh copy into the Aurral playlist library. |
 | Reuse existing files | Reuse a matching completed Aurral or Lidarr file when found.   |
 
@@ -363,15 +363,15 @@ npm run auth:reset-admin-password -- --generate
 
 Most setup happens in the web UI. These are the deployment variables regular users are most likely to need:
 
-| Variable                                  | Why you might set it                                                     |
-| ----------------------------------------- | ------------------------------------------------------------------------ |
-| `DATA_ROOT` / host `MEDIA_ROOT`           | Host folder mounted as `/data` in Aurral, Lidarr, slskd, and Navidrome.  |
-| `DOWNLOAD_FOLDER`                         | Path inside `/data` where Aurral writes flows and playlists.             |
-| `STORAGE`                                 | Host folder for Aurral database and settings (`/app/backend/data`).      |
-| `PUID` / `PGID`                           | Run the container as the same user/group that owns your mounted folders. |
-| `TRUST_PROXY`                             | Set when Aurral is behind a reverse proxy and needs correct client IPs.  |
-| `AUTH_PROXY_*`                            | Use only if your reverse proxy handles login for Aurral.                 |
-| `AURRAL_VERBOSE_LOGS`                     | Turn on fuller server logs while troubleshooting.                        |
+| Variable                        | Why you might set it                                                     |
+| ------------------------------- | ------------------------------------------------------------------------ |
+| `DATA_ROOT` / host `MEDIA_ROOT` | Host folder mounted as `/data` in Aurral, Lidarr, slskd, and Navidrome.  |
+| `DOWNLOAD_FOLDER`               | Path inside `/data` where Aurral writes flows and playlists.             |
+| `STORAGE`                       | Host folder for Aurral database and settings (`/app/backend/data`).      |
+| `PUID` / `PGID`                 | Run the container as the same user/group that owns your mounted folders. |
+| `TRUST_PROXY`                   | Set when Aurral is behind a reverse proxy and needs correct client IPs.  |
+| `AUTH_PROXY_*`                  | Use only if your reverse proxy handles login for Aurral.                 |
+| `AURRAL_VERBOSE_LOGS`           | Turn on fuller server logs while troubleshooting.                        |
 
 Example:
 

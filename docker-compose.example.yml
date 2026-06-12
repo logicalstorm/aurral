@@ -7,10 +7,9 @@ services:
     environment:
       - PUID=${PUID:-1000}
       - PGID=${PGID:-1000}
-      - DOWNLOAD_FOLDER=/data/downloads/aurral
     volumes:
       - ${MEDIA_ROOT:-/srv/media}:/data
-      - ${STORAGE:-./data/app}:/app/backend/data
+      - ${CONFIG:-./config/aurral}:/config
 
   lidarr:
     image: lscr.io/linuxserver/lidarr:latest

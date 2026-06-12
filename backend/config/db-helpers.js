@@ -8,6 +8,10 @@ import {
   normalizeListenHistoryProvider,
   normalizeListenHistoryUsername,
 } from "../services/listeningHistory.js";
+import {
+  syncDownloadFolderPath,
+  validateDownloadFolderPath,
+} from "../services/downloadFolderConfig.js";
 
 const getSettingStmt = db.prepare("SELECT value FROM settings WHERE key = ?");
 const upsertSettingStmt = db.prepare(
@@ -444,6 +448,9 @@ export const dbOps = {
       getSettingStmt.get("security")?.value
     );
     const rootFolderPath = getSettingStmt.get("rootFolderPath")?.value;
+    const downloadFolderPath =
+      getSettingStmt.get("downloadFolderPath")?.value || null;
+    syncDownloadFolderPath(downloadFolderPath);
     const releaseTypes = dbHelpers.parseJSON(
       getSettingStmt.get("releaseTypes")?.value
     );
@@ -472,6 +479,7 @@ export const dbOps = {
           ? security
           : { localNetworkBypass: { enabled: false } },
       rootFolderPath: rootFolderPath || null,
+      downloadFolderPath: downloadFolderPath || null,
       releaseTypes: releaseTypes || [],
       flows: flows || null,
       sharedPlaylists: sharedPlaylists || null,
@@ -520,6 +528,22 @@ export const dbOps = {
         settings.rootFolderPath !== null
       ) {
         upsertSettingStmt.run("rootFolderPath", settings.rootFolderPath);
+      }
+      if (settings.downloadFolderPath !== undefined) {
+        const normalized = String(settings.downloadFolderPath || "").trim();
+        if (!normalized) {
+          deleteSettingStmt.run("downloadFolderPath");
+          syncDownloadFolderPath(null);
+        } else {
+          const validation = validateDownloadFolderPath(normalized, undefined, {
+            create: true,
+          });
+          if (!validation.valid) {
+            throw new Error(validation.error);
+          }
+          upsertSettingStmt.run("downloadFolderPath", validation.path);
+          syncDownloadFolderPath(validation.path);
+        }
       }
       if (settings.releaseTypes) {
         upsertSettingStmt.run(

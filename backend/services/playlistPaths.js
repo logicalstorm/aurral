@@ -1,21 +1,17 @@
 import fs from "fs/promises";
 import path from "path";
-import { fileURLToPath } from "url";
+import { resolveAurralDataDir } from "../config/data-dir.js";
+import {
+  getStoredDownloadFolderPath,
+  resolveEnvDownloadFolder,
+} from "./downloadFolderConfig.js";
 
 export const PLAYLIST_LIBRARY_DIR = "aurral-playlists";
 const LEGACY_LIBRARY_DIR = "aurral-weekly-flow";
 const LEGACY_DOCKER_PLAYLIST_ROOT = "/app/downloads";
-const DEFAULT_DATA_DIR = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "data",
-);
 
 function defaultPlaylistRoot() {
-  const dataDir = process.env.AURRAL_DATA_DIR
-    ? path.resolve(process.env.AURRAL_DATA_DIR)
-    : path.resolve(DEFAULT_DATA_DIR);
-  return path.resolve(dataDir, "..", "downloads");
+  return path.resolve(resolveAurralDataDir(), "..", "downloads");
 }
 
 export function resolvePlaylistRoot(explicitRoot) {
@@ -26,31 +22,25 @@ export function resolvePlaylistRoot(explicitRoot) {
       : path.resolve(process.cwd(), override);
   }
 
-  const playlistFolder = String(process.env.PLAYLIST_FOLDER || "").trim();
-  if (playlistFolder) {
-    return path.isAbsolute(playlistFolder)
-      ? playlistFolder
-      : path.resolve(process.cwd(), playlistFolder);
+  const stored = getStoredDownloadFolderPath();
+  if (stored) {
+    return path.isAbsolute(stored)
+      ? stored
+      : path.resolve(process.cwd(), stored);
   }
 
-  const weeklyFlowFolder = String(process.env.WEEKLY_FLOW_FOLDER || "").trim();
-  if (weeklyFlowFolder) {
-    return path.isAbsolute(weeklyFlowFolder)
-      ? weeklyFlowFolder
-      : path.resolve(process.cwd(), weeklyFlowFolder);
-  }
-
-  const downloadFolder = String(process.env.DOWNLOAD_FOLDER || "").trim();
-  if (downloadFolder) {
-    return path.isAbsolute(downloadFolder)
-      ? downloadFolder
-      : path.resolve(process.cwd(), downloadFolder);
+  const envDownloadFolder = resolveEnvDownloadFolder();
+  if (envDownloadFolder) {
+    return envDownloadFolder;
   }
 
   return defaultPlaylistRoot();
 }
 
-export function remapLegacyPath(finalPath, playlistRoot = resolvePlaylistRoot()) {
+export function remapLegacyPath(
+  finalPath,
+  playlistRoot = resolvePlaylistRoot(),
+) {
   let resolved = path.resolve(String(finalPath || "").trim());
   const root = path.resolve(playlistRoot);
   if (resolved === root || resolved.startsWith(`${root}${path.sep}`)) {
@@ -66,7 +56,9 @@ export function remapLegacyPath(finalPath, playlistRoot = resolvePlaylistRoot())
   if (resolved.includes(LEGACY_LIBRARY_DIR)) {
     resolved = path.resolve(
       root,
-      path.relative(root, resolved).replaceAll(LEGACY_LIBRARY_DIR, PLAYLIST_LIBRARY_DIR),
+      path
+        .relative(root, resolved)
+        .replaceAll(LEGACY_LIBRARY_DIR, PLAYLIST_LIBRARY_DIR),
     );
   }
   return resolved;
@@ -103,7 +95,10 @@ export async function resolveExistingTrackPath(
   return null;
 }
 
-export async function migrateLegacyPaths(playlistRoot = resolvePlaylistRoot(), tracker) {
+export async function migrateLegacyPaths(
+  playlistRoot = resolvePlaylistRoot(),
+  tracker,
+) {
   if (!tracker?.getAll || !tracker?.setDone) {
     return { scanned: 0, migrated: 0 };
   }
@@ -112,7 +107,10 @@ export async function migrateLegacyPaths(playlistRoot = resolvePlaylistRoot(), t
   let migrated = 0;
   for (const job of jobs) {
     if (!job?.finalPath || job.status !== "done") continue;
-    const resolved = await resolveExistingTrackPath(job.finalPath, playlistRoot);
+    const resolved = await resolveExistingTrackPath(
+      job.finalPath,
+      playlistRoot,
+    );
     if (!resolved?.migratedFrom) continue;
     tracker.setDone(job.id, resolved.path, job.albumName || null);
     migrated += 1;
