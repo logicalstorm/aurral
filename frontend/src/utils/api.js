@@ -845,7 +845,7 @@ export const getDiscoverArtworkUrl = (presetId, version) => {
   return url;
 };
 
-export const getNearbyShows = async (zipCode = "", limit) => {
+export const getNearbyShows = async (zipCode = "", limit, options = {}) => {
   const params = { _: Date.now() };
   if (typeof zipCode === "string" && zipCode.trim()) {
     params.zip = zipCode.trim();
@@ -853,7 +853,13 @@ export const getNearbyShows = async (zipCode = "", limit) => {
   if (Number.isFinite(limit) && limit > 0) {
     params.limit = Math.floor(limit);
   }
-  const response = await api.get("/discover/nearby-shows", { params });
+  const response = await api.get("/discover/nearby-shows", {
+    ...options,
+    params: {
+      ...(options.params || {}),
+      ...params,
+    },
+  });
   return response.data;
 };
 
@@ -1135,6 +1141,7 @@ export const getFlowStatus = async ({
   includeJobs = false,
   flowId,
   jobsLimit,
+  signal,
 } = {}) => {
   const params = {};
   if (includeJobs) {
@@ -1146,13 +1153,17 @@ export const getFlowStatus = async ({
   if (jobsLimit != null) {
     params.jobsLimit = jobsLimit;
   }
-  const response = await api.get("/playlists/status", { params });
+  const response = await api.get("/playlists/status", { params, signal });
   return response.data;
 };
 
-export const getFlowJobs = async (flowId, limit = 200) => {
+export const getFlowJobs = async (flowId, limit = 200, options = {}) => {
   const response = await api.get(`/playlists/jobs/${flowId}`, {
-    params: { limit },
+    ...options,
+    params: {
+      ...(options.params || {}),
+      limit,
+    },
   });
   return response.data;
 };

@@ -1794,19 +1794,17 @@ function FlowTracksSortHeader({
 }) {
   const active = activeSortKey === sortKey;
   const DirectionIcon = sortDirection === "asc" ? ArrowUp : ArrowDown;
+  const ariaSort = active
+    ? sortDirection === "asc"
+      ? "ascending"
+      : "descending"
+    : "none";
   return (
-    <th className={className}>
+    <th className={className} scope="col" aria-sort={ariaSort}>
       <button
         type="button"
         className={`flow-page__tracks-sort-button${active ? " is-active" : ""}`}
         onClick={() => onSort(sortKey)}
-        aria-sort={
-          active
-            ? sortDirection === "asc"
-              ? "ascending"
-              : "descending"
-            : "none"
-        }
       >
         <span>{label}</span>
         {active ? (
