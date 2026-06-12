@@ -17,6 +17,7 @@ export function ArtistDetailsReleaseTrackList({
   artistName = "",
   playbackSource = null,
   onAddTrackToPlaylist,
+  resolveMembershipTrack,
   playlists,
   playlistsLoading,
   playlistSavingKey,
@@ -164,6 +165,11 @@ export function ArtistDetailsReleaseTrackList({
                 </span>
                 {onAddTrackToPlaylist ? (
                   <TrackPlaylistMenu
+                    track={
+                      resolveMembershipTrack
+                        ? resolveMembershipTrack(track, release)
+                        : track
+                    }
                     playlists={playlists}
                     loading={playlistsLoading}
                     saving={playlistSavingKey === currentTrackId}

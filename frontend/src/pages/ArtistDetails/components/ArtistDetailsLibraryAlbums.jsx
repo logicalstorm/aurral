@@ -39,6 +39,7 @@ export function ArtistDetailsLibraryAlbums({
   handleReSearchAlbum,
   handleReSearchMissingDownloads,
   onAddTrackToPlaylist,
+  resolveMembershipTrack,
   playlists,
   playlistsLoading,
   playlistSavingKey,
@@ -688,6 +689,15 @@ export function ArtistDetailsLibraryAlbums({
                       </span>
                       {onAddTrackToPlaylist ? (
                         <TrackPlaylistMenu
+                          track={
+                            resolveMembershipTrack
+                              ? resolveMembershipTrack(
+                                  track,
+                                  libraryAlbum,
+                                  rgId,
+                                )
+                              : track
+                          }
                           playlists={playlists}
                           loading={playlistsLoading}
                           saving={

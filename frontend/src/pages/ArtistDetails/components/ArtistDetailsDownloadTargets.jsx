@@ -54,6 +54,7 @@ export function ArtistDetailsDownloadTargets({
   artistName = "",
   playbackSource = null,
   onAddTrackToPlaylist,
+  resolveMembershipTrack,
   playlists,
   playlistsLoading,
   playlistSavingKey,
@@ -252,6 +253,14 @@ export function ArtistDetailsDownloadTargets({
                       </span>
                       {onAddTrackToPlaylist ? (
                         <TrackPlaylistMenu
+                          track={
+                            resolveMembershipTrack
+                              ? resolveMembershipTrack(
+                                  track,
+                                  missingReleasePick.releaseGroup,
+                                )
+                              : track
+                          }
                           playlists={playlists}
                           loading={playlistsLoading}
                           saving={playlistSavingKey === currentTrackId}
