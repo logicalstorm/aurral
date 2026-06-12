@@ -46,6 +46,7 @@ export function SettingsPlaylistsTab({
               <DownloadFolderField
                 id="download-folder-path"
                 value={settings.downloadFolderPath || ""}
+                autoApplySuggestion={false}
                 onChange={(nextPath) =>
                   updateSettings({
                     ...settings,
