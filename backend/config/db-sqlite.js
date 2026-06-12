@@ -1,19 +1,11 @@
 import Database from "better-sqlite3";
 import path from "path";
-import { fileURLToPath } from "url";
 import fs from "fs";
-import { applyV2Migration } from "./schema-migration-v2.js";
+import { initializeSchemaOnStartup } from "./schema-migration-v2.js";
+import { syncDownloadFolderPath } from "../services/downloadFolderConfig.js";
+import { ensureDataDir } from "./data-dir.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const DEFAULT_DATA_DIR = path.join(__dirname, "..", "data");
-const DATA_DIR = process.env.AURRAL_DATA_DIR
-  ? path.resolve(process.env.AURRAL_DATA_DIR)
-  : DEFAULT_DATA_DIR;
-
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
+const DATA_DIR = ensureDataDir();
 
 const DB_PATH = process.env.AURRAL_DB_PATH
   ? path.resolve(process.env.AURRAL_DB_PATH)
@@ -31,7 +23,11 @@ function tryAddColumn(sql) {
   try {
     db.exec(sql);
   } catch (error) {
-    if (!String(error?.message || "").toLowerCase().includes("duplicate column name")) {
+    if (
+      !String(error?.message || "")
+        .toLowerCase()
+        .includes("duplicate column name")
+    ) {
       throw error;
     }
   }
@@ -158,7 +154,9 @@ if (!tableColumns.includes("reason")) {
   tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN reason TEXT");
 }
 if (!tableColumns.includes("artist_mbid")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN artist_mbid TEXT");
+  tryAddColumn(
+    "ALTER TABLE playlist_download_jobs ADD COLUMN artist_mbid TEXT",
+  );
 }
 if (!tableColumns.includes("album_mbid")) {
   tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN album_mbid TEXT");
@@ -167,25 +165,39 @@ if (!tableColumns.includes("track_mbid")) {
   tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN track_mbid TEXT");
 }
 if (!tableColumns.includes("release_year")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN release_year TEXT");
+  tryAddColumn(
+    "ALTER TABLE playlist_download_jobs ADD COLUMN release_year TEXT",
+  );
 }
 if (!tableColumns.includes("duration_ms")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN duration_ms INTEGER");
+  tryAddColumn(
+    "ALTER TABLE playlist_download_jobs ADD COLUMN duration_ms INTEGER",
+  );
 }
 if (!tableColumns.includes("track_number")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN track_number INTEGER");
+  tryAddColumn(
+    "ALTER TABLE playlist_download_jobs ADD COLUMN track_number INTEGER",
+  );
 }
 if (!tableColumns.includes("album_track_count")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN album_track_count INTEGER");
+  tryAddColumn(
+    "ALTER TABLE playlist_download_jobs ADD COLUMN album_track_count INTEGER",
+  );
 }
 if (!tableColumns.includes("album_track_titles")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN album_track_titles TEXT");
+  tryAddColumn(
+    "ALTER TABLE playlist_download_jobs ADD COLUMN album_track_titles TEXT",
+  );
 }
 if (!tableColumns.includes("artist_aliases")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN artist_aliases TEXT");
+  tryAddColumn(
+    "ALTER TABLE playlist_download_jobs ADD COLUMN artist_aliases TEXT",
+  );
 }
 if (!tableColumns.includes("playlist_type")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN playlist_type TEXT");
+  tryAddColumn(
+    "ALTER TABLE playlist_download_jobs ADD COLUMN playlist_type TEXT",
+  );
 }
 
 const userColumns = db
@@ -206,7 +218,9 @@ if (!userColumns.includes("lidarr_root_folder_path")) {
   tryAddColumn("ALTER TABLE users ADD COLUMN lidarr_root_folder_path TEXT");
 }
 if (!userColumns.includes("lidarr_quality_profile_id")) {
-  tryAddColumn("ALTER TABLE users ADD COLUMN lidarr_quality_profile_id INTEGER");
+  tryAddColumn(
+    "ALTER TABLE users ADD COLUMN lidarr_quality_profile_id INTEGER",
+  );
 }
 if (!userColumns.includes("discover_layout")) {
   tryAddColumn("ALTER TABLE users ADD COLUMN discover_layout TEXT");
@@ -248,6 +262,11 @@ export const dbHelpers = {
   },
 };
 
-applyV2Migration(db, dbHelpers);
+export const v2MigrationRuntime = initializeSchemaOnStartup(db, dbHelpers);
+
+const existingDownloadFolder = db
+  .prepare("SELECT value FROM settings WHERE key = ?")
+  .get("downloadFolderPath");
+syncDownloadFolderPath(existingDownloadFolder?.value || null);
 
 export { db };

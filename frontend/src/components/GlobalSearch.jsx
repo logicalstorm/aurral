@@ -1,30 +1,26 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ChevronDown, Loader2, Search } from "lucide-react";
+import { Clock, Loader2, Search } from "lucide-react";
 import {
   getBootstrapStatus,
   getTagSuggestions,
-  searchArtists,
+  searchUnified,
 } from "../utils/api";
+import {
+  buildUnifiedSuggestionSections,
+  flattenSuggestionSections,
+  getSearchResultLabel,
+  navigateFromSearchResult,
+} from "../utils/searchNavigation";
+import {
+  addRecentSearch,
+  clearRecentSearches,
+  readRecentSearches,
+} from "../utils/recentSearches";
 
 const AUTOCOMPLETE_DEBOUNCE_MS = 250;
-const AUTOCOMPLETE_LIMIT = 6;
+const SUGGEST_LIMIT = 5;
 const TAG_SUGGESTIONS_LIMIT = 8;
-const SEARCH_SCOPES = [
-  { value: "artist", label: "Artist", shortLabel: "Artist" },
-  { value: "album", label: "Album/Release", shortLabel: "Release" },
-  { value: "tag", label: "Tag", shortLabel: "Tag" },
-];
-
-function normalizeArtistName(value) {
-  if (!value || typeof value !== "string") return "";
-  return value
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .replace(/\s4$/g, " for")
-    .replace(/\s*[.\-_]\s*$/g, "")
-    .trim();
-}
 
 function isEditableTarget(target) {
   if (!(target instanceof HTMLElement)) return false;
@@ -35,21 +31,62 @@ function isEditableTarget(target) {
 
 function GlobalSearch() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchScope, setSearchScope] = useState("artist");
   const [lastfmConfigured, setLastfmConfigured] = useState(true);
-  const [scopeMenuOpen, setScopeMenuOpen] = useState(false);
-  const [suggestions, setSuggestions] = useState([]);
+  const [localSearchConfigured, setLocalSearchConfigured] = useState(true);
+  const [suggestionRows, setSuggestionRows] = useState([]);
   const [suggestionMode, setSuggestionMode] = useState(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [suggestionIndex, setSuggestionIndex] = useState(-1);
+  const [inputFocused, setInputFocused] = useState(false);
+  const [recentSearches, setRecentSearches] = useState(() => readRecentSearches());
   const searchContainerRef = useRef(null);
   const inputRef = useRef(null);
   const debounceRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
 
+  const selectableRows = useMemo(() => {
+    if (suggestionMode === "tag") return suggestionRows;
+    return suggestionRows.filter((row) => row.kind === "item");
+  }, [suggestionRows, suggestionMode]);
+
+  const showRecentSearches = useMemo(
+    () =>
+      inputFocused &&
+      searchQuery.trim().length < 2 &&
+      recentSearches.length > 0 &&
+      !loadingSuggestions &&
+      suggestionRows.length === 0,
+    [
+      inputFocused,
+      loadingSuggestions,
+      recentSearches.length,
+      searchQuery,
+      suggestionRows.length,
+    ],
+  );
+
+  const recentSelectableRows = useMemo(
+    () =>
+      showRecentSearches
+        ? recentSearches.map((query, index) => ({
+            kind: "recent",
+            key: `recent:${query}:${index}`,
+            query,
+          }))
+        : [],
+    [recentSearches, showRecentSearches],
+  );
+
+  const keyboardRows = showRecentSearches ? recentSelectableRows : selectableRows;
+
+  const rememberSearch = useCallback((rawQuery) => {
+    const next = addRecentSearch(rawQuery);
+    setRecentSearches(next);
+  }, []);
+
   const closeAutocomplete = useCallback(() => {
-    setSuggestions([]);
+    setSuggestionRows([]);
     setSuggestionMode(null);
     setSuggestionIndex(-1);
   }, []);
@@ -73,20 +110,6 @@ function GlobalSearch() {
       cancelled = true;
     };
   }, []);
-
-  const availableScopes = lastfmConfigured
-    ? SEARCH_SCOPES
-    : SEARCH_SCOPES.filter((scope) => scope.value !== "tag");
-
-  const selectedScope =
-    availableScopes.find((scope) => scope.value === searchScope) ||
-    availableScopes[0];
-
-  useEffect(() => {
-    if (!lastfmConfigured && searchScope === "tag") {
-      setSearchScope("artist");
-    }
-  }, [lastfmConfigured, searchScope]);
 
   useEffect(() => {
     setSearchQuery("");
@@ -117,18 +140,56 @@ function GlobalSearch() {
   useEffect(() => {
     const trimmed = searchQuery.trim();
     const isTagShortcut = lastfmConfigured && trimmed.startsWith("#");
-    const effectiveScope = isTagShortcut ? "tag" : searchScope;
     const tagPart = isTagShortcut ? trimmed.slice(1).trim() : trimmed;
-    const shouldAutocomplete =
-      effectiveScope === "tag"
-        ? isTagShortcut || searchScope === "tag"
-        : effectiveScope === "artist";
 
-    if (
-      !shouldAutocomplete ||
-      (effectiveScope === "artist" && trimmed.length < 2) ||
-      (effectiveScope === "tag" && !isTagShortcut && trimmed.length < 2)
-    ) {
+    if (isTagShortcut) {
+      if (tagPart.length < 2) {
+        if (debounceRef.current) {
+          clearTimeout(debounceRef.current);
+          debounceRef.current = null;
+        }
+        closeAutocomplete();
+        return;
+      }
+
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(async () => {
+        debounceRef.current = null;
+        setLoadingSuggestions(true);
+        try {
+          const data = await getTagSuggestions(tagPart, TAG_SUGGESTIONS_LIMIT);
+          const raw = data.tags || [];
+          const seen = new Set();
+          const tags = raw.filter((tag) => {
+            const key = String(tag || "")
+              .trim()
+              .toLowerCase();
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          setSuggestionRows(
+            tags.map((tagName) => ({
+              kind: "tag",
+              key: `tag:${tagName}`,
+              tagName,
+            })),
+          );
+          setSuggestionMode("tag");
+          setSuggestionIndex(-1);
+        } catch {
+          closeAutocomplete();
+        } finally {
+          setLoadingSuggestions(false);
+        }
+      }, AUTOCOMPLETE_DEBOUNCE_MS);
+
+      return () => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+      };
+    }
+
+    if (trimmed.length < 2) {
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
@@ -142,38 +203,14 @@ function GlobalSearch() {
       debounceRef.current = null;
       setLoadingSuggestions(true);
       try {
-        if (effectiveScope === "tag") {
-          const data = await getTagSuggestions(tagPart, TAG_SUGGESTIONS_LIMIT);
-          const raw = data.tags || [];
-          const seen = new Set();
-          const list = raw.filter((tag) => {
-            const key = String(tag || "")
-              .trim()
-              .toLowerCase();
-            if (!key || seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          });
-          setSuggestions(list);
-          setSuggestionMode("tag");
-          setSuggestionIndex(-1);
-          return;
-        }
-
-        const data = await searchArtists(trimmed, AUTOCOMPLETE_LIMIT, 0);
-        const raw = data.artists || [];
-        const seenIds = new Set();
-        const seenNames = new Set();
-        const list = raw.filter((artist) => {
-          if (!artist?.id || seenIds.has(artist.id)) return false;
-          const key = normalizeArtistName(artist.name);
-          if (!key || seenNames.has(key)) return false;
-          seenIds.add(artist.id);
-          seenNames.add(key);
-          return true;
+        const data = await searchUnified(trimmed, {
+          mode: "suggest",
+          limit: SUGGEST_LIMIT,
         });
-        setSuggestions(list);
-        setSuggestionMode("artist");
+        setLocalSearchConfigured(!!data?.localSearchConfigured);
+        const sections = buildUnifiedSuggestionSections(data);
+        setSuggestionRows(flattenSuggestionSections(sections));
+        setSuggestionMode("unified");
         setSuggestionIndex(-1);
       } catch {
         closeAutocomplete();
@@ -185,7 +222,7 @@ function GlobalSearch() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [searchQuery, searchScope, closeAutocomplete, lastfmConfigured]);
+  }, [searchQuery, closeAutocomplete, lastfmConfigured]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -193,7 +230,6 @@ function GlobalSearch() {
         searchContainerRef.current &&
         !searchContainerRef.current.contains(event.target)
       ) {
-        setScopeMenuOpen(false);
         closeAutocomplete();
       }
     };
@@ -202,24 +238,20 @@ function GlobalSearch() {
   }, [closeAutocomplete]);
 
   const navigateToSearch = useCallback(
-    (rawQuery, scopeOverride = null) => {
+    (rawQuery) => {
       const trimmed = String(rawQuery || "").trim();
       if (!trimmed) return;
+      rememberSearch(trimmed);
       if (trimmed.startsWith("#")) {
         navigate(`/search?q=${encodeURIComponent(trimmed.slice(1))}&type=tag`);
       } else {
-        const effectiveScope = scopeOverride || searchScope;
-        navigate(
-          `/search?q=${encodeURIComponent(trimmed)}&type=${encodeURIComponent(
-            effectiveScope,
-          )}`,
-        );
+        navigate(`/search?q=${encodeURIComponent(trimmed)}`);
       }
       setSearchQuery("");
-      setScopeMenuOpen(false);
       closeAutocomplete();
+      setInputFocused(false);
     },
-    [navigate, searchScope, closeAutocomplete],
+    [navigate, closeAutocomplete, rememberSearch],
   );
 
   const handleSubmit = (event) => {
@@ -229,43 +261,64 @@ function GlobalSearch() {
 
   const handleSuggestionSelect = useCallback(
     (selection) => {
-      if (typeof selection === "string") {
-        navigate(`/search?q=${encodeURIComponent(selection)}&type=tag`);
-        setSearchQuery("");
-        setScopeMenuOpen(false);
-        closeAutocomplete();
+      if (!selection) return;
+
+      if (selection.kind === "recent") {
+        navigateToSearch(selection.query);
         return;
       }
-      if (!selection?.id) return;
-      navigate(`/artist/${selection.id}`, {
-        state: { artistName: selection.name },
-      });
-      setSearchQuery("");
-      setScopeMenuOpen(false);
-      closeAutocomplete();
+
+      if (selection.kind === "tag") {
+        rememberSearch(`#${selection.tagName}`);
+        navigate(
+          `/search?q=${encodeURIComponent(selection.tagName)}&type=tag`,
+        );
+        setSearchQuery("");
+        closeAutocomplete();
+        setInputFocused(false);
+        return;
+      }
+
+      if (selection.kind === "item") {
+        const query = searchQuery.trim();
+        if (query) rememberSearch(query);
+        navigateFromSearchResult(navigate, selection.item, { query });
+        setSearchQuery("");
+        closeAutocomplete();
+        setInputFocused(false);
+      }
     },
-    [navigate, closeAutocomplete],
+    [navigate, navigateToSearch, rememberSearch, searchQuery, closeAutocomplete],
   );
+
+  const handleClearRecentSearches = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setRecentSearches(clearRecentSearches());
+    setSuggestionIndex(-1);
+  }, []);
 
   const handleKeyDown = (event) => {
     if (event.key === "Escape") {
       closeAutocomplete();
       return;
     }
-    if (suggestions.length === 0) return;
+    if (keyboardRows.length === 0) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setSuggestionIndex((current) =>
-        current < suggestions.length - 1 ? current + 1 : current,
+        current < keyboardRows.length - 1 ? current + 1 : current,
       );
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setSuggestionIndex((current) => (current > 0 ? current - 1 : -1));
     } else if (event.key === "Enter" && suggestionIndex >= 0) {
       event.preventDefault();
-      handleSuggestionSelect(suggestions[suggestionIndex]);
+      handleSuggestionSelect(keyboardRows[suggestionIndex]);
     }
   };
+
+  let selectableCursor = -1;
 
   return (
     <form
@@ -273,63 +326,21 @@ function GlobalSearch() {
       onSubmit={handleSubmit}
       className="global-search"
     >
-      <div className="global-search__box">
-        <div className="global-search__scope-wrap">
-          <button
-            type="button"
-            onClick={() => setScopeMenuOpen((open) => !open)}
-            className={`global-search__scope-button${scopeMenuOpen ? " is-open" : ""}`}
-            aria-haspopup="listbox"
-            aria-expanded={scopeMenuOpen}
-            aria-label="Search scope"
-          >
-            <span className="global-search__scope-label--short">{selectedScope.shortLabel}</span>
-            <span className="global-search__scope-label--full">{selectedScope.label}</span>
-            <ChevronDown
-              className={`artist-icon-sm${scopeMenuOpen ? " artist-chevron--open" : ""}`}
-            />
-          </button>
-
-          {scopeMenuOpen && (
-            <div className="global-search__scope-menu">
-              <ul className="global-search__scope-list">
-                {availableScopes.map((scope) => {
-                  const selected = scope.value === searchScope;
-                  return (
-                    <li key={scope.value}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSearchScope(scope.value);
-                          setScopeMenuOpen(false);
-                        }}
-                        className={`global-search__menu-button${selected ? " is-selected" : ""}`}
-                        role="option"
-                        aria-selected={selected}
-                      >
-                        <span className="global-search__scope-label--short">{scope.shortLabel}</span>
-                        <span className="global-search__scope-label--full">{scope.label}</span>
-                        {selected && (
-                          <span className="global-search__selected-dot" />
-                        )}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
-        </div>
-
-        <div className="global-search__divider" />
-
-        <div className="global-search__input-wrap">
+      <div className="global-search__box global-search__box--unified">
+        <div className="global-search__input-wrap global-search__input-wrap--unified">
           <Search className="global-search__icon" />
           <input
             ref={inputRef}
             type="text"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
+            onFocus={() => {
+              setInputFocused(true);
+              setSuggestionIndex(-1);
+            }}
+            onBlur={() => {
+              window.setTimeout(() => setInputFocused(false), 120);
+            }}
             onKeyDown={handleKeyDown}
             placeholder=""
             className="global-search__input"
@@ -339,9 +350,7 @@ function GlobalSearch() {
             <div className="global-search__placeholder">
               <span className="global-search__scope-label--short">Search...</span>
               <span className="global-search__scope-label--full">Type</span>
-              <span className="global-search__key">
-                /
-              </span>
+              <span className="global-search__key">/</span>
               <span className="global-search__scope-label--full">to search</span>
             </div>
           )}
@@ -353,32 +362,136 @@ function GlobalSearch() {
         </div>
       </div>
 
-      {!loadingSuggestions && suggestions.length > 0 && (
-        <ul className="global-search__suggestions">
+      {!loadingSuggestions &&
+        suggestionMode === "unified" &&
+        !localSearchConfigured &&
+        searchQuery.trim().length >= 2 && (
+          <div className="global-search__suggestions global-search__suggestions--grouped">
+            <div className="global-search__suggestion-group">
+              Search not configured
+            </div>
+            <div className="global-search__suggestion global-search__suggestion--message">
+              Configure the search server in Settings to search artists,
+              releases, and tracks.
+            </div>
+          </div>
+        )}
+
+      {showRecentSearches && (
+        <div className="global-search__suggestions global-search__suggestions--grouped global-search__suggestions--recent">
+          <div className="global-search__recent-header">
+            <span className="global-search__recent-label">Recent searches</span>
+            <button
+              type="button"
+              className="global-search__recent-clear"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={handleClearRecentSearches}
+            >
+              Clear
+            </button>
+          </div>
+          {recentSelectableRows.map((row, index) => (
+            <button
+              key={row.key}
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => handleSuggestionSelect(row)}
+              className={`global-search__suggestion global-search__suggestion--recent${
+                index === suggestionIndex ? " is-highlighted" : ""
+              }`}
+            >
+              <Clock className="global-search__recent-icon" aria-hidden="true" />
+              <span className="global-search__recent-query">{row.query}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!loadingSuggestions && suggestionRows.length > 0 && (
+        <div className="global-search__suggestions global-search__suggestions--grouped">
           {suggestionMode === "tag"
-            ? suggestions.map((tagName, index) => (
-                <li key={tagName}>
-                  <button
-                    type="button"
-                    onClick={() => handleSuggestionSelect(tagName)}
-                    className={`global-search__suggestion${index === suggestionIndex ? " is-highlighted" : ""}`}
-                  >
-                    #{tagName}
-                  </button>
-                </li>
+            ? suggestionRows.map((row, index) => (
+                <button
+                  key={row.key}
+                  type="button"
+                  onClick={() => handleSuggestionSelect(row)}
+                  className={`global-search__suggestion${
+                    index === suggestionIndex ? " is-highlighted" : ""
+                  }`}
+                >
+                  #{row.tagName}
+                </button>
               ))
-            : suggestions.map((artist, index) => (
-                <li key={artist.id || index}>
+            : suggestionRows.map((row) => {
+                if (row.kind === "header") {
+                  return (
+                    <div
+                      key={row.key}
+                      className="global-search__suggestion-group"
+                    >
+                      {row.label}
+                    </div>
+                  );
+                }
+
+                selectableCursor += 1;
+                const highlighted = selectableCursor === suggestionIndex;
+                const item = row.item;
+                const label = getSearchResultLabel(item);
+                const typeLabel =
+                  item.type === "artist"
+                    ? "Artist"
+                    : item.type === "album"
+                      ? "Album"
+                      : item.type === "track"
+                        ? "Song"
+                        : item.type === "playlist"
+                          ? "Playlist"
+                          : null;
+                const meta =
+                  item.type === "track" && item.albumTitle
+                    ? item.albumTitle
+                    : item.type === "album" && item.primaryType
+                      ? item.primaryType
+                      : item.type === "playlist" && item.trackCount != null
+                        ? `${item.trackCount} track${item.trackCount === 1 ? "" : "s"}`
+                        : null;
+
+                return (
                   <button
+                    key={row.key}
                     type="button"
-                    onClick={() => handleSuggestionSelect(artist)}
-                    className={`global-search__suggestion${index === suggestionIndex ? " is-highlighted" : ""}`}
+                    onClick={() => handleSuggestionSelect(row)}
+                    className={`global-search__suggestion global-search__suggestion--rich${
+                      highlighted ? " is-highlighted" : ""
+                    }`}
                   >
-                    {artist.name}
+                    <span className="global-search__suggestion-copy">
+                      <span className="global-search__suggestion-title">
+                        {label}
+                      </span>
+                      {meta && (
+                        <span className="global-search__suggestion-meta">
+                          {meta}
+                        </span>
+                      )}
+                    </span>
+                    <span className="global-search__suggestion-tags">
+                      {typeLabel && (
+                        <span className="global-search__suggestion-type">
+                          {typeLabel}
+                        </span>
+                      )}
+                      {item.inLibrary && (
+                        <span className="global-search__suggestion-badge">
+                          Library
+                        </span>
+                      )}
+                    </span>
                   </button>
-                </li>
-              ))}
-        </ul>
+                );
+              })}
+        </div>
       )}
     </form>
   );

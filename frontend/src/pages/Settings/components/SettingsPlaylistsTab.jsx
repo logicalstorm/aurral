@@ -1,5 +1,5 @@
-import { ListMusic } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
+import DownloadFolderField from "../../../components/DownloadFolderField";
 import { SettingsSelect } from "./SettingsField";
 
 const PLAYLIST_ARTWORK_STYLE_OPTIONS = [
@@ -20,10 +20,7 @@ export function SettingsPlaylistsTab({
   return (
     <div className="settings-page__panel">
       <div className="settings-page__panel-header">
-        <h2 className="settings-page__panel-title">
-          <ListMusic className="settings-page__panel-title-icon" />
-          Playlists
-        </h2>
+        <h2 className="settings-page__panel-title">Playlists</h2>
         <FlipSaveButton
           saving={saving}
           disabled={!hasUnsavedChanges}
@@ -36,6 +33,31 @@ export function SettingsPlaylistsTab({
         className="settings-page__form"
         autoComplete="off"
       >
+        <div className="settings-page__section">
+          <h3 className="settings-page__section-title">Downloads folder</h3>
+          <fieldset className="settings-page__fields">
+            <div className="settings-page__field">
+              <label
+                className="artist-field-label"
+                htmlFor="download-folder-path"
+              >
+                Path
+              </label>
+              <DownloadFolderField
+                id="download-folder-path"
+                value={settings.downloadFolderPath || ""}
+                onChange={(nextPath) =>
+                  updateSettings({
+                    ...settings,
+                    downloadFolderPath: nextPath,
+                  })
+                }
+                helperText="Folder where Aurral writes generated flows and imported playlists. Use the same mounted path in Navidrome and slskd."
+              />
+            </div>
+          </fieldset>
+        </div>
+
         <div className="settings-page__section">
           <h3 className="settings-page__section-title">Cover art</h3>
           <fieldset className="settings-page__fields">

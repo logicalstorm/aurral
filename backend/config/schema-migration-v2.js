@@ -1,5 +1,9 @@
+import fs from "fs";
+import path from "path";
+import { resolvePlaylistRoot } from "../services/playlistPaths.js";
+
 const SCHEMA_VERSION_KEY = "schemaVersion";
-const TARGET_SCHEMA_VERSION = 2;
+export const TARGET_SCHEMA_VERSION = 2;
 const LEGACY_LIBRARY_DIR = "aurral-weekly-flow";
 const PLAYLIST_LIBRARY_DIR = "aurral-playlists";
 const LEGACY_SETTINGS_KEYS = [
@@ -9,6 +13,102 @@ const LEGACY_SETTINGS_KEYS = [
   "weeklyFlowPlaylists",
   "playlists",
 ];
+
+export function getSchemaVersion(db) {
+  const row = db
+    .prepare("SELECT value FROM settings WHERE key = ?")
+    .get(SCHEMA_VERSION_KEY);
+  return Number(row?.value || 1);
+}
+
+function hasLegacyPlaylistDirectory() {
+  const root = resolvePlaylistRoot();
+  return fs.existsSync(path.join(root, LEGACY_LIBRARY_DIR));
+}
+
+export function hasV1MigrationMarkers(db, dbHelpers) {
+  const getSettingStmt = db.prepare("SELECT value FROM settings WHERE key = ?");
+  for (const key of LEGACY_SETTINGS_KEYS) {
+    if (getSettingStmt.get(key)?.value != null) {
+      return true;
+    }
+  }
+  if (tableExists(db, "weekly_flow_jobs")) {
+    return true;
+  }
+  const integrations = dbHelpers.parseJSON(
+    getSettingStmt.get("integrations")?.value,
+  );
+  if (integrations?.soulseek) {
+    return true;
+  }
+  return hasLegacyPlaylistDirectory();
+}
+
+export function buildV2MigrationPreview(db, dbHelpers) {
+  const getSettingStmt = db.prepare("SELECT value FROM settings WHERE key = ?");
+  const integrations = dbHelpers.parseJSON(
+    getSettingStmt.get("integrations")?.value,
+  );
+  const weeklyFlowJobCount = tableExists(db, "weekly_flow_jobs")
+    ? Number(
+        db.prepare("SELECT COUNT(*) AS count FROM weekly_flow_jobs").get()
+          ?.count || 0,
+      )
+    : 0;
+  const flows = dbHelpers.parseJSON(getSettingStmt.get("weeklyFlows")?.value);
+  const sharedPlaylists = dbHelpers.parseJSON(
+    getSettingStmt.get("sharedFlowPlaylists")?.value,
+  );
+  return {
+    flowCount: Array.isArray(flows) ? flows.length : 0,
+    sharedPlaylistCount: Array.isArray(sharedPlaylists)
+      ? sharedPlaylists.length
+      : 0,
+    weeklyFlowJobCount,
+    hasSoulseekIntegration: !!integrations?.soulseek,
+    hasLegacyPlaylistDirectory: hasLegacyPlaylistDirectory(),
+    legacyLibraryDir: LEGACY_LIBRARY_DIR,
+    playlistLibraryDir: PLAYLIST_LIBRARY_DIR,
+  };
+}
+
+export function getV2MigrationStatus(db, dbHelpers) {
+  const schemaVersion = getSchemaVersion(db);
+  if (schemaVersion >= TARGET_SCHEMA_VERSION) {
+    return { required: false, schemaVersion };
+  }
+  if (!hasV1MigrationMarkers(db, dbHelpers)) {
+    return { required: false, schemaVersion, freshInstall: true };
+  }
+  return {
+    required: true,
+    schemaVersion,
+    preview: buildV2MigrationPreview(db, dbHelpers),
+  };
+}
+
+export function runV2SchemaMaintenance(db, dbHelpers) {
+  finalizeV2SettingsKeys(db, dbHelpers);
+  migrateJobsTable(db);
+  return { schemaVersion: getSchemaVersion(db) };
+}
+
+export function initializeSchemaOnStartup(db, dbHelpers) {
+  const status = getV2MigrationStatus(db, dbHelpers);
+  if (status.required) {
+    return { pending: true, status };
+  }
+  if (status.freshInstall) {
+    applyV2Migration(db, dbHelpers);
+    return {
+      pending: false,
+      status: { required: false, schemaVersion: TARGET_SCHEMA_VERSION },
+    };
+  }
+  runV2SchemaMaintenance(db, dbHelpers);
+  return { pending: false, status };
+}
 
 function tableExists(db, name) {
   const row = db
@@ -304,23 +404,21 @@ function migrateJobsTable(db) {
 }
 
 export function applyV2Migration(db, dbHelpers) {
-  const getSettingStmt = db.prepare("SELECT value FROM settings WHERE key = ?");
   const upsertSettingStmt = db.prepare(
     "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
   );
-  const currentVersion = Number(
-    getSettingStmt.get(SCHEMA_VERSION_KEY)?.value || 1,
-  );
-  finalizeV2SettingsKeys(db, dbHelpers);
-  if (currentVersion >= TARGET_SCHEMA_VERSION) {
-    migrateJobsTable(db);
-    return { migrated: false, schemaVersion: currentVersion };
-  }
-
+  const currentVersion = getSchemaVersion(db);
+  const migrated = currentVersion < TARGET_SCHEMA_VERSION;
   const run = db.transaction(() => {
+    finalizeV2SettingsKeys(db, dbHelpers);
     migrateJobsTable(db);
-    upsertSettingStmt.run(SCHEMA_VERSION_KEY, String(TARGET_SCHEMA_VERSION));
+    if (migrated) {
+      upsertSettingStmt.run(SCHEMA_VERSION_KEY, String(TARGET_SCHEMA_VERSION));
+    }
   });
   run();
-  return { migrated: true, schemaVersion: TARGET_SCHEMA_VERSION };
+  return {
+    migrated,
+    schemaVersion: migrated ? TARGET_SCHEMA_VERSION : currentVersion,
+  };
 }

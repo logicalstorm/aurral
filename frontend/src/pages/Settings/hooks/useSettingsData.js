@@ -14,6 +14,7 @@ import { useWebSocketChannel } from "../../../hooks/useWebSocket";
 import { allReleaseTypes } from "../constants";
 import {
   DEFAULT_METADATA_BASE_URL,
+  DEFAULT_SEARCH_URL,
   checkForChanges,
   normalizeSettings,
 } from "../utils";
@@ -22,6 +23,7 @@ const DISCOVERY_MANUAL_REFRESH_KEY = "aurral.discovery.manualRefreshPending";
 
 const defaultSettings = {
   rootFolderPath: "",
+  downloadFolderPath: "",
   quality: "standard",
   releaseTypes: allReleaseTypes,
   integrations: {
@@ -63,6 +65,10 @@ const defaultSettings = {
       baseUrl: DEFAULT_METADATA_BASE_URL,
       userAgentSuffix: "",
       enableNarrowFallbacks: true,
+    },
+    search: {
+      url: DEFAULT_SEARCH_URL,
+      apiKey: "",
     },
     general: { authUser: "", authPassword: "" },
     gotify: {

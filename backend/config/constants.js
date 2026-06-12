@@ -115,6 +115,7 @@ export const AURRAL_MUSICBRAINZ_API = "https://mb.lkly.net/ws/2";
 export const OFFICIAL_COVER_ART_ARCHIVE_API = "https://coverartarchive.org";
 export const LEGACY_METADATA_BASE_URL = "https://brainzmash.kell.ly";
 export const DEFAULT_METADATA_BASE_URL = "https://lidarrapi.brainzmash.cc";
+export const DEFAULT_SEARCH_URL = "https://aurral-search.kell.ly";
 export const LASTFM_API = "https://ws.audioscrobbler.com/2.0/";
 export const LISTENBRAINZ_API = "https://api.listenbrainz.org";
 export const APP_NAME = "Aurral";
@@ -161,6 +162,7 @@ export const defaultData = {
   customFormats: [],
   settings: {
     rootFolderPath: null,
+    downloadFolderPath: null,
     quality: "standard",
     releaseTypes: [
       "Album",
@@ -212,6 +214,10 @@ export const defaultData = {
         baseUrl: DEFAULT_METADATA_BASE_URL,
         userAgentSuffix: "",
         enableNarrowFallbacks: true,
+      },
+      search: {
+        url: DEFAULT_SEARCH_URL,
+        apiKey: "",
       },
       general: { authUser: "", authPassword: "" },
       gotify: {
