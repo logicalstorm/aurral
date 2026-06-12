@@ -281,8 +281,12 @@ export const searchUnified = async (
     params.limit = limit;
   }
   const key = `search-unified:${JSON.stringify(params)}`;
+  const timeoutMs = mode === "full" ? 30000 : 12000;
   return fetchInflightOnce(searchInflightRequests, key, async () => {
-    const response = await api.get("/search/unified", { params });
+    const response = await api.get("/search/unified", {
+      params,
+      timeout: timeoutMs,
+    });
     return response.data;
   });
 };

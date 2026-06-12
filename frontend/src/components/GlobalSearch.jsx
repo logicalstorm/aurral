@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Clock, Loader2, Search } from "lucide-react";
+import SearchLibraryCheck from "./SearchLibraryCheck";
 import {
   getBootstrapStatus,
   getTagSuggestions,
   searchUnified,
 } from "../utils/api";
 import {
-  buildUnifiedSuggestionSections,
-  flattenSuggestionSections,
+  buildMixedSuggestionItems,
+  getSearchResultKey,
   getSearchResultLabel,
   navigateFromSearchResult,
 } from "../utils/searchNavigation";
@@ -42,6 +43,7 @@ function GlobalSearch() {
   const searchContainerRef = useRef(null);
   const inputRef = useRef(null);
   const debounceRef = useRef(null);
+  const searchGenerationRef = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -148,16 +150,21 @@ function GlobalSearch() {
           clearTimeout(debounceRef.current);
           debounceRef.current = null;
         }
+        searchGenerationRef.current += 1;
+        setLoadingSuggestions(false);
         closeAutocomplete();
         return;
       }
 
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      const generation = searchGenerationRef.current + 1;
+      searchGenerationRef.current = generation;
       debounceRef.current = setTimeout(async () => {
         debounceRef.current = null;
         setLoadingSuggestions(true);
         try {
           const data = await getTagSuggestions(tagPart, TAG_SUGGESTIONS_LIMIT);
+          if (generation !== searchGenerationRef.current) return;
           const raw = data.tags || [];
           const seen = new Set();
           const tags = raw.filter((tag) => {
@@ -178,14 +185,19 @@ function GlobalSearch() {
           setSuggestionMode("tag");
           setSuggestionIndex(-1);
         } catch {
-          closeAutocomplete();
+          if (generation === searchGenerationRef.current) {
+            closeAutocomplete();
+          }
         } finally {
-          setLoadingSuggestions(false);
+          if (generation === searchGenerationRef.current) {
+            setLoadingSuggestions(false);
+          }
         }
       }, AUTOCOMPLETE_DEBOUNCE_MS);
 
       return () => {
         if (debounceRef.current) clearTimeout(debounceRef.current);
+        searchGenerationRef.current += 1;
       };
     }
 
@@ -194,11 +206,15 @@ function GlobalSearch() {
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
       }
+      searchGenerationRef.current += 1;
+      setLoadingSuggestions(false);
       closeAutocomplete();
       return;
     }
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    const generation = searchGenerationRef.current + 1;
+    searchGenerationRef.current = generation;
     debounceRef.current = setTimeout(async () => {
       debounceRef.current = null;
       setLoadingSuggestions(true);
@@ -207,20 +223,32 @@ function GlobalSearch() {
           mode: "suggest",
           limit: SUGGEST_LIMIT,
         });
+        if (generation !== searchGenerationRef.current) return;
         setLocalSearchConfigured(!!data?.localSearchConfigured);
-        const sections = buildUnifiedSuggestionSections(data);
-        setSuggestionRows(flattenSuggestionSections(sections));
+        const items = buildMixedSuggestionItems(data, SUGGEST_LIMIT + 3);
+        setSuggestionRows(
+          items.map((item, index) => ({
+            kind: "item",
+            key: getSearchResultKey(item, index),
+            item,
+          })),
+        );
         setSuggestionMode("unified");
         setSuggestionIndex(-1);
       } catch {
-        closeAutocomplete();
+        if (generation === searchGenerationRef.current) {
+          closeAutocomplete();
+        }
       } finally {
-        setLoadingSuggestions(false);
+        if (generation === searchGenerationRef.current) {
+          setLoadingSuggestions(false);
+        }
       }
     }, AUTOCOMPLETE_DEBOUNCE_MS);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      searchGenerationRef.current += 1;
     };
   }, [searchQuery, closeAutocomplete, lastfmConfigured]);
 
@@ -423,17 +451,6 @@ function GlobalSearch() {
                 </button>
               ))
             : suggestionRows.map((row) => {
-                if (row.kind === "header") {
-                  return (
-                    <div
-                      key={row.key}
-                      className="global-search__suggestion-group"
-                    >
-                      {row.label}
-                    </div>
-                  );
-                }
-
                 selectableCursor += 1;
                 const highlighted = selectableCursor === suggestionIndex;
                 const item = row.item;
@@ -449,10 +466,10 @@ function GlobalSearch() {
                           ? "Playlist"
                           : null;
                 const meta =
-                  item.type === "track" && item.albumTitle
-                    ? item.albumTitle
-                    : item.type === "album" && item.primaryType
-                      ? item.primaryType
+                  item.type === "track" && item.artistName
+                    ? item.artistName
+                    : item.type === "album" && item.artistName
+                      ? item.artistName
                       : item.type === "playlist" && item.trackCount != null
                         ? `${item.trackCount} track${item.trackCount === 1 ? "" : "s"}`
                         : null;
@@ -482,11 +499,7 @@ function GlobalSearch() {
                           {typeLabel}
                         </span>
                       )}
-                      {item.inLibrary && (
-                        <span className="global-search__suggestion-badge">
-                          Library
-                        </span>
-                      )}
+                      {item.inLibrary && <SearchLibraryCheck />}
                     </span>
                   </button>
                 );
