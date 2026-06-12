@@ -53,9 +53,13 @@ test("resolveSafeBrowsePath allows child directories under filesystem root", asy
   const { resolveSafeBrowsePath } = await import(
     "../../backend/services/downloadFolderConfig.js"
   );
-  const usersPath = resolveSafeBrowsePath("/Users");
-  assert.ok(usersPath);
-  assert.equal(usersPath, fs.realpathSync("/Users"));
+  const childPath = ["/Users", "/tmp", "/home"].find((candidate) =>
+    fs.existsSync(candidate),
+  );
+  assert.ok(childPath, "expected a top-level child directory for this test");
+  const resolvedPath = resolveSafeBrowsePath(childPath);
+  assert.ok(resolvedPath);
+  assert.equal(resolvedPath, fs.realpathSync(childPath));
   if (previousRoots === undefined) delete process.env.FILE_BROWSE_ROOTS;
   else process.env.FILE_BROWSE_ROOTS = previousRoots;
 });
