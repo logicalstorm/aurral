@@ -108,7 +108,8 @@ export function useArtistDetailsStream(
   const [loadingLibrary, setLoadingLibrary] = useState(
     seededExistsInLibrary === undefined,
   );
-  const [loadingReleases, setLoadingReleases] = useState(false);
+  const [loadingReleases, setLoadingReleases] = useState(!!mbid);
+  const [loadingAppearsOn, setLoadingAppearsOn] = useState(!!mbid);
   const [appSettings, setAppSettings] = useState(null);
   const [albumCovers, setAlbumCovers] = useState({});
   const artistReleaseGroups = artist?.["release-groups"];
@@ -188,7 +189,8 @@ export function useArtistDetailsStream(
     setError(null);
     setLoadingCover(true);
     setLoadingSimilar(true);
-    setLoadingReleases(false);
+    setLoadingReleases(!!mbid);
+    setLoadingAppearsOn(!!mbid);
     setLibraryArtist(nextSeededLibraryArtist);
     setLibraryAlbums([]);
     setExistsInLibrary(nextSeededExistsInLibrary === true);
@@ -330,6 +332,8 @@ export function useArtistDetailsStream(
         if (!isCurrentRequest()) return;
         setArtist(artistData);
         setLoading(false);
+        setLoadingReleases(false);
+        setLoadingAppearsOn(false);
 
         const nameForCover = artistData?.name || artistNameRef.current || artistNameFromNav || "";
         artistNameRef.current = nameForCover;
@@ -350,6 +354,8 @@ export function useArtistDetailsStream(
         setLoadingCover(false);
         setLoadingSimilar(false);
         setLoadingLibrary(false);
+        setLoadingReleases(false);
+        setLoadingAppearsOn(false);
       }
     };
 
@@ -364,7 +370,10 @@ export function useArtistDetailsStream(
       try {
         const artistData = JSON.parse(event.data);
         if (!isCurrentRequest()) return;
-        if (!artistData || !artistData.id) {
+        if (!artistData) {
+          throw new Error("Invalid artist data received");
+        }
+        if (!artistData.id && !artistReceived) {
           throw new Error("Invalid artist data received");
         }
         setArtist((prev) => {
@@ -387,6 +396,18 @@ export function useArtistDetailsStream(
           if (!("bio" in artistData)) next.bio = prev.bio;
           return next;
         });
+        if (
+          "release-groups" in artistData &&
+          Array.isArray(artistData["release-groups"])
+        ) {
+          setLoadingReleases(false);
+        }
+        if (
+          "appears-on-release-groups" in artistData &&
+          Array.isArray(artistData["appears-on-release-groups"])
+        ) {
+          setLoadingAppearsOn(false);
+        }
         if (!artistReceived) setLoading(false);
         artistReceived = true;
       } catch (err) {
@@ -474,6 +495,8 @@ export function useArtistDetailsStream(
       streamComplete = true;
       clearTimeout(fallbackTimeout);
       eventSource.close();
+      setLoadingReleases(false);
+      setLoadingAppearsOn(false);
 
       if (libraryReceived) {
         return;
@@ -716,6 +739,7 @@ export function useArtistDetailsStream(
     loadingLibrary,
     setLoadingLibrary,
     loadingReleases,
+    loadingAppearsOn,
     existsInLibrary,
     setExistsInLibrary,
     appSettings,
