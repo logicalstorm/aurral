@@ -505,7 +505,7 @@ function SearchResultsPage() {
     return () => {
       cancelled = true;
     };
-  }, [results, libraryLookup, isAlbumSearch]);
+  }, [results, libraryLookup, isAlbumSearch, isUnifiedSearch]);
 
   useEffect(() => {
     if (!isUnifiedSearch || !unifiedResults?.catalog?.albums?.length) {
