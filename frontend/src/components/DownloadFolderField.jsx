@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import { Folder } from "lucide-react";
 import { browseFilesystem } from "../utils/api";
@@ -8,19 +8,28 @@ export default function DownloadFolderField({
   value = "",
   onChange,
   disabled = false,
+  autoApplySuggestion = true,
   id,
   helperText = "",
 }) {
-  const [draft, setDraft] = useState(value);
+  const [draft, setDraft] = useState(() => String(value || "").trim());
   const [showPicker, setShowPicker] = useState(false);
   const [prefilled, setPrefilled] = useState(false);
+  const onChangeRef = useRef(onChange);
 
   useEffect(() => {
-    setDraft(value || "");
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    const nextValue = String(value || "").trim();
+    if (nextValue) {
+      setDraft(nextValue);
+    }
   }, [value]);
 
   useEffect(() => {
-    if (prefilled || value || disabled) return;
+    if (prefilled || String(value || "").trim() || disabled) return;
     let cancelled = false;
     browseFilesystem()
       .then((result) => {
@@ -28,7 +37,9 @@ export default function DownloadFolderField({
         const suggested = String(result.suggestedDownloadFolder || "").trim();
         if (suggested) {
           setDraft(suggested);
-          onChange?.(suggested);
+          if (autoApplySuggestion) {
+            onChangeRef.current?.(suggested);
+          }
         }
         setPrefilled(true);
       })
@@ -38,11 +49,12 @@ export default function DownloadFolderField({
     return () => {
       cancelled = true;
     };
-  }, [disabled, onChange, prefilled, value]);
+  }, [autoApplySuggestion, disabled, prefilled, value]);
 
   const commitDraft = (nextValue) => {
     const trimmed = String(nextValue ?? draft).trim();
     setDraft(trimmed);
+    if (trimmed === String(value || "").trim()) return;
     onChange?.(trimmed);
   };
 
@@ -100,6 +112,7 @@ DownloadFolderField.propTypes = {
   value: PropTypes.string,
   onChange: PropTypes.func,
   disabled: PropTypes.bool,
+  autoApplySuggestion: PropTypes.bool,
   id: PropTypes.string,
   helperText: PropTypes.string,
 };
