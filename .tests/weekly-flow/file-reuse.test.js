@@ -71,7 +71,7 @@ test("reuseTrackForPlaylist references a completed Aurral track path", async () 
   };
   const sourcePath = path.join(
     weeklyFlowRoot,
-    "aurral-playlists",
+    "aurral-weekly-flow",
     "source-playlist",
     "System of a Down",
     "Toxicity",
@@ -117,7 +117,7 @@ test("repairCompletedTrackLink updates missing playlist paths to a reusable sour
   const lidarrPath = path.join(weeklyFlowRoot, "lidarr-library", "Creep.flac");
   const playlistPath = path.join(
     weeklyFlowRoot,
-    "aurral-playlists",
+    "aurral-weekly-flow",
     "flow-playlist",
     "Radiohead",
     "Pablo Honey",
@@ -159,7 +159,7 @@ test("repairCompletedTrackLink skips tracks whose playlist file still exists", a
   const sourcePath = path.join(weeklyFlowRoot, "library", "Hyperballad.flac");
   const playlistPath = path.join(
     weeklyFlowRoot,
-    "aurral-playlists",
+    "aurral-weekly-flow",
     "flow-playlist",
     "Bjork",
     "Post",
@@ -200,7 +200,7 @@ test("repairReusableTrackLinks does nothing when reuse is disabled", async () =>
   };
   const playlistPath = path.join(
     weeklyFlowRoot,
-    "aurral-playlists",
+    "aurral-weekly-flow",
     "flow-playlist",
     "Song.flac",
   );

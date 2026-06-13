@@ -126,7 +126,7 @@ Create one shared tree on the host, for example `/srv/media`:
     ├── slskd/
     │   └── complete/                   # slskd finished downloads
     └── aurral/                         # Aurral DOWNLOAD_FOLDER
-        └── aurral-playlists/           # created automatically by Aurral
+        └── aurral-weekly-flow/         # created automatically by Aurral
 ```
 
 ### Paths each service should use
@@ -183,7 +183,7 @@ After the containers are up:
 | ------------------------------- | --------------------------------------------------------------------------------------------------- |
 | Lidarr library reuse / playback | Aurral must read files at the same paths Lidarr stores in its database.                             |
 | slskd → Aurral downloads        | Aurral picks up completed files from slskd's download path, then moves them into `DOWNLOAD_FOLDER`. |
-| Navidrome flow playback         | Navidrome must scan the same `aurral-playlists` tree Aurral writes.                                 |
+| Navidrome flow playback         | Navidrome must scan the same `aurral-weekly-flow` tree Aurral writes.                               |
 | Efficient reuse                 | Hardlinks and reuse work best when library and downloads share a filesystem.                        |
 
 ### Common mistake: mounting only `/data/music`
@@ -260,7 +260,7 @@ Flows are dynamic playlists that refresh on a schedule. Imported playlists are s
 Both download into Aurral's own folder:
 
 ```text
-/data/downloads/aurral/aurral-playlists
+/data/downloads/aurral/aurral-weekly-flow
 ```
 
 They do not write directly into your main music library.
@@ -307,7 +307,7 @@ If you want generated flows to appear in Navidrome:
 
 1. Follow [Shared Storage Layout](#shared-storage-layout) so Aurral, Navidrome, slskd, and Lidarr all mount the same `/data` tree.
 2. Configure Navidrome in `Settings -> Integrations -> Subsonic / Navidrome`.
-3. Let Aurral create/update the `aurral-playlists` library and generated M3U playlists.
+3. Let Aurral create/update the `aurral-weekly-flow` library and generated M3U playlists.
 
 Recommended Navidrome setting:
 
