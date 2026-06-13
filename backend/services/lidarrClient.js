@@ -245,6 +245,9 @@ export class LidarrClient {
   }
 
   updateConfig() {
+    if (this._holdConfig) {
+      return;
+    }
     const previousConfig = this.config;
     const settings = dbOps.getSettings();
     const dbConfig = settings.integrations?.lidarr || {};
@@ -1097,6 +1100,42 @@ export class LidarrClient {
   async getTracksByAlbumId(albumId) {
     try {
       const result = await this.request(`/track?albumId=${albumId}`);
+      if (Array.isArray(result)) return result;
+      if (result?.records && Array.isArray(result.records))
+        return result.records;
+      return [];
+    } catch {
+      return [];
+    }
+  }
+
+  async getTrackFilesByAlbumId(albumId) {
+    try {
+      const result = await this.request(`/trackfile?albumId=${albumId}`);
+      if (Array.isArray(result)) return result;
+      if (result?.records && Array.isArray(result.records))
+        return result.records;
+      return [];
+    } catch {
+      return [];
+    }
+  }
+
+  async getAllTracks() {
+    try {
+      const result = await this.request("/track");
+      if (Array.isArray(result)) return result;
+      if (result?.records && Array.isArray(result.records))
+        return result.records;
+      return [];
+    } catch {
+      return [];
+    }
+  }
+
+  async getAllTrackFiles() {
+    try {
+      const result = await this.request("/trackfile");
       if (Array.isArray(result)) return result;
       if (result?.records && Array.isArray(result.records))
         return result.records;

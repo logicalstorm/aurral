@@ -1,20 +1,28 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Loader, Music, X } from "lucide-react";
 import { useToast } from "../../contexts/ToastContext";
 import { useAuth } from "../../contexts/AuthContext";
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { useArtistDetailsStream } from "./hooks/useArtistDetailsStream";
-import { useReleaseTypeFilter } from "./hooks/useReleaseTypeFilter";
 import { usePreviewPlayer } from "./hooks/usePreviewPlayer";
 import { useArtistDetailsLibrary } from "./hooks/useArtistDetailsLibrary";
+import { useArtistSearchFocus } from "./hooks/useArtistSearchFocus";
+import { allReleaseTypes, ARTIST_DETAILS_APPEARS_ON_LIMIT } from "./constants";
 import { ArtistDetailsHero } from "./components/ArtistDetailsHero";
+import { ArtistDetailsActionBar } from "./components/ArtistDetailsActionBar";
+import { ArtistDetailsDownloadTargets } from "./components/ArtistDetailsDownloadTargets";
 import { ArtistDetailsLibraryAlbums } from "./components/ArtistDetailsLibraryAlbums";
 import { ArtistDetailsReleaseGroups } from "./components/ArtistDetailsReleaseGroups";
+import { ArtistDetailsAppearsOn } from "./components/ArtistDetailsAppearsOn";
+import { ArtistDetailsPreviewTracks } from "./components/ArtistDetailsPreviewTracks";
+import { ArtistDetailsAbout } from "./components/ArtistDetailsAbout";
 import { ArtistDetailsSimilar } from "./components/ArtistDetailsSimilar";
 import { DeleteArtistModal } from "./components/DeleteArtistModal";
 import { DeleteAlbumModal } from "./components/DeleteAlbumModal";
 import { AddArtistCustomizeModal } from "./components/AddArtistCustomizeModal";
 import {
+  addArtistToLibrary,
   addSharedPlaylistTracks,
   getArtistCover,
   getArtistDetails,
@@ -24,9 +32,9 @@ import {
   getSimilarArtistsForArtist,
   createSharedPlaylist,
   updateArtistOverrides,
-  getBlocklist,
-  updateBlocklist,
 } from "../../utils/api";
+import { buildDownloadTargets, getArtistPosterImage } from "./utils";
+import { useArtistTasteFeedback } from "../../hooks/useArtistTasteFeedback";
 
 const MBID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -75,7 +83,6 @@ function ArtistDetailsPage() {
   const { showSuccess, showError } = useToast();
   const { hasPermission } = useAuth();
   const similarArtistsScrollRef = useRef(null);
-  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [showEditIdsModal, setShowEditIdsModal] = useState(false);
   const [idsLoading, setIdsLoading] = useState(false);
   const [idsSaving, setIdsSaving] = useState(false);
@@ -88,20 +95,13 @@ function ArtistDetailsPage() {
   const [playlistModalLoading, setPlaylistModalLoading] = useState(false);
   const [playlistModalError, setPlaylistModalError] = useState("");
   const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
-  const [blockingArtist, setBlockingArtist] = useState(false);
-  const [artistBlocked, setArtistBlocked] = useState(false);
   const [visibleReleaseGroupCoverIds, setVisibleReleaseGroupCoverIds] = useState(
     [],
   );
+  const [visibleAppearsOnCoverIds, setVisibleAppearsOnCoverIds] = useState([]);
   const [visibleLibraryCoverIds, setVisibleLibraryCoverIds] = useState([]);
 
-  const filter = useReleaseTypeFilter();
-  const {
-    selectedReleaseTypes,
-    setSelectedReleaseTypes,
-    primaryReleaseTypes,
-    secondaryReleaseTypes,
-  } = filter;
+  const selectedReleaseTypes = allReleaseTypes;
 
   const stream = useArtistDetailsStream(
     mbid,
@@ -110,17 +110,21 @@ function ArtistDetailsPage() {
     {
       visibleCoverIds: [
         ...visibleReleaseGroupCoverIds,
+        ...visibleAppearsOnCoverIds,
         ...visibleLibraryCoverIds,
       ],
       initialLibraryHint,
+      appearsOnLimit: ARTIST_DETAILS_APPEARS_ON_LIMIT,
     },
   );
   const canAddArtist = hasPermission("addArtist");
+  const { lookup: artistFeedbackLookup, getFeedbackFlags, submitFeedback } =
+    useArtistTasteFeedback();
+  const [tasteActionPending, setTasteActionPending] = useState(null);
   const canAddAlbum = hasPermission("addAlbum");
   const canChangeMonitoring = hasPermission("changeMonitoring");
   const canDeleteArtist = hasPermission("deleteArtist");
   const canDeleteAlbum = hasPermission("deleteAlbum");
-  const canBulkAddAlbums = canAddAlbum && canChangeMonitoring;
   const {
     artist,
     coverImages,
@@ -139,6 +143,7 @@ function ArtistDetailsPage() {
     setLoadingSimilar,
     loadingLibrary,
     loadingReleases,
+    loadingAppearsOn,
     existsInLibrary,
     setExistsInLibrary,
     appSettings,
@@ -147,123 +152,72 @@ function ArtistDetailsPage() {
     setArtist,
   } = stream;
 
-  const preview = usePreviewPlayer(mbid, artistNameFromNav, artist);
-  const {
-    previewTracks,
-    loadingPreview,
-    setLoadingPreview,
-    playingPreviewId,
-    previewProgress,
-    previewSnappingBack,
-    previewVolume,
-    setPreviewVolume,
-    previewAudioRef,
-    handlePreviewPlay,
-    setPreviewTracks,
-  } = preview;
+  const artistDisplayName = artist?.name || artistNameFromNav || "";
+  useDocumentTitle(artistDisplayName);
 
-  const normalizeArtists = useCallback((artists) => {
-    const source = Array.isArray(artists) ? artists : [];
-    const seen = new Set();
-    const out = [];
-    for (const entry of source) {
-      if (!entry) continue;
-      const entryMbid =
-        typeof entry.mbid === "string" && MBID_REGEX.test(entry.mbid.trim())
-          ? entry.mbid.trim()
-          : null;
-      const entryName = String(entry.name || "").trim();
-      if (!entryMbid && !entryName) continue;
-      const key = entryMbid
-        ? `mbid:${entryMbid.toLowerCase()}`
-        : `name:${entryName.toLowerCase()}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({ mbid: entryMbid, name: entryName || null });
-    }
-    return out;
-  }, []);
+  const tasteArtist = useMemo(
+    () => ({
+      id: artist?.id || mbid,
+      name: artistDisplayName,
+      tags: artist?.tags || [],
+      genres: artist?.genres || [],
+    }),
+    [artist?.genres, artist?.id, artist?.tags, artistDisplayName, mbid],
+  );
 
-  const isBlockedByEntries = useCallback((entries) => {
-    const artistMbid = String(artist?.id || mbid || "")
-      .trim()
-      .toLowerCase();
-    const artistName = String(artist?.name || artistNameFromNav || "")
-      .trim()
-      .toLowerCase();
-    return entries.some((entry) => {
-      const mbidValue = String(entry?.mbid || "")
-        .trim()
-        .toLowerCase();
-      const nameValue = String(entry?.name || "")
-        .trim()
-        .toLowerCase();
-      if (artistMbid && mbidValue && artistMbid === mbidValue) return true;
-      if (artistName && nameValue && artistName === nameValue) return true;
-      return false;
-    });
-  }, [artist?.id, artist?.name, artistNameFromNav, mbid]);
+  const currentArtistFeedback = useMemo(
+    () => getFeedbackFlags(tasteArtist),
+    [getFeedbackFlags, tasteArtist],
+  );
 
-  const handleToggleBlockArtist = async () => {
-    if (!artist) return;
-    setBlockingArtist(true);
-    try {
-      const current = await getBlocklist();
-      const entries = normalizeArtists(current.artists);
-      const artistMbid =
-        String(artist?.id || mbid || "").trim() || null;
-      const artistName = String(artist?.name || artistNameFromNav || "").trim() || null;
-      const exists = entries.some((entry) => {
-        const entryMbid = String(entry?.mbid || "").trim().toLowerCase();
-        const entryName = String(entry?.name || "").trim().toLowerCase();
-        if (artistMbid && entryMbid && artistMbid.toLowerCase() === entryMbid) return true;
-        if (artistName && entryName && artistName.toLowerCase() === entryName) return true;
-        return false;
-      });
-      const nextArtists = exists
-        ? entries.filter((entry) => {
-            const entryMbid = String(entry?.mbid || "").trim().toLowerCase();
-            const entryName = String(entry?.name || "").trim().toLowerCase();
-            if (artistMbid && entryMbid && artistMbid.toLowerCase() === entryMbid) return false;
-            if (artistName && entryName && artistName.toLowerCase() === entryName) return false;
-            return true;
-          })
-        : [...entries, { mbid: artistMbid, name: artistName }];
-      const response = await updateBlocklist({
-        artists: nextArtists,
-        tags: current.tags || [],
-      });
-      const savedArtists = normalizeArtists(response?.blocklist?.artists || nextArtists);
-      const blocked = isBlockedByEntries(savedArtists);
-      setArtistBlocked(blocked);
-      showSuccess(blocked ? "Artist added to blocklist" : "Artist removed from blocklist");
-    } catch (err) {
-      showError(err.response?.data?.message || "Failed to update blocklist");
-    } finally {
-      setBlockingArtist(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!artist && !mbid) return;
-    let cancelled = false;
-    const run = async () => {
+  const handleArtistTasteFeedback = useCallback(
+    async (targetArtist, action, { isSelected = false } = {}) => {
+      setTasteActionPending(action);
       try {
-        const data = await getBlocklist();
-        if (cancelled) return;
-        const entries = normalizeArtists(data.artists);
-        setArtistBlocked(isBlockedByEntries(entries));
-      } catch {
-        if (!cancelled) {
-          setArtistBlocked(false);
-        }
+        return await submitFeedback(targetArtist, action, {
+          isSelected,
+          sourceContext: "artist_page",
+          seedArtistName: tasteArtist.name,
+        });
+      } finally {
+        setTasteActionPending(null);
       }
-    };
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [artist, artistNameFromNav, isBlockedByEntries, mbid, normalizeArtists]);
+    },
+    [submitFeedback, tasteArtist.name],
+  );
+
+  const handleCurrentArtistTasteFeedback = useCallback(
+    async (action) => {
+      await handleArtistTasteFeedback(tasteArtist, action, {
+        isSelected: !!currentArtistFeedback[action],
+      });
+    },
+    [currentArtistFeedback, handleArtistTasteFeedback, tasteArtist],
+  );
+
+  const handleAddSimilarArtistToLibrary = useCallback(
+    async (similarArtist) => {
+      const artistId = similarArtist?.id || similarArtist?.mbid;
+      if (!similarArtist?.name || !artistId) return false;
+      try {
+        await addArtistToLibrary({
+          foreignArtistId: artistId,
+          artistName: similarArtist.name,
+        });
+        showSuccess(`Adding ${similarArtist.name}...`);
+        return true;
+      } catch (err) {
+        showError(
+          err.response?.data?.message ||
+            err.response?.data?.error ||
+            err.message ||
+            "Failed to add artist to library",
+        );
+        return false;
+      }
+    },
+    [showError, showSuccess],
+  );
 
   const library = useArtistDetailsLibrary({
     artist,
@@ -278,6 +232,41 @@ function ArtistDetailsPage() {
     showError,
     selectedReleaseTypes,
   });
+
+  useArtistSearchFocus({
+    navigate,
+    mbid,
+    locationState,
+  });
+
+  const preview = usePreviewPlayer(mbid, artistNameFromNav, artist, {
+    existsInLibrary,
+    libraryArtist,
+    libraryAlbums,
+    downloadStatuses: library.downloadStatuses || {},
+  });
+  const {
+    previewTracks,
+    loadingPreview,
+    buildingQueue,
+    setLoadingPreview,
+    playingPreviewId,
+    isArtistPlaybackActive,
+    handlePreviewPlay,
+    handlePreviewPlayAll,
+    setPreviewTracks,
+  } = preview;
+
+  const downloadTargets = useMemo(
+    () =>
+      buildDownloadTargets({
+        artist,
+        libraryAlbums,
+        downloadStatuses: library.downloadStatuses || {},
+        releaseGroups: artist?.["release-groups"] || [],
+      }),
+    [artist, library.downloadStatuses, libraryAlbums],
+  );
 
   const handleOpenEditIds = async () => {
     if (!mbid) return;
@@ -401,9 +390,7 @@ function ArtistDetailsPage() {
     );
 
   const buildReleaseTrackPayload = (track, releaseGroup) => {
-    const year = String(
-      releaseGroup?.["first-release-date"] || "",
-    ).slice(0, 4);
+    const year = String(releaseGroup?.["first-release-date"] || "").slice(0, 4);
     return {
       artistName: artist?.name || artistNameFromNav || "",
       trackName: track?.trackName || track?.title || "",
@@ -421,24 +408,21 @@ function ArtistDetailsPage() {
     };
   };
 
-  const buildLibraryTrackPayload = (track, libraryAlbum, releaseGroupId) => {
-    const year = String(libraryAlbum?.releaseDate || "").slice(0, 4);
-    return {
-      artistName: artist?.name || artistNameFromNav || "",
-      trackName: track?.trackName || track?.title || "",
-      albumName: libraryAlbum?.albumName || "",
-      artistMbid: mbid || "",
-      albumMbid: releaseGroupId || libraryAlbum?.mbid || "",
-      trackMbid: track?.mbid || track?.id || "",
-      releaseYear: year || null,
-      durationMs:
-        track?.length != null && Number.isFinite(Number(track.length))
-          ? Number(track.length)
-          : null,
-      reason: null,
-      artistAliases: [],
-    };
-  };
+  const buildPreviewTrackPayload = (track) => ({
+    artistName: artist?.name || artistNameFromNav || "",
+    trackName: track?.title || track?.trackName || "",
+    albumName: track?.album || "",
+    artistMbid: mbid || "",
+    albumMbid: "",
+    trackMbid: track?.mbid || track?.id || "",
+    releaseYear: null,
+    durationMs:
+      track?.duration_ms != null && Number.isFinite(Number(track.duration_ms))
+        ? Number(track.duration_ms)
+        : null,
+    reason: "Artist preview",
+    artistAliases: [],
+  });
 
   const saveTrackToPlaylist = async (trackPayload, target, savingKey) => {
     if (!trackPayload?.artistName || !trackPayload?.trackName) {
@@ -496,40 +480,34 @@ function ArtistDetailsPage() {
     return saveTrackToPlaylist(payload, target, savingKey);
   };
 
-  const handleLibraryTrackAdd = (track, libraryAlbum, releaseGroupId, target) => {
-    const payload = buildLibraryTrackPayload(track, libraryAlbum, releaseGroupId);
-    const savingKey = String(track?.id ?? track?.mbid ?? track?.title ?? "");
+  const handlePreviewTrackAdd = (track, target) => {
+    const payload = buildPreviewTrackPayload(track);
+    const savingKey = String(track?.id ?? track?.title ?? "");
     return saveTrackToPlaylist(payload, target, savingKey);
   };
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center py-20">
-        <Loader
-          className="w-12 h-12 animate-spin"
-          style={{ color: "#c1c1c3" }}
-        />
+      <div className="artist-loading">
+        <Loader className="artist-spinner artist-spinner--large animate-spin" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="card">
-        <div className="text-center py-12">
-          <Music
-            className="w-16 h-16 mx-auto mb-4"
-            style={{ color: "#c1c1c3" }}
-          />
-          <h3 className="text-xl font-semibold mb-2" style={{ color: "#fff" }}>
+      <div className="artist-error-panel">
+        <div>
+          <Music className="artist-error-icon" />
+          <h3 className="artist-error-title">
             Error Loading Artist
           </h3>
-          <p className="mb-6" style={{ color: "#c1c1c3" }}>
+          <p className="artist-error-copy">
             {error}
           </p>
           <button
             onClick={() => navigate("/search")}
-            className="btn btn-primary hidden sm:inline-flex"
+            className="btn btn-primary artist-hidden-mobile"
           >
             Back to Search
           </button>
@@ -542,16 +520,28 @@ function ArtistDetailsPage() {
     return null;
   }
 
+  const artistCoverImage = getArtistPosterImage(coverImages);
+  const playbackSource = {
+    type: "artist",
+    id: mbid,
+    label: artistDisplayName,
+  };
+
   return (
-    <div className="animate-fade-in">
+    <div className="artist-details-page">
       <ArtistDetailsHero
         artist={artist}
-        libraryArtist={libraryArtist}
-        appSettings={appSettings}
         coverImages={coverImages}
         loadingCover={loadingCover}
         loadingLibrary={loadingLibrary}
         existsInLibrary={existsInLibrary}
+        onCoverError={handleCoverError}
+        onNavigate={(path) => navigate(path)}
+      />
+
+      <ArtistDetailsActionBar
+        existsInLibrary={existsInLibrary}
+        loadingLibrary={loadingLibrary}
         showRemoveDropdown={library.showRemoveDropdown}
         setShowRemoveDropdown={library.setShowRemoveDropdown}
         showMonitorOptionMenu={library.showMonitorOptionMenu}
@@ -569,21 +559,51 @@ function ArtistDetailsPage() {
         canRefreshArtist={canChangeMonitoring}
         handleRefreshArtist={library.handleRefreshArtist}
         refreshingArtist={library.refreshingArtist}
-        onCoverError={handleCoverError}
-        onNavigate={(path) => navigate(path)}
+        buildingQueue={buildingQueue}
+        isArtistPlaybackActive={isArtistPlaybackActive}
+        handlePreviewPlayAll={handlePreviewPlayAll}
+        onEditIds={handleOpenEditIds}
+        onTasteFeedback={handleCurrentArtistTasteFeedback}
+        tasteFeedbackUsed={currentArtistFeedback}
+        tasteActionPending={tasteActionPending}
+      />
+
+      <ArtistDetailsPreviewTracks
+        mbid={mbid}
+        artistName={artist?.name || artistNameFromNav || ""}
         loadingPreview={loadingPreview}
         previewTracks={previewTracks}
-        previewAudioRef={previewAudioRef}
         playingPreviewId={playingPreviewId}
-        previewProgress={previewProgress}
-        previewSnappingBack={previewSnappingBack}
-        previewVolume={previewVolume}
-        setPreviewVolume={setPreviewVolume}
+        isArtistPlaybackActive={isArtistPlaybackActive}
         handlePreviewPlay={handlePreviewPlay}
-        onEditIds={handleOpenEditIds}
-        onToggleBlockArtist={handleToggleBlockArtist}
-        blockingArtist={blockingArtist}
-        artistBlocked={artistBlocked}
+        onAddTrackToPlaylist={handlePreviewTrackAdd}
+        resolveMembershipTrack={buildPreviewTrackPayload}
+        playlists={sharedPlaylists}
+        playlistsLoading={playlistModalLoading}
+        playlistSavingKey={playlistMenuSavingKey}
+        playlistError={playlistModalError}
+        getDefaultPlaylistName={getDefaultTrackPlaylistName}
+        onLoadPlaylists={loadSharedPlaylists}
+      />
+
+      <ArtistDetailsDownloadTargets
+        targets={downloadTargets}
+        artist={artist}
+        albumCovers={albumCovers}
+        artistCoverImage={artistCoverImage}
+        canAddAlbum={canAddAlbum}
+        requestingAlbum={library.requestingAlbum}
+        handleRequestAlbum={library.handleRequestAlbum}
+        playbackSource={playbackSource}
+        artistName={artistDisplayName}
+        onAddTrackToPlaylist={handleReleaseTrackAdd}
+        resolveMembershipTrack={buildReleaseTrackPayload}
+        playlists={sharedPlaylists}
+        playlistsLoading={playlistModalLoading}
+        playlistSavingKey={playlistMenuSavingKey}
+        playlistError={playlistModalError}
+        getDefaultPlaylistName={getDefaultTrackPlaylistName}
+        onLoadPlaylists={loadSharedPlaylists}
       />
 
       {existsInLibrary && libraryAlbums && libraryAlbums.length > 0 && (
@@ -595,73 +615,70 @@ function ArtistDetailsPage() {
           reSearchingAlbum={library.reSearchingAlbum}
           reSearchingMissingAlbums={library.reSearchingMissingAlbums}
           albumCovers={albumCovers}
-          expandedLibraryAlbum={library.expandedLibraryAlbum}
-          albumTracks={library.albumTracks}
-          loadingTracks={library.loadingTracks}
+          artistCoverImage={artistCoverImage}
           albumDropdownOpen={library.albumDropdownOpen}
           setAlbumDropdownOpen={library.setAlbumDropdownOpen}
-          handleLibraryAlbumClick={library.handleLibraryAlbumClick}
           canDeleteAlbum={canDeleteAlbum}
           handleDeleteAlbumClick={library.handleDeleteAlbumClick}
           canReSearchAlbum={canAddAlbum}
           handleReSearchAlbum={library.handleReSearchAlbum}
           handleReSearchMissingDownloads={library.handleReSearchMissingDownloads}
-          onAddTrackToPlaylist={handleLibraryTrackAdd}
-          playlists={sharedPlaylists}
-          playlistsLoading={playlistModalLoading}
-          playlistSavingKey={playlistMenuSavingKey}
-          playlistError={playlistModalError}
-          getDefaultPlaylistName={getDefaultTrackPlaylistName}
-          onLoadPlaylists={loadSharedPlaylists}
           onVisibleCoverIdsChange={setVisibleLibraryCoverIds}
+          artistName={artistDisplayName}
         />
       )}
 
-      {artist["release-groups"] && artist["release-groups"].length > 0 && (
+      {(loadingReleases ||
+        (artist["release-groups"] && artist["release-groups"].length > 0)) && (
         <ArtistDetailsReleaseGroups
           artist={artist}
-          selectedReleaseTypes={selectedReleaseTypes}
-          setSelectedReleaseTypes={setSelectedReleaseTypes}
-          primaryReleaseTypes={primaryReleaseTypes}
-          secondaryReleaseTypes={secondaryReleaseTypes}
-          showFilterDropdown={showFilterDropdown}
-          setShowFilterDropdown={setShowFilterDropdown}
           loadingReleases={loadingReleases}
-          existsInLibrary={existsInLibrary}
-          canBulkAddAlbums={canBulkAddAlbums}
-          handleMonitorAll={library.handleMonitorAll}
-          processingBulk={library.processingBulk}
           albumCovers={albumCovers}
-          expandedReleaseGroup={library.expandedReleaseGroup}
-          albumTracks={library.albumTracks}
-          loadingTracks={library.loadingTracks}
+          artistCoverImage={artistCoverImage}
           getAlbumStatus={library.getAlbumStatus}
-          albumDropdownOpen={library.albumDropdownOpen}
-          setAlbumDropdownOpen={library.setAlbumDropdownOpen}
-          handleReleaseGroupAlbumClick={library.handleReleaseGroupAlbumClick}
           canAddAlbum={canAddAlbum}
           handleRequestAlbum={library.handleRequestAlbum}
-          canDeleteAlbum={canDeleteAlbum}
-          handleDeleteAlbumClick={library.handleDeleteAlbumClick}
           requestingAlbum={library.requestingAlbum}
-          reSearchingAlbum={library.reSearchingAlbum}
-          canReSearchAlbum={canAddAlbum}
-          handleReSearchAlbum={library.handleReSearchAlbum}
-          previewVolume={previewVolume}
-          setPreviewVolume={setPreviewVolume}
-          isReleaseGroupDownloadedInLibrary={
-            library.isReleaseGroupDownloadedInLibrary
-          }
-          onAddTrackToPlaylist={handleReleaseTrackAdd}
-          playlists={sharedPlaylists}
-          playlistsLoading={playlistModalLoading}
-          playlistSavingKey={playlistMenuSavingKey}
-          playlistError={playlistModalError}
-          getDefaultPlaylistName={getDefaultTrackPlaylistName}
-          onLoadPlaylists={loadSharedPlaylists}
+          artistName={artistDisplayName}
           onVisibleCoverIdsChange={setVisibleReleaseGroupCoverIds}
+          onViewAll={() =>
+            navigate(`/artist/${artist.id}/albums`, {
+              state: { artistName: artist.name, inLibrary: existsInLibrary },
+            })
+          }
         />
       )}
+
+      {(loadingAppearsOn ||
+        (artist["appears-on-release-groups"] &&
+          artist["appears-on-release-groups"].length > 0)) && (
+          <ArtistDetailsAppearsOn
+            artist={artist}
+            loadingAppearsOn={loadingAppearsOn}
+            albumCovers={albumCovers}
+            artistCoverImage={artistCoverImage}
+            getAlbumStatus={library.getAlbumStatus}
+            canAddAlbum={canAddAlbum}
+            handleRequestAlbum={library.handleRequestAlbum}
+            requestingAlbum={library.requestingAlbum}
+            artistName={artistDisplayName}
+            onVisibleCoverIdsChange={setVisibleAppearsOnCoverIds}
+            onViewAll={() =>
+              navigate(`/artist/${artist.id}/appears-on`, {
+                state: { artistName: artist.name, inLibrary: existsInLibrary },
+              })
+            }
+          />
+        )}
+
+      <ArtistDetailsAbout
+        artist={artist}
+        libraryArtist={libraryArtist}
+        appSettings={appSettings}
+        existsInLibrary={existsInLibrary}
+        coverImages={coverImages}
+        onNavigate={(path) => navigate(path)}
+      />
 
       {(loadingSimilar || similarArtists.length > 0) && (
         <ArtistDetailsSimilar
@@ -676,6 +693,10 @@ function ArtistDetailsPage() {
               },
             })
           }
+          canAddArtist={canAddArtist}
+          onAddToLibrary={handleAddSimilarArtistToLibrary}
+          onArtistFeedback={handleArtistTasteFeedback}
+          artistFeedbackLookup={artistFeedbackLookup}
         />
       )}
 
@@ -748,38 +769,33 @@ function EditArtistIdsModal({
   if (!show) return null;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
+      className="artist-modal-backdrop"
       onClick={onClose}
     >
       <div
-        className="card max-w-md w-full mx-4"
+        className="artist-modal"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold" style={{ color: "#fff" }}>
+        <div className="artist-modal__header">
+          <h3 className="artist-modal__title">
             Edit Artist IDs
           </h3>
           <button
             type="button"
-            className="p-2 rounded transition-colors hover:bg-[#2a2a2e]"
-            style={{ color: "#c1c1c3" }}
+            className="btn btn-surface btn-icon-square"
             onClick={onClose}
             aria-label="Close"
           >
-            <X className="w-5 h-5" />
+            <X className="artist-icon-md" />
           </button>
         </div>
-        <p className="text-sm mb-5" style={{ color: "#c1c1c3" }}>
+        <p className="artist-modal__subcopy">
           {artistName ? `${artistName}: ` : ""}
           Update the MusicBrainz or Deezer ID to fix metadata and cover art.
         </p>
-        <div className="space-y-4">
+        <div className="artist-modal__fields">
           <div>
-            <label
-              className="block text-sm font-medium mb-2"
-              style={{ color: "#fff" }}
-            >
+            <label className="artist-field-label">
               MusicBrainz ID
             </label>
             <input
@@ -793,15 +809,11 @@ function EditArtistIdsModal({
                 }))
               }
               placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-              className="w-full px-3 py-2 rounded border border-white/10 focus:outline-none"
-              style={{ backgroundColor: "#1a1a1e", color: "#fff" }}
+              className="artist-input"
             />
           </div>
           <div>
-            <label
-              className="block text-sm font-medium mb-2"
-              style={{ color: "#fff" }}
-            >
+            <label className="artist-field-label">
               Deezer Artist ID
             </label>
             <input
@@ -815,20 +827,19 @@ function EditArtistIdsModal({
                 }))
               }
               placeholder="Numeric Deezer ID"
-              className="w-full px-3 py-2 rounded border border-white/10 focus:outline-none"
-              style={{ backgroundColor: "#1a1a1e", color: "#fff" }}
+              className="artist-input"
             />
           </div>
-          <p className="text-xs" style={{ color: "#c1c1c3" }}>
+          <p className="artist-subtext">
             Leave both fields blank to clear overrides.
           </p>
           {error && (
-            <div className="text-sm" style={{ color: "#ff6b6b" }}>
+            <div className="artist-error-text">
               {error}
             </div>
           )}
         </div>
-        <div className="flex gap-3 justify-end mt-6">
+        <div className="artist-modal__actions">
           <button
             type="button"
             className="btn btn-secondary"
