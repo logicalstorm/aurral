@@ -8,11 +8,73 @@ import {
   normalizeListenHistoryProvider,
   normalizeListenHistoryUsername,
 } from "../services/listeningHistory.js";
+import {
+  syncDownloadFolderPath,
+  validateDownloadFolderPath,
+} from "../services/downloadFolderConfig.js";
 
 const getSettingStmt = db.prepare("SELECT value FROM settings WHERE key = ?");
 const upsertSettingStmt = db.prepare(
   "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)"
 );
+const deleteSettingStmt = db.prepare("DELETE FROM settings WHERE key = ?");
+
+const PLAYLIST_WORKER_RETRY_CYCLE_MINUTES = 360;
+
+function readStoredSettingJson(primaryKey, legacyKeys = []) {
+  const primary = dbHelpers.parseJSON(getSettingStmt.get(primaryKey)?.value);
+  if (primary != null) return primary;
+  for (const legacyKey of legacyKeys) {
+    const legacy = dbHelpers.parseJSON(getSettingStmt.get(legacyKey)?.value);
+    if (legacy != null) return legacy;
+  }
+  return null;
+}
+
+function normalizePlaylistArtworkSettings(raw) {
+  const artwork = raw && typeof raw === "object" ? raw : {};
+  const style = String(artwork.style || "photo").trim().toLowerCase();
+  return {
+    style: style === "aurral" ? "aurral" : "photo",
+  };
+}
+
+function normalizePlaylistWorkerSettings(raw) {
+  const worker = raw && typeof raw === "object" ? raw : {};
+  const parsedConcurrency = Number(worker.concurrency);
+  const concurrency =
+    Number.isFinite(parsedConcurrency) && parsedConcurrency >= 1
+      ? Math.min(3, Math.floor(parsedConcurrency))
+      : 2;
+  const retryCycleMinutes = PLAYLIST_WORKER_RETRY_CYCLE_MINUTES;
+  const retryPausedPlaylistIds = Array.isArray(worker.retryPausedPlaylistIds)
+    ? [
+        ...new Set(
+          worker.retryPausedPlaylistIds
+            .map((entry) => String(entry || "").trim())
+            .filter(Boolean),
+        ),
+      ]
+    : [];
+  return {
+    concurrency,
+    retryCycleMinutes,
+    retryPausedPlaylistIds,
+    existingFileMode: normalizeExistingFileMode(worker.existingFileMode),
+  };
+}
+
+function normalizeLegacyWeeklyFlowWorkerSettings(raw) {
+  const legacy = readStoredSettingJson("weeklyFlowWorker") || {};
+  const current = normalizePlaylistWorkerSettings(raw);
+  return {
+    ...legacy,
+    concurrency: current.concurrency,
+    retryCycleMinutes: current.retryCycleMinutes,
+    retryPausedPlaylistIds: current.retryPausedPlaylistIds,
+    existingFileMode: current.existingFileMode,
+  };
+}
 
 const getDiscoveryCacheStmt = db.prepare(
   "SELECT value, last_updated FROM discovery_cache WHERE key = ?"
@@ -65,6 +127,38 @@ const deleteArtistOverrideStmt = db.prepare(
   "DELETE FROM artist_overrides WHERE mbid = ?"
 );
 
+const insertAurralHistoryStmt = db.prepare(`
+  INSERT OR REPLACE INTO aurral_history (
+    id, kind, title, subtitle, status, status_label, href, metadata, created_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+const getAurralHistoryStmt = db.prepare(`
+  SELECT id, kind, title, subtitle, status, status_label, href, metadata, created_at
+  FROM aurral_history
+  WHERE created_at >= ?
+  ORDER BY created_at DESC
+  LIMIT ?
+`);
+const getAurralHistoryByIdStmt = db.prepare(`
+  SELECT id, kind, title, subtitle, status, status_label, href, metadata, created_at
+  FROM aurral_history
+  WHERE id = ?
+`);
+const deleteAurralHistoryOlderThanStmt = db.prepare(
+  "DELETE FROM aurral_history WHERE created_at < ?",
+);
+const countAurralHistoryStmt = db.prepare(
+  "SELECT COUNT(*) as count FROM aurral_history",
+);
+const deleteOldestAurralHistoryStmt = db.prepare(`
+  DELETE FROM aurral_history
+  WHERE id IN (
+    SELECT id FROM aurral_history
+    ORDER BY created_at ASC
+    LIMIT ?
+  )
+`);
+
 const getUserByUsernameStmt = db.prepare(
   "SELECT * FROM users WHERE username = ?"
 );
@@ -94,9 +188,15 @@ const DEFAULT_PERMISSIONS = {
 
 const normalizeExistingFileMode = (value) => {
   const normalized = String(value || "").trim().toLowerCase();
-  return ["download", "hardlink", "copy"].includes(normalized)
-    ? normalized
-    : "hardlink";
+  if (normalized === "download") return "download";
+  if (
+    normalized === "reuse" ||
+    normalized === "hardlink" ||
+    normalized === "copy"
+  ) {
+    return "reuse";
+  }
+  return "reuse";
 };
 
 export const userOps = {
@@ -354,73 +454,27 @@ export const dbOps = {
       getSettingStmt.get("security")?.value
     );
     const rootFolderPath = getSettingStmt.get("rootFolderPath")?.value;
+    const downloadFolderPath =
+      getSettingStmt.get("downloadFolderPath")?.value || null;
+    syncDownloadFolderPath(downloadFolderPath);
     const releaseTypes = dbHelpers.parseJSON(
       getSettingStmt.get("releaseTypes")?.value
     );
-    const weeklyFlowPlaylists = dbHelpers.parseJSON(
-      getSettingStmt.get("weeklyFlowPlaylists")?.value
+    const flows = readStoredSettingJson("flows", ["weeklyFlows"]);
+    const sharedPlaylists = readStoredSettingJson("sharedPlaylists", [
+      "sharedFlowPlaylists",
+    ]);
+    const playlistWorker = normalizePlaylistWorkerSettings(
+      readStoredSettingJson("playlistWorker", ["weeklyFlowWorker"]),
     );
-    const weeklyFlows = dbHelpers.parseJSON(
-      getSettingStmt.get("weeklyFlows")?.value
-    );
-    const sharedFlowPlaylists = dbHelpers.parseJSON(
-      getSettingStmt.get("sharedFlowPlaylists")?.value
-    );
-    const weeklyFlowWorker = dbHelpers.parseJSON(
-      getSettingStmt.get("weeklyFlowWorker")?.value
+    const playlistArtwork = normalizePlaylistArtworkSettings(
+      readStoredSettingJson("playlistArtwork"),
     );
     const blocklist = dbHelpers.parseJSON(
       getSettingStmt.get("blocklist")?.value
     );
     const onboardingComplete =
       getSettingStmt.get("onboardingComplete")?.value === "true";
-    const parsedConcurrency = Number(weeklyFlowWorker?.concurrency);
-    const concurrency =
-      Number.isFinite(parsedConcurrency) && parsedConcurrency >= 1
-        ? Math.min(3, Math.floor(parsedConcurrency))
-        : 2;
-    const preferredFormat =
-      String(weeklyFlowWorker?.preferredFormat || "").toLowerCase() === "mp3"
-        ? "mp3"
-        : "flac";
-    const preferredFormatStrict = weeklyFlowWorker?.preferredFormatStrict === true;
-    const parsedRetryCycleMinutes = Number(weeklyFlowWorker?.retryCycleMinutes);
-    const retryCycleMinutes =
-      Number.isFinite(parsedRetryCycleMinutes) &&
-      [15, 30, 60, 360, 720, 1440].includes(
-        Math.floor(parsedRetryCycleMinutes),
-      )
-        ? Math.floor(parsedRetryCycleMinutes)
-        : 15;
-    const retryPausedPlaylistIds = Array.isArray(
-      weeklyFlowWorker?.retryPausedPlaylistIds,
-    )
-      ? [...new Set(
-          weeklyFlowWorker.retryPausedPlaylistIds
-            .map((entry) => String(entry || "").trim())
-            .filter(Boolean),
-        )]
-      : [];
-    const existingFileMode = normalizeExistingFileMode(
-      weeklyFlowWorker?.existingFileMode,
-    );
-
-    const defaultFlowPlaylists = {
-      discover: { enabled: false, nextRunAt: null },
-      mix: { enabled: false, nextRunAt: null },
-      trending: { enabled: false, nextRunAt: null },
-    };
-    const merged = weeklyFlowPlaylists
-      ? { ...defaultFlowPlaylists, ...weeklyFlowPlaylists }
-      : defaultFlowPlaylists;
-    if (merged.recommended) {
-      merged.discover = {
-        ...defaultFlowPlaylists.discover,
-        ...merged.discover,
-        ...merged.recommended,
-      };
-    }
-    delete merged.recommended;
 
     const result = {
       integrations: decryptIntegrations(integrations, encKey) || {},
@@ -431,18 +485,12 @@ export const dbOps = {
           ? security
           : { localNetworkBypass: { enabled: false } },
       rootFolderPath: rootFolderPath || null,
+      downloadFolderPath: downloadFolderPath || null,
       releaseTypes: releaseTypes || [],
-      weeklyFlowPlaylists: merged,
-      weeklyFlows: weeklyFlows || null,
-      sharedFlowPlaylists: sharedFlowPlaylists || null,
-      weeklyFlowWorker: {
-        concurrency,
-        preferredFormat,
-        preferredFormatStrict,
-        retryCycleMinutes,
-        retryPausedPlaylistIds,
-        existingFileMode,
-      },
+      flows: flows || null,
+      sharedPlaylists: sharedPlaylists || null,
+      playlistWorker,
+      playlistArtwork,
       blocklist:
         blocklist && typeof blocklist === "object"
           ? blocklist
@@ -459,10 +507,22 @@ export const dbOps = {
     const updateFn = db.transaction(() => {
       if (settings.integrations) {
         const encKey = getOrCreateEncryptionKey();
+        const existingIntegrations =
+          decryptIntegrations(
+            dbHelpers.parseJSON(getSettingStmt.get("integrations")?.value),
+            encKey,
+          ) || {};
+        const nextIntegrations = { ...settings.integrations };
+        if (
+          existingIntegrations.soulseek &&
+          nextIntegrations.soulseek === undefined
+        ) {
+          nextIntegrations.soulseek = existingIntegrations.soulseek;
+        }
         upsertSettingStmt.run(
           "integrations",
           dbHelpers.stringifyJSON(
-            encryptIntegrations(settings.integrations, encKey)
+            encryptIntegrations(nextIntegrations, encKey)
           )
         );
       }
@@ -487,34 +547,73 @@ export const dbOps = {
       ) {
         upsertSettingStmt.run("rootFolderPath", settings.rootFolderPath);
       }
+      if (settings.downloadFolderPath !== undefined) {
+        const normalized = String(settings.downloadFolderPath || "").trim();
+        if (!normalized) {
+          deleteSettingStmt.run("downloadFolderPath");
+          syncDownloadFolderPath(null);
+        } else {
+          const validation = validateDownloadFolderPath(normalized, undefined, {
+            create: true,
+          });
+          if (!validation.valid) {
+            throw new Error(validation.error);
+          }
+          upsertSettingStmt.run("downloadFolderPath", validation.path);
+          syncDownloadFolderPath(validation.path);
+        }
+      }
       if (settings.releaseTypes) {
         upsertSettingStmt.run(
           "releaseTypes",
           dbHelpers.stringifyJSON(settings.releaseTypes)
         );
       }
-      if (settings.weeklyFlowPlaylists !== undefined) {
+      if (settings.flows !== undefined) {
+        const serializedFlows = dbHelpers.stringifyJSON(settings.flows);
         upsertSettingStmt.run(
-          "weeklyFlowPlaylists",
-          dbHelpers.stringifyJSON(settings.weeklyFlowPlaylists)
+          "flows",
+          serializedFlows,
         );
-      }
-      if (settings.weeklyFlows !== undefined) {
         upsertSettingStmt.run(
           "weeklyFlows",
-          dbHelpers.stringifyJSON(settings.weeklyFlows)
+          serializedFlows,
         );
       }
-      if (settings.sharedFlowPlaylists !== undefined) {
+      if (settings.sharedPlaylists !== undefined) {
+        const serializedSharedPlaylists = dbHelpers.stringifyJSON(
+          settings.sharedPlaylists,
+        );
+        upsertSettingStmt.run(
+          "sharedPlaylists",
+          serializedSharedPlaylists,
+        );
         upsertSettingStmt.run(
           "sharedFlowPlaylists",
-          dbHelpers.stringifyJSON(settings.sharedFlowPlaylists)
+          serializedSharedPlaylists,
         );
       }
-      if (settings.weeklyFlowWorker !== undefined) {
+      if (settings.playlistWorker !== undefined) {
+        const normalizedPlaylistWorker = normalizePlaylistWorkerSettings(
+          settings.playlistWorker,
+        );
+        upsertSettingStmt.run(
+          "playlistWorker",
+          dbHelpers.stringifyJSON(normalizedPlaylistWorker),
+        );
         upsertSettingStmt.run(
           "weeklyFlowWorker",
-          dbHelpers.stringifyJSON(settings.weeklyFlowWorker)
+          dbHelpers.stringifyJSON(
+            normalizeLegacyWeeklyFlowWorkerSettings(normalizedPlaylistWorker),
+          ),
+        );
+      }
+      if (settings.playlistArtwork !== undefined) {
+        upsertSettingStmt.run(
+          "playlistArtwork",
+          dbHelpers.stringifyJSON(
+            normalizePlaylistArtworkSettings(settings.playlistArtwork),
+          ),
         );
       }
       if (settings.blocklist !== undefined) {
@@ -556,6 +655,9 @@ export const dbOps = {
     const fallbackGenrePools = dbHelpers.parseJSON(
       getDiscoveryCacheStmt.get(`${prefix}fallbackGenrePools`)?.value
     );
+    const discoverPlaylists = dbHelpers.parseJSON(
+      getDiscoveryCacheStmt.get(`${prefix}discoverPlaylists`)?.value
+    );
     const provider =
       getDiscoveryCacheStmt.get(`${prefix}provider`)?.value || null;
     const lastUpdated = cacheNamespace
@@ -573,6 +675,7 @@ export const dbOps = {
         fallbackGenrePools && typeof fallbackGenrePools === "object"
           ? fallbackGenrePools
           : {},
+      discoverPlaylists: discoverPlaylists || [],
       provider,
       lastUpdated,
     };
@@ -628,6 +731,13 @@ export const dbOps = {
         upsertDiscoveryCacheStmt.run(
           `${prefix}fallbackGenrePools`,
           dbHelpers.stringifyJSON(discovery.fallbackGenrePools),
+          now
+        );
+      }
+      if (discovery.discoverPlaylists) {
+        upsertDiscoveryCacheStmt.run(
+          `${prefix}discoverPlaylists`,
+          dbHelpers.stringifyJSON(discovery.discoverPlaylists),
           now
         );
       }
@@ -788,5 +898,64 @@ export const dbOps = {
   deleteArtistOverride(mbid) {
     if (!mbid) return null;
     return deleteArtistOverrideStmt.run(mbid);
+  },
+
+  insertAurralHistory(entry) {
+    if (!entry?.id || !entry?.title) return null;
+    insertAurralHistoryStmt.run(
+      entry.id,
+      entry.kind || "activity",
+      entry.title,
+      entry.subtitle || null,
+      entry.status || "completed",
+      entry.statusLabel || null,
+      entry.href || null,
+      dbHelpers.stringifyJSON(entry.metadata),
+      Number(entry.createdAt) || Date.now(),
+    );
+    return entry;
+  },
+
+  getAurralHistoryById(id) {
+    if (!id) return null;
+    const row = getAurralHistoryByIdStmt.get(String(id));
+    if (!row) return null;
+    return {
+      id: row.id,
+      kind: row.kind,
+      title: row.title,
+      subtitle: row.subtitle || null,
+      status: row.status || "completed",
+      statusLabel: row.status_label || null,
+      href: row.href || null,
+      metadata: dbHelpers.parseJSON(row.metadata),
+      createdAt: row.created_at,
+    };
+  },
+
+  getAurralHistory({ since = 0, limit = 200 } = {}) {
+    const safeLimit = Math.max(1, Math.min(500, Number(limit) || 200));
+    const safeSince = Number(since) || 0;
+    return getAurralHistoryStmt.all(safeSince, safeLimit).map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      title: row.title,
+      subtitle: row.subtitle || null,
+      status: row.status || "completed",
+      statusLabel: row.status_label || null,
+      href: row.href || null,
+      metadata: dbHelpers.parseJSON(row.metadata),
+      createdAt: row.created_at,
+    }));
+  },
+
+  pruneAurralHistory({ maxAgeMs = 30 * 24 * 60 * 60 * 1000, maxEntries = 1000 } = {}) {
+    const cutoff = Date.now() - Math.max(0, Number(maxAgeMs) || 0);
+    deleteAurralHistoryOlderThanStmt.run(cutoff);
+    const count = Number(countAurralHistoryStmt.get()?.count || 0);
+    const overflow = count - Math.max(1, Number(maxEntries) || 500);
+    if (overflow > 0) {
+      deleteOldestAurralHistoryStmt.run(overflow);
+    }
   },
 };

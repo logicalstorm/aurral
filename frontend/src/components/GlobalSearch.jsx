@@ -1,30 +1,42 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ChevronDown, Loader2, Search } from "lucide-react";
+import { Clock, Loader2, Search } from "lucide-react";
+import AddAlbumButton from "./AddAlbumButton";
+import AddToLibraryButton from "./AddToLibraryButton";
+import SearchLibraryCheck from "./SearchLibraryCheck";
+import { TrackPlaylistMenu } from "../pages/ArtistDetails/components/TrackPlaylistMenu";
+import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../contexts/ToastContext";
 import {
+  addArtistToLibrary,
+  addSharedPlaylistTracks,
+  createSharedPlaylist,
   getBootstrapStatus,
+  getFlowStatus,
   getTagSuggestions,
-  searchArtists,
+  requestAlbumFromSearch,
+  searchUnified,
 } from "../utils/api";
+import { getArtistRecordId } from "../utils/artistTaste";
+import {
+  buildMixedSuggestionItems,
+  getSearchResultKey,
+  navigateFromSearchResult,
+} from "../utils/searchNavigation";
+import {
+  addRecentSearch,
+  clearRecentSearches,
+  readRecentSearches,
+} from "../utils/recentSearches";
 
 const AUTOCOMPLETE_DEBOUNCE_MS = 250;
-const AUTOCOMPLETE_LIMIT = 6;
+const SUGGEST_LIMIT = 5;
 const TAG_SUGGESTIONS_LIMIT = 8;
-const SEARCH_SCOPES = [
-  { value: "artist", label: "Artist", shortLabel: "Artist" },
-  { value: "album", label: "Album/Release", shortLabel: "Release" },
-  { value: "tag", label: "Tag", shortLabel: "Tag" },
-];
-
-function normalizeArtistName(value) {
-  if (!value || typeof value !== "string") return "";
-  return value
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .replace(/\s4$/g, " for")
-    .replace(/\s*[.\-_]\s*$/g, "")
-    .trim();
-}
+const ALBUM_PENDING_STATUSES = new Set([
+  "searching",
+  "downloading",
+  "processing",
+]);
 
 function isEditableTarget(target) {
   if (!(target instanceof HTMLElement)) return false;
@@ -33,23 +45,140 @@ function isEditableTarget(target) {
   return ["input", "textarea", "select"].includes(tagName);
 }
 
+function getSuggestionTitle(item) {
+  if (item?.type === "artist") return item.name || "";
+  if (item?.type === "album") return item.title || "";
+  if (item?.type === "track") return item.title || "";
+  if (item?.type === "playlist") return item.name || "";
+  return "";
+}
+
+function getSuggestionMeta(item) {
+  if (item?.type === "artist") return "Artist";
+  if (item?.type === "album") {
+    return item.artistName ? `Album · ${item.artistName}` : "Album";
+  }
+  if (item?.type === "track") {
+    return item.artistName ? `Song · ${item.artistName}` : "Song";
+  }
+  if (item?.type === "playlist") {
+    return item.trackCount != null
+      ? `Playlist · ${item.trackCount} track${item.trackCount === 1 ? "" : "s"}`
+      : "Playlist";
+  }
+  return null;
+}
+
+function getSuggestionItemId(item) {
+  if (!item) return "";
+  if (item.type === "artist") return getArtistRecordId(item) || "";
+  if (item.type === "track") return item.id || item.trackMbid || "";
+  return item.id || "";
+}
+
+function getTrackSavingKey(track) {
+  return String(
+    track?.id ||
+      track?.trackMbid ||
+      `${track?.artistName || ""}:${track?.title || ""}`,
+  );
+}
+
+function isSuggestionInLibrary(item) {
+  if (!item) return false;
+  if (item.inLibrary) return true;
+  return item.type === "album" && ["available", "inLibrary"].includes(item.status);
+}
+
+function buildTrackPlaylistPayload(track) {
+  const payload = {
+    artistName: track?.artistName || "",
+    trackName: track?.title || "",
+    albumName: track?.albumTitle || "",
+    artistMbid: track?.artistMbid || "",
+    albumMbid: track?.albumMbid || "",
+    trackMbid: track?.id || track?.trackMbid || "",
+    releaseYear: track?.releaseYear || null,
+    durationMs:
+      track?.durationMs != null && Number.isFinite(Number(track.durationMs))
+        ? Number(track.durationMs)
+        : null,
+    reason: null,
+    artistAliases: [],
+  };
+  if (!payload.artistName || !payload.trackName) return null;
+  return payload;
+}
+
 function GlobalSearch() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchScope, setSearchScope] = useState("artist");
   const [lastfmConfigured, setLastfmConfigured] = useState(true);
-  const [scopeMenuOpen, setScopeMenuOpen] = useState(false);
-  const [suggestions, setSuggestions] = useState([]);
+  const [localSearchConfigured, setLocalSearchConfigured] = useState(true);
+  const [suggestionRows, setSuggestionRows] = useState([]);
   const [suggestionMode, setSuggestionMode] = useState(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [suggestionIndex, setSuggestionIndex] = useState(-1);
+  const [inputFocused, setInputFocused] = useState(false);
+  const [recentSearches, setRecentSearches] = useState(() => readRecentSearches());
   const searchContainerRef = useRef(null);
   const inputRef = useRef(null);
   const debounceRef = useRef(null);
+  const searchGenerationRef = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
+  const { hasPermission } = useAuth();
+  const { showSuccess, showError } = useToast();
+  const canAddArtist = hasPermission("addArtist");
+  const canAddAlbum = hasPermission("addAlbum");
+  const [pendingArtistIds, setPendingArtistIds] = useState({});
+  const [pendingAlbumIds, setPendingAlbumIds] = useState({});
+  const [sharedPlaylists, setSharedPlaylists] = useState([]);
+  const [playlistModalLoading, setPlaylistModalLoading] = useState(false);
+  const [playlistModalError, setPlaylistModalError] = useState("");
+  const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
+
+  const selectableRows = useMemo(() => {
+    if (suggestionMode === "tag") return suggestionRows;
+    return suggestionRows.filter((row) => row.kind === "item");
+  }, [suggestionRows, suggestionMode]);
+
+  const showRecentSearches = useMemo(
+    () =>
+      inputFocused &&
+      searchQuery.trim().length < 2 &&
+      recentSearches.length > 0 &&
+      !loadingSuggestions &&
+      suggestionRows.length === 0,
+    [
+      inputFocused,
+      loadingSuggestions,
+      recentSearches.length,
+      searchQuery,
+      suggestionRows.length,
+    ],
+  );
+
+  const recentSelectableRows = useMemo(
+    () =>
+      showRecentSearches
+        ? recentSearches.map((query, index) => ({
+            kind: "recent",
+            key: `recent:${query}:${index}`,
+            query,
+          }))
+        : [],
+    [recentSearches, showRecentSearches],
+  );
+
+  const keyboardRows = showRecentSearches ? recentSelectableRows : selectableRows;
+
+  const rememberSearch = useCallback((rawQuery) => {
+    const next = addRecentSearch(rawQuery);
+    setRecentSearches(next);
+  }, []);
 
   const closeAutocomplete = useCallback(() => {
-    setSuggestions([]);
+    setSuggestionRows([]);
     setSuggestionMode(null);
     setSuggestionIndex(-1);
   }, []);
@@ -73,20 +202,6 @@ function GlobalSearch() {
       cancelled = true;
     };
   }, []);
-
-  const availableScopes = lastfmConfigured
-    ? SEARCH_SCOPES
-    : SEARCH_SCOPES.filter((scope) => scope.value !== "tag");
-
-  const selectedScope =
-    availableScopes.find((scope) => scope.value === searchScope) ||
-    availableScopes[0];
-
-  useEffect(() => {
-    if (!lastfmConfigured && searchScope === "tag") {
-      setSearchScope("artist");
-    }
-  }, [lastfmConfigured, searchScope]);
 
   useEffect(() => {
     setSearchQuery("");
@@ -117,36 +232,32 @@ function GlobalSearch() {
   useEffect(() => {
     const trimmed = searchQuery.trim();
     const isTagShortcut = lastfmConfigured && trimmed.startsWith("#");
-    const effectiveScope = isTagShortcut ? "tag" : searchScope;
     const tagPart = isTagShortcut ? trimmed.slice(1).trim() : trimmed;
-    const shouldAutocomplete =
-      effectiveScope === "tag"
-        ? isTagShortcut || searchScope === "tag"
-        : effectiveScope === "artist";
 
-    if (
-      !shouldAutocomplete ||
-      (effectiveScope === "artist" && trimmed.length < 2) ||
-      (effectiveScope === "tag" && !isTagShortcut && trimmed.length < 2)
-    ) {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-        debounceRef.current = null;
+    if (isTagShortcut) {
+      if (tagPart.length < 2) {
+        if (debounceRef.current) {
+          clearTimeout(debounceRef.current);
+          debounceRef.current = null;
+        }
+        searchGenerationRef.current += 1;
+        setLoadingSuggestions(false);
+        closeAutocomplete();
+        return;
       }
-      closeAutocomplete();
-      return;
-    }
 
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      debounceRef.current = null;
-      setLoadingSuggestions(true);
-      try {
-        if (effectiveScope === "tag") {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      const generation = searchGenerationRef.current + 1;
+      searchGenerationRef.current = generation;
+      debounceRef.current = setTimeout(async () => {
+        debounceRef.current = null;
+        setLoadingSuggestions(true);
+        try {
           const data = await getTagSuggestions(tagPart, TAG_SUGGESTIONS_LIMIT);
+          if (generation !== searchGenerationRef.current) return;
           const raw = data.tags || [];
           const seen = new Set();
-          const list = raw.filter((tag) => {
+          const tags = raw.filter((tag) => {
             const key = String(tag || "")
               .trim()
               .toLowerCase();
@@ -154,38 +265,82 @@ function GlobalSearch() {
             seen.add(key);
             return true;
           });
-          setSuggestions(list);
+          setSuggestionRows(
+            tags.map((tagName) => ({
+              kind: "tag",
+              key: `tag:${tagName}`,
+              tagName,
+            })),
+          );
           setSuggestionMode("tag");
           setSuggestionIndex(-1);
-          return;
+        } catch {
+          if (generation === searchGenerationRef.current) {
+            closeAutocomplete();
+          }
+        } finally {
+          if (generation === searchGenerationRef.current) {
+            setLoadingSuggestions(false);
+          }
         }
+      }, AUTOCOMPLETE_DEBOUNCE_MS);
 
-        const data = await searchArtists(trimmed, AUTOCOMPLETE_LIMIT, 0);
-        const raw = data.artists || [];
-        const seenIds = new Set();
-        const seenNames = new Set();
-        const list = raw.filter((artist) => {
-          if (!artist?.id || seenIds.has(artist.id)) return false;
-          const key = normalizeArtistName(artist.name);
-          if (!key || seenNames.has(key)) return false;
-          seenIds.add(artist.id);
-          seenNames.add(key);
-          return true;
+      return () => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        searchGenerationRef.current += 1;
+      };
+    }
+
+    if (trimmed.length < 2) {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      searchGenerationRef.current += 1;
+      setLoadingSuggestions(false);
+      closeAutocomplete();
+      return;
+    }
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const generation = searchGenerationRef.current + 1;
+    searchGenerationRef.current = generation;
+    debounceRef.current = setTimeout(async () => {
+      debounceRef.current = null;
+      setLoadingSuggestions(true);
+      try {
+        const data = await searchUnified(trimmed, {
+          mode: "suggest",
+          limit: SUGGEST_LIMIT,
         });
-        setSuggestions(list);
-        setSuggestionMode("artist");
+        if (generation !== searchGenerationRef.current) return;
+        setLocalSearchConfigured(!!data?.localSearchConfigured);
+        const items = buildMixedSuggestionItems(data, SUGGEST_LIMIT + 3);
+        setSuggestionRows(
+          items.map((item, index) => ({
+            kind: "item",
+            key: getSearchResultKey(item, index),
+            item,
+          })),
+        );
+        setSuggestionMode("unified");
         setSuggestionIndex(-1);
       } catch {
-        closeAutocomplete();
+        if (generation === searchGenerationRef.current) {
+          closeAutocomplete();
+        }
       } finally {
-        setLoadingSuggestions(false);
+        if (generation === searchGenerationRef.current) {
+          setLoadingSuggestions(false);
+        }
       }
     }, AUTOCOMPLETE_DEBOUNCE_MS);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      searchGenerationRef.current += 1;
     };
-  }, [searchQuery, searchScope, closeAutocomplete, lastfmConfigured]);
+  }, [searchQuery, closeAutocomplete, lastfmConfigured]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -193,7 +348,6 @@ function GlobalSearch() {
         searchContainerRef.current &&
         !searchContainerRef.current.contains(event.target)
       ) {
-        setScopeMenuOpen(false);
         closeAutocomplete();
       }
     };
@@ -202,24 +356,20 @@ function GlobalSearch() {
   }, [closeAutocomplete]);
 
   const navigateToSearch = useCallback(
-    (rawQuery, scopeOverride = null) => {
+    (rawQuery) => {
       const trimmed = String(rawQuery || "").trim();
       if (!trimmed) return;
+      rememberSearch(trimmed);
       if (trimmed.startsWith("#")) {
         navigate(`/search?q=${encodeURIComponent(trimmed.slice(1))}&type=tag`);
       } else {
-        const effectiveScope = scopeOverride || searchScope;
-        navigate(
-          `/search?q=${encodeURIComponent(trimmed)}&type=${encodeURIComponent(
-            effectiveScope,
-          )}`,
-        );
+        navigate(`/search?q=${encodeURIComponent(trimmed)}`);
       }
       setSearchQuery("");
-      setScopeMenuOpen(false);
       closeAutocomplete();
+      setInputFocused(false);
     },
-    [navigate, searchScope, closeAutocomplete],
+    [navigate, closeAutocomplete, rememberSearch],
   );
 
   const handleSubmit = (event) => {
@@ -229,22 +379,282 @@ function GlobalSearch() {
 
   const handleSuggestionSelect = useCallback(
     (selection) => {
-      if (typeof selection === "string") {
-        navigate(`/search?q=${encodeURIComponent(selection)}&type=tag`);
-        setSearchQuery("");
-        setScopeMenuOpen(false);
-        closeAutocomplete();
+      if (!selection) return;
+
+      if (selection.kind === "recent") {
+        navigateToSearch(selection.query);
         return;
       }
-      if (!selection?.id) return;
-      navigate(`/artist/${selection.id}`, {
-        state: { artistName: selection.name },
-      });
-      setSearchQuery("");
-      setScopeMenuOpen(false);
-      closeAutocomplete();
+
+      if (selection.kind === "tag") {
+        rememberSearch(`#${selection.tagName}`);
+        navigate(
+          `/search?q=${encodeURIComponent(selection.tagName)}&type=tag`,
+        );
+        setSearchQuery("");
+        closeAutocomplete();
+        setInputFocused(false);
+        return;
+      }
+
+      if (selection.kind === "item") {
+        const query = searchQuery.trim();
+        if (query) rememberSearch(query);
+        navigateFromSearchResult(navigate, selection.item, { query });
+        setSearchQuery("");
+        closeAutocomplete();
+        setInputFocused(false);
+      }
     },
-    [navigate, closeAutocomplete],
+    [navigate, navigateToSearch, rememberSearch, searchQuery, closeAutocomplete],
+  );
+
+  const handleClearRecentSearches = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setRecentSearches(clearRecentSearches());
+    setSuggestionIndex(-1);
+  }, []);
+
+  const updateSuggestionItem = useCallback((targetItem, updates) => {
+    if (!targetItem) return;
+    const targetType = targetItem.type;
+    const targetId = getSuggestionItemId(targetItem);
+    setSuggestionRows((rows) =>
+      rows.map((row) => {
+        if (row.kind !== "item" || row.item?.type !== targetType) return row;
+        const currentId = getSuggestionItemId(row.item);
+        if (!targetId || currentId !== targetId) return row;
+        const patch =
+          typeof updates === "function" ? updates(row.item) : updates || {};
+        return {
+          ...row,
+          item: {
+            ...row.item,
+            ...patch,
+          },
+        };
+      }),
+    );
+  }, []);
+
+  const loadSharedPlaylists = useCallback(async () => {
+    setPlaylistModalLoading(true);
+    setPlaylistModalError("");
+    try {
+      const data = await getFlowStatus();
+      const playlists = Array.isArray(data?.sharedPlaylists)
+        ? data.sharedPlaylists
+        : [];
+      setSharedPlaylists(playlists);
+      return playlists;
+    } catch (err) {
+      const message =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        "Failed to load playlists";
+      setPlaylistModalError(message);
+      showError(message);
+      return null;
+    } finally {
+      setPlaylistModalLoading(false);
+    }
+  }, [showError]);
+
+  const handleArtistAction = useCallback(
+    async (artist) => {
+      const artistId = getArtistRecordId(artist);
+      if (!artist?.name || !artistId) return false;
+      setPendingArtistIds((prev) => ({ ...prev, [artistId]: true }));
+      try {
+        await addArtistToLibrary({
+          foreignArtistId: artistId,
+          artistName: artist.name,
+        });
+        updateSuggestionItem(artist, { inLibrary: true });
+        showSuccess(`Adding ${artist.name}...`);
+        return true;
+      } catch (err) {
+        showError(
+          err.response?.data?.message ||
+            err.response?.data?.error ||
+            err.message ||
+            "Failed to add artist to library",
+        );
+        return false;
+      } finally {
+        setPendingArtistIds((prev) => {
+          const next = { ...prev };
+          delete next[artistId];
+          return next;
+        });
+      }
+    },
+    [showError, showSuccess, updateSuggestionItem],
+  );
+
+  const handleAlbumAction = useCallback(
+    async (album) => {
+      if (!album?.id) return;
+      const shouldTriggerSearch = album.status === "inLibrary";
+      setPendingAlbumIds((prev) => ({ ...prev, [album.id]: true }));
+      try {
+        const result = await requestAlbumFromSearch({
+          albumMbid: album.id,
+          albumName: album.title,
+          artistMbid: album.artistMbid,
+          artistName: album.artistName,
+          triggerSearch: shouldTriggerSearch,
+        });
+        const nextAlbum = {
+          inLibrary: true,
+          libraryAlbumId: result.album?.id,
+          libraryArtistId: result.artist?.id,
+          status: result.status,
+        };
+        updateSuggestionItem(album, nextAlbum);
+        showSuccess(
+          result.triggeredSearch
+            ? `Search triggered for ${album.title}`
+            : `${album.title} added to library`,
+        );
+      } catch (err) {
+        showError(
+          err.response?.data?.error ||
+            err.response?.data?.message ||
+            err.message ||
+            "Failed to request album",
+        );
+      } finally {
+        setPendingAlbumIds((prev) => {
+          const next = { ...prev };
+          delete next[album.id];
+          return next;
+        });
+      }
+    },
+    [showError, showSuccess, updateSuggestionItem],
+  );
+
+  const handleSearchTrackAdd = useCallback(
+    async (track, target) => {
+      const payload = buildTrackPlaylistPayload(track);
+      if (!payload) {
+        showError("Track details are incomplete");
+        return;
+      }
+
+      const savingKey = getTrackSavingKey(track);
+      setPlaylistModalError("");
+      setPlaylistMenuSavingKey(savingKey);
+      try {
+        if (target?.mode === "new") {
+          const name = String(target?.name || "").trim() || "Playlist";
+          const response = await createSharedPlaylist({
+            name,
+            tracks: [payload],
+          });
+          showSuccess(`Track saved to ${response?.playlist?.name || name}`);
+        } else {
+          const targetPlaylist = sharedPlaylists.find(
+            (playlist) => playlist.id === target?.playlistId,
+          );
+          await addSharedPlaylistTracks(target.playlistId, {
+            tracks: [payload],
+          });
+          showSuccess(`Track added to ${targetPlaylist?.name || "playlist"}`);
+        }
+
+        const nextPlaylists = await loadSharedPlaylists();
+        if (nextPlaylists) {
+          setSharedPlaylists(nextPlaylists);
+        }
+      } catch (err) {
+        const message =
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          err.message ||
+          "Failed to save track to playlist";
+        setPlaylistModalError(message);
+        showError(message);
+      } finally {
+        setPlaylistMenuSavingKey("");
+      }
+    },
+    [loadSharedPlaylists, sharedPlaylists, showError, showSuccess],
+  );
+
+  const renderSuggestionAction = useCallback(
+    (item) => {
+      if (!item) return null;
+      if (isSuggestionInLibrary(item) && item.type !== "track") {
+        return <SearchLibraryCheck />;
+      }
+
+      if (item.type === "artist") {
+        const artistId = getArtistRecordId(item);
+        if (!canAddArtist || !artistId) return null;
+        return (
+          <AddToLibraryButton
+            className="btn-add-library--suggestion"
+            disabled={!!pendingArtistIds[artistId]}
+            isLoading={!!pendingArtistIds[artistId]}
+            onClick={() => handleArtistAction(item)}
+          />
+        );
+      }
+
+      if (item.type === "album") {
+        if (!canAddAlbum || !item.id) return null;
+        const pending = !!pendingAlbumIds[item.id];
+        return (
+          <AddAlbumButton
+            onClick={(event) => {
+              event.stopPropagation();
+              handleAlbumAction(item);
+            }}
+            isLoading={pending}
+            disabled={pending || ALBUM_PENDING_STATUSES.has(item.status)}
+            label="Add to Lidarr"
+          />
+        );
+      }
+
+      if (item.type === "track") {
+        const savingKey = getTrackSavingKey(item);
+        return (
+          <TrackPlaylistMenu
+            track={item}
+            triggerLabel="Add to playlist"
+            playlists={sharedPlaylists}
+            loading={playlistModalLoading}
+            saving={playlistMenuSavingKey === savingKey}
+            error={playlistModalError}
+            defaultNewPlaylistName={`${item.artistName || "Artist"} Picks`}
+            menuVariant="search-suggestion"
+            onLoadPlaylists={loadSharedPlaylists}
+            onSelect={(target) => handleSearchTrackAdd(item, target)}
+          />
+        );
+      }
+
+      return null;
+    },
+    [
+      canAddAlbum,
+      canAddArtist,
+      handleAlbumAction,
+      handleArtistAction,
+      handleSearchTrackAdd,
+      loadSharedPlaylists,
+      pendingAlbumIds,
+      pendingArtistIds,
+      playlistMenuSavingKey,
+      playlistModalError,
+      playlistModalLoading,
+      sharedPlaylists,
+    ],
   );
 
   const handleKeyDown = (event) => {
@@ -252,201 +662,168 @@ function GlobalSearch() {
       closeAutocomplete();
       return;
     }
-    if (suggestions.length === 0) return;
+    if (keyboardRows.length === 0) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setSuggestionIndex((current) =>
-        current < suggestions.length - 1 ? current + 1 : current,
+        current < keyboardRows.length - 1 ? current + 1 : current,
       );
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setSuggestionIndex((current) => (current > 0 ? current - 1 : -1));
     } else if (event.key === "Enter" && suggestionIndex >= 0) {
       event.preventDefault();
-      handleSuggestionSelect(suggestions[suggestionIndex]);
+      handleSuggestionSelect(keyboardRows[suggestionIndex]);
     }
   };
+
+  let selectableCursor = -1;
 
   return (
     <form
       ref={searchContainerRef}
       onSubmit={handleSubmit}
-      className="relative flex-1"
+      className="global-search"
     >
-      <div
-        className="relative flex items-stretch overflow-visible rounded-xl border shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_12px_32px_rgba(0,0,0,0.24)]"
-        style={{
-          background:
-            "linear-gradient(180deg, rgba(26,26,31,0.96), rgba(20,20,24,0.96))",
-          borderColor: "rgba(193,193,195,0.18)",
-        }}
-      >
-        <div className="relative shrink-0">
-          <button
-            type="button"
-            onClick={() => setScopeMenuOpen((open) => !open)}
-            className="flex h-full min-w-[96px] items-center gap-2 px-3 text-sm font-medium transition-colors hover:bg-white/[0.035] focus:outline-none sm:min-w-[132px] sm:px-4"
-            style={{
-              color: "#f3f3f4",
-              backgroundColor: scopeMenuOpen
-                ? "rgba(255,255,255,0.04)"
-                : "rgba(255,255,255,0.02)",
-            }}
-            aria-haspopup="listbox"
-            aria-expanded={scopeMenuOpen}
-            aria-label="Search scope"
-          >
-            <span className="sm:hidden">{selectedScope.shortLabel}</span>
-            <span className="hidden sm:inline">{selectedScope.label}</span>
-            <ChevronDown
-              className={`h-4 w-4 transition-transform ${
-                scopeMenuOpen ? "rotate-180" : ""
-              }`}
-              style={{ color: "#9f9fa5" }}
-            />
-          </button>
-
-          {scopeMenuOpen && (
-            <div
-              className="absolute left-0 top-[calc(100%+8px)] z-[70] min-w-[152px] overflow-hidden rounded-xl border shadow-[0_18px_48px_rgba(0,0,0,0.45)] sm:min-w-[180px]"
-              style={{
-                backgroundColor: "#17171c",
-                borderColor: "rgba(193,193,195,0.14)",
-              }}
-            >
-              <ul className="py-1">
-                {availableScopes.map((scope) => {
-                  const selected = scope.value === searchScope;
-                  return (
-                    <li key={scope.value}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSearchScope(scope.value);
-                          setScopeMenuOpen(false);
-                        }}
-                        className="flex w-full items-center justify-between px-4 py-3 text-left text-sm transition-colors hover:bg-white/[0.05] focus:bg-white/[0.05] focus:outline-none"
-                        style={{ color: selected ? "#fff" : "#d0d0d4" }}
-                        role="option"
-                        aria-selected={selected}
-                      >
-                        <span className="sm:hidden">{scope.shortLabel}</span>
-                        <span className="hidden sm:inline">{scope.label}</span>
-                        {selected && (
-                          <span
-                            className="h-2 w-2 rounded-full"
-                            style={{ backgroundColor: "#c1c1c3" }}
-                          />
-                        )}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
-        </div>
-
-        <div
-          className="my-2 w-px shrink-0"
-          style={{ backgroundColor: "rgba(193,193,195,0.14)" }}
-        />
-
-        <div className="relative min-w-0 flex-1">
-          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-            <Search className="h-5 w-5" style={{ color: "#a7a7ad" }} />
-          </div>
+      <div className="global-search__box global-search__box--unified">
+        <div className="global-search__input-wrap global-search__input-wrap--unified">
+          <Search className="global-search__icon" />
           <input
             ref={inputRef}
             type="text"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
+            onFocus={() => {
+              setInputFocused(true);
+              setSuggestionIndex(-1);
+            }}
+            onBlur={() => {
+              window.setTimeout(() => setInputFocused(false), 120);
+            }}
             onKeyDown={handleKeyDown}
             placeholder=""
-            className="block w-full bg-transparent py-3 pl-11 pr-4 text-sm focus:outline-none sm:pr-10"
-            style={{
-              color: "#fff",
-            }}
+            className="global-search__input"
             autoComplete="off"
           />
           {!searchQuery && (
-            <div
-              className="pointer-events-none absolute inset-y-0 left-0 flex items-center gap-2 pl-11 pr-4 text-[15px]"
-              style={{ color: "#92929a" }}
-            >
-              <span className="sm:hidden">Search...</span>
-              <span className="hidden sm:inline">Type</span>
-              <span
-                className="hidden sm:inline-flex h-6 min-w-6 items-center justify-center rounded-md border px-1.5 text-[13px] font-medium"
-                style={{
-                  borderColor: "rgba(193,193,195,0.28)",
-                  backgroundColor: "rgba(255,255,255,0.03)",
-                  color: "#e6e6e8",
-                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-                }}
-              >
-                /
-              </span>
-              <span className="hidden sm:inline">to search</span>
+            <div className="global-search__placeholder">
+              <span className="global-search__scope-label--short">Search...</span>
+              <span className="global-search__scope-label--full">Type</span>
+              <span className="global-search__key">/</span>
+              <span className="global-search__scope-label--full">to search</span>
             </div>
           )}
           {loadingSuggestions && (
-            <div
-              className="pointer-events-none absolute inset-y-0 right-3 flex items-center"
-              style={{ color: "#c1c1c3" }}
-            >
-              <Loader2 className="h-5 w-5 animate-spin" />
+            <div className="global-search__loader">
+              <Loader2 className="artist-icon-md animate-spin" />
             </div>
           )}
         </div>
       </div>
 
-      {!loadingSuggestions && suggestions.length > 0 && (
-        <ul
-          className="absolute left-0 right-0 top-full z-50 mt-2 max-h-64 overflow-x-hidden overflow-y-auto rounded-xl border py-1 shadow-[0_18px_48px_rgba(0,0,0,0.45)]"
-          style={{
-            backgroundColor: "#17171c",
-            borderColor: "rgba(193,193,195,0.14)",
-          }}
-        >
+      {!loadingSuggestions &&
+        suggestionMode === "unified" &&
+        !localSearchConfigured &&
+        searchQuery.trim().length >= 2 && (
+          <div className="global-search__suggestions global-search__suggestions--grouped">
+            <div className="global-search__suggestion-group">
+              Search not configured
+            </div>
+            <div className="global-search__suggestion global-search__suggestion--message">
+              Configure the search server in Settings to search artists,
+              releases, and tracks.
+            </div>
+          </div>
+        )}
+
+      {showRecentSearches && (
+        <div className="global-search__suggestions global-search__suggestions--grouped global-search__suggestions--recent">
+          <div className="global-search__recent-header">
+            <span className="global-search__recent-label">Recent searches</span>
+            <button
+              type="button"
+              className="global-search__recent-clear"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={handleClearRecentSearches}
+            >
+              Clear
+            </button>
+          </div>
+          {recentSelectableRows.map((row, index) => (
+            <button
+              key={row.key}
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => handleSuggestionSelect(row)}
+              className={`global-search__suggestion global-search__suggestion--recent${
+                index === suggestionIndex ? " is-highlighted" : ""
+              }`}
+            >
+              <Clock className="global-search__recent-icon" aria-hidden="true" />
+              <span className="global-search__recent-query">{row.query}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!loadingSuggestions && suggestionRows.length > 0 && (
+        <div className="global-search__suggestions global-search__suggestions--grouped">
           {suggestionMode === "tag"
-            ? suggestions.map((tagName, index) => (
-                <li key={tagName}>
-                  <button
-                    type="button"
-                    onClick={() => handleSuggestionSelect(tagName)}
-                    className="w-full px-4 py-2.5 text-left text-sm hover:bg-white/10 focus:bg-white/10 focus:outline-none"
-                    style={{
-                      color: "#fff",
-                      backgroundColor:
-                        index === suggestionIndex
-                          ? "rgba(255,255,255,0.1)"
-                          : undefined,
-                    }}
-                  >
-                    #{tagName}
-                  </button>
-                </li>
+            ? suggestionRows.map((row, index) => (
+                <button
+                  key={row.key}
+                  type="button"
+                  onClick={() => handleSuggestionSelect(row)}
+                  className={`global-search__suggestion${
+                    index === suggestionIndex ? " is-highlighted" : ""
+                  }`}
+                >
+                  #{row.tagName}
+                </button>
               ))
-            : suggestions.map((artist, index) => (
-                <li key={artist.id || index}>
-                  <button
-                    type="button"
-                    onClick={() => handleSuggestionSelect(artist)}
-                    className="w-full px-4 py-2.5 text-left text-sm hover:bg-white/10 focus:bg-white/10 focus:outline-none"
-                    style={{
-                      color: "#fff",
-                      backgroundColor:
-                        index === suggestionIndex
-                          ? "rgba(255,255,255,0.1)"
-                          : undefined,
-                    }}
+            : suggestionRows.map((row) => {
+                selectableCursor += 1;
+                const highlighted = selectableCursor === suggestionIndex;
+                const item = row.item;
+                const label = getSuggestionTitle(item);
+                const meta = getSuggestionMeta(item);
+                const action = renderSuggestionAction(item);
+
+                return (
+                  <div
+                    key={row.key}
+                    className={`global-search__suggestion global-search__suggestion--rich${
+                      highlighted ? " is-highlighted" : ""
+                    }`}
                   >
-                    {artist.name}
-                  </button>
-                </li>
-              ))}
-        </ul>
+                    <button
+                      type="button"
+                      onClick={() => handleSuggestionSelect(row)}
+                      className="global-search__suggestion-main"
+                    >
+                      <span className="global-search__suggestion-copy">
+                        <span className="global-search__suggestion-title">
+                          {label}
+                        </span>
+                        {meta && (
+                          <span className="global-search__suggestion-meta">
+                            {meta}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                    {action && (
+                      <span
+                        className="global-search__suggestion-actions"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {action}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+        </div>
       )}
     </form>
   );
