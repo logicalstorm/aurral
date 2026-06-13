@@ -71,8 +71,8 @@ services:
       - PUID=${PUID:-1000}
       - PGID=${PGID:-1000}
     volumes:
-      - ${MEDIA_ROOT:-/srv/media}:/data
-      - ${CONFIG:-./config/aurral}:/config
+      - ${MEDIA_ROOT:-/data}:/data
+      - ${CONFIG:-./config}:/config
 ```
 
 Change `${MEDIA_ROOT:-/srv/media}` to the host path you use for media. For file reuse, slskd downloads, and generated playlists, mount the **same root directory** into Aurral, Lidarr, slskd, and Navidrome at the same container path (for example `/srv/media:/data`). See [shared storage](https://docs.aurral.org/getting-started/storage/).
