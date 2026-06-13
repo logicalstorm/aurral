@@ -1,8 +1,9 @@
 import { useCallback, useState } from "react";
 import PropTypes from "prop-types";
-import { CheckCircle, Music } from "lucide-react";
+import { Music } from "lucide-react";
+import SearchLibraryCheck from "./SearchLibraryCheck";
 import AddAlbumButton from "./AddAlbumButton";
-import { getAlbumTracklistNavigationTarget } from "../utils/searchNavigation";
+import { getReleaseNavigationTarget } from "../utils/searchNavigation";
 
 function isAlbumActionDisabled(album, isPending, canAddAlbum) {
   if (!canAddAlbum) return true;
@@ -55,7 +56,7 @@ function AlbumAction({ album, isPending, canAddAlbum, onAlbumAction }) {
   if (isComplete) {
     return (
       <span className="artist-release-card__status" title="In library">
-        <CheckCircle className="artist-icon-sm" />
+        <SearchLibraryCheck size="overlay" />
         <span className="sr-only">In library</span>
       </span>
     );
@@ -87,7 +88,7 @@ function SearchAlbumResults({
 }) {
   const openAlbum = useCallback(
     (album) => {
-      const target = getAlbumTracklistNavigationTarget({ ...album, type: "album" });
+      const target = getReleaseNavigationTarget({ ...album, type: "album" });
       if (target) {
         navigate(target.pathname, { state: target.state });
         return;
@@ -171,6 +172,7 @@ function SearchAlbumResults({
 
     return (
       <article
+        key={album.id}
         className="artist-release-card search-album-results__item"
         onClick={() => openAlbum(album)}
       >
@@ -194,7 +196,7 @@ function SearchAlbumResults({
             />
           </div>
         </div>
-        <h2 className="artist-release-card__title artist-clamp-2">
+        <h2 className="artist-release-card__title artist-truncate" title={album.title}>
           {album.title}
         </h2>
         {album.artistName ? (
@@ -223,9 +225,7 @@ function SearchAlbumResults({
         viewMode === "grid" ? "artist-albums-grid" : "artist-release-list"
       }
     >
-      {albums.map((album) => (
-        <div key={album.id}>{renderAlbum(album)}</div>
-      ))}
+      {albums.map((album) => renderAlbum(album))}
     </div>
   );
 }

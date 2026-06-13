@@ -36,6 +36,87 @@ test("searchLocalFromData returns playlist matches", () => {
   assert.equal(result.tracks.length, 0);
 });
 
+test("searchLocalFromData ignores playlist name matches without track content", () => {
+  const result = searchLocalFromData(
+    "summer vibes",
+    {
+      playlists: [
+        {
+          id: "pl-2",
+          name: "Summer Vibes",
+          tracks: [{ artistName: "Radiohead", trackName: "Creep" }],
+        },
+      ],
+    },
+    5,
+  );
+
+  assert.equal(result.playlists.length, 0);
+});
+
+test("searchLocalFromData matches playlists for band names with leading articles", () => {
+  const result = searchLocalFromData(
+    "the used",
+    {
+      playlists: [
+        {
+          id: "pl-used",
+          name: "Emo Mix",
+          tracks: [{ artistName: "The Used", trackName: "The Taste of Ink" }],
+        },
+      ],
+    },
+    5,
+  );
+
+  assert.equal(result.playlists.length, 1);
+  assert.equal(result.playlists[0].name, "Emo Mix");
+});
+
+test("searchLocalFromData ignores playlists without the full query phrase in tracks", () => {
+  const indieSpotlightTracks = [
+    { artistName: "The Neighbourhood", trackName: "A Little Death" },
+    { artistName: "Arctic Monkeys", trackName: "No. 1 Party Anthem" },
+    { artistName: "The Smiths", trackName: "There Is a Light That Never Goes Out" },
+    { artistName: "The Strokes", trackName: "Call It Fate, Call It Karma" },
+    { artistName: "The Killers", trackName: "Spaceman" },
+    { artistName: "The 1975", trackName: "The Sound" },
+  ];
+  const result = searchLocalFromData(
+    "the used",
+    {
+      playlists: [
+        {
+          id: "pl-indie",
+          name: "Indie Spotlight",
+          tracks: indieSpotlightTracks,
+        },
+      ],
+    },
+    5,
+  );
+
+  assert.equal(result.playlists.length, 0);
+});
+
+test("searchLocalFromData ignores playlist tracks with only partial query overlap", () => {
+  const result = searchLocalFromData(
+    "the used",
+    {
+      playlists: [
+        {
+          id: "pl-partial",
+          name: "Random",
+          tracks: [{ artistName: "Someone Used Something", trackName: "Hello" }],
+        },
+      ],
+    },
+    5,
+  );
+
+  assert.equal(result.playlists.length, 0);
+});
+
 test("searchLocalFromData returns library artist and track matches", () => {
   const result = searchLocalFromData(
     "radiohead",
@@ -65,6 +146,23 @@ test("searchLocalFromData returns library artist and track matches", () => {
   assert.equal(result.tracks[0].title, "Creep");
   assert.equal(result.artists[0].inLibrary, true);
   assert.equal(result.tracks[0].inLibrary, true);
+});
+
+test("searchLocalFromData ignores library artists that only share article words", () => {
+  const result = searchLocalFromData(
+    "the used",
+    {
+      artists: [
+        { mbid: "used-mbid", artistName: "The Used" },
+        { mbid: "1975-mbid", artistName: "The 1975" },
+        { mbid: "almost-mbid", artistName: "The Almost" },
+      ],
+    },
+    5,
+  );
+
+  assert.equal(result.artists.length, 1);
+  assert.equal(result.artists[0].name, "The Used");
 });
 
 test("normalizeRelevanceScore preserves catalog popularity score ordering", () => {

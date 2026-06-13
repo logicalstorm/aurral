@@ -50,23 +50,78 @@ function buildReleaseFocusState(item, releaseGroupMbid) {
   };
 }
 
-export function getAlbumTracklistNavigationTarget(item) {
-  if (!item?.artistMbid) return null;
-  const releaseGroupMbid = item.type === "album" ? item.id : item.albumMbid;
-  if (!releaseGroupMbid) return null;
-  const state = buildArtistFocusState(item, {
-    focusReleaseGroupMbid: releaseGroupMbid,
-    focusReleaseGroup: buildReleaseFocusState(item, releaseGroupMbid),
-  });
-  if (item.type === "track") {
-    const trackMbid = item.id || item.trackMbid;
-    if (trackMbid) state.focusTrackMbid = trackMbid;
-    if (item.title) state.focusTrackTitle = item.title;
-  }
+export function buildReleaseGroupNavigationItem(
+  releaseGroup,
+  { artistMbid, artistName, coverUrl = "" } = {},
+) {
+  if (!releaseGroup?.id || !artistMbid) return null;
   return {
-    pathname: `/artist/${item.artistMbid}/albums`,
-    state,
+    type: "album",
+    id: releaseGroup.id,
+    title: releaseGroup.title || "",
+    artistMbid,
+    artistName: artistName || "",
+    releaseDate: releaseGroup["first-release-date"] || "",
+    primaryType: releaseGroup["primary-type"] || "Album",
+    secondaryTypes: Array.isArray(releaseGroup["secondary-types"])
+      ? releaseGroup["secondary-types"]
+      : [],
+    coverUrl: coverUrl || releaseGroup._coverUrl || releaseGroup.coverUrl || "",
+    deezerAlbumId: releaseGroup._deezerAlbumId || "",
   };
+}
+
+export function buildLibraryAlbumNavigationItem(
+  libraryAlbum,
+  { artistMbid, artistName, coverUrl = "" } = {},
+) {
+  const releaseGroupMbid =
+    libraryAlbum?.mbid || libraryAlbum?.foreignAlbumId || null;
+  if (!releaseGroupMbid || !artistMbid) return null;
+  return {
+    type: "album",
+    id: releaseGroupMbid,
+    title: libraryAlbum.albumName || "",
+    artistMbid,
+    artistName: artistName || libraryAlbum.artistName || "",
+    releaseDate: libraryAlbum.releaseDate || "",
+    primaryType: libraryAlbum.albumType || "Album",
+    coverUrl,
+  };
+}
+
+export function navigateToReleaseGroup(
+  navigate,
+  releaseGroup,
+  { artistMbid, artistName, coverUrl = "" } = {},
+) {
+  const target = getReleaseNavigationTarget(
+    buildReleaseGroupNavigationItem(releaseGroup, {
+      artistMbid,
+      artistName,
+      coverUrl,
+    }),
+  );
+  if (!target) return false;
+  navigate(target.pathname, { state: target.state });
+  return true;
+}
+
+export function navigateToLibraryAlbum(
+  navigate,
+  libraryAlbum,
+  { artistMbid, artistName, coverUrl = "" } = {},
+) {
+  const target = getReleaseNavigationTarget(
+    buildLibraryAlbumNavigationItem(libraryAlbum, {
+      artistMbid,
+      artistName,
+      coverUrl,
+    }),
+  );
+  if (!target) return false;
+  navigate(target.pathname, { state: target.state });
+  return true;
 }
 
 export function getReleaseNavigationTarget(item) {
@@ -91,7 +146,7 @@ export function getReleaseNavigationTarget(item) {
 export function navigateFromSearchResult(
   navigate,
   item,
-  { query = "", albumDestination = "release" } = {},
+  { query = "" } = {},
 ) {
   if (!item || typeof navigate !== "function") return;
 
@@ -107,10 +162,7 @@ export function navigateFromSearchResult(
   }
 
   if (item.type === "album") {
-    const target =
-      albumDestination === "tracklist"
-        ? getAlbumTracklistNavigationTarget(item)
-        : getReleaseNavigationTarget(item);
+    const target = getReleaseNavigationTarget(item);
     if (target) {
       navigate(target.pathname, { state: target.state });
       return;
@@ -126,10 +178,7 @@ export function navigateFromSearchResult(
       navigate("/library");
       return;
     }
-    const target =
-      albumDestination === "tracklist"
-        ? getAlbumTracklistNavigationTarget(item)
-        : getReleaseNavigationTarget(item);
+    const target = getReleaseNavigationTarget(item);
     if (target) {
       navigate(target.pathname, { state: target.state });
       return;
@@ -235,11 +284,160 @@ export function dedupeArtistsByName(artists) {
   return result;
 }
 
+function findArtistMatch(artists, { id, name }) {
+  if (id) {
+    const byId = artists.find(
+      (artist) => artist?.id === id || artist?.key === id,
+    );
+    if (byId) return byId;
+  }
+  if (name) {
+    const normalizedName = normalizeSearchText(name);
+    return artists.find(
+      (artist) => normalizeSearchText(artist?.name) === normalizedName,
+    );
+  }
+  return null;
+}
+
+function compactSearchText(value) {
+  return normalizeSearchText(value).replace(/\s+/g, "");
+}
+
+function queryMatchesArtistName(query, artistName) {
+  const normalizedQuery = normalizeSearchText(query);
+  const normalizedName = normalizeSearchText(artistName);
+  if (!normalizedQuery || !normalizedName) return false;
+  if (normalizedQuery === normalizedName) return true;
+  return compactSearchText(normalizedQuery) === compactSearchText(normalizedName);
+}
+
+function findQueryArtist(allArtists, query) {
+  const exact = findArtistMatch(allArtists, { name: query });
+  if (exact) return exact;
+
+  const compactQuery = compactSearchText(query);
+  if (!compactQuery) return null;
+  return (
+    allArtists.find(
+      (artist) => compactSearchText(artist?.name) === compactQuery,
+    ) || null
+  );
+}
+
+function artistFromAlbumTop(album) {
+  if (!album?.artistName) return null;
+  return {
+    type: "artist",
+    source: album.source,
+    id: album.artistMbid || null,
+    key: album.artistMbid || album.artistName,
+    name: album.artistName,
+    sortName: album.artistName,
+    inLibrary: Boolean(album.inLibrary),
+    hasMbid: Boolean(album.artistMbid),
+    score: album.score,
+  };
+}
+
+function artistFromPerformerFields(item) {
+  if (!item?.artistName && !item?.artistMbid) return null;
+  return {
+    type: "artist",
+    id: item.artistMbid || null,
+    key: item.artistMbid || item.artistName,
+    name: item.artistName,
+    sortName: item.artistName,
+    inLibrary: Boolean(item.artistInLibrary || item.inLibrary),
+    score: item.score,
+  };
+}
+
+export function resolveSearchTopResult(data, libraryFlags = {}) {
+  if (!data) return null;
+
+  const query = String(data.query || "").trim();
+  const top = data.top;
+  const catalogArtists = data.catalog?.artists || [];
+  const queryArtist = findQueryArtist(catalogArtists, query);
+
+  if (top?.type === "artist" && top.name) {
+    return prepareSearchCandidates([top], libraryFlags)[0];
+  }
+
+  if (top?.type === "album" && queryMatchesArtistName(query, top.artistName)) {
+    const artist =
+      findArtistMatch(catalogArtists, {
+        id: top.artistMbid,
+        name: top.artistName,
+      }) || artistFromAlbumTop(top);
+    if (artist?.name) {
+      return prepareSearchCandidates([artist], libraryFlags)[0];
+    }
+  }
+
+  if (
+    queryArtist &&
+    (top?.type === "album" || top?.type === "track" || !top)
+  ) {
+    return prepareSearchCandidates([queryArtist], libraryFlags)[0];
+  }
+
+  if (top?.type && (top.name || top.title)) {
+    return prepareSearchCandidates([top], libraryFlags)[0];
+  }
+
+  const fallback =
+    queryArtist ||
+    catalogArtists[0] ||
+    data.catalog?.albums?.[0] ||
+    data.catalog?.tracks?.[0];
+  if (!fallback) return null;
+  return prepareSearchCandidates([fallback], libraryFlags)[0];
+}
+
+export function resolveSearchTopArtist(data, libraryFlags = {}) {
+  const top = resolveSearchTopResult(data, libraryFlags);
+  if (!top) return null;
+  if (top.type === "artist") return top;
+
+  const catalogArtists = data.catalog?.artists || [];
+  const matched =
+    findArtistMatch(catalogArtists, {
+      id: top.artistMbid,
+      name: top.artistName,
+    }) || artistFromPerformerFields(top);
+  if (matched?.name) {
+    return prepareSearchCandidates([matched], libraryFlags)[0];
+  }
+
+  return catalogArtists[0] || null;
+}
+
+export function buildSearchArtistResults(data, libraryFlags = {}) {
+  if (!data) return [];
+
+  const candidates = [...(data.catalog?.artists || [])];
+  const topArtist = resolveSearchTopArtist(data, libraryFlags);
+  if (topArtist?.name) {
+    const topId = topArtist.id || topArtist.mbid;
+    const alreadyListed =
+      topId &&
+      candidates.some((artist) => (artist?.id || artist?.mbid) === topId);
+    if (!alreadyListed) {
+      candidates.push(topArtist);
+    }
+  }
+
+  return dedupeArtistsByName(
+    prepareSearchCandidates(candidates, libraryFlags).filter(
+      (artist) => artist?.id || artist?.mbid || artist?.foreignArtistId,
+    ),
+  );
+}
+
 function getSearchResultBuckets(data) {
   return [
-    ...(data.library?.playlists || []),
-    ...(data.library?.tracks || []),
-    ...(data.library?.artists || []),
     ...(data.catalog?.artists || []),
     ...(data.catalog?.albums || []),
     ...(data.catalog?.tracks || []),
@@ -332,7 +530,7 @@ export function buildUnifiedSuggestionSections(data) {
   }
 
   const libraryItems = dedupeItems(
-    [...(data.library?.tracks || []), ...(data.library?.artists || [])],
+    data.library?.tracks || [],
     seen,
     seenArtistNames,
   );
@@ -341,19 +539,6 @@ export function buildUnifiedSuggestionSections(data) {
       key: "library",
       label: "Your Library",
       items: libraryItems,
-    });
-  }
-
-  const playlists = dedupeItems(
-    data.library?.playlists || [],
-    seen,
-    seenArtistNames,
-  );
-  if (playlists.length > 0) {
-    sections.push({
-      key: "playlists",
-      label: "Playlists",
-      items: playlists,
     });
   }
 

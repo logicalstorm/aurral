@@ -438,7 +438,7 @@ export function DiscoverPlaylistSection({
         return (
           <div key={playlist.presetId} className="artist-discover-shelf-card">
             <div
-              className={`artist-discover-card${isExpanded ? " is-expanded" : ""}`}
+              className={`artist-discover-card artist-discover-card--playlist${isExpanded ? " is-expanded" : ""}`}
             >
               <button
                 type="button"

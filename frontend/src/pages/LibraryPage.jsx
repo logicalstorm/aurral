@@ -352,7 +352,7 @@ function LibraryPage() {
                   </div>
 
                   <span
-                    className="artist-release-card__title artist-truncate"
+                    className="artist-release-card__title"
                     title={artistName}
                   >
                     {artistName}
