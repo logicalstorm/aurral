@@ -158,20 +158,18 @@ function SearchArtistResults({
                 ) : null}
               </div>
 
-              {variant !== "round" ? (
-                <ArtistContextMenu
-                  artist={artist}
-                  isInLibrary={!!libraryLookup[artistId]}
-                  canAddArtist={canAddArtist}
-                  onAddToLibrary={onAddArtistToLibrary}
-                  onFeedback={onArtistFeedback}
-                  feedbackUsed={
-                    artistFeedbackLookup
-                      ? getArtistFeedbackFlags(artistFeedbackLookup, artist)
-                      : undefined
-                  }
-                />
-              ) : null}
+              <ArtistContextMenu
+                artist={artist}
+                isInLibrary={!!libraryLookup[artistId]}
+                canAddArtist={canAddArtist}
+                onAddToLibrary={onAddArtistToLibrary}
+                onFeedback={onArtistFeedback}
+                feedbackUsed={
+                  artistFeedbackLookup
+                    ? getArtistFeedbackFlags(artistFeedbackLookup, artist)
+                    : undefined
+                }
+              />
             </div>
           </article>
         );
