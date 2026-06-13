@@ -4660,6 +4660,8 @@ textarea {
 .discover-page__customize-btn {
   margin-top: 0.25rem;
   flex-shrink: 0;
+  align-self: flex-start;
+  font-weight: 600;
   background-color: var(--aurral-surface-mid);
   color: var(--aurral-white);
 }
