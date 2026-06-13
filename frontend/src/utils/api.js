@@ -255,18 +255,6 @@ export const testNavidromeOnboarding = async (url, username, password) => {
   return response.data;
 };
 
-export const getAuthConfig = async () => {
-  const response = await api.get("/auth/config");
-  return response.data;
-};
-
-export const searchArtists = async (query, limit = 24, offset = 0) => {
-  const response = await api.get("/search/artists", {
-    params: { query, limit, offset },
-  });
-  return response.data;
-};
-
 export const searchUnified = async (
   query,
   { mode = "suggest", limit } = {},
@@ -497,16 +485,7 @@ export const updateArtistOverrides = async (
   return response.data;
 };
 
-export const getStreamUrl = async (songId) => {
-  return buildStreamUrl(`/library/stream/${encodeURIComponent(songId)}`);
-};
-
-export const getStreamAccessToken = async () => {
-  const response = await api.post("/health/stream-token");
-  return response.data?.token || null;
-};
-
-export const buildStreamUrl = async (path) => {
+const buildStreamUrl = async (path) => {
   const base = import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
   let relativePath = String(path || "");
   if (!relativePath.startsWith("/")) {
@@ -579,13 +558,6 @@ export const getLibraryArtists = async (options = {}) => {
   return response.data;
 };
 
-export const clearLibrary = async (deleteFiles = false) => {
-  const response = await api.delete("/library/clear", {
-    params: { deleteFiles },
-  });
-  return response.data;
-};
-
 export const getLibraryArtist = async (mbid) => {
   const response = await api.get(`/library/artists/${mbid}`);
   const artist = response.data;
@@ -611,7 +583,7 @@ export const readLibraryLookupCache = (mbids) => {
   return result;
 };
 
-export const writeLibraryLookupCache = (lookup) => {
+const writeLibraryLookupCache = (lookup) => {
   if (!lookup || typeof lookup !== "object") return;
   Object.entries(lookup).forEach(([id, value]) => {
     setLibraryLookupCacheEntry(id, value);
@@ -649,16 +621,6 @@ export const deleteAlbumFromLibrary = async (id, deleteFiles = false) => {
   return response.data;
 };
 
-export const getLibraryRootFolders = async () => {
-  const response = await api.get("/library/rootfolder");
-  return response.data;
-};
-
-export const getLibraryQualityProfiles = async () => {
-  const response = await api.get("/library/qualityprofile");
-  return response.data;
-};
-
 export const getLibraryAlbums = async (artistId) => {
   const response = await api.get("/library/albums", {
     params: { artistId },
@@ -685,20 +647,6 @@ export const addLibraryAlbum = async (
 export const requestAlbumFromSearch = async (payload) => {
   const response = await api.post("/library/albums/request", payload);
   return response.data;
-};
-
-export const getLibraryPlaybackQueue = async () => {
-  const response = await api.get("/library/playback-queue");
-  const tracks = Array.isArray(response.data) ? response.data : [];
-  return Promise.all(
-    tracks.map(async (track) => ({
-      ...track,
-      preview_url: track.streamPath
-        ? await buildStreamUrl(track.streamPath)
-        : track.preview_url || null,
-      previewProvider: "lidarr",
-    })),
-  );
 };
 
 export const getLibraryTracks = async (
@@ -756,22 +704,9 @@ export const triggerAlbumSearch = async (albumId) => {
   return response.data;
 };
 
-export const downloadTrack = async (artistId, trackId) => {
-  const response = await api.post("/library/downloads/track", {
-    artistId,
-    trackId,
-  });
-  return response.data;
-};
-
 export const getDownloadStatus = async (albumIds) => {
   const ids = Array.isArray(albumIds) ? albumIds.join(",") : albumIds;
   const response = await api.get(`/library/downloads/status?albumIds=${ids}`);
-  return response.data;
-};
-
-export const getAllDownloadStatus = async () => {
-  const response = await api.get("/library/downloads/status/all");
   return response.data;
 };
 
@@ -783,19 +718,6 @@ export const refreshLibraryArtist = async (mbid) => {
 export const getRequests = async () => {
   const response = await api.get("/requests");
   return response.data;
-};
-
-export const deleteRequest = async (id) => {
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-  if (uuidRegex.test(id)) {
-    const response = await api.delete(`/requests/${id}`);
-    return response.data;
-  } else {
-    const response = await api.delete(`/requests/album/${id}`);
-    return response.data;
-  }
 };
 
 export const getRecentlyAdded = async () => {
@@ -882,56 +804,11 @@ export const resetDiscoveryFeedback = async () => {
   return response.data;
 };
 
-export const getRelatedArtists = async (limit = 20) => {
-  const response = await api.get("/discover/related", {
-    params: { limit },
-  });
-  return response.data;
-};
-
-export const getSimilarArtists = async (limit = 20) => {
-  const response = await api.get("/discover/similar", {
-    params: { limit },
-  });
-  return response.data;
-};
-
 export const getTagSuggestions = async (q, limit = 10) => {
   const response = await api.get("/discover/tags", {
     params: { q: q.trim(), limit },
   });
   return response.data;
-};
-
-export const searchArtistsByTag = async (
-  tag,
-  limit = 24,
-  offset = 0,
-  scope = "merged",
-) => {
-  const params = { tag, limit, offset };
-  if (scope !== "merged") {
-    params.scope = scope;
-  }
-  const response = await api.get("/discover/by-tag", {
-    params,
-  });
-  return response.data;
-};
-
-export const verifyCredentials = async (password, username) => {
-  try {
-    const result = await loginApi(username, password);
-    return !!result?.token;
-  } catch (error) {
-    if (
-      error.response &&
-      (error.response.status === 401 || error.response.status === 403)
-    ) {
-      return false;
-    }
-    throw error;
-  }
 };
 
 export const getUsers = async () => {
@@ -1251,37 +1128,6 @@ export const startFlowPlaylist = async (flowId, limit = 30) => {
   const response = await api.post(`/playlists/start/${flowId}`, {
     limit,
   });
-  return response.data;
-};
-
-export const resetFlowPlaylists = async (flowIds) => {
-  const response = await api.post("/playlists/reset", {
-    flowIds,
-  });
-  return response.data;
-};
-
-export const startFlowWorker = async () => {
-  const response = await api.post("/playlists/worker/start");
-  return response.data;
-};
-
-export const stopFlowWorker = async () => {
-  const response = await api.post("/playlists/worker/stop");
-  return response.data;
-};
-
-export const updateFlowWorkerSettings = async (settings) => {
-  const response = await api.put("/playlists/worker/settings", settings);
-  return response.data;
-};
-
-
-export const setPlaylistRetryCyclePaused = async (playlistId, paused) => {
-  const response = await api.put(
-    `/playlists/playlists/${playlistId}/retry-cycle`,
-    { paused },
-  );
   return response.data;
 };
 
