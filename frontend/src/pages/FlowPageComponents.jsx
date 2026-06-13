@@ -4,38 +4,45 @@ import {
   useCallback,
   useMemo,
   useState,
-  useImperativeHandle,
-  forwardRef,
 } from "react";
 import {
   Loader2,
   Check,
-  CircleDashed,
   Clock,
   Trash2,
   Pencil,
   FilePlus2,
   ListMusic,
+  Sparkles,
   Download,
   Upload,
   Play,
   Pause,
   Shuffle,
-  SkipBack,
-  SkipForward,
-  Volume2,
-  VolumeX,
   Plus,
   Search,
   ChevronDown,
-  RefreshCw,
   MoreHorizontal,
+  Save,
   X,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
+import {
+  getFlowTrackDisplayNumber,
+  sortFlowTracks,
+} from "../utils/flowTrackSort";
+import { Link } from "react-router-dom";
 import PillToggle from "../components/PillToggle";
 import FlipSaveButton from "../components/FlipSaveButton";
-import { useSharedVolume } from "../hooks/useSharedVolume";
+import { useAudioQueue } from "../hooks/useAudioQueue";
+import { normalizeFlowTrack } from "../utils/audioQueue";
+import {
+  TrackPlaylistMenu,
+  TrackPlaylistSubmenu,
+} from "./ArtistDetails/components/TrackPlaylistMenu";
 import { TAG_COLORS } from "./ArtistDetails/constants";
+import { getTagColor } from "./ArtistDetails/utils";
 
 const SOURCE_MIX_COLORS = {
   discover: TAG_COLORS[10],
@@ -62,14 +69,9 @@ const WEEKDAY_OPTIONS = [
 ];
 
 const FLOW_WORKER_CONCURRENCY_OPTIONS = [1, 2, 3];
-const FLOW_WORKER_FORMAT_OPTIONS = [
-  { id: "flac", label: "FLAC" },
-  { id: "mp3", label: "MP3" },
-];
 const FLOW_WORKER_EXISTING_FILE_OPTIONS = [
   { id: "download", label: "Download" },
-  { id: "hardlink", label: "Hardlink" },
-  { id: "copy", label: "Copy" },
+  { id: "reuse", label: "Reuse existing files" },
 ];
 const FLOW_WORKER_RETRY_CYCLE_OPTIONS = [
   { minutes: 15, label: "15 min" },
@@ -223,9 +225,9 @@ export function MixSlider({
     }));
 
   return (
-    <div className="grid gap-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap gap-2">
+    <div className="flow-page__mix">
+      <div className="flow-page__mix-header">
+        <div className="flow-page__mix-toggles">
           {SOURCE_MIX_OPTIONS.map((option) => {
             const isActive = normalized[option.key] > 0;
             const isOnlyActive = isActive && activeKeys.length === 1;
@@ -240,24 +242,17 @@ export function MixSlider({
                   onChange(toggleSourceInMix(normalized, option.key, normalizeMixPercent))
                 }
                 disabled={isDisabled}
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                  isActive
-                    ? "text-[#141414]"
-                    : "border-white/10 bg-white/[0.035] text-[#9f9fa7] hover:bg-white/[0.07]"
-                } ${isDisabled ? "cursor-not-allowed opacity-50" : ""}`}
+                className={`flow-page__mix-toggle${isActive ? " is-active" : ""}${isDisabled ? " is-disabled" : ""}`}
                 style={
                   isActive
-                    ? {
-                        backgroundColor: SOURCE_MIX_COLORS[option.key],
-                        borderColor: SOURCE_MIX_COLORS[option.key],
-                      }
+                    ? { backgroundColor: SOURCE_MIX_COLORS[option.key] }
                     : undefined
                 }
                 aria-pressed={isActive}
                 title={disabledReason || undefined}
               >
                 <span>{option.label}</span>
-                <span className={isActive ? "text-black/65" : "text-[#76767d]"}>
+                <span className="flow-page__mix-toggle-state">
                   {disabledReason ? "Needs Last.fm" : isActive ? "On" : "Off"}
                 </span>
               </button>
@@ -265,30 +260,34 @@ export function MixSlider({
           })}
         </div>
         {trailingControl ? (
-          <div className="flex items-center gap-2 self-end sm:self-auto">
-            {trailingControl}
-          </div>
+          <div className="flow-page__mix-trailing">{trailingControl}</div>
         ) : null}
       </div>
       <div
         ref={barRef}
-        className="relative h-9 rounded-full border border-white/10 bg-white/5 select-none"
+        className="flow-page__mix-bar"
         style={{ touchAction: handles.length > 0 ? "none" : "auto" }}
       >
-        <div className="absolute inset-0 flex overflow-hidden rounded-full">
-          {SOURCE_MIX_OPTIONS.map((option) => {
-            const percent = Number(normalized[option.key] || 0);
+        <div className="flow-page__mix-bar-inner">
+          {activeKeys.map((key) => {
+            const percent = Number(normalized[key] || 0);
+            if (percent <= 0) return null;
+            const option =
+              SOURCE_MIX_OPTIONS.find((entry) => entry.key === key) ||
+              { key, label: key };
             const showLabel = percent >= labelMinPercent;
             return (
               <div
-                key={option.key}
-                className="h-full text-[10px] font-semibold text-black/70 flex items-center justify-center"
+                key={key}
+                className={`flow-page__mix-segment flow-page__mix-segment--${key}`}
                 style={{
                   width: `${percent}%`,
-                  backgroundColor: SOURCE_MIX_COLORS[option.key],
+                  backgroundColor: SOURCE_MIX_COLORS[key],
                 }}
               >
-                {showLabel ? `${option.label} (${trackCounts[option.key] ?? 0})` : ""}
+                {showLabel
+                  ? `${option.label} (${trackCounts[key] ?? 0})`
+                  : ""}
               </div>
             );
           })}
@@ -298,11 +297,11 @@ export function MixSlider({
             key={handle.key}
             type="button"
             onPointerDown={(event) => startDrag(event, handle.handleIndex)}
-            className="absolute top-0 h-full w-4 -ml-2 cursor-ew-resize z-10"
+            className="flow-page__mix-handle"
             style={{ left: `${handle.position}%` }}
             aria-label={handle.ariaLabel}
           >
-            <span className="absolute left-1/2 top-1 bottom-1 w-2 -translate-x-1/2 rounded-full bg-white/80" />
+            <span className="flow-page__mix-handle-thumb" />
           </button>
         ))}
       </div>
@@ -379,7 +378,6 @@ function CommaTokenInput({
   value,
   placeholder,
   onChange,
-  chipClassName,
 }) {
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef(null);
@@ -402,14 +400,14 @@ function CommaTokenInput({
 
   return (
     <div
-      className="min-h-10 w-full rounded-md border border-white/10 bg-[#1f1f24] px-3 py-2 text-sm text-white transition focus-within:border-[#90a07d] focus-within:ring-1 focus-within:ring-[#90a07d]"
+      className="flow-page__token-input"
       onClick={() => setIsFocused(true)}
     >
       {isFocused ? (
         <input
           ref={inputRef}
           type="text"
-          className="w-full bg-transparent text-sm text-white outline-none placeholder:text-[#6f6f76]"
+          className="flow-page__token-input-field"
           placeholder={placeholder}
           value={rawValue}
           onFocus={() => setIsFocused(true)}
@@ -427,20 +425,21 @@ function CommaTokenInput({
           }}
         />
       ) : (
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flow-page__token-input-chips">
           {committed.map((entry) => (
             <span
               key={`${placeholder}-${entry}`}
-              className={chipClassName}
+              className="flow-page__token-chip"
+              style={{ backgroundColor: getTagColor(entry) }}
             >
               {entry}
             </span>
           ))}
           {committed.length === 0 ? (
-            <span className="text-sm text-[#6f6f76]">{placeholder}</span>
+            <span className="flow-page__token-placeholder">{placeholder}</span>
           ) : null}
           {pending ? (
-            <span className="text-sm text-[#c9c9cf]">{pending}</span>
+            <span className="flow-page__token-pending">{pending}</span>
           ) : null}
         </div>
       )}
@@ -448,10 +447,155 @@ function CommaTokenInput({
   );
 }
 
+export function FlowScheduleFields({
+  draft,
+  inputClassName = "flow-page__field-control",
+  onDraftChange,
+  onClearError,
+  sizeLabel = "Tracks",
+}) {
+  const updateDraft = (updater) => {
+    onDraftChange((prev) => updater(prev));
+    if (onClearError) onClearError();
+  };
+  const scheduleDays = Array.isArray(draft?.scheduleDays)
+    ? [...new Set(draft.scheduleDays.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry >= 0 && entry <= 6))].sort(
+        (a, b) => a - b
+      )
+    : [];
+  const scheduleTime = String(draft?.scheduleTime || "00:00");
+
+  return (
+    <div className="flow-page__form-section">
+      <div className="flow-page__schedule-row">
+        <div className="flow-page__field">
+          <label className="flow-page__field-label">
+            {sizeLabel}
+          </label>
+          <div className="flow-page__field-round">
+            <input
+              type="number"
+              min="1"
+              max="100"
+              className={`${inputClassName} flow-page__field-input--size`}
+              value={draft.size}
+              onChange={(event) => {
+                const value = event.target.value;
+                updateDraft((prev) => ({ ...prev, size: value }));
+              }}
+            />
+          </div>
+        </div>
+        <div className="flow-page__field">
+          <label className="flow-page__field-label">
+            Update hour
+          </label>
+          <div className="flow-page__field-round flow-page__field-round--select">
+            <select
+              className={`${inputClassName} flow-page__field-select`}
+              value={scheduleTime}
+              onChange={(event) =>
+                updateDraft((prev) => ({
+                  ...prev,
+                  scheduleTime: event.target.value || "00:00",
+                }))
+              }
+            >
+              {SCHEDULE_HOUR_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="flow-page__select-icon" />
+          </div>
+        </div>
+        <div className="flow-page__field flow-page__field--schedule-days">
+          <label className="flow-page__field-label">
+            Update days
+          </label>
+          <div className="flow-page__weekday-grid">
+            {WEEKDAY_OPTIONS.map((day) => {
+              const checked = scheduleDays.includes(day.id);
+              return (
+                <label
+                  key={day.id}
+                  className={`flow-page__weekday${checked ? " is-active" : ""}`}
+                  title={day.full}
+                >
+                  <input
+                    type="checkbox"
+                    className="flow-page__weekday-input"
+                    checked={checked}
+                    disabled={checked && scheduleDays.length === 1}
+                    onChange={() =>
+                      updateDraft((prev) => {
+                        const current = Array.isArray(prev?.scheduleDays)
+                          ? prev.scheduleDays
+                          : [];
+                        const normalized = [...new Set(current
+                          .map((entry) => Number(entry))
+                          .filter((entry) => Number.isFinite(entry) && entry >= 0 && entry <= 6))];
+                        if (checked && normalized.length === 1) {
+                          return prev;
+                        }
+                        const next = checked
+                          ? normalized.filter((entry) => entry !== day.id)
+                          : [...normalized, day.id];
+                        return {
+                          ...prev,
+                          scheduleDays: next.sort((a, b) => a - b),
+                        };
+                      })
+                    }
+                  />
+                  <span>{day.short}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ReleaseRadarRecipeFields({
+  draft,
+  inputClassName = "flow-page__field-control",
+  errorMessage,
+  onDraftChange,
+  onClearError,
+}) {
+  return (
+    <div className="flow-page__form">
+      <div className="flow-page__preset-recipe">
+        <p className="flow-page__preset-recipe-label">New releases</p>
+        <p className="flow-page__preset-recipe-desc">
+          Finds recent albums from artists in your library that you do not have
+          yet, then picks a standout track from each release. The track limit is
+          a maximum; if fewer albums qualify, the playlist will be shorter. It
+          refreshes on your schedule below.
+        </p>
+      </div>
+      <FlowScheduleFields
+        draft={draft}
+        inputClassName={inputClassName}
+        onDraftChange={onDraftChange}
+        onClearError={onClearError}
+        sizeLabel="Max tracks"
+      />
+      {errorMessage ? (
+        <div className="flow-page__error-text">{errorMessage}</div>
+      ) : null}
+    </div>
+  );
+}
+
 export function FlowFormFields({
   draft,
   remaining,
-  inputClassName = "input",
+  inputClassName = "flow-page__field-control",
   errorMessage,
   onDraftChange,
   onClearError,
@@ -464,12 +608,6 @@ export function FlowFormFields({
   };
   const normalizedMix = normalizeMixPercent(draft?.mix);
   const totalSize = Number.isFinite(Number(remaining)) && Number(remaining) > 0 ? Math.round(Number(remaining)) : 0;
-  const scheduleDays = Array.isArray(draft?.scheduleDays)
-    ? [...new Set(draft.scheduleDays.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry >= 0 && entry <= 6))].sort(
-        (a, b) => a - b
-      )
-    : [];
-  const scheduleTime = String(draft?.scheduleTime || "00:00");
   const { focusEnabled, focusValidationError } = getFocusDraftValidation(
     draft,
     normalizeMixPercent,
@@ -503,109 +641,20 @@ export function FlowFormFields({
   })();
 
   return (
-    <div className="grid gap-6">
-      <div className="grid gap-4 rounded-lg border border-white/10 bg-white/5 p-4">
-        <div className="grid gap-4 lg:grid-cols-[96px_minmax(0,1fr)_160px] lg:items-start">
-          <div className="grid content-start gap-2">
-            <label className="flex min-h-5 items-end text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
-              Tracks
-            </label>
-            <input
-              type="number"
-              min="1"
-              max="100"
-              className={`${inputClassName} w-[4.75rem] text-center sm:w-24 lg:text-left`}
-              value={draft.size}
-              onChange={(event) => {
-                const value = event.target.value;
-                updateDraft((prev) => ({ ...prev, size: value }));
-              }}
-            />
-          </div>
-          <div className="grid content-start justify-start gap-2 lg:justify-center">
-            <label className="flex min-h-5 items-end justify-start text-xs uppercase tracking-wider text-[#8b8b90] font-medium lg:justify-center">
-              Update Days
-            </label>
-            <div className="inline-flex w-fit items-center gap-1.5 rounded-xl bg-black/10 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-2">
-              {WEEKDAY_OPTIONS.map((day) => {
-                const checked = scheduleDays.includes(day.id);
-                return (
-                  <label
-                    key={day.id}
-                    className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-semibold transition-colors cursor-pointer sm:h-10 sm:w-10 ${
-                      checked
-                        ? "bg-[#8f8f97] text-white"
-                        : "bg-[#15161a] text-[#a7aab5] hover:bg-[#202229] hover:text-[#dde1ea]"
-                    }`}
-                    title={day.full}
-                  >
-                    <input
-                      type="checkbox"
-                      className="sr-only"
-                      checked={checked}
-                      disabled={checked && scheduleDays.length === 1}
-                      onChange={() =>
-                        updateDraft((prev) => {
-                          const current = Array.isArray(prev?.scheduleDays)
-                            ? prev.scheduleDays
-                            : [];
-                          const normalized = [...new Set(current
-                            .map((entry) => Number(entry))
-                            .filter((entry) => Number.isFinite(entry) && entry >= 0 && entry <= 6))];
-                          if (checked && normalized.length === 1) {
-                            return prev;
-                          }
-                          const next = checked
-                            ? normalized.filter((entry) => entry !== day.id)
-                            : [...normalized, day.id];
-                          return {
-                            ...prev,
-                            scheduleDays: next.sort((a, b) => a - b),
-                          };
-                        })
-                      }
-                    />
-                    <span>{day.short}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-          <div className="grid content-start justify-start gap-2 lg:justify-self-end">
-              <label className="flex min-h-5 items-end text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
-              Update Hour
-              </label>
-              <div className="relative w-[6.75rem] sm:w-40">
-                <select
-                  className={`${inputClassName} w-full appearance-none pr-10`}
-                  value={scheduleTime}
-                  onChange={(event) =>
-                    updateDraft((prev) => ({
-                      ...prev,
-                      scheduleTime: event.target.value || "00:00",
-                    }))
-                  }
-                >
-                  {SCHEDULE_HOUR_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#b8b8bf]" />
-              </div>
-            </div>
-        </div>
-      </div>
+    <div className="flow-page__form">
+      <FlowScheduleFields
+        draft={draft}
+        inputClassName={inputClassName}
+        onDraftChange={onDraftChange}
+        onClearError={onClearError}
+      />
 
-      <div className="grid gap-3 rounded-lg border border-white/10 bg-white/5 p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] font-semibold">
-            Source Mix
-          </div>
+      <div className="flow-page__form-section">
+        <div className="flow-page__field-label flow-page__field-label--section">
+          Source mix
         </div>
 
-        <div className="pt-1">
+        <div>
           <MixSlider
             mix={draft.mix}
             trackCounts={mixScaled}
@@ -619,11 +668,7 @@ export function FlowFormFields({
                     deepDive: !(prev?.deepDive === true),
                   }))
                 }
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                  draft.deepDive === true
-                    ? "border-[#d6d6db] bg-[#d6d6db] text-[#141414]"
-                    : "border-white/10 bg-white/[0.035] text-[#9f9fa7] hover:bg-white/[0.07]"
-                }`}
+                className={`flow-page__mix-toggle flow-page__mix-toggle--feature${draft.deepDive === true ? " is-active" : ""}${Object.keys(disabledSources || {}).length > 0 ? " is-disabled" : ""}`}
                 aria-pressed={draft.deepDive === true}
                 disabled={Object.keys(disabledSources || {}).length > 0}
                 title={
@@ -634,7 +679,7 @@ export function FlowFormFields({
                 aria-label={`Deep Dive ${draft.deepDive === true ? "on" : "off"}. Deep Dive pulls tracks ranked 10 through 25 instead of the top 10.`}
               >
                 <span>Deep Dive</span>
-                <span className={draft.deepDive === true ? "text-black/65" : "text-[#76767d]"}>
+                <span className="flow-page__mix-toggle-state">
                   {draft.deepDive === true ? "On" : "Off"}
                 </span>
               </button>
@@ -648,36 +693,33 @@ export function FlowFormFields({
             normalizeMixPercent={normalizeMixPercent}
           />
           {Object.keys(disabledSources || {}).length > 0 ? (
-            <p className="text-xs text-amber-300">
+            <p className="flow-page__warning-text">
               Flow generation requires Last.fm for source selection in this version.
             </p>
           ) : null}
         </div>
       </div>
 
-      <div className={`grid gap-4 rounded-lg border border-white/10 bg-white/5 p-4 transition-opacity ${focusEnabled ? "" : "opacity-60"}`}>
-        <div className="flex items-center justify-between">
-          <div className="grid gap-1">
-            <div className="text-xs uppercase tracking-[0.3em] text-[#8b8b90] font-semibold">
-              Focus Filters
-            </div>
-            {focusValidationError ? (
-              <div className="text-[11px] font-medium text-amber-300">
-                {focusValidationError}
-              </div>
-            ) : null}
+      <div className={`flow-page__form-section${focusEnabled ? "" : " flow-page__form-section--dimmed"}`}>
+        <div className="flow-page__field">
+          <div className="flow-page__field-label flow-page__field-label--section">
+            Focus filters
           </div>
+          {focusValidationError ? (
+            <div className="flow-page__warning-text">
+              {focusValidationError}
+            </div>
+          ) : null}
         </div>
 
-        <div className="grid gap-4">
-          <div className="grid gap-1.5">
-            <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
-              Genre Tags (separate by comma)
+        <div className="flow-page__form-grid">
+          <div className="flow-page__field">
+            <label className="flow-page__field-label">
+              Genre tags (separate by comma)
             </label>
             <CommaTokenInput
               value={draft.includeTags}
               placeholder="lofi, indie"
-              chipClassName="rounded-full border border-[#90a07d]/35 bg-[#90a07d]/12 px-2.5 py-1 text-[11px] font-medium text-[#d7e0ce]"
               onChange={(nextValue) =>
                 updateDraft((prev) => ({
                   ...prev,
@@ -687,14 +729,13 @@ export function FlowFormFields({
             />
           </div>
 
-          <div className="grid gap-1.5">
-            <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
-              Related Artists (separate by comma)
+          <div className="flow-page__field">
+            <label className="flow-page__field-label">
+              Related artists (separate by comma)
             </label>
             <CommaTokenInput
               value={draft.includeRelatedArtists}
               placeholder="artist a, artist b"
-              chipClassName="rounded-full border border-[#7aa2f7]/35 bg-[#7aa2f7]/12 px-2.5 py-1 text-[11px] font-medium text-[#d8e4ff]"
               onChange={(nextValue) =>
                 updateDraft((prev) => ({
                   ...prev,
@@ -706,25 +747,23 @@ export function FlowFormFields({
         </div>
       </div>
       
-      {errorMessage && <div className="text-xs text-red-400 font-medium">{errorMessage}</div>}
+      {errorMessage && <div className="flow-page__error-text">{errorMessage}</div>}
     </div>
   );
 }
 
 export function FlowPageHeader({ onNewFlow }) {
   return (
-    <div className="flex flex-col gap-4 mb-6 lg:flex-row lg:items-center lg:justify-between">
-      <div className="flex items-start gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-white">Flow</h1>
-        </div>
+    <div className="flow-page__page-header">
+      <div className="flow-page__page-header-row">
+        <h1 className="flow-page__page-title">Playlists</h1>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flow-page__header-actions">
         <button
           onClick={onNewFlow}
-          className="btn btn-primary btn-sm flex items-center gap-2"
+          className="btn btn-primary btn-sm"
         >
-          <FilePlus2 className="w-4 h-4" />
+          <FilePlus2 className="artist-icon-sm" />
           New Flow
         </button>
       </div>
@@ -782,56 +821,313 @@ export function FlowStatusCards({
         : "badge-neutral";
 
   return (
-    <div className="mb-6 rounded-lg border border-white/5 bg-card p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-white">Worker Overview</h2>
+    <div className="flow-page__worker-card">
+      <div className="flow-page__worker-card-header">
+        <h2 className="flow-page__worker-card-title">Worker Overview</h2>
         <span className={`badge ${statusBadgeClass}`}>
           {statusLabel}
         </span>
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
+      <div className="flow-page__worker-summary">
         {workerRunning ? (
-          <Loader2 className="w-4 h-4 animate-spin text-[#9aa886]" />
+          <Loader2 className="flow-page__worker-summary-icon animate-spin" />
         ) : (
-          <Clock className="w-4 h-4 text-[#d0d0d4]" />
+          <Clock className="flow-page__worker-summary-icon flow-page__worker-summary-icon--idle" />
         )}
-        <span className="text-[#e3e3e7]">{summaryMessage}</span>
+        <span>{summaryMessage}</span>
       </div>
       {total > 0 ? (
-        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
-          <div
-            className="h-full rounded-full bg-[#9aa886] transition-all duration-300"
-            style={{ width: `${progressPct}%` }}
-          />
+        <div className="flow-page__progress">
+          <div className="flow-page__progress-bar">
+            <div
+              className="flow-page__progress-fill"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
         </div>
       ) : null}
-      <div className="mt-3 overflow-x-auto rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs">
-        <div className="flex min-w-max items-center gap-3 text-[#c1c1c3]">
-          <div className="flex items-center gap-2 whitespace-nowrap">
-            <span className="rounded bg-black/30 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#d0d0d4]">
+      <div className="flow-page__worker-stats">
+        <div className="flow-page__worker-stats-row">
+          <div className="flow-page__worker-stats-group">
+            <span className="flow-page__worker-stats-label">
               Flows
             </span>
-            <span>On <span className="text-white">{enabledCount}/{flowCount}</span></span>
-            <span className="text-white/25">•</span>
-            <span>Running <span className="text-white">{runningCount}</span></span>
-            <span className="text-white/25">•</span>
-            <span>Completed <span className="text-white">{completedCount}</span></span>
-            <span className="text-white/25">•</span>
-            <span>Idle <span className="text-white">{idleCount}</span></span>
+            <span>On <span className="flow-page__worker-stats-value">{enabledCount}/{flowCount}</span></span>
+            <span className="flow-page__card-meta-dot">•</span>
+            <span>Running <span className="flow-page__worker-stats-value">{runningCount}</span></span>
+            <span className="flow-page__card-meta-dot">•</span>
+            <span>Completed <span className="flow-page__worker-stats-value">{completedCount}</span></span>
+            <span className="flow-page__card-meta-dot">•</span>
+            <span>Idle <span className="flow-page__worker-stats-value">{idleCount}</span></span>
           </div>
-          <div className="h-4 w-px shrink-0 bg-white/15" />
-          <div className="flex items-center gap-2 whitespace-nowrap">
-            <span className="rounded bg-black/30 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#d0d0d4]">
+          <div className="flow-page__worker-stats-divider" />
+          <div className="flow-page__worker-stats-group">
+            <span className="flow-page__worker-stats-label">
               Tracks
             </span>
-            <span>Pending <span className="text-white">{pending}</span></span>
-            <span className="text-white/25">•</span>
-            <span>Downloading <span className="text-white">{downloading}</span></span>
-            <span className="text-white/25">•</span>
-            <span>Done <span className="text-white">{done}</span></span>
+            <span>Pending <span className="flow-page__worker-stats-value">{pending}</span></span>
+            <span className="flow-page__card-meta-dot">•</span>
+            <span>Downloading <span className="flow-page__worker-stats-value">{downloading}</span></span>
+            <span className="flow-page__card-meta-dot">•</span>
+            <span>Done <span className="flow-page__worker-stats-value">{done}</span></span>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function FlowTrackPlaylistMenus({
+  track,
+  useTrackContextMenu,
+  playlists,
+  playlistsLoading,
+  playlistSavingKey,
+  playlistMenuError,
+  excludedPlaylistIds,
+  getDefaultPlaylistName,
+  onLoadPlaylists,
+  onAddTrackToPlaylist,
+  onMoveTrackToPlaylist,
+  children,
+}) {
+  const canUsePlaylistMenus =
+    track?.artistName &&
+    track?.trackName &&
+    (onAddTrackToPlaylist || onMoveTrackToPlaylist);
+  const saving = playlistSavingKey === String(track?.id || "");
+  const defaultNewPlaylistName =
+    getDefaultPlaylistName?.(track) || "Playlist";
+  const sharedMenuProps = {
+    track,
+    playlists,
+    loading: playlistsLoading,
+    saving,
+    error: playlistMenuError,
+    defaultNewPlaylistName,
+    excludedPlaylistIds,
+    onLoadPlaylists,
+  };
+
+  if (!canUsePlaylistMenus) {
+    return typeof children === "function" ? children() : children;
+  }
+
+  if (useTrackContextMenu) {
+    return children({
+      playlistMenuProps: {
+        ...sharedMenuProps,
+        onAddTrackToPlaylist: onAddTrackToPlaylist
+          ? (target) => onAddTrackToPlaylist(track, target)
+          : null,
+        onMoveTrackToPlaylist: onMoveTrackToPlaylist
+          ? (target) => onMoveTrackToPlaylist(track, target)
+          : null,
+      },
+    });
+  }
+
+  return (
+    <>
+      {onAddTrackToPlaylist ? (
+        <TrackPlaylistMenu
+          {...sharedMenuProps}
+          triggerVariant="compact"
+          onSelect={(target) => onAddTrackToPlaylist(track, target)}
+        />
+      ) : null}
+      {typeof children === "function" ? children() : children}
+    </>
+  );
+}
+
+function FlowTrackKebabMenu({
+  track,
+  canReSearch,
+  isReSearching,
+  canDelete,
+  isDeleting,
+  onReSearch,
+  onDelete,
+  playlistMenuProps = null,
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [openSubmenu, setOpenSubmenu] = useState(null);
+  const [menuPosition, setMenuPosition] = useState(null);
+  const menuRef = useRef(null);
+  const triggerRef = useRef(null);
+  const onLoadPlaylistsRef = useRef(playlistMenuProps?.onLoadPlaylists);
+  onLoadPlaylistsRef.current = playlistMenuProps?.onLoadPlaylists;
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setIsOpen(false);
+        setOpenSubmenu(null);
+        setMenuPosition(null);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    onLoadPlaylistsRef.current?.();
+  }, [isOpen]);
+
+  const close = () => {
+    setIsOpen(false);
+    setOpenSubmenu(null);
+    setMenuPosition(null);
+  };
+  const trackLabel = track?.trackName || "track";
+  const openMenu = () => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) {
+      const menuWidth = 216;
+      const viewportPadding = 12;
+      setMenuPosition({
+        top: rect.bottom + 8,
+        left: Math.min(
+          Math.max(viewportPadding, rect.right - menuWidth),
+          window.innerWidth - menuWidth - viewportPadding,
+        ),
+      });
+    }
+    setIsOpen(true);
+  };
+
+  return (
+    <div
+      className={`flow-page__track-menu${isOpen ? " is-open" : ""}`}
+      ref={menuRef}
+    >
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          if (isOpen) {
+            close();
+            return;
+          }
+          openMenu();
+        }}
+        className="btn btn-secondary btn-icon btn-xs flow-page__track-menu-trigger"
+        aria-label={`Options for ${trackLabel}`}
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+      >
+        <MoreHorizontal className="artist-icon-xs" />
+      </button>
+      {isOpen ? (
+        <>
+          <button
+            type="button"
+            className="artist-backdrop-button"
+            onClick={close}
+            aria-label="Close track menu"
+          />
+          <div
+            className="artist-floating-menu flow-page__track-menu-dropdown"
+            style={{
+              top: menuPosition?.top ?? 0,
+              left: menuPosition?.left ?? 0,
+            }}
+            role="menu"
+          >
+            {canReSearch ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="artist-menu-item"
+                disabled={isReSearching}
+                onClick={() => {
+                  onReSearch?.(track);
+                  close();
+                }}
+              >
+                <span className="artist-menu-item__main">
+                  {isReSearching ? (
+                    <Loader2 className="artist-icon-sm animate-spin" />
+                  ) : (
+                    <Search className="artist-icon-sm" />
+                  )}
+                  Re-search
+                </span>
+              </button>
+            ) : null}
+            {playlistMenuProps?.onAddTrackToPlaylist ? (
+              <TrackPlaylistSubmenu
+                label="Add to playlist"
+                icon={Plus}
+                track={playlistMenuProps.track}
+                playlists={playlistMenuProps.playlists}
+                loading={playlistMenuProps.loading}
+                saving={playlistMenuProps.saving}
+                error={playlistMenuProps.error}
+                defaultNewPlaylistName={playlistMenuProps.defaultNewPlaylistName}
+                excludedPlaylistIds={playlistMenuProps.excludedPlaylistIds}
+                onSelect={playlistMenuProps.onAddTrackToPlaylist}
+                onClose={close}
+                toggleOnClick
+                isOpen={openSubmenu === "add"}
+                onToggle={() =>
+                  setOpenSubmenu((current) =>
+                    current === "add" ? null : "add",
+                  )
+                }
+              />
+            ) : null}
+            {playlistMenuProps?.onMoveTrackToPlaylist ? (
+              <TrackPlaylistSubmenu
+                label="Move to playlist"
+                icon={ListMusic}
+                track={playlistMenuProps.track}
+                playlists={playlistMenuProps.playlists}
+                loading={playlistMenuProps.loading}
+                saving={playlistMenuProps.saving}
+                error={playlistMenuProps.error}
+                defaultNewPlaylistName={playlistMenuProps.defaultNewPlaylistName}
+                excludedPlaylistIds={playlistMenuProps.excludedPlaylistIds}
+                onSelect={playlistMenuProps.onMoveTrackToPlaylist}
+                onClose={close}
+                toggleOnClick
+                isOpen={openSubmenu === "move"}
+                onToggle={() =>
+                  setOpenSubmenu((current) =>
+                    current === "move" ? null : "move",
+                  )
+                }
+              />
+            ) : null}
+            {canDelete ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="artist-menu-item artist-menu-item--danger"
+                disabled={isDeleting}
+                onClick={() => {
+                  onDelete?.(track);
+                  close();
+                }}
+              >
+                <span className="artist-menu-item__main">
+                  {isDeleting ? (
+                    <Loader2 className="artist-icon-sm animate-spin" />
+                  ) : (
+                    <Trash2 className="artist-icon-sm" />
+                  )}
+                  Remove from playlist
+                </span>
+              </button>
+            ) : null}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -853,547 +1149,83 @@ export function MoreMenu({ children, activeButtonClass = "btn-primary" }) {
   }, [isOpen]);
 
   return (
-    <div className={`relative ${isOpen ? "z-20" : "z-10"}`} ref={menuRef}>
+    <div className={`flow-page__menu-wrap${isOpen ? " is-open" : ""}`} ref={menuRef}>
       <button 
         type="button" 
         onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }} 
-        className={`btn btn-sm gap-2 px-2.5 ${isOpen ? activeButtonClass : "btn-secondary"}`}
+        className={`btn btn-sm btn--toolbar ${isOpen ? activeButtonClass : "btn-secondary"}`}
         aria-label="More options"
       >
-        <MoreHorizontal className="w-4 h-4" />
-        <span className="hidden sm:inline">More</span>
+        <MoreHorizontal className="artist-icon-sm" />
+        <span className="flow-page__btn-label--wide">More</span>
       </button>
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 z-30 flex w-48 flex-col rounded-md border border-[#3a3a44] bg-[#2d2d36] py-1"
-             onClick={() => setIsOpen(false)}>
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function buildEditableTrackRows(tracks) {
-  return (Array.isArray(tracks) ? tracks : []).map((track, index) => ({
-    rowId:
-      track?.id ||
-      `track-${index}-${Math.random().toString(36).slice(2, 10)}`,
-    persistedTrackId: track?.id || null,
-    artistName: String(track?.artistName || ""),
-    trackName: String(track?.trackName || ""),
-    albumName: String(track?.albumName || ""),
-    artistMbid: String(track?.artistMbid || ""),
-    albumMbid: String(track?.albumMbid || ""),
-    trackMbid: String(track?.trackMbid || ""),
-    releaseYear: String(track?.releaseYear || ""),
-    durationMs:
-      track?.durationMs != null && Number.isFinite(Number(track.durationMs))
-        ? Math.max(0, Math.round(Number(track.durationMs)))
-        : null,
-    artistAliases: Array.isArray(track?.artistAliases)
-      ? track.artistAliases
-          .map((entry) => String(entry || "").trim())
-          .filter(Boolean)
-      : [],
-    reason: String(track?.reason || ""),
-    status: String(track?.status || "draft"),
-    error: String(track?.error || ""),
-    isMarkedForDeletion: false,
-  }));
-}
-
-function TrackStatusBadge({ status, pendingDelete = false, compact = false }) {
-  const isDownloaded = status === "done";
-  const label = pendingDelete
-    ? "Pending Delete"
-    : isDownloaded
-      ? "Downloaded"
-      : "Not Downloaded";
-  return (
-    <span
-      className={`inline-flex h-6 w-6 items-center justify-center rounded-full border sm:h-6 sm:w-6 ${
-        compact ? "h-4 w-4" : ""
-      } ${
-        pendingDelete
-          ? "border-[#6f5941] bg-[#3a3025] text-[#ddb98b]"
-          : isDownloaded
-          ? "border-[#35533a] bg-[#223124] text-[#7ee081]"
-          : "border-[#4b4231] bg-[#30281d] text-[#d8b16f]"
-      }`}
-      title={label}
-      aria-label={label}
-    >
-      {pendingDelete ? (
-        <X className={compact ? "w-2.5 h-2.5" : "w-3.5 h-3.5"} />
-      ) : isDownloaded ? (
-        <Check className={compact ? "w-2.5 h-2.5" : "w-3.5 h-3.5"} />
-      ) : (
-        <CircleDashed className={compact ? "w-2.5 h-2.5" : "w-3.5 h-3.5"} />
-      )}
-    </span>
-  );
-}
-
-function buildTrackSavePayload(tracks) {
-  const nextTracks = [];
-  for (const track of Array.isArray(tracks) ? tracks : []) {
-    if (track?.isMarkedForDeletion) {
-      continue;
-    }
-    const artistName = String(track?.artistName || "").trim();
-    const trackName = String(track?.trackName || "").trim();
-    const albumName = String(track?.albumName || "").trim();
-    const artistMbid = String(track?.artistMbid || "").trim();
-    const albumMbid = String(track?.albumMbid || "").trim();
-    const trackMbid = String(track?.trackMbid || "").trim();
-    const releaseYear = String(track?.releaseYear || "").trim();
-    const reason = String(track?.reason || "").trim();
-    const durationMs =
-      track?.durationMs != null && Number.isFinite(Number(track.durationMs))
-        ? Math.max(0, Math.round(Number(track.durationMs)))
-        : null;
-    const artistAliases = Array.isArray(track?.artistAliases)
-      ? track.artistAliases
-          .map((entry) => String(entry || "").trim())
-          .filter(Boolean)
-      : [];
-    if (
-      !artistName &&
-      !trackName &&
-      !albumName &&
-      !artistMbid &&
-      !albumMbid &&
-      !trackMbid &&
-      !releaseYear &&
-      !reason
-    ) {
-      continue;
-    }
-    if (!artistName || !trackName) {
-      throw new Error("Each edited track needs both an artist and song name");
-    }
-    nextTracks.push({
-      artistName,
-      trackName,
-      albumName: albumName || null,
-      artistMbid: artistMbid || null,
-      albumMbid: albumMbid || null,
-      trackMbid: trackMbid || null,
-      releaseYear: releaseYear || null,
-      durationMs,
-      artistAliases,
-      reason: reason || null,
-    });
-  }
-  return nextTracks;
-}
-
-export const SharedPlaylistTrackEditor = forwardRef(function SharedPlaylistTrackEditor({
-  tracks,
-  loading,
-  error,
-  saving,
-  headerActions = null,
-  onSave,
-}, ref) {
-  const [draftTracks, setDraftTracks] = useState(() => buildEditableTrackRows(tracks));
-  const [editorError, setEditorError] = useState("");
-  const [missingOnly, setMissingOnly] = useState(false);
-
-  useEffect(() => {
-    setDraftTracks(buildEditableTrackRows(tracks));
-    setEditorError("");
-    setMissingOnly(false);
-  }, [tracks]);
-
-  const missingCount = draftTracks.filter(
-    (track) => track.status === "failed" && !track.isMarkedForDeletion,
-  ).length;
-  const pendingDeletionCount = draftTracks.filter(
-    (track) => track.isMarkedForDeletion,
-  ).length;
-  const visibleTracks = missingOnly
-    ? draftTracks.filter(
-        (track) => track.isMarkedForDeletion || track.status === "failed",
-      )
-    : draftTracks;
-  const utilityButtonClass =
-    "inline-flex h-8 items-center gap-1.5 rounded-md border border-white/12 bg-[#4a4a52] px-3 text-xs font-medium text-[#ededf0] transition hover:border-white/20 hover:bg-[#575762] disabled:cursor-not-allowed disabled:opacity-50";
-  const activeUtilityButtonClass =
-    "border-white/20 bg-[#5a5a64] text-white hover:bg-[#676773]";
-  const initialPayload = useMemo(() => {
-    try {
-      return JSON.stringify(buildTrackSavePayload(buildEditableTrackRows(tracks)));
-    } catch {
-      return "";
-    }
-  }, [tracks]);
-
-  const updateTrack = (rowId, key, value) => {
-    setDraftTracks((prev) =>
-      prev.map((track) =>
-        track.rowId === rowId ? { ...track, [key]: value } : track,
-      ),
-    );
-    if (editorError) {
-      setEditorError("");
-    }
-  };
-
-  const toggleTrackDeletion = (rowId) => {
-    setDraftTracks((prev) => {
-      const target = prev.find((track) => track.rowId === rowId);
-      if (!target) return prev;
-      if (!target.persistedTrackId && target.status === "draft") {
-        return prev.filter((track) => track.rowId !== rowId);
-      }
-      return prev.map((track) =>
-        track.rowId === rowId
-          ? { ...track, isMarkedForDeletion: !track.isMarkedForDeletion }
-          : track,
-      );
-    });
-    if (editorError) {
-      setEditorError("");
-    }
-  };
-
-  const handleAddTrack = () => {
-    setDraftTracks((prev) => [
-      ...prev,
-      {
-        rowId: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        persistedTrackId: null,
-        artistName: "",
-        trackName: "",
-        albumName: "",
-        artistMbid: "",
-        albumMbid: "",
-        trackMbid: "",
-        releaseYear: "",
-        durationMs: null,
-        artistAliases: [],
-        reason: "",
-        status: "draft",
-        error: "",
-        isMarkedForDeletion: false,
-      },
-    ]);
-    setMissingOnly(false);
-  };
-
-  const buildPayload = () => {
-    return buildTrackSavePayload(draftTracks);
-  };
-
-  const handleSave = async () => {
-    try {
-      const payload = buildPayload();
-      const currentPayload = JSON.stringify(payload);
-      if (currentPayload === initialPayload) {
-        setEditorError("");
-        return "unchanged";
-      }
-      setEditorError("");
-      await onSave?.(payload);
-      return "saved";
-    } catch (saveError) {
-      setEditorError(saveError?.message || "Failed to save tracklist");
-      return "error";
-    }
-  };
-
-  useImperativeHandle(ref, () => ({
-    save: handleSave,
-  }));
-
-  if (loading) {
-    return (
-      <div className="rounded-lg border border-white/10 bg-[#1f1f24] p-6 flex items-center gap-2 text-[#c1c1c3]">
-        <Loader2 className="w-4 h-4 animate-spin" />
-        Loading tracks...
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="rounded-lg border border-white/10 bg-[#1f1f24] p-6 text-red-400 text-sm">
-        {error}
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-lg border border-white/10 bg-[#211f27] overflow-hidden">
-      <div className="border-b border-white/10 px-3 py-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-[#b7bbc7]">
-          <span>{draftTracks.length} tracks</span>
-          {missingCount > 0 ? (
-            <>
-              <span className="text-white/25">•</span>
-              <span>{missingCount} missing</span>
-            </>
-          ) : null}
-          {pendingDeletionCount > 0 ? (
-            <>
-              <span className="text-white/25">•</span>
-              <span className="text-[#d7b58a]">
-                {pendingDeletionCount} marked for deletion
-              </span>
-            </>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {headerActions}
-          {missingCount > 0 ? (
-            <button
-              type="button"
-              onClick={() => setMissingOnly((prev) => !prev)}
-              className={`${utilityButtonClass} ${missingOnly ? activeUtilityButtonClass : ""}`}
-            >
-              {missingOnly ? "Show All" : "Missing Only"}
-            </button>
-          ) : null}
+        <>
           <button
             type="button"
-            onClick={handleAddTrack}
-            className={utilityButtonClass}
-            disabled={saving}
+            className="artist-backdrop-button"
+            onClick={() => setIsOpen(false)}
+            aria-label="Close menu"
+          />
+          <div
+            className="artist-dropdown artist-dropdown--right"
+            onClick={() => setIsOpen(false)}
           >
-            <Plus className="w-3.5 h-3.5" />
-            Add Track
-          </button>
-        </div>
-      </div>
-      <div className="overflow-auto max-h-[60vh]">
-        {visibleTracks.length === 0 ? (
-          <div className="p-6 text-sm text-[#c1c1c3]">
-            {missingOnly ? "No missing tracks right now." : "No tracks in this playlist yet."}
+            {children}
           </div>
-        ) : (
-          <>
-            <div className="grid gap-2 p-3 sm:hidden">
-              <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 px-2.5 text-[10px] font-medium uppercase tracking-[0.16em] text-[#8b8b90]">
-                <div>Song</div>
-                <div>Artist</div>
-                <div>Album</div>
-                <div />
-              </div>
-              {visibleTracks.map((track) => {
-                const isLocked = track.status === "done";
-                const isMarkedForDeletion = track.isMarkedForDeletion === true;
-                const showStaticValues = isLocked || isMarkedForDeletion;
-                return (
-                  <div key={track.rowId} className={isMarkedForDeletion ? "opacity-50" : ""}>
-                    <div className="rounded-lg border border-white/8 bg-[#1c1b22] p-2.5 text-[#d6d6d8]">
-                      <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-2">
-                        <div className="min-w-0">
-                          {showStaticValues ? (
-                            <div className={`truncate text-sm ${isMarkedForDeletion ? "line-through" : ""}`}>
-                              {track.trackName || "Untitled Song"}
-                            </div>
-                          ) : (
-                            <div className="grid gap-1">
-                              <input
-                                type="text"
-                                className="input input-xs h-8 w-full min-w-0 bg-[#141419] px-2 text-sm"
-                                value={track.trackName}
-                                onChange={(event) =>
-                                  updateTrack(track.rowId, "trackName", event.target.value)
-                                }
-                                placeholder="Song name"
-                              />
-                              {track.error ? (
-                                <span className="text-[11px] text-[#d49c9c]">
-                                  {track.error}
-                                </span>
-                              ) : null}
-                            </div>
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          {showStaticValues ? (
-                            <div className={`truncate text-sm ${isMarkedForDeletion ? "line-through" : ""}`}>
-                              {track.artistName || "Unknown Artist"}
-                            </div>
-                          ) : (
-                            <input
-                              type="text"
-                              className="input input-xs h-8 w-full min-w-0 bg-[#141419] px-2 text-sm"
-                              value={track.artistName}
-                              onChange={(event) =>
-                                updateTrack(track.rowId, "artistName", event.target.value)
-                              }
-                              placeholder="Artist name"
-                            />
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          {showStaticValues ? (
-                            <div className={`truncate text-sm ${isMarkedForDeletion ? "line-through" : ""}`}>
-                              {track.albumName || "Unknown Album"}
-                            </div>
-                          ) : (
-                            <input
-                              type="text"
-                              className="input input-xs h-8 w-full min-w-0 bg-[#141419] px-2 text-sm"
-                              value={track.albumName}
-                              onChange={(event) =>
-                                updateTrack(track.rowId, "albumName", event.target.value)
-                              }
-                              placeholder="Album name"
-                            />
-                          )}
-                        </div>
-                        <div className="flex justify-end">
-                          {isMarkedForDeletion ? (
-                            <button
-                              type="button"
-                              onClick={() => toggleTrackDeletion(track.rowId)}
-                              className="btn btn-secondary btn-xs px-2"
-                            >
-                              Undo
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => toggleTrackDeletion(track.rowId)}
-                              className="btn btn-ghost btn-xs px-2 text-red-400 hover:bg-red-500/10 hover:text-red-300"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <table className="hidden w-full text-sm sm:table">
-              <thead className="sticky top-0 z-20 bg-[#1c1b22]">
-                <tr className="text-left text-[#8b8b90] uppercase text-xs tracking-wider">
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Song</th>
-                  <th className="px-3 py-2">Artist</th>
-                  <th className="px-3 py-2">Album</th>
-                  <th className="px-3 py-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleTracks.map((track, index) => {
-                  const isLocked = track.status === "done";
-                  const isMarkedForDeletion = track.isMarkedForDeletion === true;
-                  const showStaticValues = isLocked || isMarkedForDeletion;
-                  return (
-                    <tr
-                      key={track.rowId}
-                      className={`border-t border-white/5 text-[#d6d6d8] ${
-                        index % 2 === 0 ? "bg-[#211f27]" : "bg-[#1c1b22]"
-                      } ${isMarkedForDeletion ? "opacity-50" : ""}`}
-                    >
-                      <td className="px-3 py-2 align-top">
-                        <TrackStatusBadge
-                          status={track.status}
-                          pendingDelete={isMarkedForDeletion}
-                        />
-                      </td>
-                      <td className="px-3 py-2 align-top">
-                        {showStaticValues ? (
-                          <div className={`min-w-[180px] ${isMarkedForDeletion ? "line-through" : ""}`}>
-                            {track.trackName || "Untitled Song"}
-                          </div>
-                        ) : (
-                          <div className="grid gap-1 min-w-[180px]">
-                            <input
-                              type="text"
-                              className="input input-xs bg-[#141419]"
-                              value={track.trackName}
-                              onChange={(event) =>
-                                updateTrack(track.rowId, "trackName", event.target.value)
-                              }
-                              placeholder="Song name"
-                            />
-                            {track.error ? (
-                              <span className="text-[11px] text-[#d49c9c]">
-                                {track.error}
-                              </span>
-                            ) : null}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 align-top">
-                        {showStaticValues ? (
-                          <div className={`min-w-[180px] ${isMarkedForDeletion ? "line-through" : ""}`}>
-                            {track.artistName || "Unknown Artist"}
-                          </div>
-                        ) : (
-                          <input
-                            type="text"
-                            className="input input-xs min-w-[180px] bg-[#141419]"
-                            value={track.artistName}
-                            onChange={(event) =>
-                              updateTrack(track.rowId, "artistName", event.target.value)
-                            }
-                            placeholder="Artist name"
-                          />
-                        )}
-                      </td>
-                      <td className="px-3 py-2 align-top">
-                        {showStaticValues ? (
-                          <div className={`min-w-[180px] ${isMarkedForDeletion ? "line-through" : ""}`}>
-                            {track.albumName || "Unknown Album"}
-                          </div>
-                        ) : (
-                          <input
-                            type="text"
-                            className="input input-xs min-w-[180px] bg-[#141419]"
-                            value={track.albumName}
-                            onChange={(event) =>
-                              updateTrack(track.rowId, "albumName", event.target.value)
-                            }
-                            placeholder="Album name"
-                          />
-                        )}
-                      </td>
-                      <td className="px-3 py-2 align-top">
-                        {isMarkedForDeletion ? (
-                          <button
-                            type="button"
-                            onClick={() => toggleTrackDeletion(track.rowId)}
-                            className="btn btn-secondary btn-xs px-2"
-                          >
-                            Undo
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => toggleTrackDeletion(track.rowId)}
-                            className="btn btn-ghost btn-xs px-2 text-red-400 hover:bg-red-500/10 hover:text-red-300"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </>
-        )}
-      </div>
-      {editorError ? (
-        <div className="border-t border-white/10 px-3 py-2 text-xs text-red-400">
-          {editorError}
-        </div>
-      ) : null}
+        </>
+      )}
     </div>
   );
-});
+}
 
-function PlaylistArtworkThumb({ artworkUrl, name }) {
+function getTrackStatusMeta(status) {
+  switch (String(status || "").toLowerCase()) {
+    case "done":
+      return { label: "Downloaded", className: "flow-page__track-status-dot--done" };
+    case "downloading":
+      return {
+        label: "Downloading",
+        className: "flow-page__track-status-dot--downloading",
+      };
+    case "failed":
+      return { label: "Failed", className: "flow-page__track-status-dot--failed" };
+    case "pending":
+    default:
+      return { label: "Queued", className: "flow-page__track-status-dot--pending" };
+  }
+}
+
+function TrackStatusDot({ status }) {
+  const meta = getTrackStatusMeta(status);
+  const normalized = String(status || "").toLowerCase();
+  const isLinkable = normalized !== "done";
+  if (isLinkable) {
+    return (
+      <Link
+        to="/downloads"
+        className={`flow-page__track-status-dot flow-page__track-status-dot--link ${meta.className}`}
+        title={`${meta.label} — view activity`}
+        aria-label={`${meta.label}, view activity`}
+      />
+    );
+  }
+  return (
+    <span
+      className={`flow-page__track-status-dot ${meta.className}`}
+      title={meta.label}
+      aria-label={meta.label}
+      role="img"
+    />
+  );
+}
+
+export function PlaylistArtworkThumb({
+  artworkUrl,
+  name,
+  className = "",
+  onClick,
+}) {
   const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => {
@@ -1401,24 +1233,33 @@ function PlaylistArtworkThumb({ artworkUrl, name }) {
   }, [artworkUrl]);
 
   const fallbackLabel = String(name || "?").trim().charAt(0).toUpperCase() || "?";
+  const classes = `flow-page__artwork${onClick ? " flow-page__artwork--interactive" : ""}${className ? ` ${className}` : ""}`;
+  const content =
+    !imageFailed && artworkUrl ? (
+      <img
+        src={artworkUrl}
+        alt={`${name} cover`}
+        loading="lazy"
+        onError={() => setImageFailed(true)}
+      />
+    ) : (
+      <div className="flow-page__artwork-fallback">{fallbackLabel}</div>
+    );
 
-  return (
-    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-[#1c1b22] min-[360px]:h-16 min-[360px]:w-16 sm:h-20 sm:w-20 sm:rounded-[1.25rem]">
-      {!imageFailed && artworkUrl ? (
-        <img
-          src={artworkUrl}
-          alt={`${name} cover`}
-          className="h-full w-full object-cover"
-          loading="lazy"
-          onError={() => setImageFailed(true)}
-        />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center bg-white/5 text-lg font-semibold text-[#d2dac9]">
-          {fallbackLabel}
-        </div>
-      )}
-    </div>
-  );
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        className={classes}
+        onClick={onClick}
+        aria-label={`Edit ${name} cover`}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={classes}>{content}</div>;
 }
 
 const MOBILE_CARD_MEDIA_QUERY = "(max-width: 639px)";
@@ -1592,7 +1433,7 @@ export function FlowCard({
       nextRun === "soon" ? "Next update soon" : `Next update in ${nextRun}`,
     );
   }
-  const typeLabel = enabled ? "Flow" : "Flow Draft";
+  const typeLabel = enabled ? "Flow" : "Flow draft";
   const statusSummary = enabled ? "" : "Flow ready when enabled";
   const ownerLabel = isAdminView && flow?.ownerUsername
     ? `Owner: ${flow.ownerUsername}`
@@ -1604,178 +1445,196 @@ export function FlowCard({
   };
 
   return (
-    <div className="bg-card overflow-visible border border-white/5 -mx-4 rounded-none sm:mx-0 sm:rounded-lg">
-      <div className="p-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
+    <div className="flow-page__card">
+      <div className="flow-page__card-body">
         <div
-          className="min-w-0 flex-1 flex gap-3 sm:gap-4 cursor-pointer sm:cursor-default"
+          className="flow-page__card-main"
           onClick={handleMobileTrackToggle}
         >
-          <div className={enabled ? "" : "opacity-50"}>
+          <div className={enabled ? "" : "flow-page__card--dimmed"}>
             <PlaylistArtworkThumb artworkUrl={artworkUrl} name={flow.name} />
           </div>
-          <div className="min-w-0 flex-1 grid gap-2">
-            <div className="flex flex-col gap-2 min-[420px]:flex-row min-[420px]:items-start min-[420px]:justify-between">
-              <div className={enabled ? "" : "opacity-50"}>
-                <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
-                  <span className="rounded-full bg-black/25 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[#d2dac9]">
+          <div className="flow-page__card-content">
+            <div className="flow-page__card-top">
+              <div className={enabled ? "" : "flow-page__card--dimmed"}>
+                <div className="flow-page__card-badges">
+                  <span className="flow-page__badge flow-page__badge--type">
                     {typeLabel}
                   </span>
-                  <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-[#c6c6cb]">
+                  <span className="flow-page__badge flow-page__badge--count">
                     {flow.size} tracks
                   </span>
                   {ownerLabel ? (
-                    <span className="rounded-full border border-[#90a07d]/25 bg-[#90a07d]/10 px-2 py-0.5 text-[11px] text-[#d8e5cc]">
+                    <span className="flow-page__badge flow-page__badge--owner">
                       {ownerLabel}
                     </span>
                   ) : null}
                   {state === "running" && (
-                    <span className="badge badge-success badge-sm gap-1.5 pl-1.5 pr-2">
-                      <Loader2 className="w-3 h-3 animate-spin" />
+                    <span className="badge badge-success flow-page__status-badge">
+                      <Loader2 className="artist-icon-xs animate-spin" />
                       Running
                     </span>
                   )}
                   {togglingId === flow.id && (
-                    <span className="badge badge-secondary badge-sm gap-1.5 pl-1.5 pr-2">
-                      <Loader2 className="w-3 h-3 animate-spin" />
+                    <span className="badge badge-secondary flow-page__status-badge">
+                      <Loader2 className="artist-icon-xs animate-spin" />
                       Updating
                     </span>
                   )}
                 </div>
               </div>
-              <div className="flex shrink-0 items-center justify-end gap-1 self-end min-[420px]:self-start">
+              <div className="flow-page__card-actions">
                 <button
                   onClick={onViewTracks}
-                  className={`hidden sm:inline-flex btn ${isTracksOpen ? "btn-neutral-active" : "btn-secondary"} btn-sm gap-2 px-2.5`}
+                  className={`btn btn--hide-mobile btn-sm btn--toolbar ${isTracksOpen ? "btn-neutral-active" : "btn-secondary"}`}
                   aria-label={isTracksOpen ? `Close ${flow.name} tracks` : `View ${flow.name} tracks`}
                   title={isTracksOpen ? `Close ${flow.name} tracks` : `View ${flow.name} tracks`}
                   aria-pressed={isTracksOpen}
                   disabled={!enabled && !isTracksOpen}
                 >
-                  <ListMusic className="w-4 h-4" />
-                  <span className="hidden md:inline">Tracks</span>
+                  <ListMusic className="artist-icon-sm" />
+                  <span className="flow-page__btn-label--md">Tracks</span>
                 </button>
                 <button
                   onClick={onToggleEditing}
-                  className={`hidden sm:inline-flex btn ${isEditing ? "btn-neutral-active" : "btn-secondary"} btn-sm gap-2 px-2.5`}
+                  className={`btn btn--hide-mobile btn-sm btn--toolbar ${isEditing ? "btn-neutral-active" : "btn-secondary"}`}
                   aria-label={isEditing ? "Close editor" : "Edit flow"}
                   title={isEditing ? `Close ${flow.name} editor` : `Edit ${flow.name}`}
                   aria-pressed={isEditing}
                 >
-                  <Pencil className="w-4 h-4" />
-                  <span className="hidden md:inline">Manage</span>
+                  <Pencil className="artist-icon-sm" />
+                  <span className="flow-page__btn-label--md">Manage</span>
                 </button>
                 <MoreMenu activeButtonClass="btn-neutral-active">
                   <button
                     onClick={onViewTracks}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
+                    className="artist-menu-item flow-page__menu-item--mobile-only"
                     aria-pressed={isTracksOpen}
                     disabled={!enabled && !isTracksOpen}
                   >
-                    <ListMusic className="w-4 h-4" />
-                    {isTracksOpen ? "Hide Tracks" : "View Tracks"}
+                    <span className="artist-menu-item__main">
+                      <ListMusic className="artist-icon-sm" />
+                      {isTracksOpen ? "Hide Tracks" : "View Tracks"}
+                    </span>
                   </button>
                   <button
                     onClick={onToggleEditing}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white sm:hidden"
+                    className="artist-menu-item flow-page__menu-item--mobile-only"
                     aria-pressed={isEditing}
                   >
-                    <Pencil className="w-4 h-4" />
-                    {isEditing ? "Close Manage View" : "Manage Flow"}
+                    <span className="artist-menu-item__main">
+                      <Pencil className="artist-icon-sm" />
+                      {isEditing ? "Close Manage View" : "Manage Flow"}
+                    </span>
                   </button>
                   {isNameEditing ? (
                     <>
                       <button
                         type="button"
                         onClick={isNameDirty ? onNameApply : onNameCancel}
-                        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
+                        className="artist-menu-item flow-page__menu-item--mobile-only"
                         disabled={isNameApplying}
                       >
-                        {isNameApplying ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Check className="w-4 h-4" />
-                        )}
-                        Save Title
+                        <span className="artist-menu-item__main">
+                          {isNameApplying ? (
+                            <Loader2 className="artist-icon-sm animate-spin" />
+                          ) : (
+                            <Check className="artist-icon-sm" />
+                          )}
+                          Save Title
+                        </span>
                       </button>
                       <button
                         type="button"
                         onClick={onNameCancel}
-                        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
+                        className="artist-menu-item flow-page__menu-item--mobile-only"
                         disabled={isNameApplying}
                       >
-                        <X className="w-4 h-4" />
-                        Cancel Rename
+                        <span className="artist-menu-item__main">
+                          <X className="artist-icon-sm" />
+                          Cancel Rename
+                        </span>
                       </button>
                     </>
                   ) : (
                     <button
                       type="button"
                       onClick={onToggleNameEditing}
-                      className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white sm:hidden"
+                      className="artist-menu-item flow-page__menu-item--mobile-only"
                     >
-                      <Pencil className="w-4 h-4" />
-                      Rename Title
+                      <span className="artist-menu-item__main">
+                        <Pencil className="artist-icon-sm" />
+                        Rename Title
+                      </span>
                     </button>
                   )}
-                  <div className="my-1 border-t border-white/10 sm:hidden" />
+                  <div className="flow-page__menu-divider flow-page__menu-divider--mobile-only" />
                   <button
                     onClick={onRunNow}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    className="artist-menu-item"
                     disabled={!canRunNow}
                   >
-                    {isRerunningThisFlow ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Play className="w-4 h-4" />
-                    )}
-                    Run Now
+                    <span className="artist-menu-item__main">
+                      {isRerunningThisFlow ? (
+                        <Loader2 className="artist-icon-sm animate-spin" />
+                      ) : (
+                        <Play className="artist-icon-sm" />
+                      )}
+                      Run Now
+                    </span>
                   </button>
                   <button
                     onClick={onConvertToStatic}
-                    className="w-full text-left px-3 py-2.5 text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white flex items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="artist-menu-item"
                     disabled={!canConvertToStatic || convertingId === flow.id}
                   >
-                    {convertingId === flow.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <FilePlus2 className="w-4 h-4" />}
-                    Convert to Static
+                    <span className="artist-menu-item__main">
+                      {convertingId === flow.id ? <Loader2 className="artist-icon-sm animate-spin" /> : <FilePlus2 className="artist-icon-sm" />}
+                      Convert to Static
+                    </span>
                   </button>
                   <button
                     onClick={onExport}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    className="artist-menu-item"
                     disabled={!canExport}
                   >
-                    <Download className="w-4 h-4" />
-                    Download JSON
+                    <span className="artist-menu-item__main">
+                      <Download className="artist-icon-sm" />
+                      Download JSON
+                    </span>
                   </button>
-                  <div className="my-1 border-t border-white/10" />
+                  <div className="flow-page__menu-divider" />
                   <button
                     onClick={onDelete}
-                    className="w-full text-left px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 flex items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="artist-menu-item artist-menu-item--danger"
                     disabled={deletingId === flow.id}
                   >
-                    {deletingId === flow.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                    Delete Flow
+                    <span className="artist-menu-item__main">
+                      {deletingId === flow.id ? <Loader2 className="artist-icon-sm animate-spin" /> : <Trash2 className="artist-icon-sm" />}
+                      Delete Flow
+                    </span>
                   </button>
                 </MoreMenu>
-                <div className="flex items-center rounded-md bg-black/20 px-1.5 py-1 min-[420px]:px-2 min-[420px]:py-1.5">
+                <div className="flow-page__toggle-wrap">
                   {togglingId === flow.id && (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-white/50" />
+                    <Loader2 className="artist-icon-xs animate-spin flow-page__toggle-spinner" />
                   )}
                   <PillToggle
                     checked={enabled}
-                    className={enabled ? "max-[420px]:[--w:38px]" : "is-off max-[420px]:[--w:38px]"}
+                    className={`pill-toggle--flow-compact${enabled ? "" : " is-off"}`}
                     onChange={(event) => onToggleEnabled(event.target.checked)}
                     disabled={togglingId === flow.id}
                   />
                 </div>
               </div>
             </div>
-            <div className="space-y-1">
-              <div className={enabled ? "" : "opacity-50"}>
-                <div className="flex min-w-0 items-start gap-2">
+            <div className="flow-page__card-title-row">
+              <div className={enabled ? "" : "flow-page__card--dimmed"}>
+                <div className="flow-page__card-title-row">
                   {isNameEditing ? (
                     <input
                       type="text"
-                      className="input input-sm h-9 w-full max-w-md bg-[#1c1b22] text-base font-medium text-white"
+                      className="input input-sm flow-page__card-title-input"
                       value={simpleDraft?.name ?? ""}
                       onChange={(event) =>
                         onDraftChange((prev) => ({
@@ -1801,11 +1660,11 @@ export function FlowCard({
                       aria-label={`Edit ${flow.name} name`}
                     />
                   ) : (
-                    <h3 className="min-w-0 truncate text-sm font-medium text-white sm:text-base">
+                    <h3 className="flow-page__card-title">
                       {flow.name}
                     </h3>
                   )}
-                  <div className="hidden shrink-0 items-center gap-1 sm:flex">
+                  <div className="flow-page__card-title-actions">
                     <button
                       type="button"
                       onClick={
@@ -1813,70 +1672,66 @@ export function FlowCard({
                           ? (isNameDirty ? onNameApply : onNameCancel)
                           : onToggleNameEditing
                       }
-                      className={`btn ${isNameEditing ? "btn-primary" : "btn-ghost"} btn-xs px-2`}
+                      className={`btn ${isNameEditing ? "btn-primary" : "btn-ghost"} btn-xs`}
                       aria-label={isNameEditing ? `Save ${flow.name}` : `Edit ${flow.name}`}
                       title={isNameEditing ? `Save ${flow.name}` : `Edit ${flow.name}`}
                       disabled={isNameApplying}
                     >
                       {isNameApplying ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <Loader2 className="artist-icon-xs animate-spin" />
                       ) : isNameEditing ? (
-                        <Check className="w-3.5 h-3.5" />
+                        <Check className="artist-icon-xs" />
                       ) : (
-                        <Pencil className="w-3.5 h-3.5" />
+                        <Pencil className="artist-icon-xs" />
                       )}
                     </button>
                     {isNameEditing ? (
                       <button
                         type="button"
                         onClick={onNameCancel}
-                        className="btn btn-ghost btn-xs px-2"
+                        className="btn btn-ghost btn-xs"
                         aria-label={`Cancel editing ${flow.name}`}
                         title={`Cancel editing ${flow.name}`}
                         disabled={isNameApplying}
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <X className="artist-icon-xs" />
                       </button>
                     ) : null}
                   </div>
                 </div>
-                <div className="hidden flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[#b5b5bc] sm:gap-x-3 sm:text-xs md:flex">
+                <div className="flow-page__card-meta">
                   {statusSummary ? <span>{statusSummary}</span> : null}
                   {statusSummary && metaItems.length > 0 ? (
-                    <>
-                      <span className="text-white/25">•</span>
-                    </>
+                    <span className="flow-page__card-meta-dot">•</span>
                   ) : null}
                   {metaItems.length > 0 ? <span>{metaItems.join(" • ")}</span> : null}
                 </div>
               </div>
             </div>
               {flowWorkerMessage ? (
-              <div className={`hidden truncate text-xs text-[#9aa886] sm:block ${enabled ? "" : "opacity-50"}`}>
+              <div className={`flow-page__card-status flow-page__card-hint--desktop${enabled ? "" : " flow-page__card--dimmed"}`}>
                 {flowWorkerMessage}
               </div>
             ) : null}
-            <div className={`text-[11px] text-[#9aa886] sm:hidden ${enabled ? "" : "opacity-50"}`}>
+            <div className={`flow-page__card-hint flow-page__card-hint--mobile${enabled ? "" : " flow-page__card--dimmed"}`}>
               {isTracksOpen ? "Tap card to hide tracks" : "Tap card to view tracks"}
             </div>
             {(state === "running" || state === "completed") && total > 0 ? (
-              <div className={`grid gap-1.5 ${enabled ? "" : "opacity-50"}`}>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+              <div className={`flow-page__progress${enabled ? "" : " flow-page__card--dimmed"}`}>
+                <div className="flow-page__progress-bar">
                   <div
-                    className={`h-full rounded-full transition-all duration-300 ${
-                      state === "completed" ? "bg-[#7aa2f7]" : "bg-[#9aa886]"
-                    }`}
+                    className={`flow-page__progress-fill${state === "completed" ? " flow-page__progress-fill--completed" : ""}`}
                     style={{ width: `${progressPct}%` }}
                   />
                 </div>
-                <div className="text-[11px] text-[#d3d3d8] sm:hidden">{progressPct}% complete</div>
-                <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#d3d3d8] sm:flex">
+                <div className="flow-page__progress-stats-mobile">{progressPct}% complete</div>
+                <div className="flow-page__progress-stats">
                   <span>{progressPct}% complete</span>
-                  <span className="text-white/25">•</span>
+                  <span className="flow-page__card-meta-dot">•</span>
                   <span>Pending {pendingCount}</span>
-                  <span className="text-white/25">•</span>
+                  <span className="flow-page__card-meta-dot">•</span>
                   <span>Downloading {downloadingCount}</span>
-                    <span className="text-white/25">•</span>
+                  <span className="flow-page__card-meta-dot">•</span>
                   <span>Done {processedDisplay}</span>
                 </div>
               </div>
@@ -1886,20 +1741,20 @@ export function FlowCard({
       </div>
 
       {isEditing && (
-        <div className="px-4 pb-4">
-          <div className="card-separator mb-4" />
-          <div className="grid gap-3">
+        <div className="flow-page__card-expanded">
+          <div className="flow-page__card-expanded-separator" />
+          <div className="flow-page__form">
             <FlowFormFields
               draft={simpleDraft}
               remaining={simpleRemaining}
-              inputClassName="input bg-[#1f1f24]"
+              inputClassName="flow-page__field-control"
               errorMessage={simpleError}
               onDraftChange={onDraftChange}
               onClearError={onClearError}
               normalizeMixPercent={normalizeMixPercent}
               disabledSources={disabledSources}
             />
-            <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="flow-page__card-footer-actions">
               <button onClick={onCancel} className="btn btn-secondary btn-sm">
                 Cancel
               </button>
@@ -1917,8 +1772,8 @@ export function FlowCard({
       )}
 
       {isTracksOpen && (
-        <div className="pb-4 sm:px-4">
-          <div className="card-separator mx-4 mb-4 sm:mx-0" />
+        <div className="flow-page__card-expanded">
+          <div className="flow-page__card-expanded-separator" />
           <FlowTracksPanel
             tracks={tracks}
             loading={tracksLoading}
@@ -1932,466 +1787,436 @@ export function FlowCard({
   );
 }
 
+function FlowTracksSortHeader({
+  label,
+  sortKey,
+  activeSortKey,
+  sortDirection,
+  onSort,
+  className = "",
+}) {
+  const active = activeSortKey === sortKey;
+  const DirectionIcon = sortDirection === "asc" ? ArrowUp : ArrowDown;
+  const ariaSort = active
+    ? sortDirection === "asc"
+      ? "ascending"
+      : "descending"
+    : "none";
+  return (
+    <th className={className} scope="col" aria-sort={ariaSort}>
+      <button
+        type="button"
+        className={`flow-page__tracks-sort-button${active ? " is-active" : ""}`}
+        onClick={() => onSort(sortKey)}
+      >
+        <span>{label}</span>
+        {active ? (
+          <DirectionIcon className="artist-icon-xs" aria-hidden="true" />
+        ) : null}
+      </button>
+    </th>
+  );
+}
+
 export function FlowTracksPanel({
   tracks,
   loading,
   error,
+  activityHint = null,
   emptyMessage = "No tracks generated for this flow yet.",
-  editable = false,
-  showStatus = false,
-  hideFailedTracks = false,
-  showFailedDetails = true,
   headerActions = null,
   deletingTrackId = null,
   reSearchingTrackIds = {},
+  useTrackContextMenu = false,
+  playlists = [],
+  playlistsLoading = false,
+  playlistSavingKey = "",
+  playlistMenuError = "",
+  excludedPlaylistIds = [],
+  getDefaultPlaylistName,
+  onLoadPlaylists,
   onDeleteTrack,
   onAddTrackToPlaylist,
+  onMoveTrackToPlaylist,
   onNavigateArtist,
   onReSearchTrack,
+  playbackSource = null,
+  showPlaybackControls = true,
+  hideAlbumColumn = false,
+  hideStatusColumn = false,
 }) {
-  const [queue, setQueue] = useState([]);
-  const [currentTrackId, setCurrentTrackId] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isShuffleEnabled, setIsShuffleEnabled] = useState(false);
-  const [sharedVolume, setSharedVolume] = useSharedVolume();
-  const [playbackProgress, setPlaybackProgress] = useState(0);
-  const [progressSnappingBack, setProgressSnappingBack] = useState(false);
-  const volume = Math.round(sharedVolume * 100);
-  const lastVolumeRef = useRef(volume > 0 ? volume : 70);
-  const progressResetTimeoutRef = useRef(null);
-  const audioRef = useRef(null);
-
-  const playableTracks = useMemo(
-    () => tracks.filter((track) => track.status === "done" && track.streamUrl),
+  const [sortKey, setSortKey] = useState("index");
+  const [sortDirection, setSortDirection] = useState("asc");
+  const trackOrderKey = useMemo(
+    () => tracks.map((track) => track.id).join("\n"),
     [tracks],
   );
 
-  const currentTrack = useMemo(
-    () => playableTracks.find((track) => track.id === currentTrackId) || null,
-    [playableTracks, currentTrackId],
+  useEffect(() => {
+    setSortKey("index");
+    setSortDirection("asc");
+  }, [trackOrderKey]);
+
+  const {
+    playQueue,
+    playTrack,
+    togglePlayPause,
+    isShuffleEnabled,
+    matchesSource,
+    isPlaying,
+    currentTrack: activeTrack,
+  } = useAudioQueue();
+
+  const sortedTracks = useMemo(
+    () => sortFlowTracks(tracks, sortKey, sortDirection),
+    [tracks, sortKey, sortDirection],
   );
-  const visibleTracks = useMemo(
+
+  const playableTracks = useMemo(
     () =>
-      hideFailedTracks
-        ? tracks.filter((track) => track.status !== "failed")
-        : tracks,
-    [hideFailedTracks, tracks],
+      sortedTracks.filter(
+        (track) => track.status === "done" && track.streamUrl,
+      ),
+    [sortedTracks],
   );
 
-  const startQueue = (trackIds) => {
-    if (!trackIds.length) return;
-    setQueue(trackIds);
-    setCurrentTrackId(trackIds[0]);
-  };
-
-  const getOrderedIds = () => playableTracks.map((track) => track.id);
-
-  const getShuffledIds = () => {
-    const ids = getOrderedIds();
-    const shuffled = [...ids];
-    for (let i = shuffled.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-  };
-
-  const getPlaybackIds = () =>
-    isShuffleEnabled ? getShuffledIds() : getOrderedIds();
-
-  const resetProgress = (snap = false) => {
-    if (progressResetTimeoutRef.current) {
-      window.clearTimeout(progressResetTimeoutRef.current);
-      progressResetTimeoutRef.current = null;
-    }
-    if (snap) {
-      setProgressSnappingBack(true);
-      setPlaybackProgress(0);
-      progressResetTimeoutRef.current = window.setTimeout(() => {
-        setProgressSnappingBack(false);
-      }, 280);
+  const handleSort = (nextSortKey) => {
+    if (sortKey === nextSortKey) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
       return;
     }
-    setProgressSnappingBack(false);
-    setPlaybackProgress(0);
+    setSortKey(nextSortKey);
+    setSortDirection("asc");
   };
+
+  const isSourceActive = matchesSource(playbackSource);
+  const currentTrackId =
+    isSourceActive && activeTrack?.id ? activeTrack.id : null;
+  const isCurrentPlaying = isSourceActive && isPlaying;
+
+  const isPlaylistPlaying = isSourceActive && isCurrentPlaying;
 
   const handlePrimaryPlay = () => {
     if (playableTracks.length === 0) return;
-    const audio = audioRef.current;
-    const hasCurrentPlayable = playableTracks.some((track) => track.id === currentTrackId);
-    if (currentTrackId && hasCurrentPlayable) {
-      if (isPlaying) {
-        audio?.pause();
-        return;
-      }
-      audio
-        ?.play()
-        .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false));
+    if (isSourceActive && (isPlaying || currentTrackId)) {
+      togglePlayPause();
       return;
     }
-    const ids = getPlaybackIds();
-    if (ids.length === 0) return;
-    resetProgress();
-    startQueue(ids);
+    const queueTracks = playableTracks.map((track) => normalizeFlowTrack(track));
+    playQueue(queueTracks, {
+      source: playbackSource,
+      shuffle: false,
+    });
   };
 
-  const handlePrevious = () => {
+  const handleShufflePlay = () => {
     if (playableTracks.length === 0) return;
-    if (!queue.length || !currentTrackId) {
-      const ids = getPlaybackIds();
-      if (ids.length === 0) return;
-      resetProgress();
-      startQueue(ids);
-      return;
-    }
-    const currentIndex = queue.findIndex((id) => id === currentTrackId);
-    if (currentIndex > 0) {
-      resetProgress(true);
-      setCurrentTrackId(queue[currentIndex - 1]);
-      return;
-    }
-    const audio = audioRef.current;
-    if (audio) {
-      audio.currentTime = 0;
-    }
-    resetProgress(true);
-  };
-
-  const handleNext = () => {
-    if (playableTracks.length === 0) return;
-    if (!queue.length || !currentTrackId) {
-      const ids = getPlaybackIds();
-      if (ids.length === 0) return;
-      resetProgress();
-      startQueue(ids);
-      return;
-    }
-    const currentIndex = queue.findIndex((id) => id === currentTrackId);
-    const nextId = currentIndex >= 0 ? queue[currentIndex + 1] : null;
-    if (nextId) {
-      resetProgress(true);
-      setCurrentTrackId(nextId);
-      return;
-    }
-    resetProgress(true);
-    setIsPlaying(false);
-    setCurrentTrackId(null);
-    setQueue([]);
+    const queueTracks = playableTracks.map((track) => normalizeFlowTrack(track));
+    playQueue(queueTracks, {
+      source: playbackSource,
+      shuffle: true,
+    });
   };
 
   const handlePlayTrack = (track) => {
     if (!track?.streamUrl) return;
-    if (currentTrackId === track.id && isPlaying) {
-      audioRef.current?.pause();
+    const normalized = normalizeFlowTrack(track);
+    if (currentTrackId === track.id && isSourceActive) {
+      togglePlayPause();
       return;
     }
-    setQueue([track.id]);
-    resetProgress();
-    setCurrentTrackId(track.id);
+    playTrack(normalized, {
+      source: playbackSource,
+      queue: playableTracks.map((entry) => normalizeFlowTrack(entry)),
+      shuffle: isShuffleEnabled,
+    });
   };
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !currentTrack?.streamUrl) return;
-    audio.src = currentTrack.streamUrl;
-    audio
-      .play()
-      .then(() => setIsPlaying(true))
-      .catch(() => setIsPlaying(false));
-  }, [currentTrack?.id, currentTrack?.streamUrl]);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.muted = volume <= 0;
-    audio.volume = sharedVolume;
-  }, [sharedVolume, volume]);
-
-  useEffect(() => {
-    if (volume > 0) {
-      lastVolumeRef.current = volume;
-    }
-  }, [volume]);
-
-  const handleVolumeChange = (nextValue) => {
-    const nextVolume = Math.min(Math.max(Number(nextValue) || 0, 0), 100);
-    if (nextVolume > 0) {
-      lastVolumeRef.current = nextVolume;
-    }
-    setSharedVolume(nextVolume / 100);
-  };
-
-  const handleToggleMute = () => {
-    if (volume <= 0) {
-      const restoredVolume = lastVolumeRef.current > 0 ? lastVolumeRef.current : 70;
-      setSharedVolume(restoredVolume / 100);
-      return;
-    }
-    if (volume > 0) {
-      lastVolumeRef.current = volume;
-    }
-    setSharedVolume(0);
-  };
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    const handlePlay = () => setIsPlaying(true);
-    const handlePause = () => setIsPlaying(false);
-    const handleTimeUpdate = () => {
-      const duration = Number(audio.duration);
-      if (!Number.isFinite(duration) || duration <= 0) {
-        setPlaybackProgress(0);
-        return;
-      }
-      setProgressSnappingBack(false);
-      setPlaybackProgress(Math.min(Math.max(audio.currentTime / duration, 0), 1));
-    };
-    const handleEnded = () => {
-      resetProgress(true);
-      const currentIndex = queue.findIndex((id) => id === currentTrackId);
-      const nextId = currentIndex >= 0 ? queue[currentIndex + 1] : null;
-      if (nextId) {
-        setCurrentTrackId(nextId);
-        return;
-      }
-      setIsPlaying(false);
-      setCurrentTrackId(null);
-      setQueue([]);
-    };
-    audio.addEventListener("play", handlePlay);
-    audio.addEventListener("pause", handlePause);
-    audio.addEventListener("timeupdate", handleTimeUpdate);
-    audio.addEventListener("ended", handleEnded);
-    return () => {
-      audio.removeEventListener("play", handlePlay);
-      audio.removeEventListener("pause", handlePause);
-      audio.removeEventListener("timeupdate", handleTimeUpdate);
-      audio.removeEventListener("ended", handleEnded);
-    };
-  }, [queue, currentTrackId]);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    return () => {
-      if (progressResetTimeoutRef.current) {
-        window.clearTimeout(progressResetTimeoutRef.current);
-      }
-      if (audio) {
-        audio.pause();
-        audio.src = "";
-      }
-    };
-  }, []);
 
   return (
-    <div className="overflow-hidden border border-white/10 bg-[#211f27] rounded-none sm:rounded-lg">
-      <div className="relative bg-[#211f27] px-3 py-2.5 border-b border-white/10 flex items-center">
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center gap-2">
-          <button
-            onClick={handlePrevious}
-            className="btn btn-secondary btn-sm px-2"
-            disabled={playableTracks.length === 0}
-            aria-label="Previous track"
-          >
-            <SkipBack className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handlePrimaryPlay}
-            className="btn btn-primary btn-sm px-2"
-            disabled={playableTracks.length === 0}
-            aria-label={isPlaying ? "Pause playback" : "Start playback"}
-          >
-            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-          </button>
-          <button
-            onClick={handleNext}
-            className="btn btn-secondary btn-sm px-2"
-            disabled={playableTracks.length === 0}
-            aria-label="Next track"
-          >
-            <SkipForward className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setIsShuffleEnabled((prev) => !prev)}
-            className="btn btn-secondary btn-sm px-2"
-            aria-label={isShuffleEnabled ? "Disable shuffle" : "Enable shuffle"}
-            style={
-              isShuffleEnabled
-                ? { backgroundColor: "rgba(154, 168, 134, 0.3)", borderColor: "rgba(154, 168, 134, 0.65)" }
-                : undefined
-            }
-          >
-            <Shuffle className="w-4 h-4" />
-          </button>
+    <div className="flow-page__tracks">
+      {showPlaybackControls || headerActions ? (
+        <div className="flow-page__tracks-toolbar">
+          {showPlaybackControls ? (
+            <div className="flow-page__tracks-toolbar-start">
+              <button
+                type="button"
+                onClick={handlePrimaryPlay}
+                className="btn btn-primary btn-round-lg"
+                disabled={playableTracks.length === 0}
+                aria-label={
+                  isPlaylistPlaying ? "Pause playback" : "Play all tracks"
+                }
+              >
+                {isPlaylistPlaying ? (
+                  <Pause className="artist-icon-md" />
+                ) : (
+                  <Play className="artist-icon-md" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={handleShufflePlay}
+                className={`btn btn-secondary btn-round-lg flow-page__tracks-toolbar-shuffle${isShuffleEnabled ? " is-active" : ""}`}
+                disabled={playableTracks.length === 0}
+                aria-label="Shuffle and play"
+              >
+                <Shuffle className="artist-icon-md" />
+              </button>
+            </div>
+          ) : headerActions ? (
+            <div className="flow-page__tracks-toolbar-start flow-page__tracks-toolbar-start--full">
+              {headerActions}
+            </div>
+          ) : null}
+          {showPlaybackControls && headerActions ? (
+            <div className="flow-page__tracks-toolbar-actions">
+              {headerActions}
+            </div>
+          ) : null}
         </div>
-        <div className="ml-auto flex items-center gap-2 relative z-10">
-          {headerActions}
-          <button
-            onClick={handleToggleMute}
-            className="btn btn-ghost btn-xs px-1.5"
-            aria-label={volume <= 0 ? "Unmute" : "Mute"}
-          >
-            {volume <= 0 ? (
-              <VolumeX className="w-4 h-4 text-[#8b8b90]" />
-            ) : (
-              <Volume2 className="w-4 h-4 text-[#8b8b90]" />
-            )}
-          </button>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            value={volume}
-            onChange={(event) => handleVolumeChange(event.target.value)}
-            className="volume-slider hidden w-24 sm:block"
-            aria-label="Track volume"
-          />
-        </div>
-      </div>
+      ) : null}
 
-      <div className="overflow-auto max-h-[55vh]">
+      <div className="flow-page__tracks-body">
         {loading && (
-          <div className="p-6 flex items-center gap-2 text-[#c1c1c3]">
-            <Loader2 className="w-4 h-4 animate-spin" />
+          <div className="flow-page__tracks-loading">
+            <Loader2 className="artist-icon-sm animate-spin" />
             Loading tracks...
           </div>
         )}
         {!loading && error && (
-          <div className="p-6 text-red-400 text-sm">{error}</div>
+          <div className="flow-page__tracks-error">{error}</div>
         )}
-        {!loading && !error && visibleTracks.length === 0 && (
-          <div className="p-6 text-[#c1c1c3] text-sm">
-            {emptyMessage}
+        {!loading && !error && tracks.length === 0 && (
+          <div className="flow-page__tracks-empty">
+            {activityHint ? (
+              <>
+                <Loader2 className="artist-icon-sm animate-spin" />
+                <span>{activityHint}</span>
+              </>
+            ) : (
+              emptyMessage
+            )}
           </div>
         )}
-        {!loading && !error && visibleTracks.length > 0 && (
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-20 bg-[#1c1b22]">
-              <tr className="text-left text-[#8b8b90] uppercase text-xs tracking-wider">
-                {showStatus ? <th className="hidden px-3 py-2 sm:table-cell">Status</th> : null}
-                <th className="px-3 py-2">Song</th>
-                <th className="px-3 py-2">Artist</th>
-                <th className="px-3 py-2">Album</th>
-                <th className="px-3 py-2">Actions</th>
+        {!loading && !error && tracks.length > 0 && (
+          <table
+            className={`flow-page__tracks-table${hideAlbumColumn ? " flow-page__tracks-table--no-album" : ""}`}
+          >
+            <thead className="flow-page__tracks-table-head">
+              <tr>
+                <FlowTracksSortHeader
+                  label="#"
+                  sortKey="index"
+                  activeSortKey={sortKey}
+                  sortDirection={sortDirection}
+                  onSort={handleSort}
+                  className="flow-page__tracks-table-index"
+                />
+                <FlowTracksSortHeader
+                  label="Song"
+                  sortKey="song"
+                  activeSortKey={sortKey}
+                  sortDirection={sortDirection}
+                  onSort={handleSort}
+                  className="flow-page__tracks-table-song"
+                />
+                <FlowTracksSortHeader
+                  label="Artist"
+                  sortKey="artist"
+                  activeSortKey={sortKey}
+                  sortDirection={sortDirection}
+                  onSort={handleSort}
+                  className="flow-page__tracks-table-artist"
+                />
+                {hideAlbumColumn ? null : (
+                  <FlowTracksSortHeader
+                    label="Album"
+                    sortKey="album"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                    className="flow-page__tracks-table-album"
+                  />
+                )}
+                {hideStatusColumn ? null : (
+                  <FlowTracksSortHeader
+                    label="Status"
+                    sortKey="status"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                    className="flow-page__tracks-table-status-head"
+                  />
+                )}
+                <th
+                  className="flow-page__tracks-table-actions-head"
+                  aria-hidden="true"
+                />
               </tr>
             </thead>
             <tbody>
-              {visibleTracks.map((track, index) => {
-                const canPlay = track.status === "done" && !!track.streamUrl;
-                const canDelete = editable && track.status === "done" && !!track.id;
+              {sortedTracks.map((track, index) => {
+                const trackDisplayNumber = getFlowTrackDisplayNumber(track, {
+                  tracks,
+                  sortedTracks,
+                  sortedIndex: index,
+                  sortKey,
+                  sortDirection,
+                });
+                const canPlay =
+                  showPlaybackControls &&
+                  track.status === "done" &&
+                  !!track.streamUrl;
+                const canDelete =
+                  typeof onDeleteTrack === "function" && !!track.id;
                 const canReSearch =
                   typeof onReSearchTrack === "function" &&
                   !!track.id &&
                   (track.status === "done" || track.status === "failed");
                 const isReSearching = reSearchingTrackIds[track.id] === true;
-                const isCurrent = track.id === currentTrackId;
-                const progressWidth = `${Math.round(playbackProgress * 100)}%`;
+                const isDeleting = deletingTrackId === track.id;
+                const isCurrent = track.id === currentTrackId && isCurrentPlaying;
                 return (
                   <tr
                     key={track.id}
-                    className={`border-t border-white/5 text-[#d6d6d8] relative overflow-hidden ${
-                      index % 2 === 0 ? "bg-[#211f27]" : "bg-[#1c1b22]"
-                    }`}
-                    style={
-                      isCurrent
-                        ? {
-                            backgroundImage: "linear-gradient(rgba(112, 126, 97, 0.55), rgba(112, 126, 97, 0.55))",
-                            backgroundSize: `${progressWidth} 100%`,
-                            backgroundRepeat: "no-repeat",
-                            transition: progressSnappingBack
-                              ? "background-size 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)"
-                              : "background-size 0.1s linear",
-                          }
-                        : undefined
-                    }
+                    className={`flow-page__tracks-table-row${isCurrent ? " is-current" : ""}`}
                   >
-                    {showStatus ? (
-                      <td className="hidden px-3 py-2 align-top sm:table-cell">
-                        <TrackStatusBadge status={track.status} />
-                      </td>
-                    ) : null}
-                    <td className="px-3 py-2">{track.trackName}</td>
-                    <td className="px-3 py-2">
+                    <td className="flow-page__tracks-table-index">
+                      {showPlaybackControls ? (
+                        <div className="flow-page__tracks-table-index-inner">
+                          <span className="flow-page__tracks-table-index-number">
+                            {trackDisplayNumber}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handlePlayTrack(track)}
+                            className="flow-page__tracks-table-index-play btn btn-secondary btn-icon btn-xs"
+                            disabled={!canPlay}
+                            aria-label={
+                              isCurrent
+                                ? `Pause ${track.trackName}`
+                                : `Play ${track.trackName}`
+                            }
+                          >
+                            {isCurrent ? (
+                              <Pause className="artist-icon-xs" />
+                            ) : (
+                              <Play className="artist-icon-xs" />
+                            )}
+                          </button>
+                        </div>
+                      ) : (
+                        trackDisplayNumber
+                      )}
+                    </td>
+                    <td
+                      className="flow-page__tracks-table-song"
+                      title={track.trackName}
+                    >
+                      <span className="flow-page__tracks-table-cell-text">
+                        {track.trackName}
+                      </span>
+                    </td>
+                    <td
+                      className="flow-page__tracks-table-artist"
+                      title={track.artistName}
+                    >
                       {track.artistMbid ? (
                         <button
                           type="button"
                           onClick={() => onNavigateArtist(track)}
-                          className="text-left text-[#d6d6d8] transition-colors hover:text-white hover:underline"
+                          className="flow-page__tracks-artist-link"
                         >
                           {track.artistName}
                         </button>
                       ) : (
-                        track.artistName
+                        <span className="flow-page__tracks-table-cell-text">
+                          {track.artistName}
+                        </span>
                       )}
                     </td>
-                    <td className="px-3 py-2">
-                      <div className="grid gap-1">
-                        <span>{track.albumName || "Unknown Album"}</span>
-                        {showFailedDetails && track.status === "failed" && track.error ? (
-                          <span className="text-[11px] text-[#d49c9c]">
-                            {track.error}
-                          </span>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handlePlayTrack(track)}
-                          className="btn btn-secondary btn-xs px-2"
-                          disabled={!canPlay}
+                    {hideAlbumColumn ? null : (
+                      <td
+                        className="flow-page__tracks-table-album"
+                        title={track.albumName || "Unknown Album"}
+                      >
+                        <span className="flow-page__tracks-table-cell-text">
+                          {track.albumName || "Unknown Album"}
+                        </span>
+                      </td>
+                    )}
+                    {hideStatusColumn ? null : (
+                      <td className="flow-page__tracks-table-status-cell">
+                        <TrackStatusDot status={track.status} />
+                      </td>
+                    )}
+                    <td className="flow-page__tracks-table-actions-cell">
+                      <div className="flow-page__tracks-actions">
+                        <FlowTrackPlaylistMenus
+                          track={track}
+                          useTrackContextMenu={useTrackContextMenu}
+                          playlists={playlists}
+                          playlistsLoading={playlistsLoading}
+                          playlistSavingKey={playlistSavingKey}
+                          playlistMenuError={playlistMenuError}
+                          excludedPlaylistIds={excludedPlaylistIds}
+                          getDefaultPlaylistName={getDefaultPlaylistName}
+                          onLoadPlaylists={onLoadPlaylists}
+                          onAddTrackToPlaylist={onAddTrackToPlaylist}
+                          onMoveTrackToPlaylist={onMoveTrackToPlaylist}
                         >
-                          {isCurrent && isPlaying ? (
-                            <Pause className="w-3.5 h-3.5" />
-                          ) : (
-                            <Play className="w-3.5 h-3.5" />
-                          )}
-                        </button>
-                        {onAddTrackToPlaylist ? (
-                          <button
-                            onClick={() => onAddTrackToPlaylist(track)}
-                            className="btn btn-secondary btn-xs px-2"
-                            aria-label={`Add ${track.trackName} to playlist`}
-                            title={`Add ${track.trackName} to playlist`}
-                            disabled={!track.artistName || !track.trackName}
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        ) : null}
-                        {canReSearch ? (
-                          <button
-                            onClick={() => onReSearchTrack(track)}
-                            className="btn btn-secondary btn-xs px-2"
-                            aria-label={`Re-search ${track.trackName}`}
-                            title={`Re-search ${track.trackName}`}
-                            disabled={isReSearching}
-                          >
-                            {isReSearching ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          {(playlistMenuHandlers) =>
+                            useTrackContextMenu ? (
+                              <FlowTrackKebabMenu
+                                track={track}
+                                canReSearch={canReSearch}
+                                isReSearching={isReSearching}
+                                canDelete={canDelete}
+                                isDeleting={isDeleting}
+                                onReSearch={onReSearchTrack}
+                                onDelete={onDeleteTrack}
+                                playlistMenuProps={
+                                  playlistMenuHandlers?.playlistMenuProps
+                                }
+                              />
                             ) : (
-                              <Search className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-                        ) : null}
-                        {canDelete ? (
-                          <button
-                            onClick={() => onDeleteTrack?.(track)}
-                            className="btn btn-ghost btn-xs px-2 text-red-400 hover:bg-red-500/10 hover:text-red-300"
-                            aria-label={`Remove ${track.trackName} from playlist`}
-                            title={`Remove ${track.trackName} from playlist`}
-                            disabled={deletingTrackId === track.id}
-                          >
-                            {deletingTrackId === track.id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-                        ) : null}
+                              <>
+                                {canReSearch ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => onReSearchTrack(track)}
+                                    className="btn btn-secondary btn-icon btn-xs"
+                                    aria-label={`Re-search ${track.trackName}`}
+                                    title={`Re-search ${track.trackName}`}
+                                    disabled={isReSearching}
+                                  >
+                                    {isReSearching ? (
+                                      <Loader2 className="artist-icon-xs animate-spin" />
+                                    ) : (
+                                      <Search className="artist-icon-xs" />
+                                    )}
+                                  </button>
+                                ) : null}
+                                {canDelete ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => onDeleteTrack?.(track)}
+                                    className="btn btn-ghost-danger btn-icon btn-xs"
+                                    aria-label={`Remove ${track.trackName} from playlist`}
+                                    title={`Remove ${track.trackName} from playlist`}
+                                    disabled={isDeleting}
+                                  >
+                                    {isDeleting ? (
+                                      <Loader2 className="artist-icon-xs animate-spin" />
+                                    ) : (
+                                      <Trash2 className="artist-icon-xs" />
+                                    )}
+                                  </button>
+                                ) : null}
+                              </>
+                            )
+                          }
+                        </FlowTrackPlaylistMenus>
                       </div>
                     </td>
                   </tr>
@@ -2401,402 +2226,131 @@ export function FlowTracksPanel({
           </table>
         )}
       </div>
-      <audio ref={audioRef} preload="metadata" />
     </div>
   );
 }
 
-export function FlowEmptyState({ onCreate, creating, canCreate = true }) {
-  return (
-    <div className="p-4 bg-card rounded-lg border border-white/5 text-sm text-[#c1c1c3]">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <span>
-          {canCreate
-            ? "No flows yet. Start with your first flow."
-            : "Flows require a Last.fm API key for generated source selection."}
-        </span>
-        {canCreate ? (
-          <button
-            onClick={onCreate}
-            className="btn btn-primary btn-sm flex items-center gap-2"
-            disabled={creating}
-          >
-            <FilePlus2 className="w-4 h-4" />
-            {creating ? "Creating..." : "Create First Flow"}
-          </button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-export function SharedPlaylistCard({
-  playlist,
-  isAdminView = false,
-  stats,
-  currentJob,
-  artworkUrl,
-  isEditing,
-  isTrackEditing,
-  isTracksOpen,
-  tracks,
-  tracksLoading,
-  tracksError,
-  nameDraft,
-  nameError,
-  isApplyingName,
-  isApplyingTracks,
-  deletingId,
-  onToggleEditing,
-  onNameChange,
-  onCancelEdit,
-  onApplyEdit,
-  onToggleTrackEditing,
-  onSaveTracks,
-  onDelete,
-  onExport,
-  onViewTracks,
-  onAddTrackToPlaylist,
-  onNavigateArtist,
-  reSearchingTrackIds,
-  onReSearchTrack,
-  retryCyclePaused,
-  retryCycleScheduled,
-  retryActionInFlight,
-  onSetRetryCyclePaused,
-}) {
-  const trackEditorRef = useRef(null);
-  const pending = Number(stats?.pending || 0);
-  const downloading = Number(stats?.downloading || 0);
-  const done = Number(stats?.done || 0);
-  const failed = Number(stats?.failed || 0);
-  const total = Math.max(Number(playlist?.trackCount || 0), pending + downloading + done);
-  const progressPct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
-  const waitingForRetryCycle =
-    retryCycleScheduled === true &&
-    pending === 0 &&
-    downloading === 0 &&
-    done < Number(playlist?.trackCount || 0);
-  const isCurrentJob =
-    currentJob?.playlistType === playlist.id &&
-    currentJob?.artistName &&
-    currentJob?.trackName;
-  const ownerLabel = isAdminView && playlist?.ownerUsername
-    ? `Owner: ${playlist.ownerUsername}`
-    : null;
-
-  const handleMobileTrackToggle = (event) => {
-    if (!shouldHandleMobileCardTap(event)) return;
-    onViewTracks?.();
+const getFlowEmptyCopy = (libraryFilter, canCreate) => {
+  if (libraryFilter === "playlists") {
+    return {
+      title: "No playlists yet",
+      message:
+        "Create a playlist to curate tracks, or import one from Aurral Convert or a JSON export.",
+      showPlaylistAction: true,
+      showFlowAction: false,
+      showImportAction: true,
+    };
+  }
+  if (libraryFilter === "flows") {
+    if (!canCreate) {
+      return {
+        title: "Flows need listening history",
+        message:
+          "Connect Last.fm in Settings to create flows that generate tracks from your taste.",
+        showPlaylistAction: false,
+        showFlowAction: false,
+        showImportAction: false,
+        showSettingsAction: true,
+      };
+    }
+    return {
+      title: "No flows yet",
+      message:
+        "Flows are auto-updating playlists built from recipes like Release Radar or your top artists.",
+      showPlaylistAction: false,
+      showFlowAction: true,
+      showImportAction: false,
+    };
+  }
+  return {
+    title: "Start your playlist library",
+    message:
+      "Import a playlist, build your own track list, or create a flow that updates automatically from your taste.",
+    showPlaylistAction: true,
+    showFlowAction: canCreate,
+    showImportAction: true,
   };
+};
+
+export function FlowEmptyState({
+  canCreate = true,
+  libraryFilter = "all",
+  variant = "full",
+  onImport,
+  onNewPlaylist,
+  onNewFlow,
+  creatingPlaylist = false,
+  creatingFlow = false,
+}) {
+  const copy = getFlowEmptyCopy(libraryFilter, canCreate);
+  const isCompact = variant === "compact";
 
   return (
-    <div className="overflow-visible border border-white/5 bg-card -mx-4 rounded-none sm:mx-0 sm:rounded-lg">
-      <div className="flex flex-col gap-3 px-4 py-4 md:flex-row md:items-start md:justify-between md:gap-4">
-        <div
-          className="min-w-0 flex-1 flex gap-3 sm:gap-4 cursor-pointer sm:cursor-default"
-          onClick={handleMobileTrackToggle}
-        >
-          <PlaylistArtworkThumb artworkUrl={artworkUrl} name={playlist.name} />
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="flex flex-col gap-2 min-[420px]:flex-row min-[420px]:items-start min-[420px]:justify-between">
-              <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
-                <span className="rounded-full bg-black/25 px-3.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[#d6e5c8]">
-                  Playlist
-                </span>
-                <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-[#c6c6cb]">
-                  {playlist.trackCount} tracks
-                </span>
-                {ownerLabel ? (
-                  <span className="rounded-full border border-[#90a07d]/25 bg-[#90a07d]/10 px-2 py-0.5 text-[11px] text-[#d8e5cc]">
-                    {ownerLabel}
-                  </span>
-                ) : null}
-              </div>
-              <div className="flex shrink-0 items-center justify-end gap-1 self-end min-[420px]:self-start">
-                <button
-                  type="button"
-                  onClick={onViewTracks}
-                  className={`hidden sm:inline-flex btn ${isTracksOpen ? "btn-neutral-active" : "btn-secondary"} btn-sm gap-2 px-2.5`}
-                  aria-label={isTracksOpen ? `Close ${playlist.name} tracks` : `View ${playlist.name} tracks`}
-                  title={isTracksOpen ? `Close ${playlist.name} tracks` : `View ${playlist.name} tracks`}
-                  aria-pressed={isTracksOpen}
-                >
-                  <ListMusic className="w-4 h-4" />
-                  <span className="hidden md:inline">Tracks</span>
-                </button>
-                <MoreMenu activeButtonClass="btn-neutral-active">
-                  <button
-                    type="button"
-                    onClick={onViewTracks}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white sm:hidden"
-                    aria-pressed={isTracksOpen}
-                  >
-                    <ListMusic className="w-4 h-4" />
-                    {isTracksOpen ? "Hide Tracks" : "View Tracks"}
-                  </button>
-                  {isEditing ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={onApplyEdit}
-                        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={isApplyingName}
-                      >
-                        {isApplyingName ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Check className="w-4 h-4" />
-                        )}
-                        Save Title
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onCancelEdit}
-                        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white sm:hidden disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={isApplyingName}
-                      >
-                        <X className="w-4 h-4" />
-                        Cancel Rename
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={onToggleEditing}
-                      className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white sm:hidden"
-                    >
-                      <Pencil className="w-4 h-4" />
-                      Rename Title
-                    </button>
-                  )}
-                  <div className="my-1 border-t border-white/10 sm:hidden" />
-                  <button
-                    type="button"
-                    onClick={onExport}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white"
-                  >
-                    <Download className="w-4 h-4" />
-                    Download JSON
-                  </button>
-                  <div className="my-1 border-t border-white/10" />
-                  <button
-                    type="button"
-                    onClick={() => onSetRetryCyclePaused?.(!retryCyclePaused)}
-                    className="w-full text-left px-3 py-2.5 text-sm text-[#d6d6d8] hover:bg-white/10 hover:text-white flex items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={retryActionInFlight}
-                  >
-                    {retryActionInFlight ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : retryCyclePaused ? (
-                      <Play className="w-4 h-4" />
-                    ) : (
-                      <Pause className="w-4 h-4" />
-                    )}
-                    {retryCyclePaused ? "Resume Retry Cycle" : "Pause Retry Cycle"}
-                  </button>
-                  <div className="my-1 border-t border-white/10" />
-                  <button
-                    type="button"
-                    onClick={onDelete}
-                    className="w-full text-left px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 flex items-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={deletingId === playlist.id}
-                  >
-                    {deletingId === playlist.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                    Delete Playlist
-                  </button>
-                </MoreMenu>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <div className="flex min-w-0 items-start gap-2">
-                {isEditing ? (
-                  <input
-                    type="text"
-                    className="input input-sm h-9 w-full max-w-md bg-[#1c1b22] text-base font-medium text-white"
-                    value={nameDraft ?? ""}
-                    onChange={(event) => onNameChange(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        onApplyEdit();
-                      }
-                      if (event.key === "Escape") {
-                        event.preventDefault();
-                        onCancelEdit();
-                      }
-                    }}
-                    aria-label={`Edit ${playlist.name} name`}
-                  />
-                ) : (
-                  <h3 className="min-w-0 truncate text-sm font-medium text-white sm:text-base">
-                    {playlist.name}
-                  </h3>
-                )}
-                <div className="hidden shrink-0 items-center gap-1 sm:flex">
-                  <button
-                    type="button"
-                    onClick={isEditing ? onApplyEdit : onToggleEditing}
-                    className={`btn ${isEditing ? "btn-primary" : "btn-ghost"} btn-xs px-2`}
-                    aria-label={isEditing ? `Save ${playlist.name}` : `Edit ${playlist.name}`}
-                    title={isEditing ? `Save ${playlist.name}` : `Edit ${playlist.name}`}
-                    disabled={isApplyingName}
-                  >
-                    {isApplyingName ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : isEditing ? (
-                      <Check className="w-3.5 h-3.5" />
-                    ) : (
-                      <Pencil className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                  {isEditing ? (
-                    <button
-                      type="button"
-                      onClick={onCancelEdit}
-                      className="btn btn-ghost btn-xs px-2"
-                      aria-label={`Cancel editing ${playlist.name}`}
-                      title={`Cancel editing ${playlist.name}`}
-                      disabled={isApplyingName}
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-              {nameError ? (
-                <p className="text-xs text-red-400">
-                  {nameError}
-                </p>
-              ) : null}
-              {isCurrentJob ? (
-                <p className="truncate text-xs text-[#9ed3a1]">
-                  Downloading {currentJob.trackName}
-                </p>
-              ) : null}
-              {waitingForRetryCycle ? (
-                <p className="text-xs text-[#d8c78e]">
-                  Waiting for next retry cycle
-                </p>
-              ) : null}
-              <p className="text-[11px] text-[#9aa886] sm:hidden">
-                {isTracksOpen ? "Tap card to hide tracks" : "Tap card to view tracks"}
-              </p>
-            </div>
-            <div className="grid gap-1.5">
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                <div
-                  className="h-full rounded-full bg-[#707e61] transition-all duration-300"
-                  style={{ width: `${progressPct}%` }}
-                />
-              </div>
-              <div className="text-[11px] text-[#c7ccc7] sm:hidden">{progressPct}% complete</div>
-              <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#c7ccc7] sm:flex">
-                <span>{progressPct}% complete</span>
-                <span className="text-white/25">•</span>
-                <span>Pending {pending}</span>
-                <span className="text-white/25">•</span>
-                <span>Downloading {downloading}</span>
-                <span className="text-white/25">•</span>
-                <span>Done {done}</span>
-                <span className="text-white/25">•</span>
-                <span>Stalled {failed}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+    <div
+      className={`flow-page__collection-empty${isCompact ? " flow-page__collection-empty--compact" : ""}`}
+    >
+      <div className="flow-page__collection-empty__icon" aria-hidden="true">
+        <ListMusic className="artist-icon-lg" />
       </div>
-
-      {isTracksOpen && (
-        <div className="pb-4 sm:px-4">
-          <div className="card-separator mx-4 mb-4 sm:mx-0" />
-          {isTrackEditing ? (
-            <SharedPlaylistTrackEditor
-              ref={trackEditorRef}
-              tracks={tracks}
-              loading={tracksLoading}
-              error={tracksError}
-              saving={isApplyingTracks}
-              headerActions={
-                <>
-                  <button
-                    type="button"
-                    onClick={onToggleTrackEditing}
-                    className="btn btn-ghost btn-xs p-2"
-                    aria-label={`Cancel editing ${playlist.name} tracklist`}
-                    title={`Cancel editing ${playlist.name} tracklist`}
-                    disabled={isApplyingTracks}
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const result = await trackEditorRef.current?.save?.();
-                      if (result === "unchanged") {
-                        onToggleTrackEditing();
-                      }
-                    }}
-                    className="btn btn-primary btn-xs p-2"
-                    aria-label={`Save ${playlist.name} tracklist`}
-                    title={`Save ${playlist.name} tracklist`}
-                    disabled={isApplyingTracks}
-                  >
-                    {isApplyingTracks ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Check className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                </>
-              }
-              onSave={onSaveTracks}
-            />
-          ) : (
-            <FlowTracksPanel
-              tracks={tracks}
-              loading={tracksLoading}
-              error={tracksError}
-              emptyMessage="No tracks in this static playlist yet."
-              editable={false}
-              showStatus={true}
-              hideFailedTracks={true}
-              showFailedDetails={false}
-              headerActions={
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (isTrackEditing) {
-                      const result = await trackEditorRef.current?.save?.();
-                      if (result === "unchanged") {
-                        onToggleTrackEditing();
-                      }
-                      return;
-                    }
-                    onToggleTrackEditing();
-                  }}
-                  className={`btn ${isTrackEditing ? "btn-primary" : "btn-secondary"} btn-xs p-2`}
-                  aria-label={isTrackEditing ? `Save ${playlist.name} tracklist` : `Edit ${playlist.name} tracklist`}
-                  title={isTrackEditing ? `Save ${playlist.name} tracklist` : `Edit ${playlist.name} tracklist`}
-                  disabled={isApplyingTracks}
-                >
-                  {isApplyingTracks ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : isTrackEditing ? (
-                    <Check className="w-3.5 h-3.5" />
-                  ) : (
-                    <Pencil className="w-3.5 h-3.5" />
-                  )}
-                </button>
-              }
-              onAddTrackToPlaylist={onAddTrackToPlaylist}
-              onNavigateArtist={onNavigateArtist}
-              reSearchingTrackIds={reSearchingTrackIds}
-              onReSearchTrack={onReSearchTrack}
-            />
-          )}
+      <h2 className="flow-page__collection-empty__title">{copy.title}</h2>
+      <p className="flow-page__collection-empty__message">{copy.message}</p>
+      {!isCompact ? (
+        <div className="flow-page__collection-empty__actions">
+          {copy.showPlaylistAction ? (
+            <button
+              type="button"
+              onClick={onNewPlaylist}
+              disabled={creatingPlaylist}
+              className="btn btn-primary btn--bold btn-min-h"
+            >
+              <ListMusic className="artist-icon-sm" />
+              {creatingPlaylist ? "Creating..." : "New Playlist"}
+            </button>
+          ) : null}
+          {copy.showFlowAction ? (
+            <button
+              type="button"
+              onClick={onNewFlow}
+              disabled={creatingFlow}
+              className="btn btn-secondary btn--bold btn-min-h"
+            >
+              <Sparkles className="artist-icon-sm" />
+              {creatingFlow ? "Creating..." : "New Flow"}
+            </button>
+          ) : null}
+          {copy.showImportAction ? (
+            <button
+              type="button"
+              onClick={onImport}
+              className="btn btn-secondary btn--bold btn-min-h"
+            >
+              <Upload className="artist-icon-sm" />
+              Import
+            </button>
+          ) : null}
+          {copy.showSettingsAction ? (
+            <Link
+              to="/settings"
+              className="btn btn-primary btn--bold btn-min-h"
+            >
+              Open Settings
+            </Link>
+          ) : null}
         </div>
-      )}
+      ) : null}
+    </div>
+  );
+}
+
+export function FlowDetailPlaceholder() {
+  return (
+    <div className="flow-page__detail-placeholder">
+      <div className="flow-page__detail-placeholder__icon" aria-hidden="true">
+        <ListMusic className="artist-icon-lg" />
+      </div>
+      <p className="flow-page__detail-placeholder__message">
+        Select a playlist or flow to view tracks and settings.
+      </p>
     </div>
   );
 }
@@ -2814,58 +2368,57 @@ export function FlowImportReviewModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0, 0, 0, 0.78)" }}
+      className="artist-modal-backdrop"
       onClick={importing ? undefined : onCancel}
     >
       <div
-        className="mx-4 w-full max-w-3xl overflow-hidden rounded-lg border border-white/5 bg-card shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+        className="flow-page__import-modal"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="border-b border-white/10 px-5 py-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-1">
-              <div className="text-xs font-medium uppercase tracking-[0.2em] text-[#dbe6cf]">
+        <div className="flow-page__import-modal-header">
+          <div className="flow-page__import-modal-header-row">
+            <div>
+              <div className="flow-page__import-modal-eyebrow">
                 Import Playlist
               </div>
-              <h3 className="text-lg font-semibold text-white">
+              <h3 className="flow-page__import-modal-title">
                 {importReview.fileName || "Selected playlist file"}
               </h3>
-              <p className="text-sm text-[#bcc4b4]">
+              <p className="flow-page__import-modal-copy">
                 {flows.length} {flows.length === 1 ? "playlist" : "playlists"} detected. Imports stay separate from weekly flows and queue their own downloads.
               </p>
             </div>
-            <div className="rounded-full bg-black/25 px-3 py-1 text-sm text-[#dbe6cf]">
+            <div className="flow-page__import-modal-badge">
               JSON import
             </div>
           </div>
         </div>
 
-        <div className="max-h-[60vh] overflow-auto px-5 py-4">
-          <div className="grid gap-3">
+        <div className="flow-page__import-modal-body">
+          <div className="flow-page__import-list">
             {flows.map((flow, index) => {
               const trackCount = Number(flow?.tracks?.length || flow?.trackCount || 0);
               const previewTracks = Array.isArray(flow?.tracks) ? flow.tracks.slice(0, 3) : [];
               return (
                 <div
                   key={`${flow?.name || "flow"}-${index}`}
-                  className="rounded-lg border border-white/5 bg-black/20 px-4 py-3"
+                  className="flow-page__import-item"
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h4 className="text-sm font-medium text-white">
+                  <div className="flow-page__import-item-header">
+                    <h4 className="flow-page__import-item-title">
                       {flow?.name || `Playlist ${index + 1}`}
                     </h4>
-                    <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-[#c6c6cb]">
+                    <span className="flow-page__badge flow-page__badge--count">
                       {trackCount} tracks
                     </span>
                     {flow?.sourceName ? (
-                      <span className="rounded-full bg-black/25 px-2 py-0.5 text-[11px] text-[#dce8d0]">
+                      <span className="flow-page__badge flow-page__badge--type">
                         From {flow.sourceName}
                       </span>
                     ) : null}
                   </div>
-                  <div className="mt-3">
-                    <label className="mb-1 block text-[11px] uppercase tracking-[0.16em] text-[#90988b]">
+                  <div className="flow-page__field">
+                    <label className="flow-page__field-label">
                       Playlist Name
                     </label>
                     <input
@@ -2874,17 +2427,17 @@ export function FlowImportReviewModal({
                       onChange={(event) => onNameChange?.(index, event.target.value)}
                       placeholder={`Playlist ${index + 1}`}
                       disabled={importing}
-                      className="w-full rounded-md border border-white/10 bg-black/35 px-3 py-2 text-sm text-white outline-none transition focus:border-[#90a07d] focus:ring-1 focus:ring-[#90a07d]"
+                      className="input flow-page__field-input"
                     />
                   </div>
-                  <div className="mt-2 grid gap-1 text-xs text-[#aeb0b6]">
+                  <div className="flow-page__import-preview">
                     {previewTracks.map((track) => (
                       <span key={`${track.artistName}-${track.trackName}`}>
                         {track.artistName} — {track.trackName}
                       </span>
                     ))}
                     {trackCount > previewTracks.length ? (
-                      <span className="text-[#89938a]">
+                      <span className="flow-page__import-preview-more">
                         +{trackCount - previewTracks.length} more tracks
                       </span>
                     ) : null}
@@ -2895,11 +2448,11 @@ export function FlowImportReviewModal({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4">
-          <p className="max-w-xl text-xs leading-5 text-[#9ca09f]">
+        <div className="flow-page__import-modal-footer">
+          <p className="flow-page__import-modal-hint">
             Supports exported playlist files, a single playlist object, or a raw array of tracks. Imported playlists stay separate from weekly flow refreshes.
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flow-page__import-modal-actions">
             <button
               type="button"
               onClick={onCancel}
@@ -2911,17 +2464,17 @@ export function FlowImportReviewModal({
             <button
               type="button"
               onClick={onConfirm}
-              className="btn btn-primary gap-2"
+              className="btn btn-primary"
               disabled={importing || flows.length === 0}
             >
               {importing ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="artist-icon-sm animate-spin" />
                   Importing...
                 </>
               ) : (
                 <>
-                  <Upload className="w-4 h-4" />
+                  <Upload className="artist-icon-sm" />
                   Import Playlists
                 </>
               )}
@@ -2938,28 +2491,23 @@ export function ConfirmDeleteModal({ confirmDelete, deletingId, onCancel, onConf
   const isShared = confirmDelete.kind === "shared";
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
-      onClick={onCancel}
-    >
-      <div className="card max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-xl font-bold mb-2 text-white">
+    <div className="artist-modal-backdrop" onClick={onCancel}>
+      <div className="artist-modal" onClick={(e) => e.stopPropagation()}>
+        <h3 className="artist-modal__title">
           Delete {confirmDelete.title}?
         </h3>
-        <p className="text-[#c1c1c3] mb-6">
+        <p className="artist-modal__subcopy">
           {isShared
             ? "This removes the imported static playlist and any downloaded files tied to it."
             : "This removes the flow and its playlist setup. You can recreate it later."}
         </p>
-        <div className="flex gap-3 justify-end">
+        <div className="artist-modal__actions">
           <button onClick={onCancel} className="btn btn-secondary">
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="btn btn-primary"
-            style={{ backgroundColor: "#ef4444" }}
+            className="btn btn-secondary flow-page__btn--destructive"
             disabled={deletingId === confirmDelete.flowId}
           >
             {deletingId === confirmDelete.flowId ? "Deleting..." : "Delete"}
@@ -2979,26 +2527,21 @@ export function ConfirmDisableModal({
   if (!confirmDisable) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
-      onClick={onCancel}
-    >
-      <div className="card max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-xl font-bold mb-2 text-white">
+    <div className="artist-modal-backdrop" onClick={onCancel}>
+      <div className="artist-modal" onClick={(e) => e.stopPropagation()}>
+        <h3 className="artist-modal__title">
           Turn off {confirmDisable.title}?
         </h3>
-        <p className="text-[#c1c1c3] mb-6">
+        <p className="artist-modal__subcopy">
           This pauses future runs. You can turn it back on anytime.
         </p>
-        <div className="flex gap-3 justify-end">
+        <div className="artist-modal__actions">
           <button onClick={onCancel} className="btn btn-secondary">
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="btn btn-primary"
-            style={{ backgroundColor: "#ef4444" }}
+            className="btn btn-secondary flow-page__btn--destructive"
             disabled={togglingId === confirmDisable.flowId}
           >
             {togglingId === confirmDisable.flowId ? "Turning off..." : "Turn Off"}
@@ -3018,26 +2561,21 @@ export function ConfirmStopAllModal({
   if (!confirmStopAll) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
-      onClick={onCancel}
-    >
-      <div className="card max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-xl font-bold mb-2 text-white">
+    <div className="artist-modal-backdrop" onClick={onCancel}>
+      <div className="artist-modal" onClick={(e) => e.stopPropagation()}>
+        <h3 className="artist-modal__title">
           Stop all playlists?
         </h3>
-        <p className="text-[#c1c1c3] mb-6">
+        <p className="artist-modal__subcopy">
           This pauses future runs. You can start them again anytime.
         </p>
-        <div className="flex gap-3 justify-end">
+        <div className="artist-modal__actions">
           <button onClick={onCancel} className="btn btn-secondary">
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="btn btn-primary"
-            style={{ backgroundColor: "#ef4444" }}
+            className="btn btn-secondary flow-page__btn--destructive"
             disabled={bulkActionRunning}
           >
             {bulkActionRunning ? "Stopping..." : "Stop All"}
@@ -3051,247 +2589,60 @@ export function ConfirmStopAllModal({
 export function FlowWorkerSettingsModal({
   isOpen,
   settings,
-  soulseekCredential,
   hasChanges,
   saving,
-  rotatingSoulseekCredential,
   onCancel,
   onChange,
-  onRotateSoulseekCredential,
   onSave,
 }) {
-  const [hoveredConcurrencyIndex, setHoveredConcurrencyIndex] = useState(null);
-  const [hoveredFormatIndex, setHoveredFormatIndex] = useState(null);
-  const concurrencyTabsRef = useRef(null);
-  const concurrencyActiveBubbleRef = useRef(null);
-  const concurrencyHoverBubbleRef = useRef(null);
-  const concurrencyOptionRefs = useRef({});
-  const formatTabsRef = useRef(null);
-  const formatActiveBubbleRef = useRef(null);
-  const formatHoverBubbleRef = useRef(null);
-  const formatOptionRefs = useRef({});
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const updateConcurrencyActiveBubble = () => {
-      if (!concurrencyTabsRef.current || !concurrencyActiveBubbleRef.current) {
-        return;
-      }
-      const activeIndex = FLOW_WORKER_CONCURRENCY_OPTIONS.findIndex(
-        (value) => value === settings.concurrency,
-      );
-      if (activeIndex === -1) {
-        concurrencyActiveBubbleRef.current.style.opacity = "0";
-        return;
-      }
-      const activeOptionEl = concurrencyOptionRefs.current[activeIndex];
-      if (!activeOptionEl) {
-        setTimeout(updateConcurrencyActiveBubble, 50);
-        return;
-      }
-      const tabsRect = concurrencyTabsRef.current.getBoundingClientRect();
-      const tabRect = activeOptionEl.getBoundingClientRect();
-      concurrencyActiveBubbleRef.current.style.left = `${tabRect.left - tabsRect.left}px`;
-      concurrencyActiveBubbleRef.current.style.top = `${tabRect.top - tabsRect.top}px`;
-      concurrencyActiveBubbleRef.current.style.width = `${tabRect.width}px`;
-      concurrencyActiveBubbleRef.current.style.height = `${tabRect.height}px`;
-      concurrencyActiveBubbleRef.current.style.opacity = "1";
-    };
-    const timeoutId = setTimeout(updateConcurrencyActiveBubble, 10);
-    window.addEventListener("resize", updateConcurrencyActiveBubble);
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener("resize", updateConcurrencyActiveBubble);
-    };
-  }, [isOpen, settings.concurrency]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const updateConcurrencyHoverBubble = () => {
-      if (!concurrencyTabsRef.current || !concurrencyHoverBubbleRef.current) {
-        return;
-      }
-      if (hoveredConcurrencyIndex === null) {
-        concurrencyHoverBubbleRef.current.style.left = "0px";
-        concurrencyHoverBubbleRef.current.style.top = "0px";
-        concurrencyHoverBubbleRef.current.style.width = "100%";
-        concurrencyHoverBubbleRef.current.style.height = "100%";
-        concurrencyHoverBubbleRef.current.style.opacity = "0.6";
-        return;
-      }
-      const hoveredOptionEl = concurrencyOptionRefs.current[hoveredConcurrencyIndex];
-      if (!hoveredOptionEl) return;
-      const tabsRect = concurrencyTabsRef.current.getBoundingClientRect();
-      const tabRect = hoveredOptionEl.getBoundingClientRect();
-      concurrencyHoverBubbleRef.current.style.left = `${tabRect.left - tabsRect.left}px`;
-      concurrencyHoverBubbleRef.current.style.top = `${tabRect.top - tabsRect.top}px`;
-      concurrencyHoverBubbleRef.current.style.width = `${tabRect.width}px`;
-      concurrencyHoverBubbleRef.current.style.height = `${tabRect.height}px`;
-      concurrencyHoverBubbleRef.current.style.opacity = "1";
-    };
-    updateConcurrencyHoverBubble();
-  }, [isOpen, hoveredConcurrencyIndex]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const updateFormatActiveBubble = () => {
-      if (!formatTabsRef.current || !formatActiveBubbleRef.current) {
-        return;
-      }
-      const activeIndex = FLOW_WORKER_FORMAT_OPTIONS.findIndex(
-        (option) => option.id === settings.preferredFormat,
-      );
-      if (activeIndex === -1) {
-        formatActiveBubbleRef.current.style.opacity = "0";
-        return;
-      }
-      const activeOptionEl = formatOptionRefs.current[activeIndex];
-      if (!activeOptionEl) {
-        setTimeout(updateFormatActiveBubble, 50);
-        return;
-      }
-      const tabsRect = formatTabsRef.current.getBoundingClientRect();
-      const tabRect = activeOptionEl.getBoundingClientRect();
-      formatActiveBubbleRef.current.style.left = `${tabRect.left - tabsRect.left}px`;
-      formatActiveBubbleRef.current.style.top = `${tabRect.top - tabsRect.top}px`;
-      formatActiveBubbleRef.current.style.width = `${tabRect.width}px`;
-      formatActiveBubbleRef.current.style.height = `${tabRect.height}px`;
-      formatActiveBubbleRef.current.style.opacity = "1";
-    };
-    const timeoutId = setTimeout(updateFormatActiveBubble, 10);
-    window.addEventListener("resize", updateFormatActiveBubble);
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener("resize", updateFormatActiveBubble);
-    };
-  }, [isOpen, settings.preferredFormat]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const updateFormatHoverBubble = () => {
-      if (!formatTabsRef.current || !formatHoverBubbleRef.current) {
-        return;
-      }
-      if (hoveredFormatIndex === null) {
-        formatHoverBubbleRef.current.style.left = "0px";
-        formatHoverBubbleRef.current.style.top = "0px";
-        formatHoverBubbleRef.current.style.width = "100%";
-        formatHoverBubbleRef.current.style.height = "100%";
-        formatHoverBubbleRef.current.style.opacity = "0.6";
-        return;
-      }
-      const hoveredOptionEl = formatOptionRefs.current[hoveredFormatIndex];
-      if (!hoveredOptionEl) return;
-      const tabsRect = formatTabsRef.current.getBoundingClientRect();
-      const tabRect = hoveredOptionEl.getBoundingClientRect();
-      formatHoverBubbleRef.current.style.left = `${tabRect.left - tabsRect.left}px`;
-      formatHoverBubbleRef.current.style.top = `${tabRect.top - tabsRect.top}px`;
-      formatHoverBubbleRef.current.style.width = `${tabRect.width}px`;
-      formatHoverBubbleRef.current.style.height = `${tabRect.height}px`;
-      formatHoverBubbleRef.current.style.opacity = "1";
-    };
-    updateFormatHoverBubble();
-  }, [isOpen, hoveredFormatIndex]);
-
   if (!isOpen) return null;
 
-  const credentialUsername = String(soulseekCredential?.username || "").trim();
-  const canRotate = soulseekCredential?.canRotate === true;
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}
-      onClick={onCancel}
-    >
-      <div className="card max-w-lg w-full mx-4 grid gap-5" onClick={(e) => e.stopPropagation()}>
-        <div className="grid gap-1">
-          <h3 className="text-xl font-bold text-white">Worker Settings</h3>
+    <div className="artist-modal-backdrop" onClick={onCancel}>
+      <div
+        className="settings-page__modal settings-page__modal--wide flow-page__worker-modal"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-labelledby="worker-settings-title"
+        aria-modal="true"
+      >
+        <div className="settings-page__modal-header settings-page__modal-header--spaced">
+          <h3 id="worker-settings-title" className="settings-page__modal-title">
+            Worker Settings
+          </h3>
         </div>
-        <div className="grid gap-4">
-          <div className="grid gap-3 rounded-md border border-white/10 bg-black/20 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="grid gap-1">
-                <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
-                  Soulseek Account
-                </label>
-                <div className="text-sm font-medium text-white">
-                  {credentialUsername || "Unavailable"}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={onRotateSoulseekCredential}
-                disabled={!canRotate || rotatingSoulseekCredential}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-white/10 bg-white/5 text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                title={
-                  canRotate
-                    ? "Rotate Soulseek account now"
-                    : "Soulseek account cannot be rotated here"
-                }
-                aria-label="Rotate Soulseek account now"
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${
-                    rotatingSoulseekCredential ? "animate-spin" : ""
-                  }`}
-                />
-              </button>
-            </div>
-          </div>
-          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px] md:items-end">
-            <div className="grid gap-1.5">
-              <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
+
+        <div className="flow-page__worker-fields">
+          <div className="flow-page__worker-fields-split">
+            <div className="flow-page__field">
+              <label className="flow-page__field-label">
                 Download Concurrency
               </label>
               <div
-                ref={concurrencyTabsRef}
-                className="relative p-1.5 inline-flex"
-                style={{ backgroundColor: "#0f0f12" }}
+                className="artist-segmented flow-page__worker-segmented"
                 role="radiogroup"
                 aria-label="Download concurrency"
               >
-                <div
-                  ref={concurrencyActiveBubbleRef}
-                  className="absolute transition-all duration-300 ease-out z-10 opacity-0"
-                  style={{ backgroundColor: "#211f27" }}
-                />
-                <div
-                  ref={concurrencyHoverBubbleRef}
-                  className="absolute transition-all duration-200 ease-out z-0"
-                  style={{ backgroundColor: "#1a1a1e" }}
-                />
-                <div
-                  className="relative flex gap-1"
-                  onMouseLeave={() => setHoveredConcurrencyIndex(null)}
-                >
-                  {FLOW_WORKER_CONCURRENCY_OPTIONS.map((value, index) => (
-                    <button
-                      key={value}
-                      ref={(el) => {
-                        if (el) concurrencyOptionRefs.current[index] = el;
-                      }}
-                      type="button"
-                      role="radio"
-                      aria-checked={settings.concurrency === value}
-                      onMouseEnter={() => setHoveredConcurrencyIndex(index)}
-                      onClick={() =>
-                        onChange((prev) => ({ ...prev, concurrency: value }))
-                      }
-                      className="relative z-20 flex items-center justify-center px-4 py-2.5 font-medium transition-all duration-200 text-sm"
-                      style={{ color: "#fff" }}
-                    >
-                      {value}
-                    </button>
-                  ))}
-                </div>
+                {FLOW_WORKER_CONCURRENCY_OPTIONS.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={settings.concurrency === value}
+                    className={`artist-segmented-button${settings.concurrency === value ? " is-active" : ""}`}
+                    onClick={() =>
+                      onChange((prev) => ({ ...prev, concurrency: value }))
+                    }
+                  >
+                    {value}
+                  </button>
+                ))}
               </div>
             </div>
-            <div className="grid gap-1.5">
-              <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
-                Retry Cycle
-              </label>
-              <div className="relative">
+
+            <div className="flow-page__field">
+              <label className="flow-page__field-label">Retry Cycle</label>
+              <div className="artist-modal-field aurral-radius-round">
                 <select
                   value={settings.retryCycleMinutes}
                   onChange={(event) =>
@@ -3300,130 +2651,64 @@ export function FlowWorkerSettingsModal({
                       retryCycleMinutes: Number(event.target.value),
                     }))
                   }
-                  className="h-[52px] w-full appearance-none rounded-md border border-white/10 bg-black/20 pl-3 pr-12 text-sm text-white outline-none transition focus:border-[#90a07d] focus:ring-1 focus:ring-[#90a07d]"
+                  className="artist-modal-select"
                 >
                   {FLOW_WORKER_RETRY_CYCLE_OPTIONS.map((option) => (
-                    <option
-                      key={option.minutes}
-                      value={option.minutes}
-                      className="bg-[#131419] text-white"
-                    >
+                    <option key={option.minutes} value={option.minutes}>
                       {option.label}
                     </option>
                   ))}
                 </select>
-                <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white" />
               </div>
             </div>
           </div>
-          <div className="grid gap-1.5">
-            <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
-              Preferred Format
-            </label>
-            <div className="flex items-stretch gap-2">
-              <div
-                ref={formatTabsRef}
-                className="relative p-1.5 flex-1 min-w-0"
-                style={{ backgroundColor: "#0f0f12" }}
-              >
-                <div
-                  ref={formatActiveBubbleRef}
-                  className="absolute transition-all duration-300 ease-out z-10 opacity-0"
-                  style={{ backgroundColor: "#211f27" }}
-                />
-                <div
-                  ref={formatHoverBubbleRef}
-                  className="absolute transition-all duration-200 ease-out z-0"
-                  style={{ backgroundColor: "#1a1a1e" }}
-                />
-                <div
-                  className="relative flex gap-1"
-                  onMouseLeave={() => setHoveredFormatIndex(null)}
-                >
-                  {FLOW_WORKER_FORMAT_OPTIONS.map((option, index) => (
-                    <button
-                      key={option.id}
-                      ref={(el) => {
-                        if (el) formatOptionRefs.current[index] = el;
-                      }}
-                      type="button"
-                      onMouseEnter={() => setHoveredFormatIndex(index)}
-                      onClick={() =>
-                        onChange((prev) => ({
-                          ...prev,
-                          preferredFormat: option.id,
-                        }))
-                      }
-                      className="relative z-20 flex items-center justify-center px-4 py-2.5 font-medium transition-all duration-200 text-sm"
-                      style={{ color: "#fff" }}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="flex min-w-[100px] items-center justify-end rounded-md border border-white/10 bg-black/20 px-3 py-2">
-                <div className="grid gap-0.5 pr-3">
-                  <span className="text-sm font-medium text-white">Strict</span>
-                </div>
-                <PillToggle
-                  checked={settings.preferredFormatStrict === true}
-                  onChange={(event) => {
-                    const checked = event.target.checked;
-                    onChange((prev) => ({
-                      ...prev,
-                      preferredFormatStrict: checked,
-                    }));
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-          <div className="grid gap-1.5">
-            <label className="text-xs uppercase tracking-wider text-[#8b8b90] font-medium">
-              Existing Files
-            </label>
-            <div className="relative">
+
+          <div className="flow-page__field">
+            <label className="flow-page__field-label">Existing Files</label>
+            <div className="artist-modal-field aurral-radius-round">
               <select
-                value={settings.existingFileMode || "hardlink"}
+                value={settings.existingFileMode || "reuse"}
                 onChange={(event) =>
                   onChange((prev) => ({
                     ...prev,
                     existingFileMode: event.target.value,
                   }))
                 }
-                className="h-[52px] w-full appearance-none rounded-md border border-white/10 bg-black/20 pl-3 pr-12 text-sm text-white outline-none transition focus:border-[#90a07d] focus:ring-1 focus:ring-[#90a07d]"
+                className="artist-modal-select"
                 title="How generated playlists reuse existing Aurral or Lidarr files"
               >
                 {FLOW_WORKER_EXISTING_FILE_OPTIONS.map((option) => (
-                  <option
-                    key={option.id}
-                    value={option.id}
-                    className="bg-[#131419] text-white"
-                  >
+                  <option key={option.id} value={option.id}>
                     {option.label}
                   </option>
                 ))}
               </select>
-              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white" />
             </div>
           </div>
         </div>
-        <div className="flex gap-3 justify-end">
+
+        <div className="settings-page__modal-actions">
           <button
+            type="button"
             onClick={onCancel}
             className="btn btn-secondary"
-            disabled={saving || rotatingSoulseekCredential}
+            disabled={saving}
           >
             Cancel
           </button>
-          <FlipSaveButton
-            disabled={!hasChanges}
-            saving={saving}
+          <button
+            type="button"
             onClick={onSave}
-            label="Save"
-            savedLabel="Saved"
-          />
+            className="btn btn-primary"
+            disabled={!hasChanges || saving}
+          >
+            {saving ? (
+              <Loader2 className="artist-icon-xs animate-spin" />
+            ) : (
+              <Save className="artist-icon-xs" />
+            )}
+            {saving ? "Saving..." : "Save"}
+          </button>
         </div>
       </div>
     </div>

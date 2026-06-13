@@ -2,15 +2,24 @@ import { UUID_REGEX } from "../../../config/constants.js";
 import {
   getLastfmApiKey,
   lastfmRequest,
+  musicbrainzGetArtistAppearsOnReleaseGroups,
   musicbrainzGetArtistReleaseGroups,
   musicbrainzGetArtistNameByMbid,
 } from "../../../services/apiClients.js";
 import { dbOps } from "../../../config/db-helpers.js";
 import { noCache } from "../../../middleware/cache.js";
 import { verifyTokenAuth } from "../../../middleware/auth.js";
-import { sendSSE, pendingArtistRequests } from "../utils.js";
+import {
+  buildArtistRequestKey,
+  sendSSE,
+  pendingArtistRequests,
+} from "../utils.js";
 import { getArtistImage } from "../../../services/imageService.js";
 import { buildImageProxyUrl } from "../../../services/imageProxyService.js";
+import {
+  attachCachedCoverUrls,
+  resolveReleaseGroupCoversBatch,
+} from "../../../services/releaseGroupCoverService.js";
 import { getArtistByMbid } from "../../../services/metadataProvider.js";
 
 export default function registerStream(router) {
@@ -25,6 +34,11 @@ export default function registerStream(router) {
               .split(",")
               .map((value) => value.trim())
               .filter(Boolean)
+          : null;
+      const parsedAppearsOnLimit = Number.parseInt(req.query.appearsOnLimit, 10);
+      const appearsOnLimit =
+        Number.isFinite(parsedAppearsOnLimit) && parsedAppearsOnLimit > 0
+          ? parsedAppearsOnLimit
           : null;
 
       if (!UUID_REGEX.test(mbid)) {
@@ -58,6 +72,12 @@ export default function registerStream(router) {
 
       const override = dbOps.getArtistOverride(mbid);
       const resolvedMbid = override?.musicbrainzId || mbid;
+      const requestKey = buildArtistRequestKey({
+        mbid,
+        mode: "full",
+        selectedReleaseTypes,
+        appearsOnLimit,
+      });
       const toLegacyRelations = (metadataArtist) =>
         Array.isArray(metadataArtist?.links)
           ? metadataArtist.links
@@ -122,6 +142,7 @@ export default function registerStream(router) {
         genres: Array.isArray(metadataArtist?.genres) ? metadataArtist.genres : [],
         links: Array.isArray(metadataArtist?.links) ? metadataArtist.links : [],
         relations: toLegacyRelations(metadataArtist),
+        rating: metadataArtist?.rating || null,
         ...(metadataArtist?.overview ? { bio: metadataArtist.overview } : {}),
       });
       const sendArtist = (payload) => {
@@ -133,16 +154,13 @@ export default function registerStream(router) {
         ...buildArtistBase(initialName),
         tags: [],
         genres: [],
-        "release-groups": [],
-        "release-group-count": 0,
-        "release-count": 0,
       });
 
       try {
         const tasks = [];
         let fullArtistPromise = null;
-        const pendingPromise = pendingArtistRequests.has(mbid)
-          ? pendingArtistRequests.get(mbid)
+        const pendingPromise = pendingArtistRequests.has(requestKey)
+          ? pendingArtistRequests.get(requestKey)
           : null;
         const metadataArtistPromise = getArtistByMbid(resolvedMbid).catch(() => null);
         const namePromise = pendingPromise
@@ -263,7 +281,7 @@ export default function registerStream(router) {
 
         if (pendingPromise) {
           console.log(
-            `[Artists Stream] Request for ${mbid} already in progress, waiting...`,
+            `[Artists Stream] Request for ${requestKey} already in progress, waiting...`,
           );
           pendingPromise
             .then((data) => {
@@ -279,44 +297,117 @@ export default function registerStream(router) {
         }
 
         if (!pendingPromise) {
+          const includeTrackCounts = !appearsOnLimit;
           const releaseGroupsPromise = musicbrainzGetArtistReleaseGroups(
             resolvedMbid,
             selectedReleaseTypes,
+            { includeTrackCounts },
           ).catch(() => []);
-          const metadataCorePromise = Promise.all([
+          const discographyTask = Promise.all([
             metadataArtistPromise,
             namePromise,
             releaseGroupsPromise,
           ]).then(async ([metadataArtist, name, releaseGroups]) => {
+            if (!isClientConnected()) return null;
+            const releaseGroupsWithCovers = attachCachedCoverUrls(
+              releaseGroups,
+              12,
+            );
+            sendArtist({
+              ...buildArtistBase(name, metadataArtist),
+              "release-groups": releaseGroupsWithCovers,
+              "release-group-count": releaseGroupsWithCovers.length,
+              "release-count": releaseGroupsWithCovers.length,
+            });
+            const prefetchItems = releaseGroupsWithCovers
+              .filter((releaseGroup) => releaseGroup?.id && !releaseGroup.coverUrl)
+              .slice(0, 6)
+              .map((releaseGroup) => ({
+                mbid: releaseGroup.id,
+                artistName: name || "",
+                albumTitle: releaseGroup.title || "",
+              }));
+            if (prefetchItems.length) {
+              resolveReleaseGroupCoversBatch(prefetchItems, {
+                concurrency: 6,
+              }).catch(() => {});
+            }
+            return { metadataArtist, name, releaseGroups: releaseGroupsWithCovers };
+          });
+          tasks.push(discographyTask);
+
+          const appearsOnTask = discographyTask.then(async (ctx) => {
+            if (!ctx) return [];
+            const appearsOnReleaseGroups =
+              await musicbrainzGetArtistAppearsOnReleaseGroups(
+                resolvedMbid,
+                ctx.releaseGroups,
+                { limit: appearsOnLimit },
+              ).catch(() => []);
+            if (!isClientConnected()) return appearsOnReleaseGroups;
+            const appearsOnWithCovers = attachCachedCoverUrls(
+              appearsOnReleaseGroups,
+              appearsOnLimit || 6,
+            );
+            sendArtist({
+              id: resolvedMbid,
+              "appears-on-release-groups": appearsOnWithCovers,
+            });
+            const prefetchAppearsOnItems = [...appearsOnWithCovers]
+              .sort((a, b) =>
+                String(b["first-release-date"] || "").localeCompare(
+                  String(a["first-release-date"] || ""),
+                ),
+              )
+              .filter(
+                (releaseGroup) => releaseGroup?.id && !releaseGroup.coverUrl,
+              )
+              .slice(0, appearsOnLimit || 6)
+              .map((releaseGroup) => ({
+                mbid: releaseGroup.id,
+                artistName:
+                  releaseGroup["artist-credit"]?.[0]?.name ||
+                  releaseGroup["artist-credit"]?.[0]?.artist?.name ||
+                  "",
+                albumTitle: releaseGroup.title || "",
+              }));
+            if (prefetchAppearsOnItems.length) {
+              resolveReleaseGroupCoversBatch(prefetchAppearsOnItems, {
+                concurrency: 6,
+              }).catch(() => {});
+            }
+            return appearsOnWithCovers;
+          });
+          tasks.push(appearsOnTask);
+
+          const metadataCorePromise = Promise.all([
+            discographyTask,
+            appearsOnTask,
+          ]).then(async ([ctx, appearsOnReleaseGroups]) => {
+            if (!ctx) return null;
             const tagPayload = await getArtistTagPayload(
               resolvedMbid,
-              name,
-              metadataArtist,
+              ctx.name,
+              ctx.metadataArtist,
             );
             return {
-              ...buildArtistBase(name, metadataArtist),
+              ...buildArtistBase(ctx.name, ctx.metadataArtist),
               tags: tagPayload.tags,
               genres: tagPayload.genres,
-              "release-groups": releaseGroups,
-              "release-group-count": releaseGroups.length,
-              "release-count": releaseGroups.length,
+              "release-groups": ctx.releaseGroups,
+              "appears-on-release-groups": appearsOnReleaseGroups,
+              "release-group-count": ctx.releaseGroups.length,
+              "release-count": ctx.releaseGroups.length,
             };
           });
-
-          tasks.push(
-            metadataCorePromise.then((artistPayload) => {
-              if (!isClientConnected()) return;
-              sendArtist(artistPayload);
-            }),
-          );
 
           fullArtistPromise = metadataCorePromise
             .then((artistPayload) => artistPayload)
             .catch(() => null);
 
-          pendingArtistRequests.set(mbid, fullArtistPromise);
+          pendingArtistRequests.set(requestKey, fullArtistPromise);
           fullArtistPromise.finally(() => {
-            pendingArtistRequests.delete(mbid);
+            pendingArtistRequests.delete(requestKey);
           });
 
         }
@@ -329,22 +420,32 @@ export default function registerStream(router) {
               cachedImage.imageUrl &&
               cachedImage.imageUrl !== "NOT_FOUND"
             ) {
+              const artistName =
+                (await namePromise.catch(() => null)) || streamArtistName || null;
+              const cachedCover = await getArtistImage(mbid, {
+                artistName,
+              }).catch(() => null);
               sendSSE(res, "cover", {
-                images: [
-                  {
-                    image: cachedImage.imageUrl,
-                    front: true,
-                    types: ["Front"],
-                  },
-                ],
+                images: cachedCover?.images?.length
+                  ? cachedCover.images
+                  : [
+                      {
+                        image: cachedImage.imageUrl,
+                        front: true,
+                        types: ["Front"],
+                      },
+                    ],
               });
               return;
             }
 
             const artistName =
               (await namePromise.catch(() => null)) || streamArtistName || null;
+            const shouldForceRefresh =
+              cachedImage?.imageUrl === "NOT_FOUND" && !!artistName;
             const cover = await getArtistImage(mbid, {
               artistName,
+              forceRefresh: shouldForceRefresh,
             });
             if (cover?.images?.length) {
               sendSSE(res, "cover", {

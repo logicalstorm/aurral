@@ -41,12 +41,12 @@ const normalizeQualityProfileId = (value) => {
 
 const DEFAULT_DISCOVER_LAYOUT = [
   { id: "recentlyAdded", enabled: true },
+  { id: "playlists", enabled: true },
   { id: "recommendedShows", enabled: true },
   { id: "recentReleases", enabled: true },
   { id: "recommended", enabled: true },
   { id: "globalTop", enabled: true },
   { id: "genreSections", enabled: true },
-  { id: "topTags", enabled: true },
 ];
 
 const FALLBACK_GENRE_SECTION_PREFIX = "fallbackGenre:";

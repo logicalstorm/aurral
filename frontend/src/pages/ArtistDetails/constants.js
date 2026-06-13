@@ -37,8 +37,10 @@ export const emptyArtistShape = {
   tags: [],
   genres: [],
   relations: [],
+  "appears-on-release-groups": [],
   "release-group-count": 0,
   "release-count": 0,
 };
 
 export const ARTIST_DETAILS_FILTER_KEY = "artistDetailsFilterSettings";
+export const ARTIST_DETAILS_APPEARS_ON_LIMIT = 6;
