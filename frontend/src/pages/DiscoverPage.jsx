@@ -2017,7 +2017,7 @@ function DiscoverPage() {
             <button
               type="button"
               onClick={openDiscoverModal}
-              className="btn btn-surface btn--bold btn-min-h discover-page__customize-btn"
+              className="btn btn-sm btn-surface discover-page__customize-btn"
             >
               <LayoutTemplate className="artist-discover-hero__customize-icon" />
               <span>Customize</span>
