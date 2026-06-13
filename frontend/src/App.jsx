@@ -23,15 +23,21 @@ const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
 const DiscoverPage = lazy(() => import("./pages/DiscoverPage"));
 const ShowsPage = lazy(() => import("./pages/ShowsPage"));
 const LibraryPage = lazy(() => import("./pages/LibraryPage"));
-const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const SettingsPage = lazy(() => import("./pages/Settings/SettingsPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const MetadataProvidersPage = lazy(
   () => import("./pages/Settings/MetadataProvidersPage"),
 );
-const ArtistDetailsPage = lazy(() => import("./pages/ArtistDetailsPage"));
-const ArtistAlbumsPage = lazy(() => import("./pages/ArtistAlbumsPage"));
-const ReleasePage = lazy(() => import("./pages/ReleasePage"));
-const ArtistAppearsOnPage = lazy(() => import("./pages/ArtistAppearsOnPage"));
+const ArtistDetailsPage = lazy(
+  () => import("./pages/ArtistDetails/ArtistDetailsPage"),
+);
+const ArtistAlbumsPage = lazy(
+  () => import("./pages/ArtistDetails/ArtistAlbumsPage"),
+);
+const ReleasePage = lazy(() => import("./pages/ArtistDetails/ReleasePage"));
+const ArtistAppearsOnPage = lazy(
+  () => import("./pages/ArtistDetails/ArtistAppearsOnPage"),
+);
 const HistoryPage = lazy(() => import("./pages/HistoryPage"));
 const FlowPage = lazy(() => import("./pages/FlowPage"));
 const DISCOVERY_MANUAL_REFRESH_KEY = "aurral.discovery.manualRefreshPending";
