@@ -1360,7 +1360,6 @@ function SearchResultsPage() {
     activeFilter,
     isUnifiedSearch,
     searchLibraryFlags,
-    trimmedQuery,
     unifiedResults,
   ]);
 

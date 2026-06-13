@@ -11,7 +11,6 @@ import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
 import AddAlbumButton from "../../../components/AddAlbumButton";
 import { navigateToReleaseGroup } from "../../../utils/searchNavigation";
 import {
-  getArtistReleaseGridColumnCount,
   getReleaseMetric,
   getReleaseYear,
 } from "../utils";
