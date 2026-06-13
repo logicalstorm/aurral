@@ -449,7 +449,9 @@ textarea {
 .btn-icon-square {
   width: 2.5rem;
   height: 2.5rem;
+  min-width: 2.5rem;
   padding: 0;
+  flex-shrink: 0;
 }
 
 .btn-round-lg {
@@ -7764,6 +7766,49 @@ textarea {
   color: var(--aurral-gray-light);
   font-size: 0.875rem;
   line-height: 1.5;
+}
+
+.settings-page__banner--sponsor {
+  margin-bottom: 1.25rem;
+  background: var(--aurral-surface-mid);
+}
+
+.settings-page__banner-cta {
+  margin-top: 0.75rem;
+  width: fit-content;
+}
+
+.settings-page__banner-cta-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.settings-page__section--sponsor {
+  padding: 1rem 1.125rem;
+  margin-bottom: 2rem;
+  border-radius: var(--aurral-radius-sm);
+  background: var(--aurral-surface-mid);
+}
+
+.settings-page__section--sponsor .settings-page__section-header {
+  margin-bottom: 0.5rem;
+}
+
+.settings-page__sponsor-icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--aurral-green);
+}
+
+.settings-page__sponsor-copy {
+  margin: 0 0 0.875rem;
+  color: var(--aurral-gray-light);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.settings-page__sponsor-cta {
+  width: fit-content;
 }
 
 .settings-page__meta-grid {
