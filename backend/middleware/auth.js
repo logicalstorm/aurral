@@ -565,6 +565,8 @@ export const createAuthMiddleware = () => {
       req.path === "/api/health" ||
       req.path === "/api/health/live" ||
       req.path === "/api/health/bootstrap" ||
+      req.path === "/api/filesystem/browse" ||
+      req.path === "/api/filesystem/ensure" ||
       req.path === "/api/image-proxy" ||
       req.path.startsWith("/api/image-proxy/")
     ) {
@@ -572,9 +574,16 @@ export const createAuthMiddleware = () => {
     }
     if (
       /^\/api\/library\/stream\/[^/]+$/.test(req.path) ||
+      /^\/api\/library\/file-stream\/[^/]+\/[^/]+$/i.test(req.path) ||
       /^\/api\/artists\/[a-f0-9-]{36}\/stream$/i.test(req.path) ||
       /^\/api\/weekly-flow\/stream\/[^/]+$/i.test(req.path) ||
-      /^\/api\/weekly-flow\/artwork\/[^/]+$/i.test(req.path)
+      /^\/api\/playlists\/stream\/[^/]+$/i.test(req.path) ||
+      (req.method === "GET" &&
+        /^\/api\/weekly-flow\/artwork\/[^/]+$/i.test(req.path)) ||
+      (req.method === "GET" &&
+        /^\/api\/playlists\/artwork\/[^/]+$/i.test(req.path)) ||
+      (req.method === "GET" &&
+        /^\/api\/discover\/artwork\/[^/]+$/i.test(req.path))
     ) {
       return next();
     }

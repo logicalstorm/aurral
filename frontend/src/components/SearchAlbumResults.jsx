@@ -1,27 +1,13 @@
+import { useCallback, useState } from "react";
 import PropTypes from "prop-types";
-import { useState } from "react";
-import { Check, Loader2, Music, Plus, Search } from "lucide-react";
-
-function getAlbumActionLabel(album, isPending, canAddAlbum) {
-  if (!canAddAlbum) return "No Access";
-  if (isPending || ["searching", "downloading", "processing"].includes(album.status)) {
-    return "Searching...";
-  }
-  if (album.status === "available") return "In Library";
-  if (album.status === "inLibrary") return "Search Album";
-  return "Add to Lidarr";
-}
+import { Music } from "lucide-react";
+import SearchLibraryCheck from "./SearchLibraryCheck";
+import AddAlbumButton from "./AddAlbumButton";
+import { getReleaseNavigationTarget } from "../utils/searchNavigation";
 
 function isAlbumActionDisabled(album, isPending, canAddAlbum) {
   if (!canAddAlbum) return true;
   return isPending || ["searching", "downloading", "processing"].includes(album.status);
-}
-
-function getAlbumActionIcon(album, isPending) {
-  if (isPending) return Loader2;
-  if (album.status === "available") return Check;
-  if (album.status === "inLibrary") return Search;
-  return Plus;
 }
 
 function getReleaseYear(releaseDate) {
@@ -30,21 +16,63 @@ function getReleaseYear(releaseDate) {
   return value.split("-")[0] || null;
 }
 
+function getReleaseTypeLabel(album) {
+  const primary = album.primaryType || null;
+  const secondary = Array.isArray(album.secondaryTypes)
+    ? album.secondaryTypes.filter(Boolean)
+    : [];
+  const types = [primary, ...secondary].filter(Boolean);
+  return types.length ? types.join(" · ") : null;
+}
+
 function AlbumCover({ src, alt }) {
   const [failed, setFailed] = useState(false);
 
   if (!src || failed) {
-    return <Music className="h-8 w-8" />;
+    return (
+      <div className="artist-release-card__placeholder">
+        <Music className="artist-icon-lg" />
+      </div>
+    );
   }
 
   return (
     <img
       src={src}
       alt={alt}
-      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
       loading="lazy"
       decoding="async"
       onError={() => setFailed(true)}
+    />
+  );
+}
+
+function AlbumAction({ album, isPending, canAddAlbum, onAlbumAction }) {
+  const actionDisabled = isAlbumActionDisabled(album, isPending, canAddAlbum);
+  const isComplete = album.status === "available";
+  const actionLabel =
+    album.status === "inLibrary" ? "Search Album" : "Add to Lidarr";
+
+  if (isComplete) {
+    return (
+      <span className="artist-release-card__status" title="In library">
+        <SearchLibraryCheck size="overlay" />
+        <span className="sr-only">In library</span>
+      </span>
+    );
+  }
+
+  if (!canAddAlbum) return null;
+
+  return (
+    <AddAlbumButton
+      onClick={(event) => {
+        event.stopPropagation();
+        onAlbumAction(album);
+      }}
+      isLoading={isPending}
+      disabled={actionDisabled}
+      label={actionLabel}
     />
   );
 }
@@ -56,136 +84,148 @@ function SearchAlbumResults({
   pendingAlbumIds,
   onAlbumAction,
   navigate,
+  viewMode = "grid",
 }) {
-  const openArtist = (album) => {
-    if (!album.artistMbid) return;
-    navigate(`/artist/${album.artistMbid}`, {
-      state: { artistName: album.artistName },
-    });
+  const openAlbum = useCallback(
+    (album) => {
+      const target = getReleaseNavigationTarget({ ...album, type: "album" });
+      if (target) {
+        navigate(target.pathname, { state: target.state });
+        return;
+      }
+      if (album.artistMbid) {
+        navigate(`/artist/${album.artistMbid}/albums`, {
+          state: { artistName: album.artistName },
+        });
+      }
+    },
+    [navigate],
+  );
+
+  const openArtist = useCallback(
+    (album, event) => {
+      event?.stopPropagation();
+      if (!album.artistMbid) return;
+      navigate(`/artist/${album.artistMbid}`, {
+        state: { artistName: album.artistName },
+      });
+    },
+    [navigate],
+  );
+
+  const renderAlbum = (album) => {
+    const isPending = !!pendingAlbumIds[album.id];
+    const coverSrc = albumCovers[album.id] || album.coverUrl;
+    const releaseYear = getReleaseYear(album.releaseDate);
+    const releaseTypeLabel = getReleaseTypeLabel(album);
+    const releaseMeta = [releaseYear, releaseTypeLabel]
+      .filter(Boolean)
+      .join(" · ");
+
+    if (viewMode === "list") {
+      return (
+        <div
+          className="artist-release-list-item search-album-results__item"
+          onClick={() => openAlbum(album)}
+        >
+          <div className="artist-media-cell artist-list-cover">
+            {coverSrc ? (
+              <img src={coverSrc} alt={album.title} loading="lazy" decoding="async" />
+            ) : (
+              <div className="artist-media-placeholder">
+                <Music className="artist-icon-md" />
+              </div>
+            )}
+          </div>
+          <div className="artist-min-0">
+            <h2 className="artist-release-card__title artist-truncate">
+              {album.title}
+            </h2>
+            <div className="artist-release-card__meta artist-truncate">
+              {album.artistName ? (
+                <button
+                  type="button"
+                  className="artist-link-button"
+                  onClick={(event) => openArtist(album, event)}
+                >
+                  {album.artistName}
+                </button>
+              ) : null}
+              {album.artistName && releaseMeta ? " · " : null}
+              {releaseMeta ? <span>{releaseMeta}</span> : null}
+            </div>
+          </div>
+          <div
+            className="artist-row-actions"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <AlbumAction
+              album={album}
+              isPending={isPending}
+              canAddAlbum={canAddAlbum}
+              onAlbumAction={onAlbumAction}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <article
+        key={album.id}
+        className="artist-release-card search-album-results__item"
+        onClick={() => openAlbum(album)}
+      >
+        <div className="artist-release-card__cover">
+          {coverSrc ? (
+            <AlbumCover src={coverSrc} alt={album.title} />
+          ) : (
+            <div className="artist-release-card__placeholder">
+              <Music className="artist-icon-lg" />
+            </div>
+          )}
+          <div
+            className="artist-release-card__action"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <AlbumAction
+              album={album}
+              isPending={isPending}
+              canAddAlbum={canAddAlbum}
+              onAlbumAction={onAlbumAction}
+            />
+          </div>
+        </div>
+        <h2 className="artist-release-card__title artist-truncate" title={album.title}>
+          {album.title}
+        </h2>
+        {album.artistName ? (
+          <button
+            type="button"
+            className="artist-card-button"
+            onClick={(event) => openArtist(album, event)}
+          >
+            <p className="artist-release-card__meta artist-truncate">
+              {album.artistName}
+            </p>
+          </button>
+        ) : null}
+        {releaseMeta && (
+          <p className="artist-release-card__meta artist-truncate">
+            {releaseMeta}
+          </p>
+        )}
+      </article>
+    );
   };
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-      {albums.map((album) => {
-        const isPending = !!pendingAlbumIds[album.id];
-        const actionDisabled = isAlbumActionDisabled(
-          album,
-          isPending,
-          canAddAlbum,
-        );
-        const AlbumActionIcon = getAlbumActionIcon(album, isPending);
-        const releaseYear = getReleaseYear(album.releaseDate);
-        const releaseType =
-          album.primaryType || album.secondaryTypes?.[0] || null;
-        const handlePrimaryAction = () => {
-          if (album.status === "available") {
-            openArtist(album);
-            return;
-          }
-          onAlbumAction(album);
-        };
-
-        return (
-          <div
-            key={album.id}
-            className="group min-w-0"
-          >
-            <div
-              className="relative aspect-square overflow-hidden border border-white/8"
-              style={{ backgroundColor: "#17161b" }}
-            >
-              <button
-                type="button"
-                onClick={() => openArtist(album)}
-                className="absolute inset-0 z-[1] cursor-pointer"
-                aria-label={`Open artist page for ${album.artistName}`}
-                title={`Open artist: ${album.artistName}`}
-              />
-
-              <div
-                className="absolute inset-0"
-                style={{ backgroundColor: "#211f27", color: "#8a8a8f" }}
-              >
-                <AlbumCover
-                  src={albumCovers[album.id] || album.coverUrl}
-                  alt={album.title}
-                />
-              </div>
-
-              <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/75" />
-
-              <div className="absolute inset-x-0 top-0 z-10 flex items-start justify-between p-2">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handlePrimaryAction}
-                    disabled={actionDisabled}
-                    className="inline-flex h-9 w-9 items-center overflow-hidden border border-white/10 backdrop-blur-sm transition-all duration-200 ease-out hover:w-[142px] disabled:cursor-not-allowed [&:hover_.album-action-label]:translate-x-0 [&:hover_.album-action-label]:opacity-100"
-                    style={{
-                      backgroundColor:
-                        album.status === "available"
-                          ? "rgba(112,126,97,0.9)"
-                        : "rgba(20,19,24,0.78)",
-                      color: album.status === "available" ? "#ffffff" : "#fff",
-                      opacity: actionDisabled && album.status !== "available" ? 0.5 : 1,
-                    }}
-                    aria-label={getAlbumActionLabel(album, isPending, canAddAlbum)}
-                    title={getAlbumActionLabel(album, isPending, canAddAlbum)}
-                  >
-                    <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center">
-                      <AlbumActionIcon
-                        className={`h-4 w-4 ${isPending ? "animate-spin" : ""}`}
-                      />
-                    </span>
-                    <span className="album-action-label pr-3 text-xs font-medium whitespace-nowrap opacity-0 transition-all duration-150 ease-out -translate-x-2">
-                      {getAlbumActionLabel(album, isPending, canAddAlbum)}
-                    </span>
-                  </button>
-                </div>
-
-              </div>
-
-              <div
-                className="absolute inset-x-0 bottom-0 z-10 flex items-center justify-between gap-3 p-2 text-[11px] uppercase tracking-[0.16em]"
-                style={{
-                  background:
-                    "linear-gradient(to top, rgba(18,17,22,0.92), rgba(18,17,22,0.55), transparent)",
-                  color: "#d4d4d8",
-                }}
-              >
-                <span className="truncate text-left">
-                  {releaseType || ""}
-                </span>
-                <span className="shrink-0 text-right">
-                  {releaseYear || ""}
-                </span>
-              </div>
-            </div>
-
-            <div className="min-w-0 px-1 pb-1 pt-2">
-              <button
-                type="button"
-                onClick={() => openArtist(album)}
-                className="block w-full text-left transition-opacity hover:opacity-80 disabled:cursor-pointer"
-                title={`${album.title} — ${album.artistName}`}
-              >
-                <span
-                  className="block truncate text-base font-semibold"
-                  style={{ color: "#fff" }}
-                >
-                  {album.title}
-                </span>
-                <span
-                  className="mt-0.5 block truncate text-sm"
-                  style={{ color: "#b9b9be" }}
-                >
-                  {album.artistName}
-                </span>
-              </button>
-            </div>
-          </div>
-        );
-      })}
+    <div
+      className={
+        viewMode === "grid" ? "artist-albums-grid" : "artist-release-list"
+      }
+    >
+      {albums.map((album) => renderAlbum(album))}
     </div>
   );
 }
@@ -197,6 +237,19 @@ SearchAlbumResults.propTypes = {
   pendingAlbumIds: PropTypes.object.isRequired,
   onAlbumAction: PropTypes.func.isRequired,
   navigate: PropTypes.func.isRequired,
+  viewMode: PropTypes.oneOf(["grid", "list"]),
+};
+
+AlbumCover.propTypes = {
+  src: PropTypes.string,
+  alt: PropTypes.string,
+};
+
+AlbumAction.propTypes = {
+  album: PropTypes.object.isRequired,
+  isPending: PropTypes.bool.isRequired,
+  canAddAlbum: PropTypes.bool.isRequired,
+  onAlbumAction: PropTypes.func.isRequired,
 };
 
 export default SearchAlbumResults;

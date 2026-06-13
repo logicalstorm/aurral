@@ -1,26 +1,31 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PropTypes from "prop-types";
-import { Loader, ChevronLeft, ChevronRight, CheckCircle2 } from "lucide-react";
+import { Loader, ChevronLeft, ChevronRight } from "lucide-react";
+import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
 import ArtistImage from "../../../components/ArtistImage";
+import { ArtistContextMenu } from "../../../components/ArtistContextMenu";
 import {
   lookupArtistsInLibraryBatch,
   readLibraryLookupCache,
 } from "../../../utils/api";
-
-const getArtistId = (artist) =>
-  artist?.id || artist?.mbid || artist?.foreignArtistId;
+import { getArtistFeedbackFlags } from "../../../utils/discoveryFeedback";
+import { getArtistRecordId } from "../../../utils/artistTaste";
 
 export function ArtistDetailsSimilar({
   loadingSimilar,
   similarArtists,
   similarArtistsScrollRef,
   onArtistClick,
+  canAddArtist = false,
+  onAddToLibrary,
+  onArtistFeedback,
+  artistFeedbackLookup,
 }) {
   const [libraryLookup, setLibraryLookup] = useState({});
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
   const artistIds = useMemo(
-    () => similarArtists.map(getArtistId).filter(Boolean),
+    () => similarArtists.map(getArtistRecordId).filter(Boolean),
     [similarArtists],
   );
 
@@ -84,106 +89,111 @@ export function ArtistDetailsSimilar({
   if (!loadingSimilar && similarArtists.length === 0) return null;
 
   return (
-    <div className="mt-12">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h2
-          className="flex items-center text-2xl font-bold"
-          style={{ color: "#fff" }}
-        >
-          Similar Artists
+    <section className="artist-section">
+      <div className="artist-similar-header">
+        <h2 className="artist-section-title">
+          Fans Also Like
           {loadingSimilar && (
-            <Loader
-              className="ml-2 h-4 w-4 animate-spin"
-              style={{ color: "#c1c1c3" }}
-            />
+            <Loader className="artist-icon-sm animate-spin" />
           )}
         </h2>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="artist-scroll-controls">
           <button
             type="button"
             onClick={() => scrollByAmount(-1)}
-            className="flex h-10 w-10 items-center justify-center transition-colors disabled:cursor-default"
-            style={{ color: canScrollLeft ? "#6f7685" : "#2d3442" }}
+            className="btn btn-ghost btn-icon-square"
             aria-label="Scroll similar artists left"
             disabled={!canScrollLeft}
           >
-            <ChevronLeft className="h-7 w-7 stroke-[1.5]" />
+            <ChevronLeft className="artist-icon-lg" />
           </button>
           <button
             type="button"
             onClick={() => scrollByAmount(1)}
-            className="flex h-10 w-10 items-center justify-center transition-colors disabled:cursor-default"
-            style={{ color: canScrollRight ? "#d1d5df" : "#2d3442" }}
+            className="btn btn-ghost btn-icon-square"
             aria-label="Scroll similar artists right"
             disabled={!canScrollRight}
           >
-            <ChevronRight className="h-7 w-7 stroke-[1.5]" />
+            <ChevronRight className="artist-icon-lg" />
           </button>
         </div>
       </div>
       {loadingSimilar ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader
-            className="w-8 h-8 animate-spin"
-            style={{ color: "#c1c1c3" }}
-          />
+        <div className="artist-loading">
+          <Loader className="artist-spinner animate-spin" />
         </div>
       ) : similarArtists.length > 0 ? (
         <div>
           <div
             ref={similarArtistsScrollRef}
-            className="flex overflow-x-auto pb-4 gap-4 scroll-smooth similar-artists-scroll flex-1"
+            className="artist-similar-rail similar-artists-scroll"
             style={{
               scrollbarWidth: "none",
               msOverflowStyle: "none",
             }}
           >
             {similarArtists.map((similar) => {
-              const artistId = getArtistId(similar);
+              const artistId = getArtistRecordId(similar);
               return (
-                <div
-                  key={similar.id}
-                  className="group w-[148px] shrink-0 cursor-pointer sm:w-[164px]"
-                  onClick={() =>
-                    onArtistClick(
-                      similar.id,
-                      similar.name,
-                      typeof libraryLookup[artistId] === "boolean"
-                        ? libraryLookup[artistId]
-                        : undefined,
-                    )
-                  }
-                >
+                <div key={similar.id} className="artist-similar-card">
                   <div
-                    className="relative aspect-square overflow-hidden  mb-2 shadow-sm group-hover:shadow-md transition-all"
-                    style={{ backgroundColor: "#211f27" }}
+                    className="artist-similar-avatar"
+                    onClick={() =>
+                      onArtistClick(
+                        similar.id,
+                        similar.name,
+                        typeof libraryLookup[artistId] === "boolean"
+                          ? libraryLookup[artistId]
+                          : undefined,
+                      )
+                    }
                   >
                     <ArtistImage
                       src={similar.image}
-                      mbid={similar.id}
+                      mbid={getArtistRecordId(similar)}
                       artistName={similar.name}
                       alt={similar.name}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                      className=""
+                      loading="eager"
                     />
 
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"></div>
-
                     {similar.match && (
-                      <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm text-white text-[10px] px-1.5 py-0.5 font-medium">
+                      <div className="artist-similar-match">
                         {similar.match}% Match
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 min-w-0">
-                    <h3
-                      className="font-medium text-sm truncate transition-colors min-w-0"
-                      style={{ color: "#fff" }}
+                  <div className="artist-similar-name-row">
+                    <div
+                      className="artist-similar-name-block"
+                      onClick={() =>
+                        onArtistClick(
+                          similar.id,
+                          similar.name,
+                          typeof libraryLookup[artistId] === "boolean"
+                            ? libraryLookup[artistId]
+                            : undefined,
+                        )
+                      }
                     >
-                      {similar.name}
-                    </h3>
-                    {artistId && libraryLookup[artistId] && (
-                      <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                    )}
+                      <h3 className="artist-similar-name">{similar.name}</h3>
+                      {artistId && libraryLookup[artistId] && (
+                        <SearchLibraryCheck size="sm" />
+                      )}
+                    </div>
+                    <ArtistContextMenu
+                      artist={similar}
+                      isInLibrary={!!libraryLookup[artistId]}
+                      canAddArtist={canAddArtist}
+                      onAddToLibrary={onAddToLibrary}
+                      onFeedback={onArtistFeedback}
+                      feedbackUsed={
+                        artistFeedbackLookup
+                          ? getArtistFeedbackFlags(artistFeedbackLookup, similar)
+                          : undefined
+                      }
+                      buttonClassName="btn btn-icon-square artist-context-menu__trigger"
+                    />
                   </div>
                 </div>
               );
@@ -191,7 +201,7 @@ export function ArtistDetailsSimilar({
           </div>
         </div>
       ) : null}
-    </div>
+    </section>
   );
 }
 
@@ -203,11 +213,15 @@ ArtistDetailsSimilar.propTypes = {
       name: PropTypes.string,
       image: PropTypes.string,
       match: PropTypes.number,
-    })
+    }),
   ),
   similarArtistsScrollRef: PropTypes.oneOfType([
     PropTypes.func,
     PropTypes.shape({ current: PropTypes.instanceOf(Element) }),
   ]),
   onArtistClick: PropTypes.func,
+  canAddArtist: PropTypes.bool,
+  onAddToLibrary: PropTypes.func,
+  onArtistFeedback: PropTypes.func,
+  artistFeedbackLookup: PropTypes.instanceOf(Map),
 };
