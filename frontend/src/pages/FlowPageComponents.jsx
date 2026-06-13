@@ -28,7 +28,10 @@ import {
   ArrowUp,
   ArrowDown,
 } from "lucide-react";
-import { sortFlowTracks } from "../utils/flowTrackSort";
+import {
+  getFlowTrackDisplayNumber,
+  sortFlowTracks,
+} from "../utils/flowTrackSort";
 import { Link } from "react-router-dom";
 import PillToggle from "../components/PillToggle";
 import FlipSaveButton from "../components/FlipSaveButton";
@@ -2053,6 +2056,13 @@ export function FlowTracksPanel({
             </thead>
             <tbody>
               {sortedTracks.map((track, index) => {
+                const trackDisplayNumber = getFlowTrackDisplayNumber(track, {
+                  tracks,
+                  sortedTracks,
+                  sortedIndex: index,
+                  sortKey,
+                  sortDirection,
+                });
                 const canPlay =
                   showPlaybackControls &&
                   track.status === "done" &&
@@ -2075,7 +2085,7 @@ export function FlowTracksPanel({
                       {showPlaybackControls ? (
                         <div className="flow-page__tracks-table-index-inner">
                           <span className="flow-page__tracks-table-index-number">
-                            {index + 1}
+                            {trackDisplayNumber}
                           </span>
                           <button
                             type="button"
@@ -2096,7 +2106,7 @@ export function FlowTracksPanel({
                           </button>
                         </div>
                       ) : (
-                        index + 1
+                        trackDisplayNumber
                       )}
                     </td>
                     <td

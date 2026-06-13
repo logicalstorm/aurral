@@ -350,6 +350,17 @@ textarea {
   color: var(--aurral-danger);
 }
 
+.artist-context-menu__trigger {
+  background: transparent;
+  color: var(--aurral-gray-light);
+}
+
+.artist-context-menu__trigger:hover:not(:disabled),
+.artist-context-menu__trigger:focus-visible {
+  background: transparent;
+  color: var(--aurral-white);
+}
+
 .btn-icon {
   padding: 0.5rem;
 }
@@ -4810,6 +4821,22 @@ textarea {
 .artist-discover-card--album .artist-discover-card__cover,
 .artist-discover-card--playlist .artist-discover-card__cover {
   border-radius: var(--aurral-radius);
+}
+
+.artist-discover-card__cover-wrap {
+  position: relative;
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+.artist-discover-card__cover-wrap .artist-discover-card__cover {
+  margin-bottom: 0;
+}
+
+.artist-discover-card__action {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
 }
 
 .artist-discover-card__image {
