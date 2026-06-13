@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { CornerUpLeft, Loader, Music } from "lucide-react";
+import { CornerUpLeft, Music } from "lucide-react";
 import SearchLibraryCheck from "../../components/SearchLibraryCheck";
 import AddAlbumButton from "../../components/AddAlbumButton";
 import { useAuth } from "../../contexts/AuthContext";
