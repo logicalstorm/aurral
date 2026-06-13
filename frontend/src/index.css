@@ -671,16 +671,12 @@ textarea {
   white-space: nowrap;
   transition:
     width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    min-width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    background-color 0.2s ease,
-    color 0.2s ease;
+    min-width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .btn-add-library--suggestion:hover:not(:disabled) {
   width: 8.25rem;
   min-width: 8.25rem;
-  background-color: var(--aurral-gray-light);
-  color: var(--aurral-black);
 }
 
 .btn-add-library--suggestion span {
@@ -753,17 +749,13 @@ textarea {
   cursor: pointer;
   transition:
     width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    min-width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    background-color 0.2s ease,
-    color 0.2s ease;
+    min-width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .btn-add-album:hover:not(:disabled),
 .btn-add-album.is-expanded {
   width: 7.875rem;
   min-width: 7.875rem;
-  background-color: var(--aurral-gray-light);
-  color: var(--aurral-black);
 }
 
 .btn-add-album:disabled {
@@ -4040,17 +4032,13 @@ textarea {
   white-space: nowrap;
   transition:
     width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    min-width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    background-color 0.2s ease,
-    color 0.2s ease;
+    min-width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .artist-playlist-trigger:hover,
 .artist-playlist-trigger.is-open {
   width: 8.75rem;
   min-width: 8.75rem;
-  background: var(--aurral-gray-light);
-  color: var(--aurral-black);
 }
 
 .artist-playlist-trigger__icon {
