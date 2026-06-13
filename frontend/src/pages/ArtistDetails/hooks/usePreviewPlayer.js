@@ -27,6 +27,7 @@ export function usePreviewPlayer(
     isPlaying,
     isLoading,
     currentTrack,
+    isShuffleEnabled,
   } = useAudioQueue();
 
   const artistName = artistNameFromNav || artist?.name || "";
@@ -98,7 +99,7 @@ export function usePreviewPlayer(
       if (tracks.length === 0) return;
       playQueue(tracks, {
         source: artistSource,
-        shuffle: true,
+        shuffle: isShuffleEnabled,
         updateShufflePreference: false,
       });
     } finally {
