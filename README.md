@@ -114,6 +114,14 @@ Aurral builds on open metadata, listening data, and infrastructure from the proj
 - Community: [Discord](https://discord.gg/cpPYfgVURJ)
 - Bugs and feature requests: [GitHub Issues](https://github.com/lklynet/aurral/issues)
 
+## Contributors
+
+![contributors badge](https://readme-contribs.as93.net/contributors/lklynet/aurral)
+
+## Sponsors
+
+![sponsors badge](https://readme-contribs.as93.net/sponsors/lklynet)
+
 ## License
 
 Aurral is released under the [MIT License](LICENSE).
