@@ -55,11 +55,8 @@ Aurral only needs Lidarr to get started. It works best with the stack self-hoste
 | App or service | Role |
 | --- | --- |
 | [Lidarr](https://github.com/Lidarr/Lidarr) | Library management, artist and album requests, queue status |
-| [Last.fm](https://www.last.fm) | Personalized discovery, tags, and richer recommendations |
-| [ListenBrainz](https://listenbrainz.org) | Optional per-user listening history |
 | [slskd](https://github.com/slskd/slskd) | Soulseek-backed downloads for flows and playlists |
 | [Navidrome](https://www.navidrome.org) | Streaming and playback for generated playlists |
-| [Ticketmaster](https://developer.ticketmaster.com) | Local shows for artists you care about |
 
 ## Quick Start
 
@@ -107,14 +104,17 @@ Full setup and usage guides live at [docs.aurral.org](https://docs.aurral.org/).
 
 ## Support
 
-Aurral's hosted metadata and search services run on personal infrastructure and may experience occasional downtime. If the app is part of your daily listening, [sponsoring development](https://github.com/sponsors/lklynet/) helps keep those services reliable and sustain ongoing work on Aurral.
+Aurral builds on open metadata, listening data, and infrastructure from the projects below.
+
+| Project | Contribution |
+| --- | --- |
+| [BrainzMash](https://github.com/statichum/brainzmash-hearring-aid) | Hosted artist and album metadata for discovery and search |
+| [Honker](https://github.com/russellromney/honker) | Durable SQLite queues and background workers across Aurral |
+| [Last.fm](https://www.last.fm) | Listening history, tags, and personalized recommendations |
+| [MusicBrainz](https://musicbrainz.org) | Canonical release metadata and artist identifiers |
 
 - Community: [Discord](https://discord.gg/cpPYfgVURJ)
 - Bugs and feature requests: [GitHub Issues](https://github.com/lklynet/aurral/issues)
-
-## Special Thanks
-
-Special thanks to the BrainzMash team for the metadata work behind Aurral's artist and album discovery. Their open-source work is available at [statichum/brainzmash-hearring-aid](https://github.com/statichum/brainzmash-hearring-aid).
 
 ## License
 
