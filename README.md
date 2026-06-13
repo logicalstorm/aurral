@@ -40,10 +40,10 @@ Aurral is a self-hosted music discovery app for the Lidarr stack. Find new artis
 </p>
 
 <p align="center">
-  <img src="frontend/images/discover2.webp" width="210" alt="Aurral personalized recommendations" />
-  <img src="frontend/images/artist.webp" width="210" alt="Aurral artist details" />
-  <img src="frontend/images/artist.webp" width="210" alt="Aurral artist details" />
-  <img src="frontend/images/artist.webp" width="210" alt="Aurral artist details" />
+  <img src="frontend/images/discover2.webp" width="205" alt="Aurral personalized recommendations" />
+  <img src="frontend/images/artist.webp" width="205" alt="Aurral artist details" />
+  <img src="frontend/images/artist.webp" width="205" alt="Aurral artist details" />
+  <img src="frontend/images/artist.webp" width="205" alt="Aurral artist details" />
 </p>
 
 ## Recommended Stack
