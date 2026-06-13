@@ -12,6 +12,7 @@ const repoRoot = join(__dirname, "..", "..");
 const RESET_TABLES = [
   "sessions",
   "playlist_download_jobs",
+  "weekly_flow_jobs",
   "users",
   "discovery_cache",
   "images_cache",

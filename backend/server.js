@@ -10,7 +10,6 @@ import { createServer } from "http";
 import { fileURLToPath } from "url";
 
 import { createAuthMiddleware } from "./middleware/auth.js";
-import { createMigrationGateMiddleware } from "./middleware/migrationGate.js";
 import { websocketService } from "./services/websocketService.js";
 import { getAllDownloadStatuses } from "./routes/library/handlers/downloads.js";
 import { getWeeklyFlowStatusSnapshot } from "./services/weeklyFlowStatusSnapshot.js";
@@ -119,7 +118,6 @@ app.use(
 );
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
-app.use(createMigrationGateMiddleware());
 app.use(createAuthMiddleware());
 
 const authLimiter = rateLimit({

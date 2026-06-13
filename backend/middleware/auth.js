@@ -565,7 +565,6 @@ export const createAuthMiddleware = () => {
       req.path === "/api/health" ||
       req.path === "/api/health/live" ||
       req.path === "/api/health/bootstrap" ||
-      req.path === "/api/health/migrate-v2" ||
       req.path === "/api/filesystem/browse" ||
       req.path === "/api/filesystem/ensure" ||
       req.path === "/api/image-proxy" ||

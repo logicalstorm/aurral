@@ -27,42 +27,45 @@ test.after(async () => {
   await cleanupIsolatedState(isolatedState);
 });
 
-test("renames aurral-weekly-flow to aurral-playlists", async () => {
-  const legacyDir = path.join(root, "aurral-weekly-flow");
-  const trackPath = path.join(legacyDir, "playlist-id", "Artist", "Track.flac");
+test("keeps aurral-weekly-flow in place", async () => {
+  const playlistRoot = path.join(root, "aurral-weekly-flow");
+  const trackPath = path.join(playlistRoot, "playlist-id", "Artist", "Track.flac");
   await fs.mkdir(path.dirname(trackPath), { recursive: true });
   await fs.writeFile(trackPath, "audio");
 
   const result = ensurePlaylistFilesystemLayout({ root });
 
-  assert.equal(result.renamed, true);
+  assert.equal(result.renamed, false);
+  assert.equal(result.merged, 0);
+  assert.equal(result.playlistRoot, playlistRoot);
   await assert.doesNotReject(() =>
-    fs.access(path.join(root, "aurral-playlists", "playlist-id", "Artist", "Track.flac")),
+    fs.access(trackPath),
   );
-  await assert.rejects(() => fs.access(legacyDir));
 });
 
-test("merges legacy playlist files when aurral-playlists already exists", async () => {
-  const legacyDir = path.join(root, "aurral-weekly-flow");
-  const nextDir = path.join(root, "aurral-playlists");
-  const legacyTrack = path.join(legacyDir, "legacy-playlist", "Song.flac");
-  const existingTrack = path.join(nextDir, "existing-playlist", "Other.flac");
-  await fs.mkdir(path.dirname(legacyTrack), { recursive: true });
-  await fs.mkdir(path.dirname(existingTrack), { recursive: true });
-  await fs.writeFile(legacyTrack, "legacy");
-  await fs.writeFile(existingTrack, "existing");
+test("does not merge or delete existing playlist directories", async () => {
+  const playlistRoot = path.join(root, "aurral-weekly-flow");
+  const previousV2Root = path.join(root, "aurral-playlists");
+  const playlistTrack = path.join(playlistRoot, "legacy-playlist", "Song.flac");
+  const previousTrack = path.join(previousV2Root, "existing-playlist", "Other.flac");
+  await fs.mkdir(path.dirname(playlistTrack), { recursive: true });
+  await fs.mkdir(path.dirname(previousTrack), { recursive: true });
+  await fs.writeFile(playlistTrack, "legacy");
+  await fs.writeFile(previousTrack, "existing");
 
   const result = ensurePlaylistFilesystemLayout({ root });
 
-  assert.ok(result.merged > 0);
+  assert.equal(result.merged, 0);
   await assert.doesNotReject(() =>
-    fs.access(path.join(nextDir, "legacy-playlist", "Song.flac")),
+    fs.access(playlistTrack),
   );
-  await assert.rejects(() => fs.access(legacyDir));
+  await assert.doesNotReject(() =>
+    fs.access(previousTrack),
+  );
 });
 
 test("moves playlist sidecars into _playlists", async () => {
-  const playlistRoot = path.join(root, "aurral-playlists");
+  const playlistRoot = path.join(root, "aurral-weekly-flow");
   await fs.mkdir(playlistRoot, { recursive: true });
   await fs.writeFile(path.join(playlistRoot, "[AS] Test.m3u"), "#EXTM3U\n");
 

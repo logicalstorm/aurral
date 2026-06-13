@@ -1463,7 +1463,7 @@ router.post("/playlist/:playlistType/create", requireAdmin, async (req, res) => 
     res.json({
       success: true,
       message:
-        "Playlists ensured. M3U files in aurral-playlists/_playlists reference completed track paths and import after Navidrome scans the Aurral library.",
+        "Playlists ensured. M3U files in the Aurral playlist library reference completed track paths and import after Navidrome scans that library.",
     });
   } catch (error) {
     res.status(500).json({

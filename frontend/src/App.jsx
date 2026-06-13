@@ -17,7 +17,6 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { AudioQueueProvider } from "./contexts/AudioQueueProvider";
 import ReloadPrompt from "./components/ReloadPrompt";
 import UpdateBanner from "./components/UpdateBanner";
-import V2MigrationGate from "./components/V2MigrationGate";
 import { useWebSocketChannel } from "./hooks/useWebSocket";
 
 const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
@@ -283,16 +282,14 @@ function App() {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <V2MigrationGate>
-          <AuthProvider>
-            <AudioPlayerProvider>
-              <AudioQueueProvider>
-                <AppContent />
-                <ReloadPrompt />
-              </AudioQueueProvider>
-            </AudioPlayerProvider>
-          </AuthProvider>
-        </V2MigrationGate>
+        <AuthProvider>
+          <AudioPlayerProvider>
+            <AudioQueueProvider>
+              <AppContent />
+              <ReloadPrompt />
+            </AudioQueueProvider>
+          </AudioPlayerProvider>
+        </AuthProvider>
       </ToastProvider>
     </ThemeProvider>
   );

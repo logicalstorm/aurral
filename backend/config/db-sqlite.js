@@ -262,7 +262,7 @@ export const dbHelpers = {
   },
 };
 
-export const v2MigrationRuntime = initializeSchemaOnStartup(db, dbHelpers);
+initializeSchemaOnStartup(db, dbHelpers);
 
 const existingDownloadFolder = db
   .prepare("SELECT value FROM settings WHERE key = ?")
