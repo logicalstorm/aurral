@@ -5,10 +5,12 @@
 # Aurral
 
 [![Docker](https://img.shields.io/badge/docker-ghcr.io%2Flklynet%2Faurral-blue?logo=docker&logoColor=white)](https://ghcr.io/lklynet/aurral)
+[![Downloads](https://img.shields.io/badge/dynamic/json?url=https://ghcr-badge.elias.eu.org/api/lklynet/aurral/aurral&query=downloadCount&label=downloads&logo=docker&color=2496ed)](https://github.com/lklynet/aurral/pkgs/container/aurral)
 ![GitHub Release](https://img.shields.io/github/v/release/lklynet/aurral)
 ![GitHub License](https://img.shields.io/github/license/lklynet/aurral)
 [![Build](https://img.shields.io/github/actions/workflow/status/lklynet/aurral/release.yml?branch=main)](https://github.com/lklynet/aurral/actions/workflows/release.yml)
 ![Discord](https://img.shields.io/discord/1457052417580339285?style=flat)
+[![Sponsor](https://img.shields.io/github/sponsors/lklynet?label=Sponsor&logo=GitHub-Sponsors&logoColor=fe8a76)](https://github.com/sponsors/lklynet/)
 
 Aurral is a self-hosted music discovery app for the Lidarr stack. Find new artists, request albums, run scheduled flows, import playlists, and follow everything from recommendation to playback — without writing generated files into your main library.
 
