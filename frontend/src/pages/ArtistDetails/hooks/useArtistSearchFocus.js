@@ -49,12 +49,14 @@ export function useArtistSearchFocus({
 
   useEffect(() => {
     if (appliedRef.current || !focusReleaseGroupMbid) return;
-    if (loading || loadingReleases || !artist) return;
+    if (loading || !artist) return;
 
     const { releaseGroup, section } = findReleaseGroup(
       artist,
       focusReleaseGroupMbid,
     );
+
+    if (loadingReleases && !releaseGroup) return;
 
     if (!releaseGroup) {
       const libAlbum = libraryAlbums.find(

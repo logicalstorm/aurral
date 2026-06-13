@@ -1,16 +1,26 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Clock, Loader2, Search } from "lucide-react";
+import AddAlbumButton from "./AddAlbumButton";
+import AddToLibraryButton from "./AddToLibraryButton";
 import SearchLibraryCheck from "./SearchLibraryCheck";
+import { TrackPlaylistMenu } from "../pages/ArtistDetails/components/TrackPlaylistMenu";
+import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../contexts/ToastContext";
 import {
+  addArtistToLibrary,
+  addSharedPlaylistTracks,
+  createSharedPlaylist,
   getBootstrapStatus,
+  getFlowStatus,
   getTagSuggestions,
+  requestAlbumFromSearch,
   searchUnified,
 } from "../utils/api";
+import { getArtistRecordId } from "../utils/artistTaste";
 import {
   buildMixedSuggestionItems,
   getSearchResultKey,
-  getSearchResultLabel,
   navigateFromSearchResult,
 } from "../utils/searchNavigation";
 import {
@@ -22,12 +32,82 @@ import {
 const AUTOCOMPLETE_DEBOUNCE_MS = 250;
 const SUGGEST_LIMIT = 5;
 const TAG_SUGGESTIONS_LIMIT = 8;
+const ALBUM_PENDING_STATUSES = new Set([
+  "searching",
+  "downloading",
+  "processing",
+]);
 
 function isEditableTarget(target) {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;
   const tagName = target.tagName.toLowerCase();
   return ["input", "textarea", "select"].includes(tagName);
+}
+
+function getSuggestionTitle(item) {
+  if (item?.type === "artist") return item.name || "";
+  if (item?.type === "album") return item.title || "";
+  if (item?.type === "track") return item.title || "";
+  if (item?.type === "playlist") return item.name || "";
+  return "";
+}
+
+function getSuggestionMeta(item) {
+  if (item?.type === "artist") return "Artist";
+  if (item?.type === "album") {
+    return item.artistName ? `Album · ${item.artistName}` : "Album";
+  }
+  if (item?.type === "track") {
+    return item.artistName ? `Song · ${item.artistName}` : "Song";
+  }
+  if (item?.type === "playlist") {
+    return item.trackCount != null
+      ? `Playlist · ${item.trackCount} track${item.trackCount === 1 ? "" : "s"}`
+      : "Playlist";
+  }
+  return null;
+}
+
+function getSuggestionItemId(item) {
+  if (!item) return "";
+  if (item.type === "artist") return getArtistRecordId(item) || "";
+  if (item.type === "track") return item.id || item.trackMbid || "";
+  return item.id || "";
+}
+
+function getTrackSavingKey(track) {
+  return String(
+    track?.id ||
+      track?.trackMbid ||
+      `${track?.artistName || ""}:${track?.title || ""}`,
+  );
+}
+
+function isSuggestionInLibrary(item) {
+  if (!item) return false;
+  if (item.inLibrary) return true;
+  return item.type === "album" && ["available", "inLibrary"].includes(item.status);
+}
+
+function buildTrackPlaylistPayload(track) {
+  const payload = {
+    artistName: track?.artistName || "",
+    trackName: track?.title || "",
+    albumName: track?.albumTitle || "",
+    artistMbid: track?.artistMbid || "",
+    albumMbid: track?.albumMbid || "",
+    trackMbid: track?.id || track?.trackMbid || "",
+    releaseYear: track?.releaseYear || null,
+    durationMs:
+      track?.durationMs != null && Number.isFinite(Number(track.durationMs))
+        ? Number(track.durationMs)
+        : null,
+    reason: null,
+    artistAliases: [],
+  };
+  if (!payload.artistName || !payload.trackName) return null;
+  return payload;
 }
 
 function GlobalSearch() {
@@ -46,6 +126,16 @@ function GlobalSearch() {
   const searchGenerationRef = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
+  const { hasPermission } = useAuth();
+  const { showSuccess, showError } = useToast();
+  const canAddArtist = hasPermission("addArtist");
+  const canAddAlbum = hasPermission("addAlbum");
+  const [pendingArtistIds, setPendingArtistIds] = useState({});
+  const [pendingAlbumIds, setPendingAlbumIds] = useState({});
+  const [sharedPlaylists, setSharedPlaylists] = useState([]);
+  const [playlistModalLoading, setPlaylistModalLoading] = useState(false);
+  const [playlistModalError, setPlaylistModalError] = useState("");
+  const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
 
   const selectableRows = useMemo(() => {
     if (suggestionMode === "tag") return suggestionRows;
@@ -326,6 +416,247 @@ function GlobalSearch() {
     setSuggestionIndex(-1);
   }, []);
 
+  const updateSuggestionItem = useCallback((targetItem, updates) => {
+    if (!targetItem) return;
+    const targetType = targetItem.type;
+    const targetId = getSuggestionItemId(targetItem);
+    setSuggestionRows((rows) =>
+      rows.map((row) => {
+        if (row.kind !== "item" || row.item?.type !== targetType) return row;
+        const currentId = getSuggestionItemId(row.item);
+        if (!targetId || currentId !== targetId) return row;
+        const patch =
+          typeof updates === "function" ? updates(row.item) : updates || {};
+        return {
+          ...row,
+          item: {
+            ...row.item,
+            ...patch,
+          },
+        };
+      }),
+    );
+  }, []);
+
+  const loadSharedPlaylists = useCallback(async () => {
+    setPlaylistModalLoading(true);
+    setPlaylistModalError("");
+    try {
+      const data = await getFlowStatus();
+      const playlists = Array.isArray(data?.sharedPlaylists)
+        ? data.sharedPlaylists
+        : [];
+      setSharedPlaylists(playlists);
+      return playlists;
+    } catch (err) {
+      const message =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        "Failed to load playlists";
+      setPlaylistModalError(message);
+      showError(message);
+      return null;
+    } finally {
+      setPlaylistModalLoading(false);
+    }
+  }, [showError]);
+
+  const handleArtistAction = useCallback(
+    async (artist) => {
+      const artistId = getArtistRecordId(artist);
+      if (!artist?.name || !artistId) return false;
+      setPendingArtistIds((prev) => ({ ...prev, [artistId]: true }));
+      try {
+        await addArtistToLibrary({
+          foreignArtistId: artistId,
+          artistName: artist.name,
+        });
+        updateSuggestionItem(artist, { inLibrary: true });
+        showSuccess(`Adding ${artist.name}...`);
+        return true;
+      } catch (err) {
+        showError(
+          err.response?.data?.message ||
+            err.response?.data?.error ||
+            err.message ||
+            "Failed to add artist to library",
+        );
+        return false;
+      } finally {
+        setPendingArtistIds((prev) => {
+          const next = { ...prev };
+          delete next[artistId];
+          return next;
+        });
+      }
+    },
+    [showError, showSuccess, updateSuggestionItem],
+  );
+
+  const handleAlbumAction = useCallback(
+    async (album) => {
+      if (!album?.id) return;
+      const shouldTriggerSearch = album.status === "inLibrary";
+      setPendingAlbumIds((prev) => ({ ...prev, [album.id]: true }));
+      try {
+        const result = await requestAlbumFromSearch({
+          albumMbid: album.id,
+          albumName: album.title,
+          artistMbid: album.artistMbid,
+          artistName: album.artistName,
+          triggerSearch: shouldTriggerSearch,
+        });
+        const nextAlbum = {
+          inLibrary: true,
+          libraryAlbumId: result.album?.id,
+          libraryArtistId: result.artist?.id,
+          status: result.status,
+        };
+        updateSuggestionItem(album, nextAlbum);
+        showSuccess(
+          result.triggeredSearch
+            ? `Search triggered for ${album.title}`
+            : `${album.title} added to library`,
+        );
+      } catch (err) {
+        showError(
+          err.response?.data?.error ||
+            err.response?.data?.message ||
+            err.message ||
+            "Failed to request album",
+        );
+      } finally {
+        setPendingAlbumIds((prev) => {
+          const next = { ...prev };
+          delete next[album.id];
+          return next;
+        });
+      }
+    },
+    [showError, showSuccess, updateSuggestionItem],
+  );
+
+  const handleSearchTrackAdd = useCallback(
+    async (track, target) => {
+      const payload = buildTrackPlaylistPayload(track);
+      if (!payload) {
+        showError("Track details are incomplete");
+        return;
+      }
+
+      const savingKey = getTrackSavingKey(track);
+      setPlaylistModalError("");
+      setPlaylistMenuSavingKey(savingKey);
+      try {
+        if (target?.mode === "new") {
+          const name = String(target?.name || "").trim() || "Playlist";
+          const response = await createSharedPlaylist({
+            name,
+            tracks: [payload],
+          });
+          showSuccess(`Track saved to ${response?.playlist?.name || name}`);
+        } else {
+          const targetPlaylist = sharedPlaylists.find(
+            (playlist) => playlist.id === target?.playlistId,
+          );
+          await addSharedPlaylistTracks(target.playlistId, {
+            tracks: [payload],
+          });
+          showSuccess(`Track added to ${targetPlaylist?.name || "playlist"}`);
+        }
+
+        const nextPlaylists = await loadSharedPlaylists();
+        if (nextPlaylists) {
+          setSharedPlaylists(nextPlaylists);
+        }
+      } catch (err) {
+        const message =
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          err.message ||
+          "Failed to save track to playlist";
+        setPlaylistModalError(message);
+        showError(message);
+      } finally {
+        setPlaylistMenuSavingKey("");
+      }
+    },
+    [loadSharedPlaylists, sharedPlaylists, showError, showSuccess],
+  );
+
+  const renderSuggestionAction = useCallback(
+    (item) => {
+      if (!item) return null;
+      if (isSuggestionInLibrary(item) && item.type !== "track") {
+        return <SearchLibraryCheck />;
+      }
+
+      if (item.type === "artist") {
+        const artistId = getArtistRecordId(item);
+        if (!canAddArtist || !artistId) return null;
+        return (
+          <AddToLibraryButton
+            className="btn-add-library--suggestion"
+            disabled={!!pendingArtistIds[artistId]}
+            isLoading={!!pendingArtistIds[artistId]}
+            onClick={() => handleArtistAction(item)}
+          />
+        );
+      }
+
+      if (item.type === "album") {
+        if (!canAddAlbum || !item.id) return null;
+        const pending = !!pendingAlbumIds[item.id];
+        return (
+          <AddAlbumButton
+            onClick={(event) => {
+              event.stopPropagation();
+              handleAlbumAction(item);
+            }}
+            isLoading={pending}
+            disabled={pending || ALBUM_PENDING_STATUSES.has(item.status)}
+            label="Add to Lidarr"
+          />
+        );
+      }
+
+      if (item.type === "track") {
+        const savingKey = getTrackSavingKey(item);
+        return (
+          <TrackPlaylistMenu
+            track={item}
+            triggerLabel="Add to playlist"
+            playlists={sharedPlaylists}
+            loading={playlistModalLoading}
+            saving={playlistMenuSavingKey === savingKey}
+            error={playlistModalError}
+            defaultNewPlaylistName={`${item.artistName || "Artist"} Picks`}
+            menuVariant="search-suggestion"
+            onLoadPlaylists={loadSharedPlaylists}
+            onSelect={(target) => handleSearchTrackAdd(item, target)}
+          />
+        );
+      }
+
+      return null;
+    },
+    [
+      canAddAlbum,
+      canAddArtist,
+      handleAlbumAction,
+      handleArtistAction,
+      handleSearchTrackAdd,
+      loadSharedPlaylists,
+      pendingAlbumIds,
+      pendingArtistIds,
+      playlistMenuSavingKey,
+      playlistModalError,
+      playlistModalLoading,
+      sharedPlaylists,
+    ],
+  );
+
   const handleKeyDown = (event) => {
     if (event.key === "Escape") {
       closeAutocomplete();
@@ -454,54 +785,42 @@ function GlobalSearch() {
                 selectableCursor += 1;
                 const highlighted = selectableCursor === suggestionIndex;
                 const item = row.item;
-                const label = getSearchResultLabel(item);
-                const typeLabel =
-                  item.type === "artist"
-                    ? "Artist"
-                    : item.type === "album"
-                      ? "Album"
-                      : item.type === "track"
-                        ? "Song"
-                        : item.type === "playlist"
-                          ? "Playlist"
-                          : null;
-                const meta =
-                  item.type === "track" && item.artistName
-                    ? item.artistName
-                    : item.type === "album" && item.artistName
-                      ? item.artistName
-                      : item.type === "playlist" && item.trackCount != null
-                        ? `${item.trackCount} track${item.trackCount === 1 ? "" : "s"}`
-                        : null;
+                const label = getSuggestionTitle(item);
+                const meta = getSuggestionMeta(item);
+                const action = renderSuggestionAction(item);
 
                 return (
-                  <button
+                  <div
                     key={row.key}
-                    type="button"
-                    onClick={() => handleSuggestionSelect(row)}
                     className={`global-search__suggestion global-search__suggestion--rich${
                       highlighted ? " is-highlighted" : ""
                     }`}
                   >
-                    <span className="global-search__suggestion-copy">
-                      <span className="global-search__suggestion-title">
-                        {label}
+                    <button
+                      type="button"
+                      onClick={() => handleSuggestionSelect(row)}
+                      className="global-search__suggestion-main"
+                    >
+                      <span className="global-search__suggestion-copy">
+                        <span className="global-search__suggestion-title">
+                          {label}
+                        </span>
+                        {meta && (
+                          <span className="global-search__suggestion-meta">
+                            {meta}
+                          </span>
+                        )}
                       </span>
-                      {meta && (
-                        <span className="global-search__suggestion-meta">
-                          {meta}
-                        </span>
-                      )}
-                    </span>
-                    <span className="global-search__suggestion-tags">
-                      {typeLabel && (
-                        <span className="global-search__suggestion-type">
-                          {typeLabel}
-                        </span>
-                      )}
-                      {item.inLibrary && <SearchLibraryCheck />}
-                    </span>
-                  </button>
+                    </button>
+                    {action && (
+                      <span
+                        className="global-search__suggestion-actions"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {action}
+                      </span>
+                    )}
+                  </div>
                 );
               })}
         </div>

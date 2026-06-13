@@ -4,15 +4,15 @@ import {
   scoreTextMatch,
 } from "./providers/brainzmashRanking.js";
 import { getMetadataBaseUrl } from "./providers/brainzmashProvider.js";
-import { searchArtists } from "./metadataProvider.js";
+import { searchAlbums, searchArtists } from "./metadataProvider.js";
 import {
   isRemoteSearchConfigured,
   searchRemoteCatalog,
 } from "./aurralSearchClient.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
-import { libraryManager } from "./libraryManager.js";
+import { getCachedArtists } from "./libraryManager.js";
+import { getDiscoveryCache } from "./discoveryService.js";
 import { compareSearchResults, getLocalMatchThreshold } from "./searchRanking.js";
-import { enrichCatalogArtists } from "./searchInference.js";
 
 const unifiedSearchCache = new NodeCache({
   stdTTL: 60,
@@ -22,24 +22,384 @@ const unifiedSearchCache = new NodeCache({
 
 const SUGGEST_LIMIT = 5;
 const FULL_LIMIT = 20;
-const EXACT_MATCH_BOOST = 15;
-const LOCAL_MATCH_THRESHOLD = 16;
+const SEARCH_CONTEXT_TTL_SECONDS = 45;
+const CONTEXT_BOOST = {
+  LIBRARY_TRACK: 420,
+  PLAYLIST_TRACK: 360,
+  PLAYLIST_TRACK_FUZZY: 220,
+  PLAYLIST_ALBUM: 150,
+  LIBRARY_ARTIST: 80,
+  PLAYLIST_ARTIST: 48,
+  EXACT_TITLE_WITH_LIBRARY_ARTIST: 36,
+};
+
+const searchContextCache = new NodeCache({
+  stdTTL: SEARCH_CONTEXT_TTL_SECONDS,
+  checkperiod: 30,
+  maxKeys: 200,
+  useClones: false,
+});
+
+const EMPTY_SEARCH_CONTEXT = {
+  playlists: [],
+  artists: [],
+  tracks: [],
+  index: {
+    libraryArtistIds: new Set(),
+    libraryArtistNames: new Set(),
+    libraryTrackCoreKeys: new Set(),
+    libraryTrackFullKeys: new Set(),
+    playlistArtistIds: new Map(),
+    playlistArtistNames: new Map(),
+    playlistAlbumIds: new Map(),
+    playlistAlbumKeys: new Map(),
+    playlistTrackIds: new Map(),
+    playlistTrackCoreKeys: new Map(),
+    playlistTrackFullKeys: new Map(),
+  },
+};
 
 function isLocalMatch(score, query) {
   return Number(score) > getLocalMatchThreshold(query);
 }
 
-function dedupeCatalogArtists(artists) {
-  const bestByName = new Map();
-  for (const artist of artists) {
-    const key = getNormalizedText(artist.name);
-    if (!key) continue;
-    const existing = bestByName.get(key);
-    if (!existing || compareSearchResults(existing, artist) > 0) {
-      bestByName.set(key, artist);
+function normalizeKey(value) {
+  return getNormalizedText(value);
+}
+
+function addCount(map, key, increment = 1) {
+  if (!key) return;
+  map.set(key, (map.get(key) || 0) + increment);
+}
+
+function hasSetValue(set, value) {
+  const key = String(value || "").trim();
+  return Boolean(key && set.has(key));
+}
+
+function getCount(map, value) {
+  const key = String(value || "").trim();
+  return key ? map.get(key) || 0 : 0;
+}
+
+function getNormalizedCount(map, value) {
+  return getCount(map, normalizeKey(value));
+}
+
+function buildCoreTrackKey(artistName, title) {
+  const artistKey = normalizeKey(artistName);
+  const titleKey = normalizeKey(title);
+  if (!artistKey || !titleKey) return "";
+  return `${artistKey}\u0001${titleKey}`;
+}
+
+function buildFullTrackKey(artistName, title, albumTitle) {
+  const coreKey = buildCoreTrackKey(artistName, title);
+  const albumKey = normalizeKey(albumTitle);
+  if (!coreKey || !albumKey) return "";
+  return `${coreKey}\u0001${albumKey}`;
+}
+
+function buildAlbumKey(artistName, albumTitle) {
+  const artistKey = normalizeKey(artistName);
+  const albumKey = normalizeKey(albumTitle);
+  if (!artistKey || !albumKey) return "";
+  return `${artistKey}\u0001${albumKey}`;
+}
+
+function addArtistToIndex(index, artist, target = "library") {
+  const id = String(
+    artist?.mbid || artist?.foreignArtistId || artist?.artistMbid || artist?.id || "",
+  ).trim();
+  const name = String(
+    artist?.artistName || artist?.name || artist?.artist || "",
+  ).trim();
+
+  if (target === "library") {
+    if (id) index.libraryArtistIds.add(id);
+    const nameKey = normalizeKey(name);
+    if (nameKey) index.libraryArtistNames.add(nameKey);
+    return;
+  }
+
+  if (id) addCount(index.playlistArtistIds, id);
+  addCount(index.playlistArtistNames, normalizeKey(name));
+}
+
+function addPlaylistTrackToIndex(index, track) {
+  const artistName = String(track?.artistName || track?.artist || "").trim();
+  const title = String(track?.trackName || track?.title || track?.name || "").trim();
+  const albumTitle = String(track?.albumName || track?.albumTitle || track?.album || "").trim();
+  const artistMbid = String(track?.artistMbid || track?.artistId || "").trim();
+  const albumMbid = String(track?.albumMbid || track?.releaseGroupMbid || track?.albumId || "").trim();
+  const trackMbid = String(track?.trackMbid || track?.recordingMbid || track?.id || "").trim();
+
+  addArtistToIndex(index, { id: artistMbid, name: artistName }, "playlist");
+  if (albumMbid) addCount(index.playlistAlbumIds, albumMbid);
+  addCount(index.playlistAlbumKeys, buildAlbumKey(artistName, albumTitle));
+  if (trackMbid) addCount(index.playlistTrackIds, trackMbid);
+  addCount(index.playlistTrackCoreKeys, buildCoreTrackKey(artistName, title));
+  addCount(index.playlistTrackFullKeys, buildFullTrackKey(artistName, title, albumTitle));
+}
+
+function addLibraryTrackToIndex(index, track) {
+  const artistName = String(track?.artist || track?.artistName || "").trim();
+  const title = String(track?.title || track?.trackName || "").trim();
+  const albumTitle = String(track?.album || track?.albumTitle || "").trim();
+
+  index.libraryTrackCoreKeys.add(buildCoreTrackKey(artistName, title));
+  const fullKey = buildFullTrackKey(artistName, title, albumTitle);
+  if (fullKey) index.libraryTrackFullKeys.add(fullKey);
+}
+
+export function buildSearchContextIndex({
+  playlists = [],
+  artists = [],
+  tracks = [],
+} = {}) {
+  const index = {
+    libraryArtistIds: new Set(),
+    libraryArtistNames: new Set(),
+    libraryTrackCoreKeys: new Set(),
+    libraryTrackFullKeys: new Set(),
+    playlistArtistIds: new Map(),
+    playlistArtistNames: new Map(),
+    playlistAlbumIds: new Map(),
+    playlistAlbumKeys: new Map(),
+    playlistTrackIds: new Map(),
+    playlistTrackCoreKeys: new Map(),
+    playlistTrackFullKeys: new Map(),
+  };
+
+  for (const artist of Array.isArray(artists) ? artists : []) {
+    addArtistToIndex(index, artist, "library");
+  }
+
+  for (const track of Array.isArray(tracks) ? tracks : []) {
+    addLibraryTrackToIndex(index, track);
+  }
+
+  for (const playlist of Array.isArray(playlists) ? playlists : []) {
+    for (const track of Array.isArray(playlist?.tracks) ? playlist.tracks : []) {
+      addPlaylistTrackToIndex(index, track);
     }
   }
-  return Array.from(bestByName.values()).sort(compareSearchResults);
+
+  index.libraryTrackCoreKeys.delete("");
+  index.libraryTrackFullKeys.delete("");
+  return index;
+}
+
+function isArtistInLibrary(item, index) {
+  return (
+    hasSetValue(index.libraryArtistIds, item?.id || item?.artistMbid) ||
+    index.libraryArtistNames.has(normalizeKey(item?.name || item?.artistName))
+  );
+}
+
+function getPlaylistArtistMatchCount(item, index) {
+  return (
+    getCount(index.playlistArtistIds, item?.id || item?.artistMbid) +
+    getNormalizedCount(index.playlistArtistNames, item?.name || item?.artistName)
+  );
+}
+
+function getPrimarySearchText(item) {
+  if (item?.type === "artist") return item.name || item.artistName || "";
+  if (item?.type === "album") return item.title || "";
+  if (item?.type === "track") return item.title || "";
+  if (item?.type === "playlist") return item.name || "";
+  return "";
+}
+
+function annotateSearchItem(item, query, context = EMPTY_SEARCH_CONTEXT) {
+  if (!item || typeof item !== "object") return item;
+  const index = context.index || EMPTY_SEARCH_CONTEXT.index;
+  const next = { ...item };
+  const primaryMatchScore = scoreTextMatch(query, getPrimarySearchText(next));
+  if (primaryMatchScore > 0) {
+    next.primaryMatchScore = Math.max(
+      Number(next.primaryMatchScore || 0),
+      primaryMatchScore,
+    );
+  }
+  const baseContextBoost = Number(next.contextBoost || 0);
+  let contextBoost = Number.isFinite(baseContextBoost) ? baseContextBoost : 0;
+  const contextReasons = Array.isArray(next.contextReasons)
+    ? [...next.contextReasons]
+    : [];
+
+  const addBoost = (amount, reason) => {
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    contextBoost += amount;
+    if (reason && !contextReasons.includes(reason)) {
+      contextReasons.push(reason);
+    }
+  };
+
+  if (next.type === "artist") {
+    const inLibrary = isArtistInLibrary(next, index);
+    const playlistArtistCount = getPlaylistArtistMatchCount(next, index);
+    const canPersonalizeArtist =
+      next.libraryBoostEligible !== false ||
+      scoreTextMatch(query, next.name) >= getLocalMatchThreshold(query);
+    if (inLibrary) {
+      next.inLibrary = true;
+      if (canPersonalizeArtist) {
+        addBoost(CONTEXT_BOOST.LIBRARY_ARTIST, "library_artist");
+      }
+    }
+    if (playlistArtistCount > 0) {
+      next.inPlaylist = true;
+      next.playlistMatchCount = playlistArtistCount;
+      if (canPersonalizeArtist) {
+        addBoost(
+          CONTEXT_BOOST.PLAYLIST_ARTIST + Math.min(playlistArtistCount, 8) * 4,
+          "playlist_artist",
+        );
+      }
+    }
+  }
+
+  if (next.type === "album") {
+    const artistInLibrary = isArtistInLibrary(
+      { id: next.artistMbid, name: next.artistName },
+      index,
+    );
+    const playlistArtistCount = getPlaylistArtistMatchCount(
+      { id: next.artistMbid, name: next.artistName },
+      index,
+    );
+    const playlistAlbumCount =
+      getCount(index.playlistAlbumIds, next.id || next.albumMbid) +
+      getCount(index.playlistAlbumIds, next.albumMbid) +
+      getCount(index.playlistAlbumKeys, buildAlbumKey(next.artistName, next.title));
+
+    if (artistInLibrary) {
+      next.artistInLibrary = true;
+      addBoost(CONTEXT_BOOST.LIBRARY_ARTIST, "library_artist");
+    }
+    if (playlistArtistCount > 0) {
+      next.artistInPlaylist = true;
+      addBoost(CONTEXT_BOOST.PLAYLIST_ARTIST, "playlist_artist");
+    }
+    if (playlistAlbumCount > 0) {
+      next.inPlaylist = true;
+      next.playlistMatchCount = playlistAlbumCount;
+      addBoost(CONTEXT_BOOST.PLAYLIST_ALBUM, "playlist_album");
+    }
+    if (artistInLibrary && scoreTextMatch(query, next.title) >= 92) {
+      addBoost(
+        CONTEXT_BOOST.EXACT_TITLE_WITH_LIBRARY_ARTIST,
+        "exact_title_library_artist",
+      );
+    }
+  }
+
+  if (next.type === "track") {
+    const artistInLibrary = isArtistInLibrary(
+      { id: next.artistMbid, name: next.artistName },
+      index,
+    );
+    const artistPlaylistCount = getPlaylistArtistMatchCount(
+      { id: next.artistMbid, name: next.artistName },
+      index,
+    );
+    const coreTrackKey = buildCoreTrackKey(next.artistName, next.title);
+    const fullTrackKey = buildFullTrackKey(
+      next.artistName,
+      next.title,
+      next.albumTitle,
+    );
+    const playlistTrackCount =
+      getCount(index.playlistTrackIds, next.id || next.trackMbid) +
+      getCount(index.playlistTrackIds, next.trackMbid) +
+      getCount(index.playlistTrackFullKeys, fullTrackKey);
+    const fuzzyPlaylistTrackCount = getCount(
+      index.playlistTrackCoreKeys,
+      coreTrackKey,
+    );
+    const libraryTrackMatch =
+      index.libraryTrackCoreKeys.has(coreTrackKey) ||
+      (fullTrackKey && index.libraryTrackFullKeys.has(fullTrackKey));
+    const playlistAlbumCount =
+      getCount(index.playlistAlbumIds, next.albumMbid) +
+      getCount(index.playlistAlbumKeys, buildAlbumKey(next.artistName, next.albumTitle));
+
+    if (libraryTrackMatch) {
+      next.inLibrary = true;
+      addBoost(CONTEXT_BOOST.LIBRARY_TRACK, "library_track");
+    }
+    if (artistInLibrary) {
+      next.artistInLibrary = true;
+      addBoost(CONTEXT_BOOST.LIBRARY_ARTIST, "library_artist");
+    }
+    if (playlistTrackCount > 0 || fuzzyPlaylistTrackCount > 0) {
+      const exactCount = playlistTrackCount || 0;
+      const fuzzyCount = Math.max(0, fuzzyPlaylistTrackCount - exactCount);
+      const totalCount = exactCount + fuzzyCount;
+      next.inPlaylist = true;
+      next.playlistMatchCount = totalCount;
+      addBoost(
+        (exactCount > 0
+          ? CONTEXT_BOOST.PLAYLIST_TRACK
+          : CONTEXT_BOOST.PLAYLIST_TRACK_FUZZY) +
+          Math.min(totalCount, 8) * 5,
+        exactCount > 0 ? "playlist_track" : "playlist_track_fuzzy",
+      );
+    } else if (playlistAlbumCount > 0) {
+      next.inPlaylist = true;
+      next.playlistMatchCount = playlistAlbumCount;
+      addBoost(CONTEXT_BOOST.PLAYLIST_ALBUM, "playlist_album");
+    } else if (artistPlaylistCount > 0) {
+      next.artistInPlaylist = true;
+      addBoost(CONTEXT_BOOST.PLAYLIST_ARTIST, "playlist_artist");
+    }
+    if (artistInLibrary && scoreTextMatch(query, next.title) >= 92) {
+      addBoost(
+        CONTEXT_BOOST.EXACT_TITLE_WITH_LIBRARY_ARTIST,
+        "exact_title_library_artist",
+      );
+    }
+  }
+
+  if (contextBoost > 0) {
+    next.contextBoost = contextBoost;
+    next.contextReasons = contextReasons;
+  }
+  return next;
+}
+
+function sliceCatalogItems(items, limit = FULL_LIMIT) {
+  return (Array.isArray(items) ? items : []).filter(Boolean).slice(0, limit);
+}
+
+export function applyCatalogSearchContext(
+  rawCatalog,
+  query,
+  context = EMPTY_SEARCH_CONTEXT,
+  limit = FULL_LIMIT,
+) {
+  const artists = (rawCatalog?.artists || []).map((artist) =>
+    annotateSearchItem(artist, query, context),
+  );
+  const annotatedTracks = (rawCatalog?.tracks || []).map((track) =>
+    annotateSearchItem(track, query, context),
+  );
+  const annotatedAlbums = (rawCatalog?.albums || []).map((album) =>
+    annotateSearchItem(album, query, context),
+  );
+
+  return {
+    artists: sliceCatalogItems(artists, limit),
+    albums: sliceCatalogItems(annotatedAlbums, limit),
+    tracks: sliceCatalogItems(annotatedTracks, limit),
+  };
+}
+
+function pickCatalogTopFallback(catalog) {
+  if (!catalog) return null;
+  return catalog.artists?.[0] || catalog.albums?.[0] || catalog.tracks?.[0] || null;
 }
 
 function parsePositiveInt(value, fallback) {
@@ -74,19 +434,43 @@ function mapBrainzmashArtist(item) {
   };
 }
 
-async function searchBrainzmashArtistCatalog(query, limit) {
+function mapBrainzmashAlbum(item) {
+  return {
+    type: "album",
+    source: "brainzmash",
+    id: item.id,
+    key: item.id,
+    title: item.title || "Untitled Release",
+    artistName: item.artistName || "Unknown Artist",
+    artistMbid: item.artistId || null,
+    primaryType: item.type || null,
+    secondaryTypes: Array.isArray(item.secondaryTypes) ? item.secondaryTypes : [],
+    releaseDate: item.releaseDate || null,
+    coverUrl: item.coverUrl || null,
+    inLibrary: false,
+    score: item.score || 0,
+  };
+}
+
+async function searchBrainzmashCatalog(query, limit) {
+  const trimmed = String(query || "").trim();
   try {
-    const result = await searchArtists(String(query || "").trim(), {
-      limit,
-      offset: 0,
-    });
+    const [artistResult, albumResult] = await Promise.all([
+      searchArtists(trimmed, { limit, offset: 0 }),
+      searchAlbums(trimmed, {
+        limit,
+        offset: 0,
+        releaseTypes: [],
+        sort: "relevance",
+      }),
+    ]);
     return {
-      artists: (result.items || []).map(mapBrainzmashArtist),
-      albums: [],
+      artists: (artistResult.items || []).map(mapBrainzmashArtist),
+      albums: (albumResult.items || []).map(mapBrainzmashAlbum),
       tracks: [],
     };
   } catch (error) {
-    console.warn("[UnifiedSearch] BrainzMash artist fallback failed:", error.message);
+    console.warn("[UnifiedSearch] BrainzMash catalog fallback failed:", error.message);
     return { artists: [], albums: [], tracks: [] };
   }
 }
@@ -100,11 +484,92 @@ async function searchCatalog(query, { mode, limit }) {
         remoteCatalog.albums.length > 0 ||
         remoteCatalog.tracks.length > 0;
       if (hasResults) {
-        return remoteCatalog;
+        return {
+          top: remoteCatalog.top || null,
+          artists: remoteCatalog.artists,
+          albums: remoteCatalog.albums,
+          tracks: remoteCatalog.tracks,
+        };
       }
     }
   }
-  return searchBrainzmashArtistCatalog(query, limit);
+  const catalog = await searchBrainzmashCatalog(query, limit);
+  return {
+    ...catalog,
+    top: pickCatalogTopFallback(catalog),
+  };
+}
+
+function getDiscoverPlaylistsForSearch(user) {
+  try {
+    const cache = user ? getDiscoveryCache(user) : getDiscoveryCache();
+    return (Array.isArray(cache?.discoverPlaylists) ? cache.discoverPlaylists : [])
+      .map((playlist) => {
+        const presetId = String(playlist?.presetId || playlist?.id || "").trim();
+        const name = String(playlist?.name || "").trim();
+        if (!presetId || !name) return null;
+        const tracks = Array.isArray(playlist?.tracks) ? playlist.tracks : [];
+        return {
+          id: playlist.adoptedPlaylistId || `discover:${presetId}`,
+          name,
+          tracks,
+          trackCount: tracks.length,
+          discoverPresetId: presetId,
+          sourceFlowId: playlist.adoptedFlowId || null,
+          isDiscoverPlaylist: !playlist.adoptedPlaylistId,
+        };
+      })
+      .filter(Boolean);
+  } catch (error) {
+    console.warn(
+      "[UnifiedSearch] Failed to read discover playlists:",
+      error.message,
+    );
+    return [];
+  }
+}
+
+function getAllPlaylistsForSearch(user) {
+  const shared = getVisiblePlaylistsForUser(user);
+  const discover = getDiscoverPlaylistsForSearch(user);
+  const seen = new Set(shared.map((playlist) => playlist.id));
+  return [
+    ...shared,
+    ...discover.filter((playlist) => !seen.has(playlist.id)),
+  ];
+}
+
+function getVisiblePlaylistsForUser(user) {
+  try {
+    return user ? flowPlaylistConfig.getSharedPlaylistsForUser(user) : [];
+  } catch (error) {
+    console.warn("[UnifiedSearch] Failed to read playlists:", error.message);
+    return [];
+  }
+}
+
+function loadSearchContext(user) {
+  const playlists = getAllPlaylistsForSearch(user);
+  const artists = getCachedArtists();
+  const context = {
+    playlists,
+    artists: Array.isArray(artists) ? artists : [],
+    tracks: [],
+  };
+  return {
+    ...context,
+    index: buildSearchContextIndex(context),
+  };
+}
+
+function getSearchContext(user) {
+  const cacheKey = user?.id || "anon";
+  const cached = searchContextCache.get(cacheKey);
+  if (cached) return cached;
+
+  const context = loadSearchContext(user);
+  searchContextCache.set(cacheKey, context);
+  return context;
 }
 
 export function searchLocalFromData(
@@ -125,23 +590,32 @@ export function searchLocalFromData(
         .map((track) =>
           scoreTextMatch(
             query,
-            `${track?.artistName || ""} ${track?.trackName || ""}`,
+            `${track?.artistName || track?.artist || ""} ${track?.trackName || track?.title || ""}`,
           ),
         )
         .filter((score) => score > 0);
+      const artistScores = (Array.isArray(playlist?.tracks) ? playlist.tracks : [])
+        .map((track) =>
+          scoreTextMatch(query, track?.artistName || track?.artist || ""),
+        )
+        .filter((score) => score > 0);
       const bestTrackScore = trackScores.length > 0 ? Math.max(...trackScores) : 0;
+      const bestArtistScore =
+        artistScores.length > 0 ? Math.max(...artistScores) : 0;
       const nameScore = scoreTextMatch(query, name);
-      const score = Math.max(nameScore, bestTrackScore);
+      const score = Math.max(nameScore, bestTrackScore, bestArtistScore);
       if (!isLocalMatch(score, query)) return null;
       return {
         type: "playlist",
-        source: "library",
+        source: playlist.isDiscoverPlaylist ? "discover" : "library",
         id: playlist.id,
         key: `playlist:${playlist.id}`,
         name,
         trackCount: Number(playlist?.trackCount || playlist?.tracks?.length || 0),
+        discoverPresetId: playlist.discoverPresetId || null,
+        sourceFlowId: playlist.sourceFlowId || null,
         score,
-        inLibrary: true,
+        inLibrary: !playlist.isDiscoverPlaylist,
       };
     })
     .filter(Boolean)
@@ -206,53 +680,34 @@ export function searchLocalFromData(
   };
 }
 
-function pickTopResult({ library, catalog }) {
-  const catalogArtists = dedupeCatalogArtists(catalog?.artists || []);
-  const candidates = [
-    ...(library?.playlists || []),
-    ...(library?.tracks || []),
-    ...(library?.artists || []),
-    ...catalogArtists,
-    ...(catalog?.tracks || []),
-    ...(catalog?.albums || []),
-  ]
-    .filter(Boolean)
-    .sort(compareSearchResults);
-  return candidates[0] || null;
-}
-
-async function searchLocalLibrary(query, limit, user, mode = "suggest") {
-  const playlists = user
-    ? flowPlaylistConfig.getSharedPlaylistsForUser(user)
-    : [];
-  const isSuggest = normalizeMode(mode) === "suggest";
-  const timeoutMs = isSuggest ? 2500 : 8000;
-
-  const withTimeout = (promise, label) =>
-    Promise.race([
-      promise,
-      new Promise((_, reject) => {
-        setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs);
-      }),
-    ]);
-
+async function searchLocalLibrary(query, limit, user) {
   try {
-    const artistsPromise = withTimeout(
-      libraryManager.getAllArtists(),
-      "Library artists",
-    );
-    const tracksPromise = isSuggest
-      ? Promise.resolve([])
-      : withTimeout(libraryManager.getPlaybackQueue(), "Library tracks");
-    const [artists, tracks] = await Promise.all([artistsPromise, tracksPromise]);
-    return searchLocalFromData(
-      query,
-      { playlists, artists, tracks },
-      limit,
-    );
+    const context = getSearchContext(user);
+    return {
+      context,
+      library: searchLocalFromData(
+        query,
+        {
+          playlists: context.playlists,
+          artists: context.artists,
+          tracks: context.tracks,
+        },
+        limit,
+      ),
+    };
   } catch (error) {
-    console.warn("[UnifiedSearch] Local library search failed:", error.message);
-    return searchLocalFromData(query, { playlists }, limit);
+    console.warn("[UnifiedSearch] Local search context failed:", error.message);
+    const playlists = getAllPlaylistsForSearch(user);
+    const fallbackContext = {
+      playlists,
+      artists: [],
+      tracks: [],
+      index: buildSearchContextIndex({ playlists }),
+    };
+    return {
+      context: fallbackContext,
+      library: searchLocalFromData(query, { playlists }, limit),
+    };
   }
 }
 
@@ -281,35 +736,28 @@ export async function searchUnified(
   const cached = unifiedSearchCache.get(cacheKey);
   if (cached) return cached;
 
-  const [rawCatalog, library] = await Promise.all([
+  const [fetchedCatalog, local] = await Promise.all([
     searchCatalog(trimmed, {
       mode: normalizedMode,
       limit: perBucketLimit,
     }),
-    searchLocalLibrary(trimmed, perBucketLimit, user, normalizedMode),
+    searchLocalLibrary(trimmed, perBucketLimit, user),
   ]);
-  const catalog = {
-    artists: dedupeCatalogArtists(
-      enrichCatalogArtists(
-        {
-          artists: rawCatalog.artists || [],
-          albums: rawCatalog.albums || [],
-          tracks: rawCatalog.tracks || [],
-        },
-        trimmed,
-      ),
-    ),
-    albums: rawCatalog.albums || [],
-    tracks: rawCatalog.tracks || [],
-  };
+  const library = local?.library || { artists: [], tracks: [], playlists: [] };
+  const context = local?.context || EMPTY_SEARCH_CONTEXT;
+  const catalog = applyCatalogSearchContext(
+    fetchedCatalog,
+    trimmed,
+    context,
+    perBucketLimit,
+  );
+  const rawTop = fetchedCatalog?.top || pickCatalogTopFallback(catalog);
+  const top = rawTop ? annotateSearchItem(rawTop, trimmed, context) : null;
 
   const response = {
     query: trimmed,
     mode: normalizedMode,
-    top: pickTopResult({
-      library,
-      catalog,
-    }),
+    top: top?.type ? top : null,
     library: {
       artists: library.artists,
       tracks: library.tracks,

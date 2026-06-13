@@ -31,16 +31,37 @@ export function buildArtistFocusState(item, overrides = {}) {
   return state;
 }
 
-export function getReleaseNavigationTarget(item) {
+function buildReleaseFocusState(item, releaseGroupMbid) {
+  const releaseTitle = item?.type === "album" ? item.title : item?.albumTitle;
+  const releaseDate =
+    item?.releaseDate ||
+    item?.firstReleaseDate ||
+    (item?.releaseYear ? String(item.releaseYear) : "");
+  return {
+    id: releaseGroupMbid,
+    title: releaseTitle || "",
+    firstReleaseDate: releaseDate || "",
+    primaryType: item?.primaryType || item?.releaseType || "Album",
+    secondaryTypes: Array.isArray(item?.secondaryTypes)
+      ? item.secondaryTypes
+      : [],
+    coverUrl: item?.coverUrl || item?.imageUrl || item?.image || "",
+    deezerAlbumId: item?._deezerAlbumId || item?.deezerAlbumId || "",
+  };
+}
+
+export function getAlbumTracklistNavigationTarget(item) {
   if (!item?.artistMbid) return null;
   const releaseGroupMbid = item.type === "album" ? item.id : item.albumMbid;
   if (!releaseGroupMbid) return null;
   const state = buildArtistFocusState(item, {
     focusReleaseGroupMbid: releaseGroupMbid,
+    focusReleaseGroup: buildReleaseFocusState(item, releaseGroupMbid),
   });
   if (item.type === "track") {
     const trackMbid = item.id || item.trackMbid;
     if (trackMbid) state.focusTrackMbid = trackMbid;
+    if (item.title) state.focusTrackTitle = item.title;
   }
   return {
     pathname: `/artist/${item.artistMbid}/albums`,
@@ -48,7 +69,30 @@ export function getReleaseNavigationTarget(item) {
   };
 }
 
-export function navigateFromSearchResult(navigate, item, { query = "" } = {}) {
+export function getReleaseNavigationTarget(item) {
+  if (!item?.artistMbid) return null;
+  const releaseGroupMbid = item.type === "album" ? item.id : item.albumMbid;
+  if (!releaseGroupMbid) return null;
+  const state = buildArtistFocusState(item, {
+    focusReleaseGroupMbid: releaseGroupMbid,
+    focusReleaseGroup: buildReleaseFocusState(item, releaseGroupMbid),
+  });
+  if (item.type === "track") {
+    const trackMbid = item.id || item.trackMbid;
+    if (trackMbid) state.focusTrackMbid = trackMbid;
+    if (item.title) state.focusTrackTitle = item.title;
+  }
+  return {
+    pathname: `/artist/${item.artistMbid}/release/${releaseGroupMbid}`,
+    state,
+  };
+}
+
+export function navigateFromSearchResult(
+  navigate,
+  item,
+  { query = "", albumDestination = "release" } = {},
+) {
   if (!item || typeof navigate !== "function") return;
 
   if (item.type === "artist") {
@@ -63,7 +107,10 @@ export function navigateFromSearchResult(navigate, item, { query = "" } = {}) {
   }
 
   if (item.type === "album") {
-    const target = getReleaseNavigationTarget(item);
+    const target =
+      albumDestination === "tracklist"
+        ? getAlbumTracklistNavigationTarget(item)
+        : getReleaseNavigationTarget(item);
     if (target) {
       navigate(target.pathname, { state: target.state });
       return;
@@ -79,7 +126,10 @@ export function navigateFromSearchResult(navigate, item, { query = "" } = {}) {
       navigate("/library");
       return;
     }
-    const target = getReleaseNavigationTarget(item);
+    const target =
+      albumDestination === "tracklist"
+        ? getAlbumTracklistNavigationTarget(item)
+        : getReleaseNavigationTarget(item);
     if (target) {
       navigate(target.pathname, { state: target.state });
       return;
@@ -99,6 +149,14 @@ export function navigateFromSearchResult(navigate, item, { query = "" } = {}) {
   }
 
   if (item.type === "playlist" && item.id) {
+    if (item.discoverPresetId && item.source === "discover") {
+      navigate("/discover");
+      return;
+    }
+    if (item.sourceFlowId) {
+      navigate("/flows", { state: { selectedFlowId: item.sourceFlowId } });
+      return;
+    }
     navigate("/playlists", { state: { selectedPlaylistId: item.id } });
   }
 }
@@ -110,35 +168,6 @@ function normalizeSearchText(value) {
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-const SEARCH_RANK = {
-  PLAYLIST: 5000,
-  LIBRARY_TRACK: 4000,
-  LIBRARY_ARTIST: 3500,
-  LIBRARY_ITEM: 3000,
-};
-
-const LIBRARY_PRIORITY_MIN_SCORE = 82;
-
-function getLibraryTierBoost(item, base) {
-  if (base < LIBRARY_PRIORITY_MIN_SCORE) return 0;
-  if (item?.type === "playlist") return SEARCH_RANK.PLAYLIST;
-  if (item?.inLibrary) {
-    if (item.type === "track") return SEARCH_RANK.LIBRARY_TRACK;
-    if (item.type === "artist") return SEARCH_RANK.LIBRARY_ARTIST;
-    return SEARCH_RANK.LIBRARY_ITEM;
-  }
-  return 0;
-}
-
-export function getSearchRankScore(item) {
-  const base = Number(item?.score) || 0;
-  return base + getLibraryTierBoost(item, base);
-}
-
-export function compareSearchResults(left, right) {
-  return getSearchRankScore(right) - getSearchRankScore(left);
 }
 
 function applyLibraryFlags(item, libraryFlags = {}) {
@@ -165,112 +194,6 @@ function prepareSearchCandidates(items, libraryFlags) {
   return items
     .filter(Boolean)
     .map((item) => applyLibraryFlags(item, libraryFlags));
-}
-
-function titleMatchesQuery(query, title) {
-  const normalizedQuery = normalizeSearchText(query);
-  const normalizedTitle = normalizeSearchText(title);
-  if (!normalizedQuery || !normalizedTitle) return false;
-  if (normalizedQuery === normalizedTitle) return true;
-  return (
-    normalizedTitle.includes(normalizedQuery) ||
-    normalizedQuery.includes(normalizedTitle)
-  );
-}
-
-function mapInferredArtist({ artistMbid, artistName, score }) {
-  if (!artistMbid || !artistName) return null;
-  return {
-    type: "artist",
-    source: "aurral-search",
-    id: artistMbid,
-    key: artistMbid,
-    name: artistName,
-    sortName: artistName,
-    inLibrary: false,
-    hasMbid: true,
-    score,
-  };
-}
-
-export function inferArtistsFromCatalog(catalog, query) {
-  const normalizedQuery = normalizeSearchText(query);
-  const byMbid = new Map();
-
-  for (const album of catalog?.albums || []) {
-    if (!album?.artistMbid || !album?.artistName) continue;
-    let score = Number(album.score) || 0;
-    const normalizedTitle = normalizeSearchText(album.title);
-    if (normalizedQuery && normalizedTitle === normalizedQuery) {
-      score += 35;
-    } else if (titleMatchesQuery(query, album.title)) {
-      score += 18;
-    }
-    const existing = byMbid.get(album.artistMbid);
-    if (!existing || score > existing.score) {
-      const mapped = mapInferredArtist({
-        artistMbid: album.artistMbid,
-        artistName: album.artistName,
-        score,
-      });
-      if (mapped) byMbid.set(album.artistMbid, mapped);
-    }
-  }
-
-  for (const track of catalog?.tracks || []) {
-    if (!track?.artistMbid || !track?.artistName) continue;
-    let score = Number(track.score) || 0;
-    const normalizedTitle = normalizeSearchText(track.title);
-    if (normalizedQuery && normalizedTitle === normalizedQuery) {
-      score += 30;
-    } else if (titleMatchesQuery(query, track.title)) {
-      score += 15;
-    }
-    const existing = byMbid.get(track.artistMbid);
-    if (!existing || score > existing.score) {
-      const mapped = mapInferredArtist({
-        artistMbid: track.artistMbid,
-        artistName: track.artistName,
-        score,
-      });
-      if (mapped) byMbid.set(track.artistMbid, mapped);
-    }
-  }
-
-  return Array.from(byMbid.values());
-}
-
-function demoteShadowArtists(artists, catalog, query) {
-  const normalizedQuery = normalizeSearchText(query);
-  if (!normalizedQuery) return artists;
-
-  const hasExactAlbumTitle = (catalog?.albums || []).some(
-    (album) => normalizeSearchText(album?.title) === normalizedQuery,
-  );
-  if (!hasExactAlbumTitle) return artists;
-
-  return artists.map((artist) => {
-    if (normalizeSearchText(artist?.name) !== normalizedQuery) return artist;
-    return {
-      ...artist,
-      score: Math.max(0, (Number(artist.score) || 0) - 45),
-    };
-  });
-}
-
-export function getCatalogArtists(data, query) {
-  if (!data) return [];
-  const catalog = {
-    artists: data.catalog?.artists || [],
-    albums: data.catalog?.albums || [],
-    tracks: data.catalog?.tracks || [],
-  };
-  const inferred = inferArtistsFromCatalog(catalog, query);
-  return demoteShadowArtists(
-    [...inferred, ...catalog.artists],
-    catalog,
-    query,
-  );
 }
 
 function getResultIdentity(item) {
@@ -301,70 +224,58 @@ function dedupeItems(items, seen, seenArtistNames = null) {
 }
 
 export function dedupeArtistsByName(artists) {
-  const bestByName = new Map();
+  const seen = new Set();
+  const result = [];
   for (const artist of artists) {
     const key = normalizeSearchText(artist?.name);
-    if (!key) continue;
-    const existing = bestByName.get(key);
-    if (!existing) {
-      bestByName.set(key, artist);
-      continue;
-    }
-    if (compareSearchResults(artist, existing) < 0) {
-      bestByName.set(key, artist);
-    }
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(artist);
   }
-  return Array.from(bestByName.values()).sort(compareSearchResults);
+  return result;
 }
 
-export function pickTopSearchArtist(data, libraryFlags = {}, query = "") {
-  if (!data) return null;
-  const searchQuery = query || data.query || "";
-  const artists = dedupeArtistsByName(
-    prepareSearchCandidates(
-      [
-        ...(data.library?.artists || []),
-        ...getCatalogArtists(data, searchQuery),
-      ],
-      libraryFlags,
-    ),
-  ).filter((artist) => artist?.id);
-  const libraryArtist = artists.find((artist) => artist.inLibrary);
-  if (libraryArtist) return libraryArtist;
-  return artists[0] || null;
+function getSearchResultBuckets(data) {
+  return [
+    ...(data.library?.playlists || []),
+    ...(data.library?.tracks || []),
+    ...(data.library?.artists || []),
+    ...(data.catalog?.artists || []),
+    ...(data.catalog?.albums || []),
+    ...(data.catalog?.tracks || []),
+  ];
 }
 
 export function buildMixedSearchPageItems(
   data,
-  { limit = 24, excludeArtist = null, libraryFlags = {} } = {},
+  { limit = 24, excludeArtist = null, excludeItem = null, libraryFlags = {} } = {},
 ) {
   if (!data) return [];
 
-  const excludeName = excludeArtist
-    ? normalizeSearchText(excludeArtist.name)
+  const excluded = excludeItem || excludeArtist;
+  const excludeName = excluded?.type === "artist"
+    ? normalizeSearchText(excluded.name)
     : "";
-  const excludeId = excludeArtist?.id || null;
+  const excludeId = excluded?.id || null;
+  const excludeIdentity = getResultIdentity(excluded);
 
   const candidates = prepareSearchCandidates(
-    [
-      ...(data.library?.playlists || []),
-      ...(data.library?.tracks || []),
-      ...(data.library?.artists || []),
-      ...getCatalogArtists(data, data.query || ""),
-      ...(data.catalog?.tracks || []),
-      ...(data.catalog?.albums || []),
-    ],
+    getSearchResultBuckets(data),
     libraryFlags,
-  )
-    .filter((item) => {
-      if (item.type !== "artist" || !excludeArtist) return true;
-      if (excludeId && item.id === excludeId) return false;
-      if (excludeName && normalizeSearchText(item.name) === excludeName) {
-        return false;
-      }
-      return true;
-    })
-    .sort(compareSearchResults);
+  ).filter((item) => {
+    if (!excluded) return true;
+    if (excludeIdentity && getResultIdentity(item) === excludeIdentity) {
+      return false;
+    }
+    if (excludeId && item.id === excludeId && item.type === excluded.type) {
+      return false;
+    }
+    if (item.type !== "artist") return true;
+    if (excludeName && normalizeSearchText(item.name) === excludeName) {
+      return false;
+    }
+    return true;
+  });
 
   const seen = new Set();
   const seenArtistNames = new Set();
@@ -375,21 +286,32 @@ export function buildMixedSearchPageItems(
 export function buildMixedSuggestionItems(data, limit = 8, libraryFlags = {}) {
   if (!data) return [];
 
-  const candidates = prepareSearchCandidates(
-    [
-      ...(data.library?.playlists || []),
-      ...(data.library?.tracks || []),
-      ...(data.library?.artists || []),
-      ...getCatalogArtists(data, data.query || ""),
-      ...(data.catalog?.tracks || []),
-      ...(data.catalog?.albums || []),
-    ],
-    libraryFlags,
-  ).sort(compareSearchResults);
-
   const seen = new Set();
   const seenArtistNames = new Set();
-  return dedupeItems(candidates, seen, seenArtistNames).slice(0, limit);
+  const result = [];
+
+  const topItem = data.top
+    ? prepareSearchCandidates([data.top], libraryFlags)[0]
+    : null;
+  if (topItem) {
+    result.push(topItem);
+    const identity = getResultIdentity(topItem);
+    if (identity) seen.add(identity);
+    if (topItem.type === "artist") {
+      const nameKey = normalizeSearchText(topItem.name);
+      if (nameKey) seenArtistNames.add(nameKey);
+    }
+  }
+
+  const candidates = prepareSearchCandidates(
+    getSearchResultBuckets(data),
+    libraryFlags,
+  );
+  for (const item of dedupeItems(candidates, seen, seenArtistNames)) {
+    if (result.length >= limit) break;
+    result.push(item);
+  }
+  return result.slice(0, limit);
 }
 
 export function buildUnifiedSuggestionSections(data) {
@@ -436,7 +358,7 @@ export function buildUnifiedSuggestionSections(data) {
   }
 
   const artists = dedupeItems(
-    getCatalogArtists(data, data.query || ""),
+    data.catalog?.artists || [],
     seen,
     seenArtistNames,
   );
@@ -491,3 +413,4 @@ export function flattenSuggestionSections(sections) {
   }
   return rows;
 }
+
