@@ -43,6 +43,8 @@ const formatDuration = (track) => {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 };
 
+const TRACK_PREVIEW_LIMIT = 8;
+
 export function ArtistDetailsDownloadTargets({
   targets,
   artist,
@@ -67,6 +69,7 @@ export function ArtistDetailsDownloadTargets({
     buildAurralPick(targets);
   const [tracks, setTracks] = useState([]);
   const [loadingTracks, setLoadingTracks] = useState(false);
+  const [showAllTracks, setShowAllTracks] = useState(false);
   useEffect(() => {
     const releaseGroupId = missingReleasePick?.releaseGroupId;
     const releaseGroup = missingReleasePick?.releaseGroup;
@@ -108,6 +111,16 @@ export function ArtistDetailsDownloadTargets({
     missingReleasePick?.title,
     missingReleasePick?.type,
   ]);
+
+  useEffect(() => {
+    setShowAllTracks(false);
+  }, [missingReleasePick?.releaseGroupId]);
+
+  const visibleTracks =
+    showAllTracks || tracks.length <= TRACK_PREVIEW_LIMIT
+      ? tracks
+      : tracks.slice(0, TRACK_PREVIEW_LIMIT);
+  const hasHiddenTracks = tracks.length > TRACK_PREVIEW_LIMIT;
 
   const normalizeTrack = useCallback(
     (track, index) =>
@@ -222,7 +235,7 @@ export function ArtistDetailsDownloadTargets({
                   onShufflePlay={handleShufflePlay}
                 />
                 <div className="artist-pick-panel__track-grid">
-                {tracks.map((track, index) => {
+                {visibleTracks.map((track, index) => {
                   const currentTrackId = String(
                     track.id ?? track.mbid ?? `pick-${index}`,
                   );
@@ -286,6 +299,17 @@ export function ArtistDetailsDownloadTargets({
                   );
                 })}
                 </div>
+                {hasHiddenTracks ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm artist-pick-panel__show-all"
+                    onClick={() => setShowAllTracks((current) => !current)}
+                  >
+                    {showAllTracks
+                      ? "Show fewer tracks"
+                      : `Show all ${tracks.length} tracks`}
+                  </button>
+                ) : null}
               </>
             ) : null}
           </div>

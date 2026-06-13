@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import { useNavigate } from "react-router-dom";
 import {
@@ -132,6 +132,8 @@ export function DiscoverPlaylistSection({
   const [playlistsLoading, setPlaylistsLoading] = useState(false);
   const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
   const [playlistMenuError, setPlaylistMenuError] = useState("");
+  const expandedPanelRef = useRef(null);
+  const playlistCardsRef = useRef(null);
   const navigate = useNavigate();
   const { showSuccess, showError } = useToast();
 
@@ -155,6 +157,27 @@ export function DiscoverPlaylistSection({
   const handleToggle = useCallback((presetId) => {
     setExpandedId((current) => (current === presetId ? null : presetId));
   }, []);
+
+  useEffect(() => {
+    if (!expandedId) return undefined;
+
+    const handlePointerDown = (event) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (expandedPanelRef.current?.contains(target)) return;
+      if (playlistCardsRef.current?.contains(target)) return;
+      if (
+        target instanceof Element &&
+        target.closest(".artist-options-menu--discover")
+      ) {
+        return;
+      }
+      setExpandedId(null);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [expandedId]);
 
   const loadPlaylistsForMenu = useCallback(async () => {
     setPlaylistsLoading(true);
@@ -405,7 +428,7 @@ export function DiscoverPlaylistSection({
       }
       footer={
         expandedPlaylist ? (
-          <div className="discover-playlist-expanded">
+          <div ref={expandedPanelRef} className="discover-playlist-expanded">
             <FlowTracksPanel
               tracks={expandedTracks}
               loading={false}
@@ -427,6 +450,7 @@ export function DiscoverPlaylistSection({
         ) : null
       }
     >
+      <div ref={playlistCardsRef} className="discover-playlist-cards">
       {visiblePlaylists.map((playlist) => {
         const CoverIcon = getPlaylistCoverIcon(playlist);
         const sourceLine = getPlaylistSourceLine(playlist);
@@ -517,6 +541,7 @@ export function DiscoverPlaylistSection({
           </div>
         );
       })}
+      </div>
     </DiscoverRail>
   );
 }
