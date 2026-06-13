@@ -438,11 +438,14 @@ export function DiscoverPlaylistSection({
         return (
           <div key={playlist.presetId} className="artist-discover-shelf-card">
             <div
-              className={`artist-discover-card${isExpanded ? " is-expanded" : ""}`}
+              className={`artist-discover-card artist-discover-card--playlist${isExpanded ? " is-expanded" : ""}`}
             >
-              <div
+              <button
+                type="button"
                 className="artist-discover-card__cover"
                 onClick={() => handleToggle(playlist.presetId)}
+                aria-expanded={isExpanded}
+                aria-label={`${isExpanded ? "Collapse" : "Expand"} ${playlist.name}`}
               >
                 {showArtwork ? (
                   <img
@@ -465,17 +468,19 @@ export function DiscoverPlaylistSection({
                     <CoverIcon className="artist-icon-lg" />
                   </div>
                 )}
-              </div>
+              </button>
               <div className="artist-discover-card__content">
                 <div className="artist-discover-card__text">
                   <div className="artist-card-title-row--discover">
-                    <h3
+                    <button
+                      type="button"
                       className="artist-card-title--discover"
                       title={playlist.name}
                       onClick={() => handleToggle(playlist.presetId)}
+                      aria-expanded={isExpanded}
                     >
                       {playlist.name}
-                    </h3>
+                    </button>
                     {playlist.adoptedFlowId ? (
                       <CheckCircle2
                         className="artist-library-check--discover"

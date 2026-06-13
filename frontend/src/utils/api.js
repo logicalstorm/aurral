@@ -202,11 +202,6 @@ export const getBootstrapStatus = async () => {
   return response.data;
 };
 
-export const confirmV2Migration = async () => {
-  const response = await api.post("/health/migrate-v2");
-  return response.data;
-};
-
 export const browseFilesystem = async (pathValue) => {
   const response = await api.get("/filesystem/browse", {
     params: pathValue ? { path: pathValue } : undefined,
@@ -281,8 +276,12 @@ export const searchUnified = async (
     params.limit = limit;
   }
   const key = `search-unified:${JSON.stringify(params)}`;
+  const timeoutMs = mode === "full" ? 30000 : 12000;
   return fetchInflightOnce(searchInflightRequests, key, async () => {
-    const response = await api.get("/search/unified", { params });
+    const response = await api.get("/search/unified", {
+      params,
+      timeout: timeoutMs,
+    });
     return response.data;
   });
 };
@@ -575,8 +574,8 @@ export const generateFlowArtwork = async (playlistId) => {
   return response.data;
 };
 
-export const getLibraryArtists = async () => {
-  const response = await api.get("/library/artists");
+export const getLibraryArtists = async (options = {}) => {
+  const response = await api.get("/library/artists", options);
   return response.data;
 };
 
@@ -845,7 +844,7 @@ export const getDiscoverArtworkUrl = (presetId, version) => {
   return url;
 };
 
-export const getNearbyShows = async (zipCode = "", limit) => {
+export const getNearbyShows = async (zipCode = "", limit, options = {}) => {
   const params = { _: Date.now() };
   if (typeof zipCode === "string" && zipCode.trim()) {
     params.zip = zipCode.trim();
@@ -853,7 +852,13 @@ export const getNearbyShows = async (zipCode = "", limit) => {
   if (Number.isFinite(limit) && limit > 0) {
     params.limit = Math.floor(limit);
   }
-  const response = await api.get("/discover/nearby-shows", { params });
+  const response = await api.get("/discover/nearby-shows", {
+    ...options,
+    params: {
+      ...(options.params || {}),
+      ...params,
+    },
+  });
   return response.data;
 };
 
@@ -1135,6 +1140,7 @@ export const getFlowStatus = async ({
   includeJobs = false,
   flowId,
   jobsLimit,
+  signal,
 } = {}) => {
   const params = {};
   if (includeJobs) {
@@ -1146,13 +1152,17 @@ export const getFlowStatus = async ({
   if (jobsLimit != null) {
     params.jobsLimit = jobsLimit;
   }
-  const response = await api.get("/playlists/status", { params });
+  const response = await api.get("/playlists/status", { params, signal });
   return response.data;
 };
 
-export const getFlowJobs = async (flowId, limit = 200) => {
+export const getFlowJobs = async (flowId, limit = 200, options = {}) => {
   const response = await api.get(`/playlists/jobs/${flowId}`, {
-    params: { limit },
+    ...options,
+    params: {
+      ...(options.params || {}),
+      limit,
+    },
   });
   return response.data;
 };

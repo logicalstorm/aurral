@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import PropTypes from "prop-types";
-import { Disc3, Music } from "lucide-react";
+import { Music } from "lucide-react";
+import SearchLibraryCheck from "./SearchLibraryCheck";
 import {
   getSearchResultKey,
   navigateFromSearchResult,
@@ -10,10 +11,31 @@ import { TrackPlayButton } from "../pages/ArtistDetails/components/TrackPlayButt
 import { useGlobalTrackPlayback } from "../hooks/useGlobalTrackPlayback";
 import { normalizePreviewTrack } from "../utils/audioQueue";
 
+function TrackCover({ src, title }) {
+  if (!src) {
+    return (
+      <span className="search-track-results__cover search-track-results__cover--placeholder">
+        <Music className="artist-icon-sm" />
+      </span>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={title ? `${title} cover art` : ""}
+      className="search-track-results__cover"
+      loading="lazy"
+      decoding="async"
+    />
+  );
+}
+
 function SearchTrackResults({
   tracks,
   navigate,
   query = "",
+  albumCovers = {},
   playlists = [],
   playlistsLoading = false,
   playlistSavingKey = "",
@@ -70,13 +92,15 @@ function SearchTrackResults({
         const subtitle = [track.artistName, track.albumTitle]
           .filter(Boolean)
           .join(" · ");
-        const Icon = track.inLibrary ? Disc3 : Music;
         const trackId = String(
           track.id ?? track.trackMbid ?? getSearchResultKey(track, index),
         );
         const canPreview = Boolean(track.preview_url);
         const isPlaying = canPreview && isTrackPlaying(trackId);
         const isLoadingPreview = canPreview && isTrackLoading(trackId);
+        const coverSrc =
+          track.coverUrl ||
+          (track.albumMbid ? albumCovers[track.albumMbid] : null);
 
         return (
           <li key={getSearchResultKey(track, index)}>
@@ -88,7 +112,8 @@ function SearchTrackResults({
                   navigateFromSearchResult(navigate, track, { query })
                 }
               >
-                <span className="search-track-results__icon" aria-hidden="true">
+                <TrackCover src={coverSrc} title={track.albumTitle || label} />
+                <span className="search-track-results__play-slot">
                   {canPreview ? (
                     <TrackPlayButton
                       track={track}
@@ -97,7 +122,7 @@ function SearchTrackResults({
                       onClick={(event) => handleTrackPlay(track, index, event)}
                     />
                   ) : (
-                    <Icon className="artist-icon-sm" />
+                    <span className="search-track-results__play-placeholder" />
                   )}
                 </span>
                 <span className="search-track-results__copy">
@@ -108,9 +133,7 @@ function SearchTrackResults({
                     </span>
                   )}
                 </span>
-                {track.inLibrary && (
-                  <span className="search-track-results__badge">In library</span>
-                )}
+                {track.inLibrary && <SearchLibraryCheck />}
               </button>
               {onAddTrackToPlaylist ? (
                 <div
@@ -119,7 +142,6 @@ function SearchTrackResults({
                 >
                   <TrackPlaylistMenu
                     track={track}
-                    triggerVariant="compact"
                     triggerLabel="Add to playlist"
                     playlists={playlists}
                     loading={playlistsLoading}
@@ -146,6 +168,7 @@ SearchTrackResults.propTypes = {
   tracks: PropTypes.arrayOf(PropTypes.object).isRequired,
   navigate: PropTypes.func.isRequired,
   query: PropTypes.string,
+  albumCovers: PropTypes.object,
   playlists: PropTypes.array,
   playlistsLoading: PropTypes.bool,
   playlistSavingKey: PropTypes.string,
@@ -153,6 +176,11 @@ SearchTrackResults.propTypes = {
   onLoadPlaylists: PropTypes.func,
   onAddTrackToPlaylist: PropTypes.func,
   getDefaultPlaylistName: PropTypes.func,
+};
+
+TrackCover.propTypes = {
+  src: PropTypes.string,
+  title: PropTypes.string,
 };
 
 export default SearchTrackResults;

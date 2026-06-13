@@ -47,7 +47,6 @@ const DEFAULT_DISCOVER_LAYOUT = [
   { id: "recommended", enabled: true },
   { id: "globalTop", enabled: true },
   { id: "genreSections", enabled: true },
-  { id: "topTags", enabled: true },
 ];
 
 const FALLBACK_GENRE_SECTION_PREFIX = "fallbackGenre:";

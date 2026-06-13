@@ -31,12 +31,6 @@ function readStoredSettingJson(primaryKey, legacyKeys = []) {
   return null;
 }
 
-function deleteStoredSettingKeys(keys) {
-  for (const key of keys) {
-    deleteSettingStmt.run(key);
-  }
-}
-
 function normalizePlaylistArtworkSettings(raw) {
   const artwork = raw && typeof raw === "object" ? raw : {};
   const style = String(artwork.style || "photo").trim().toLowerCase();
@@ -67,6 +61,18 @@ function normalizePlaylistWorkerSettings(raw) {
     retryCycleMinutes,
     retryPausedPlaylistIds,
     existingFileMode: normalizeExistingFileMode(worker.existingFileMode),
+  };
+}
+
+function normalizeLegacyWeeklyFlowWorkerSettings(raw) {
+  const legacy = readStoredSettingJson("weeklyFlowWorker") || {};
+  const current = normalizePlaylistWorkerSettings(raw);
+  return {
+    ...legacy,
+    concurrency: current.concurrency,
+    retryCycleMinutes: current.retryCycleMinutes,
+    retryPausedPlaylistIds: current.retryPausedPlaylistIds,
+    existingFileMode: current.existingFileMode,
   };
 }
 
@@ -501,10 +507,22 @@ export const dbOps = {
     const updateFn = db.transaction(() => {
       if (settings.integrations) {
         const encKey = getOrCreateEncryptionKey();
+        const existingIntegrations =
+          decryptIntegrations(
+            dbHelpers.parseJSON(getSettingStmt.get("integrations")?.value),
+            encKey,
+          ) || {};
+        const nextIntegrations = { ...settings.integrations };
+        if (
+          existingIntegrations.soulseek &&
+          nextIntegrations.soulseek === undefined
+        ) {
+          nextIntegrations.soulseek = existingIntegrations.soulseek;
+        }
         upsertSettingStmt.run(
           "integrations",
           dbHelpers.stringifyJSON(
-            encryptIntegrations(settings.integrations, encKey)
+            encryptIntegrations(nextIntegrations, encKey)
           )
         );
       }
@@ -552,27 +570,43 @@ export const dbOps = {
         );
       }
       if (settings.flows !== undefined) {
+        const serializedFlows = dbHelpers.stringifyJSON(settings.flows);
         upsertSettingStmt.run(
           "flows",
-          dbHelpers.stringifyJSON(settings.flows),
+          serializedFlows,
         );
-        deleteStoredSettingKeys(["weeklyFlows"]);
+        upsertSettingStmt.run(
+          "weeklyFlows",
+          serializedFlows,
+        );
       }
       if (settings.sharedPlaylists !== undefined) {
+        const serializedSharedPlaylists = dbHelpers.stringifyJSON(
+          settings.sharedPlaylists,
+        );
         upsertSettingStmt.run(
           "sharedPlaylists",
-          dbHelpers.stringifyJSON(settings.sharedPlaylists),
+          serializedSharedPlaylists,
         );
-        deleteStoredSettingKeys(["sharedFlowPlaylists"]);
+        upsertSettingStmt.run(
+          "sharedFlowPlaylists",
+          serializedSharedPlaylists,
+        );
       }
       if (settings.playlistWorker !== undefined) {
+        const normalizedPlaylistWorker = normalizePlaylistWorkerSettings(
+          settings.playlistWorker,
+        );
         upsertSettingStmt.run(
           "playlistWorker",
+          dbHelpers.stringifyJSON(normalizedPlaylistWorker),
+        );
+        upsertSettingStmt.run(
+          "weeklyFlowWorker",
           dbHelpers.stringifyJSON(
-            normalizePlaylistWorkerSettings(settings.playlistWorker),
+            normalizeLegacyWeeklyFlowWorkerSettings(normalizedPlaylistWorker),
           ),
         );
-        deleteStoredSettingKeys(["weeklyFlowWorker"]);
       }
       if (settings.playlistArtwork !== undefined) {
         upsertSettingStmt.run(

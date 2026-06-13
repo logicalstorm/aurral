@@ -1,7 +1,6 @@
 import { useState } from "react";
 import PropTypes from "prop-types";
 import {
-  CheckCircle,
   ChevronDown,
   Loader,
   MoreHorizontal,
@@ -15,6 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 import AddToLibraryButton from "../../../components/AddToLibraryButton";
+import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
 import { getDiscoveryFeedbackLabel } from "../../../utils/discoveryFeedback";
 
 const MONITOR_OPTIONS = [
@@ -77,7 +77,7 @@ export function ArtistDetailsActionBar({
             onClick={() => setShowRemoveDropdown(!showRemoveDropdown)}
             className="btn btn-neutral-active btn--bold btn-min-h"
           >
-            <CheckCircle className="artist-icon-sm" />
+            <SearchLibraryCheck size="sm" />
             In Library
             {(canChangeMonitoring || canDeleteArtist) && (
               <ChevronDown

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef } from "react";
 import PropTypes from "prop-types";
 import { Loader } from "lucide-react";
 import { TrackPlayButton } from "./TrackPlayButton";
-import { getReleaseYear } from "../utils";
 import { TrackPlaylistMenu } from "./TrackPlaylistMenu";
 import { ArtistTrackListToolbar } from "./ArtistTrackListToolbar";
 import { useAlbumTrackListToolbar } from "../../../hooks/useAlbumTrackListToolbar";
@@ -87,8 +86,8 @@ export function ArtistDetailsReleaseTrackList({
     );
     const row = rowRefs.current[trackId];
     if (!row) return;
-    row.scrollIntoView({ block: "nearest", behavior: "smooth" });
     row.classList.add("is-search-focused");
+    row.scrollIntoView({ block: "nearest", behavior: "smooth" });
     const timeout = window.setTimeout(() => {
       row.classList.remove("is-search-focused");
     }, 2400);
@@ -98,18 +97,7 @@ export function ArtistDetailsReleaseTrackList({
   if (!release) return null;
 
   return (
-    <div className="artist-expanded-panel">
-      <div className="artist-expanded-panel__header">
-        <div className="artist-min-0">
-          <h3 className="artist-card-title artist-truncate">{release.title}</h3>
-          <p className="artist-card-meta">
-            {[getReleaseYear(release), release["primary-type"]]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
-        </div>
-      </div>
-
+    <div className="artist-release-track-list">
       {loading ? (
         <div className="artist-loading">
           <Loader className="artist-spinner animate-spin" />

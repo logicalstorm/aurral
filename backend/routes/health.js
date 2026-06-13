@@ -29,10 +29,6 @@ import {
   DISCOVERY_PROVIDER_LISTENBRAINZ_FALLBACK,
   getDiscoveryCapabilities,
 } from "../services/listenbrainzDiscoveryFallback.js";
-import { isV2MigrationPending } from "../middleware/migrationGate.js";
-import { v2MigrationRuntime } from "../config/db-sqlite.js";
-import { migrateToV2 } from "../scripts/migrateToV2.js";
-import { startBackgroundWorkers } from "../services/appRuntime.js";
 
 const router = express.Router();
 
@@ -46,19 +42,11 @@ function buildBootstrapPayload(req) {
   const localNetworkBypass = getLocalNetworkBypassStatus(req);
   const lidarrConfigured = lidarrClient.isConfigured();
 
-  const v2MigrationRequired = isV2MigrationPending();
-
   const payload = {
-    status: v2MigrationRequired ? "migration_required" : "ok",
+    status: "ok",
     authRequired,
     authUser: currentUser ? currentUser.username : authUser,
-    onboardingRequired: !onboardingDone && !v2MigrationRequired,
-    v2Migration: v2MigrationRequired
-      ? {
-          required: true,
-          preview: v2MigrationRuntime.status?.preview || null,
-        }
-      : { required: false },
+    onboardingRequired: !onboardingDone,
     timestamp: new Date().toISOString(),
     appVersion: APP_VERSION,
     rootFolderConfigured: lidarrConfigured,
@@ -95,31 +83,6 @@ router.get("/bootstrap", noCache, (req, res) => {
     console.error("Bootstrap check error:", error);
     res.status(500).json({
       error: "Internal server error",
-    });
-  }
-});
-
-router.post("/migrate-v2", noCache, (req, res) => {
-  try {
-    if (!isV2MigrationPending()) {
-      return res.json({
-        migrated: false,
-        skipped: true,
-        schemaVersion: v2MigrationRuntime.status?.schemaVersion || 2,
-      });
-    }
-    const result = migrateToV2({ logger: console, force: true });
-    startBackgroundWorkers({ logger: console });
-    return res.json({
-      migrated: !!result.migrated,
-      schemaVersion: result.schemaVersion,
-      layout: result.layout,
-    });
-  } catch (error) {
-    console.error("V2 migration error:", error);
-    return res.status(500).json({
-      error: "migration_failed",
-      message: error?.message || "Failed to migrate database to v2.",
     });
   }
 });

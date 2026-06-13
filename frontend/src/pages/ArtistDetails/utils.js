@@ -325,19 +325,6 @@ export const getArtistReleaseGridColumnCount = () => {
   return 2;
 };
 
-export const getExpandedReleaseRenderAfterIndex = (
-  expandedReleaseIndex,
-  itemCount,
-  gridColumnCount,
-) => {
-  if (expandedReleaseIndex < 0) return -1;
-  return Math.min(
-    expandedReleaseIndex +
-      (gridColumnCount - 1 - (expandedReleaseIndex % gridColumnCount)),
-    itemCount - 1,
-  );
-};
-
 export const isLibraryPlaybackTrack = (track) =>
   track?.previewProvider === "lidarr" || !!track?.streamPath;
 

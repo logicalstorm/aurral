@@ -20,7 +20,7 @@ const dbHelpers = {
   },
 };
 
-test("getV2MigrationStatus requires consent for legacy v1 databases", async () => {
+test("getV2MigrationStatus does not require consent for legacy v1 databases", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aurral-v2-status-"));
   const dbPath = path.join(tempDir, "aurral.db");
   const db = new Database(dbPath);
@@ -37,12 +37,12 @@ test("getV2MigrationStatus requires consent for legacy v1 databases", async () =
   const status = getV2MigrationStatus(reopened, dbHelpers);
   reopened.close();
 
-  assert.equal(status.required, true);
+  assert.equal(status.required, false);
   assert.equal(status.schemaVersion, 1);
-  assert.equal(status.preview.flowCount, 0);
+  assert.equal(status.legacyDetected, true);
 });
 
-test("getV2MigrationStatus auto-applies for fresh installs", async () => {
+test("getV2MigrationStatus reports fresh installs as not legacy", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aurral-v2-fresh-"));
   const dbPath = path.join(tempDir, "aurral.db");
   const db = new Database(dbPath);
@@ -67,5 +67,5 @@ test("getV2MigrationStatus auto-applies for fresh installs", async () => {
   reopened.close();
 
   assert.equal(status.required, false);
-  assert.equal(status.freshInstall, true);
+  assert.equal(status.legacyDetected, false);
 });

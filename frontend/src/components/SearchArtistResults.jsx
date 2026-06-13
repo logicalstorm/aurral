@@ -1,6 +1,7 @@
 import PropTypes from "prop-types";
-import { CheckCircle2, Star } from "lucide-react";
+import { Star } from "lucide-react";
 import ArtistImage from "./ArtistImage";
+import SearchLibraryCheck from "./SearchLibraryCheck";
 import { ArtistContextMenu } from "./ArtistContextMenu";
 import { getArtistFeedbackFlags } from "../utils/discoveryFeedback";
 import { getArtistRecordId } from "../utils/artistTaste";
@@ -15,6 +16,7 @@ function SearchArtistResults({
   onAddArtistToLibrary,
   onArtistFeedback,
   artistFeedbackLookup,
+  variant = "square",
 }) {
   const formatLifeSpan = (artist) => {
     const begin =
@@ -67,8 +69,13 @@ function SearchArtistResults({
     });
   };
 
+  const gridClassName =
+    variant === "round"
+      ? "artist-release-grid search-artist-grid--round"
+      : "artist-release-grid";
+
   return (
-    <div className="artist-release-grid">
+    <div className={gridClassName}>
       {artists.map((artist, index) => {
         const artistId = getArtistRecordId(artist);
         const isRecommendedTagResult =
@@ -99,7 +106,7 @@ function SearchArtistResults({
         return (
           <article
             key={artistId || `artist-${index}`}
-            className="artist-discover-card"
+            className="artist-discover-card artist-discover-card--artist"
           >
             <div
               onClick={() => openArtist(artist)}
@@ -131,9 +138,7 @@ function SearchArtistResults({
                   >
                     {artist.name}
                   </h3>
-                  {libraryLookup[artistId] && (
-                    <CheckCircle2 className="artist-library-check--discover" />
-                  )}
+                  {libraryLookup[artistId] && <SearchLibraryCheck />}
                 </div>
                 {artistMetaText ? (
                   <p
@@ -143,7 +148,7 @@ function SearchArtistResults({
                     {artistMetaText}
                   </p>
                 ) : null}
-                {disambiguationLine ? (
+                {variant !== "round" && disambiguationLine ? (
                   <p
                     className="artist-card-meta--discover"
                     title={disambiguationLine}
@@ -153,18 +158,20 @@ function SearchArtistResults({
                 ) : null}
               </div>
 
-              <ArtistContextMenu
-                artist={artist}
-                isInLibrary={!!libraryLookup[artistId]}
-                canAddArtist={canAddArtist}
-                onAddToLibrary={onAddArtistToLibrary}
-                onFeedback={onArtistFeedback}
-                feedbackUsed={
-                  artistFeedbackLookup
-                    ? getArtistFeedbackFlags(artistFeedbackLookup, artist)
-                    : undefined
-                }
-              />
+              {variant !== "round" ? (
+                <ArtistContextMenu
+                  artist={artist}
+                  isInLibrary={!!libraryLookup[artistId]}
+                  canAddArtist={canAddArtist}
+                  onAddToLibrary={onAddArtistToLibrary}
+                  onFeedback={onArtistFeedback}
+                  feedbackUsed={
+                    artistFeedbackLookup
+                      ? getArtistFeedbackFlags(artistFeedbackLookup, artist)
+                      : undefined
+                  }
+                />
+              ) : null}
             </div>
           </article>
         );
@@ -183,6 +190,7 @@ SearchArtistResults.propTypes = {
   onAddArtistToLibrary: PropTypes.func,
   onArtistFeedback: PropTypes.func,
   artistFeedbackLookup: PropTypes.instanceOf(Map),
+  variant: PropTypes.oneOf(["square", "round"]),
 };
 
 export default SearchArtistResults;

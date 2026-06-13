@@ -7,7 +7,8 @@ import {
   useState,
 } from "react";
 import PropTypes from "prop-types";
-import { Check, ChevronRight, Loader, Plus } from "lucide-react";
+import { ChevronRight, Loader, Plus } from "lucide-react";
+import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
 import { playlistContainsTrack } from "../../../utils/sharedTrackIdentity";
 
 function useAvailablePlaylists(playlists, excludedPlaylistIds) {
@@ -85,9 +86,9 @@ export function TrackPlaylistPickerContent({
               >
                 <span className="artist-track-title">{playlist.name}</span>
                 {alreadyAdded ? (
-                  <Check
-                    className="artist-icon-sm artist-playlist-menu__check"
-                    aria-hidden="true"
+                  <SearchLibraryCheck
+                    size="sm"
+                    className="artist-playlist-menu__check"
                   />
                 ) : null}
               </button>
@@ -258,6 +259,15 @@ export const TrackPlaylistMenu = forwardRef(function TrackPlaylistMenu(
     triggerVariant === "compact"
       ? `btn btn-secondary btn-icon btn-xs${open ? " btn-neutral-active" : ""}`
       : `artist-playlist-trigger${open ? " is-open" : ""}`;
+  const menuClassName = [
+    "artist-playlist-menu",
+    menuVariant === "preview-tracks" ? "artist-playlist-menu--preview-tracks" : "",
+    menuVariant === "search-suggestion"
+      ? "artist-playlist-menu--search-suggestion"
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className="artist-relative" ref={menuRef}>
@@ -267,7 +277,7 @@ export const TrackPlaylistMenu = forwardRef(function TrackPlaylistMenu(
           type="button"
           className={triggerClassName}
           onClick={handleOpen}
-          title={triggerLabel}
+          title={triggerVariant === "compact" ? triggerLabel : undefined}
           aria-label={triggerLabel}
           aria-expanded={open}
           disabled={saving}
@@ -297,7 +307,7 @@ export const TrackPlaylistMenu = forwardRef(function TrackPlaylistMenu(
 
       {open ? (
         <div
-          className={`artist-playlist-menu${menuVariant === "preview-tracks" ? " artist-playlist-menu--preview-tracks" : ""}`}
+          className={menuClassName}
           style={{
             top: menuPosition.top,
             left: menuPosition.left,
@@ -361,5 +371,5 @@ TrackPlaylistMenu.propTypes = {
   onLoadPlaylists: PropTypes.func,
   onSelect: PropTypes.func,
   onOpenChange: PropTypes.func,
-  menuVariant: PropTypes.oneOf(["preview-tracks"]),
+  menuVariant: PropTypes.oneOf(["preview-tracks", "search-suggestion"]),
 };

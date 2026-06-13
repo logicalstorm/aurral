@@ -2,7 +2,7 @@ import { UUID_REGEX } from "../../../config/constants.js";
 import { dbOps } from "../../../config/db-helpers.js";
 import { buildImageProxyUrl } from "../../../services/imageProxyService.js";
 import { fetchReleaseGroupCoverUrl } from "../../../services/imageService.js";
-import { libraryManager } from "../../../services/libraryManager.js";
+import { libraryManager, getCachedArtists } from "../../../services/libraryManager.js";
 import { qualityManager } from "../../../services/qualityManager.js";
 
 export default function registerMisc(router) {
@@ -87,7 +87,7 @@ export default function registerMisc(router) {
         return res.status(400).json({ error: "mbids must be an array" });
       }
 
-      const libraryArtists = await libraryManager.getAllArtists();
+      const libraryArtists = getCachedArtists();
       const existingArtistIds = new Set(
         libraryArtists.map((artist) => artist.mbid).filter(Boolean),
       );

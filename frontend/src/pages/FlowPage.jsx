@@ -629,7 +629,9 @@ const LIBRARY_SIDEBAR_COLLAPSED_KEY = "aurral.playlists.sidebarCollapsed";
 
 function readLibrarySidebarCollapsed() {
   try {
-    return localStorage.getItem(LIBRARY_SIDEBAR_COLLAPSED_KEY) === "1";
+    return (
+      globalThis.localStorage?.getItem(LIBRARY_SIDEBAR_COLLAPSED_KEY) === "1"
+    );
   } catch {
     return false;
   }
@@ -639,12 +641,18 @@ const FLOW_MOBILE_LAYOUT_QUERY = "(max-width: 767px)";
 
 function useFlowMobileLayout() {
   const [isMobileLayout, setIsMobileLayout] = useState(() =>
-    typeof window !== "undefined"
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
       ? window.matchMedia(FLOW_MOBILE_LAYOUT_QUERY).matches
       : false,
   );
 
   useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    ) {
+      return undefined;
+    }
     const mediaQuery = window.matchMedia(FLOW_MOBILE_LAYOUT_QUERY);
     const handleChange = (event) => setIsMobileLayout(event.matches);
     mediaQuery.addEventListener("change", handleChange);
@@ -964,14 +972,15 @@ function FlowPage() {
   };
 
   const fetchFlowTracks = useCallback(
-    async (flowId, { showSpinner = true } = {}) => {
+    async (flowId, { showSpinner = true, signal } = {}) => {
       if (!flowId) return;
       if (showSpinner) {
         setTracksLoadingByFlowId((prev) => ({ ...prev, [flowId]: true }));
       }
       setTracksErrorByFlowId((prev) => ({ ...prev, [flowId]: "" }));
       try {
-        const jobs = await getFlowJobs(flowId, 500);
+        const jobs = await getFlowJobs(flowId, 500, { signal });
+        if (signal?.aborted) return;
         const normalized = (Array.isArray(jobs) ? jobs : [])
           .map((job) => ({
             ...job,
@@ -987,12 +996,13 @@ function FlowPage() {
           [flowId]: normalized,
         }));
       } catch (err) {
+        if (signal?.aborted) return;
         const message =
           err.response?.data?.message || err.message || "Failed to load tracks";
         setTracksErrorByFlowId((prev) => ({ ...prev, [flowId]: message }));
         showError(message);
       } finally {
-        if (showSpinner) {
+        if (showSpinner && !signal?.aborted) {
           setTracksLoadingByFlowId((prev) => ({ ...prev, [flowId]: false }));
         }
       }
@@ -1166,7 +1176,9 @@ function FlowPage() {
 
   useEffect(() => {
     if (!selectedId) return;
-    fetchFlowTracks(selectedId);
+    const controller = new AbortController();
+    fetchFlowTracks(selectedId, { signal: controller.signal });
+    return () => controller.abort();
   }, [selectedId, fetchFlowTracks]);
 
   const selectPlaylist = (entry) => {
@@ -2157,7 +2169,7 @@ function FlowPage() {
                 setLibraryCollapsed((prev) => {
                   const next = !prev;
                   try {
-                    localStorage.setItem(
+                    globalThis.localStorage?.setItem(
                       LIBRARY_SIDEBAR_COLLAPSED_KEY,
                       next ? "1" : "0",
                     );

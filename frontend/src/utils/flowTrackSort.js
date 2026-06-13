@@ -55,3 +55,21 @@ export function sortFlowTracks(tracks, sortKey, sortDirection) {
     return diff * direction;
   });
 }
+
+export function getFlowTrackDisplayNumber(
+  track,
+  { tracks, sortedTracks, sortedIndex, sortKey, sortDirection },
+) {
+  const originalNumber =
+    tracks.findIndex((item) => item.id === track.id) + 1;
+
+  if (sortKey !== "index") {
+    return originalNumber;
+  }
+
+  if (sortDirection === "desc") {
+    return sortedTracks.length - sortedIndex;
+  }
+
+  return sortedIndex + 1;
+}

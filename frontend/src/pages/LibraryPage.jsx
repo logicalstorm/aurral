@@ -20,19 +20,43 @@ const SORT_OPTIONS = [
   { value: "albums", label: "Album Count" },
 ];
 
+const getArtistName = (artist) =>
+  String(artist?.artistName || artist?.sortName || artist?.name || "").trim();
+
+const getArtistRouteId = (artist) =>
+  String(artist?.foreignArtistId || artist?.mbid || artist?.id || "").trim();
+
+const getAddedTime = (artist) => {
+  const time = Date.parse(artist?.added || artist?.addedAt || "");
+  return Number.isFinite(time) ? time : null;
+};
+
+const compareNullableNumbers = (left, right, sortDirection) => {
+  if (left === null && right === null) return 0;
+  if (left === null) return 1;
+  if (right === null) return -1;
+  const diff = left - right;
+  return sortDirection === "asc" ? diff : -diff;
+};
+
 const sortArtists = (items, sortKey, sortDirection) =>
   [...items].sort((a, b) => {
     let diff = 0;
     if (sortKey === "name") {
-      diff = a.artistName.localeCompare(b.artistName);
+      diff = getArtistName(a).localeCompare(getArtistName(b));
     } else if (sortKey === "added") {
-      diff = new Date(a.added) - new Date(b.added);
+      diff = compareNullableNumbers(
+        getAddedTime(a),
+        getAddedTime(b),
+        sortDirection,
+      );
+      if (diff !== 0) return diff;
     } else if (sortKey === "albums") {
       diff =
         (a.statistics?.albumCount || 0) - (b.statistics?.albumCount || 0);
     }
     if (diff !== 0) return sortDirection === "asc" ? diff : -diff;
-    return a.artistName.localeCompare(b.artistName);
+    return getArtistName(a).localeCompare(getArtistName(b));
   });
 
 function LibraryPage() {
@@ -61,7 +85,7 @@ function LibraryPage() {
       setLoading(true);
       setError(null);
       try {
-        const data = await getLibraryArtists();
+        const data = await getLibraryArtists({ signal: controller.signal });
         if (!controller.signal.aborted) {
           setArtists(data);
         }
@@ -94,8 +118,17 @@ function LibraryPage() {
         setSortMenuOpen(false);
       }
     };
-    document.addEventListener("click", handleClickOutside);
-    return () => document.removeEventListener("click", handleClickOutside);
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setSortMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, []);
 
   const onSentinel = useCallback((entries) => {
@@ -115,17 +148,20 @@ function LibraryPage() {
   const handleSortOptionClick = useCallback((option) => {
     if (sortKey === option.value) {
       setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      setSortMenuOpen(false);
       return;
     }
     setSortKey(option.value);
+    setSortMenuOpen(false);
   }, [sortKey]);
 
   const filteredArtists = useMemo(() => {
     let filtered = artists;
 
-    if (searchTerm) {
+    if (searchTerm.trim()) {
+      const normalizedSearch = searchTerm.trim().toLowerCase();
       filtered = filtered.filter((artist) =>
-        artist.artistName.toLowerCase().includes(searchTerm.toLowerCase())
+        getArtistName(artist).toLowerCase().includes(normalizedSearch)
       );
     }
 
@@ -134,9 +170,11 @@ function LibraryPage() {
 
   const navigateToArtist = useCallback(
     (artist) => {
-      navigate(`/artist/${artist.foreignArtistId}`, {
+      const routeId = getArtistRouteId(artist);
+      if (!routeId) return;
+      navigate(`/artist/${encodeURIComponent(routeId)}`, {
         state: {
-          artistName: artist.artistName,
+          artistName: getArtistName(artist),
           inLibrary: true,
           libraryArtist: artist,
         },
@@ -164,6 +202,7 @@ function LibraryPage() {
                 className={`global-search__scope-button library-page__sort-button${sortMenuOpen ? " is-open" : ""}`}
                 aria-haspopup="listbox"
                 aria-expanded={sortMenuOpen}
+                aria-controls="library-sort-menu"
                 aria-label="Sort library"
               >
                 <span className="library-page__sort-label">{selectedSort.label}</span>
@@ -174,7 +213,12 @@ function LibraryPage() {
               </button>
 
               {sortMenuOpen && (
-                <div className="artist-options-menu library-page__sort-menu">
+                <div
+                  id="library-sort-menu"
+                  className="artist-options-menu library-page__sort-menu"
+                  role="listbox"
+                  aria-label="Library sort options"
+                >
                   {SORT_OPTIONS.map((option) => {
                     const active = sortKey === option.value;
                     const DirectionIcon =
@@ -273,6 +317,8 @@ function LibraryPage() {
 
           <div className="artist-albums-grid">
             {filteredArtists.slice(0, visibleCount).map((artist) => {
+              const artistName = getArtistName(artist) || "Unknown Artist";
+              const routeId = getArtistRouteId(artist);
               const monitorOption =
                 artist.addOptions?.monitor ||
                 artist.monitorNewItems ||
@@ -281,16 +327,19 @@ function LibraryPage() {
               const isMonitored = artist.monitored && monitorOption !== "none";
 
               return (
-                <article
+                <button
+                  type="button"
                   key={artist.id}
                   className="artist-release-card"
                   onClick={() => navigateToArtist(artist)}
+                  disabled={!routeId}
+                  aria-label={`Open ${artistName}`}
                 >
                   <div className="artist-release-card__cover">
                     <ArtistImage
-                      mbid={artist.foreignArtistId}
-                      artistName={artist.artistName}
-                      alt={artist.artistName}
+                      mbid={routeId}
+                      artistName={artistName}
+                      alt={artistName}
                       className="artist-image-fill"
                       showLoading={false}
                     />
@@ -302,13 +351,13 @@ function LibraryPage() {
                     )}
                   </div>
 
-                  <h2
-                    className="artist-release-card__title artist-truncate"
-                    title={artist.artistName}
+                  <span
+                    className="artist-release-card__title"
+                    title={artistName}
                   >
-                    {artist.artistName}
-                  </h2>
-                </article>
+                    {artistName}
+                  </span>
+                </button>
               );
             })}
           </div>

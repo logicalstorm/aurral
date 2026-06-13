@@ -17,7 +17,6 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { AudioQueueProvider } from "./contexts/AudioQueueProvider";
 import ReloadPrompt from "./components/ReloadPrompt";
 import UpdateBanner from "./components/UpdateBanner";
-import V2MigrationGate from "./components/V2MigrationGate";
 import { useWebSocketChannel } from "./hooks/useWebSocket";
 
 const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
@@ -31,6 +30,7 @@ const MetadataProvidersPage = lazy(
 );
 const ArtistDetailsPage = lazy(() => import("./pages/ArtistDetailsPage"));
 const ArtistAlbumsPage = lazy(() => import("./pages/ArtistAlbumsPage"));
+const ReleasePage = lazy(() => import("./pages/ReleasePage"));
 const ArtistAppearsOnPage = lazy(() => import("./pages/ArtistAppearsOnPage"));
 const HistoryPage = lazy(() => import("./pages/HistoryPage"));
 const FlowPage = lazy(() => import("./pages/FlowPage"));
@@ -245,6 +245,10 @@ function AppContent() {
                 element={<ArtistAlbumsPage />}
               />
               <Route
+                path="/artist/:mbid/release/:releaseMbid"
+                element={<ReleasePage />}
+              />
+              <Route
                 path="/artist/:mbid/appears-on"
                 element={<ArtistAppearsOnPage />}
               />
@@ -278,16 +282,14 @@ function App() {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <V2MigrationGate>
-          <AuthProvider>
-            <AudioPlayerProvider>
-              <AudioQueueProvider>
-                <AppContent />
-                <ReloadPrompt />
-              </AudioQueueProvider>
-            </AudioPlayerProvider>
-          </AuthProvider>
-        </V2MigrationGate>
+        <AuthProvider>
+          <AudioPlayerProvider>
+            <AudioQueueProvider>
+              <AppContent />
+              <ReloadPrompt />
+            </AudioQueueProvider>
+          </AudioPlayerProvider>
+        </AuthProvider>
       </ToastProvider>
     </ThemeProvider>
   );

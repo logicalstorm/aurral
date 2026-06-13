@@ -1,8 +1,6 @@
 import { dbOps } from "../config/db-helpers.js";
 import { DEFAULT_SEARCH_URL } from "../config/constants.js";
 
-const DEFAULT_TIMEOUT_MS = 8000;
-
 function getSettingsSearch() {
   return dbOps.getSettings().integrations?.search || {};
 }
@@ -29,11 +27,20 @@ export function isRemoteSearchConfigured() {
   return Boolean(getSearchBaseUrl());
 }
 
+const DEFAULT_TIMEOUT_MS = 10000;
+const FULL_TIMEOUT_MS = 15000;
+
+function getRemoteTimeoutMs(mode) {
+  return String(mode || "").trim() === "full"
+    ? FULL_TIMEOUT_MS
+    : DEFAULT_TIMEOUT_MS;
+}
+
 export async function searchRemoteCatalog(query, { mode = "suggest", limit } = {}) {
   const baseUrl = getSearchBaseUrl();
   if (!baseUrl) return null;
 
-  const url = new URL(`${baseUrl}/catalog`);
+  const url = new URL(`${baseUrl}/search`);
   url.searchParams.set("q", String(query || "").trim());
   url.searchParams.set("mode", mode);
   if (limit != null) {
@@ -47,7 +54,8 @@ export async function searchRemoteCatalog(query, { mode = "suggest", limit } = {
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  const timeoutMs = getRemoteTimeoutMs(mode);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(url, {
@@ -60,12 +68,16 @@ export async function searchRemoteCatalog(query, { mode = "suggest", limit } = {
     const payload = await response.json();
     const catalog = payload?.catalog || payload;
     return {
+      top: payload?.top ?? catalog?.top ?? null,
       artists: Array.isArray(catalog?.artists) ? catalog.artists : [],
       albums: Array.isArray(catalog?.albums) ? catalog.albums : [],
       tracks: Array.isArray(catalog?.tracks) ? catalog.tracks : [],
     };
   } catch (error) {
-    console.warn("[AurralSearch] Remote catalog search failed:", error.message);
+    console.warn(
+      `[AurralSearch] Remote catalog search failed (${baseUrl}):`,
+      error.message,
+    );
     return null;
   } finally {
     clearTimeout(timeout);
