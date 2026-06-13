@@ -25,6 +25,7 @@ function SearchPlaylistResults({ playlists, navigate, query = "" }) {
             <span className="search-playlist-card__title">{playlist.name}</span>
             {playlist.trackCount != null && (
               <span className="search-playlist-card__meta">
+                {playlist.source === "discover" ? "Discover · " : ""}
                 {playlist.trackCount} track
                 {playlist.trackCount === 1 ? "" : "s"}
               </span>

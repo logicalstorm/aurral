@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import PropTypes from "prop-types";
 import { CheckCircle, Music } from "lucide-react";
 import AddAlbumButton from "./AddAlbumButton";
-import { navigateFromSearchResult } from "../utils/searchNavigation";
+import { getAlbumTracklistNavigationTarget } from "../utils/searchNavigation";
 
 function isAlbumActionDisabled(album, isPending, canAddAlbum) {
   if (!canAddAlbum) return true;
@@ -87,7 +87,16 @@ function SearchAlbumResults({
 }) {
   const openAlbum = useCallback(
     (album) => {
-      navigateFromSearchResult(navigate, { ...album, type: "album" });
+      const target = getAlbumTracklistNavigationTarget({ ...album, type: "album" });
+      if (target) {
+        navigate(target.pathname, { state: target.state });
+        return;
+      }
+      if (album.artistMbid) {
+        navigate(`/artist/${album.artistMbid}/albums`, {
+          state: { artistName: album.artistName },
+        });
+      }
     },
     [navigate],
   );

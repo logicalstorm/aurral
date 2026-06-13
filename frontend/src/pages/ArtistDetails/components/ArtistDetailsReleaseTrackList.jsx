@@ -25,6 +25,7 @@ export function ArtistDetailsReleaseTrackList({
   getDefaultPlaylistName,
   onLoadPlaylists,
   highlightTrackId = null,
+  showHeader = true,
 }) {
   const rowRefs = useRef({});
   const normalizeTrack = useCallback(
@@ -87,8 +88,8 @@ export function ArtistDetailsReleaseTrackList({
     );
     const row = rowRefs.current[trackId];
     if (!row) return;
-    row.scrollIntoView({ block: "nearest", behavior: "smooth" });
     row.classList.add("is-search-focused");
+    row.scrollIntoView({ block: "nearest", behavior: "smooth" });
     const timeout = window.setTimeout(() => {
       row.classList.remove("is-search-focused");
     }, 2400);
@@ -99,16 +100,18 @@ export function ArtistDetailsReleaseTrackList({
 
   return (
     <div className="artist-expanded-panel">
-      <div className="artist-expanded-panel__header">
-        <div className="artist-min-0">
-          <h3 className="artist-card-title artist-truncate">{release.title}</h3>
-          <p className="artist-card-meta">
-            {[getReleaseYear(release), release["primary-type"]]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
+      {showHeader ? (
+        <div className="artist-expanded-panel__header">
+          <div className="artist-min-0">
+            <h3 className="artist-card-title artist-truncate">{release.title}</h3>
+            <p className="artist-card-meta">
+              {[getReleaseYear(release), release["primary-type"]]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {loading ? (
         <div className="artist-loading">
@@ -218,4 +221,5 @@ ArtistDetailsReleaseTrackList.propTypes = {
   getDefaultPlaylistName: PropTypes.func,
   onLoadPlaylists: PropTypes.func,
   highlightTrackId: PropTypes.string,
+  showHeader: PropTypes.bool,
 };

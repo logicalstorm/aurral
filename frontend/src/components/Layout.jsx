@@ -47,7 +47,10 @@ function Layout({ children, appVersion }) {
   const location = useLocation();
   const { authRequired, logout, user } = useAuth();
   const { isActive: isPlayerActive } = useAudioQueue();
-  const isArtistDetailsRoute = /^\/artist\/[^/]+$/.test(location.pathname);
+  const isArtistDetailsRoute =
+    /^\/artist\/[^/]+(\/(albums|appears-on|release\/[^/]+))?$/.test(
+      location.pathname,
+    );
 
   const updateMainScrollbar = useCallback(() => {
     const node = mainScrollRef.current;

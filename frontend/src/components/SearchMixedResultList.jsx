@@ -92,6 +92,7 @@ function SearchMixedResultList({
   query = "",
   artistImages = {},
   albumCovers = {},
+  albumDestination = "tracklist",
 }) {
   if (!items.length) return null;
 
@@ -104,7 +105,9 @@ function SearchMixedResultList({
             <button
               type="button"
               className="search-mixed-results__row"
-              onClick={() => navigateFromSearchResult(navigate, item, { query })}
+              onClick={() =>
+                navigateFromSearchResult(navigate, item, { query, albumDestination })
+              }
             >
               <ResultThumbnail
                 item={item}
@@ -139,6 +142,7 @@ SearchMixedResultList.propTypes = {
   query: PropTypes.string,
   artistImages: PropTypes.object,
   albumCovers: PropTypes.object,
+  albumDestination: PropTypes.oneOf(["release", "tracklist"]),
 };
 
 ResultThumbnail.propTypes = {

@@ -40,7 +40,7 @@ export async function searchRemoteCatalog(query, { mode = "suggest", limit } = {
   const baseUrl = getSearchBaseUrl();
   if (!baseUrl) return null;
 
-  const url = new URL(`${baseUrl}/catalog`);
+  const url = new URL(`${baseUrl}/search`);
   url.searchParams.set("q", String(query || "").trim());
   url.searchParams.set("mode", mode);
   if (limit != null) {
@@ -68,6 +68,7 @@ export async function searchRemoteCatalog(query, { mode = "suggest", limit } = {
     const payload = await response.json();
     const catalog = payload?.catalog || payload;
     return {
+      top: payload?.top ?? catalog?.top ?? null,
       artists: Array.isArray(catalog?.artists) ? catalog.artists : [],
       albums: Array.isArray(catalog?.albums) ? catalog.albums : [],
       tracks: Array.isArray(catalog?.tracks) ? catalog.tracks : [],
