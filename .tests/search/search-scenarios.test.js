@@ -318,6 +318,11 @@ test("mixed suggestions preserve bucket order when API top is absent", () => {
 
 const LIVE_SEARCH_BASE =
   process.env.AURRAL_SEARCH_URL || "https://search.aurral.org";
+const LIVE_SEARCH_API_KEY = String(process.env.AURRAL_SEARCH_API_KEY || "").trim();
+const LIVE_SEARCH_ENABLED =
+  process.env.AURRAL_SEARCH_LIVE_TESTS === "1" ||
+  process.env.AURRAL_SEARCH_ASSERT_TOP === "1" ||
+  Boolean(process.env.AURRAL_SEARCH_URL || LIVE_SEARCH_API_KEY);
 const LIVE_TOP_STRICT = process.env.AURRAL_SEARCH_ASSERT_TOP === "1";
 
 async function fetchLiveSearch(query, mode, limit = 10) {
@@ -325,7 +330,11 @@ async function fetchLiveSearch(query, mode, limit = 10) {
   url.searchParams.set("q", query);
   url.searchParams.set("mode", mode);
   url.searchParams.set("limit", String(limit));
-  const response = await fetch(url, { headers: { Accept: "application/json" } });
+  const headers = { Accept: "application/json" };
+  if (LIVE_SEARCH_API_KEY) {
+    headers["X-Aurral-Search-Key"] = LIVE_SEARCH_API_KEY;
+  }
+  const response = await fetch(url, { headers });
   if (!response.ok) {
     throw new Error(`aurral-search ${response.status}`);
   }
@@ -419,8 +428,10 @@ function topMatches(item, pattern) {
   return patterns.every((entry) => haystack.includes(String(entry).toLowerCase()));
 }
 
+const liveCatalogTest = LIVE_SEARCH_ENABLED ? test : test.skip;
+
 for (const scenario of LIVE_SCENARIOS) {
-  test(`live catalog ${scenario.mode}: "${scenario.query}"`, async () => {
+  liveCatalogTest(`live catalog ${scenario.mode}: "${scenario.query}"`, async () => {
     const payload = await fetchLiveSearch(
       scenario.query,
       scenario.mode,
