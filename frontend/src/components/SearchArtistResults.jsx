@@ -148,9 +148,7 @@ function SearchArtistResults({
                     {artistMetaText}
                   </p>
                 ) : null}
-                {variant === "round" ? (
-                  <p className="artist-card-meta--discover">Artist</p>
-                ) : disambiguationLine ? (
+                {variant !== "round" && disambiguationLine ? (
                   <p
                     className="artist-card-meta--discover"
                     title={disambiguationLine}

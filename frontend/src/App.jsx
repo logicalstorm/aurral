@@ -31,6 +31,7 @@ const MetadataProvidersPage = lazy(
 );
 const ArtistDetailsPage = lazy(() => import("./pages/ArtistDetailsPage"));
 const ArtistAlbumsPage = lazy(() => import("./pages/ArtistAlbumsPage"));
+const ReleasePage = lazy(() => import("./pages/ReleasePage"));
 const ArtistAppearsOnPage = lazy(() => import("./pages/ArtistAppearsOnPage"));
 const HistoryPage = lazy(() => import("./pages/HistoryPage"));
 const FlowPage = lazy(() => import("./pages/FlowPage"));
@@ -243,6 +244,10 @@ function AppContent() {
               <Route
                 path="/artist/:mbid/albums"
                 element={<ArtistAlbumsPage />}
+              />
+              <Route
+                path="/artist/:mbid/release/:releaseMbid"
+                element={<ReleasePage />}
               />
               <Route
                 path="/artist/:mbid/appears-on"

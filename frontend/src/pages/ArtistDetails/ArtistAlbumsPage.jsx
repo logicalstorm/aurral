@@ -94,6 +94,26 @@ const getReleaseTypeLabel = (releaseGroup) => {
   return types.length ? types.join(" · ") : "Release";
 };
 
+const buildFocusedReleaseGroup = (locationState) => {
+  const releaseGroupId = locationState?.focusReleaseGroupMbid;
+  if (!releaseGroupId) return null;
+  const releaseGroup = locationState?.focusReleaseGroup || {};
+  const title = String(releaseGroup.title || "").trim();
+  if (!title) return null;
+  return {
+    id: releaseGroupId,
+    title,
+    "first-release-date": releaseGroup.firstReleaseDate || "",
+    "primary-type": releaseGroup.primaryType || "Album",
+    "secondary-types": Array.isArray(releaseGroup.secondaryTypes)
+      ? releaseGroup.secondaryTypes
+      : [],
+    _coverUrl: releaseGroup.coverUrl || "",
+    _deezerAlbumId: releaseGroup.deezerAlbumId || "",
+    _isFocusStub: true,
+  };
+};
+
 const sortReleaseGroups = (items, sortKey, sortDirection) =>
   [...items].sort((a, b) => {
     let diff;
@@ -136,6 +156,8 @@ function ArtistAlbumsPage() {
   const [playlistModalError, setPlaylistModalError] = useState("");
   const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
   const optionsMenuRef = useRef(null);
+  const releaseCardRefs = useRef({});
+  const scrolledReleaseFocusRef = useRef("");
   const artistNameFromNav = state?.artistName || "";
   const canAddAlbum = hasPermission("addAlbum");
 
@@ -170,6 +192,8 @@ function ArtistAlbumsPage() {
     artistDisplayName ? `${artistDisplayName}'s Releases` : "",
   );
 
+  const focusedReleaseGroup = useMemo(() => buildFocusedReleaseGroup(state), [state]);
+
   const library = useArtistDetailsLibrary({
     artist,
     libraryArtist,
@@ -184,10 +208,23 @@ function ArtistAlbumsPage() {
     selectedReleaseTypes: allReleaseTypes,
   });
 
-  const releaseGroups = useMemo(
-    () => artist?.["release-groups"] || [],
-    [artist],
-  );
+  const releaseGroups = useMemo(() => {
+    const groups = artist?.["release-groups"] || [];
+    if (
+      !focusedReleaseGroup ||
+      groups.some((releaseGroup) => releaseGroup.id === focusedReleaseGroup.id)
+    ) {
+      return groups;
+    }
+    return [focusedReleaseGroup, ...groups];
+  }, [artist, focusedReleaseGroup]);
+  const artistForFocus = useMemo(() => {
+    if (!artist || releaseGroups === artist["release-groups"]) return artist;
+    return {
+      ...artist,
+      "release-groups": releaseGroups,
+    };
+  }, [artist, releaseGroups]);
   const filteredReleaseGroups = useMemo(
     () =>
       sortReleaseGroups(
@@ -213,7 +250,7 @@ function ArtistAlbumsPage() {
   );
 
   const { highlightTrackId } = useArtistSearchFocus({
-    artist,
+    artist: artistForFocus,
     loading,
     loadingReleases,
     library,
@@ -224,6 +261,15 @@ function ArtistAlbumsPage() {
     pageContext: "albums",
     prepareForFocus,
   });
+
+  const setReleaseCardNode = useCallback((releaseGroupId, node) => {
+    if (!releaseGroupId) return;
+    if (node) {
+      releaseCardRefs.current[releaseGroupId] = node;
+    } else {
+      delete releaseCardRefs.current[releaseGroupId];
+    }
+  }, []);
 
   useEffect(() => {
     setVisibleCoverIds(filteredReleaseGroups.map((item) => item.id).filter(Boolean));
@@ -245,6 +291,24 @@ function ArtistAlbumsPage() {
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [optionsOpen]);
+
+  useEffect(() => {
+    if (!highlightTrackId || !library.expandedReleaseGroup) return undefined;
+    const focusKey = `${library.expandedReleaseGroup}:${highlightTrackId}`;
+    if (scrolledReleaseFocusRef.current === focusKey) return undefined;
+
+    const frame = window.requestAnimationFrame(() => {
+      const node = releaseCardRefs.current[library.expandedReleaseGroup];
+      if (!node) return;
+      scrolledReleaseFocusRef.current = focusKey;
+      node.scrollIntoView({
+        block: "start",
+        behavior: "auto",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [highlightTrackId, library.expandedReleaseGroup, viewMode]);
 
   const handleSortOptionClick = (option) => {
     if (sortKey === option.value) {
@@ -373,7 +437,11 @@ function ArtistAlbumsPage() {
   const renderReleaseCard = (releaseGroup) => {
     const status = library.getAlbumStatus(releaseGroup.id);
     const metric = getReleaseMetric(releaseGroup);
-    const cover = albumCovers[releaseGroup.id] || artistCoverImage;
+    const cover =
+      albumCovers[releaseGroup.id] ||
+      releaseGroup.coverUrl ||
+      releaseGroup._coverUrl ||
+      artistCoverImage;
     const isComplete = status?.status === "available" || status?.status === "added";
     const releaseTypeLabel = getReleaseTypeLabel(releaseGroup);
 
@@ -381,6 +449,7 @@ function ArtistAlbumsPage() {
       return (
         <div
           key={releaseGroup.id}
+          ref={(node) => setReleaseCardNode(releaseGroup.id, node)}
           className="artist-release-list-item"
           onClick={() =>
             library.handleReleaseGroupAlbumClick(releaseGroup, status?.libraryId)
@@ -438,6 +507,7 @@ function ArtistAlbumsPage() {
     return (
       <article
         key={releaseGroup.id}
+        ref={(node) => setReleaseCardNode(releaseGroup.id, node)}
         className="artist-release-card"
         onClick={() =>
           library.handleReleaseGroupAlbumClick(releaseGroup, status?.libraryId)

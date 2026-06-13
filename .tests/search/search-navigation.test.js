@@ -5,18 +5,38 @@ import {
   buildMixedSearchPageItems,
   buildMixedSuggestionItems,
   buildUnifiedSuggestionSections,
-  compareSearchResults,
-  getSearchRankScore,
-  pickTopSearchArtist,
+  getReleaseNavigationTarget,
 } from "../../frontend/src/utils/searchNavigation.js";
+
+test("buildMixedSuggestionItems uses API top as the first item", () => {
+  const top = {
+    type: "artist",
+    id: "mcr",
+    name: "My Chemical Romance",
+    score: 0.998,
+  };
+  const items = buildMixedSuggestionItems({
+    query: "my chemical romance",
+    top,
+    catalog: {
+      artists: [top],
+      albums: [],
+      tracks: [],
+    },
+    library: { artists: [], tracks: [], playlists: [] },
+  });
+
+  assert.equal(items[0]?.type, "artist");
+  assert.equal(items[0]?.name, "My Chemical Romance");
+});
 
 test("buildMixedSuggestionItems dedupes artists with the same display name", () => {
   const items = buildMixedSuggestionItems({
     catalog: {
       artists: [
-        { type: "artist", id: "a1", name: "Bear", score: 115 },
-        { type: "artist", id: "a2", name: "Bear", score: 110 },
-        { type: "artist", id: "a3", name: "Beartooth", score: 90 },
+        { type: "artist", id: "a1", name: "Bear", score: 0.92 },
+        { type: "artist", id: "a2", name: "Bear", score: 0.88 },
+        { type: "artist", id: "a3", name: "Beartooth", score: 0.75 },
       ],
       albums: [],
       tracks: [],
@@ -29,17 +49,17 @@ test("buildMixedSuggestionItems dedupes artists with the same display name", () 
   assert.equal(items[0].id, "a1");
 });
 
-test("buildMixedSuggestionItems mixes entity types by score", () => {
+test("buildMixedSuggestionItems preserves catalog bucket order", () => {
   const items = buildMixedSuggestionItems({
     catalog: {
-      artists: [{ type: "artist", id: "a1", name: "Bear", score: 80 }],
+      artists: [{ type: "artist", id: "a1", name: "Bear", score: 0.72 }],
       albums: [
         {
           type: "album",
           id: "rg1",
           title: "Bear",
           artistName: "Remute",
-          score: 120,
+          score: 0.95,
         },
       ],
       tracks: [
@@ -48,7 +68,7 @@ test("buildMixedSuggestionItems mixes entity types by score", () => {
           id: "r1",
           title: "Bear",
           artistName: "Support Lesbiens",
-          score: 100,
+          score: 0.84,
         },
       ],
     },
@@ -57,37 +77,43 @@ test("buildMixedSuggestionItems mixes entity types by score", () => {
 
   assert.deepEqual(
     items.map((item) => item.type),
-    ["album", "track", "artist"],
+    ["artist", "album", "track"],
   );
 });
 
-test("pickTopSearchArtist prefers library artists over catalog top results", () => {
-  const artist = pickTopSearchArtist({
-    top: { type: "artist", id: "a1", name: "Beartooth", score: 115 },
-    catalog: {
-      artists: [{ type: "artist", id: "a1", name: "Beartooth", score: 115 }],
-      albums: [],
-      tracks: [],
-    },
-    library: {
-      artists: [
-        {
-          type: "artist",
-          id: "lib-1",
-          name: "Bear",
-          score: 90,
-          inLibrary: true,
-        },
-      ],
-      tracks: [],
-      playlists: [],
-    },
+test("getReleaseNavigationTarget preserves focused track album metadata", () => {
+  const target = getReleaseNavigationTarget({
+    type: "track",
+    id: "track-1",
+    title: "Welcome to the Black Parade",
+    artistMbid: "artist-1",
+    artistName: "My Chemical Romance",
+    albumMbid: "album-1",
+    albumTitle: "The Black Parade",
+    releaseYear: "2006",
+    primaryType: "Album",
+    coverUrl: "https://example.test/cover.jpg",
   });
 
-  assert.equal(artist.id, "lib-1");
+  assert.equal(
+    target.pathname,
+    "/artist/artist-1/release/album-1",
+  );
+  assert.equal(target.state.focusReleaseGroupMbid, "album-1");
+  assert.equal(target.state.focusTrackMbid, "track-1");
+  assert.equal(target.state.focusTrackTitle, "Welcome to the Black Parade");
+  assert.deepEqual(target.state.focusReleaseGroup, {
+    id: "album-1",
+    title: "The Black Parade",
+    firstReleaseDate: "2006",
+    primaryType: "Album",
+    secondaryTypes: [],
+    coverUrl: "https://example.test/cover.jpg",
+    deezerAlbumId: "",
+  });
 });
 
-test("buildMixedSuggestionItems ranks strong playlist matches ahead of catalog", () => {
+test("buildMixedSuggestionItems places library playlists before catalog buckets", () => {
   const items = buildMixedSuggestionItems({
     catalog: {
       artists: [],
@@ -98,7 +124,7 @@ test("buildMixedSuggestionItems ranks strong playlist matches ahead of catalog",
           id: "r1",
           title: "Bear",
           artistName: "Support Lesbiens",
-          score: 115,
+          score: 0.94,
         },
       ],
     },
@@ -110,7 +136,7 @@ test("buildMixedSuggestionItems ranks strong playlist matches ahead of catalog",
           type: "playlist",
           id: "pl-1",
           name: "Bear Mix",
-          score: 90,
+          score: 0.88,
           inLibrary: true,
         },
       ],
@@ -118,102 +144,71 @@ test("buildMixedSuggestionItems ranks strong playlist matches ahead of catalog",
   });
 
   assert.equal(items[0].type, "playlist");
+  assert.equal(items[1].type, "track");
 });
 
-test("buildMixedSuggestionItems prefers catalog for album title queries over weak library matches", () => {
-  const items = buildMixedSuggestionItems({
-    query: "the black parade",
-    catalog: {
-      artists: [
-        {
-          type: "artist",
-          id: "mcr",
-          name: "My Chemical Romance",
-          score: 127,
-        },
-      ],
-      albums: [
-        {
-          type: "album",
-          id: "tbp",
-          title: "The Black Parade",
-          artistName: "My Chemical Romance",
-          score: 92,
-        },
-      ],
-      tracks: [],
-    },
-    library: {
-      artists: [
-        {
-          type: "artist",
-          id: "bk",
-          name: "The Black Keys",
-          score: 67,
-          inLibrary: true,
-        },
-      ],
-      playlists: [
-        {
-          type: "playlist",
-          id: "dw",
-          name: "Discover Weekly",
-          score: 67,
-          inLibrary: true,
-        },
-      ],
-      tracks: [],
-    },
-  });
-
-  assert.equal(items[0].name, "My Chemical Romance");
-  assert.equal(
-    items.some((item) => item.type === "album" && item.title === "The Black Parade"),
-    true,
-  );
-});
-
-test("pickTopSearchArtist falls back to best catalog artist without library matches", () => {
-  const artist = pickTopSearchArtist({
-    query: "bear",
-    top: { type: "artist", id: "a1", name: "Bear", score: 115 },
-    catalog: {
-      artists: [
-        { type: "artist", id: "a1", name: "Bear", score: 115 },
-        { type: "artist", id: "a3", name: "Beartooth", score: 90 },
-      ],
-      albums: [],
-      tracks: [],
-    },
-    library: { artists: [], tracks: [], playlists: [] },
-  });
-
-  assert.equal(artist.id, "a1");
-});
-
-test("buildMixedSearchPageItems excludes the highlighted top artist", () => {
-  const topArtist = { type: "artist", id: "a1", name: "Bear", score: 115 };
-  const items = buildMixedSearchPageItems(
+test("buildMixedSuggestionItems prefers catalog for album title queries when API top is set", () => {
+  const album = {
+    type: "album",
+    id: "tbp",
+    title: "The Black Parade",
+    artistName: "My Chemical Romance",
+    artistMbid: "mcr",
+    score: 0.94,
+  };
+  const items = buildMixedSuggestionItems(
     {
+      query: "the black parade",
+      top: album,
       catalog: {
         artists: [
-          topArtist,
-          { type: "artist", id: "a2", name: "Beartooth", score: 90 },
-        ],
-        albums: [
           {
-            type: "album",
-            id: "rg1",
-            title: "Bear",
-            artistName: "Remute",
-            score: 100,
+            type: "artist",
+            id: "shadow",
+            name: "The Black Parade",
+            score: 0.91,
           },
         ],
+        albums: [album],
+        tracks: [
+          {
+            type: "track",
+            id: "willie",
+            title: "The Black Parade",
+            artistName: "Willie Nile",
+            artistMbid: "willie",
+            score: 0.86,
+          },
+        ],
+      },
+      library: { artists: [], tracks: [], playlists: [] },
+    },
+    8,
+  );
+
+  assert.equal(items[0].type, "album");
+  assert.equal(items[0].title, "The Black Parade");
+});
+
+test("buildMixedSearchPageItems excludes the highlighted top item", () => {
+  const topArtist = {
+    type: "artist",
+    id: "bear-mbid",
+    name: "Bear",
+    score: 0.94,
+  };
+  const items = buildMixedSearchPageItems(
+    {
+      query: "bear",
+      top: topArtist,
+      catalog: {
+        artists: [topArtist, { type: "artist", id: "a2", name: "Beartooth", score: 0.82 }],
+        albums: [{ type: "album", id: "rg1", title: "Bear", artistName: "Remute", score: 0.88 }],
         tracks: [],
       },
       library: { artists: [], tracks: [], playlists: [] },
     },
-    { excludeArtist: topArtist },
+    { excludeItem: topArtist },
   );
 
   assert.equal(
@@ -223,30 +218,20 @@ test("buildMixedSearchPageItems excludes the highlighted top artist", () => {
   assert.equal(items.some((item) => item.type === "album"), true);
 });
 
-test("compareSearchResults boosts in-library catalog artists with strong matches", () => {
-  const libraryArtist = {
-    type: "artist",
-    score: 95,
-    inLibrary: true,
-  };
-  const catalogArtist = {
-    type: "artist",
-    score: 115,
-    inLibrary: false,
-  };
-
-  assert.ok(getSearchRankScore(libraryArtist) > getSearchRankScore(catalogArtist));
-  assert.ok(compareSearchResults(libraryArtist, catalogArtist) < 0);
-});
-
 test("buildUnifiedSuggestionSections avoids repeating the top artist name", () => {
+  const topArtist = {
+    type: "artist",
+    id: "bear-mbid",
+    name: "Bear",
+    score: 0.94,
+  };
   const sections = buildUnifiedSuggestionSections({
-    top: { type: "artist", id: "a1", name: "Bear", score: 115 },
+    query: "bear",
+    top: topArtist,
     catalog: {
       artists: [
-        { type: "artist", id: "a1", name: "Bear", score: 115 },
-        { type: "artist", id: "a2", name: "Bear", score: 110 },
-        { type: "artist", id: "a3", name: "Beartooth", score: 90 },
+        topArtist,
+        { type: "artist", id: "a2", name: "Beartooth", score: 0.82 },
       ],
       albums: [],
       tracks: [],

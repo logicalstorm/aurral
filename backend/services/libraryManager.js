@@ -128,6 +128,10 @@ export function getCachedArtistCount() {
   return Array.isArray(_cachedArtists) ? _cachedArtists.length : 0;
 }
 
+export function getCachedArtists() {
+  return Array.isArray(_cachedArtists) ? [..._cachedArtists] : [];
+}
+
 function getSettings() {
   return dbOps.getSettings();
 }
