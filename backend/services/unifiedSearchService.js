@@ -63,6 +63,24 @@ function isLocalMatch(score, query) {
   return Number(score) > getLocalMatchThreshold(query);
 }
 
+function scorePlaylistContentMatch(query, text) {
+  const normalizedQuery = getNormalizedText(query);
+  const normalizedText = getNormalizedText(text);
+  if (!normalizedQuery || !normalizedText) return 0;
+  if (normalizedQuery === normalizedText) return 100;
+  if (normalizedText.includes(normalizedQuery)) return 92;
+  return 0;
+}
+
+function scorePlaylistTrackMatch(query, track) {
+  const artistName = track?.artistName || track?.artist || "";
+  const trackTitle = track?.trackName || track?.title || "";
+  return Math.max(
+    scorePlaylistContentMatch(query, artistName),
+    scorePlaylistContentMatch(query, trackTitle),
+  );
+}
+
 function normalizeKey(value) {
   return getNormalizedText(value);
 }
@@ -587,23 +605,11 @@ export function searchLocalFromData(
       const name = String(playlist?.name || "").trim();
       if (!name) return null;
       const trackScores = (Array.isArray(playlist?.tracks) ? playlist.tracks : [])
-        .map((track) =>
-          scoreTextMatch(
-            query,
-            `${track?.artistName || track?.artist || ""} ${track?.trackName || track?.title || ""}`,
-          ),
-        )
-        .filter((score) => score > 0);
-      const artistScores = (Array.isArray(playlist?.tracks) ? playlist.tracks : [])
-        .map((track) =>
-          scoreTextMatch(query, track?.artistName || track?.artist || ""),
-        )
+        .map((track) => scorePlaylistTrackMatch(query, track))
         .filter((score) => score > 0);
       const bestTrackScore = trackScores.length > 0 ? Math.max(...trackScores) : 0;
-      const bestArtistScore =
-        artistScores.length > 0 ? Math.max(...artistScores) : 0;
-      const nameScore = scoreTextMatch(query, name);
-      const score = Math.max(nameScore, bestTrackScore, bestArtistScore);
+      const score = bestTrackScore;
+      if (bestTrackScore <= 0) return null;
       if (!isLocalMatch(score, query)) return null;
       return {
         type: "playlist",
@@ -627,8 +633,8 @@ export function searchLocalFromData(
       const name = String(artist?.artistName || artist?.name || "").trim();
       const mbid = artist?.mbid || artist?.foreignArtistId || null;
       if (!name || !mbid) return null;
-      const score = scoreTextMatch(query, name);
-      if (!isLocalMatch(score, query)) return null;
+      const score = scorePlaylistContentMatch(query, name);
+      if (score <= 0) return null;
       return {
         type: "artist",
         source: "library",
@@ -651,11 +657,12 @@ export function searchLocalFromData(
       const artistName = String(track?.artist || track?.artistName || "").trim();
       const albumTitle = String(track?.album || track?.albumTitle || "").trim();
       if (!title) return null;
-      const score = scoreTextMatch(
-        query,
-        `${artistName} ${title} ${albumTitle}`,
+      const score = Math.max(
+        scorePlaylistContentMatch(query, artistName),
+        scorePlaylistContentMatch(query, title),
+        scorePlaylistContentMatch(query, `${artistName} ${title}`.trim()),
       );
-      if (!isLocalMatch(score, query)) return null;
+      if (score <= 0) return null;
       return {
         type: "track",
         source: "library",
@@ -728,7 +735,7 @@ export async function searchUnified(
       library: { artists: [], tracks: [], playlists: [] },
       catalog: { artists: [], albums: [], tracks: [] },
       localSearchConfigured: catalogSearchConfigured,
-      filters: ["all", "artists", "albums", "tracks", "library", "playlists"],
+      filters: ["all", "artists", "albums", "tracks", "playlists"],
     };
   }
 
@@ -759,13 +766,13 @@ export async function searchUnified(
     mode: normalizedMode,
     top: top?.type ? top : null,
     library: {
-      artists: library.artists,
+      artists: [],
       tracks: library.tracks,
       playlists: library.playlists,
     },
     catalog,
     localSearchConfigured: catalogSearchConfigured,
-    filters: ["all", "artists", "albums", "tracks", "library", "playlists"],
+    filters: ["all", "artists", "albums", "tracks", "playlists"],
   };
 
   unifiedSearchCache.set(cacheKey, response);

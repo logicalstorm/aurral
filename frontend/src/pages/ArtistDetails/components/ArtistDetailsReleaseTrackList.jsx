@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef } from "react";
 import PropTypes from "prop-types";
 import { Loader } from "lucide-react";
 import { TrackPlayButton } from "./TrackPlayButton";
-import { getReleaseYear } from "../utils";
 import { TrackPlaylistMenu } from "./TrackPlaylistMenu";
 import { ArtistTrackListToolbar } from "./ArtistTrackListToolbar";
 import { useAlbumTrackListToolbar } from "../../../hooks/useAlbumTrackListToolbar";
@@ -25,7 +24,6 @@ export function ArtistDetailsReleaseTrackList({
   getDefaultPlaylistName,
   onLoadPlaylists,
   highlightTrackId = null,
-  showHeader = true,
 }) {
   const rowRefs = useRef({});
   const normalizeTrack = useCallback(
@@ -99,20 +97,7 @@ export function ArtistDetailsReleaseTrackList({
   if (!release) return null;
 
   return (
-    <div className="artist-expanded-panel">
-      {showHeader ? (
-        <div className="artist-expanded-panel__header">
-          <div className="artist-min-0">
-            <h3 className="artist-card-title artist-truncate">{release.title}</h3>
-            <p className="artist-card-meta">
-              {[getReleaseYear(release), release["primary-type"]]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
-          </div>
-        </div>
-      ) : null}
-
+    <div className="artist-release-track-list">
       {loading ? (
         <div className="artist-loading">
           <Loader className="artist-spinner animate-spin" />
@@ -221,5 +206,4 @@ ArtistDetailsReleaseTrackList.propTypes = {
   getDefaultPlaylistName: PropTypes.func,
   onLoadPlaylists: PropTypes.func,
   highlightTrackId: PropTypes.string,
-  showHeader: PropTypes.bool,
 };

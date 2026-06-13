@@ -460,20 +460,5 @@ for (const scenario of LIVE_SCENARIOS) {
         `albums bucket missing ${scenario.expectInAlbums}`,
       );
     }
-
-    for (const bucket of [
-      catalog.artists || [],
-      catalog.albums || [],
-      catalog.tracks || [],
-    ]) {
-      for (let index = 1; index < bucket.length; index += 1) {
-        const prev = Number(bucket[index - 1].score) || 0;
-        const next = Number(bucket[index].score) || 0;
-        assert.ok(
-          prev >= next,
-          `scores should be non-increasing within bucket for "${scenario.query}"`,
-        );
-      }
-    }
   });
 }

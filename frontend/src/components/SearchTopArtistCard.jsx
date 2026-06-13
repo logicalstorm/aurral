@@ -1,5 +1,5 @@
 import PropTypes from "prop-types";
-import { ListMusic, Music } from "lucide-react";
+import { ChevronRight, ListMusic, Music } from "lucide-react";
 import ArtistImage from "./ArtistImage";
 import SearchLibraryCheck from "./SearchLibraryCheck";
 import { navigateFromSearchResult } from "../utils/searchNavigation";
@@ -7,8 +7,7 @@ import { getArtistRecordId } from "../utils/artistTaste";
 
 function getPrimaryLabel(item) {
   if (item?.type === "artist") return item.name || "";
-  if (item?.type === "album") return item.title || "";
-  if (item?.type === "track") return item.title || "";
+  if (item?.type === "album" || item?.type === "track") return item.title || "";
   if (item?.type === "playlist") return item.name || "";
   return "";
 }
@@ -29,7 +28,21 @@ function getMetaLabel(item) {
   return "";
 }
 
-function TopResultImage({ item, artistImages, albumCovers }) {
+function getPreviewLabel(item, previewTracks) {
+  const trackTitles = (previewTracks || [])
+    .map((track) => track?.title)
+    .filter(Boolean)
+    .slice(0, 3);
+  if (trackTitles.length > 0) {
+    return trackTitles.join(" · ");
+  }
+  if (item?.type === "track" && item.albumTitle) {
+    return item.albumTitle;
+  }
+  return null;
+}
+
+function TopResultArtwork({ item, artistImages, albumCovers }) {
   if (item.type === "artist") {
     const artistId = getArtistRecordId(item);
     return (
@@ -71,7 +84,21 @@ function TopResultImage({ item, artistImages, albumCovers }) {
   );
 }
 
-function SearchTopResultCard({
+function getBackdropSrc(item, artistImages, albumCovers) {
+  if (item.type === "artist") {
+    const artistId = getArtistRecordId(item);
+    return artistImages[artistId] || item.image || item.imageUrl || "";
+  }
+  if (item.type === "album") {
+    return albumCovers[item.id] || item.coverUrl || "";
+  }
+  if (item.type === "track") {
+    return albumCovers[item.albumMbid] || item.coverUrl || "";
+  }
+  return "";
+}
+
+function SearchTopArtistCard({
   item,
   artist: legacyArtist,
   artistImages,
@@ -79,15 +106,20 @@ function SearchTopResultCard({
   libraryLookup,
   navigate,
   query = "",
-  albumDestination = "tracklist",
+  previewTracks = [],
 }) {
   const result = item || legacyArtist;
   const label = getPrimaryLabel(result);
   if (!result || !label) return null;
 
-  const artistId = result.type === "artist" ? getArtistRecordId(result) : null;
+  const isArtist = result.type === "artist";
+  const artistId = isArtist ? getArtistRecordId(result) : null;
+  const backdropSrc = getBackdropSrc(result, artistImages, albumCovers);
   const isInLibrary =
-    result.inLibrary || (artistId ? libraryLookup[artistId] : false);
+    result.inLibrary ||
+    (isArtist && artistId ? libraryLookup[artistId] : false);
+  const metaLabel = getMetaLabel(result);
+  const previewLabel = getPreviewLabel(result, previewTracks);
 
   return (
     <article className="search-top-artist">
@@ -95,34 +127,62 @@ function SearchTopResultCard({
         type="button"
         className="search-top-artist__main"
         onClick={() =>
-          navigateFromSearchResult(navigate, result, { query, albumDestination })
+          navigateFromSearchResult(navigate, result, { query })
         }
       >
-        <span
-          className={`search-top-artist__image-wrap${
-            result.type === "artist" ? "" : " search-top-artist__image-wrap--square"
-          }`}
-        >
-          <TopResultImage
-            item={result}
-            artistImages={artistImages}
-            albumCovers={albumCovers}
-          />
+        <span className="search-top-artist__backdrop" aria-hidden="true">
+          {backdropSrc ? (
+            <img
+              src={backdropSrc}
+              alt=""
+              className="search-top-artist__backdrop-image"
+            />
+          ) : null}
+          <span className="search-top-artist__backdrop-wash" />
         </span>
-        <span className="search-top-artist__copy">
-          <span className="search-top-artist__eyebrow">Top result</span>
-          <span className="search-top-artist__title-row">
-            <span className="search-top-artist__name">{label}</span>
-            {isInLibrary && <SearchLibraryCheck />}
+
+        <span className="search-top-artist__content">
+          <span
+            className={`search-top-artist__image-wrap${
+              isArtist ? "" : " search-top-artist__image-wrap--square"
+            }`}
+          >
+            <TopResultArtwork
+              item={result}
+              artistImages={artistImages}
+              albumCovers={albumCovers}
+            />
           </span>
-          <span className="search-top-artist__meta">{getMetaLabel(result)}</span>
+
+          <span className="search-top-artist__copy">
+            <span className="search-top-artist__eyebrow">Top result</span>
+            <span className="search-top-artist__title-row">
+              <span className="search-top-artist__name">{label}</span>
+              {isInLibrary && <SearchLibraryCheck />}
+            </span>
+            <span className="search-top-artist__meta-row">
+              <span className="search-top-artist__meta">{metaLabel}</span>
+              {previewLabel ? (
+                <>
+                  <span className="search-top-artist__meta-dot" aria-hidden="true">
+                    ·
+                  </span>
+                  <span className="search-top-artist__preview">{previewLabel}</span>
+                </>
+              ) : null}
+            </span>
+          </span>
+
+          <span className="search-top-artist__cta" aria-hidden="true">
+            <ChevronRight className="search-top-artist__cta-icon" />
+          </span>
         </span>
       </button>
     </article>
   );
 }
 
-SearchTopResultCard.propTypes = {
+SearchTopArtistCard.propTypes = {
   item: PropTypes.object,
   artist: PropTypes.object,
   artistImages: PropTypes.object.isRequired,
@@ -130,13 +190,13 @@ SearchTopResultCard.propTypes = {
   libraryLookup: PropTypes.object.isRequired,
   navigate: PropTypes.func.isRequired,
   query: PropTypes.string,
-  albumDestination: PropTypes.oneOf(["release", "tracklist"]),
+  previewTracks: PropTypes.arrayOf(PropTypes.object),
 };
 
-TopResultImage.propTypes = {
+TopResultArtwork.propTypes = {
   item: PropTypes.object.isRequired,
   artistImages: PropTypes.object.isRequired,
   albumCovers: PropTypes.object.isRequired,
 };
 
-export default SearchTopResultCard;
+export default SearchTopArtistCard;

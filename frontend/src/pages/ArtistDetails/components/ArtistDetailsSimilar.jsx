@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PropTypes from "prop-types";
-import { Loader, ChevronLeft, ChevronRight, CheckCircle2 } from "lucide-react";
+import { Loader, ChevronLeft, ChevronRight } from "lucide-react";
+import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
 import ArtistImage from "../../../components/ArtistImage";
 import { ArtistContextMenu } from "../../../components/ArtistContextMenu";
 import {
@@ -177,7 +178,7 @@ export function ArtistDetailsSimilar({
                     >
                       <h3 className="artist-similar-name">{similar.name}</h3>
                       {artistId && libraryLookup[artistId] && (
-                        <CheckCircle2 className="artist-library-check" />
+                        <SearchLibraryCheck size="sm" />
                       )}
                     </div>
                     <ArtistContextMenu

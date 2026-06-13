@@ -234,15 +234,9 @@ function ArtistDetailsPage() {
   });
 
   useArtistSearchFocus({
-    artist,
-    loading,
-    loadingReleases,
-    library,
-    libraryAlbums,
     navigate,
     mbid,
     locationState,
-    pageContext: "artist",
   });
 
   const preview = usePreviewPlayer(mbid, artistNameFromNav, artist, {
@@ -250,7 +244,6 @@ function ArtistDetailsPage() {
     libraryArtist,
     libraryAlbums,
     downloadStatuses: library.downloadStatuses || {},
-    albumTracks: library.albumTracks || {},
   });
   const {
     previewTracks,
@@ -396,25 +389,6 @@ function ArtistDetailsPage() {
       `${artist?.name || artistNameFromNav || track?.artistName || "Artist"} Picks`,
     );
 
-  const buildLibraryTrackPayload = (track, libraryAlbum, releaseGroupId) => {
-    const year = String(libraryAlbum?.releaseDate || "").slice(0, 4);
-    return {
-      artistName: artist?.name || artistNameFromNav || "",
-      trackName: track?.trackName || track?.title || "",
-      albumName: libraryAlbum?.albumName || "",
-      artistMbid: mbid || "",
-      albumMbid: releaseGroupId || libraryAlbum?.mbid || "",
-      trackMbid: track?.mbid || track?.id || "",
-      releaseYear: year || null,
-      durationMs:
-        track?.length != null && Number.isFinite(Number(track.length))
-          ? Number(track.length)
-          : null,
-      reason: null,
-      artistAliases: [],
-    };
-  };
-
   const buildReleaseTrackPayload = (track, releaseGroup) => {
     const year = String(releaseGroup?.["first-release-date"] || "").slice(0, 4);
     return {
@@ -498,12 +472,6 @@ function ArtistDetailsPage() {
     } finally {
       setPlaylistMenuSavingKey("");
     }
-  };
-
-  const handleLibraryTrackAdd = (track, libraryAlbum, releaseGroupId, target) => {
-    const payload = buildLibraryTrackPayload(track, libraryAlbum, releaseGroupId);
-    const savingKey = String(track?.id ?? track?.mbid ?? track?.title ?? "");
-    return saveTrackToPlaylist(payload, target, savingKey);
   };
 
   const handleReleaseTrackAdd = (track, releaseGroup, target) => {
@@ -648,27 +616,14 @@ function ArtistDetailsPage() {
           reSearchingMissingAlbums={library.reSearchingMissingAlbums}
           albumCovers={albumCovers}
           artistCoverImage={artistCoverImage}
-          expandedLibraryAlbum={library.expandedLibraryAlbum}
-          albumTracks={library.albumTracks}
-          loadingTracks={library.loadingTracks}
           albumDropdownOpen={library.albumDropdownOpen}
           setAlbumDropdownOpen={library.setAlbumDropdownOpen}
-          handleLibraryAlbumClick={library.handleLibraryAlbumClick}
           canDeleteAlbum={canDeleteAlbum}
           handleDeleteAlbumClick={library.handleDeleteAlbumClick}
           canReSearchAlbum={canAddAlbum}
           handleReSearchAlbum={library.handleReSearchAlbum}
           handleReSearchMissingDownloads={library.handleReSearchMissingDownloads}
-          onAddTrackToPlaylist={handleLibraryTrackAdd}
-          resolveMembershipTrack={buildLibraryTrackPayload}
-          playlists={sharedPlaylists}
-          playlistsLoading={playlistModalLoading}
-          playlistSavingKey={playlistMenuSavingKey}
-          playlistError={playlistModalError}
-          getDefaultPlaylistName={getDefaultTrackPlaylistName}
-          onLoadPlaylists={loadSharedPlaylists}
           onVisibleCoverIdsChange={setVisibleLibraryCoverIds}
-          playbackSource={playbackSource}
           artistName={artistDisplayName}
         />
       )}
@@ -680,24 +635,11 @@ function ArtistDetailsPage() {
           loadingReleases={loadingReleases}
           albumCovers={albumCovers}
           artistCoverImage={artistCoverImage}
-          expandedReleaseGroup={library.expandedReleaseGroup}
-          albumTracks={library.albumTracks}
-          loadingTracks={library.loadingTracks}
           getAlbumStatus={library.getAlbumStatus}
-          handleReleaseGroupAlbumClick={library.handleReleaseGroupAlbumClick}
           canAddAlbum={canAddAlbum}
           handleRequestAlbum={library.handleRequestAlbum}
           requestingAlbum={library.requestingAlbum}
-          playbackSource={playbackSource}
           artistName={artistDisplayName}
-          onAddTrackToPlaylist={handleReleaseTrackAdd}
-          resolveMembershipTrack={buildReleaseTrackPayload}
-          playlists={sharedPlaylists}
-          playlistsLoading={playlistModalLoading}
-          playlistSavingKey={playlistMenuSavingKey}
-          playlistError={playlistModalError}
-          getDefaultPlaylistName={getDefaultTrackPlaylistName}
-          onLoadPlaylists={loadSharedPlaylists}
           onVisibleCoverIdsChange={setVisibleReleaseGroupCoverIds}
           onViewAll={() =>
             navigate(`/artist/${artist.id}/albums`, {
@@ -715,24 +657,11 @@ function ArtistDetailsPage() {
             loadingAppearsOn={loadingAppearsOn}
             albumCovers={albumCovers}
             artistCoverImage={artistCoverImage}
-            expandedReleaseGroup={library.expandedReleaseGroup}
-            albumTracks={library.albumTracks}
-            loadingTracks={library.loadingTracks}
             getAlbumStatus={library.getAlbumStatus}
-            handleReleaseGroupAlbumClick={library.handleReleaseGroupAlbumClick}
             canAddAlbum={canAddAlbum}
             handleRequestAlbum={library.handleRequestAlbum}
             requestingAlbum={library.requestingAlbum}
-            playbackSource={playbackSource}
             artistName={artistDisplayName}
-            onAddTrackToPlaylist={handleReleaseTrackAdd}
-            resolveMembershipTrack={buildReleaseTrackPayload}
-            playlists={sharedPlaylists}
-            playlistsLoading={playlistModalLoading}
-            playlistSavingKey={playlistMenuSavingKey}
-            playlistError={playlistModalError}
-            getDefaultPlaylistName={getDefaultTrackPlaylistName}
-            onLoadPlaylists={loadSharedPlaylists}
             onVisibleCoverIdsChange={setVisibleAppearsOnCoverIds}
             onViewAll={() =>
               navigate(`/artist/${artist.id}/appears-on`, {
