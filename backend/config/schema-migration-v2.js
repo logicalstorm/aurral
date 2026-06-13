@@ -1,11 +1,5 @@
-import fs from "fs";
-import path from "path";
-import { resolvePlaylistRoot } from "../services/playlistPaths.js";
-
 const SCHEMA_VERSION_KEY = "schemaVersion";
 export const TARGET_SCHEMA_VERSION = 2;
-const LEGACY_LIBRARY_DIR = "aurral-weekly-flow";
-const PLAYLIST_LIBRARY_DIR = "aurral-playlists";
 const LEGACY_SETTINGS_KEYS = [
   "weeklyFlows",
   "sharedFlowPlaylists",
@@ -19,11 +13,6 @@ export function getSchemaVersion(db) {
     .prepare("SELECT value FROM settings WHERE key = ?")
     .get(SCHEMA_VERSION_KEY);
   return Number(row?.value || 1);
-}
-
-function hasLegacyPlaylistDirectory() {
-  const root = resolvePlaylistRoot();
-  return fs.existsSync(path.join(root, LEGACY_LIBRARY_DIR));
 }
 
 export function hasV1MigrationMarkers(db, dbHelpers) {
@@ -42,7 +31,7 @@ export function hasV1MigrationMarkers(db, dbHelpers) {
   if (integrations?.soulseek) {
     return true;
   }
-  return hasLegacyPlaylistDirectory();
+  return false;
 }
 
 export function buildV2MigrationPreview(db, dbHelpers) {
@@ -67,24 +56,15 @@ export function buildV2MigrationPreview(db, dbHelpers) {
       : 0,
     weeklyFlowJobCount,
     hasSoulseekIntegration: !!integrations?.soulseek,
-    hasLegacyPlaylistDirectory: hasLegacyPlaylistDirectory(),
-    legacyLibraryDir: LEGACY_LIBRARY_DIR,
-    playlistLibraryDir: PLAYLIST_LIBRARY_DIR,
   };
 }
 
 export function getV2MigrationStatus(db, dbHelpers) {
   const schemaVersion = getSchemaVersion(db);
-  if (schemaVersion >= TARGET_SCHEMA_VERSION) {
-    return { required: false, schemaVersion };
-  }
-  if (!hasV1MigrationMarkers(db, dbHelpers)) {
-    return { required: false, schemaVersion, freshInstall: true };
-  }
   return {
-    required: true,
+    required: false,
     schemaVersion,
-    preview: buildV2MigrationPreview(db, dbHelpers),
+    legacyDetected: hasV1MigrationMarkers(db, dbHelpers),
   };
 }
 
@@ -95,19 +75,15 @@ export function runV2SchemaMaintenance(db, dbHelpers) {
 }
 
 export function initializeSchemaOnStartup(db, dbHelpers) {
-  const status = getV2MigrationStatus(db, dbHelpers);
-  if (status.required) {
-    return { pending: true, status };
-  }
-  if (status.freshInstall) {
-    applyV2Migration(db, dbHelpers);
-    return {
-      pending: false,
-      status: { required: false, schemaVersion: TARGET_SCHEMA_VERSION },
-    };
-  }
-  runV2SchemaMaintenance(db, dbHelpers);
-  return { pending: false, status };
+  const result = applyV2Migration(db, dbHelpers);
+  return {
+    pending: false,
+    status: {
+      required: false,
+      schemaVersion: result.schemaVersion,
+      legacyDetected: getV2MigrationStatus(db, dbHelpers).legacyDetected,
+    },
+  };
 }
 
 function tableExists(db, name) {
@@ -127,6 +103,14 @@ function tryAddColumn(db, sql) {
       throw error;
     }
   }
+}
+
+function getTableColumns(db, tableName) {
+  if (!tableExists(db, tableName)) return [];
+  return db
+    .prepare(`PRAGMA table_info(${tableName})`)
+    .all()
+    .map((column) => column.name);
 }
 
 function buildPlaylistWorkerSettings(weeklyFlowWorker, playlistWorker) {
@@ -160,6 +144,20 @@ function buildPlaylistWorkerSettings(weeklyFlowWorker, playlistWorker) {
     retryCycleMinutes,
     retryPausedPlaylistIds,
     existingFileMode,
+  };
+}
+
+function buildLegacyPlaylistWorkerSettings(weeklyFlowWorker, playlistWorker) {
+  const legacy = weeklyFlowWorker && typeof weeklyFlowWorker === "object"
+    ? weeklyFlowWorker
+    : {};
+  const current = buildPlaylistWorkerSettings(weeklyFlowWorker, playlistWorker);
+  return {
+    ...legacy,
+    concurrency: current.concurrency,
+    retryCycleMinutes: current.retryCycleMinutes,
+    retryPausedPlaylistIds: current.retryPausedPlaylistIds,
+    existingFileMode: current.existingFileMode,
   };
 }
 
@@ -204,14 +202,15 @@ export function finalizeV2SettingsKeys(db, dbHelpers) {
   const upsertSettingStmt = db.prepare(
     "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
   );
-  const deleteSettingStmt = db.prepare("DELETE FROM settings WHERE key = ?");
 
   const flows = dbHelpers.parseJSON(getSettingStmt.get("flows")?.value);
   const weeklyFlows = dbHelpers.parseJSON(
     getSettingStmt.get("weeklyFlows")?.value,
   );
-  if (!flows && weeklyFlows) {
+  if (flows == null && weeklyFlows != null) {
     upsertSettingStmt.run("flows", dbHelpers.stringifyJSON(weeklyFlows));
+  } else if (flows != null && weeklyFlows == null) {
+    upsertSettingStmt.run("weeklyFlows", dbHelpers.stringifyJSON(flows));
   }
 
   const sharedPlaylists = dbHelpers.parseJSON(
@@ -220,10 +219,15 @@ export function finalizeV2SettingsKeys(db, dbHelpers) {
   const sharedFlowPlaylists = dbHelpers.parseJSON(
     getSettingStmt.get("sharedFlowPlaylists")?.value,
   );
-  if (!sharedPlaylists && sharedFlowPlaylists) {
+  if (sharedPlaylists == null && sharedFlowPlaylists != null) {
     upsertSettingStmt.run(
       "sharedPlaylists",
       dbHelpers.stringifyJSON(sharedFlowPlaylists),
+    );
+  } else if (sharedPlaylists != null && sharedFlowPlaylists == null) {
+    upsertSettingStmt.run(
+      "sharedFlowPlaylists",
+      dbHelpers.stringifyJSON(sharedPlaylists),
     );
   }
 
@@ -234,79 +238,361 @@ export function finalizeV2SettingsKeys(db, dbHelpers) {
     getSettingStmt.get("weeklyFlowWorker")?.value,
   );
   if (weeklyFlowWorker || playlistWorker) {
+    const v2Worker = buildPlaylistWorkerSettings(
+      weeklyFlowWorker,
+      playlistWorker,
+    );
     upsertSettingStmt.run(
       "playlistWorker",
+      dbHelpers.stringifyJSON(v2Worker),
+    );
+    upsertSettingStmt.run(
+      "weeklyFlowWorker",
       dbHelpers.stringifyJSON(
-        buildPlaylistWorkerSettings(weeklyFlowWorker, playlistWorker),
+        buildLegacyPlaylistWorkerSettings(weeklyFlowWorker, v2Worker),
       ),
     );
   }
 
   backfillSlskdSettings(db, dbHelpers);
+}
 
-  for (const key of LEGACY_SETTINGS_KEYS) {
-    deleteSettingStmt.run(key);
+function ensurePlaylistDownloadJobsTable(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS playlist_download_jobs (
+      id TEXT PRIMARY KEY,
+      artist_name TEXT NOT NULL,
+      track_name TEXT NOT NULL,
+      album_name TEXT,
+      reason TEXT,
+      artist_mbid TEXT,
+      album_mbid TEXT,
+      track_mbid TEXT,
+      release_year TEXT,
+      duration_ms INTEGER,
+      track_number INTEGER,
+      album_track_count INTEGER,
+      album_track_titles TEXT,
+      artist_aliases TEXT,
+      playlist_id TEXT NOT NULL,
+      playlist_type TEXT,
+      status TEXT NOT NULL,
+      staging_path TEXT,
+      final_path TEXT,
+      error TEXT,
+      started_at INTEGER,
+      completed_at INTEGER,
+      created_at INTEGER NOT NULL,
+      slskd_search_id TEXT,
+      slskd_batch_id TEXT,
+      remote_username TEXT,
+      remote_filename TEXT
+    );
+  `);
+}
+
+function ensureLegacyWeeklyFlowJobsTable(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS weekly_flow_jobs (
+      id TEXT PRIMARY KEY,
+      artist_name TEXT NOT NULL,
+      track_name TEXT NOT NULL,
+      album_name TEXT,
+      reason TEXT,
+      artist_mbid TEXT,
+      album_mbid TEXT,
+      track_mbid TEXT,
+      release_year TEXT,
+      duration_ms INTEGER,
+      artist_aliases TEXT,
+      playlist_type TEXT NOT NULL,
+      status TEXT NOT NULL,
+      staging_path TEXT,
+      final_path TEXT,
+      error TEXT,
+      started_at INTEGER,
+      completed_at INTEGER,
+      created_at INTEGER NOT NULL
+    );
+  `);
+
+  const columns = getTableColumns(db, "weekly_flow_jobs");
+  const optionalColumns = [
+    ["album_name", "TEXT"],
+    ["reason", "TEXT"],
+    ["artist_mbid", "TEXT"],
+    ["album_mbid", "TEXT"],
+    ["track_mbid", "TEXT"],
+    ["release_year", "TEXT"],
+    ["duration_ms", "INTEGER"],
+    ["artist_aliases", "TEXT"],
+    ["playlist_type", "TEXT"],
+    ["staging_path", "TEXT"],
+    ["final_path", "TEXT"],
+    ["error", "TEXT"],
+    ["started_at", "INTEGER"],
+    ["completed_at", "INTEGER"],
+  ];
+  for (const [name, type] of optionalColumns) {
+    if (!columns.includes(name)) {
+      tryAddColumn(db, `ALTER TABLE weekly_flow_jobs ADD COLUMN ${name} ${type}`);
+    }
   }
 
-  const integrations = dbHelpers.parseJSON(
-    getSettingStmt.get("integrations")?.value,
+  db.exec(
+    "CREATE INDEX IF NOT EXISTS idx_weekly_flow_jobs_status ON weekly_flow_jobs(status)",
   );
-  if (integrations?.soulseek) {
-    const next = { ...integrations };
-    delete next.soulseek;
-    upsertSettingStmt.run("integrations", dbHelpers.stringifyJSON(next));
-  }
+  db.exec(
+    "CREATE INDEX IF NOT EXISTS idx_weekly_flow_jobs_playlist_type ON weekly_flow_jobs(playlist_type)",
+  );
+}
+
+function legacyColumnExpr(columns, columnName, fallback = "NULL") {
+  return columns.includes(columnName) ? columnName : fallback;
+}
+
+function syncWeeklyFlowJobsToPlaylistDownloads(db) {
+  if (!tableExists(db, "weekly_flow_jobs")) return;
+
+  const columns = getTableColumns(db, "weekly_flow_jobs");
+  const playlistTypeExpr = columns.includes("playlist_type")
+    ? "NULLIF(TRIM(playlist_type), '')"
+    : "NULL";
+
+  db.exec(`
+    INSERT INTO playlist_download_jobs (
+      id,
+      artist_name,
+      track_name,
+      album_name,
+      reason,
+      artist_mbid,
+      album_mbid,
+      track_mbid,
+      release_year,
+      duration_ms,
+      track_number,
+      album_track_count,
+      album_track_titles,
+      artist_aliases,
+      playlist_id,
+      playlist_type,
+      status,
+      staging_path,
+      final_path,
+      error,
+      started_at,
+      completed_at,
+      created_at
+    )
+    SELECT
+      id,
+      COALESCE(${legacyColumnExpr(columns, "artist_name")}, 'Unknown Artist'),
+      COALESCE(${legacyColumnExpr(columns, "track_name")}, 'Unknown Track'),
+      ${legacyColumnExpr(columns, "album_name")},
+      ${legacyColumnExpr(columns, "reason")},
+      ${legacyColumnExpr(columns, "artist_mbid")},
+      ${legacyColumnExpr(columns, "album_mbid")},
+      ${legacyColumnExpr(columns, "track_mbid")},
+      ${legacyColumnExpr(columns, "release_year")},
+      ${legacyColumnExpr(columns, "duration_ms")},
+      NULL,
+      NULL,
+      NULL,
+      ${legacyColumnExpr(columns, "artist_aliases")},
+      COALESCE(${playlistTypeExpr}, 'discover'),
+      ${playlistTypeExpr},
+      COALESCE(NULLIF(TRIM(${legacyColumnExpr(columns, "status", "'pending'")}), ''), 'pending'),
+      ${legacyColumnExpr(columns, "staging_path")},
+      ${legacyColumnExpr(columns, "final_path")},
+      ${legacyColumnExpr(columns, "error")},
+      ${legacyColumnExpr(columns, "started_at")},
+      ${legacyColumnExpr(columns, "completed_at")},
+      COALESCE(${legacyColumnExpr(columns, "created_at")}, 0)
+    FROM weekly_flow_jobs
+    WHERE 1
+    ON CONFLICT(id) DO UPDATE SET
+      artist_name = excluded.artist_name,
+      track_name = excluded.track_name,
+      album_name = excluded.album_name,
+      reason = excluded.reason,
+      artist_mbid = excluded.artist_mbid,
+      album_mbid = excluded.album_mbid,
+      track_mbid = excluded.track_mbid,
+      release_year = excluded.release_year,
+      duration_ms = excluded.duration_ms,
+      artist_aliases = excluded.artist_aliases,
+      playlist_id = excluded.playlist_id,
+      playlist_type = excluded.playlist_type,
+      status = excluded.status,
+      staging_path = excluded.staging_path,
+      final_path = excluded.final_path,
+      error = excluded.error,
+      started_at = excluded.started_at,
+      completed_at = excluded.completed_at,
+      created_at = excluded.created_at;
+  `);
+}
+
+function dropPlaylistDownloadJobSyncTriggers(db) {
+  db.exec(`
+    DROP TRIGGER IF EXISTS sync_playlist_download_jobs_ai_weekly_flow_jobs;
+    DROP TRIGGER IF EXISTS sync_playlist_download_jobs_au_weekly_flow_jobs;
+    DROP TRIGGER IF EXISTS sync_playlist_download_jobs_ad_weekly_flow_jobs;
+  `);
+}
+
+function syncPlaylistDownloadsToWeeklyFlowJobs(db) {
+  ensureLegacyWeeklyFlowJobsTable(db);
+  db.exec(`
+    INSERT OR REPLACE INTO weekly_flow_jobs (
+      id,
+      artist_name,
+      track_name,
+      album_name,
+      reason,
+      artist_mbid,
+      album_mbid,
+      track_mbid,
+      release_year,
+      duration_ms,
+      artist_aliases,
+      playlist_type,
+      status,
+      staging_path,
+      final_path,
+      error,
+      started_at,
+      completed_at,
+      created_at
+    )
+    SELECT
+      id,
+      artist_name,
+      track_name,
+      album_name,
+      reason,
+      artist_mbid,
+      album_mbid,
+      track_mbid,
+      release_year,
+      duration_ms,
+      artist_aliases,
+      COALESCE(NULLIF(TRIM(playlist_type), ''), NULLIF(TRIM(playlist_id), ''), 'discover'),
+      status,
+      staging_path,
+      final_path,
+      error,
+      started_at,
+      completed_at,
+      created_at
+    FROM playlist_download_jobs;
+
+    CREATE TRIGGER sync_playlist_download_jobs_ai_weekly_flow_jobs
+    AFTER INSERT ON playlist_download_jobs
+    BEGIN
+      INSERT OR REPLACE INTO weekly_flow_jobs (
+        id,
+        artist_name,
+        track_name,
+        album_name,
+        reason,
+        artist_mbid,
+        album_mbid,
+        track_mbid,
+        release_year,
+        duration_ms,
+        artist_aliases,
+        playlist_type,
+        status,
+        staging_path,
+        final_path,
+        error,
+        started_at,
+        completed_at,
+        created_at
+      )
+      VALUES (
+        NEW.id,
+        NEW.artist_name,
+        NEW.track_name,
+        NEW.album_name,
+        NEW.reason,
+        NEW.artist_mbid,
+        NEW.album_mbid,
+        NEW.track_mbid,
+        NEW.release_year,
+        NEW.duration_ms,
+        NEW.artist_aliases,
+        COALESCE(NULLIF(TRIM(NEW.playlist_type), ''), NULLIF(TRIM(NEW.playlist_id), ''), 'discover'),
+        NEW.status,
+        NEW.staging_path,
+        NEW.final_path,
+        NEW.error,
+        NEW.started_at,
+        NEW.completed_at,
+        NEW.created_at
+      );
+    END;
+
+    CREATE TRIGGER sync_playlist_download_jobs_au_weekly_flow_jobs
+    AFTER UPDATE ON playlist_download_jobs
+    BEGIN
+      INSERT OR REPLACE INTO weekly_flow_jobs (
+        id,
+        artist_name,
+        track_name,
+        album_name,
+        reason,
+        artist_mbid,
+        album_mbid,
+        track_mbid,
+        release_year,
+        duration_ms,
+        artist_aliases,
+        playlist_type,
+        status,
+        staging_path,
+        final_path,
+        error,
+        started_at,
+        completed_at,
+        created_at
+      )
+      VALUES (
+        NEW.id,
+        NEW.artist_name,
+        NEW.track_name,
+        NEW.album_name,
+        NEW.reason,
+        NEW.artist_mbid,
+        NEW.album_mbid,
+        NEW.track_mbid,
+        NEW.release_year,
+        NEW.duration_ms,
+        NEW.artist_aliases,
+        COALESCE(NULLIF(TRIM(NEW.playlist_type), ''), NULLIF(TRIM(NEW.playlist_id), ''), 'discover'),
+        NEW.status,
+        NEW.staging_path,
+        NEW.final_path,
+        NEW.error,
+        NEW.started_at,
+        NEW.completed_at,
+        NEW.created_at
+      );
+    END;
+
+    CREATE TRIGGER sync_playlist_download_jobs_ad_weekly_flow_jobs
+    AFTER DELETE ON playlist_download_jobs
+    BEGIN
+      DELETE FROM weekly_flow_jobs WHERE id = OLD.id;
+    END;
+  `);
 }
 
 function migrateJobsTable(db) {
-  if (tableExists(db, "weekly_flow_jobs")) {
-    if (tableExists(db, "playlist_download_jobs")) {
-      const playlistCount = Number(
-        db.prepare("SELECT COUNT(*) AS count FROM playlist_download_jobs").get()
-          .count || 0,
-      );
-      if (playlistCount === 0) {
-        db.exec("DROP TABLE playlist_download_jobs");
-      }
-    }
-    if (!tableExists(db, "playlist_download_jobs")) {
-      db.exec("ALTER TABLE weekly_flow_jobs RENAME TO playlist_download_jobs");
-    }
-  }
-
-  if (!tableExists(db, "playlist_download_jobs")) {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS playlist_download_jobs (
-        id TEXT PRIMARY KEY,
-        artist_name TEXT NOT NULL,
-        track_name TEXT NOT NULL,
-        album_name TEXT,
-        reason TEXT,
-        artist_mbid TEXT,
-        album_mbid TEXT,
-        track_mbid TEXT,
-        release_year TEXT,
-        duration_ms INTEGER,
-        track_number INTEGER,
-        album_track_count INTEGER,
-        album_track_titles TEXT,
-        artist_aliases TEXT,
-        playlist_id TEXT NOT NULL,
-        playlist_type TEXT,
-        status TEXT NOT NULL,
-        staging_path TEXT,
-        final_path TEXT,
-        error TEXT,
-        started_at INTEGER,
-        completed_at INTEGER,
-        created_at INTEGER NOT NULL,
-        slskd_search_id TEXT,
-        slskd_batch_id TEXT,
-        remote_username TEXT,
-        remote_filename TEXT
-      );
-    `);
-  }
+  ensurePlaylistDownloadJobsTable(db);
+  dropPlaylistDownloadJobSyncTriggers(db);
 
   const columns = db
     .prepare("PRAGMA table_info(playlist_download_jobs)")
@@ -350,6 +636,12 @@ function migrateJobsTable(db) {
     db,
     "ALTER TABLE playlist_download_jobs ADD COLUMN album_track_titles TEXT",
   );
+  tryAddColumn(
+    db,
+    "ALTER TABLE playlist_download_jobs ADD COLUMN artist_aliases TEXT",
+  );
+
+  syncWeeklyFlowJobsToPlaylistDownloads(db);
 
   const latestColumns = db
     .prepare("PRAGMA table_info(playlist_download_jobs)")
@@ -380,27 +672,15 @@ function migrateJobsTable(db) {
     `);
   }
 
-  if (latestColumns.includes("final_path")) {
-    db.exec(`
-      UPDATE playlist_download_jobs
-      SET final_path = REPLACE(final_path, '${LEGACY_LIBRARY_DIR}', '${PLAYLIST_LIBRARY_DIR}')
-      WHERE final_path LIKE '%${LEGACY_LIBRARY_DIR}%';
-    `);
-  }
-  if (latestColumns.includes("staging_path")) {
-    db.exec(`
-      UPDATE playlist_download_jobs
-      SET staging_path = REPLACE(staging_path, '${LEGACY_LIBRARY_DIR}', '${PLAYLIST_LIBRARY_DIR}')
-      WHERE staging_path LIKE '%${LEGACY_LIBRARY_DIR}%';
-    `);
-  }
-
   db.exec(
     "CREATE INDEX IF NOT EXISTS idx_playlist_download_jobs_status ON playlist_download_jobs(status)",
   );
   db.exec(
     "CREATE INDEX IF NOT EXISTS idx_playlist_download_jobs_playlist_id ON playlist_download_jobs(playlist_id)",
   );
+
+  dropPlaylistDownloadJobSyncTriggers(db);
+  syncPlaylistDownloadsToWeeklyFlowJobs(db);
 }
 
 export function applyV2Migration(db, dbHelpers) {

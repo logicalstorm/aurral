@@ -6,8 +6,9 @@ import {
   resolveEnvDownloadFolder,
 } from "./downloadFolderConfig.js";
 
-export const PLAYLIST_LIBRARY_DIR = "aurral-playlists";
+export const PLAYLIST_LIBRARY_DIR = "aurral-weekly-flow";
 const LEGACY_LIBRARY_DIR = "aurral-weekly-flow";
+const PREVIOUS_V2_LIBRARY_DIR = "aurral-playlists";
 const LEGACY_DOCKER_PLAYLIST_ROOT = "/app/downloads";
 
 function defaultPlaylistRoot() {
@@ -43,15 +44,20 @@ export function remapLegacyPath(
 ) {
   let resolved = path.resolve(String(finalPath || "").trim());
   const root = path.resolve(playlistRoot);
-  if (resolved === root || resolved.startsWith(`${root}${path.sep}`)) {
-    return resolved;
-  }
   const legacyRoot = path.resolve(LEGACY_DOCKER_PLAYLIST_ROOT);
   if (
     resolved === legacyRoot ||
     resolved.startsWith(`${legacyRoot}${path.sep}`)
   ) {
     resolved = path.resolve(root, path.relative(legacyRoot, resolved));
+  }
+  if (resolved.includes(PREVIOUS_V2_LIBRARY_DIR)) {
+    resolved = path.resolve(
+      root,
+      path
+        .relative(root, resolved)
+        .replaceAll(PREVIOUS_V2_LIBRARY_DIR, PLAYLIST_LIBRARY_DIR),
+    );
   }
   if (resolved.includes(LEGACY_LIBRARY_DIR)) {
     resolved = path.resolve(

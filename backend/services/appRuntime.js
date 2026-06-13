@@ -1,4 +1,3 @@
-import { isV2MigrationPending } from "../middleware/migrationGate.js";
 import { ensurePlaylistFilesystemLayout } from "./playlistFilesystemMigration.js";
 import {
   enqueueHonkerStartupTasks,
@@ -21,7 +20,6 @@ let backgroundWorkersStarted = false;
 export function startBackgroundWorkers({ logger = console } = {}) {
   if (
     backgroundWorkersStarted ||
-    isV2MigrationPending() ||
     process.env.AURRAL_TEST_SERVER === "1"
   ) {
     return false;
@@ -45,9 +43,5 @@ export function startBackgroundWorkers({ logger = console } = {}) {
 
 export function initializeAppRuntime({ logger = console } = {}) {
   startHonkerScheduler();
-  if (isV2MigrationPending()) {
-    logger.info?.("V2 migration pending; background workers deferred.");
-    return;
-  }
   startBackgroundWorkers({ logger });
 }

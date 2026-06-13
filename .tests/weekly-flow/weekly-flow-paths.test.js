@@ -84,7 +84,16 @@ test("remapLegacyWeeklyFlowPath rewrites legacy roots and library dir names", ()
     "/app/downloads/aurral-weekly-flow/playlist-id/Artist/Album/Track.flac";
   assert.equal(
     remapLegacyWeeklyFlowPath(legacyPath, "/data/downloads/tmp"),
-    "/data/downloads/tmp/aurral-playlists/playlist-id/Artist/Album/Track.flac",
+    "/data/downloads/tmp/aurral-weekly-flow/playlist-id/Artist/Album/Track.flac",
+  );
+});
+
+test("remapLegacyWeeklyFlowPath rewrites previous v2 library dir names", () => {
+  const previousV2Path =
+    "/data/downloads/tmp/aurral-playlists/playlist-id/Artist/Album/Track.flac";
+  assert.equal(
+    remapLegacyWeeklyFlowPath(previousV2Path, "/data/downloads/tmp"),
+    "/data/downloads/tmp/aurral-weekly-flow/playlist-id/Artist/Album/Track.flac",
   );
 });
 
@@ -93,7 +102,7 @@ test("resolveExistingWeeklyFlowTrackPath prefers a migrated legacy path when the
   const root = path.join(process.env.WEEKLY_FLOW_FOLDER, "legacy-path-check");
   const playlistPath = path.join(
     root,
-    "aurral-playlists",
+    "aurral-weekly-flow",
     "playlist-id",
     "Artist",
     "Track.flac",

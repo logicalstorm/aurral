@@ -140,7 +140,7 @@ Imported playlists are separate from flows.
 
 ## Existing file reuse
 
-Aurral keeps every generated playlist entry inside its own playlist folder under `aurral-playlists/<playlist-id>`. When existing file reuse is enabled, that entry can point at a matching completed Aurral or Lidarr file instead of a new slskd download.
+Aurral keeps every generated playlist entry inside its own playlist folder under `aurral-weekly-flow/<playlist-id>`. When existing file reuse is enabled, that entry can point at a matching completed Aurral or Lidarr file instead of a new slskd download.
 
 - `Download` always downloads a new file.
 - `Reuse existing files` uses a matching completed Aurral or Lidarr file when one is available.
