@@ -2,7 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "http";
 
-import { importFromRepo } from "../helpers/backendTestHarness.js";
+import {
+  createIsolatedStateDir,
+  applyIsolatedBackendEnv,
+  cleanupIsolatedState,
+  importFromRepo,
+  resetDatabase,
+} from "../helpers/backendTestHarness.js";
+
+const isolatedState = await createIsolatedStateDir("slskd-client");
+applyIsolatedBackendEnv(isolatedState);
 
 const [
   {
@@ -12,10 +21,20 @@ const [
     slskdClient,
   },
   { dbOps },
+  { db },
 ] = await Promise.all([
   importFromRepo("backend/services/slskdClient.js"),
   importFromRepo("backend/config/db-helpers.js"),
+  importFromRepo("backend/config/db-sqlite.js"),
 ]);
+
+test.beforeEach(() => {
+  resetDatabase(db);
+});
+
+test.after(async () => {
+  await cleanupIsolatedState(isolatedState);
+});
 
 function createMockServer(handler) {
   const server = http.createServer(handler);
