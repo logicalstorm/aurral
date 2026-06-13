@@ -231,17 +231,17 @@
           </a>
 
           <a
-            href="https://slsknet.org/"
+            href="https://github.com/slskd/slskd"
             target="_blank"
             rel="noopener noreferrer"
             class="integration-card"
           >
             <div class="integration-mark">
-              <img src="icons/soulseek.svg" alt="" />
+              <img src="icons/slskd.svg" alt="" />
             </div>
             <div class="integration-copy">
-              <h3>Soulseek</h3>
-              <p>Turns flows and playlists into real downloads.</p>
+              <h3>slskd</h3>
+              <p>Handles Soulseek-backed downloads for flows and playlists.</p>
               <code>Acquisition layer</code>
             </div>
           </a>
@@ -299,7 +299,7 @@
                 <span class="workflow-step-index">02</span>
                 <div>
                   <strong>Download</strong>
-                  <p>Queue tracks through Soulseek with retry logic for playlist and flow behavior.</p>
+                  <p>Queue tracks through slskd with retry logic for playlist and flow behavior.</p>
                 </div>
               </div>
               <div class="workflow-step">
@@ -392,10 +392,10 @@
     ports:
       - "3001:3001"
     environment:
-      - DOWNLOAD_FOLDER=${DL_FOLDER:-./data/downloads}
+      - DOWNLOAD_FOLDER=${DOWNLOAD_FOLDER:-/data/downloads/aurral}
     volumes:
-      - ${DL_FOLDER:-./data/downloads}:/app/downloads
-      - ${STORAGE:-./data}:/app/backend/data</code></pre>
+      - ${DATA_ROOT:-./data}:/data
+      - ${STORAGE:-./data/app}:/app/backend/data</code></pre>
         </div>
 
         <div class="setup-links">

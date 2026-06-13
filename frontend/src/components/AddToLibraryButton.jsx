@@ -1,9 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import PropTypes from "prop-types";
 import { Plus, Check, Loader } from "lucide-react";
-import "./AddToLibraryButton.css";
 
-const AddToLibraryButton = ({ onClick, className, isLoading }) => {
+const AddToLibraryButton = ({
+  onClick,
+  className,
+  disabled = false,
+  isLoading,
+  label = "Add to Library",
+}) => {
   const [isSuccess, setIsSuccess] = useState(false);
   const isMounted = useRef(true);
 
@@ -15,7 +20,7 @@ const AddToLibraryButton = ({ onClick, className, isLoading }) => {
 
   const handleClick = async (e) => {
     e.preventDefault();
-    if (isLoading) return;
+    if (disabled || isLoading) return;
     if (onClick) {
       const success = await onClick();
       if (isMounted.current && success !== false) {
@@ -26,19 +31,19 @@ const AddToLibraryButton = ({ onClick, className, isLoading }) => {
 
   return (
     <button
-      className={`add-to-library-button ${isSuccess ? "success" : ""} ${className || ""}`}
-      onClick={handleClick}
-      disabled={isLoading}
       type="button"
+      className={`btn btn-add-library${isSuccess ? " is-success" : ""}${className ? ` ${className}` : ""}`}
+      onClick={handleClick}
+      disabled={disabled || isLoading}
     >
-      <span>Add to Library</span>
-      <div className="icon">
+      <span>{label}</span>
+      <div className="btn-add-library__icon">
         {isLoading ? (
-          <Loader className="animate-spin" />
+          <Loader className="animate-spin" aria-hidden="true" />
         ) : (
           <>
-            <Plus className="plus-icon" />
-            <Check className="check-icon" />
+            <Plus className="plus-icon" aria-hidden="true" />
+            <Check className="check-icon" aria-hidden="true" />
           </>
         )}
       </div>
@@ -49,7 +54,9 @@ const AddToLibraryButton = ({ onClick, className, isLoading }) => {
 AddToLibraryButton.propTypes = {
   onClick: PropTypes.func,
   className: PropTypes.string,
+  disabled: PropTypes.bool,
   isLoading: PropTypes.bool,
+  label: PropTypes.string,
 };
 
 export default AddToLibraryButton;

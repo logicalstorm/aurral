@@ -71,16 +71,23 @@ const ArtistImage = ({
       try {
         setHasError(false);
 
-        const data = await scheduleFetch(
-          () =>
-            Promise.race([
-              getArtistCover(mbidToFetch, nameForCover, refresh),
-              new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("Timeout")), 5000),
-              ),
-            ]),
-          signal,
-        );
+        const requestCover = (forceRefresh = false) =>
+          scheduleFetch(
+            () =>
+              Promise.race([
+                getArtistCover(mbidToFetch, nameForCover, forceRefresh),
+                new Promise((_, reject) =>
+                  setTimeout(() => reject(new Error("Timeout")), 5000),
+                ),
+              ]),
+            signal,
+          );
+
+        let data = await requestCover(refresh);
+        if (signal?.aborted) return;
+        if ((!data?.images || data.images.length === 0) && !refresh) {
+          data = await requestCover(true);
+        }
         if (signal?.aborted) return;
         if (data?.images && data.images.length > 0) {
           const front = data.images.find((img) => img.front) || data.images[0];
@@ -137,10 +144,6 @@ const ArtistImage = ({
     const image = imgRef.current;
     if (!currentSrc || !image) return;
 
-    // Chrome/Safari can restore cached images without reliably firing a fresh
-    // load event during refresh navigation. If the browser already has decoded
-    // dimensions for the current source, promote the image to visible
-    // immediately instead of waiting on onLoad.
     if (image.complete && image.naturalWidth > 0) {
       setIsLoading(false);
       setHasError(false);
@@ -157,7 +160,11 @@ const ArtistImage = ({
             setHasError(false);
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          if (!cancelled) {
+            setIsLoading(false);
+          }
+        });
     }
 
     return () => {
@@ -185,11 +192,8 @@ const ArtistImage = ({
 
   if (hasError) {
     return (
-      <div
-        className={`flex items-center justify-center ${className}`}
-        style={{ backgroundColor: "#211f27", color: "#c1c1c3" }}
-      >
-        <Music className="w-1/3 h-1/3" />
+      <div className={`artist-image-placeholder ${className}`}>
+        <Music className="artist-image-icon" />
       </div>
     );
   }
@@ -197,53 +201,39 @@ const ArtistImage = ({
   if (showPlaceholder) {
     return (
       <div
-        className={`relative overflow-hidden ${className}`}
+        className={`artist-image-root ${className}`}
         style={{
           background:
             "linear-gradient(135deg, rgba(33,31,39,1) 0%, rgba(46,43,54,1) 100%)",
         }}
       >
-        <div
-          className="absolute inset-0 flex items-center justify-center z-10"
-          style={{ backgroundColor: "transparent" }}
-        >
+        <div className="artist-image-overlay">
           {isLoading ? (
             <Loader
-              className={`w-6 h-6 ${showLoading ? "animate-spin" : "opacity-60"}`}
-              style={{ color: "#c1c1c3" }}
+              className={`artist-image-loader${
+                showLoading ? " animate-spin is-brand" : " is-dim"
+              }`}
             />
           ) : (
-            <Music className="w-1/3 h-1/3" style={{ color: "#c1c1c3" }} />
+            <Music className="artist-image-icon" />
           )}
         </div>
-        {isLoading && (
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                "linear-gradient(110deg, rgba(255,255,255,0.02) 8%, rgba(255,255,255,0.08) 18%, rgba(255,255,255,0.02) 33%)",
-              backgroundSize: "200% 100%",
-              animation: "shimmer 1.6s linear infinite",
-            }}
-          />
-        )}
+        {isLoading && <div className="artist-image-shimmer" />}
       </div>
     );
   }
 
   return (
     <div
-      className={`relative overflow-hidden ${className}`}
+      className={`artist-image-root ${className}`}
       style={{ backgroundColor: "#211f27" }}
     >
       {isLoading && showLoading && (
         <div
-          className="absolute inset-0 flex items-center justify-center z-10"
+          className="artist-image-overlay"
           style={{ backgroundColor: "#211f27" }}
         >
-          <Loader
-            className="w-6 h-6 text-primary-500 animate-spin"
-          />
+          <Loader className="artist-image-loader animate-spin is-brand" />
         </div>
       )}
       {currentSrc && (
@@ -251,8 +241,8 @@ const ArtistImage = ({
           ref={imgRef}
           src={currentSrc}
           alt={alt || "Artist cover"}
-          className={`w-full h-full object-cover transition-opacity duration-200 ${
-            isLoading ? "opacity-0" : "opacity-100"
+          className={`artist-image-media ${
+            showLoading && isLoading ? "is-loading" : "is-loaded"
           }`}
           onLoad={handleLoad}
           onError={handleError}
