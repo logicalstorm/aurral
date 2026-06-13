@@ -192,7 +192,7 @@ export function ArtistDetailsSimilar({
                           ? getArtistFeedbackFlags(artistFeedbackLookup, similar)
                           : undefined
                       }
-                      buttonClassName="btn btn-ghost btn-icon-square"
+                      buttonClassName="btn btn-icon-square artist-context-menu__trigger"
                     />
                   </div>
                 </div>

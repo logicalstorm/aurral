@@ -192,7 +192,7 @@ export function DiscoverPlaylistContextMenu({
   const triggerClassName =
     triggerVariant === "add"
       ? "btn btn-primary discover-playlist-add-button"
-      : "btn btn-surface btn-icon-square";
+      : "btn btn-icon-square artist-context-menu__trigger";
 
   return (
     <div
