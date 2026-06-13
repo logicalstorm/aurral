@@ -20,6 +20,8 @@ import {
   lookupArtistsInLibraryBatch,
   readLibraryLookupCache,
   updateMyDiscoverLayout,
+  downloadAlbum,
+  updateLibraryAlbum,
 } from "../utils/api";
 import { useWebSocketChannel } from "../hooks/useWebSocket";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -379,6 +381,7 @@ function DiscoverPage() {
   );
   const [releaseCovers, setReleaseCovers] = useState({});
   const [artistCovers, setArtistCovers] = useState({});
+  const [pendingRecentReleaseIds, setPendingRecentReleaseIds] = useState({});
   const [error, setError] = useState(null);
   const [libraryLookup, setLibraryLookup] = useState({});
   const { lookup: artistFeedbackLookup, submitFeedback } =
@@ -413,6 +416,7 @@ function DiscoverPage() {
   const navigate = useNavigate();
   const { showSuccess, showError } = useToast();
   const canAddArtist = hasPermission("addArtist");
+  const canAddAlbum = hasPermission("addAlbum");
   const canAdoptPlaylist = hasPermission("accessFlow");
   const {
     discoverSections,
@@ -1271,6 +1275,44 @@ function DiscoverPage() {
     [showError, showSuccess],
   );
 
+  const getRecentReleaseKey = useCallback(
+    (album) => album.mbid || album.foreignAlbumId || album.id,
+    [],
+  );
+
+  const handleRecentReleaseAlbumAction = useCallback(
+    async (album) => {
+      const albumKey = getRecentReleaseKey(album);
+      if (!album?.id || !album?.artistId || !albumKey) return;
+      setPendingRecentReleaseIds((prev) => ({ ...prev, [albumKey]: true }));
+      try {
+        await updateLibraryAlbum(album.id, {
+          ...album,
+          monitored: true,
+        });
+        await downloadAlbum(album.artistId, album.id, {
+          artistMbid: album.artistMbid || album.foreignArtistId,
+          artistName: album.artistName,
+        });
+        showSuccess(`Searching for ${album.albumName || "album"}`);
+      } catch (err) {
+        showError(
+          err.response?.data?.message ||
+            err.response?.data?.error ||
+            err.message ||
+            "Failed to request album",
+        );
+      } finally {
+        setPendingRecentReleaseIds((prev) => {
+          const next = { ...prev };
+          delete next[albumKey];
+          return next;
+        });
+      }
+    },
+    [getRecentReleaseKey, showError, showSuccess],
+  );
+
   const handleDiscoveryFeedback = useCallback(
     (artist, action, options = {}) => submitFeedback(artist, action, options),
     [submitFeedback],
@@ -1402,6 +1444,9 @@ function DiscoverPage() {
                     releaseCovers={releaseCovers}
                     artistCovers={artistCovers}
                     onNavigate={navigate}
+                    canAddAlbum={canAddAlbum}
+                    isPending={!!pendingRecentReleaseIds[getRecentReleaseKey(album)]}
+                    onAlbumAction={handleRecentReleaseAlbumAction}
                   />
                 </div>
               ))}

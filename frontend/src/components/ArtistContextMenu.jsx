@@ -40,7 +40,7 @@ export function ArtistContextMenu({
   onFeedback,
   feedbackUsed = {},
   className = "",
-  buttonClassName = "btn btn-surface btn-icon-square",
+  buttonClassName = "btn btn-icon-square artist-context-menu__trigger",
 }) {
   const [showMenu, setShowMenu] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
