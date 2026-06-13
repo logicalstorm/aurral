@@ -665,7 +665,6 @@ export class LibraryManager {
           inc: "recordings",
         });
 
-        let tracksAdded = 0;
         if (releaseData.media && releaseData.media.length > 0) {
           for (const medium of releaseData.media) {
             if (medium.tracks) {
@@ -679,7 +678,6 @@ export class LibraryManager {
                       recording.title,
                       track.position || 0,
                     );
-                    tracksAdded++;
                   } catch (err) {
                     if (!err.message.includes("already exists")) {
                       console.error(
@@ -692,10 +690,6 @@ export class LibraryManager {
               }
             }
           }
-        }
-
-        if (tracksAdded > 0) {
-          await this.updateAlbumStatistics(albumId);
         }
       }
     } catch (error) {
@@ -986,18 +980,6 @@ export class LibraryManager {
           ...(mapped.addOptions || {}),
           monitor: normalizedMonitorOption,
         };
-        if (mapped.monitored && mapped.monitorOption !== "none") {
-          import("./monitoringService.js")
-            .then(({ monitoringService }) => {
-              monitoringService.processArtistMonitoring(mapped).catch((err) => {
-                console.error(
-                  `[LibraryManager] Error triggering monitoring for ${mapped.artistName}:`,
-                  err.message,
-                );
-              });
-            })
-            .catch(() => {});
-        }
         return mapped;
       }
       return this.mapLidarrArtist(lidarrArtist);
@@ -1721,25 +1703,6 @@ export class LibraryManager {
     } catch {
       return null;
     }
-  }
-
-  async scanLibrary(discover = false) {
-    const { fileScanner } = await import("./fileScanner.js");
-    return await fileScanner.scanLibrary(discover);
-  }
-
-  async updateAlbumStatistics(albumId) {
-    const album = await this.getAlbumById(albumId);
-    if (!album) return album;
-
-    return album;
-  }
-
-  async updateArtistStatistics(artistId) {
-    const artist = await this.getArtistById(artistId);
-    if (!artist) return artist;
-
-    return artist;
   }
 
   sanitizePath(name) {

@@ -20,8 +20,6 @@ It is built for people who love discovering music and want that discovery loop t
 - [Flows and Playlists guide](flows-and-playlists.md)
 - [Spotify import helper](https://aurral.org/aurral-convert)
 - [Discord community](https://discord.gg/cpPYfgVURJ)
-- [Contributing guide](CONTRIBUTING.md)
-- [Development notes](DEVELOPMENT.md)
 
 ## What Aurral Does
 
@@ -449,8 +447,6 @@ Special thanks to the BrainzMash team for the metadata work that helps make Aurr
 
 - Community and questions: [Discord](https://discord.gg/cpPYfgVURJ)
 - Bugs and feature requests: [GitHub Issues](https://github.com/lklynet/aurral/issues)
-- Contributor workflow: [CONTRIBUTING.md](CONTRIBUTING.md)
-- Local development: [DEVELOPMENT.md](DEVELOPMENT.md)
 
 ## License
 

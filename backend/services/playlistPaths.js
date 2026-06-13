@@ -123,8 +123,3 @@ export async function migrateLegacyPaths(
   }
   return { scanned: jobs.length, migrated };
 }
-
-export const resolveWeeklyFlowRoot = resolvePlaylistRoot;
-export const remapLegacyWeeklyFlowPath = remapLegacyPath;
-export const resolveExistingWeeklyFlowTrackPath = resolveExistingTrackPath;
-export const migrateLegacyWeeklyFlowPaths = migrateLegacyPaths;
