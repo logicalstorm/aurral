@@ -1,8 +1,9 @@
 import { memo, useCallback } from "react";
 import PropTypes from "prop-types";
-import { CheckCircle2, Music } from "lucide-react";
+import { Music } from "lucide-react";
 import ArtistImage from "../components/ArtistImage";
 import { ArtistContextMenu } from "../components/ArtistContextMenu";
+import SearchLibraryCheck from "../components/SearchLibraryCheck";
 
 const parseCalendarDate = (value) => {
   if (!value) return null;
@@ -92,7 +93,7 @@ export const ArtistCard = memo(
     }, [navigateTo, hasValidMbid, artist.name, isInLibrary, onNavigate]);
 
     return (
-      <div className="artist-discover-card">
+      <div className="artist-discover-card artist-discover-card--artist">
         <button
           type="button"
           onClick={handleClick}
@@ -122,9 +123,7 @@ export const ArtistCard = memo(
               >
                 {artist.name}
               </button>
-              {isInLibrary && (
-                <CheckCircle2 className="artist-library-check--discover" />
-              )}
+              {isInLibrary && <SearchLibraryCheck size="discover" />}
             </div>
             {artistMetaText ? (
               <p
@@ -230,7 +229,7 @@ export const AlbumCard = memo(
     }, [navigateTo, hasValidMbid, album.artistName, onNavigate]);
 
     return (
-      <div className="artist-discover-card">
+      <div className="artist-discover-card artist-discover-card--album">
         <button
           type="button"
           onClick={handleClick}

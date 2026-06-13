@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { CheckCircle, CornerUpLeft, Loader, Music } from "lucide-react";
+import { CornerUpLeft, Loader, Music } from "lucide-react";
+import SearchLibraryCheck from "../../components/SearchLibraryCheck";
 import AddAlbumButton from "../../components/AddAlbumButton";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
@@ -398,7 +399,7 @@ function ReleasePage() {
           <div className="release-page__actions">
             {isComplete ? (
               <span className="release-page__library-status" title="In library">
-                <CheckCircle className="artist-icon-sm" />
+                <SearchLibraryCheck />
                 <span>In library</span>
               </span>
             ) : canAddAlbum ? (
@@ -433,7 +434,6 @@ function ReleasePage() {
           getDefaultPlaylistName={getDefaultTrackPlaylistName}
           onLoadPlaylists={loadSharedPlaylists}
           highlightTrackId={focusTrackMbid}
-          showHeader={false}
         />
       </div>
     </div>

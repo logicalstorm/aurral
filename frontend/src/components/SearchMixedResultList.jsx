@@ -1,11 +1,11 @@
 import PropTypes from "prop-types";
-import { ListMusic, Music } from "lucide-react";
+import { Music } from "lucide-react";
 import ArtistImage from "./ArtistImage";
-import SearchLibraryCheck from "./SearchLibraryCheck";
 import {
   getSearchResultKey,
   navigateFromSearchResult,
 } from "../utils/searchNavigation";
+import { getSearchPlaylistArtworkUrl } from "../utils/playlistArtworkUrls";
 import { getArtistRecordId } from "../utils/artistTaste";
 
 function getTypeLabel(item) {
@@ -25,17 +25,20 @@ function getPrimaryLabel(item) {
 }
 
 function getSecondaryLabel(item) {
-  if (item.type === "artist") return "Artist";
-  if (item.type === "album" && item.artistName) {
-    return `Album · ${item.artistName}`;
+  if (item.type === "artist") {
+    return String(item.disambiguation || "").trim() || null;
   }
-  if (item.type === "track" && item.artistName) {
-    return `Song · ${item.artistName}`;
+  if (item.type === "album" && item.artistName) {
+    return item.artistName;
+  }
+  if (item.type === "track") {
+    return [item.artistName, item.albumTitle].filter(Boolean).join(" · ") || null;
   }
   if (item.type === "playlist" && item.trackCount != null) {
-    return `Playlist · ${item.trackCount} track${item.trackCount === 1 ? "" : "s"}`;
+    const prefix = item.source === "discover" ? "Discover · " : "";
+    return `${prefix}${item.trackCount} track${item.trackCount === 1 ? "" : "s"}`;
   }
-  return getTypeLabel(item);
+  return null;
 }
 
 function ResultThumbnail({ item, artistImages, albumCovers }) {
@@ -57,11 +60,13 @@ function ResultThumbnail({ item, artistImages, albumCovers }) {
   }
 
   const coverSrc =
-    item.type === "album"
-      ? albumCovers[item.id] || item.coverUrl
-      : item.type === "track"
-        ? albumCovers[item.albumMbid] || item.coverUrl
-        : null;
+    item.type === "playlist"
+      ? getSearchPlaylistArtworkUrl(item)
+      : item.type === "album"
+        ? albumCovers[item.id] || item.coverUrl
+        : item.type === "track"
+          ? albumCovers[item.albumMbid] || item.coverUrl
+          : null;
 
   return (
     <span className="search-mixed-results__thumb">
@@ -73,13 +78,11 @@ function ResultThumbnail({ item, artistImages, albumCovers }) {
           loading="lazy"
           decoding="async"
         />
+      ) : item.type === "playlist" ? (
+        <span className="search-mixed-results__placeholder" aria-hidden="true" />
       ) : (
         <span className="search-mixed-results__placeholder" aria-hidden="true">
-          {item.type === "playlist" ? (
-            <ListMusic className="artist-icon-sm" />
-          ) : (
-            <Music className="artist-icon-sm" />
-          )}
+          <Music className="artist-icon-sm" />
         </span>
       )}
     </span>
@@ -92,7 +95,7 @@ function SearchMixedResultList({
   query = "",
   artistImages = {},
   albumCovers = {},
-  albumDestination = "tracklist",
+  renderAction = null,
 }) {
   if (!items.length) return null;
 
@@ -100,35 +103,58 @@ function SearchMixedResultList({
     <ul className="search-mixed-results">
       {items.map((item, index) => {
         const typeLabel = getTypeLabel(item);
+        const primaryLabel = getPrimaryLabel(item);
+        const secondaryLabel = getSecondaryLabel(item);
+        const action = renderAction ? renderAction(item) : null;
+
         return (
           <li key={getSearchResultKey(item, index)}>
-            <button
-              type="button"
-              className="search-mixed-results__row"
-              onClick={() =>
-                navigateFromSearchResult(navigate, item, { query, albumDestination })
-              }
-            >
-              <ResultThumbnail
-                item={item}
-                artistImages={artistImages}
-                albumCovers={albumCovers}
-              />
-              <span className="search-mixed-results__copy">
-                <span className="search-mixed-results__title">
-                  {getPrimaryLabel(item)}
+            <div className="search-mixed-results__row">
+              <button
+                type="button"
+                className="search-mixed-results__main"
+                onClick={() =>
+                  navigateFromSearchResult(navigate, item, {
+                    query,
+                  })
+                }
+              >
+                <ResultThumbnail
+                  item={item}
+                  artistImages={artistImages}
+                  albumCovers={albumCovers}
+                />
+                <span className="search-mixed-results__copy">
+                  <span
+                    className="search-mixed-results__title"
+                    title={primaryLabel}
+                  >
+                    {primaryLabel}
+                  </span>
+                  {secondaryLabel ? (
+                    <span
+                      className="search-mixed-results__subtitle"
+                      title={secondaryLabel}
+                    >
+                      {secondaryLabel}
+                    </span>
+                  ) : null}
                 </span>
-                <span className="search-mixed-results__subtitle">
-                  {getSecondaryLabel(item)}
-                </span>
-              </span>
-              <span className="search-mixed-results__tags">
-                {typeLabel && (
+              </button>
+              {typeLabel ? (
+                <span className="search-mixed-results__type-col">
                   <span className="search-mixed-results__type">{typeLabel}</span>
-                )}
-                {item.inLibrary && <SearchLibraryCheck />}
+                </span>
+              ) : (
+                <span className="search-mixed-results__type-col" />
+              )}
+              <span
+                className="search-mixed-results__actions"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {action}
               </span>
-            </button>
+            </div>
           </li>
         );
       })}
@@ -142,7 +168,7 @@ SearchMixedResultList.propTypes = {
   query: PropTypes.string,
   artistImages: PropTypes.object,
   albumCovers: PropTypes.object,
-  albumDestination: PropTypes.oneOf(["release", "tracklist"]),
+  renderAction: PropTypes.func,
 };
 
 ResultThumbnail.propTypes = {

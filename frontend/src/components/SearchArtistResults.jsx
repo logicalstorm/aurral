@@ -106,11 +106,11 @@ function SearchArtistResults({
         return (
           <article
             key={artistId || `artist-${index}`}
-            className={`artist-discover-card${variant === "round" ? " artist-discover-card--round" : ""}`}
+            className="artist-discover-card artist-discover-card--artist"
           >
             <div
               onClick={() => openArtist(artist)}
-              className={`artist-discover-card__cover${variant === "round" ? " artist-discover-card__cover--round" : ""}`}
+              className="artist-discover-card__cover"
             >
               <ArtistImage
                 src={artistImages[artistId] || artist.image || artist.imageUrl}

@@ -109,10 +109,7 @@ function SearchTrackResults({
                 type="button"
                 className="search-track-results__main"
                 onClick={() =>
-                  navigateFromSearchResult(navigate, track, {
-                    query,
-                    albumDestination: "tracklist",
-                  })
+                  navigateFromSearchResult(navigate, track, { query })
                 }
               >
                 <TrackCover src={coverSrc} title={track.albumTitle || label} />

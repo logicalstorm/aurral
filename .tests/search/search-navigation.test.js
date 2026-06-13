@@ -4,9 +4,170 @@ import assert from "node:assert/strict";
 import {
   buildMixedSearchPageItems,
   buildMixedSuggestionItems,
+  buildSearchArtistResults,
   buildUnifiedSuggestionSections,
   getReleaseNavigationTarget,
+  resolveSearchTopArtist,
+  resolveSearchTopResult,
 } from "../../frontend/src/utils/searchNavigation.js";
+
+test("resolveSearchTopResult uses API top when it is an artist", () => {
+  const artist = {
+    type: "artist",
+    id: "mcr",
+    name: "My Chemical Romance",
+    score: 0.998,
+  };
+  const resolved = resolveSearchTopResult({
+    query: "my chemical romance",
+    top: artist,
+    catalog: { artists: [artist], albums: [], tracks: [] },
+    library: { artists: [], tracks: [], playlists: [] },
+  });
+
+  assert.equal(resolved?.type, "artist");
+  assert.equal(resolved?.name, "My Chemical Romance");
+});
+
+test("resolveSearchTopResult prefers artist over album when query matches artist name", () => {
+  const artist = {
+    type: "artist",
+    id: "fob",
+    name: "Fall Out Boy",
+    score: 0.95,
+  };
+  const album = {
+    type: "album",
+    id: "fob-album",
+    title: "Fall Out Boy",
+    artistName: "Fall Out Boy",
+    artistMbid: "fob",
+    score: 0.98,
+  };
+  const resolved = resolveSearchTopResult({
+    query: "fall out boy",
+    top: album,
+    catalog: { artists: [artist], albums: [album], tracks: [] },
+    library: { artists: [], tracks: [], playlists: [] },
+  });
+
+  assert.equal(resolved?.type, "artist");
+  assert.equal(resolved?.name, "Fall Out Boy");
+});
+
+test("resolveSearchTopResult prefers artist when catalog spacing differs from query", () => {
+  const album = {
+    type: "album",
+    id: "fob-album",
+    title: "Fall Out Boy",
+    artistName: "Fall Out Boy",
+    artistMbid: "516cef4d-0718-4007-9939-f9b38af3f784",
+    score: 1,
+  };
+  const resolved = resolveSearchTopResult({
+    query: "fall out boy",
+    top: album,
+    catalog: {
+      artists: [
+        { type: "artist", id: "bad-1", name: "Fallout Boy", score: 0.9 },
+        { type: "artist", id: "bad-2", name: "Falloutboy", score: 0.88 },
+      ],
+      albums: [album],
+      tracks: [],
+    },
+    library: { artists: [], tracks: [], playlists: [] },
+  });
+
+  assert.equal(resolved?.type, "artist");
+  assert.equal(resolved?.name, "Fall Out Boy");
+  assert.equal(resolved?.id, "516cef4d-0718-4007-9939-f9b38af3f784");
+});
+
+test("resolveSearchTopResult uses API top when it is an album", () => {
+  const album = {
+    type: "album",
+    id: "tbp",
+    title: "The Black Parade",
+    artistName: "My Chemical Romance",
+    artistMbid: "mcr",
+    score: 0.94,
+  };
+  const resolved = resolveSearchTopResult({
+    query: "the black parade",
+    top: album,
+    catalog: {
+      artists: [
+        {
+          type: "artist",
+          id: "mcr",
+          name: "My Chemical Romance",
+          score: 0.87,
+        },
+      ],
+      albums: [album],
+      tracks: [],
+    },
+    library: { artists: [], tracks: [], playlists: [] },
+  });
+
+  assert.equal(resolved?.type, "album");
+  assert.equal(resolved?.title, "The Black Parade");
+  assert.equal(resolved?.artistName, "My Chemical Romance");
+});
+
+test("resolveSearchTopArtist derives the performer when API top is an album", () => {
+  const artist = {
+    type: "artist",
+    id: "mcr",
+    name: "My Chemical Romance",
+    score: 0.87,
+  };
+  const resolved = resolveSearchTopArtist({
+    query: "the black parade",
+    top: {
+      type: "album",
+      id: "tbp",
+      title: "The Black Parade",
+      artistName: "My Chemical Romance",
+      artistMbid: "mcr",
+      score: 0.94,
+    },
+    catalog: {
+      artists: [artist],
+      albums: [],
+      tracks: [],
+    },
+    library: { artists: [], tracks: [], playlists: [] },
+  });
+
+  assert.equal(resolved?.type, "artist");
+  assert.equal(resolved?.name, "My Chemical Romance");
+  assert.equal(resolved?.id, "mcr");
+});
+
+test("resolveSearchTopArtist synthesizes an artist from track top metadata", () => {
+  const resolved = resolveSearchTopArtist({
+    query: "bohemian rhapsody",
+    top: {
+      type: "track",
+      id: "br",
+      title: "Bohemian Rhapsody",
+      artistName: "Queen",
+      artistMbid: "queen",
+      score: 0.95,
+    },
+    catalog: {
+      artists: [],
+      albums: [],
+      tracks: [],
+    },
+    library: { artists: [], tracks: [], playlists: [] },
+  });
+
+  assert.equal(resolved?.type, "artist");
+  assert.equal(resolved?.name, "Queen");
+  assert.equal(resolved?.id, "queen");
+});
 
 test("buildMixedSuggestionItems uses API top as the first item", () => {
   const top = {
@@ -113,7 +274,7 @@ test("getReleaseNavigationTarget preserves focused track album metadata", () => 
   });
 });
 
-test("buildMixedSuggestionItems places library playlists before catalog buckets", () => {
+test("buildMixedSuggestionItems excludes library playlists from mixed results", () => {
   const items = buildMixedSuggestionItems({
     catalog: {
       artists: [],
@@ -143,8 +304,8 @@ test("buildMixedSuggestionItems places library playlists before catalog buckets"
     },
   });
 
-  assert.equal(items[0].type, "playlist");
-  assert.equal(items[1].type, "track");
+  assert.equal(items.length, 1);
+  assert.equal(items[0].type, "track");
 });
 
 test("buildMixedSuggestionItems prefers catalog for album title queries when API top is set", () => {
@@ -243,4 +404,29 @@ test("buildUnifiedSuggestionSections avoids repeating the top artist name", () =
     sections.find((section) => section.key === "artists")?.items || [];
   assert.equal(artistItems.length, 1);
   assert.equal(artistItems[0].name, "Beartooth");
+});
+
+test("buildSearchArtistResults includes resolved top artist when catalog artists bucket is empty", () => {
+  const album = {
+    type: "album",
+    id: "self-titled",
+    title: "The White Stripes",
+    artistName: "The White Stripes",
+    artistMbid: "11ae9fbb-f3d7-4a47-936f-4c0a04d3b3b5",
+    score: 1,
+  };
+  const artists = buildSearchArtistResults({
+    query: "the white stripes",
+    top: album,
+    catalog: {
+      artists: [],
+      albums: [album],
+      tracks: [],
+    },
+    library: { artists: [], tracks: [], playlists: [] },
+  });
+
+  assert.equal(artists.length, 1);
+  assert.equal(artists[0].name, "The White Stripes");
+  assert.equal(artists[0].id, "11ae9fbb-f3d7-4a47-936f-4c0a04d3b3b5");
 });
