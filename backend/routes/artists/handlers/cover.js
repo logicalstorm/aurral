@@ -49,14 +49,20 @@ export default function registerCover(router) {
           fetchCoverInBackground(mbid, artistNameFromQuery).catch(() => {});
         });
 
+        const cachedResult = await getArtistImage(mbid, {
+          artistName: artistNameFromQuery,
+        }).catch(() => null);
+
         return res.json({
-          images: [
-            {
-              image: cachedImage.imageUrl,
-              front: true,
-              types: ["Front"],
-            },
-          ],
+          images: cachedResult?.images?.length
+            ? cachedResult.images
+            : [
+                {
+                  image: cachedImage.imageUrl,
+                  front: true,
+                  types: ["Front"],
+                },
+              ],
         });
       }
 
@@ -78,10 +84,14 @@ export default function registerCover(router) {
 
       console.log(`[Cover Route] Fetching cover for ${mbid}`);
 
+      const shouldForceRefresh =
+        !!refresh ||
+        (cachedImage?.imageUrl === "NOT_FOUND" && !!artistNameFromQuery);
+
       const fetchPromise = (async () => {
         try {
           const result = await getArtistImage(mbid, {
-            forceRefresh: !!refresh,
+            forceRefresh: shouldForceRefresh,
             artistName: artistNameFromQuery,
           });
           return {

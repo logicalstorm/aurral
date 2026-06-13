@@ -14,6 +14,7 @@ import { useWebSocketChannel } from "../../../hooks/useWebSocket";
 import { allReleaseTypes } from "../constants";
 import {
   DEFAULT_METADATA_BASE_URL,
+  DEFAULT_SEARCH_URL,
   checkForChanges,
   normalizeSettings,
 } from "../utils";
@@ -22,6 +23,7 @@ const DISCOVERY_MANUAL_REFRESH_KEY = "aurral.discovery.manualRefreshPending";
 
 const defaultSettings = {
   rootFolderPath: "",
+  downloadFolderPath: "",
   quality: "standard",
   releaseTypes: allReleaseTypes,
   integrations: {
@@ -32,12 +34,19 @@ const defaultSettings = {
       discoveryPeriod: "1month",
       discoveryAutoRefreshHours: 168,
       discoveryRecommendationsPerRefresh: 200,
+      discoveryFlowsPerRefresh: 9,
       discoveryMode: "balanced",
     },
-    slskd: { url: "", apiKey: "" },
+    slskd: {
+      url: "",
+      apiKey: "",
+      preferredFormat: "flac",
+      preferredFormatStrict: false,
+      cleanupAfterRuns: false,
+    },
     ticketmaster: {
       apiKey: "",
-      searchRadiusMiles: 50,
+      searchRadiusMiles: 250,
       localDiscoveryIncludeRecommendations: true,
       localDiscoveryIncludeTrending: true,
     },
@@ -57,6 +66,10 @@ const defaultSettings = {
       userAgentSuffix: "",
       enableNarrowFallbacks: true,
     },
+    search: {
+      url: DEFAULT_SEARCH_URL,
+      apiKey: "",
+    },
     general: { authUser: "", authPassword: "" },
     gotify: {
       url: "",
@@ -69,6 +82,9 @@ const defaultSettings = {
       notifyDiscoveryUpdated: false,
       notifyWeeklyFlowDone: false,
     },
+  },
+  playlistArtwork: {
+    style: "photo",
   },
   security: {
     localNetworkBypass: {
@@ -85,6 +101,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
   const [saving, setSaving] = useState(false);
   const [refreshingDiscovery, setRefreshingDiscovery] = useState(false);
   const [discoveryProgressMessage, setDiscoveryProgressMessage] = useState("");
+  const [discoveryProgress, setDiscoveryProgress] = useState(null);
   const [clearingCache, setClearingCache] = useState(false);
   const [lidarrProfiles, setLidarrProfiles] = useState([]);
   const [loadingLidarrProfiles, setLoadingLidarrProfiles] = useState(false);
@@ -104,10 +121,15 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     if (healthData?.discovery?.isUpdating) {
       setRefreshingDiscovery(true);
       setDiscoveryProgressMessage(
-        (current) => current || "Discovery refresh is running",
+        healthData.discovery.updateProgressMessage ||
+          "Discovery refresh is running",
       );
+      if (typeof healthData.discovery.updateProgress === "number") {
+        setDiscoveryProgress(healthData.discovery.updateProgress);
+      }
     } else {
       setRefreshingDiscovery(false);
+      setDiscoveryProgress(null);
     }
   }, []);
 
@@ -126,6 +148,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
 
     if (msg.phase === "error") {
       setRefreshingDiscovery(false);
+      setDiscoveryProgress(null);
       setDiscoveryProgressMessage(
         msg.progressMessage || "Discovery refresh failed",
       );
@@ -134,14 +157,18 @@ export function useSettingsData(showSuccess, showError, showInfo) {
 
     if (msg.isUpdating) {
       setRefreshingDiscovery(true);
-      setDiscoveryProgressMessage(
-        msg.progressMessage || "Discovery refresh is running",
-      );
+      if (msg.progressMessage) {
+        setDiscoveryProgressMessage(msg.progressMessage);
+      }
+      if (typeof msg.progress === "number") {
+        setDiscoveryProgress(msg.progress);
+      }
       return;
     }
 
     if (msg.phase === "completed" || Array.isArray(msg.recommendations)) {
       setRefreshingDiscovery(false);
+      setDiscoveryProgress(100);
       setDiscoveryProgressMessage(
         msg.progressMessage || "Discovery refresh completed",
       );
@@ -208,7 +235,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     };
 
     pollHealth();
-    const intervalId = setInterval(pollHealth, 8000);
+    const intervalId = setInterval(pollHealth, 3000);
     return () => clearInterval(intervalId);
   }, [refreshingDiscovery, refreshHealth]);
 
@@ -258,6 +285,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
       await refreshHealth();
     } catch (err) {
       setRefreshingDiscovery(false);
+      setDiscoveryProgress(null);
       setDiscoveryProgressMessage("");
       showError(
         "Failed to start refresh: " +
@@ -374,6 +402,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     fetchSettings,
     refreshHealth,
     refreshingDiscovery,
+    discoveryProgress,
     discoveryProgressMessage,
     clearingCache,
     handleRefreshDiscovery,

@@ -20,8 +20,6 @@ It is built for people who love discovering music and want that discovery loop t
 - [Flows and Playlists guide](flows-and-playlists.md)
 - [Spotify import helper](https://aurral.org/aurral-convert)
 - [Discord community](https://discord.gg/cpPYfgVURJ)
-- [Contributing guide](CONTRIBUTING.md)
-- [Development notes](DEVELOPMENT.md)
 
 ## What Aurral Does
 
@@ -57,7 +55,7 @@ Aurral only needs Lidarr to get started, but it shines with a fuller music stack
 | Lidarr         | Library management, artist and album adds, queue/history status, monitoring, and imports. |
 | Last.fm        | Personalized recommendations, artist similarity, tags, genre search, and richer flows.    |
 | ListenBrainz   | Optional listening-history source for users.                                              |
-| Soulseek       | Downloads for flows and imported playlists.                                               |
+| slskd          | Soulseek-backed downloads for flows and imported playlists.                               |
 | Navidrome      | Streaming and a separate Aurral flow library.                                             |
 | Ticketmaster   | Local shows from artists Aurral thinks you may care about.                                |
 
@@ -75,10 +73,10 @@ services:
     ports:
       - "3001:3001"
     environment:
-      - DOWNLOAD_FOLDER=${DL_FOLDER:-./data/downloads}
+      - DOWNLOAD_FOLDER=${DOWNLOAD_FOLDER:-/data/downloads/aurral}
     volumes:
-      - ${DL_FOLDER:-./data/downloads}:/app/downloads
-      - ${STORAGE:-./data}:/app/backend/data
+      - ${DATA_ROOT:-./data}:/data
+      - ${STORAGE:-./data/app}:/app/backend/data
 ```
 
 Start Aurral:
@@ -100,20 +98,106 @@ Then follow the onboarding flow.
 You can keep your paths in a `.env` file next to `docker-compose.yml`:
 
 ```bash
-DL_FOLDER=./data/downloads
-STORAGE=./data
+DATA_ROOT=./data
+DOWNLOAD_FOLDER=/data/downloads/aurral
+STORAGE=./data/app
 ```
 
-`STORAGE` keeps Aurral's database and settings. `DL_FOLDER` keeps generated flow and playlist files.
+`STORAGE` keeps Aurral's database and settings. `DATA_ROOT` is the shared mount root, and `DOWNLOAD_FOLDER` is the path inside that shared mount where generated flow and playlist files are written.
+
+For a fuller stack example with Lidarr, slskd, and Navidrome, see [`docker-compose.example.yml`](docker-compose.example.yml).
+
+## Shared Storage Layout
+
+For full functionality — Lidarr library reuse, slskd downloads, flow/playlist output, and Navidrome playback — **Aurral, Lidarr, slskd, and Navidrome should all mount the same host folder at the same container path** (this guide uses `/data`).
+
+Docker only exposes paths you mount. Aurral does not browse your whole host disk. It uses the **exact paths** Lidarr and slskd report over their APIs, then reads, moves, or reuses files on its own filesystem. If a path exists in Lidarr but is not mounted into Aurral at the same location, library checks, slskd pickup, and file reuse will fail even when the apps can talk over the network.
+
+### Recommended host layout
+
+Create one shared tree on the host, for example `/srv/media`:
+
+```text
+/srv/media/
+├── music/                              # main library (Lidarr root folder)
+└── downloads/
+    ├── slskd/
+    │   └── complete/                   # slskd finished downloads
+    └── aurral/                         # Aurral DOWNLOAD_FOLDER
+        └── aurral-weekly-flow/         # created automatically by Aurral
+```
+
+### Paths each service should use
+
+| Service   | Container mount    | Path inside the container                       | Purpose                                |
+| --------- | ------------------ | ----------------------------------------------- | -------------------------------------- |
+| Lidarr    | `/srv/media:/data` | Root folder `/data/music`                       | Permanent library                      |
+| slskd     | `/srv/media:/data` | Download dir `/data/downloads/slskd/complete`   | Soulseek downloads for flows/playlists |
+| Aurral    | `/srv/media:/data` | `DOWNLOAD_FOLDER=/data/downloads/aurral`        | Generated flows and imported playlists |
+| Navidrome | `/srv/media:/data` | Scan `/data/music` and `/data/downloads/aurral` | Stream library + Aurral output         |
+
+Aurral app state (database, settings, users) stays separate at `/app/backend/data` via the `STORAGE` mount. That folder does not need to be shared with the other apps.
+
+### Example compose mounts
+
+```yaml
+services:
+  aurral:
+    environment:
+      - DOWNLOAD_FOLDER=/data/downloads/aurral
+    volumes:
+      - /srv/media:/data
+      - ./data/app:/app/backend/data
+
+  lidarr:
+    volumes:
+      - /srv/media:/data
+      - ./config/lidarr:/config
+
+  slskd:
+    volumes:
+      - /srv/media:/data
+      - ./config/slskd:/app
+
+  navidrome:
+    environment:
+      - ND_SCANNER_PURGEMISSING=always
+      - ND_DATA=/config
+    volumes:
+      - /srv/media:/data:ro
+      - ./data/navidrome:/config
+```
+
+After the containers are up:
+
+1. In **Lidarr**, set the root folder to `/data/music`.
+2. In **slskd**, set the download directory to `/data/downloads/slskd/complete`.
+3. In **Aurral**, set `DOWNLOAD_FOLDER=/data/downloads/aurral` (as above).
+4. In **Navidrome**, add `/data/music` and `/data/downloads/aurral` as music folders to scan. Keep Navidrome's own database on `/config` (`ND_DATA`), separate from the shared media tree.
+
+### What the shared mount enables
+
+| Feature                         | Why the shared path matters                                                                         |
+| ------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Lidarr library reuse / playback | Aurral must read files at the same paths Lidarr stores in its database.                             |
+| slskd → Aurral downloads        | Aurral picks up completed files from slskd's download path, then moves them into `DOWNLOAD_FOLDER`. |
+| Navidrome flow playback         | Navidrome must scan the same `aurral-weekly-flow` tree Aurral writes.                               |
+| Efficient reuse                 | Hardlinks and reuse work best when library and downloads share a filesystem.                        |
+
+### Common mistake: mounting only `/data/music`
+
+Mounting only `/data/music:/data/music` is enough for Lidarr API connectivity, but **not** for flows, slskd handoff, or Navidrome playback of generated playlists. Aurral cannot see `/data/downloads/...` unless that tree is mounted too. Prefer mounting the parent shared root: `/srv/media:/data`.
 
 ## First Run
 
 Onboarding asks for:
 
 1. An admin account
-2. Lidarr URL and API key
+2. Lidarr URL and API key (plus library access check and default profiles)
 3. Optional Navidrome connection
 4. Optional Last.fm username and API key
+5. Optional slskd URL and API key
+6. Optional Ticketmaster consumer key
 
 After onboarding, use `Settings` to finish anything you skipped.
 
@@ -174,7 +258,7 @@ Flows are dynamic playlists that refresh on a schedule. Imported playlists are s
 Both download into Aurral's own folder:
 
 ```text
-/app/downloads/aurral-weekly-flow
+/data/downloads/aurral/aurral-weekly-flow
 ```
 
 They do not write directly into your main music library.
@@ -219,10 +303,9 @@ For a deeper guide, including accepted JSON formats and flow source behavior, re
 
 If you want generated flows to appear in Navidrome:
 
-1. Mount the same host download folder into Aurral at `/app/downloads`.
-2. Set `DOWNLOAD_FOLDER` to that host path.
-3. Configure Navidrome in `Settings -> Integrations -> Subsonic / Navidrome`.
-4. Let Aurral create/update the `Aurral Weekly Flow` library and smart playlists.
+1. Follow [Shared Storage Layout](#shared-storage-layout) so Aurral, Navidrome, slskd, and Lidarr all mount the same `/data` tree.
+2. Configure Navidrome in `Settings -> Integrations -> Subsonic / Navidrome`.
+3. Let Aurral create/update the `aurral-weekly-flow` library and generated M3U playlists.
 
 Recommended Navidrome setting:
 
@@ -238,21 +321,12 @@ Aurral can avoid redownloading tracks it already has or tracks Lidarr already ha
 
 Worker setting:
 
-| Mode     | Meaning                                                                       |
-| -------- | ----------------------------------------------------------------------------- |
-| Download | Always download a fresh copy into the Aurral flow library.                    |
-| Hardlink | Reuse a matching Aurral or Lidarr file with a hardlink, falling back to copy. |
-| Copy     | Copy a matching Aurral or Lidarr file into the playlist folder.               |
+| Mode                 | Meaning                                                        |
+| -------------------- | -------------------------------------------------------------- |
+| Download             | Always download a fresh copy into the Aurral playlist library. |
+| Reuse existing files | Reuse a matching completed Aurral or Lidarr file when found.   |
 
-To reuse Lidarr files, Aurral must see Lidarr's root directory the same way Lidarr sees it. In Lidarr, find this at `Settings -> Media Management -> Root Folders -> Path`. If your Lidarr root folder is `/data`, mount that same host library path into Aurral as `/data`:
-
-```yaml
-services:
-  aurral:
-    volumes:
-      - /srv/aurral/downloads:/app/downloads
-      - /srv/music:/data:ro
-```
+Lidarr-aware reuse requires the shared mount described in [Shared Storage Layout](#shared-storage-layout). In Lidarr, the root folder path is at `Settings -> Media Management -> Root Folders -> Path` (for example `/data/music`). Aurral must mount that path at the **same container location** and also mount the `DOWNLOAD_FOLDER` tree.
 
 ## Users And Auth
 
@@ -287,14 +361,15 @@ npm run auth:reset-admin-password -- --generate
 
 Most setup happens in the web UI. These are the deployment variables regular users are most likely to need:
 
-| Variable                                  | Why you might set it                                                     |
-| ----------------------------------------- | ------------------------------------------------------------------------ |
-| `DOWNLOAD_FOLDER`                         | Host path Navidrome should use for the Aurral flow library.              |
-| `PUID` / `PGID`                           | Run the container as the same user/group that owns your mounted folders. |
-| `TRUST_PROXY`                             | Set when Aurral is behind a reverse proxy and needs correct client IPs.  |
-| `AUTH_PROXY_*`                            | Use only if your reverse proxy handles login for Aurral.                 |
-| `SOULSEEK_USERNAME` / `SOULSEEK_PASSWORD` | Optional fixed Soulseek credentials instead of generated/rotated ones.   |
-| `AURRAL_VERBOSE_LOGS`                     | Turn on fuller server logs while troubleshooting.                        |
+| Variable                        | Why you might set it                                                     |
+| ------------------------------- | ------------------------------------------------------------------------ |
+| `DATA_ROOT` / host `MEDIA_ROOT` | Host folder mounted as `/data` in Aurral, Lidarr, slskd, and Navidrome.  |
+| `DOWNLOAD_FOLDER`               | Path inside `/data` where Aurral writes flows and playlists.             |
+| `STORAGE`                       | Host folder for Aurral database and settings (`/app/backend/data`).      |
+| `PUID` / `PGID`                 | Run the container as the same user/group that owns your mounted folders. |
+| `TRUST_PROXY`                   | Set when Aurral is behind a reverse proxy and needs correct client IPs.  |
+| `AUTH_PROXY_*`                  | Use only if your reverse proxy handles login for Aurral.                 |
+| `AURRAL_VERBOSE_LOGS`           | Turn on fuller server logs while troubleshooting.                        |
 
 Example:
 
@@ -302,7 +377,7 @@ Example:
 environment:
   - PUID=1000
   - PGID=1000
-  - DOWNLOAD_FOLDER=/srv/aurral/downloads
+  - DOWNLOAD_FOLDER=/data/downloads/aurral
 ```
 
 ## Backups And Safety
@@ -310,7 +385,7 @@ environment:
 Back up:
 
 - `/app/backend/data`
-- Your `/app/downloads` host folder if you want generated playlists to survive rebuilds
+- Your shared `DOWNLOAD_FOLDER` host folder if you want generated playlists to survive rebuilds
 - Your compose file and `.env`
 
 Aurral stores its database, settings, encrypted integration secrets, users, sessions, cache state, and flow jobs under `/app/backend/data`.
@@ -341,15 +416,15 @@ Main library safety:
 ### Flows are not downloading
 
 - Check the Flow worker settings.
-- Rotate or set Soulseek credentials.
+- Confirm slskd is configured and connected to Soulseek.
 - Try disabling strict format matching.
 - Try MP3 if FLAC matches are scarce.
 - Check the job states shown on the Flow page.
 
 ### Files do not appear in Navidrome
 
-- Confirm `/app/downloads` is mounted to a real host folder.
-- Confirm `DOWNLOAD_FOLDER` points to that host folder.
+- Confirm the shared root containing `DOWNLOAD_FOLDER` is mounted into Aurral, Navidrome, and slskd.
+- Confirm `DOWNLOAD_FOLDER` points to the mounted path Aurral writes, for example `/data/downloads/aurral`.
 - Confirm Navidrome can read the same folder.
 - Enable missing-track purging in Navidrome.
 
@@ -372,8 +447,6 @@ Special thanks to the BrainzMash team for the metadata work that helps make Aurr
 
 - Community and questions: [Discord](https://discord.gg/cpPYfgVURJ)
 - Bugs and feature requests: [GitHub Issues](https://github.com/lklynet/aurral/issues)
-- Contributor workflow: [CONTRIBUTING.md](CONTRIBUTING.md)
-- Local development: [DEVELOPMENT.md](DEVELOPMENT.md)
 
 ## License
 

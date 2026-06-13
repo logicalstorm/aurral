@@ -173,10 +173,10 @@
                 </div>
               </article>
               <article class="guide-stack-item">
-                <img src="icons/soulseek.svg" alt="" />
+                <img src="icons/slskd.svg" alt="" />
                 <div>
-                  <h3>Aurral Soulseek client</h3>
-                  <p>Built-in flow and imported-playlist downloads.</p>
+                  <h3>Aurral slskd orchestration</h3>
+                  <p>Flow and imported-playlist downloads through slskd.</p>
                 </div>
               </article>
               <article class="guide-stack-item">
@@ -300,11 +300,10 @@
             <div class="guide-note">
               <h3>Aurral and slskd are separate</h3>
               <p>
-                Aurral does not currently integrate with slskd directly. It uses
-                its own built-in Soulseek client for flow and imported-playlist
-                downloads. Add your Aurral download folder to slskd's shares so
-                completed flow files are shared back through your normal slskd
-                share set.
+                Aurral sends flow and imported-playlist searches to slskd,
+                selects the best candidate, and moves completed files into the
+                Aurral playlist download folder. Mount that same folder where
+                slskd downloads so both services can see the files.
               </p>
             </div>
           </section>
@@ -420,11 +419,18 @@
     ports:
       - "3001:3001"
     environment:
-      - DOWNLOAD_FOLDER=/srv/music/aurral
+      - DOWNLOAD_FOLDER=/data/downloads/aurral
     volumes:
+      - /srv/media:/data
       - /srv/aurral/data:/app/backend/data
-      - /srv/music/aurral:/app/downloads
-      - /srv/music/library:/data:ro
+
+  lidarr:
+    volumes:
+      - /srv/media:/data
+
+  slskd:
+    volumes:
+      - /srv/media:/data
 
   navidrome:
     image: deluan/navidrome:latest
@@ -433,14 +439,19 @@
       - "4533:4533"
     environment:
       - ND_SCANNER_PURGEMISSING=always
+      - ND_DATA=/config
     volumes:
-      - /srv/navidrome/data:/data
-      - /srv/music:/music:ro</code></pre>
+      - /srv/media:/data:ro
+      - /srv/navidrome/data:/config</code></pre>
             </div>
 
             <p>
-              If you run slskd, add <code>/srv/music/aurral</code> or the
-              equivalent host path to your slskd shared folders.
+              Mount the same host tree at <code>/data</code> in Aurral, Lidarr,
+              and slskd. Set Lidarr's root folder to
+              <code>/data/music</code>, slskd downloads to
+              <code>/data/downloads/slskd/complete</code>, and scan
+              <code>/data/music</code> plus
+              <code>/data/downloads/aurral</code> in Navidrome.
             </p>
 
             <div class="guide-card-grid guide-card-grid-three">
