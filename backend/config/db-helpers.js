@@ -7,6 +7,7 @@ import {
   hasListenHistoryProfile,
   normalizeListenHistoryProvider,
   normalizeListenHistoryUsername,
+  normalizeListenHistoryUrl,
 } from "../services/listeningHistory.js";
 import {
   syncDownloadFolderPath,
@@ -83,9 +84,6 @@ function normalizeLegacyWeeklyFlowWorkerSettings(raw) {
 
 const getDiscoveryCacheStmt = db.prepare(
   "SELECT value, last_updated FROM discovery_cache WHERE key = ?"
-);
-const getDiscoveryCacheLastUpdatedStmt = db.prepare(
-  "SELECT last_updated FROM discovery_cache ORDER BY last_updated DESC LIMIT 1"
 );
 const upsertDiscoveryCacheStmt = db.prepare(
   "INSERT OR REPLACE INTO discovery_cache (key, value, last_updated) VALUES (?, ?, ?)"
@@ -168,18 +166,18 @@ const getUserByUsernameStmt = db.prepare(
   "SELECT * FROM users WHERE username = ?"
 );
 const getAllUsersStmt = db.prepare(
-  "SELECT id, username, role, permissions, lastfm_username, listen_history_provider, listen_history_username, lidarr_root_folder_path, lidarr_quality_profile_id, discover_layout FROM users ORDER BY username"
+  "SELECT id, username, role, permissions, lastfm_username, listen_history_provider, listen_history_username, listen_history_url, lidarr_root_folder_path, lidarr_quality_profile_id, discover_layout FROM users ORDER BY username"
 );
 const getUserByIdStmt = db.prepare("SELECT * FROM users WHERE id = ?");
 const insertUserStmt = db.prepare(
   "INSERT INTO users (username, password_hash, role, permissions, lidarr_root_folder_path, lidarr_quality_profile_id, discover_layout) VALUES (?, ?, ?, ?, ?, ?, ?)"
 );
 const updateUserStmt = db.prepare(
-  "UPDATE users SET username = ?, password_hash = ?, role = ?, permissions = ?, lastfm_username = ?, listen_history_provider = ?, listen_history_username = ?, lidarr_root_folder_path = ?, lidarr_quality_profile_id = ?, discover_layout = ? WHERE id = ?"
+  "UPDATE users SET username = ?, password_hash = ?, role = ?, permissions = ?, lastfm_username = ?, listen_history_provider = ?, listen_history_username = ?, listen_history_url = ?, lidarr_root_folder_path = ?, lidarr_quality_profile_id = ?, discover_layout = ? WHERE id = ?"
 );
 const deleteUserStmt = db.prepare("DELETE FROM users WHERE id = ?");
 const getAllListeningHistoryUsersStmt = db.prepare(
-  "SELECT id, username, lastfm_username, listen_history_provider, listen_history_username FROM users WHERE listen_history_username IS NOT NULL AND TRIM(listen_history_username) != ''"
+  "SELECT id, username, lastfm_username, listen_history_provider, listen_history_username, listen_history_url FROM users WHERE (listen_history_username IS NOT NULL AND TRIM(listen_history_username) != '') OR (listen_history_url IS NOT NULL AND TRIM(listen_history_url) != '')"
 );
 
 const DEFAULT_PERMISSIONS = {
@@ -292,6 +290,7 @@ export const userOps = {
         permissions: perms,
         listenHistoryProvider: DEFAULT_LISTEN_HISTORY_PROVIDER,
         listenHistoryUsername: null,
+        listenHistoryUrl: null,
         lastfmUsername: null,
         lidarrRootFolderPath: null,
         lidarrQualityProfileId: null,
@@ -331,8 +330,17 @@ export const userOps = {
           ? data.lastfmUsername
           : existing.listenHistoryUsername,
     );
+    const listenHistoryUrl = normalizeListenHistoryUrl(
+      data.listenHistoryUrl !== undefined
+        ? data.listenHistoryUrl
+        : existing.listenHistoryUrl,
+    );
+    const resolvedUsername =
+      listenHistoryProvider === "koito" ? null : listenHistoryUsername;
+    const resolvedUrl =
+      listenHistoryProvider === "koito" ? listenHistoryUrl : null;
     const lastfmUsername =
-      listenHistoryProvider === "lastfm" ? listenHistoryUsername : null;
+      listenHistoryProvider === "lastfm" ? resolvedUsername : null;
     const lidarrRootFolderPath =
       data.lidarrRootFolderPath !== undefined
         ? data.lidarrRootFolderPath
@@ -363,7 +371,8 @@ export const userOps = {
         dbHelpers.stringifyJSON(permissions),
         lastfmUsername,
         listenHistoryProvider,
-        listenHistoryUsername,
+        resolvedUsername,
+        resolvedUrl,
         lidarrRootFolderPath,
         lidarrQualityProfileId,
         dbHelpers.stringifyJSON(discoverLayout),
@@ -375,7 +384,8 @@ export const userOps = {
         role,
         permissions,
         listenHistoryProvider,
-        listenHistoryUsername,
+        listenHistoryUsername: resolvedUsername,
+        listenHistoryUrl: resolvedUrl,
         lastfmUsername,
         lidarrRootFolderPath,
         lidarrQualityProfileId,
@@ -685,9 +695,15 @@ export const dbOps = {
     );
     const provider =
       getDiscoveryCacheStmt.get(`${prefix}provider`)?.value || null;
+    const recommendationsRow = getDiscoveryCacheStmt.get(`${prefix}recommendations`);
+    const globalTopRow = getDiscoveryCacheStmt.get(`${prefix}globalTop`);
     const lastUpdated = cacheNamespace
-      ? getDiscoveryCacheStmt.get(`${prefix}lastUpdated`)?.value || null
-      : getDiscoveryCacheLastUpdatedStmt.get()?.last_updated;
+      ? getDiscoveryCacheStmt.get(`${prefix}lastUpdated`)?.value ||
+        recommendationsRow?.last_updated ||
+        null
+      : recommendationsRow?.last_updated ||
+        globalTopRow?.last_updated ||
+        null;
 
     return {
       recommendations: recommendations || [],

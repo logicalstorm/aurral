@@ -807,7 +807,7 @@ export function SettingsIntegrationsTab({
                 />
                 <p className="settings-page__hint">
                   Used as the app-wide fallback for users who have not set their
-                  own Last.fm or ListenBrainz account in Profile.
+                  own Last.fm, ListenBrainz, or Koito account in Profile.
                 </p>
               </div>
             </fieldset>

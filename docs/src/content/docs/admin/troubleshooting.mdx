@@ -44,6 +44,19 @@ Symptoms include logs such as `Lidarr track exists but file is not accessible fr
 
 See [Shared storage — Windows and mixed Docker setups](/getting-started/storage/#windows-and-mixed-docker-setups).
 
+## Navidrome playlists show but tracks won't play
+
+Symptoms: flows or shared playlists appear in Navidrome after a scan, but playback fails or tracks are missing. Common on Windows when Aurral runs in Docker with path mappings and Navidrome runs natively.
+
+- Confirm **Test library access** passes in Lidarr settings (path mappings let Aurral read files).
+- Enable **Settings → Integrations → Navidrome → Use host paths in playlist files**, or set `M3U_PATH_MODE=remote` in compose and recreate the Aurral container.
+- Refresh playlists so `.m3u` files are rewritten (disable/re-enable a flow, edit a shared playlist, or trigger playlist ensure from the Playlists page).
+- Open a generated `.m3u` under `aurral-weekly-flow` and confirm track lines use paths Navidrome can open (for example `N:/ServerFolders/Music/...` on Windows, not `/music/...`).
+
+Leave **Use host paths in playlist files** off when Navidrome is in Docker with the same mounts as Aurral.
+
+See [Navidrome — Mixed Windows and Docker](/integrations/navidrome/#mixed-windows-and-docker-navidrome).
+
 ## Permission errors
 
 - Make sure mounted folders are writable by the container user.
