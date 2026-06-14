@@ -12,14 +12,12 @@
 ![Discord](https://img.shields.io/discord/1457052417580339285?style=flat)
 [![Sponsor](https://img.shields.io/github/sponsors/lklynet?label=Sponsor&logo=GitHub-Sponsors&logoColor=fe8a76)](https://github.com/sponsors/lklynet/)
 
-Aurral is a self-hosted music discovery app for the Lidarr stack. Find new artists, request albums, run scheduled flows, import playlists, and follow everything from recommendation to playback — without writing generated files into your main library.
+Aurral is a self-hosted music discovery app for the Lidarr stack. Find new artists, request albums, run scheduled flows, import playlists, and follow everything from recommendation to playback without writing generated files into your main library.
 
 ## Quick Links
 
 - [Website](https://aurral.org)
 - [Documentation](https://docs.aurral.org/)
-- [Self-hosting guide](https://docs.aurral.org/guides/self-hosting/)
-- [Docker image](https://ghcr.io/lklynet/aurral)
 - [Discord](https://discord.gg/cpPYfgVURJ)
 
 ## Features
