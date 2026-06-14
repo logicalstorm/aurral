@@ -39,9 +39,8 @@ export class WeeklyFlowPlaylistManager {
     this.plexClient = null;
     this._plexConfigKey = "";
     this._plexSectionId = null;
-    // playlist title -> fingerprint last pushed, so unchanged playlists skip
-    // the getPlaylistItems round-trip.
     this._plexSyncHashes = new Map();
+    this._plexCatchupRunning = false;
     this._ensureInFlight = null;
     this._refreshInFlight = new Map();
     this.updateConfig(triggerEnsureOnInit);
@@ -398,9 +397,9 @@ export class WeeklyFlowPlaylistManager {
     const override = String(this._plexDownloadsPath || "").trim();
     if (override) {
       const base = override.replace(/\\/g, "/").replace(/\/+$/, "");
-      return `${base}/aurral-weekly-flow`;
+      return `${base}/${PLAYLIST_LIBRARY_DIR}`;
     }
-    return this._getWeeklyFlowLibraryHostPath();
+    return this._getPlaylistLibraryHostPath();
   }
 
   _hashKeys(ratingKeys) {
@@ -459,7 +458,7 @@ export class WeeklyFlowPlaylistManager {
         let present = group.some(ownsPath);
         if (!present) {
           try {
-            await fs.access(path.join(this.libraryRoot, id, rel));
+            await fs.access(path.join(this.playlistLibraryRoot, id, rel));
             present = true;
           } catch {}
         }
