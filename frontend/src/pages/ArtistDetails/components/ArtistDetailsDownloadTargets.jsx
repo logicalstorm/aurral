@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import PropTypes from "prop-types";
 import { Loader, Music, Star } from "lucide-react";
 import AddAlbumButton from "../../../components/AddAlbumButton";
+import { useImageGradientColors } from "../../../hooks/useImageGradientColors";
 import { getReleaseGroupTracks } from "../../../utils/api";
 import { buildAurralPick, getReleaseMetric } from "../utils";
 import { TrackPlaylistMenu } from "./TrackPlaylistMenu";
@@ -43,10 +44,11 @@ const formatDuration = (track) => {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 };
 
-const TRACK_PREVIEW_LIMIT = 8;
+const TRACK_PREVIEW_LIMIT = 6;
 
 export function ArtistDetailsDownloadTargets({
-  targets,
+  releaseGroups = [],
+  getAlbumStatus,
   artist,
   albumCovers,
   artistCoverImage,
@@ -64,9 +66,15 @@ export function ArtistDetailsDownloadTargets({
   getDefaultPlaylistName,
   onLoadPlaylists,
 }) {
-  const missingReleasePick =
-    targets.find((target) => target.source === "release") ||
-    buildAurralPick(targets);
+  const missingReleasePick = useMemo(
+    () => buildAurralPick({ releaseGroups, getAlbumStatus }),
+    [releaseGroups, getAlbumStatus],
+  );
+  const coverSrc =
+    (missingReleasePick &&
+      (albumCovers?.[missingReleasePick.releaseGroupId] || artistCoverImage)) ||
+    "";
+  const gradientColors = useImageGradientColors(coverSrc);
   const [tracks, setTracks] = useState([]);
   const [loadingTracks, setLoadingTracks] = useState(false);
   const [showAllTracks, setShowAllTracks] = useState(false);
@@ -175,7 +183,25 @@ export function ArtistDetailsDownloadTargets({
 
   return (
     <section className="artist-section">
-      <div className="artist-pick-panel">
+      <div
+        className={`artist-pick-panel${
+          gradientColors ? " artist-pick-panel--gradient" : ""
+        }`}
+        style={
+          gradientColors
+            ? {
+                "--artist-pick-gradient-top": gradientColors.top,
+                "--artist-pick-gradient-bottom": gradientColors.bottom,
+              }
+            : undefined
+        }
+      >
+        {gradientColors ? (
+          <span className="artist-pick-panel__backdrop" aria-hidden="true">
+            <span className="artist-pick-panel__backdrop-gradient" />
+            <span className="artist-pick-panel__backdrop-wash" />
+          </span>
+        ) : null}
         <div className="artist-pick-panel__grid">
           <div className="artist-media-cell">
             <PickCover
@@ -320,7 +346,8 @@ export function ArtistDetailsDownloadTargets({
 }
 
 ArtistDetailsDownloadTargets.propTypes = {
-  targets: PropTypes.arrayOf(PropTypes.object).isRequired,
+  releaseGroups: PropTypes.arrayOf(PropTypes.object),
+  getAlbumStatus: PropTypes.func.isRequired,
   artist: PropTypes.object,
   albumCovers: PropTypes.object,
   artistCoverImage: PropTypes.string,

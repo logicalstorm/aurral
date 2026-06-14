@@ -2,6 +2,7 @@ import PropTypes from "prop-types";
 import { ChevronRight, ListMusic, Music } from "lucide-react";
 import ArtistImage from "./ArtistImage";
 import SearchLibraryCheck from "./SearchLibraryCheck";
+import { useImageGradientColors } from "../hooks/useImageGradientColors";
 import { navigateFromSearchResult } from "../utils/searchNavigation";
 import { getArtistRecordId } from "../utils/artistTaste";
 
@@ -110,11 +111,11 @@ function SearchTopArtistCard({
 }) {
   const result = item || legacyArtist;
   const label = getPrimaryLabel(result);
+  const backdropSrc = result ? getBackdropSrc(result, artistImages, albumCovers) : "";
+  const gradientColors = useImageGradientColors(backdropSrc);
   if (!result || !label) return null;
-
   const isArtist = result.type === "artist";
   const artistId = isArtist ? getArtistRecordId(result) : null;
-  const backdropSrc = getBackdropSrc(result, artistImages, albumCovers);
   const isInLibrary =
     result.inLibrary ||
     (isArtist && artistId ? libraryLookup[artistId] : false);
@@ -125,13 +126,25 @@ function SearchTopArtistCard({
     <article className="search-top-artist">
       <button
         type="button"
-        className="search-top-artist__main"
+        className={`search-top-artist__main${
+          gradientColors ? " search-top-artist__main--gradient" : ""
+        }`}
+        style={
+          gradientColors
+            ? {
+                "--search-top-gradient-top": gradientColors.top,
+                "--search-top-gradient-bottom": gradientColors.bottom,
+              }
+            : undefined
+        }
         onClick={() =>
           navigateFromSearchResult(navigate, result, { query })
         }
       >
         <span className="search-top-artist__backdrop" aria-hidden="true">
-          {backdropSrc ? (
+          {gradientColors ? (
+            <span className="search-top-artist__backdrop-gradient" />
+          ) : backdropSrc ? (
             <img
               src={backdropSrc}
               alt=""

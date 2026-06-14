@@ -33,7 +33,7 @@ import {
   createSharedPlaylist,
   updateArtistOverrides,
 } from "../../utils/api";
-import { buildDownloadTargets, getArtistPosterImage } from "./utils";
+import { getArtistPosterImage } from "./utils";
 import { useArtistTasteFeedback } from "../../hooks/useArtistTasteFeedback";
 
 const MBID_REGEX =
@@ -256,17 +256,6 @@ function ArtistDetailsPage() {
     handlePreviewPlayAll,
     setPreviewTracks,
   } = preview;
-
-  const downloadTargets = useMemo(
-    () =>
-      buildDownloadTargets({
-        artist,
-        libraryAlbums,
-        downloadStatuses: library.downloadStatuses || {},
-        releaseGroups: artist?.["release-groups"] || [],
-      }),
-    [artist, library.downloadStatuses, libraryAlbums],
-  );
 
   const handleOpenEditIds = async () => {
     if (!mbid) return;
@@ -587,7 +576,8 @@ function ArtistDetailsPage() {
       />
 
       <ArtistDetailsDownloadTargets
-        targets={downloadTargets}
+        releaseGroups={artist?.["release-groups"] || []}
+        getAlbumStatus={library.getAlbumStatus}
         artist={artist}
         albumCovers={albumCovers}
         artistCoverImage={artistCoverImage}
