@@ -1,8 +1,27 @@
 import {
+  RELEASE_LIST_VIEW_MODE_KEY,
   TAG_COLORS,
   allReleaseTypes,
   secondaryReleaseTypes,
 } from "./constants";
+
+export const readReleaseListViewMode = () => {
+  if (typeof window === "undefined") return "grid";
+  try {
+    const value = window.localStorage.getItem(RELEASE_LIST_VIEW_MODE_KEY);
+    return value === "list" ? "list" : "grid";
+  } catch {
+    return "grid";
+  }
+};
+
+export const writeReleaseListViewMode = (mode) => {
+  if (typeof window === "undefined") return;
+  if (mode !== "grid" && mode !== "list") return;
+  try {
+    window.localStorage.setItem(RELEASE_LIST_VIEW_MODE_KEY, mode);
+  } catch {}
+};
 
 export const getTagColor = (name) => {
   if (!name) return "#121212";

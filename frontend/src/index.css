@@ -3705,9 +3705,28 @@ textarea {
   padding: 0.25rem;
 }
 
-.artist-options .btn-icon-square {
+.artist-options > .btn-icon-square {
   width: 2.25rem;
   height: 2.25rem;
+}
+
+.artist-options-view-grid .btn-icon-square {
+  width: 100%;
+  min-width: 0;
+  height: 2.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.artist-options-view-grid .btn-icon-square.is-active {
+  background-color: var(--aurral-gray-light);
+  color: var(--aurral-black);
+}
+
+.artist-options-view-grid .btn-icon-square.is-active:hover:not(:disabled) {
+  background-color: var(--aurral-gray-light);
+  color: var(--aurral-black);
 }
 
 .artist-modal-backdrop {
