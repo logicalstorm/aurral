@@ -89,17 +89,6 @@ For a full stack with Lidarr, slskd, and Navidrome, see [`docker-compose.example
 
 Full setup and usage guides live at [docs.aurral.org](https://docs.aurral.org/).
 
-- [Documentation home](https://docs.aurral.org/)
-- [Docker setup](https://docs.aurral.org/getting-started/docker/)
-- [Shared storage](https://docs.aurral.org/getting-started/storage/)
-- [First run](https://docs.aurral.org/getting-started/first-run/)
-- [Self-hosting guide](https://docs.aurral.org/guides/self-hosting/)
-- [Playlists](https://docs.aurral.org/using/playlists/)
-- [Flows](https://docs.aurral.org/using/flows/)
-- [Playlist imports](https://docs.aurral.org/using/playlist-imports/)
-- [Troubleshooting](https://docs.aurral.org/admin/troubleshooting/)
-- [Spotify import tool](https://aurral.org/aurral-convert.html)
-
 ## Support
 
 Aurral builds on open metadata, listening data, and infrastructure from the projects below.
@@ -113,10 +102,6 @@ Aurral builds on open metadata, listening data, and infrastructure from the proj
 
 - Community: [Discord](https://discord.gg/cpPYfgVURJ)
 - Bugs and feature requests: [GitHub Issues](https://github.com/lklynet/aurral/issues)
-
-## Contributors
-
-![contributors badge](https://readme-contribs.as93.net/contributors/lklynet/aurral)
 
 ## Sponsors
 
