@@ -38,3 +38,5 @@ coverage/
 *.temp
 /*.mp3
 aurral-search/*
+desktop/node_modules/
+desktop/src-tauri/target/

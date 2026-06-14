@@ -1255,6 +1255,37 @@ export function SettingsIntegrationsTab({
                   }
                 />
               </div>
+              <div>
+                <label className="artist-checkbox-label">
+                  <input
+                    type="checkbox"
+                    className="artist-checkbox"
+                    checked={
+                      settings.integrations?.navidrome?.m3uPathMode === "remote"
+                    }
+                    onChange={(e) =>
+                      updateSettings({
+                        ...settings,
+                        integrations: {
+                          ...settings.integrations,
+                          navidrome: {
+                            ...(settings.integrations?.navidrome || {}),
+                            m3uPathMode: e.target.checked ? "remote" : "local",
+                          },
+                        },
+                      })
+                    }
+                  />
+                  <span className="artist-field-label">
+                    Use host paths in playlist files
+                  </span>
+                </label>
+                <p className="settings-page__hint settings-page__hint--indented">
+                  Enable when Navidrome runs outside Docker but Aurral uses
+                  path mappings. Playlist M3U files will reference host paths
+                  such as <code>N:\Music\...</code> instead of container paths.
+                </p>
+              </div>
               <p className="settings-page__hint">
                 When using Weekly Flow: set Navidrome&apos;s{" "}
                 <code>Scanner.PurgeMissing</code> to <code>always</code> or{" "}

@@ -101,6 +101,8 @@ After changing `volumes` or `environment`, recreate the container (`docker compo
 `PATH_MAPPINGS` from compose is applied at runtime but does not appear under **Settings → Playlists → Path mappings**. Use the UI if you want to view or edit mappings in the app.
 :::
 
+If Navidrome runs outside Docker, enable **Settings → Integrations → Navidrome → Use host paths in playlist files** or set `M3U_PATH_MODE=remote` in compose.
+
 Path mappings also apply to slskd download paths reported from native Windows installs.
 
 You do not need to move your music library or change Lidarr's root folder path on Windows. Aurral translates the paths it receives from Lidarr and slskd into the mounted container paths.

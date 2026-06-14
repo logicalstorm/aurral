@@ -13,6 +13,7 @@ import {
   normalizePathMappings,
   parsePathMappingsEnv,
   resolveLocalPath,
+  resolveRemotePath,
 } from "../../backend/services/pathMappings.js";
 
 test("resolveLocalPath maps a Windows prefix to a container path", () => {
@@ -106,6 +107,25 @@ test("resolveLocalPath suffix-walks mounted roots without saved mappings", async
   await fs.rm(rootDir, { recursive: true, force: true });
 });
 
+test("resolveRemotePath inverts a Windows prefix mapping", () => {
+  const mappings = normalizePathMappings([
+    { remote: "N:/ServerFolders/Music", local: "/music" },
+  ]);
+  assert.equal(
+    resolveRemotePath("/music/Music/Artist/track.mp3", mappings),
+    "N:/ServerFolders/Music/Music/Artist/track.mp3",
+  );
+});
+
+test("resolveRemotePath leaves unmapped local paths unchanged", () => {
+  const mappings = normalizePathMappings([
+    { remote: "N:/ServerFolders/Music", local: "/music" },
+  ]);
+  assert.equal(
+    resolveRemotePath("/data/music/Artist/track.mp3", mappings),
+    path.resolve("/data/music/Artist/track.mp3"),
+  );
+});
 test("looksLikeExternalOnlyPath detects Windows and UNC paths", () => {
   assert.equal(looksLikeExternalOnlyPath("N:\\Music\\Artist"), true);
   assert.equal(looksLikeExternalOnlyPath("\\\\server\\share\\Music"), true);

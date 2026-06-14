@@ -73,6 +73,7 @@ export default defineConfig({
             { slug: "getting-started/docker" },
             { slug: "getting-started/storage" },
             { slug: "getting-started/first-run" },
+            { slug: "getting-started/macos-app" },
           ],
         },
         {

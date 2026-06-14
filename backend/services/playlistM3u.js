@@ -9,6 +9,7 @@ import {
   remapLegacyWeeklyFlowPath,
   resolveWeeklyFlowRoot,
 } from "./weeklyFlowPaths.js";
+import { getM3uPathMode, normalizeM3uPathMode, resolveM3uTrackPath } from "./playlistM3uPaths.js";
 
 export function formatExtinf(durationSeconds, title, artist) {
   const duration = Math.max(0, Math.floor(Number(durationSeconds) || 0));
@@ -48,10 +49,12 @@ function sortJobsByCreatedAt(jobs) {
   });
 }
 
-function jobToEntry(job, weeklyFlowRoot) {
-  const resolvedPath = remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowRoot);
+function jobToEntry(job, weeklyFlowRoot, m3uPathMode = getM3uPathMode()) {
+  const localPath = path.resolve(
+    remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowRoot),
+  );
   return {
-    path: path.resolve(resolvedPath),
+    path: resolveM3uTrackPath(job, localPath, m3uPathMode),
     title: job.trackName || null,
     artist: job.artistName || null,
     durationSeconds: job.durationMs ? Math.round(job.durationMs / 1000) : 0,
@@ -62,6 +65,7 @@ export async function collectPlaylistM3uEntries(playlistType, options = {}) {
   const weeklyFlowRoot = path.resolve(
     options.weeklyFlowRoot || resolveWeeklyFlowRoot(),
   );
+  const m3uPathMode = normalizeM3uPathMode(options.m3uPathMode ?? getM3uPathMode());
   const doneJobs = downloadTracker
     .getByPlaylistType(playlistType)
     .filter(
@@ -89,10 +93,11 @@ export async function collectPlaylistM3uEntries(playlistType, options = {}) {
 
   const entries = [];
   for (const job of orderedJobs) {
-    const entry = jobToEntry(job, weeklyFlowRoot);
-    if (await fileExists(entry.path)) {
-      entries.push(entry);
-    }
+    const localPath = path.resolve(
+      remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowRoot),
+    );
+    if (!(await fileExists(localPath))) continue;
+    entries.push(jobToEntry(job, weeklyFlowRoot, m3uPathMode));
   }
   return entries;
 }
