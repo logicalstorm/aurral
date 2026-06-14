@@ -93,6 +93,7 @@ export default defineConfig({
           items: [
             { slug: "integrations/lidarr" },
             { slug: "integrations/lastfm" },
+            { slug: "integrations/koito" },
             { slug: "integrations/slskd" },
             { slug: "integrations/navidrome" },
             { slug: "integrations/ticketmaster" },
