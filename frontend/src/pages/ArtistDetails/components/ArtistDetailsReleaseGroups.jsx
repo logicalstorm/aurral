@@ -11,6 +11,7 @@ import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
 import AddAlbumButton from "../../../components/AddAlbumButton";
 import { navigateToReleaseGroup } from "../../../utils/searchNavigation";
 import {
+  getPopularReleaseGroups,
   getReleaseMetric,
   getReleaseYear,
 } from "../utils";
@@ -39,9 +40,7 @@ const sortLatest = (items) =>
 
 const getVisibleReleases = (releaseGroups, viewMode) => {
   if (viewMode === "popular") {
-    return [...releaseGroups]
-      .sort((a, b) => getReleaseMetric(b).sortValue - getReleaseMetric(a).sortValue)
-      .slice(0, 6);
+    return getPopularReleaseGroups(releaseGroups);
   }
   if (viewMode === "albums") {
     return sortLatest(
