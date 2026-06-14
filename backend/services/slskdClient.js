@@ -609,7 +609,6 @@ export class SlskdClient {
           size: Number(file.size || 0),
         })),
         options: {
-          destination: options.destination || null,
           externalId: options.externalId || null,
         },
       };
