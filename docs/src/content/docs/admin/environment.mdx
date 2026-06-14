@@ -10,6 +10,7 @@ Most setup happens in the web UI. These environment variables matter for Docker 
 | `PUID` / `PGID` | Run the container as the user that owns mounted folders |
 | `AURRAL_DATA_DIR` | Override app data directory (default `/config`) |
 | `DOWNLOAD_FOLDER` | Path inside `/data` for generated playlists (can also be set in UI) |
+| `PATH_MAPPINGS` | Optional path translations for mixed Windows/Docker setups, for example `N:/ServerFolders/Music|/music` |
 | `TRUST_PROXY` | Set when Aurral is behind a reverse proxy |
 | `AUTH_PROXY_*` | Reverse-proxy authentication headers |
 | `AURRAL_VERBOSE_LOGS` | Fuller server logs while troubleshooting |
