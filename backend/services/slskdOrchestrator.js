@@ -11,10 +11,7 @@ import {
   selectRankedMatchAttempts,
   validateDownloadedTrack,
 } from "./weeklyFlowSoulseekMatcher.js";
-import {
-  buildPlaylistDestination,
-  resolvePlaylistRoot,
-} from "./playlistPaths.js";
+import { resolvePlaylistRoot } from "./playlistPaths.js";
 import { resolveLocalPath } from "./pathMappings.js";
 
 const updateSlskdMetaStmt = db.prepare(`
@@ -192,27 +189,168 @@ function joinUnderRoot(root, relativePath, fileName = null) {
   return path.join(root, ...parts);
 }
 
-async function findFileRecursive(dir, fileName, depth = 0) {
-  if (depth > 8) return null;
+export function parseSlskdRemoteFile(remoteFile) {
+  const normalized = String(remoteFile || "").replace(/\\/g, "/").trim();
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts.length === 0) {
+    return { fileName: "", parentDir: "" };
+  }
+  return {
+    fileName: parts[parts.length - 1],
+    parentDir: parts.length > 1 ? parts[parts.length - 2] : "",
+  };
+}
+
+export function predictSlskdLocalPathCandidates(root, remoteFile) {
+  const base = String(root || "").trim();
+  if (!base) return [];
+  const { fileName, parentDir } = parseSlskdRemoteFile(remoteFile);
+  if (!fileName) return [];
+  const candidates = [];
+  if (parentDir) {
+    candidates.push(path.join(base, parentDir, fileName));
+  }
+  candidates.push(path.join(base, fileName));
+  const seen = new Set();
+  return candidates.filter((candidate) => {
+    const resolved = path.resolve(candidate);
+    if (seen.has(resolved)) return false;
+    seen.add(resolved);
+    return true;
+  });
+}
+
+function readTransferFilename(transfer) {
+  return String(
+    transfer?.filename ||
+      transfer?.Filename ||
+      transfer?.file ||
+      transfer?.File ||
+      "",
+  ).trim();
+}
+
+function resolveTransferLocalPath(transferFilename, slskdRoot) {
+  const raw = String(transferFilename || "").trim();
+  if (!raw) return null;
+  const normalized = raw.replace(/\\/g, path.sep);
+  if (path.isAbsolute(normalized)) {
+    return path.resolve(resolveLocalPath(normalized));
+  }
+  const slskdBase = String(slskdRoot || "").trim();
+  if (!slskdBase) return null;
+  const resolvedBase = path.resolve(slskdBase);
+  if (
+    normalized === resolvedBase ||
+    normalized.startsWith(`${resolvedBase}${path.sep}`)
+  ) {
+    return path.resolve(normalized);
+  }
+  return path.resolve(resolvedBase, normalized);
+}
+
+async function statMatchingFile(filePath, expectedSizeBytes) {
+  try {
+    const stat = await fs.stat(filePath);
+    if (!stat.isFile()) return null;
+    const expected = Number(expectedSizeBytes || 0);
+    if (expected > 0 && stat.size !== expected) return null;
+    return filePath;
+  } catch {
+    return null;
+  }
+}
+
+async function findFileRecursive(
+  dir,
+  fileName,
+  expectedSizeBytes,
+  depth = 0,
+  matches = null,
+) {
+  if (depth > 8) return matches;
+  const collected = matches || [];
   let entries = [];
   try {
     entries = await fs.readdir(dir, { withFileTypes: true });
   } catch {
-    return null;
+    return collected;
   }
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
     if (entry.isFile() && entry.name === fileName) {
-      return fullPath;
+      const stat = await fs.stat(fullPath).catch(() => null);
+      if (stat?.isFile()) {
+        collected.push({ path: fullPath, size: stat.size, mtimeMs: stat.mtimeMs });
+      }
     }
   }
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const found = await findFileRecursive(
+    await findFileRecursive(
       path.join(dir, entry.name),
       fileName,
+      expectedSizeBytes,
       depth + 1,
+      collected,
     );
+  }
+  if (depth > 0 || matches) return collected;
+  return pickBestFileMatch(collected, expectedSizeBytes);
+}
+
+function pickBestFileMatch(matches, expectedSizeBytes) {
+  if (!Array.isArray(matches) || matches.length === 0) return null;
+  const expected = Number(expectedSizeBytes || 0);
+  if (expected > 0) {
+    const sizeMatches = matches.filter((entry) => entry.size === expected);
+    if (sizeMatches.length === 1) return sizeMatches[0].path;
+    if (sizeMatches.length > 1) {
+      return sizeMatches.sort((left, right) => right.mtimeMs - left.mtimeMs)[0]
+        .path;
+    }
+    return null;
+  }
+  if (matches.length === 1) return matches[0].path;
+  return matches.sort((left, right) => right.mtimeMs - left.mtimeMs)[0].path;
+}
+
+export async function locateCompletedDownload(
+  slskdRoot,
+  playlistRoot,
+  remoteFile,
+  options = {},
+) {
+  const expectedSizeBytes = Number(options.expectedSizeBytes || 0);
+  const transferFilename = readTransferFilename(options.transfer);
+  const transferPath = resolveTransferLocalPath(transferFilename, slskdRoot);
+  if (transferPath) {
+    const directTransfer = await statMatchingFile(
+      transferPath,
+      expectedSizeBytes,
+    );
+    if (directTransfer) return directTransfer;
+  }
+
+  const searchRoots = [];
+  if (slskdRoot) searchRoots.push(slskdRoot);
+  if (playlistRoot) {
+    const resolvedPlaylist = path.resolve(playlistRoot);
+    const resolvedSlskd = path.resolve(String(slskdRoot || "").trim());
+    if (!resolvedSlskd || resolvedPlaylist !== resolvedSlskd) {
+      searchRoots.push(playlistRoot);
+    }
+  }
+
+  for (const root of searchRoots) {
+    for (const candidate of predictSlskdLocalPathCandidates(root, remoteFile)) {
+      const matched = await statMatchingFile(candidate, expectedSizeBytes);
+      if (matched) return matched;
+    }
+  }
+
+  for (const root of searchRoots) {
+    const found = await findFileRecursive(root, parseSlskdRemoteFile(remoteFile).fileName, expectedSizeBytes);
     if (found) return found;
   }
   return null;
@@ -250,51 +388,6 @@ async function cleanupEmptyAncestors(dir, rootBoundary) {
       break;
     }
   }
-}
-
-async function locateCompletedDownload(
-  slskdRoot,
-  playlistRoot,
-  destination,
-  fileName,
-) {
-  const directCandidates = [];
-  if (slskdRoot) {
-    directCandidates.push(joinUnderRoot(slskdRoot, destination, fileName));
-  }
-  if (playlistRoot) {
-    const playlistCandidate = joinUnderRoot(
-      playlistRoot,
-      destination,
-      fileName,
-    );
-    if (
-      !directCandidates.some(
-        (entry) => path.resolve(entry) === path.resolve(playlistCandidate),
-      )
-    ) {
-      directCandidates.push(playlistCandidate);
-    }
-  }
-  for (const candidate of directCandidates) {
-    try {
-      await fs.access(candidate);
-      return candidate;
-    } catch {}
-  }
-  const searchRoots = [];
-  if (slskdRoot) {
-    searchRoots.push(joinUnderRoot(slskdRoot, destination));
-    searchRoots.push(slskdRoot);
-  }
-  if (playlistRoot) {
-    searchRoots.push(joinUnderRoot(playlistRoot, destination));
-  }
-  for (const root of searchRoots) {
-    const found = await findFileRecursive(root, fileName);
-    if (found) return found;
-  }
-  return null;
 }
 
 function countPreDownloadValidCandidates(results, resolvedTrack, searchOptions) {
@@ -469,7 +562,6 @@ async function handleDownload(payload) {
         },
       ],
       options: {
-        destination: payload.destination,
         externalId: job.id,
         searchId,
       },
@@ -640,18 +732,29 @@ async function handleFinalize(payload) {
       ? payload.candidates[candidateIndex]
       : null);
   const remoteFile = String(candidate?.raw?.file || "");
-  const fileName = path.basename(remoteFile.replace(/\\/g, "/"));
+  const { fileName } = parseSlskdRemoteFile(remoteFile);
+  const transfers = readBatchTransfers(payload.batch);
+  const transfer = transfers[0] || null;
   const sourcePath = await locateCompletedDownload(
     slskdRoot,
     playlistRoot,
-    destination,
-    fileName,
+    remoteFile,
+    {
+      expectedSizeBytes: Number(candidate?.raw?.size || 0),
+      transfer,
+    },
   );
   if (!sourcePath) {
-    const expected = slskdRoot
-      ? joinUnderRoot(slskdRoot, destination, fileName)
-      : joinUnderRoot(playlistRoot, destination, fileName);
-    await failJob(job, `Downloaded file missing: ${expected}`);
+    const searchRoot = slskdRoot || playlistRoot;
+    const [predictedPath] = predictSlskdLocalPathCandidates(
+      searchRoot,
+      remoteFile,
+    );
+    const expectedPath = predictedPath || fileName;
+    await failJob(
+      job,
+      `Downloaded file missing: ${expectedPath}`,
+    );
     return null;
   }
   const ext = path.extname(sourcePath).toLowerCase();
