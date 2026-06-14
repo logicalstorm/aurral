@@ -72,4 +72,39 @@ After startup:
 Mounting only `/data/music` is enough for Lidarr API connectivity, but Aurral cannot see `/data/downloads/...` unless that tree is mounted too. Mount the parent shared root, for example `/srv/media:/data`.
 :::
 
+## Windows and mixed Docker setups
+
+The recommended setup runs Aurral, Lidarr, and slskd in Docker with the same `/data` mount. If Lidarr or slskd run natively on Windows while Aurral runs in Docker, those apps report host paths such as `N:\Music\...` that Aurral cannot open directly.
+
+Fix this by mounting the parent music folder into Aurral, then letting Aurral translate paths:
+
+```yaml
+services:
+  aurral:
+    environment:
+      - DOWNLOAD_FOLDER=/music/Aurral
+      - PATH_MAPPINGS=N:/ServerFolders/Music|/music
+    volumes:
+      - N:/ServerFolders/Music:/music
+      - ./config/aurral:/config
+```
+
+`PATH_MAPPINGS` is optional if auto-detect or a saved UI mapping works. Use `remote|local` pairs separated by `;` for multiple mappings. See [Environment variables](/admin/environment/).
+
+After changing `volumes` or `environment`, recreate the container (`docker compose up -d --force-recreate`). `docker restart` does not apply compose changes.
+
+1. Set your download folder to a path inside that mount, for example `/music/Aurral` (via `DOWNLOAD_FOLDER` or **Settings → Playlists**).
+2. In **Settings → Integrations → Lidarr**, run **Test library access**. Aurral auto-detects a mapping such as `N:\ServerFolders\Music` → `/music` when the folders line up.
+3. If auto-detect does not work, add `PATH_MAPPINGS` in compose, or open **Settings → Playlists → Path mappings**, click **Detect from Lidarr**, or add a manual **Remote path** / **Local path** pair, then save.
+
+:::note
+`PATH_MAPPINGS` from compose is applied at runtime but does not appear under **Settings → Playlists → Path mappings**. Use the UI if you want to view or edit mappings in the app.
+:::
+
+If Navidrome runs outside Docker, enable **Settings → Integrations → Navidrome → Use host paths in playlist files** or set `M3U_PATH_MODE=remote` in compose.
+
+Path mappings also apply to slskd download paths reported from native Windows installs.
+
+You do not need to move your music library or change Lidarr's root folder path on Windows. Aurral translates the paths it receives from Lidarr and slskd into the mounted container paths.
+
 Next: [First run](/getting-started/first-run/)

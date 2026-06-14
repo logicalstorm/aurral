@@ -226,6 +226,7 @@ async function findLidarrSource(track) {
     return {
       sourceType: "lidarr",
       sourcePath,
+      externalPath: matchedTrack.path,
       lidarrTrack: matchedTrack,
       albumName: album.albumName || track.albumName || null,
     };
@@ -299,6 +300,7 @@ export async function repairCompletedTrackLink(job, options = {}) {
     job.id,
     sourcePath,
     source.albumName || job.albumName || null,
+    source.externalPath || null,
   );
   console.log(
     `[WeeklyFlowReuse] Repaired ${job.playlistType} path from ${source.sourceType}: ${job.artistName} - ${job.trackName}`,
@@ -427,7 +429,12 @@ export async function reuseTrackForPlaylist(track, playlistType, options = {}) {
   if (!jobId) {
     return { reused: false, reason: "Failed to create reuse job" };
   }
-  downloadTracker.setDone(jobId, finalPath, source.albumName || track.albumName || null);
+  downloadTracker.setDone(
+    jobId,
+    finalPath,
+    source.albumName || track.albumName || null,
+    source.externalPath || null,
+  );
   console.log(
     `[WeeklyFlowReuse] Reused ${source.sourceType} track for ${playlistType}: ${track.artistName} - ${track.trackName}`,
   );

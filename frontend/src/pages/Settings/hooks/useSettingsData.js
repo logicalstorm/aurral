@@ -28,7 +28,7 @@ const defaultSettings = {
   quality: "standard",
   releaseTypes: allReleaseTypes,
   integrations: {
-    navidrome: { url: "", username: "", password: "" },
+    navidrome: { url: "", username: "", password: "", m3uPathMode: "local" },
     lastfm: {
       apiKey: "",
       username: "",

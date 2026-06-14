@@ -140,6 +140,26 @@ export function resolveLocalPath(externalPath, mappings = getPathMappings()) {
   return resolvedRaw;
 }
 
+export function resolveRemotePath(localPath, mappings = getPathMappings()) {
+  const raw = String(localPath || "").trim();
+  if (!raw) return raw;
+
+  const resolved = path.resolve(raw);
+  const normalized = resolved.replace(/\\/g, "/");
+
+  for (const mapping of mappings) {
+    const localNorm = path.resolve(mapping.local).replace(/\\/g, "/");
+    if (!pathMatchesPrefix(normalized, localNorm)) continue;
+    const suffix = normalized.slice(localNorm.length).replace(/^\//, "");
+    const remoteBase = normalizePathSeparators(mapping.remote);
+    return suffix
+      ? `${remoteBase}/${suffix.split("/").join("/")}`
+      : remoteBase;
+  }
+
+  return resolved;
+}
+
 export function inferPathMappingForExternalPath(externalPath, localRoots) {
   const norm = normalizePathSeparators(externalPath);
   const parts = norm.split("/").filter(Boolean);

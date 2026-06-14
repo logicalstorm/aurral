@@ -168,7 +168,9 @@ Aurral keeps every generated playlist entry inside its own playlist folder under
 | Download | Always download a new file |
 | Reuse existing files | Use a matching completed Aurral or Lidarr file when one is available |
 
-Aurral-global reuse prevents the same imported track from being downloaded again for another playlist. Lidarr-aware reuse requires Aurral to see Lidarr's root directory the same way Lidarr sees it — find this at **Lidarr → Settings → Media Management → Root Folders → Path** (for example `/data/music`).
+Aurral-global reuse prevents the same imported track from being downloaded again for another playlist. Lidarr-aware reuse requires Aurral to read the files at the paths Lidarr reports. In a standard all-Docker setup, that means the same `/data` mount and root folder path (for example `/data/music`).
+
+If Lidarr runs on Windows and Aurral runs in Docker, use path mappings under **Settings → Playlists** or run **Test library access** in Lidarr settings to auto-detect them. See [Shared storage](/getting-started/storage/#windows-and-mixed-docker-setups).
 
 For slskd handoff, Navidrome playback, and efficient hardlinks, mount the same host folder at `/data` in Aurral, Lidarr, slskd, and Navidrome. See [Shared storage](/getting-started/storage/) and [`docker-compose.example.yml`](https://github.com/lklynet/aurral/blob/main/docker-compose.example.yml).
 
