@@ -111,3 +111,60 @@ test("refreshPlaylist writes m3u entries for completed tracks", async () => {
   assert.match(content, /#EXTM3U/);
   assert.match(content, new RegExp(trackPath.replace(/\\/g, "/")));
 });
+
+test("collectPlaylistM3uEntries uses stored external paths in remote mode", async () => {
+  const playlist = flowPlaylistConfig.createSharedPlaylist({
+    name: "Remote",
+    tracks: [{ artistName: "Artist", trackName: "Song", albumName: "Album" }],
+  });
+  const localPath = path.join(weeklyFlowRoot, "lidarr", "Song.flac");
+  await fs.mkdir(path.dirname(localPath), { recursive: true });
+  await fs.writeFile(localPath, "audio");
+  const jobId = downloadTracker.addJob(playlist.tracks[0], playlist.id);
+  downloadTracker.setDone(
+    jobId,
+    localPath,
+    "Album",
+    "N:\\ServerFolders\\Music\\Music\\Artist\\Song.flac",
+  );
+
+  const entries = await collectPlaylistM3uEntries(playlist.id, {
+    weeklyFlowRoot,
+    m3uPathMode: "remote",
+  });
+  assert.equal(entries.length, 1);
+  assert.equal(
+    entries[0].path,
+    "N:/ServerFolders/Music/Music/Artist/Song.flac",
+  );
+});
+
+test("collectPlaylistM3uEntries inverts path mappings in remote mode", async () => {
+  const previousMappings = process.env.PATH_MAPPINGS;
+  const mappedRoot = path.join(weeklyFlowRoot, "mapped-root");
+  const localPath = path.join(mappedRoot, "Aurral", "Mapped", "Artist", "Song.flac");
+  process.env.PATH_MAPPINGS = `N:/ServerFolders/Music|${mappedRoot}`;
+
+  const playlist = flowPlaylistConfig.createSharedPlaylist({
+    name: "Mapped",
+    tracks: [{ artistName: "Artist", trackName: "Song", albumName: "Album" }],
+  });
+  await fs.mkdir(path.dirname(localPath), { recursive: true });
+  await fs.writeFile(localPath, "audio");
+  const jobId = downloadTracker.addJob(playlist.tracks[0], playlist.id);
+  downloadTracker.setDone(jobId, localPath, "Album");
+
+  const entries = await collectPlaylistM3uEntries(playlist.id, {
+    weeklyFlowRoot,
+    m3uPathMode: "remote",
+  });
+
+  if (previousMappings === undefined) delete process.env.PATH_MAPPINGS;
+  else process.env.PATH_MAPPINGS = previousMappings;
+
+  assert.equal(entries.length, 1);
+  assert.equal(
+    entries[0].path,
+    "N:/ServerFolders/Music/Aurral/Mapped/Artist/Song.flac",
+  );
+});

@@ -199,6 +199,11 @@ if (!tableColumns.includes("playlist_type")) {
     "ALTER TABLE playlist_download_jobs ADD COLUMN playlist_type TEXT",
   );
 }
+if (!tableColumns.includes("external_path")) {
+  tryAddColumn(
+    "ALTER TABLE playlist_download_jobs ADD COLUMN external_path TEXT",
+  );
+}
 
 const userColumns = db
   .prepare("PRAGMA table_info(users)")

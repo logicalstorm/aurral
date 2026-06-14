@@ -16,6 +16,7 @@ import {
   normalizePathMappings,
   syncPathMappings,
 } from "../services/pathMappings.js";
+import { normalizeM3uPathMode, syncM3uPathMode } from "../services/playlistM3uPaths.js";
 
 const getSettingStmt = db.prepare("SELECT value FROM settings WHERE key = ?");
 const upsertSettingStmt = db.prepare(
@@ -506,6 +507,12 @@ export const dbOps = {
           : { artists: [], tags: [] },
       onboardingComplete: !!onboardingComplete,
     };
+    if (result.integrations?.navidrome) {
+      result.integrations.navidrome.m3uPathMode = normalizeM3uPathMode(
+        result.integrations.navidrome.m3uPathMode,
+      );
+    }
+    syncM3uPathMode(result.integrations?.navidrome?.m3uPathMode);
     settingsCache = result;
     settingsCacheTime = Date.now();
     return result;
@@ -534,6 +541,7 @@ export const dbOps = {
             encryptIntegrations(nextIntegrations, encKey)
           )
         );
+        syncM3uPathMode(nextIntegrations?.navidrome?.m3uPathMode);
       }
       if (settings.quality) {
         upsertSettingStmt.run("quality", settings.quality);

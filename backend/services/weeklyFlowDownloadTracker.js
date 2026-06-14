@@ -78,6 +78,7 @@ function rowToJob(row) {
     completedAt: row.completed_at,
     stagingPath: row.staging_path,
     finalPath: row.final_path,
+    externalPath: row.external_path || null,
     error: row.error,
     createdAt: row.created_at,
     slskdSearchId: row.slskd_search_id || null,
@@ -109,12 +110,13 @@ const insertStmt = db.prepare(`
     status,
     staging_path,
     final_path,
+    external_path,
     error,
     started_at,
     completed_at,
     created_at
   )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 const updateStmt = db.prepare(`
@@ -122,6 +124,7 @@ const updateStmt = db.prepare(`
   SET status = ?,
       staging_path = ?,
       final_path = ?,
+      external_path = ?,
       error = ?,
       started_at = ?,
       completed_at = ?,
@@ -340,6 +343,7 @@ export class WeeklyFlowDownloadTracker {
           job.status,
           job.stagingPath,
           job.finalPath,
+          job.externalPath ?? null,
           job.error,
           job.startedAt,
           job.completedAt,
@@ -366,6 +370,7 @@ export class WeeklyFlowDownloadTracker {
           job.status,
           job.stagingPath,
           job.finalPath,
+          job.externalPath ?? null,
           job.error,
           job.startedAt,
           job.completedAt,
@@ -411,6 +416,7 @@ export class WeeklyFlowDownloadTracker {
       job.status,
       job.stagingPath ?? null,
       job.finalPath ?? null,
+      job.externalPath ?? null,
       job.error ?? null,
       job.startedAt ?? null,
       job.completedAt ?? null,
@@ -423,6 +429,7 @@ export class WeeklyFlowDownloadTracker {
       job.status,
       job.stagingPath ?? null,
       job.finalPath ?? null,
+      job.externalPath ?? null,
       job.error ?? null,
       job.startedAt ?? null,
       job.completedAt ?? null,
@@ -481,6 +488,7 @@ export class WeeklyFlowDownloadTracker {
       completedAt: null,
       stagingPath: null,
       finalPath: null,
+      externalPath: null,
       error: null,
       createdAt: Date.now(),
       retryCycle: false,
@@ -774,7 +782,7 @@ export class WeeklyFlowDownloadTracker {
     return true;
   }
 
-  setDone(id, finalPath, albumName = null) {
+  setDone(id, finalPath, albumName = null, externalPath = null) {
     const job = this.jobs.get(id);
     if (!job) return false;
     const previousStatus = job.status;
@@ -786,6 +794,7 @@ export class WeeklyFlowDownloadTracker {
     job.retryCycle = false;
     job.completedAt = Date.now();
     job.finalPath = finalPath;
+    job.externalPath = externalPath ?? null;
     const safeAlbum = String(albumName || "").trim();
     if (safeAlbum) {
       job.albumName = safeAlbum;

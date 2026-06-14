@@ -13,6 +13,12 @@ Navidrome is optional, but it is the cleanest way to play generated flows and im
 2. Connect Navidrome in **Settings → Integrations → Subsonic / Navidrome**.
 3. Let Aurral create or update its generated library and playlist files under `aurral-weekly-flow`.
 
+## Mixed Windows and Docker Navidrome
+
+If Aurral runs in Docker with path mappings but Navidrome runs natively on Windows, enable **Use host paths in playlist files** under **Settings → Integrations → Navidrome**. Aurral will write M3U entries using host paths such as `N:\Music\...` instead of container paths such as `/music/...`.
+
+You can also set `M3U_PATH_MODE=remote` in compose. Leave this off when Navidrome shares the same Docker mounts as Aurral.
+
 ## Recommended Navidrome setting
 
 ```bash

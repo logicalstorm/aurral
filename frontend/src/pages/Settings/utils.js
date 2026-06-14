@@ -81,6 +81,10 @@ export const normalizeSettings = (savedSettings) => {
         username: "",
         password: "",
         ...(savedSettings.integrations?.navidrome || {}),
+        m3uPathMode:
+          savedSettings.integrations?.navidrome?.m3uPathMode === "remote"
+            ? "remote"
+            : "local",
       },
       lastfm: {
         apiKey: "",

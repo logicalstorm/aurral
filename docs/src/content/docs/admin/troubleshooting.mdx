@@ -36,9 +36,11 @@ description: Common setup and runtime issues.
 Symptoms include logs such as `Lidarr track exists but file is not accessible from Aurral`, completed slskd files not moving, or **Test library access** failing while Lidarr itself works.
 
 - Mount the parent host folder into Aurral, not separate mounts for library and downloads. Example: `N:/ServerFolders/Music:/music`.
-- Set **Settings → Playlists → Path** to a folder under that mount, for example `/music/Aurral`.
+- Set **Settings → Playlists → Path** to a folder under that mount, for example `/music/Aurral`, or set `DOWNLOAD_FOLDER=/music/Aurral` in compose.
+- After changing compose `volumes` or `environment`, recreate the container with `docker compose up -d --force-recreate`. A simple restart does not remount volumes or reload env vars.
 - Run **Settings → Integrations → Lidarr → Test library access** so Aurral can auto-detect path mappings.
-- If needed, add mappings manually under **Settings → Playlists → Path mappings**.
+- If needed, set `PATH_MAPPINGS=N:/ServerFolders/Music|/music` in compose, or add mappings under **Settings → Playlists → Path mappings**. Compose `PATH_MAPPINGS` work at runtime but are not shown in the UI.
+- If Navidrome runs outside Docker, enable **Settings → Integrations → Navidrome → Use host paths in playlist files** or set `M3U_PATH_MODE=remote`.
 
 See [Shared storage — Windows and mixed Docker setups](/getting-started/storage/#windows-and-mixed-docker-setups).
 

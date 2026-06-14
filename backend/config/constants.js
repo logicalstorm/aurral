@@ -178,7 +178,7 @@ export const defaultData = {
       "Demo",
     ],
     integrations: {
-      navidrome: { url: "", username: "", password: "" },
+      navidrome: { url: "", username: "", password: "", m3uPathMode: "local" },
       lastfm: {
         apiKey: "",
         username: "",
