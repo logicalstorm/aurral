@@ -271,6 +271,7 @@ test("getReleaseNavigationTarget preserves focused track album metadata", () => 
     secondaryTypes: [],
     coverUrl: "https://example.test/cover.jpg",
     deezerAlbumId: "",
+    rating: null,
   });
 });
 
