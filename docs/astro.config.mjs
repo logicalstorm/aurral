@@ -96,6 +96,7 @@ export default defineConfig({
             { slug: "integrations/koito" },
             { slug: "integrations/slskd" },
             { slug: "integrations/navidrome" },
+            { slug: "integrations/plex" },
             { slug: "integrations/ticketmaster" },
             { slug: "integrations/metadata" },
           ],
