@@ -75,7 +75,6 @@ const buildReleaseFromState = (releaseMbid, locationState) => {
       ? focusRelease.secondaryTypes
       : [],
     rating: focusRelease.rating || null,
-    rating: focusRelease.rating || null,
     _coverUrl: focusRelease.coverUrl || "",
     _deezerAlbumId: focusRelease.deezerAlbumId || "",
   };
