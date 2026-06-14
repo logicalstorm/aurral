@@ -16,6 +16,7 @@ import { SettingsNotificationsTab } from "./components/SettingsNotificationsTab"
 import { SettingsUsersTab } from "./components/SettingsUsersTab";
 import { SettingsTabsNav } from "./components/SettingsTabsNav";
 import { SettingsSelect } from "./components/SettingsField";
+import SettingsSponsorBanner from "../../components/SettingsSponsorBanner";
 
 function SettingsPage() {
   const { showSuccess, showError, showInfo } = useToast();
@@ -205,6 +206,8 @@ function SettingsPage() {
             Configure application preferences and integrations
           </p>
         </header>
+
+        <SettingsSponsorBanner />
 
         <div className="settings-page__mobile-nav">
           <label

@@ -9,7 +9,7 @@ services:
       - PGID=${PGID:-1000}
     volumes:
       - ${MEDIA_ROOT:-/srv/media}:/data
-      - ${CONFIG:-./config/aurral}:/config
+      - ${CONFIG:-./config}:/config
 
   lidarr:
     image: lscr.io/linuxserver/lidarr:latest

@@ -1,0 +1,75 @@
+---
+title: Shared storage
+description: Mount the same media root in Aurral, Lidarr, slskd, and Navidrome.
+---
+
+Flows, slskd handoff, Lidarr file reuse, and Navidrome playback all depend on **the same host folder mounted at the same container path** across services. This guide uses `/data`.
+
+Docker only exposes mounted paths. Aurral uses the literal filesystem paths Lidarr and slskd report over their APIs. If Lidarr stores a file at `/data/music/...` but Aurral does not have `/data/music` mounted, library checks and reuse will fail even when the API connection works.
+
+## Recommended host layout
+
+```text
+/srv/media/
+├── music/                              # Lidarr root folder
+└── downloads/
+    ├── slskd/
+    │   └── complete/                   # slskd finished downloads
+    └── aurral/                         # Aurral DOWNLOAD_FOLDER
+        └── aurral-weekly-flow/           # created by Aurral
+```
+
+## Paths each service should use
+
+| Service | Mount | Path inside container |
+| --- | --- | --- |
+| Lidarr | `/srv/media:/data` | Root folder `/data/music` |
+| slskd | `/srv/media:/data` | Downloads `/data/downloads/slskd/complete` |
+| Aurral | `/srv/media:/data` | `DOWNLOAD_FOLDER=/data/downloads/aurral` |
+| Navidrome | `/srv/media:/data:ro` | Scan `/data/music` and `/data/downloads/aurral` |
+
+Aurral app state stays in `/config` and does not need to be shared with the other apps.
+
+## Example compose mounts
+
+```yaml
+services:
+  aurral:
+    environment:
+      - PUID=1000
+      - PGID=1000
+    volumes:
+      - /srv/media:/data
+      - ./config/aurral:/config
+
+  lidarr:
+    volumes:
+      - /srv/media:/data
+      - ./config/lidarr:/config
+
+  slskd:
+    volumes:
+      - /srv/media:/data
+      - ./config/slskd:/app
+
+  navidrome:
+    environment:
+      - ND_SCANNER_PURGEMISSING=always
+      - ND_DATA=/config
+    volumes:
+      - /srv/media:/data:ro
+      - ./data/navidrome:/config
+```
+
+After startup:
+
+1. In Lidarr, set the root folder to `/data/music`.
+2. In slskd, set downloads to `/data/downloads/slskd/complete`.
+3. In Aurral onboarding or Settings, set `DOWNLOAD_FOLDER` to `/data/downloads/aurral`.
+4. In Navidrome, add `/data/music` and `/data/downloads/aurral` as music folders.
+
+:::caution
+Mounting only `/data/music` is enough for Lidarr API connectivity, but Aurral cannot see `/data/downloads/...` unless that tree is mounted too. Mount the parent shared root, for example `/srv/media:/data`.
+:::
+
+Next: [First run](/getting-started/first-run/)

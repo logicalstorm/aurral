@@ -1,0 +1,24 @@
+---
+title: Environment variables
+description: Deployment variables most users touch outside the web UI.
+---
+
+Most setup happens in the web UI. These environment variables matter for Docker deployments.
+
+| Variable | Purpose |
+| --- | --- |
+| `PUID` / `PGID` | Run the container as the user that owns mounted folders |
+| `AURRAL_DATA_DIR` | Override app data directory (default `/config`) |
+| `DOWNLOAD_FOLDER` | Path inside `/data` for generated playlists (can also be set in UI) |
+| `TRUST_PROXY` | Set when Aurral is behind a reverse proxy |
+| `AUTH_PROXY_*` | Reverse-proxy authentication headers |
+| `AURRAL_VERBOSE_LOGS` | Fuller server logs while troubleshooting |
+
+Example:
+
+```yaml
+environment:
+  - PUID=1000
+  - PGID=1000
+  - TRUST_PROXY=true
+```
