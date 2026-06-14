@@ -25,8 +25,8 @@ Aurral is a self-hosted music discovery app for the Lidarr stack. Find new artis
 - **Library** — Browse and search artists already in Lidarr.
 - **Playlists** — Run scheduled flows, adopt discover playlists like Release Radar, import static playlists, and convert flows to fixed tracklists.
 - **History** — One timeline for Lidarr requests, slskd downloads, and Aurral playlist activity.
-- **Integrations** — Lidarr, Last.fm, ListenBrainz, slskd, Navidrome, Ticketmaster, Gotify, and webhooks.
-- **Playback** — Stream through Navidrome with generated libraries and M3U playlists in a dedicated folder.
+- **Integrations** — Lidarr, Last.fm, ListenBrainz, slskd, Navidrome, Plex, Ticketmaster, Gotify, and webhooks.
+- **Playback** — Stream through Navidrome (M3U playlists) or Plex/Plexamp (API-synced playlists) from a dedicated download folder.
 - **Multi-user** — Per-user profiles, discovery layout, permissions, local auth, LAN auto-login, and reverse-proxy SSO.
 
 ## Screenshots
@@ -44,7 +44,8 @@ Aurral only needs Lidarr to get started. It works best with the stack self-hoste
 | ------------------------------------------ | ----------------------------------------------------------- |
 | [Lidarr](https://github.com/Lidarr/Lidarr) | Library management, artist and album requests, queue status |
 | [slskd](https://github.com/slskd/slskd)    | Soulseek-backed downloads for flows and playlists           |
-| [Navidrome](https://www.navidrome.org)     | Streaming and playback for generated playlists              |
+| [Navidrome](https://www.navidrome.org)     | Streaming and playback via generated M3U playlists          |
+| [Plex](https://www.plex.tv)                | Flow playlists in Plexamp (optional)                      |
 
 
 ## Quick Start
@@ -66,7 +67,7 @@ services:
       - ${CONFIG:-./config}:/config
 ```
 
-Change `${MEDIA_ROOT:-/srv/media}` to the host path you use for media. For file reuse, slskd downloads, and generated playlists, mount the **same root directory** into Aurral, Lidarr, slskd, and Navidrome at the same container path (for example `/srv/media:/data`). See [shared storage](https://docs.aurral.org/getting-started/storage/).
+Change `${MEDIA_ROOT:-/srv/media}` to the host path you use for media. For file reuse, slskd downloads, and generated playlists, mount the **same root directory** into Aurral, Lidarr, slskd, and your player (Navidrome or Plex) at the same container path (for example `/srv/media:/data`). See [shared storage](https://docs.aurral.org/getting-started/storage/).
 
 ```bash
 docker compose up -d
@@ -74,7 +75,7 @@ docker compose up -d
 
 Open `http://localhost:3001` and complete onboarding.
 
-For a full stack with Lidarr, slskd, and Navidrome, see `[docker-compose.example.yml](docker-compose.example.yml)`.
+For a full stack with Lidarr, slskd, and Navidrome or Plex, see [`docker-compose.example.yml`](docker-compose.example.yml). Plex setup: [docs](https://docs.aurral.org/integrations/plex/).
 
 ## macOS app
 

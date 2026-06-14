@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CheckCircle, ChevronDown, RefreshCw } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
@@ -10,6 +10,12 @@ import {
   testLidarrConnection,
   testLidarrLibraryAccess,
   testSlskdConnection,
+  startPlexAuth,
+  checkPlexAuth,
+  getPlexResources,
+  testPlexConnection,
+  syncPlexNow,
+  browsePaths,
 } from "../../../utils/api";
 
 export function SettingsIntegrationsTab({
@@ -46,6 +52,7 @@ export function SettingsIntegrationsTab({
     ticketmaster: true,
     navidrome: true,
     slskd: false,
+    plex: true,
   });
   const [testingSlskd, setTestingSlskd] = useState(false);
   const [lidarrTestLatencyMs, setLidarrTestLatencyMs] = useState(null);
@@ -53,6 +60,17 @@ export function SettingsIntegrationsTab({
     useState(false);
   const [lidarrLibraryAccessResult, setLidarrLibraryAccessResult] =
     useState(null);
+  const [plexConnecting, setPlexConnecting] = useState(false);
+  const [testingPlex, setTestingPlex] = useState(false);
+  const [syncingPlex, setSyncingPlex] = useState(false);
+  const [plexServers, setPlexServers] = useState([]);
+  const [browseOpen, setBrowseOpen] = useState(false);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const [browseState, setBrowseState] = useState({
+    path: "/",
+    parent: null,
+    directories: [],
+  });
   const safeLidarrProfiles = Array.isArray(lidarrProfiles)
     ? lidarrProfiles
     : [];
@@ -113,6 +131,190 @@ export function SettingsIntegrationsTab({
       showError(message);
     } finally {
       setTestingLidarrLibraryAccess(false);
+    }
+  };
+
+  const updatePlex = (patch) =>
+    updateSettings({
+      ...settings,
+      integrations: {
+        ...settings.integrations,
+        plex: { ...(settings.integrations?.plex || {}), ...patch },
+      },
+    });
+
+  const loadPlexServers = async (token) => {
+    const { servers } = await getPlexResources(token);
+    const list = Array.isArray(servers) ? servers : [];
+    setPlexServers(list);
+    return list;
+  };
+
+  // Auto-load servers when we have a token so the dropdown is always populated.
+  const plexToken = settings.integrations?.plex?.token;
+  useEffect(() => {
+    if (!plexToken) {
+      setPlexServers([]);
+      return;
+    }
+    let cancelled = false;
+    getPlexResources(plexToken)
+      .then(({ servers }) => {
+        if (!cancelled) setPlexServers(Array.isArray(servers) ? servers : []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [plexToken]);
+
+  const loadBrowse = async (path) => {
+    setBrowseLoading(true);
+    try {
+      const result = await browsePaths(path);
+      setBrowseState(result);
+    } catch (err) {
+      const errorMsg =
+        err.response?.data?.message || err.response?.data?.error || err.message;
+      showError(`Cannot read path: ${errorMsg}`);
+    } finally {
+      setBrowseLoading(false);
+    }
+  };
+
+  const handleToggleBrowse = () => {
+    if (browseOpen) {
+      setBrowseOpen(false);
+      return;
+    }
+    setBrowseOpen(true);
+    loadBrowse(settings.integrations?.plex?.downloadsPath || "/");
+  };
+
+  const handleUseBrowsedFolder = () => {
+    updatePlex({ downloadsPath: browseState.path });
+    setBrowseOpen(false);
+  };
+
+  const handleConnectPlex = async () => {
+    setPlexConnecting(true);
+    try {
+      const { pinId, code, authUrl, clientId } = await startPlexAuth();
+      const popup = window.open(
+        authUrl,
+        "plex-auth",
+        "width=600,height=700",
+      );
+      const deadline = Date.now() + 3 * 60 * 1000;
+      let token = null;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 2000));
+        try {
+          const res = await checkPlexAuth(pinId, code);
+          if (res.token) {
+            token = res.token;
+            break;
+          }
+        } catch {}
+      }
+      if (popup && !popup.closed) popup.close();
+      if (!token) {
+        showError("Plex authentication timed out. Please try again.");
+        return;
+      }
+      const servers = await loadPlexServers(token);
+      const owned = (servers || []).filter((s) => s.owned);
+      const patch = { token, ...(clientId ? { clientId } : {}) };
+      if (owned.length === 1) {
+        const best = pickBestConnection(owned[0]);
+        if (best?.uri) {
+          patch.url = best.uri;
+          patch.machineIdentifier = owned[0].clientIdentifier;
+        }
+      }
+      updatePlex(patch);
+      showSuccess(
+        owned.length === 1 && patch.url
+          ? `Signed in and selected "${owned[0].name}". Remember to Save settings.`
+          : "Signed in to Plex. Select your server below.",
+      );
+    } catch (err) {
+      const errorMsg =
+        err.response?.data?.message || err.response?.data?.error || err.message;
+      showError(`Plex sign-in failed: ${errorMsg}`);
+    } finally {
+      setPlexConnecting(false);
+    }
+  };
+
+  const pickBestConnection = (server) => {
+    const conns = server.connections || [];
+    return conns.find((c) => c.local) || conns.find((c) => c.uri) || conns[0];
+  };
+
+  const handleSelectPlexServer = (server) => {
+    const best = pickBestConnection(server);
+    if (!best?.uri) {
+      showError("Selected Plex server has no usable connection.");
+      return;
+    }
+    updatePlex({ url: best.uri, machineIdentifier: server.clientIdentifier });
+    showInfo(`Selected "${server.name}". Remember to Save settings.`);
+  };
+
+  const handleTestPlex = async () => {
+    const url = settings.integrations?.plex?.url;
+    const token = settings.integrations?.plex?.token;
+    if (!url || !token) {
+      showError("Connect to Plex and select a server first");
+      return;
+    }
+    setTestingPlex(true);
+    try {
+      const result = await testPlexConnection(url, token);
+      if (result.success) {
+        showSuccess(
+          `Plex connection successful!${result.version ? ` (v${result.version})` : ""}`,
+        );
+        if (result.machineIdentifier) {
+          updatePlex({ machineIdentifier: result.machineIdentifier });
+        }
+      } else {
+        showError(`Connection failed: ${result.message || result.error}`);
+      }
+    } catch (err) {
+      const errorMsg =
+        err.response?.data?.message || err.response?.data?.error || err.message;
+      showError(`Connection failed: ${errorMsg}`);
+    } finally {
+      setTestingPlex(false);
+    }
+  };
+
+  const handleSyncPlex = async () => {
+    if (hasUnsavedChanges) {
+      showError("Save settings first, then sync to Plex.");
+      return;
+    }
+    setSyncingPlex(true);
+    try {
+      const result = await syncPlexNow();
+      const built = (result.playlists || []).length;
+      if (result.scanInProgress) {
+        showInfo(
+          "Library ready and a Plex scan is running. Playlists will fill in automatically over the next few minutes as Plex indexes the tracks — no need to click again.",
+        );
+      } else {
+        showSuccess(
+          `Synced to Plex: ${built} playlist(s) from ${result.indexedTracks} indexed track(s).`,
+        );
+      }
+    } catch (err) {
+      const errorMsg =
+        err.response?.data?.message || err.response?.data?.error || err.message;
+      showError(`Plex sync failed: ${errorMsg}`);
+    } finally {
+      setSyncingPlex(false);
     }
   };
 
@@ -1296,7 +1498,229 @@ export function SettingsIntegrationsTab({
             </fieldset>
           )}
         </div>
+        <div className="settings-page__section">
+          <div className="settings-page__section-header">
+            <button
+              type="button"
+              onClick={() => toggleSection("plex")}
+              className="settings-page__section-toggle"
+              aria-expanded={!collapsedSections.plex}
+            >
+              <ChevronDown
+                className={`settings-page__section-toggle-icon${collapsedSections.plex ? " is-collapsed" : ""}`}
+              />
+              <span>Plex</span>
+            </button>
+            <div className="settings-page__inline-row">
+              {settings.integrations?.plex?.token &&
+                settings.integrations?.plex?.url && (
+                  <span className="settings-page__status">
+                    <CheckCircle className="settings-page__status-icon" />
+                    Configured
+                  </span>
+                )}
+            </div>
+          </div>
+          {!collapsedSections.plex && (
+            <fieldset className="settings-page__fields">
+              <p className="settings-page__hint">
+                Sign in with your Plex account to let Aurral create a dedicated
+                music library pointed at your flow downloads and build a
+                playlist for each flow. Playlists appear in Plex and Plexamp.
+              </p>
+              <div className="settings-page__inline-row">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={handleConnectPlex}
+                  disabled={plexConnecting}
+                >
+                  {plexConnecting
+                    ? "Waiting for Plex…"
+                    : settings.integrations?.plex?.token
+                      ? "Reconnect Plex account"
+                      : "Connect Plex account"}
+                </button>
+                {settings.integrations?.plex?.token && (
+                  <span className="settings-page__status">
+                    <CheckCircle className="settings-page__status-icon" />
+                    Signed in
+                  </span>
+                )}
+              </div>
 
+              {settings.integrations?.plex?.token && (
+                <div>
+                  <label className="artist-field-label">Plex server</label>
+                  <SettingsSelect
+                    value={settings.integrations?.plex?.machineIdentifier || ""}
+                    onChange={(e) => {
+                      const server = plexServers.find(
+                        (s) => s.clientIdentifier === e.target.value,
+                      );
+                      if (server) handleSelectPlexServer(server);
+                    }}
+                  >
+                    <option value="" disabled>
+                      {plexServers.length
+                        ? "Select a server…"
+                        : "Loading servers…"}
+                    </option>
+                    {plexServers.map((s) => (
+                      <option
+                        key={s.clientIdentifier}
+                        value={s.clientIdentifier}
+                      >
+                        {s.name}
+                        {s.owned ? "" : " (shared)"}
+                      </option>
+                    ))}
+                  </SettingsSelect>
+                </div>
+              )}
+
+              <div>
+                <label className="artist-field-label">Server URL</label>
+                <SettingsInput
+                  type="url"
+                  placeholder="http://localhost:32400"
+                  autoComplete="off"
+                  value={settings.integrations?.plex?.url || ""}
+                  onChange={(e) => updatePlex({ url: e.target.value })}
+                />
+                <p className="settings-page__hint">
+                  Auto-filled when you select a server, or enter it manually.
+                </p>
+              </div>
+
+              <div>
+                <label className="artist-field-label">
+                  Plex downloads path (optional)
+                </label>
+                <div className="settings-page__field-row">
+                  <SettingsInput
+                    wrapperClassName="settings-page__field-grow"
+                    type="text"
+                    placeholder="/data/aurral_downloads"
+                    autoComplete="off"
+                    value={settings.integrations?.plex?.downloadsPath || ""}
+                    onChange={(e) =>
+                      updatePlex({ downloadsPath: e.target.value })
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={handleToggleBrowse}
+                  >
+                    {browseOpen ? "Close" : "Browse"}
+                  </button>
+                </div>
+                <p className="settings-page__hint">
+                  Only needed if Plex runs in a different container/host than
+                  Aurral. Enter the downloads folder path as the{" "}
+                  <strong>Plex server</strong> sees it — Aurral appends{" "}
+                  <code>/aurral-weekly-flow</code>. Leave blank to use
+                  Aurral&apos;s own download path. Browse shows the filesystem
+                  as Aurral sees it; type manually if Plex&apos;s mount path
+                  differs.
+                </p>
+
+                {browseOpen && (
+                  <div
+                    className="settings-page__section"
+                    style={{ marginTop: "0.75rem" }}
+                  >
+                    <div className="settings-page__inline-row">
+                      <code className="settings-page__hint">{browseState.path}</code>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        onClick={handleUseBrowsedFolder}
+                      >
+                        Use this folder
+                      </button>
+                    </div>
+                    <div
+                      style={{
+                        maxHeight: "14rem",
+                        overflowY: "auto",
+                        marginTop: "0.5rem",
+                      }}
+                    >
+                      {browseLoading ? (
+                        <p className="settings-page__hint">Loading…</p>
+                      ) : (
+                        <ul className="settings-page__fields">
+                          {browseState.parent && (
+                            <li>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => loadBrowse(browseState.parent)}
+                              >
+                                ..
+                              </button>
+                            </li>
+                          )}
+                          {browseState.directories.length === 0 && (
+                            <li className="settings-page__hint">
+                              No subfolders here.
+                            </li>
+                          )}
+                          {browseState.directories.map((dir) => (
+                            <li key={dir.path}>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => loadBrowse(dir.path)}
+                              >
+                                {dir.name}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="settings-page__inline-row">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={handleTestPlex}
+                  disabled={
+                    testingPlex ||
+                    !settings.integrations?.plex?.url ||
+                    !settings.integrations?.plex?.token
+                  }
+                >
+                  {testingPlex ? "Testing…" : "Test connection"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleSyncPlex}
+                  disabled={
+                    syncingPlex ||
+                    !settings.integrations?.plex?.url ||
+                    !settings.integrations?.plex?.token
+                  }
+                >
+                  {syncingPlex ? "Syncing…" : "Sync to Plex now"}
+                </button>
+              </div>
+              <p className="settings-page__hint">
+                Creates an &quot;Aurral&quot; music library pointed at your
+                downloads, scans it, and builds a playlist per flow. The Plex
+                server must be able to read the same downloads path Aurral
+                writes to. Save settings before syncing.
+              </p>
+            </fieldset>
+          )}
+        </div>
       </form>
     </div>
   );
