@@ -35,6 +35,35 @@ export async function ensureDiscoverArtworkDirectory() {
   await fs.mkdir(DISCOVER_ARTWORK_DIR, { recursive: true });
 }
 
+export async function pruneObsoleteDiscoverArtwork(presetIds = []) {
+  await ensureDiscoverArtworkDirectory();
+
+  const validBasenames = new Set(
+    (Array.isArray(presetIds) ? presetIds : [])
+      .map((presetId) => sanitizePresetId(presetId))
+      .filter(Boolean),
+  );
+  const artworkExtensions = new Set([".jpg", ".webp", ".png"]);
+  const files = await fs.readdir(DISCOVER_ARTWORK_DIR).catch(() => []);
+  let removed = 0;
+
+  for (const file of files) {
+    const extension = path.extname(file).toLowerCase();
+    if (!artworkExtensions.has(extension)) continue;
+
+    const basename = path.basename(file, extension);
+    if (validBasenames.has(basename)) continue;
+
+    const candidatePath = path.join(DISCOVER_ARTWORK_DIR, file);
+    try {
+      await fs.unlink(candidatePath);
+      removed += 1;
+    } catch {}
+  }
+
+  return removed;
+}
+
 export async function generateDiscoverPlaylistArtwork(playlist, options = {}) {
   const presetId = String(playlist?.presetId || "").trim();
   const title = String(playlist?.name || "").trim() || "Untitled";
@@ -60,6 +89,9 @@ export async function attachArtworkToDiscoverPlaylists(playlists = []) {
 
   const style = getPlaylistArtworkStyle();
   await ensureDiscoverArtworkDirectory();
+  await pruneObsoleteDiscoverArtwork(
+    list.map((playlist) => playlist?.presetId).filter(Boolean),
+  );
 
   const enriched = [];
   for (const playlist of list) {
