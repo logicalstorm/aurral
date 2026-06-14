@@ -1,18 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { CornerUpLeft, Music } from "lucide-react";
+import { CornerUpLeft, ExternalLink, Music } from "lucide-react";
 import SearchLibraryCheck from "../../components/SearchLibraryCheck";
 import AddAlbumButton from "../../components/AddAlbumButton";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { ArtistDetailsReleaseTrackList } from "./components/ArtistDetailsReleaseTrackList";
-import { getReleaseYear } from "./utils";
+import {
+  buildLastfmAlbumUrl,
+  formatAlbumDuration,
+  formatReleaseDate,
+  getReleaseMetric,
+  resolveReleaseLibraryDisplay,
+  sumTrackDurationMs,
+} from "./utils";
 import {
   addSharedPlaylistTracks,
   createSharedPlaylist,
+  getDownloadStatus,
   getFlowStatus,
   getReleaseGroupCover,
+  getReleaseGroupDetails,
   getReleaseGroupTracks,
   lookupAlbumsInLibraryBatch,
   requestAlbumFromSearch,
@@ -65,10 +74,38 @@ const buildReleaseFromState = (releaseMbid, locationState) => {
     "secondary-types": Array.isArray(focusRelease.secondaryTypes)
       ? focusRelease.secondaryTypes
       : [],
+    rating: focusRelease.rating || null,
+    rating: focusRelease.rating || null,
     _coverUrl: focusRelease.coverUrl || "",
     _deezerAlbumId: focusRelease.deezerAlbumId || "",
   };
 };
+
+const mergeReleaseDetails = (baseRelease, details) => {
+  if (!details) return baseRelease;
+  return {
+    ...baseRelease,
+    title: details.title || baseRelease.title,
+    "first-release-date":
+      details["first-release-date"] || baseRelease["first-release-date"],
+    "primary-type": details["primary-type"] || baseRelease["primary-type"],
+    "secondary-types":
+      Array.isArray(details["secondary-types"]) &&
+      details["secondary-types"].length
+        ? details["secondary-types"]
+        : baseRelease["secondary-types"],
+    rating: details.rating || baseRelease.rating || null,
+    _coverUrl: details.coverUrl || baseRelease._coverUrl || "",
+  };
+};
+
+const ACTIVE_DOWNLOAD_STATUSES = new Set([
+  "adding",
+  "searching",
+  "downloading",
+  "moving",
+  "processing",
+]);
 
 function ReleasePage() {
   const { mbid: artistMbid, releaseMbid } = useParams();
@@ -80,15 +117,22 @@ function ReleasePage() {
   const artistName = locationState?.artistName || "";
   const focusTrackMbid = locationState?.focusTrackMbid || null;
 
-  const release = useMemo(
+  const baseRelease = useMemo(
     () => buildReleaseFromState(releaseMbid, locationState),
     [locationState, releaseMbid],
+  );
+
+  const [releaseDetails, setReleaseDetails] = useState(null);
+  const release = useMemo(
+    () => mergeReleaseDetails(baseRelease, releaseDetails),
+    [baseRelease, releaseDetails],
   );
 
   const [coverUrl, setCoverUrl] = useState(release._coverUrl || "");
   const [tracks, setTracks] = useState([]);
   const [loadingTracks, setLoadingTracks] = useState(true);
-  const [albumStatus, setAlbumStatus] = useState("missing");
+  const [libraryInfo, setLibraryInfo] = useState(null);
+  const [downloadStatus, setDownloadStatus] = useState(null);
   const [requestingAlbum, setRequestingAlbum] = useState(false);
   const [sharedPlaylists, setSharedPlaylists] = useState([]);
   const [playlistModalLoading, setPlaylistModalLoading] = useState(false);
@@ -102,11 +146,37 @@ function ReleasePage() {
   useDocumentTitle(pageTitle);
 
   const releaseTypeLabel = getReleaseTypeLabel(release);
-  const releaseMeta = [getReleaseYear(release), releaseTypeLabel]
+  const releaseDateLabel = formatReleaseDate(release);
+  const trackCount = tracks.length;
+  const totalDurationMs = useMemo(() => sumTrackDurationMs(tracks), [tracks]);
+  const durationLabel = formatAlbumDuration(totalDurationMs);
+  const metric = getReleaseMetric(release);
+  const libraryDisplay = useMemo(
+    () => resolveReleaseLibraryDisplay(libraryInfo, downloadStatus),
+    [downloadStatus, libraryInfo],
+  );
+  const isComplete = libraryDisplay.isComplete;
+  const isInLibrary = libraryDisplay.isInLibrary;
+  const lastfmUrl =
+    artistName && releaseTitle
+      ? buildLastfmAlbumUrl(artistName, releaseTitle)
+      : "";
+
+  const releaseMeta = [
+    releaseDateLabel,
+    releaseTypeLabel,
+    trackCount > 0
+      ? `${trackCount} track${trackCount === 1 ? "" : "s"}`
+      : null,
+    durationLabel,
+    metric.label
+      ? metric.type === "rating"
+        ? `${metric.label} rating`
+        : metric.label
+      : null,
+  ]
     .filter(Boolean)
     .join(" · ");
-  const isComplete = albumStatus === "available";
-  const isInLibrary = albumStatus === "inLibrary" || isComplete;
 
   useEffect(() => {
     setCoverUrl(release._coverUrl || "");
@@ -116,13 +186,48 @@ function ReleasePage() {
     if (!releaseMbid) return undefined;
     let cancelled = false;
 
+    getReleaseGroupDetails(releaseMbid)
+      .then((details) => {
+        if (!cancelled && details) {
+          setReleaseDetails(details);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [releaseMbid]);
+
+  useEffect(() => {
+    if (!releaseMbid) return undefined;
+    let cancelled = false;
+
     const loadLibraryStatus = async () => {
       try {
         const lookup = await lookupAlbumsInLibraryBatch([releaseMbid]);
         const entry = lookup?.[releaseMbid];
-        if (cancelled || !entry) return;
-        setAlbumStatus(entry.status || (entry.inLibrary ? "inLibrary" : "missing"));
-      } catch {}
+        if (cancelled) return;
+        if (!entry?.inLibrary) {
+          setLibraryInfo(null);
+          setDownloadStatus(null);
+          return;
+        }
+        setLibraryInfo(entry);
+        if (!entry.libraryAlbumId) {
+          setDownloadStatus(null);
+          return;
+        }
+        const statuses = await getDownloadStatus([entry.libraryAlbumId]);
+        if (!cancelled) {
+          setDownloadStatus(statuses?.[entry.libraryAlbumId] || null);
+        }
+      } catch {
+        if (!cancelled) {
+          setLibraryInfo(null);
+          setDownloadStatus(null);
+        }
+      }
     };
 
     loadLibraryStatus();
@@ -130,6 +235,41 @@ function ReleasePage() {
       cancelled = true;
     };
   }, [releaseMbid]);
+
+  useEffect(() => {
+    if (!libraryInfo?.libraryAlbumId || isComplete) return undefined;
+    const status = String(downloadStatus?.status || "");
+    if (!ACTIVE_DOWNLOAD_STATUSES.has(status) && status !== "failed") {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const interval = window.setInterval(async () => {
+      try {
+        const statuses = await getDownloadStatus([libraryInfo.libraryAlbumId]);
+        if (cancelled) return;
+        const next = statuses?.[libraryInfo.libraryAlbumId] || null;
+        setDownloadStatus(next);
+        if (next?.status === "added") {
+          const lookup = await lookupAlbumsInLibraryBatch([releaseMbid]);
+          const entry = lookup?.[releaseMbid];
+          if (entry?.inLibrary) {
+            setLibraryInfo(entry);
+          }
+        }
+      } catch {}
+    }, 5000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [
+    downloadStatus?.status,
+    isComplete,
+    libraryInfo?.libraryAlbumId,
+    releaseMbid,
+  ]);
 
   useEffect(() => {
     if (!releaseMbid || coverUrl) return undefined;
@@ -312,14 +452,22 @@ function ReleasePage() {
     if (!releaseMbid || requestingAlbum) return;
     setRequestingAlbum(true);
     try {
-      const result = await requestAlbumFromSearch({
+      await requestAlbumFromSearch({
         albumMbid: releaseMbid,
         albumName: release.title,
         artistMbid,
         artistName,
         triggerSearch: isInLibrary,
       });
-      setAlbumStatus(result.status || "inLibrary");
+      const lookup = await lookupAlbumsInLibraryBatch([releaseMbid]);
+      const entry = lookup?.[releaseMbid];
+      if (entry?.inLibrary) {
+        setLibraryInfo(entry);
+        if (entry.libraryAlbumId) {
+          const statuses = await getDownloadStatus([entry.libraryAlbumId]);
+          setDownloadStatus(statuses?.[entry.libraryAlbumId] || null);
+        }
+      }
       showSuccess(
         isInLibrary
           ? `Searching for ${release.title || "album"}`
@@ -402,13 +550,32 @@ function ReleasePage() {
                 <SearchLibraryCheck />
                 <span>In library</span>
               </span>
-            ) : canAddAlbum ? (
+            ) : libraryDisplay.label ? (
+              <span
+                className={`release-page__library-status release-page__library-status--${libraryDisplay.kind}`}
+                title={libraryDisplay.label}
+              >
+                <span>{libraryDisplay.label}</span>
+              </span>
+            ) : null}
+            {canAddAlbum && !isComplete ? (
               <AddAlbumButton
                 onClick={handleAlbumAction}
                 isLoading={requestingAlbum}
                 disabled={requestingAlbum}
                 label={isInLibrary ? "Search Album" : "Add to Lidarr"}
               />
+            ) : null}
+            {lastfmUrl ? (
+              <a
+                href={lastfmUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-surface btn-sm release-page__external-link"
+              >
+                <ExternalLink className="artist-icon-sm" />
+                Last.fm
+              </a>
             ) : null}
           </div>
         </div>

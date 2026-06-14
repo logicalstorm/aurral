@@ -8,8 +8,10 @@ import {
 import { enrichTracksWithDeezerPreviews } from "../../../services/apiClients.js";
 import {
   getArtistByMbid,
+  getAlbumByMbid,
   getAlbumTracksByAlbumMbid,
 } from "../../../services/metadataProvider.js";
+import { toLegacyReleaseGroupSummary } from "../../../services/providers/brainzmashMappers.js";
 
 function extractDeezerArtistIdFromLinks(links = []) {
   if (!Array.isArray(links)) return null;
@@ -44,6 +46,39 @@ export default function registerReleaseGroup(router) {
       console.error("Error in release-groups covers batch route:", error.message);
       res.set("Cache-Control", "public, max-age=60");
       return res.json({ covers: {} });
+    }
+  });
+
+  router.get("/release-group/:mbid", cacheMiddleware(3600), async (req, res) => {
+    try {
+      const { mbid } = req.params;
+      if (!UUID_REGEX.test(mbid)) {
+        return res.status(400).json({ error: "Invalid MBID format" });
+      }
+
+      const album = await getAlbumByMbid(mbid);
+      const primaryArtist = Array.isArray(album?.artists) ? album.artists[0] : null;
+      const summary = toLegacyReleaseGroupSummary(album, primaryArtist);
+      const coverImage =
+        Array.isArray(album?.images) && album.images[0]?.url
+          ? album.images[0].url
+          : null;
+
+      res.json({
+        ...summary,
+        genres: Array.isArray(album?.genres) ? album.genres : [],
+        overview: album?.overview || "",
+        coverUrl: coverImage,
+      });
+    } catch (error) {
+      console.error(
+        `Error in release-group details route for ${req.params.mbid}:`,
+        error.message,
+      );
+      res.status(404).json({
+        error: "Release not found",
+        message: error.message,
+      });
     }
   });
 
