@@ -621,7 +621,7 @@ test("validateDownloadedTrack accepts candidates that pass pre-download threshol
   assert.ok(validation.scores.title >= 82);
 });
 
-test("validateDownloadedTrack trusts preDownloadValid candidates without re-scoring tags", async () => {
+test("validateDownloadedTrack still scores preDownloadValid candidates", async () => {
   const validation = await validateDownloadedTrack(
     "/tmp/does-not-exist.flac",
     {
@@ -640,7 +640,9 @@ test("validateDownloadedTrack trusts preDownloadValid candidates without re-scor
   );
 
   assert.equal(validation.valid, true);
-  assert.equal(validation.scores.matchReason, "pre-download-trusted");
+  assert.notEqual(validation.scores.matchReason, "pre-download-trusted");
+  assert.equal(validation.scores.preDownloadValid, true);
+  assert.ok(validation.scores.title >= 82);
 });
 
 test("rankFlowSearchResults accepts soulseek backslash paths for albums with live in the title", () => {

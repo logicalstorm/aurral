@@ -64,3 +64,25 @@ test("shouldStopSlskdSearching does not stop on a small result set without valid
     false,
   );
 });
+
+test("shouldStopSlskdSearching waits for a small floor of valid candidates", () => {
+  const validResults = Array.from({ length: 3 }, (_, index) => ({
+    user: `valid-user-${index}`,
+    file: `music\\From Autumn to Ashes\\The Fiction We Live\\01 The After Dinner Payback.flac`,
+    slots: 1,
+    speed: 700000,
+  }));
+
+  assert.equal(
+    shouldStopSlskdSearching(validResults.slice(0, 1), fataTrack, {
+      preferredFormat: "flac",
+    }),
+    false,
+  );
+  assert.equal(
+    shouldStopSlskdSearching(validResults, fataTrack, {
+      preferredFormat: "flac",
+    }),
+    true,
+  );
+});

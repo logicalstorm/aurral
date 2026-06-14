@@ -20,10 +20,12 @@ const [
     isSlskdCleanupAfterRunsEnabled,
     slskdClient,
   },
+  { recordSlskdTransferOutcome },
   { dbOps },
   { db },
 ] = await Promise.all([
   importFromRepo("backend/services/slskdClient.js"),
+  importFromRepo("backend/services/slskdTransferHistory.js"),
   importFromRepo("backend/config/db-helpers.js"),
   importFromRepo("backend/config/db-sqlite.js"),
 ]);
@@ -419,24 +421,14 @@ test("isSlskdCleanupAfterRunsEnabled reads the integrations setting", () => {
   dbOps.updateSettings(originalSettings);
 });
 
-test("cleanupAfterRun removes completed searches and downloads", async () => {
+test("cleanupAfterRun removes Aurral-owned searches and transfers", async () => {
   const originalSettings = dbOps.getSettings();
   const calls = [];
   const mock = await createMockServer((request, response) => {
     calls.push({ method: request.method, url: request.url });
-    if (request.method === "GET" && request.url === "/api/v0/searches") {
-      response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(
-        JSON.stringify([
-          { id: "search-done", state: "Completed" },
-          { id: "search-active", state: "InProgress" },
-        ]),
-      );
-      return;
-    }
     if (
       request.method === "DELETE" &&
-      request.url === "/api/v0/searches/search-done"
+      request.url === "/api/v0/searches/search-owned"
     ) {
       response.writeHead(204);
       response.end();
@@ -444,7 +436,7 @@ test("cleanupAfterRun removes completed searches and downloads", async () => {
     }
     if (
       request.method === "DELETE" &&
-      request.url === "/api/v0/transfers/downloads/all/completed"
+      request.url === "/api/v0/transfers/downloads/peer/transfer-owned?remove=true"
     ) {
       response.writeHead(204);
       response.end();
@@ -466,15 +458,32 @@ test("cleanupAfterRun removes completed searches and downloads", async () => {
   });
 
   try {
+    recordSlskdTransferOutcome({
+      job: {
+        id: "job-owned",
+        artistName: "Artist",
+        trackName: "Track",
+        albumName: "Album",
+      },
+      candidate: {
+        raw: {
+          user: "peer",
+          file: "Artist/Album/Track.flac",
+        },
+      },
+      status: "success",
+      searchIds: ["search-owned"],
+      transferId: "transfer-owned",
+    });
     const result = await slskdClient.cleanupAfterRun();
     assert.equal(result.searchesRemoved, 1);
+    assert.equal(result.transfersRemoved, 1);
     assert.equal(result.downloadsRemoved, true);
     assert.deepEqual(
       calls.map((call) => `${call.method} ${call.url}`),
       [
-        "GET /api/v0/searches",
-        "DELETE /api/v0/searches/search-done",
-        "DELETE /api/v0/transfers/downloads/all/completed",
+        "DELETE /api/v0/searches/search-owned",
+        "DELETE /api/v0/transfers/downloads/peer/transfer-owned?remove=true",
       ],
     );
   } finally {
