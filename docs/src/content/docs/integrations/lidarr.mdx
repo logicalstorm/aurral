@@ -22,6 +22,8 @@ Aurral tests that it can read files at the paths Lidarr reports. If this fails, 
 
 On mixed Windows and Docker setups, run **Test library access** to auto-detect path mappings. Aurral translates host paths such as `N:\Music\...` into mounted container paths such as `/music/Music/...`. You can review or edit mappings under **Settings → Playlists → Path mappings**.
 
+Path mappings apply to Aurral reading files. If Navidrome runs outside Docker, enable **Use host paths in playlist files** under **Settings → Integrations → Navidrome** so M3U playlists use host paths instead. See [Navidrome](/integrations/navidrome/#mixed-windows-and-docker-navidrome).
+
 ## Safety
 
 Artist and album changes go through Lidarr. Aurral does not write directly into your root music library.
