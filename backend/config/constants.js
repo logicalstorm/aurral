@@ -163,6 +163,7 @@ export const defaultData = {
   settings: {
     rootFolderPath: null,
     downloadFolderPath: null,
+    pathMappings: [],
     quality: "standard",
     releaseTypes: [
       "Album",

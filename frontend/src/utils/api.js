@@ -944,6 +944,11 @@ export const testLidarrConnection = async (url, apiKey) => {
   return response.data;
 };
 
+export const detectPathMappings = async () => {
+  const response = await api.post("/settings/path-mappings/detect");
+  return response.data;
+};
+
 export const testLidarrLibraryAccess = async (url, apiKey) => {
   const params = new URLSearchParams();
   if (url) params.append("url", url);

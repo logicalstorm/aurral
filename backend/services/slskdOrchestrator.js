@@ -15,6 +15,7 @@ import {
   buildPlaylistDestination,
   resolvePlaylistRoot,
 } from "./playlistPaths.js";
+import { resolveLocalPath } from "./pathMappings.js";
 
 const updateSlskdMetaStmt = db.prepare(`
   UPDATE playlist_download_jobs
@@ -630,7 +631,7 @@ async function handleFinalize(payload) {
   if (!job) return null;
   if (job.status === "failed" || job.status === "done") return null;
   const playlistRoot = resolvePlaylistRoot();
-  const slskdRoot = await slskdClient.getDownloadDirectory();
+  const slskdRoot = resolveLocalPath(await slskdClient.getDownloadDirectory());
   const destination = String(payload.destination || "").trim();
   const candidateIndex = Number(payload.candidateIndex || 0);
   const candidate =
