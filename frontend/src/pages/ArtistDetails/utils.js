@@ -1,8 +1,27 @@
 import {
+  RELEASE_LIST_VIEW_MODE_KEY,
   TAG_COLORS,
   allReleaseTypes,
   secondaryReleaseTypes,
 } from "./constants";
+
+export const readReleaseListViewMode = () => {
+  if (typeof window === "undefined") return "grid";
+  try {
+    const value = window.localStorage.getItem(RELEASE_LIST_VIEW_MODE_KEY);
+    return value === "list" ? "list" : "grid";
+  } catch {
+    return "grid";
+  }
+};
+
+export const writeReleaseListViewMode = (mode) => {
+  if (typeof window === "undefined") return;
+  if (mode !== "grid" && mode !== "list") return;
+  try {
+    window.localStorage.setItem(RELEASE_LIST_VIEW_MODE_KEY, mode);
+  } catch {}
+};
 
 export const getTagColor = (name) => {
   if (!name) return "#121212";
@@ -155,6 +174,116 @@ export const getReleaseYear = (releaseGroupOrAlbum) => {
     "";
   const year = String(value || "").slice(0, 4);
   return /^\d{4}$/.test(year) ? year : "";
+};
+
+export const formatReleaseDate = (releaseGroupOrAlbum) => {
+  const value =
+    releaseGroupOrAlbum?.["first-release-date"] ||
+    releaseGroupOrAlbum?.releaseDate ||
+    releaseGroupOrAlbum?.firstReleaseDate ||
+    "";
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^\d{4}$/.test(raw)) return raw;
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    const [, year, month, day] = match;
+    const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        timeZone: "UTC",
+      });
+    }
+  }
+  return getReleaseYear(releaseGroupOrAlbum) || raw;
+};
+
+export const sumTrackDurationMs = (tracks = []) =>
+  (Array.isArray(tracks) ? tracks : []).reduce((total, track) => {
+    const length = Number(track?.length || track?.duration_ms || 0);
+    return Number.isFinite(length) && length > 0 ? total + length : total;
+  }, 0);
+
+export const formatAlbumDuration = (durationMs) => {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return "";
+  const totalSeconds = Math.floor(durationMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  if (hours > 0) return `${hours} hr ${minutes} min`;
+  return `${minutes} min`;
+};
+
+export const resolveReleaseLibraryDisplay = (libraryInfo, downloadStatus) => {
+  if (!libraryInfo?.inLibrary) {
+    return {
+      kind: "missing",
+      label: null,
+      isComplete: false,
+      isInLibrary: false,
+    };
+  }
+
+  const percent = Number(libraryInfo.percentOfTracks || 0);
+  const sizeOnDisk = Number(libraryInfo.sizeOnDisk || 0);
+  const trackFileCount = Number(libraryInfo.trackFileCount || 0);
+  const hasFiles = sizeOnDisk > 0 || trackFileCount > 0;
+  const isComplete = hasFiles;
+
+  if (isComplete) {
+    return {
+      kind: "complete",
+      label: "In library",
+      isComplete: true,
+      isInLibrary: true,
+    };
+  }
+
+  const activeStatus = String(downloadStatus?.status || "").trim();
+  if (activeStatus) {
+    const labels = {
+      adding: "Adding...",
+      searching: "Searching...",
+      downloading: "Downloading...",
+      moving: "Moving files...",
+      added: "Added",
+      processing: "Searching...",
+      failed: "Failed",
+    };
+    return {
+      kind: activeStatus === "failed" ? "failed" : "active",
+      label: labels[activeStatus] || activeStatus,
+      isComplete: false,
+      isInLibrary: true,
+    };
+  }
+
+  if (percent > 0) {
+    return {
+      kind: "incomplete",
+      label: `Incomplete · ${percent}%`,
+      isComplete: false,
+      isInLibrary: true,
+    };
+  }
+
+  if (libraryInfo.monitored) {
+    return {
+      kind: "monitored",
+      label: "Monitored",
+      isComplete: false,
+      isInLibrary: true,
+    };
+  }
+
+  return {
+    kind: "unmonitored",
+    label: null,
+    isComplete: false,
+    isInLibrary: true,
+  };
 };
 
 export const getReleaseMetric = (releaseGroup) => {

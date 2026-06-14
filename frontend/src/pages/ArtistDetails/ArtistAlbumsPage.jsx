@@ -21,7 +21,7 @@ import { useArtistDetailsLibrary } from "./hooks/useArtistDetailsLibrary";
 import { useArtistSearchFocus } from "./hooks/useArtistSearchFocus";
 import { allReleaseTypes } from "./constants";
 import { navigateToReleaseGroup } from "../../utils/searchNavigation";
-import { getArtistPosterImage, getReleaseMetric, getReleaseYear } from "./utils";
+import { getArtistPosterImage, getReleaseMetric, getReleaseYear, readReleaseListViewMode, writeReleaseListViewMode } from "./utils";
 
 const sortOptions = [
   { value: "date", label: "Date", defaultDirection: "desc" },
@@ -88,7 +88,7 @@ function ArtistAlbumsPage() {
   const [selectedTab, setSelectedTab] = useState("all");
   const [sortKey, setSortKey] = useState("date");
   const [sortDirection, setSortDirection] = useState("desc");
-  const [viewMode, setViewMode] = useState("grid");
+  const [viewMode, setViewMode] = useState(() => readReleaseListViewMode());
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [visibleCoverIds, setVisibleCoverIds] = useState([]);
   const optionsMenuRef = useRef(null);
@@ -175,6 +175,11 @@ function ArtistAlbumsPage() {
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [optionsOpen]);
+
+  const handleViewModeChange = (mode) => {
+    setViewMode(mode);
+    writeReleaseListViewMode(mode);
+  };
 
   const handleSortOptionClick = (option) => {
     if (sortKey === option.value) {
@@ -417,19 +422,21 @@ function ArtistAlbumsPage() {
               <div className="artist-options-view-grid">
                 <button
                   type="button"
-                  onClick={() => setViewMode("grid")}
-                  className={`btn btn-icon-square btn-surface${viewMode === "grid" ? " btn-neutral-active" : ""}`}
+                  onClick={() => handleViewModeChange("grid")}
+                  className={`btn btn-icon-square btn-surface${viewMode === "grid" ? " is-active" : ""}`}
                   aria-label="Grid view"
                   title="Grid view"
+                  aria-pressed={viewMode === "grid"}
                 >
                   <Grid3X3 className="artist-icon-sm" />
                 </button>
                 <button
                   type="button"
-                  onClick={() => setViewMode("list")}
-                  className={`btn btn-icon-square btn-surface${viewMode === "list" ? " btn-neutral-active" : ""}`}
+                  onClick={() => handleViewModeChange("list")}
+                  className={`btn btn-icon-square btn-surface${viewMode === "list" ? " is-active" : ""}`}
                   aria-label="List view"
                   title="List view"
+                  aria-pressed={viewMode === "list"}
                 >
                   <List className="artist-icon-sm" />
                 </button>

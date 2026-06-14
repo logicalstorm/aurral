@@ -40,6 +40,7 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { allReleaseTypes } from "./ArtistDetails/constants";
+import { readReleaseListViewMode, writeReleaseListViewMode } from "./ArtistDetails/utils";
 import { useArtistTasteFeedback } from "../hooks/useArtistTasteFeedback";
 import { getArtistRecordId } from "../utils/artistTaste";
 
@@ -136,7 +137,7 @@ function SearchResultsPage() {
   const [pendingAlbumIds, setPendingAlbumIds] = useState({});
   const [pendingArtistIds, setPendingArtistIds] = useState({});
   const [albumOptionsOpen, setAlbumOptionsOpen] = useState(false);
-  const [albumViewMode, setAlbumViewMode] = useState("grid");
+  const [albumViewMode, setAlbumViewMode] = useState(() => readReleaseListViewMode());
   const [albumReleaseTab, setAlbumReleaseTab] = useState("all");
   const [dismissedTagBanner, setDismissedTagBanner] = useState(false);
   const [sharedPlaylists, setSharedPlaylists] = useState([]);
@@ -1560,19 +1561,27 @@ function SearchResultsPage() {
                     <div className="artist-options-view-grid">
                       <button
                         type="button"
-                        onClick={() => setAlbumViewMode("grid")}
-                        className={`btn btn-icon-square btn-surface${albumViewMode === "grid" ? " btn-neutral-active" : ""}`}
+                        onClick={() => {
+                          setAlbumViewMode("grid");
+                          writeReleaseListViewMode("grid");
+                        }}
+                        className={`btn btn-icon-square btn-surface${albumViewMode === "grid" ? " is-active" : ""}`}
                         aria-label="Grid view"
                         title="Grid view"
+                        aria-pressed={albumViewMode === "grid"}
                       >
                         <Grid3X3 className="artist-icon-sm" />
                       </button>
                       <button
                         type="button"
-                        onClick={() => setAlbumViewMode("list")}
-                        className={`btn btn-icon-square btn-surface${albumViewMode === "list" ? " btn-neutral-active" : ""}`}
+                        onClick={() => {
+                          setAlbumViewMode("list");
+                          writeReleaseListViewMode("list");
+                        }}
+                        className={`btn btn-icon-square btn-surface${albumViewMode === "list" ? " is-active" : ""}`}
                         aria-label="List view"
                         title="List view"
+                        aria-pressed={albumViewMode === "list"}
                       >
                         <List className="artist-icon-sm" />
                       </button>
