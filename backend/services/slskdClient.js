@@ -704,6 +704,20 @@ export class SlskdClient {
     return response.data;
   }
 
+  async deleteTransfer(username, id, { remove = true } = {}) {
+    const normalizedUsername = String(username || "").trim();
+    const normalizedId = String(id || "").trim();
+    if (!normalizedUsername || !normalizedId) return false;
+    const client = buildClient();
+    const response = await client.delete(
+      `/api/v0/transfers/downloads/${encodeURIComponent(normalizedUsername)}/${encodeURIComponent(normalizedId)}`,
+      {
+        params: remove ? { remove: true } : undefined,
+      },
+    );
+    return [200, 202, 204, 404].includes(response.status);
+  }
+
   async listDownloads() {
     const client = buildClient();
     const response = await client.get("/api/v0/transfers/downloads");
@@ -751,27 +765,82 @@ export class SlskdClient {
     return [200, 204, 404].includes(response.status);
   }
 
-  async cleanupAfterRun() {
+  async cleanupAfterRun(options = {}) {
     if (!this.isConfigured()) {
       return { skipped: true, reason: "not configured" };
     }
     return withHonkerLock("slskd-api", async () => {
       let searchesRemoved = 0;
-      const searches = await this.listSearches();
-      for (const search of searches) {
-        if (isSearchInProgress(search)) continue;
-        const searchId = readId(search);
-        if (!searchId) continue;
+      let transfersRemoved = 0;
+      const ownedOnly = options.ownedOnly !== false;
+      const explicitSearchIds = Array.isArray(options.searchIds)
+        ? options.searchIds
+        : [];
+      const explicitTransfers = Array.isArray(options.transfers)
+        ? options.transfers
+        : [];
+      let searchIds = explicitSearchIds
+        .map((entry) => String(entry || "").trim())
+        .filter(Boolean);
+      let transfers = explicitTransfers;
+      let markCleaned = null;
+
+      if (ownedOnly && searchIds.length === 0 && transfers.length === 0) {
+        try {
+          const {
+            getSlskdCleanupTargets,
+            markSlskdCleanupTargetsCleaned,
+          } = await import("./slskdTransferHistory.js");
+          const targets = getSlskdCleanupTargets();
+          searchIds = targets.searchIds;
+          transfers = targets.transfers;
+          markCleaned = markSlskdCleanupTargetsCleaned;
+        } catch (error) {
+          logger.slskd("warn", "Failed to read scoped slskd cleanup targets", {
+            error: error?.message || String(error),
+          });
+        }
+      }
+
+      if (!ownedOnly) {
+        const searches = await this.listSearches();
+        searchIds = searches
+          .filter((search) => !isSearchInProgress(search))
+          .map((search) => readId(search))
+          .filter(Boolean);
+      }
+
+      for (const searchId of [...new Set(searchIds)]) {
         if (await this.deleteSearch(searchId)) {
           searchesRemoved += 1;
         }
       }
-      const downloadsRemoved = await this.removeCompletedDownloads();
+
+      for (const transfer of transfers) {
+        const username = String(transfer?.username || "").trim();
+        const transferId = String(
+          transfer?.transferId || transfer?.id || "",
+        ).trim();
+        if (!username || !transferId) continue;
+        if (await this.deleteTransfer(username, transferId, { remove: true })) {
+          transfersRemoved += 1;
+        }
+      }
+
+      const downloadsRemoved = ownedOnly
+        ? transfersRemoved > 0
+        : await this.removeCompletedDownloads();
+
+      if (typeof markCleaned === "function") {
+        markCleaned();
+      }
       logger.slskd("info", "Cleaned up slskd after run", {
+        ownedOnly,
         searchesRemoved,
+        transfersRemoved,
         downloadsRemoved,
       });
-      return { searchesRemoved, downloadsRemoved };
+      return { searchesRemoved, transfersRemoved, downloadsRemoved };
     });
   }
 }
