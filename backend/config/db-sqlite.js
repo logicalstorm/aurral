@@ -230,6 +230,9 @@ if (!userColumns.includes("lidarr_quality_profile_id")) {
 if (!userColumns.includes("discover_layout")) {
   tryAddColumn("ALTER TABLE users ADD COLUMN discover_layout TEXT");
 }
+if (!userColumns.includes("listen_history_url")) {
+  tryAddColumn("ALTER TABLE users ADD COLUMN listen_history_url TEXT");
+}
 
 db.exec(`
   UPDATE users

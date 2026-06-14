@@ -84,6 +84,7 @@ services:
     environment:
       - DOWNLOAD_FOLDER=/music/Aurral
       - PATH_MAPPINGS=N:/ServerFolders/Music|/music
+      - M3U_PATH_MODE=remote
     volumes:
       - N:/ServerFolders/Music:/music
       - ./config/aurral:/config
@@ -91,17 +92,31 @@ services:
 
 `PATH_MAPPINGS` is optional if auto-detect or a saved UI mapping works. Use `remote|local` pairs separated by `;` for multiple mappings. See [Environment variables](/admin/environment/).
 
+`M3U_PATH_MODE=remote` is only needed when **Navidrome runs outside Docker**. Leave it unset (or `local`) when Navidrome shares the same container mounts as Aurral.
+
 After changing `volumes` or `environment`, recreate the container (`docker compose up -d --force-recreate`). `docker restart` does not apply compose changes.
 
 1. Set your download folder to a path inside that mount, for example `/music/Aurral` (via `DOWNLOAD_FOLDER` or **Settings → Playlists**).
 2. In **Settings → Integrations → Lidarr**, run **Test library access**. Aurral auto-detects a mapping such as `N:\ServerFolders\Music` → `/music` when the folders line up.
 3. If auto-detect does not work, add `PATH_MAPPINGS` in compose, or open **Settings → Playlists → Path mappings**, click **Detect from Lidarr**, or add a manual **Remote path** / **Local path** pair, then save.
+4. If Navidrome runs on Windows while Aurral is in Docker, enable **Settings → Integrations → Navidrome → Use host paths in playlist files** or set `M3U_PATH_MODE=remote` in compose.
+
+### Path mappings vs playlist file paths
+
+These solve two different problems in mixed Windows/Docker setups:
+
+| Setting | Direction | Used for |
+| --- | --- | --- |
+| **Path mappings** (`PATH_MAPPINGS` or **Settings → Playlists**) | Host → container (`N:\...` → `/music/...`) | Aurral reading Lidarr/slskd files, library reuse, **Test library access** |
+| **Playlist file paths** (`M3U_PATH_MODE=remote` or Navidrome setting) | Container → host (`/music/...` → `N:\...`) | M3U playlists Navidrome reads when it is **not** in Docker |
+
+Path mappings let Aurral open files inside the container. They do not change what Navidrome sees in generated `.m3u` files unless you also enable host paths for playlists.
+
+When reusing tracks from Lidarr, Aurral stores the original Lidarr path and prefers that in remote M3U output. Downloaded tracks fall back to inverting your path mappings.
 
 :::note
 `PATH_MAPPINGS` from compose is applied at runtime but does not appear under **Settings → Playlists → Path mappings**. Use the UI if you want to view or edit mappings in the app.
 :::
-
-If Navidrome runs outside Docker, enable **Settings → Integrations → Navidrome → Use host paths in playlist files** or set `M3U_PATH_MODE=remote` in compose.
 
 Path mappings also apply to slskd download paths reported from native Windows installs.
 

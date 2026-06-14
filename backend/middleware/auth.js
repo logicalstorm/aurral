@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import os from "os";
 import { dbOps, userOps } from "../config/db-helpers.js";
+import { getDefaultListenHistoryProfile } from "../services/listeningHistory.js";
 import { getSessionByToken } from "../config/session-helpers.js";
 
 const DEFAULT_PROXY_HEADER = "x-forwarded-user";
@@ -439,7 +440,11 @@ function migrateLegacyAdmin() {
   const authPassword = settings.integrations?.general?.authPassword;
   if (!onboardingComplete || !authPassword) return;
   const hash = bcrypt.hashSync(authPassword, 10);
-  userOps.createUser(authUser, hash, "admin", null);
+  const created = userOps.createUser(authUser, hash, "admin", null);
+  const initialListenHistory = getDefaultListenHistoryProfile(settings);
+  if (created && initialListenHistory) {
+    userOps.updateUser(created.id, initialListenHistory);
+  }
 }
 
 function resolveUser(username, password) {

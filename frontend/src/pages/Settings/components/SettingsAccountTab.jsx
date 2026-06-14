@@ -9,6 +9,8 @@ export function SettingsAccountTab({
   setListenHistoryProvider,
   listenHistoryUsername,
   setListenHistoryUsername,
+  listenHistoryUrl,
+  setListenHistoryUrl,
   lidarrConfigured,
   lidarrRootFolders,
   lidarrQualityProfiles,
@@ -53,6 +55,19 @@ export function SettingsAccountTab({
     );
   }
 
+  const profileSummary = (() => {
+    if (listenHistoryProvider === "koito" && listenHistoryUrl) {
+      return `Koito: ${listenHistoryUrl}`;
+    }
+    if (listenHistoryProvider === "listenbrainz" && listenHistoryUsername) {
+      return `ListenBrainz: ${listenHistoryUsername}`;
+    }
+    if (listenHistoryProvider === "lastfm" && listenHistoryUsername) {
+      return `Last.fm: ${listenHistoryUsername}`;
+    }
+    return null;
+  })();
+
   return (
     <div className="settings-page__panel">
       {!hidePanelHeader && (
@@ -84,11 +99,9 @@ export function SettingsAccountTab({
               Listening History
             </h3>
             <div className="settings-page__inline-row">
-              {listenHistoryUsername && (
+              {profileSummary && (
                 <span className="settings-page__muted-copy">
-                  {listenHistoryProvider === "listenbrainz"
-                    ? `ListenBrainz: ${listenHistoryUsername}`
-                    : `Last.fm: ${listenHistoryUsername}`}
+                  {profileSummary}
                 </span>
               )}
             </div>
@@ -106,30 +119,52 @@ export function SettingsAccountTab({
               >
                 <option value="lastfm">Last.fm</option>
                 <option value="listenbrainz">ListenBrainz</option>
+                <option value="koito">Koito</option>
               </SettingsSelect>
             </div>
-            <div>
-              <label
-                className="artist-field-label"
-              >
-                Username
-              </label>
-              <SettingsInput type="text"
+            {listenHistoryProvider === "koito" ? (
+              <div>
+                <label
+                  className="artist-field-label"
+                >
+                  Koito URL
+                </label>
+                <SettingsInput type="url"
 
-                placeholder={
-                  listenHistoryProvider === "listenbrainz"
-                    ? "Your ListenBrainz username"
-                    : "Your Last.fm username"
-                }
-                autoComplete="off"
-                value={listenHistoryUsername}
-                onChange={(e) => setListenHistoryUsername(e.target.value)}
-              />
-              <p className="settings-page__hint">
-                Connect Last.fm or ListenBrainz for personalized discovery
-                recommendations based on your listening history.
-              </p>
-            </div>
+                  placeholder="https://koito.example.com:4110"
+                  autoComplete="off"
+                  value={listenHistoryUrl}
+                  onChange={(e) => setListenHistoryUrl(e.target.value)}
+                />
+                <p className="settings-page__hint">
+                  Your self-hosted Koito instance URL. Aurral reads top artists
+                  from Koito&apos;s chart API to power personalized discovery.
+                </p>
+              </div>
+            ) : (
+              <div>
+                <label
+                  className="artist-field-label"
+                >
+                  Username
+                </label>
+                <SettingsInput type="text"
+
+                  placeholder={
+                    listenHistoryProvider === "listenbrainz"
+                      ? "Your ListenBrainz username"
+                      : "Your Last.fm username"
+                  }
+                  autoComplete="off"
+                  value={listenHistoryUsername}
+                  onChange={(e) => setListenHistoryUsername(e.target.value)}
+                />
+                <p className="settings-page__hint">
+                  Connect Last.fm or ListenBrainz for personalized discovery
+                  recommendations based on your listening history.
+                </p>
+              </div>
+            )}
           </fieldset>
         </div>
 

@@ -859,15 +859,8 @@ export const getMyDiscoverLayout = async () => {
   return response.data;
 };
 
-export const updateMyListeningHistory = async (
-  userId,
-  listenHistoryProvider,
-  listenHistoryUsername,
-) => {
-  const response = await api.patch(`/users/${userId}`, {
-    listenHistoryProvider,
-    listenHistoryUsername,
-  });
+export const updateMyListeningHistory = async (userId, payload) => {
+  const response = await api.patch(`/users/${userId}`, payload);
   return response.data;
 };
 

@@ -5,6 +5,7 @@ const SOURCE_BASE_WEIGHTS = {
   library: 1,
   lastfm: 1.2,
   listenbrainz: 1.3,
+  koito: 1.3,
 };
 
 const DISCOVERY_MODE_MULTIPLIERS = {

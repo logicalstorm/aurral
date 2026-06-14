@@ -1,6 +1,7 @@
 import express from "express";
 import bcrypt from "bcrypt";
 import { dbOps, userOps } from "../config/db-helpers.js";
+import { getDefaultListenHistoryProfile } from "../services/listeningHistory.js";
 import {
   DEFAULT_METADATA_BASE_URL,
   LEGACY_METADATA_BASE_URL,
@@ -401,7 +402,11 @@ router.post("/complete", async (req, res) => {
     const authPasswordFinal = integrations?.general?.authPassword || "";
     if (authPasswordFinal && userOps.getAllUsers().length === 0) {
       const hash = bcrypt.hashSync(authPasswordFinal, 10);
-      userOps.createUser(authUserFinal, hash, "admin", null);
+      const created = userOps.createUser(authUserFinal, hash, "admin", null);
+      const initialListenHistory = getDefaultListenHistoryProfile(nextSettings);
+      if (created && initialListenHistory) {
+        userOps.updateUser(created.id, initialListenHistory);
+      }
     }
 
     const hasLastfm =
