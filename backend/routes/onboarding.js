@@ -48,7 +48,7 @@ router.get("/lidarr/test-library-access", async (req, res) => {
     url = validation.url;
 
     const result = await withTemporaryLidarrClient(url, apiKey, (client) =>
-      runLidarrLibraryAccessTest(client),
+      runLidarrLibraryAccessTest(client, { autoApplyMappings: true }),
     );
 
     res.json({
@@ -57,6 +57,8 @@ router.get("/lidarr/test-library-access", async (req, res) => {
       partial: !!result.partial,
       steps: result.steps,
       sample: result.sample,
+      appliedMappings: result.appliedMappings || [],
+      suggestedMappings: result.suggestedMappings || [],
     });
   } catch (error) {
     res.status(400).json({

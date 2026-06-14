@@ -42,6 +42,9 @@ export const normalizeSettings = (savedSettings) => {
   return {
     ...savedSettings,
     downloadFolderPath: String(savedSettings.downloadFolderPath || "").trim(),
+    pathMappings: Array.isArray(savedSettings.pathMappings)
+      ? savedSettings.pathMappings
+      : [],
     playlistArtwork: {
       ...playlistArtwork,
       style: playlistArtworkStyle,

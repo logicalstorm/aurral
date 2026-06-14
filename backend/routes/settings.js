@@ -12,6 +12,7 @@ import { requireAuth, requireAdmin } from "../middleware/requirePermission.js";
 import { validateExternalUrl } from "../middleware/urlValidator.js";
 import { websocketService } from "../services/websocketService.js";
 import { resolvePlaylistRoot } from "../services/playlistPaths.js";
+import { normalizePathMappings } from "../services/pathMappings.js";
 
 const router = express.Router();
 router.use(requireAuth);
@@ -111,6 +112,7 @@ router.post("/", async (req, res) => {
       integrations,
       rootFolderPath,
       downloadFolderPath,
+      pathMappings,
       security,
       playlistArtwork,
     } = req.body;
@@ -266,6 +268,10 @@ router.post("/", async (req, res) => {
         downloadFolderPath !== undefined
           ? downloadFolderPath
           : currentSettings.downloadFolderPath || null,
+      pathMappings:
+        pathMappings !== undefined
+          ? normalizePathMappings(pathMappings)
+          : currentSettings.pathMappings || [],
       releaseTypes:
         releaseTypes !== undefined
           ? releaseTypes
@@ -538,6 +544,48 @@ router.get("/lidarr/tags", async (req, res) => {
   }
 });
 
+router.post("/path-mappings/detect", async (req, res) => {
+  try {
+    const { lidarrClient } = await import("../services/lidarrClient.js");
+    const { slskdClient } = await import("../services/slskdClient.js");
+    const { detectPathMappings } = await import("../services/pathMappings.js");
+
+    const externalPaths = [];
+    const samplePaths = [];
+
+    try {
+      lidarrClient.updateConfig();
+      const rootFolders = await lidarrClient.getRootFolders();
+      for (const folder of Array.isArray(rootFolders) ? rootFolders : []) {
+        const rootPath = String(folder?.path || "").trim();
+        if (rootPath) externalPaths.push(rootPath);
+      }
+    } catch {}
+
+    try {
+      const slskdRoot = await slskdClient.getDownloadDirectory();
+      if (slskdRoot) externalPaths.push(slskdRoot);
+    } catch {}
+
+    const detection = await detectPathMappings({
+      externalPaths,
+      samplePaths,
+    });
+
+    res.json({
+      success: true,
+      mappings: detection.mappings,
+      verified: detection.verified === true,
+      sampleLocalPath: detection.sampleLocalPath || null,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Path mapping detection failed",
+      message: error.message,
+    });
+  }
+});
+
 router.get("/lidarr/test-library-access", async (req, res) => {
   try {
     const { lidarrClient } = await import("../services/lidarrClient.js");
@@ -553,7 +601,7 @@ router.get("/lidarr/test-library-access", async (req, res) => {
     }
 
     const result = await withTemporaryLidarrClient(validation.url, apiKey, (client) =>
-      runLidarrLibraryAccessTest(client),
+      runLidarrLibraryAccessTest(client, { autoApplyMappings: true }),
     );
 
     res.json({
@@ -562,6 +610,8 @@ router.get("/lidarr/test-library-access", async (req, res) => {
       partial: !!result.partial,
       steps: result.steps,
       sample: result.sample,
+      appliedMappings: result.appliedMappings || [],
+      suggestedMappings: result.suggestedMappings || [],
     });
   } catch (error) {
     console.error("[Settings] Lidarr library access test error:", error);

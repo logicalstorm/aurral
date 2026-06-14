@@ -24,6 +24,7 @@ const DISCOVERY_MANUAL_REFRESH_KEY = "aurral.discovery.manualRefreshPending";
 const defaultSettings = {
   rootFolderPath: "",
   downloadFolderPath: "",
+  pathMappings: [],
   quality: "standard",
   releaseTypes: allReleaseTypes,
   integrations: {

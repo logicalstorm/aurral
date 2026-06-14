@@ -78,6 +78,7 @@ function SettingsPage() {
             hasUnsavedChanges={data.hasUnsavedChanges}
             saving={data.saving}
             handleSaveSettings={data.handleSaveSettings}
+            fetchSettings={data.fetchSettings}
             showSuccess={showSuccess}
             showError={showError}
             showInfo={showInfo}
@@ -91,6 +92,9 @@ function SettingsPage() {
             hasUnsavedChanges={data.hasUnsavedChanges}
             saving={data.saving}
             handleSaveSettings={data.handleSaveSettings}
+            showSuccess={showSuccess}
+            showError={showError}
+            showInfo={showInfo}
           />
         );
       case "discover":

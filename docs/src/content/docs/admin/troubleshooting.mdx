@@ -31,6 +31,17 @@ description: Common setup and runtime issues.
 - Confirm Navidrome can read the same folder and scans `aurral-weekly-flow`.
 - Enable missing-track purging in Navidrome.
 
+## Library reuse or slskd handoff fails on Windows
+
+Symptoms include logs such as `Lidarr track exists but file is not accessible from Aurral`, completed slskd files not moving, or **Test library access** failing while Lidarr itself works.
+
+- Mount the parent host folder into Aurral, not separate mounts for library and downloads. Example: `N:/ServerFolders/Music:/music`.
+- Set **Settings → Playlists → Path** to a folder under that mount, for example `/music/Aurral`.
+- Run **Settings → Integrations → Lidarr → Test library access** so Aurral can auto-detect path mappings.
+- If needed, add mappings manually under **Settings → Playlists → Path mappings**.
+
+See [Shared storage — Windows and mixed Docker setups](/getting-started/storage/#windows-and-mixed-docker-setups).
+
 ## Permission errors
 
 - Make sure mounted folders are writable by the container user.

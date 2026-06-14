@@ -20,6 +20,8 @@ During onboarding or in **Settings → Integrations → Lidarr**, provide:
 
 Aurral tests that it can read files at the paths Lidarr reports. If this fails, confirm the shared `/data` mount described in [Shared storage](/getting-started/storage/).
 
+On mixed Windows and Docker setups, run **Test library access** to auto-detect path mappings. Aurral translates host paths such as `N:\Music\...` into mounted container paths such as `/music/Music/...`. You can review or edit mappings under **Settings → Playlists → Path mappings**.
+
 ## Safety
 
 Artist and album changes go through Lidarr. Aurral does not write directly into your root music library.
