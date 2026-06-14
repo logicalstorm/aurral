@@ -1,0 +1,41 @@
+---
+title: Troubleshooting
+description: Common setup and runtime issues.
+---
+
+## Lidarr will not connect
+
+- Use the URL Aurral can reach, not necessarily the URL your browser uses.
+- In Docker, that is often `http://lidarr:8686` when both containers share a network.
+- Confirm the API key in Lidarr.
+
+## Discover is empty
+
+- Make sure Lidarr is connected and has artists.
+- Add a Last.fm API key for better discovery.
+- Set your listening-history username in **Profile**.
+- Run a manual refresh from **Settings → Discover**.
+
+## Playlists are not downloading
+
+- Check playlist worker settings in **Settings → Playlists**.
+- Confirm slskd is configured and connected to Soulseek.
+- Try disabling strict format matching.
+- Try MP3 if FLAC matches are scarce.
+- Check job states on the Playlists page.
+
+## Files do not appear in Navidrome
+
+- Confirm the shared root containing `DOWNLOAD_FOLDER` is mounted into Aurral, Navidrome, and slskd.
+- Confirm `DOWNLOAD_FOLDER` points to the mounted path Aurral writes, for example `/data/downloads/aurral`.
+- Confirm Navidrome can read the same folder and scans `aurral-weekly-flow`.
+- Enable missing-track purging in Navidrome.
+
+## Permission errors
+
+- Make sure mounted folders are writable by the container user.
+- Set `PUID` and `PGID` to match your host folder owner.
+
+## Need more logs
+
+Set `AURRAL_VERBOSE_LOGS=true`, restart Aurral, then check container logs.

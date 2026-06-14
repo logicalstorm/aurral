@@ -1,0 +1,22 @@
+---
+title: Navidrome
+description: Stream generated playlists and flow libraries.
+---
+
+Navidrome is optional, but it is the cleanest way to play generated flows and imported playlists. Aurral can create a separate **aurral-weekly-flow** library and write generated M3U playlists for your flows and static playlists.
+
+![Aurral in-app playback](../../../assets/screenshots/playback.webp)
+
+## Setup
+
+1. Follow [Shared storage](/getting-started/storage/) so Navidrome can scan the same `DOWNLOAD_FOLDER` tree Aurral writes.
+2. Connect Navidrome in **Settings → Integrations → Subsonic / Navidrome**.
+3. Let Aurral create or update its generated library and playlist files under `aurral-weekly-flow`.
+
+## Recommended Navidrome setting
+
+```bash
+ND_SCANNER_PURGEMISSING=always
+```
+
+Purging missing tracks helps Navidrome clean up old flow entries after a flow rotates.

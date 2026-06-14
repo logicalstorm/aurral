@@ -7,6 +7,7 @@ import { useSettingsData } from "./hooks/useSettingsData";
 import { useUnsavedGuard } from "./hooks/useUnsavedGuard";
 import { UnsavedModal } from "./components/UnsavedModal";
 import { SettingsMetadataTab } from "./components/SettingsMetadataTab";
+import SettingsMetadataSponsorSection from "../../components/SettingsMetadataSponsorSection";
 
 function MetadataProvidersPage() {
   useDocumentTitle("Metadata Providers");
@@ -42,6 +43,8 @@ function MetadataProvidersPage() {
             Configure metadata hydration and the Aurral Search catalog backend.
           </p>
         </header>
+
+        <SettingsMetadataSponsorSection />
 
         <SettingsMetadataTab
           settings={data.settings}
