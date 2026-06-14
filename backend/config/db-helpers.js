@@ -12,6 +12,10 @@ import {
   syncDownloadFolderPath,
   validateDownloadFolderPath,
 } from "../services/downloadFolderConfig.js";
+import {
+  normalizePathMappings,
+  syncPathMappings,
+} from "../services/pathMappings.js";
 
 const getSettingStmt = db.prepare("SELECT value FROM settings WHERE key = ?");
 const upsertSettingStmt = db.prepare(
@@ -457,6 +461,10 @@ export const dbOps = {
     const downloadFolderPath =
       getSettingStmt.get("downloadFolderPath")?.value || null;
     syncDownloadFolderPath(downloadFolderPath);
+    const pathMappings = normalizePathMappings(
+      dbHelpers.parseJSON(getSettingStmt.get("pathMappings")?.value) || [],
+    );
+    syncPathMappings(pathMappings);
     const releaseTypes = dbHelpers.parseJSON(
       getSettingStmt.get("releaseTypes")?.value
     );
@@ -486,6 +494,7 @@ export const dbOps = {
           : { localNetworkBypass: { enabled: false } },
       rootFolderPath: rootFolderPath || null,
       downloadFolderPath: downloadFolderPath || null,
+      pathMappings,
       releaseTypes: releaseTypes || [],
       flows: flows || null,
       sharedPlaylists: sharedPlaylists || null,
@@ -562,6 +571,14 @@ export const dbOps = {
           upsertSettingStmt.run("downloadFolderPath", validation.path);
           syncDownloadFolderPath(validation.path);
         }
+      }
+      if (settings.pathMappings !== undefined) {
+        const normalizedMappings = normalizePathMappings(settings.pathMappings);
+        upsertSettingStmt.run(
+          "pathMappings",
+          dbHelpers.stringifyJSON(normalizedMappings),
+        );
+        syncPathMappings(normalizedMappings);
       }
       if (settings.releaseTypes) {
         upsertSettingStmt.run(
