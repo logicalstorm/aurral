@@ -16,6 +16,7 @@ import { hydrateArtistImages } from "./artistImageHydration.js";
 import { websocketService } from "./websocketService.js";
 import { libraryManager } from "./libraryManager.js";
 import {
+  getDefaultListenHistoryProfile,
   getListenHistoryCacheNamespace,
   getListenHistoryProfile,
   hasListenHistoryProfile,
@@ -498,12 +499,18 @@ export const getDiscoveryCache = (listenHistoryProfile = null) => {
       : getListenHistoryCacheNamespace(listenHistoryProfile);
   if (cacheNamespace) {
     const userDbData = dbOps.getDiscoveryCache(cacheNamespace);
-    const hasUserData =
-      userDbData.recommendations?.length > 0 || userDbData.basedOn?.length > 0;
-    if (hasUserData) {
+    const hasUserRecommendations = userDbData.recommendations?.length > 0;
+    const hasUserBasedOn = userDbData.basedOn?.length > 0;
+    if (hasUserRecommendations || hasUserBasedOn) {
+      const globalDbData = dbOps.getDiscoveryCache();
+      const recommendations = hasUserRecommendations
+        ? userDbData.recommendations
+        : globalDbData.recommendations || [];
       return {
-        recommendations: userDbData.recommendations || [],
-        globalTop: discoveryCache.globalTop || [],
+        recommendations,
+        globalTop: discoveryCache.globalTop.length
+          ? discoveryCache.globalTop
+          : globalDbData.globalTop || [],
         basedOn: userDbData.basedOn || [],
         topTags:
           userDbData.topTags?.length > 0
@@ -744,16 +751,6 @@ const fetchListenHistoryArtists = async (
       };
     })
     .filter(Boolean);
-};
-
-const getDefaultListenHistoryProfile = () => {
-  const settings = dbOps.getSettings();
-  const username = String(settings.integrations?.lastfm?.username || "").trim();
-  if (!username) return null;
-  return {
-    listenHistoryProvider: "lastfm",
-    listenHistoryUsername: username,
-  };
 };
 
 const getSeedSampleSize = (count, failureRatio) => {
@@ -1383,7 +1380,9 @@ export const updateDiscoveryCache = async (options = {}) => {
     );
 
     const historyArtists = [];
-    const defaultListenHistoryProfile = getDefaultListenHistoryProfile();
+    const defaultListenHistoryProfile = getDefaultListenHistoryProfile(
+      dbOps.getSettings(),
+    );
     const discoveryPeriod = getLastfmDiscoveryPeriod();
     const listeningHistoryUsersConfigured = hasListeningHistoryUsers();
     if (

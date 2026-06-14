@@ -187,7 +187,12 @@ router.get("/", requireAuth, async (req, res) => {
     discoveryCache.globalTop?.length > 0 ||
     discoveryCache.topGenres?.length > 0 ||
     discoveryCache.fallbackGenres?.length > 0;
-  const hasCompletedRefresh = !!discoveryCache.lastUpdated;
+  const hasCompletedRefresh =
+    !!discoveryCache.lastUpdated &&
+    (discoveryCache.recommendations?.length > 0 ||
+      discoveryCache.globalTop?.length > 0 ||
+      discoveryCache.topGenres?.length > 0 ||
+      discoveryCache.fallbackGenres?.length > 0);
 
   let isUpdating = discoveryCache.isUpdating || false;
 

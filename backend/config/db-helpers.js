@@ -85,9 +85,6 @@ function normalizeLegacyWeeklyFlowWorkerSettings(raw) {
 const getDiscoveryCacheStmt = db.prepare(
   "SELECT value, last_updated FROM discovery_cache WHERE key = ?"
 );
-const getDiscoveryCacheLastUpdatedStmt = db.prepare(
-  "SELECT last_updated FROM discovery_cache ORDER BY last_updated DESC LIMIT 1"
-);
 const upsertDiscoveryCacheStmt = db.prepare(
   "INSERT OR REPLACE INTO discovery_cache (key, value, last_updated) VALUES (?, ?, ?)"
 );
@@ -698,9 +695,15 @@ export const dbOps = {
     );
     const provider =
       getDiscoveryCacheStmt.get(`${prefix}provider`)?.value || null;
+    const recommendationsRow = getDiscoveryCacheStmt.get(`${prefix}recommendations`);
+    const globalTopRow = getDiscoveryCacheStmt.get(`${prefix}globalTop`);
     const lastUpdated = cacheNamespace
-      ? getDiscoveryCacheStmt.get(`${prefix}lastUpdated`)?.value || null
-      : getDiscoveryCacheLastUpdatedStmt.get()?.last_updated;
+      ? getDiscoveryCacheStmt.get(`${prefix}lastUpdated`)?.value ||
+        recommendationsRow?.last_updated ||
+        null
+      : recommendationsRow?.last_updated ||
+        globalTopRow?.last_updated ||
+        null;
 
     return {
       recommendations: recommendations || [],

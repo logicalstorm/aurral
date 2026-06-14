@@ -9,6 +9,7 @@ import {
   releaseDiscoveryRefreshQueueLock,
 } from "./honkerDb.js";
 import {
+  clearDiscoveryUpdateProgress,
   getDiscoveryAutoRefreshHours,
   getDiscoveryCache,
   recordDiscoveryUpdateProgress,
@@ -132,6 +133,15 @@ export async function enqueueDiscoveryRefreshIfNeeded(options = {}) {
 }
 
 export async function bootstrapDiscoveryRefresh() {
+  const cache = getDiscoveryCache();
+  if (
+    !isHonkerLockHeld("discovery-global-refresh") &&
+    !isDiscoveryRefreshQueueLocked()
+  ) {
+    cache.isUpdating = false;
+    clearDiscoveryUpdateProgress();
+  }
+
   if (!(await isDiscoveryRefreshConfigured())) {
     console.log(
       "Discovery not configured (no Last.fm API key and no artists). Clearing cache.",
@@ -162,8 +172,21 @@ export async function bootstrapDiscoveryRefresh() {
 
   const result = await enqueueDiscoveryRefreshIfNeeded({ reason: "startup" });
   if (result.reason === "fresh") {
+    const latest = getDiscoveryCache();
+    if (
+      (!latest.recommendations?.length && !latest.globalTop?.length) ||
+      !latest.topGenres?.length
+    ) {
+      const retry = enqueueDiscoveryRefresh({ reason: "startup_incomplete" });
+      if (retry.enqueued) {
+        console.log(
+          "Discovery cache timestamp exists but data is incomplete. Re-queued refresh.",
+        );
+      }
+      return;
+    }
     console.log(
-      `Discovery cache is fresh (last updated ${getDiscoveryCache().lastUpdated}). Scheduling next refresh.`,
+      `Discovery cache is fresh (last updated ${latest.lastUpdated}). Scheduling next refresh.`,
     );
     scheduleNextDiscoveryRefresh();
     return;

@@ -100,3 +100,39 @@ export function getListenHistoryCacheNamespace(profile) {
     ? `${prefix}:${normalized.listenHistoryUsername}`
     : null;
 }
+
+export function getDefaultListenHistoryProfile(settings) {
+  const username = String(settings?.integrations?.lastfm?.username || "").trim();
+  if (!username) return null;
+  return {
+    listenHistoryProvider: "lastfm",
+    listenHistoryUsername: username,
+  };
+}
+
+export function resolveListenHistorySettings(user = {}, settings = null) {
+  const profile = getListenHistoryProfile(user);
+  if (hasListenHistoryProfile(profile)) {
+    return {
+      listenHistoryProvider: profile.listenHistoryProvider,
+      listenHistoryUsername: profile.listenHistoryUsername,
+      listenHistoryUrl: profile.listenHistoryUrl,
+      lastfmUsername: profile.lastfmUsername,
+    };
+  }
+  const defaultProfile = settings ? getDefaultListenHistoryProfile(settings) : null;
+  if (defaultProfile) {
+    return {
+      listenHistoryProvider: defaultProfile.listenHistoryProvider,
+      listenHistoryUsername: defaultProfile.listenHistoryUsername,
+      listenHistoryUrl: null,
+      lastfmUsername: defaultProfile.listenHistoryUsername,
+    };
+  }
+  return {
+    listenHistoryProvider: profile.listenHistoryProvider,
+    listenHistoryUsername: profile.listenHistoryUsername,
+    listenHistoryUrl: profile.listenHistoryUrl,
+    lastfmUsername: profile.lastfmUsername,
+  };
+}

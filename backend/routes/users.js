@@ -14,6 +14,7 @@ import {
   normalizeListenHistoryProvider,
   normalizeListenHistoryUrl,
   normalizeListenHistoryUsername,
+  resolveListenHistorySettings,
 } from "../services/listeningHistory.js";
 import { validateExternalUrl } from "../middleware/urlValidator.js";
 import { normalizeKoitoBaseUrl } from "../services/koitoClient.js";
@@ -343,12 +344,8 @@ const sendListenHistorySettings = (req, res) => {
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
-    res.json({
-      listenHistoryProvider: user.listenHistoryProvider,
-      listenHistoryUsername: user.listenHistoryUsername,
-      listenHistoryUrl: user.listenHistoryUrl,
-      lastfmUsername: user.lastfmUsername,
-    });
+    const settings = dbOps.getSettings();
+    res.json(resolveListenHistorySettings(user, settings));
   } catch (e) {
     res.status(500).json({
       error: "Failed to get listening history settings",
