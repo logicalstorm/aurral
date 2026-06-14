@@ -1,7 +1,9 @@
 import path from "path";
 import fs from "fs/promises";
+import crypto from "crypto";
 import { dbOps } from "../config/db-helpers.js";
 import { NavidromeClient } from "./navidrome.js";
+import { PlexClient } from "./plex.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { writePlaylistArtworkWebpFromBuffer } from "./playlistArtwork.js";
@@ -34,6 +36,11 @@ export class WeeklyFlowPlaylistManager {
     this.libraryRoot = path.join(this.playlistLibraryRoot, "_playlists");
     this.navidromeClient = null;
     this._navidromeConfigKey = "";
+    this.plexClient = null;
+    this._plexConfigKey = "";
+    this._plexSectionId = null;
+    this._plexSyncHashes = new Map();
+    this._plexCatchupRunning = false;
     this._ensureInFlight = null;
     this._refreshInFlight = new Map();
     this.updateConfig(triggerEnsureOnInit);
@@ -64,6 +71,32 @@ export class WeeklyFlowPlaylistManager {
       }
     } else {
       this.navidromeClient = null;
+    }
+
+    const plexConfig = settings.integrations?.plex || {};
+    const nextPlexKey = JSON.stringify({
+      url: plexConfig.url || "",
+      token: plexConfig.token || "",
+      clientId: plexConfig.clientId || "",
+      downloadsPath: plexConfig.downloadsPath || "",
+    });
+    const plexChanged = this._plexConfigKey !== nextPlexKey;
+    this._plexConfigKey = nextPlexKey;
+    this._plexDownloadsPath = plexConfig.downloadsPath || "";
+    if (plexConfig.url && plexConfig.token) {
+      if (!this.plexClient || plexChanged) {
+        this.plexClient = new PlexClient(
+          plexConfig.url,
+          plexConfig.token,
+          plexConfig.clientId,
+        );
+        this._plexSectionId = null;
+        this._plexSyncHashes.clear();
+      }
+    } else {
+      this.plexClient = null;
+      this._plexSectionId = null;
+      this._plexSyncHashes.clear();
     }
 
     if (triggerEnsurePlaylists) {
@@ -345,6 +378,222 @@ export class WeeklyFlowPlaylistManager {
         err?.message,
       );
     }
+
+    if (this.plexClient?.isConfigured()) {
+      try {
+        await this._syncPlexPlaylists(flows, sharedPlaylists);
+      } catch (err) {
+        console.warn(
+          "[WeeklyFlowPlaylistManager] Plex playlist sync failed:",
+          err?.message,
+        );
+      }
+    }
+  }
+
+  // The location must be the path the Plex server uses, which differs from
+  // Aurral's host path when Plex runs in its own container.
+  _getPlexLibraryPath() {
+    const override = String(this._plexDownloadsPath || "").trim();
+    if (override) {
+      const base = override.replace(/\\/g, "/").replace(/\/+$/, "");
+      return `${base}/${PLAYLIST_LIBRARY_DIR}`;
+    }
+    return this._getPlaylistLibraryHostPath();
+  }
+
+  _hashKeys(ratingKeys) {
+    const sorted = (ratingKeys || []).map(String).sort();
+    return crypto.createHash("sha1").update(sorted.join(",")).digest("hex");
+  }
+
+  async _ensurePlexSectionId() {
+    if (this._plexSectionId != null) return this._plexSectionId;
+    const libraryPath = this._getPlexLibraryPath();
+    const library = await this.plexClient.ensureWeeklyFlowLibrary(libraryPath);
+    // Plex section objects expose the section id as `key`.
+    const id = library?.key ?? null;
+    this._plexSectionId = id;
+    return id;
+  }
+
+  // Plex has no equivalent of Navidrome's .nsp smart playlists, so we build
+  // regular playlists from indexed tracks, grouped by their weekly-flow subfolder.
+  async _syncPlexPlaylists(flows, sharedPlaylists) {
+    const sectionId = await this._ensurePlexSectionId();
+    if (sectionId == null) return;
+
+    const tracks = await this.plexClient.getTracks(sectionId);
+    // Plex de-duplicates the same song across flow folders inconsistently:
+    // sometimes one track with one path, sometimes two separate tracks sharing
+    // a relative path. So resolve membership per relative file (Artist/Album/
+    // Title.ext) from disk, picking ONE representative track per file — the
+    // copy whose own path is in this flow when available. This puts shared
+    // songs in every flow that holds the file without duplicating a track.
+    const relativeOf = (file) => {
+      const parts = (file || "").replace(/\\/g, "/").split("/aurral-weekly-flow/");
+      if (parts.length < 2) return null;
+      const segs = parts[1].split("/");
+      segs.shift(); // drop the flow-id segment
+      return segs.join("/") || null;
+    };
+    const byRelative = new Map();
+    for (const t of tracks) {
+      const rel = relativeOf(t.files[0]);
+      if (!rel) continue;
+      if (!byRelative.has(rel)) byRelative.set(rel, []);
+      byRelative.get(rel).push(t);
+    }
+    const playlistIds = [
+      ...new Set([
+        ...flows.map((f) => f.id),
+        ...sharedPlaylists.map((p) => p.id),
+      ]),
+    ];
+    const membership = new Map(playlistIds.map((id) => [id, []]));
+    for (const id of playlistIds) {
+      for (const [rel, group] of byRelative) {
+        const ownsPath = (t) =>
+          t.files.some((f) => f.replace(/\\/g, "/").includes(`/${id}/`));
+        let present = group.some(ownsPath);
+        if (!present) {
+          try {
+            await fs.access(path.join(this.playlistLibraryRoot, id, rel));
+            present = true;
+          } catch {}
+        }
+        if (!present) continue;
+        const best = group.find(ownsPath) || group[0];
+        if (best?.ratingKey) membership.get(id).push(best.ratingKey);
+      }
+    }
+    const ratingKeysFor = (playlistType) => membership.get(playlistType) || [];
+
+    const deletePlexPlaylistsByNames = async (names) => {
+      const playlists = await this.plexClient.getPlaylists();
+      for (const name of [...new Set((names || []).filter(Boolean))]) {
+        const existing = playlists.find((p) => p.title === name);
+        if (existing) {
+          try {
+            await this.plexClient.deletePlaylist(existing.ratingKey);
+          } catch (err) {
+            console.warn(
+              `[WeeklyFlowPlaylistManager] Failed to delete Plex playlist "${name}":`,
+              err?.message,
+            );
+          }
+        }
+      }
+    };
+
+    const buildIfChanged = async (desired, ratingKeys) => {
+      const hash = this._hashKeys(ratingKeys);
+      if (this._plexSyncHashes.get(desired) === hash) return;
+      await this.plexClient.createPlaylist(desired, ratingKeys, true);
+      this._plexSyncHashes.set(desired, hash);
+    };
+
+    // Plex uses the bare flow name; remove any old "[A]"/"[AS]" prefixed names.
+    for (const flow of flows) {
+      const desired = String(flow.name || "").trim();
+      const { current, legacy } = this._getFlowPlaylistNames(flow.name);
+      const stale = [current, ...legacy].filter((name) => name !== desired);
+      if (flow.enabled) {
+        const ratingKeys = ratingKeysFor(flow.id);
+        if (ratingKeys.length) {
+          await buildIfChanged(desired, ratingKeys);
+        } else {
+          await deletePlexPlaylistsByNames([desired]);
+          this._plexSyncHashes.delete(desired);
+        }
+        await deletePlexPlaylistsByNames(stale);
+      } else {
+        await deletePlexPlaylistsByNames([desired, ...stale]);
+        this._plexSyncHashes.delete(desired);
+      }
+    }
+
+    for (const playlist of sharedPlaylists) {
+      const desired = String(playlist.name || "").trim();
+      const { current, legacy } = this._getSharedPlaylistNames(playlist.name);
+      const stale = [current, ...legacy].filter((name) => name !== desired);
+      const ratingKeys = ratingKeysFor(playlist.id);
+      if (ratingKeys.length) {
+        await buildIfChanged(desired, ratingKeys);
+      } else {
+        await deletePlexPlaylistsByNames([desired]);
+        this._plexSyncHashes.delete(desired);
+      }
+      await deletePlexPlaylistsByNames(stale);
+    }
+  }
+
+  // Returns quickly rather than blocking: Plex's music scan (with online
+  // metadata matching) can take minutes, so a background catch-up rebuilds the
+  // playlists as tracks get indexed.
+  async syncPlexNow() {
+    if (!this.plexClient?.isConfigured()) {
+      return { configured: false };
+    }
+    const sectionId = await this._ensurePlexSectionId();
+    if (sectionId == null) {
+      throw new Error("Could not create or find the Aurral Plex library");
+    }
+    await this.plexClient.scanLibrary(sectionId);
+
+    // Manual sync is authoritative: drop cached fingerprints so we reconcile
+    // against Plex's real state (catches manual edits made in Plex).
+    this._plexSyncHashes.clear();
+
+    const flows = flowPlaylistConfig.getFlows();
+    const sharedPlaylists = flowPlaylistConfig.getSharedPlaylists();
+    await this._syncPlexPlaylists(flows, sharedPlaylists);
+
+    const tracks = await this.plexClient.getTracks(sectionId);
+    const playlists = await this.plexClient.getPlaylists();
+
+    this._schedulePlexCatchup(sectionId);
+
+    const managedNames = new Set(
+      [
+        ...flows.map((f) => String(f.name || "").trim()),
+        ...sharedPlaylists.map((p) => String(p.name || "").trim()),
+      ].filter(Boolean),
+    );
+
+    return {
+      configured: true,
+      sectionId,
+      indexedTracks: tracks.length,
+      scanInProgress: tracks.length === 0,
+      playlists: playlists
+        .filter((p) => managedNames.has(p.title))
+        .map((p) => ({ title: p.title, count: p.leafCount ?? null })),
+    };
+  }
+
+  _schedulePlexCatchup(sectionId, delaysMs = [30000, 90000, 180000]) {
+    if (this._plexCatchupRunning) return;
+    this._plexCatchupRunning = true;
+    const run = async () => {
+      try {
+        for (const delay of delaysMs) {
+          await new Promise((r) => setTimeout(r, delay));
+          if (!this.plexClient?.isConfigured()) break;
+          const flows = flowPlaylistConfig.getFlows();
+          const sharedPlaylists = flowPlaylistConfig.getSharedPlaylists();
+          await this._syncPlexPlaylists(flows, sharedPlaylists);
+        }
+      } catch (err) {
+        console.warn(
+          "[WeeklyFlowPlaylistManager] Plex catch-up failed:",
+          err?.message,
+        );
+      } finally {
+        this._plexCatchupRunning = false;
+      }
+    };
+    run();
   }
 
   async _playlistArtworkExists(baseName) {
@@ -360,8 +609,21 @@ export class WeeklyFlowPlaylistManager {
   }
 
   async scanLibrary() {
-    if (!this.navidromeClient?.isConfigured()) return null;
-    return this.navidromeClient.scanLibrary();
+    const results = [];
+    if (this.navidromeClient?.isConfigured()) {
+      results.push(await this.navidromeClient.scanLibrary());
+    }
+    if (this.plexClient?.isConfigured()) {
+      try {
+        const sectionId = await this._ensurePlexSectionId();
+        if (sectionId != null) {
+          results.push(await this.plexClient.scanLibrary(sectionId));
+        }
+      } catch (err) {
+        console.warn("[WeeklyFlowPlaylistManager] Plex scan failed:", err?.message);
+      }
+    }
+    return results.length ? results : null;
   }
 
   async weeklyReset(playlistTypes = null) {

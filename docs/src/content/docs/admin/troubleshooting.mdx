@@ -13,7 +13,7 @@ description: Common setup and runtime issues.
 
 - Make sure Lidarr is connected and has artists.
 - Add a Last.fm API key for better discovery.
-- Set your listening-history username in **Profile**.
+- Set your listening-history provider in **Profile** (Last.fm or ListenBrainz username, or Koito instance URL).
 - Run a manual refresh from **Settings → Discover**.
 
 ## Playlists are not downloading
@@ -56,6 +56,18 @@ Symptoms: flows or shared playlists appear in Navidrome after a scan, but playba
 Leave **Use host paths in playlist files** off when Navidrome is in Docker with the same mounts as Aurral.
 
 See [Navidrome — Mixed Windows and Docker](/integrations/navidrome/#mixed-windows-and-docker-navidrome).
+
+## Plex playlists are empty or tracks are missing
+
+Symptoms: **Sync to Plex now** succeeds but playlists have no tracks, or the **Aurral** library in Plex stays empty after a scan.
+
+- Confirm Plex can read the flow download tree. From inside the Plex container or host, the path should exist: `<downloads>/aurral-weekly-flow/<flow-id>/...`.
+- If Plex and Aurral use different mounts, set **Settings → Integrations → Plex → Plex downloads path** to the folder Plex sees (without `/aurral-weekly-flow`). Leave it blank when both services share the same path prefix.
+- Save settings, then run **Sync to Plex now** again. Initial music scans can take several minutes; Aurral runs background catch-up syncs while Plex indexes files.
+- Confirm flows have finished downloading tracks under `aurral-weekly-flow` before expecting Plex playlists to populate.
+- **Use host paths in playlist files** under Navidrome does not apply to Plex.
+
+See [Plex integration](/integrations/plex/).
 
 ## Permission errors
 
