@@ -8,7 +8,6 @@ import {
   Music,
   SlidersHorizontal,
   X,
-  Star,
 } from "lucide-react";
 import {
   addArtistToLibrary,
@@ -1482,7 +1481,9 @@ function SearchResultsPage() {
             )}
             {isTagSearch && lastfmConfigured !== false && (
               <span className="search-page__tag-legend">
-                <Star className="search-page__tag-legend-icon" />
+                <span className="search-page__tag-legend-ring" aria-hidden="true">
+                  <span className="search-page__tag-legend-ring-core" />
+                </span>
                 <span>recommended</span>
               </span>
             )}
