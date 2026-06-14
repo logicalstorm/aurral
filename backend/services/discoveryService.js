@@ -675,7 +675,7 @@ const fetchListenHistoryArtists = async (
   lastfmHealth,
 ) => {
   const profile = getListenHistoryProfile(listenHistoryProfile);
-  if (!profile.listenHistoryUsername || discoveryPeriod === "none") {
+  if (!hasListenHistoryProfile(profile) || discoveryPeriod === "none") {
     return [];
   }
 
@@ -705,6 +705,14 @@ const fetchListenHistoryArtists = async (
         };
       })
       .filter(Boolean);
+  }
+
+  if (profile.listenHistoryProvider === "koito") {
+    const { fetchKoitoTopArtists } = await import("./koitoClient.js");
+    return fetchKoitoTopArtists(profile.listenHistoryUrl, {
+      discoveryPeriod,
+      limit: 50,
+    });
   }
 
   const userTopArtists = await lastfmRequest(

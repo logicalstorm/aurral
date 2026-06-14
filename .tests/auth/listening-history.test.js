@@ -40,6 +40,7 @@ test("normalizes legacy and explicit listening history profiles", () => {
     {
       listenHistoryProvider: "lastfm",
       listenHistoryUsername: "alice",
+      listenHistoryUrl: null,
       lastfmUsername: "alice",
     },
   );
@@ -52,6 +53,7 @@ test("normalizes legacy and explicit listening history profiles", () => {
     {
       listenHistoryProvider: "listenbrainz",
       listenHistoryUsername: "roofuskit",
+      listenHistoryUrl: null,
       lastfmUsername: null,
     },
   );
@@ -72,6 +74,14 @@ test("builds provider-specific discovery cache namespaces", () => {
       listenHistoryUsername: "alice",
     }),
     "lb:alice",
+  );
+
+  assert.equal(
+    getListenHistoryCacheNamespace({
+      listenHistoryProvider: "koito",
+      listenHistoryUrl: "https://koito.example.com",
+    }),
+    "koito:https://koito.example.com",
   );
 });
 

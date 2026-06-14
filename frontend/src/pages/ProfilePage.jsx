@@ -35,6 +35,8 @@ function ProfilePage() {
         setListenHistoryProvider={account.setListenHistoryProvider}
         listenHistoryUsername={account.listenHistoryUsername}
         setListenHistoryUsername={account.setListenHistoryUsername}
+        listenHistoryUrl={account.listenHistoryUrl}
+        setListenHistoryUrl={account.setListenHistoryUrl}
         lidarrConfigured={account.lidarrConfigured}
         lidarrRootFolders={account.lidarrRootFolders}
         lidarrQualityProfiles={account.lidarrQualityProfiles}
