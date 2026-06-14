@@ -47,6 +47,7 @@ function buildReleaseFocusState(item, releaseGroupMbid) {
       : [],
     coverUrl: item?.coverUrl || item?.imageUrl || item?.image || "",
     deezerAlbumId: item?._deezerAlbumId || item?.deezerAlbumId || "",
+    rating: item?.rating || null,
   };
 }
 
@@ -68,6 +69,7 @@ export function buildReleaseGroupNavigationItem(
       : [],
     coverUrl: coverUrl || releaseGroup._coverUrl || releaseGroup.coverUrl || "",
     deezerAlbumId: releaseGroup._deezerAlbumId || "",
+    rating: releaseGroup.rating || null,
   };
 }
 

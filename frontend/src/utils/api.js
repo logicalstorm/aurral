@@ -324,6 +324,11 @@ export const getArtistDetails = async (
   return response.data;
 };
 
+export const getReleaseGroupDetails = async (mbid) => {
+  const response = await api.get(`/artists/release-group/${mbid}`);
+  return response.data;
+};
+
 export const getReleaseGroupTracks = async (mbid, context = {}) => {
   const params = {};
   if (context.artistMbid) params.artistMbid = context.artistMbid;

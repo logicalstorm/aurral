@@ -134,6 +134,9 @@ export default function registerMisc(router) {
           album?.statistics?.percentOfTracks,
         );
         const sizeOnDisk = Number(album?.statistics?.sizeOnDisk || 0);
+        const trackCount = Number(album?.statistics?.trackCount || 0);
+        const trackFileCount = Number(album?.statistics?.trackFileCount || 0);
+        const hasFiles = sizeOnDisk > 0 || trackFileCount > 0;
 
         results[foreignAlbumId] = {
           inLibrary: true,
@@ -143,8 +146,14 @@ export default function registerMisc(router) {
             album.artistId !== undefined && album.artistId !== null
               ? String(album.artistId)
               : null,
-          status:
-            percentOfTracks >= 100 || sizeOnDisk > 0 ? "available" : "inLibrary",
+          status: hasFiles ? "available" : "inLibrary",
+          monitored: Boolean(album?.monitored),
+          percentOfTracks,
+          sizeOnDisk,
+          trackCount,
+          trackFileCount,
+          albumName: String(album?.title || "").trim(),
+          releaseDate: String(album?.releaseDate || "").trim(),
         };
       }
 
