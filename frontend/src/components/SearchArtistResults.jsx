@@ -1,10 +1,53 @@
 import PropTypes from "prop-types";
-import { Star } from "lucide-react";
 import ArtistImage from "./ArtistImage";
 import SearchLibraryCheck from "./SearchLibraryCheck";
 import { ArtistContextMenu } from "./ArtistContextMenu";
+import { useImageGradientColors } from "../hooks/useImageGradientColors";
 import { getArtistFeedbackFlags } from "../utils/discoveryFeedback";
 import { getArtistRecordId } from "../utils/artistTaste";
+
+function TagRecommendedArtistCover({
+  artist,
+  artistId,
+  artistImages,
+  onClick,
+}) {
+  const coverSrc =
+    artistImages[artistId] || artist.image || artist.imageUrl || "";
+  const gradientColors = useImageGradientColors(coverSrc);
+
+  return (
+    <div
+      onClick={onClick}
+      className="artist-discover-card__cover artist-discover-card__cover--recommended"
+      style={
+        gradientColors
+          ? {
+              "--recommended-gradient-top": gradientColors.top,
+              "--recommended-gradient-bottom": gradientColors.bottom,
+            }
+          : undefined
+      }
+    >
+      <ArtistImage
+        src={coverSrc}
+        mbid={artistId}
+        artistName={artist.name}
+        alt={artist.name}
+        className="artist-discover-card__image"
+        showLoading={false}
+        enableBackendFallback={false}
+      />
+    </div>
+  );
+}
+
+TagRecommendedArtistCover.propTypes = {
+  artist: PropTypes.object.isRequired,
+  artistId: PropTypes.string,
+  artistImages: PropTypes.object.isRequired,
+  onClick: PropTypes.func.isRequired,
+};
 
 function SearchArtistResults({
   artists,
@@ -106,27 +149,33 @@ function SearchArtistResults({
         return (
           <article
             key={artistId || `artist-${index}`}
-            className="artist-discover-card artist-discover-card--artist"
+            className={`artist-discover-card artist-discover-card--artist${
+              isRecommendedTagResult ? " artist-discover-card--recommended" : ""
+            }`}
           >
-            <div
-              onClick={() => openArtist(artist)}
-              className="artist-discover-card__cover"
-            >
-              <ArtistImage
-                src={artistImages[artistId] || artist.image || artist.imageUrl}
-                mbid={artistId}
-                artistName={artist.name}
-                alt={artist.name}
-                className="artist-discover-card__image"
-                showLoading={false}
-                enableBackendFallback={false}
+            {isRecommendedTagResult ? (
+              <TagRecommendedArtistCover
+                artist={artist}
+                artistId={artistId}
+                artistImages={artistImages}
+                onClick={() => openArtist(artist)}
               />
-              {isRecommendedTagResult && (
-                <span className="search-tag-badge" aria-hidden="true">
-                  <Star className="search-tag-badge__icon" />
-                </span>
-              )}
-            </div>
+            ) : (
+              <div
+                onClick={() => openArtist(artist)}
+                className="artist-discover-card__cover"
+              >
+                <ArtistImage
+                  src={artistImages[artistId] || artist.image || artist.imageUrl}
+                  mbid={artistId}
+                  artistName={artist.name}
+                  alt={artist.name}
+                  className="artist-discover-card__image"
+                  showLoading={false}
+                  enableBackendFallback={false}
+                />
+              </div>
+            )}
 
             <div className="artist-discover-card__content">
               <div className="artist-discover-card__text">
