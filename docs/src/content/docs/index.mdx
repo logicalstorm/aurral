@@ -1,48 +1,57 @@
 ---
-title: Aurral
-description: Documentation for self-hosted music discovery on the Lidarr stack.
-template: splash
-hero:
-  tagline: The go-to discovery layer for self-hosted music stacks.
-  image:
-    file: ../../assets/logo.svg
-  actions:
-    - text: Docker setup
-      link: /getting-started/docker/
-      icon: right-arrow
-    - text: Self-hosting guide
-      link: /guides/self-hosting/
-      icon: open-book
-    - text: aurral.org
-      link: https://aurral.org
-      icon: external
-      attrs:
-        rel: noopener
-        target: _blank
+title: Welcome
+description: Start here for Aurral documentation.
 ---
 
 import { Card, CardGrid } from "@astrojs/starlight/components";
 
-## What Aurral does
+Aurral is self-hosted music discovery for Lidarr-based stacks. It connects recommendations, requests, playlist downloads, and playback while keeping generated music separate from your main library.
 
-Aurral connects recommendation, requests, downloads, and playback for Lidarr-based stacks — without writing generated playlists into your main library.
+Use this page as a starting point for setup, day-to-day use, integrations, and administration.
+
+## Start Here
+
+<CardGrid>
+  <Card title="Install with Docker" icon="setting">
+    Run Aurral, mount storage, and complete onboarding.
+    [Open Docker setup](/getting-started/docker/)
+  </Card>
+  <Card title="Plan storage" icon="document">
+    Share paths between Aurral, Lidarr, slskd, and Navidrome.
+    [Open shared storage](/getting-started/storage/)
+  </Card>
+  <Card title="Use the app" icon="rocket">
+    Learn Discover, Search, Library, Playlists, History, Shows, Profile, and Settings.
+    [Open app overview](/using/overview/)
+  </Card>
+  <Card title="Build the stack" icon="open-book">
+    A discovery-first workflow for Aurral, Lidarr, slskd, Navidrome, and Tailscale.
+    [Open self-hosting guide](/guides/self-hosting/)
+  </Card>
+</CardGrid>
+
+## What Aurral Does
 
 <CardGrid>
   <Card title="Discover" icon="rocket">
     Recommendations, trends, tags, discover playlists, recent releases, and nearby shows.
+    [Read Discover](/using/discover/)
   </Card>
   <Card title="Playlists" icon="list-format">
-    Scheduled flows, static imports, Release Radar-style discover playlists, and Navidrome playback.
-  </Card>
-  <Card title="History" icon="document">
-    One timeline for Lidarr requests, slskd downloads, and Aurral playlist jobs.
+    Scheduled flows, imported playlists, Release Radar-style discover playlists, and Navidrome playback.
+    [Read Playlists](/using/playlists/)
   </Card>
   <Card title="Integrations" icon="setting">
     Lidarr, Last.fm, ListenBrainz, Koito, slskd, Navidrome, Ticketmaster, Gotify, and webhooks.
+    [Read integrations](/integrations/lidarr/)
+  </Card>
+  <Card title="Administration" icon="document">
+    Storage, users, environment variables, troubleshooting, and operational details.
+    [Read administration](/admin/storage/)
   </Card>
 </CardGrid>
 
-## Recommended stack
+## Recommended Stack
 
 | Service | Role | Required |
 | --- | --- | --- |
@@ -54,8 +63,8 @@ Aurral connects recommendation, requests, downloads, and playback for Lidarr-bas
 | Navidrome | Streaming generated playlists | No |
 | Ticketmaster | Local concert recommendations | No |
 
-## Where to start
+## Useful Links
 
-1. [Docker setup](/getting-started/docker/) — install Aurral and complete onboarding
-2. [Shared storage](/getting-started/storage/) — align mounts with Lidarr, slskd, and Navidrome
-3. [Self-hosting guide](/guides/self-hosting/) — discovery-first workflow for your whole stack
+- [aurral.org](https://aurral.org)
+- [GitHub](https://github.com/lklynet/aurral)
+- [Discord](https://discord.gg/cpPYfgVURJ)
