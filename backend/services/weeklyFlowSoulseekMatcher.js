@@ -148,10 +148,16 @@ function uniqueQueries(values, limit = 12) {
 
 export function bypassBannedArtistTerm(name) {
   const trimmed = String(name || "").trim();
-  if (!trimmed || trimmed.startsWith("*") || trimmed.length < 2) {
+  if (!trimmed || trimmed.length < 2) {
     return trimmed;
   }
-  return `*${trimmed.slice(1)}`;
+  return trimmed
+    .split(/\s+/)
+    .map((word) => {
+      if (!word || word.startsWith("*") || word.length < 2) return word;
+      return `*${word.slice(1)}`;
+    })
+    .join(" ");
 }
 
 function uniqueArtistTerms(values) {
@@ -425,14 +431,39 @@ function buildPrimaryTrackTierQueries(ctx) {
 function buildBaseAlbumTierQueries(ctx) {
   const queries = [];
   if (!ctx.artistName || !ctx.albumName) return queries;
-  if (ctx.isSelfTitled && ctx.releaseYear) {
-    queries.push(joinSearchParts(ctx.artistName, ctx.releaseYear));
-  }
-  queries.push(joinSearchParts(ctx.artistName, ctx.albumName));
   if (ctx.releaseYear) {
     queries.push(joinSearchParts(ctx.artistName, ctx.albumName, ctx.releaseYear));
   }
+  queries.push(joinSearchParts(ctx.artistName, ctx.albumName));
   return uniqueQueries(queries, 4);
+}
+
+function buildWildcardAlbumTierQueries(ctx) {
+  const queries = [];
+  if (!ctx.artistName || !ctx.albumName) return queries;
+  const wildcardArtist = bypassBannedArtistTerm(ctx.artistName);
+  if (!wildcardArtist || wildcardArtist === ctx.artistName) return queries;
+  if (ctx.releaseYear) {
+    queries.push(joinSearchParts(wildcardArtist, ctx.albumName, ctx.releaseYear));
+  }
+  queries.push(joinSearchParts(wildcardArtist, ctx.albumName));
+  return uniqueQueries(queries, 3);
+}
+
+function buildAlbumTrackTierQueries(ctx) {
+  const queries = [];
+  const primaryTrack = ctx.trackVariants[0] || ctx.trackName;
+  if (ctx.albumName && primaryTrack) {
+    queries.push(joinSearchParts(ctx.albumName, primaryTrack));
+  }
+  if (!ctx.albumName && ctx.artistName && primaryTrack) {
+    queries.push(joinSearchParts(ctx.artistName, primaryTrack));
+    const wildcardArtist = bypassBannedArtistTerm(ctx.artistName);
+    if (wildcardArtist && wildcardArtist !== ctx.artistName) {
+      queries.push(joinSearchParts(wildcardArtist, primaryTrack));
+    }
+  }
+  return uniqueQueries(queries, 3);
 }
 
 function buildVariationTierQueries(ctx) {
@@ -559,29 +590,23 @@ function buildTrackFallbackTierQueries(ctx) {
 export function buildFlowSearchTiers(context) {
   const ctx = readFlowSearchContext(context);
   const tiers = [];
-  const primaryTrack = buildPrimaryTrackTierQueries(ctx);
-  if (primaryTrack.length > 0) {
-    tiers.push({ tier: 0, name: "primary_track", queries: primaryTrack });
-  }
   const baseAlbum = buildBaseAlbumTierQueries(ctx);
   if (baseAlbum.length > 0) {
-    tiers.push({ tier: 1, name: "base_album", queries: baseAlbum });
+    tiers.push({ tier: 0, name: "base_album", queries: baseAlbum });
   }
-  const variations = buildVariationTierQueries(ctx);
-  if (variations.length > 0) {
-    tiers.push({ tier: 2, name: "variations", queries: variations });
+  const wildcardAlbum = buildWildcardAlbumTierQueries(ctx);
+  if (wildcardAlbum.length > 0) {
+    tiers.push({ tier: 1, name: "wildcard_album", queries: wildcardAlbum });
   }
-  const trimmed = buildTrimmedTierQueries(ctx);
-  if (trimmed.length > 0) {
-    tiers.push({ tier: 3, name: "trimmed", queries: trimmed });
+  const albumTrack = buildAlbumTrackTierQueries(ctx);
+  if (albumTrack.length > 0) {
+    tiers.push({ tier: 2, name: "album_track", queries: albumTrack });
   }
-  const special = buildSpecialCaseTierQueries(ctx);
-  if (special.length > 0) {
-    tiers.push({ tier: 4, name: "special", queries: special });
-  }
-  const trackFallback = buildTrackFallbackTierQueries(ctx);
-  if (trackFallback.length > 0) {
-    tiers.push({ tier: 5, name: "track_fallback", queries: trackFallback });
+  if (tiers.length === 0) {
+    const primaryTrack = buildPrimaryTrackTierQueries(ctx);
+    if (primaryTrack.length > 0) {
+      tiers.push({ tier: 0, name: "primary_track", queries: primaryTrack });
+    }
   }
   return tiers;
 }
