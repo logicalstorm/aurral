@@ -1,7 +1,7 @@
 import path from "path";
 import fs from "fs/promises";
 import { db } from "../config/db-sqlite.js";
-import { slskdClient } from "./slskdClient.js";
+import { isSlskdCleanupAfterRunsEnabled, slskdClient } from "./slskdClient.js";
 import { logger } from "./logger.js";
 import { enqueuePipelineJob } from "./honkerDb.js";
 import { downloadTracker } from "./playlistDownloadTracker.js";
@@ -647,6 +647,38 @@ async function cleanupTransferForPayload(payload, transfer) {
     .catch(() => {});
 }
 
+async function cleanupSuccessfulRunArtifacts(payload, transfer) {
+  if (!isSlskdCleanupAfterRunsEnabled()) return;
+  const searchIds = getPayloadSearchIds(payload);
+  const transferId = readTransferId(transfer);
+  const candidate = getPayloadCandidate(payload);
+  const username = String(
+    transfer?.username ||
+      transfer?.Username ||
+      candidate?.raw?.user ||
+      "",
+  ).trim();
+  const transfers =
+    username && transferId
+      ? [
+          {
+            username,
+            transferId,
+          },
+        ]
+      : [];
+  if (searchIds.length === 0 && transfers.length === 0) return;
+  await slskdClient
+    .cleanupAfterRun({ searchIds, transfers })
+    .catch((error) =>
+      logger.slskd("warn", "Failed to clean up successful slskd run", {
+        error: error?.message || String(error),
+        searchIds,
+        transferCount: transfers.length,
+      }),
+    );
+}
+
 async function cleanupEmptyAncestors(dir, rootBoundary) {
   const root = path.resolve(String(rootBoundary || "").trim());
   if (!root) return;
@@ -1207,6 +1239,7 @@ async function handleFinalize(payload) {
     finalPath: committedFinalPath,
     validation,
   });
+  await cleanupSuccessfulRunArtifacts(payload, transfer);
   import("./aurralHistoryService.js")
     .then(({ recordTrackJobCompleted }) => recordTrackJobCompleted(job))
     .catch(() => {});

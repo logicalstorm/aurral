@@ -19,6 +19,7 @@ const [
     removeSearchAccents,
     rankFlowSearchResults,
     selectRankedMatchAttempts,
+    stripReleaseTypeSuffix,
     validateDownloadedTrack,
   },
 ] = await Promise.all([
@@ -67,6 +68,93 @@ test("buildFlowWildcardTrackFallbackSearchQueries wildcard-prefixes artist track
 
   assert.ok(queries.includes("*ranz *erdinand Take Me Out"));
   assert.ok(queries.includes("Take Me Out Franz Ferdinand"));
+});
+
+test("stripReleaseTypeSuffix removes terminal release metadata only", () => {
+  assert.equal(
+    stripReleaseTypeSuffix("Object Permanence - Single"),
+    "Object Permanence",
+  );
+  assert.equal(stripReleaseTypeSuffix("Some Release (EP)"), "Some Release");
+  assert.equal(stripReleaseTypeSuffix("Single"), "Single");
+  assert.equal(stripReleaseTypeSuffix("Single Mothers"), "Single Mothers");
+});
+
+test("buildFlowSearchQueries strips release-type suffixes from album searches", () => {
+  const queries = buildFlowSearchQueries({
+    artistName: "Arm's Length",
+    trackName: "Object Permanence",
+    albumName: "Object Permanence - Single",
+    releaseYear: "2019",
+    artistAliases: [],
+  });
+
+  assert.ok(queries.includes("Arm's Length Object Permanence"));
+  assert.ok(queries.includes("Arm's Length Object Permanence 2019"));
+  assert.ok(queries.includes("*rm's *ength Object Permanence"));
+  assert.ok(!queries.some((query) => /Object Permanence - Single/i.test(query)));
+});
+
+test("rankFlowSearchResults rejects same-title single matches from the wrong artist", () => {
+  const ranked = rankFlowSearchResults(
+    [
+      {
+        user: "wrongArtist",
+        file: "Shared\\Sophia Stel\\Object Permanence {mbid:4d55c255-f2ae-4eb1-93e3-724898b132d0} {Single}\\Sophia Stel_Object Permanence_02_Object Permanence.flac",
+        size: 100,
+        slots: true,
+        bitrate: 900,
+        speed: 700000,
+      },
+    ],
+    {
+      artistName: "Arm's Length",
+      trackName: "Object Permanence",
+      albumName: "Object Permanence - Single",
+      releaseYear: "2019",
+      artistAliases: [],
+    },
+    {
+      preferredFormat: "flac",
+      strictFormat: false,
+    },
+  );
+
+  assert.ok(ranked.length > 0);
+  assert.equal(ranked[0].preDownloadValid, false);
+  assert.equal(
+    ranked[0].preDownloadRejectReason,
+    "weak-artist-ambiguous-title-album",
+  );
+});
+
+test("rankFlowSearchResults still accepts same-title single matches from the right artist", () => {
+  const ranked = rankFlowSearchResults(
+    [
+      {
+        user: "rightArtist",
+        file: "Shared\\Arm's Length\\Object Permanence {Single}\\Arm's Length - Object Permanence.flac",
+        size: 100,
+        slots: true,
+        bitrate: 900,
+        speed: 700000,
+      },
+    ],
+    {
+      artistName: "Arm's Length",
+      trackName: "Object Permanence",
+      albumName: "Object Permanence - Single",
+      releaseYear: "2019",
+      artistAliases: [],
+    },
+    {
+      preferredFormat: "flac",
+      strictFormat: false,
+    },
+  );
+
+  assert.ok(ranked.length > 0);
+  assert.equal(ranked[0].preDownloadValid, true);
 });
 
 test("buildFlowAlbumSearchQueries keeps album-only searches separate from track fallbacks", () => {
