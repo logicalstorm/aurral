@@ -1,7 +1,10 @@
 import path from "path";
 import fs from "fs/promises";
 import { db } from "../config/db-sqlite.js";
-import { slskdClient } from "./slskdClient.js";
+import {
+  isSlskdCleanupAfterRunsEnabled,
+  slskdClient,
+} from "./slskdClient.js";
 import { logger } from "./logger.js";
 import { enqueuePipelineJob } from "./honkerDb.js";
 import { downloadTracker } from "./playlistDownloadTracker.js";
@@ -27,7 +30,7 @@ const updateSlskdMetaStmt = db.prepare(`
   WHERE id = ?
 `);
 
-const MIN_SEARCH_CANDIDATES = 3;
+const MIN_SEARCH_CANDIDATES = 1;
 const MAX_DOWNLOAD_CANDIDATES = 7;
 const MAX_TRANSFER_RETRIES_PER_CANDIDATE = 1;
 const POLL_DELAY_SECONDS = 3;
@@ -686,6 +689,69 @@ function recordPayloadOutcome(job, payload, status, reason, details = {}) {
   });
 }
 
+function buildCleanupTransfersFromPayload(
+  payload,
+  { removeFiles = false } = {},
+) {
+  const transfers = [];
+  const candidate = getPayloadCandidate(payload);
+  const candidateUsername = String(candidate?.raw?.user || "").trim();
+  for (const transfer of readBatchTransfers(payload?.batch)) {
+    const transferId = readTransferId(transfer);
+    const username = String(
+      transfer?.username ||
+        transfer?.Username ||
+        candidateUsername ||
+        "",
+    ).trim();
+    if (!username || !transferId) continue;
+    transfers.push({
+      username,
+      transferId,
+      removeFiles: removeFiles === true,
+    });
+  }
+  if (payload?.legacyTransfer?.id && payload?.legacyTransfer?.username) {
+    transfers.push({
+      username: payload.legacyTransfer.username,
+      transferId: payload.legacyTransfer.id,
+      removeFiles: removeFiles === true,
+    });
+  }
+  const seen = new Set();
+  return transfers.filter((transfer) => {
+    const key = `${transfer.username}\0${transfer.transferId}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+async function cleanupPipelineArtifacts(
+  payload,
+  { includeTransfers = false, removeFiles = false, force = false } = {},
+) {
+  if (!force && !isSlskdCleanupAfterRunsEnabled()) return;
+  const searchIds = getPayloadSearchIds(payload);
+  const transfers = includeTransfers
+    ? buildCleanupTransfersFromPayload(payload, { removeFiles })
+    : [];
+  if (searchIds.length === 0 && transfers.length === 0) return;
+  await slskdClient
+    .cleanupAfterRun({
+      searchIds,
+      transfers,
+      ownedOnly: true,
+    })
+    .catch((error) => {
+      logger.slskd("warn", "Failed to clean up slskd pipeline artifacts", {
+        jobId: payload?.jobId,
+        phase: payload?.phase,
+        error: error?.message || String(error),
+      });
+    });
+}
+
 function retrySameCandidateAllowed(payload) {
   return (
     getCandidateRetryCount(payload, Number(payload?.candidateIndex || 0)) <
@@ -754,12 +820,7 @@ async function runSearchQuery(
       ),
   });
   const results = slskdClient.flattenSearchResults(completed);
-  const shouldCancel = shouldStopSlskdSearching(
-    probeAggregatedResults(aggregated, results, seen),
-    resolvedTrack,
-    searchOptions,
-  );
-  await slskdClient.settleSearch(created.id, { cancel: shouldCancel });
+  await slskdClient.settleSearch(created.id, { cancel: true });
   return results;
 }
 
@@ -838,11 +899,10 @@ async function handleSearch(payload) {
       rankedCount: ranked.length,
       eligibleCount: eligible.length,
     });
-    if (searchIds.length > 0) {
-      await slskdClient
-        .cleanupAfterRun({ searchIds, transfers: [] })
-        .catch(() => {});
-    }
+    await cleanupPipelineArtifacts(
+      { ...payload, searchIds },
+      { force: true },
+    );
     await failJob(job, "No suitable slskd search results");
     return null;
   }
@@ -870,6 +930,7 @@ async function handleDownload(payload) {
   const index = Number(payload.candidateIndex || 0);
   const candidate = candidates[index];
   if (!candidate?.raw?.user || !candidate?.raw?.file) {
+    await cleanupPipelineArtifacts(payload);
     await failJob(job, "No download candidate available");
     return null;
   }
@@ -921,6 +982,7 @@ async function handleDownload(payload) {
         pollAttempts: 0,
       };
     }
+    await cleanupPipelineArtifacts(payload, { includeTransfers: true });
     await failJob(job, message);
     return null;
   }
@@ -952,6 +1014,10 @@ async function handlePoll(payload) {
   const pollAttempts = Number(payload.pollAttempts || 0) + 1;
   if (pollAttempts > MAX_POLL_ATTEMPTS) {
     recordPayloadOutcome(job, payload, "transfer_timeout", "slskd transfer polling timed out");
+    await cleanupPipelineArtifacts(payload, {
+      includeTransfers: true,
+      removeFiles: true,
+    });
     await failJob(job, "slskd transfer polling timed out");
     return null;
   }
@@ -997,6 +1063,10 @@ async function handlePoll(payload) {
         { transfer },
       );
       if (nextPayload) return nextPayload;
+      await cleanupPipelineArtifacts(basePayload, {
+        includeTransfers: true,
+        removeFiles: true,
+      });
       await failJob(job, "slskd transfer failed");
       return null;
     }
@@ -1042,11 +1112,13 @@ async function handlePoll(payload) {
         { batchId: payload.batchId },
       );
       if (nextPayload) return nextPayload;
+      await cleanupPipelineArtifacts(basePayload);
       await failJob(job, "slskd batch returned no transfers");
       return null;
     }
     if (pollAttempts >= MAX_EMPTY_POLL_ATTEMPTS) {
       recordPayloadOutcome(job, basePayload, "batch_empty", "slskd batch returned no transfers");
+      await cleanupPipelineArtifacts(basePayload);
       await failJob(job, "slskd batch returned no transfers");
       return null;
     }
@@ -1076,6 +1148,10 @@ async function handlePoll(payload) {
       { transfer: failedTransfer },
     );
     if (nextPayload) return nextPayload;
+    await cleanupPipelineArtifacts(basePayload, {
+      includeTransfers: true,
+      removeFiles: true,
+    });
     await failJob(job, "slskd transfer failed");
     return null;
   }
@@ -1138,6 +1214,10 @@ async function handleFinalize(payload) {
       { transfer },
     );
     if (nextPayload) return nextPayload;
+    await cleanupPipelineArtifacts(payload, {
+      includeTransfers: true,
+      removeFiles: true,
+    });
     await failJob(job, `Downloaded file missing: ${expectedPath}`);
     return null;
   }
@@ -1181,6 +1261,10 @@ async function handleFinalize(payload) {
       ? buildNextCandidatePayload(payload)
       : null;
     if (nextPayload) return nextPayload;
+    await cleanupPipelineArtifacts(payload, {
+      includeTransfers: true,
+      removeFiles: true,
+    });
     await failJob(job, validation.reason || "Download validation failed");
     return null;
   }
@@ -1206,6 +1290,10 @@ async function handleFinalize(payload) {
     sourcePath,
     finalPath: committedFinalPath,
     validation,
+  });
+  await cleanupPipelineArtifacts(payload, {
+    includeTransfers: true,
+    removeFiles: false,
   });
   import("./aurralHistoryService.js")
     .then(({ recordTrackJobCompleted }) => recordTrackJobCompleted(job))

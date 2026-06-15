@@ -25,9 +25,9 @@ const [
   importFromRepo("backend/services/weeklyFlowSoulseekMatcher.js"),
 ]);
 
-test("bypassBannedArtistTerm replaces the first artist character with a wildcard", () => {
-  assert.equal(bypassBannedArtistTerm("Franz Ferdinand"), "*ranz Ferdinand");
-  assert.equal(bypassBannedArtistTerm("*ranz Ferdinand"), "*ranz Ferdinand");
+test("bypassBannedArtistTerm replaces the first character of each artist word", () => {
+  assert.equal(bypassBannedArtistTerm("Franz Ferdinand"), "*ranz *erdinand");
+  assert.equal(bypassBannedArtistTerm("*ranz *erdinand"), "*ranz *erdinand");
   assert.equal(bypassBannedArtistTerm("A"), "A");
   assert.equal(bypassBannedArtistTerm(""), "");
 });
@@ -41,8 +41,8 @@ test("buildFlowWildcardAlbumSearchQueries uses wildcard artist terms", () => {
     artistAliases: [],
   });
 
-  assert.ok(queries.includes("*ranz Ferdinand Franz Ferdinand"));
-  assert.ok(queries.includes("*ranz Ferdinand Franz Ferdinand 2004"));
+  assert.ok(queries.includes("*ranz *erdinand Franz Ferdinand"));
+  assert.ok(queries.includes("*ranz *erdinand Franz Ferdinand 2004"));
   assert.ok(!queries.includes("Franz Ferdinand Franz Ferdinand"));
 });
 
@@ -54,7 +54,7 @@ test("buildFlowArtistOnlySearchQueries returns wildcard artist-only searches", (
     artistAliases: ["Franz F."],
   });
 
-  assert.deepEqual(queries, ["*ranz Ferdinand", "*ranz F."]);
+  assert.deepEqual(queries, ["*ranz *erdinand", "*ranz *."]);
 });
 
 test("buildFlowWildcardTrackFallbackSearchQueries wildcard-prefixes artist track searches", () => {
@@ -65,7 +65,7 @@ test("buildFlowWildcardTrackFallbackSearchQueries wildcard-prefixes artist track
     artistAliases: [],
   });
 
-  assert.ok(queries.includes("*ranz Ferdinand Take Me Out"));
+  assert.ok(queries.includes("*ranz *erdinand Take Me Out"));
   assert.ok(queries.includes("Take Me Out Franz Ferdinand"));
 });
 
@@ -95,7 +95,7 @@ test("buildFlowAlbumSearchQueries keeps album-only searches separate from track 
   assert.ok(fallbackQueries.includes("Massive Attk Teardrop"));
 });
 
-test("buildFlowSearchTiers starts with track search before album fallbacks", () => {
+test("buildFlowSearchTiers uses a short album-first plan", () => {
   const tiers = buildFlowSearchTiers({
     artistName: "Massive Attack",
     trackName: "Teardrop",
@@ -104,25 +104,27 @@ test("buildFlowSearchTiers starts with track search before album fallbacks", () 
     artistAliases: ["Massive Attk"],
   });
 
-  assert.equal(tiers[0]?.name, "primary_track");
-  assert.ok(tiers[0].queries.includes("Massive Attack Teardrop"));
+  assert.equal(tiers[0]?.name, "base_album");
+  assert.ok(
+    tiers[0].queries.includes("Massive Attack Mezzanine 1998"),
+  );
   assert.ok(
     tiers.some(
       (tier) =>
-        tier.name === "base_album" &&
-        tier.queries.includes("Massive Attack Mezzanine 1998"),
+        tier.name === "wildcard_album" &&
+        tier.queries.includes("*assive *ttack Mezzanine 1998"),
     ),
   );
   assert.ok(
     tiers.some(
       (tier) =>
-        tier.name === "track_fallback" &&
-        tier.queries.includes("Massive Attk Teardrop"),
+        tier.name === "album_track" &&
+        tier.queries.includes("Mezzanine Teardrop"),
     ),
   );
 });
 
-test("buildFlowSearchQueries includes track-first and album fallback searches", () => {
+test("buildFlowSearchQueries includes only targeted album and album-track searches", () => {
   const queries = buildFlowSearchQueries({
     artistName: "Massive Attack",
     trackName: "Teardrop",
@@ -131,9 +133,11 @@ test("buildFlowSearchQueries includes track-first and album fallback searches", 
     artistAliases: ["Massive Attk"],
   });
 
-  assert.ok(queries[0].includes("Massive Attack Teardrop"));
+  assert.equal(queries[0], "Massive Attack Mezzanine 1998");
   assert.ok(queries.includes("Massive Attack Mezzanine 1998"));
-  assert.ok(queries.includes("Massive Attk Teardrop"));
+  assert.ok(queries.includes("*assive *ttack Mezzanine 1998"));
+  assert.ok(queries.includes("Mezzanine Teardrop"));
+  assert.ok(!queries.includes("Massive Attk Teardrop"));
 });
 
 test("search variation helpers normalize and trim bypass text", () => {
@@ -154,7 +158,7 @@ test("search variation helpers normalize and trim bypass text", () => {
   );
 });
 
-test("buildFlowSearchQueries adds artist-free track plus album fallbacks", () => {
+test("buildFlowSearchQueries adds album-track plus album searches", () => {
   const queries = buildFlowSearchQueries({
     artistName: "Gorillaz",
     trackName: "Feel Good Inc.",
@@ -163,13 +167,13 @@ test("buildFlowSearchQueries adds artist-free track plus album fallbacks", () =>
     artistAliases: [],
   });
 
-  assert.ok(queries.includes("Feel Good Inc. Demon Days"));
-  assert.ok(queries.includes("Feel Good Inc. Demon Days 2005"));
+  assert.ok(queries.includes("Demon Days Feel Good Inc."));
+  assert.ok(queries.includes("Gorillaz Demon Days 2005"));
   assert.ok(queries.includes("Gorillaz Demon Days"));
-  assert.ok(queries.includes("Gorillaz Feel Good Inc."));
+  assert.ok(!queries.includes("Gorillaz Feel Good Inc."));
 });
 
-test("buildFlowSearchQueries adds simplified variants for parenthetical and slash-heavy titles", () => {
+test("buildFlowTrackFallbackSearchQueries keeps simplified title variants available", () => {
   const queries = buildFlowSearchQueries({
     artistName: "Bully",
     trackName: "Lose You (feat. Soccer Mommy)",
@@ -177,8 +181,16 @@ test("buildFlowSearchQueries adds simplified variants for parenthetical and slas
     artistAliases: [],
   });
 
-  assert.ok(queries.includes("Bully Lose You (feat. Soccer Mommy)"));
-  assert.ok(queries.includes("Bully Lose You"));
+  assert.ok(queries.includes("Lucky For You Lose You (feat. Soccer Mommy)"));
+  assert.ok(!queries.includes("Bully Lose You"));
+
+  const fallbackQueries = buildFlowTrackFallbackSearchQueries({
+    artistName: "Bully",
+    trackName: "Lose You (feat. Soccer Mommy)",
+    albumName: "Lucky For You",
+    artistAliases: [],
+  });
+  assert.ok(fallbackQueries.includes("Bully Lose You"));
 
   const slashQueries = buildFlowSearchQueries({
     artistName: "LOVING",
@@ -189,15 +201,11 @@ test("buildFlowSearchQueries adds simplified variants for parenthetical and slas
 
   assert.ok(
     slashQueries.includes(
-      "LOVING A long slow little wave / citizen, an activity",
+      "Any Light A long slow little wave / citizen, an activity",
     ),
   );
-  assert.ok(slashQueries.includes("LOVING A long slow little wave"));
   assert.ok(
-    slashQueries.some(
-      (query) =>
-        query.includes("citizen") && query.includes("activity") && query.startsWith("LOVING"),
-    ),
+    !slashQueries.includes("LOVING A long slow little wave"),
   );
 });
 

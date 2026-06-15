@@ -822,7 +822,13 @@ export class SlskdClient {
           transfer?.transferId || transfer?.id || "",
         ).trim();
         if (!username || !transferId) continue;
-        if (await this.deleteTransfer(username, transferId, { remove: true })) {
+        const removeFiles =
+          transfer?.removeFiles === true || transfer?.remove === true;
+        if (
+          await this.deleteTransfer(username, transferId, {
+            remove: removeFiles,
+          })
+        ) {
           transfersRemoved += 1;
         }
       }

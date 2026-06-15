@@ -421,7 +421,7 @@ test("isSlskdCleanupAfterRunsEnabled reads the integrations setting", () => {
   dbOps.updateSettings(originalSettings);
 });
 
-test("cleanupAfterRun removes Aurral-owned searches and transfers", async () => {
+test("cleanupAfterRun removes Aurral-owned successful transfer records without deleting files", async () => {
   const originalSettings = dbOps.getSettings();
   const calls = [];
   const mock = await createMockServer((request, response) => {
@@ -436,7 +436,7 @@ test("cleanupAfterRun removes Aurral-owned searches and transfers", async () => 
     }
     if (
       request.method === "DELETE" &&
-      request.url === "/api/v0/transfers/downloads/peer/transfer-owned?remove=true"
+      request.url === "/api/v0/transfers/downloads/peer/transfer-owned"
     ) {
       response.writeHead(204);
       response.end();
@@ -483,7 +483,7 @@ test("cleanupAfterRun removes Aurral-owned searches and transfers", async () => 
       calls.map((call) => `${call.method} ${call.url}`),
       [
         "DELETE /api/v0/searches/search-owned",
-        "DELETE /api/v0/transfers/downloads/peer/transfer-owned?remove=true",
+        "DELETE /api/v0/transfers/downloads/peer/transfer-owned",
       ],
     );
   } finally {
