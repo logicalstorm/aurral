@@ -401,6 +401,8 @@ router.use(requireAuth);
 router.use(requirePermission("accessFlow"));
 const DEFAULT_LIMIT = 30;
 const QUEUE_LIMIT = 50;
+const SLSKD_NOT_CONFIGURED_MESSAGE =
+  "slskd is not configured. Add your slskd URL and API key in Settings > Integrations to enable Soulseek downloads for flows and playlists.";
 
 const markFlowMutationToken = (flowId) => {
   const token = createWeeklyFlowOperationToken();
@@ -561,6 +563,7 @@ router.post("/start/:flowId", async (req, res) => {
     if (!slskdClient.isConfigured()) {
       return res.status(400).json({
         error: "slskd not configured",
+        message: SLSKD_NOT_CONFIGURED_MESSAGE,
       });
     }
     const unavailableError = getUnavailableFlowSourceError(flow.mix);
@@ -804,6 +807,7 @@ router.put("/flows/:flowId/enabled", async (req, res) => {
       if (!slskdClient.isConfigured()) {
         return res.status(400).json({
           error: "slskd not configured",
+          message: SLSKD_NOT_CONFIGURED_MESSAGE,
         });
       }
 
@@ -1026,6 +1030,7 @@ router.post("/shared-playlists/import", async (req, res) => {
     if (!slskdClient.isConfigured()) {
       return res.status(400).json({
         error: "slskd not configured",
+        message: SLSKD_NOT_CONFIGURED_MESSAGE,
       });
     }
 

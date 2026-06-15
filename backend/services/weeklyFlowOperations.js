@@ -31,6 +31,8 @@ import { withHonkerLock } from "./honkerDb.js";
 
 const DEFAULT_LIMIT = 30;
 const OPERATION_TOKENS_KEY = "weeklyFlowOperationTokens";
+const SLSKD_NOT_CONFIGURED_MESSAGE =
+  "slskd is not configured. Add your slskd URL and API key in Settings > Integrations to enable Soulseek downloads for flows and playlists.";
 
 export function createWeeklyFlowOperationToken() {
   return `${Date.now()}-${randomUUID()}`;
@@ -230,7 +232,7 @@ async function runFlowSeed({
     return { cancelled: true };
   }
   if (!slskdClient.isConfigured()) {
-    throw new Error("slskd not configured");
+    throw new Error(SLSKD_NOT_CONFIGURED_MESSAGE);
   }
   const flow = flowPlaylistConfig.getFlow(safeFlowId);
   if (!flow) return { missing: true };

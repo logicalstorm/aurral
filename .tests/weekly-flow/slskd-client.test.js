@@ -399,6 +399,7 @@ test("enqueueBatch falls back to legacy slskd download endpoint", async () => {
         "/api/v0/transfers/downloads/peer",
       ],
     );
+    assert.equal(calls[1].body, "Artist/Album/Open.flac");
   } finally {
     dbOps.updateSettings(originalSettings);
     await mock.close();
