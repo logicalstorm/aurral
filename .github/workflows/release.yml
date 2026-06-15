@@ -119,6 +119,9 @@ jobs:
             type=raw,value=test,enable=${{ needs.compute-release.outputs.channel == 'test' }}
             type=raw,value=dev,enable=${{ needs.compute-release.outputs.channel == 'dev' }}
 
+      - name: Prepare local BuildKit cache
+        run: mkdir -p /home/github-runner/.cache/aurral-buildkit
+
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
@@ -133,14 +136,14 @@ jobs:
             APP_VERSION=${{ needs.compute-release.outputs.version }}
             GITHUB_REPO=${{ github.repository }}
             RELEASE_CHANNEL=${{ needs.compute-release.outputs.channel }}
-          cache-from: type=local,src=/var/cache/aurral-buildkit
-          cache-to: type=local,dest=/var/cache/aurral-buildkit-new,mode=max
+          cache-from: type=local,src=/home/github-runner/.cache/aurral-buildkit
+          cache-to: type=local,dest=/home/github-runner/.cache/aurral-buildkit-new,mode=max
 
       - name: Rotate BuildKit cache
         if: always()
         run: |
-          rm -rf /var/cache/aurral-buildkit
-          mv /var/cache/aurral-buildkit-new /var/cache/aurral-buildkit || true
+          rm -rf /home/github-runner/.cache/aurral-buildkit
+          mv /home/github-runner/.cache/aurral-buildkit-new /home/github-runner/.cache/aurral-buildkit || true
 
   create-tag:
     needs: [compute-release, publish-image]
