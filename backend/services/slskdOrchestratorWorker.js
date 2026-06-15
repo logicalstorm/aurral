@@ -38,6 +38,13 @@ async function runLoop() {
       } catch (error) {
         const message = error?.message || String(error);
         if (job.attempts >= 4) {
+          console.error("[slskdOrchestratorWorker] pipeline job failed:", {
+            jobId: job.payload?.jobId || null,
+            phase: job.payload?.phase || null,
+            candidateIndex: job.payload?.candidateIndex ?? null,
+            message,
+            stack: error?.stack || null,
+          });
           job.fail(message);
           await failPipelineJob(job.payload, message);
         } else {

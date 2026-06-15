@@ -261,6 +261,17 @@ export class WeeklyFlowPlaylistSource {
     return String(value || "").trim().toLowerCase();
   }
 
+  _releaseTitleKey(value) {
+    return String(value || "")
+      .normalize("NFKD")
+      .toLowerCase()
+      .replace(/[’‘`]/g, "'")
+      .replace(/&/g, " and ")
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   _artistKeysFromArtist(artist) {
     return [
       artist?.id,
@@ -2101,21 +2112,62 @@ export class WeeklyFlowPlaylistSource {
     return set;
   }
 
-  _pickTopAlbumTrack(trackList) {
+  _pickTopAlbumTrackInfo(trackList) {
     const entries = Array.isArray(trackList) ? trackList : [trackList];
-    const ranked = [...entries]
+    return [...entries]
       .map((entry) => {
-        const trackName = String(entry?.name || "").trim();
+        const trackName = String(
+          entry?.name || entry?.title || entry?.trackName || "",
+        ).trim();
         if (!trackName) return null;
         const rank = Number(entry?.["@attr"]?.rank ?? entry?.attr?.rank ?? NaN);
+        const fallbackRank = Number(
+          entry?.trackNumber ??
+            entry?.trackPosition ??
+            entry?.position ??
+            entry?.track_number ??
+            NaN,
+        );
         return {
           trackName,
-          rank: Number.isFinite(rank) ? rank : Number.MAX_SAFE_INTEGER,
+          trackMbid: String(
+            entry?.recordingId ||
+              entry?.recordingMbid ||
+              entry?.mbid ||
+              entry?.id ||
+              "",
+          ).trim() || null,
+          durationMs:
+            entry?.durationMs != null && Number.isFinite(Number(entry.durationMs))
+              ? Math.max(0, Math.round(Number(entry.durationMs)))
+              : null,
+          rank: Number.isFinite(rank)
+            ? rank
+            : Number.isFinite(fallbackRank)
+              ? fallbackRank
+              : Number.MAX_SAFE_INTEGER,
         };
       })
       .filter(Boolean)
       .sort((left, right) => left.rank - right.rank);
-    return ranked[0]?.trackName || null;
+  }
+
+  _pickTopAlbumTrack(trackList) {
+    return this._pickTopAlbumTrackInfo(trackList)[0]?.trackName || null;
+  }
+
+  async _getMetadataAlbumTrackList(albumMbid) {
+    const safeAlbumMbid = String(albumMbid || "").trim();
+    if (!safeAlbumMbid) return [];
+    const { getAlbumTracksByAlbumMbid } = await import("./metadataProvider.js");
+    return getAlbumTracksByAlbumMbid(safeAlbumMbid);
+  }
+
+  async _getLastfmAlbumInfo(artistName, albumTitle) {
+    return lastfmRequest("album.getInfo", {
+      artist: artistName,
+      album: albumTitle,
+    });
   }
 
   async _pickTrackFromRelease({
@@ -2129,28 +2181,41 @@ export class WeeklyFlowPlaylistSource {
     const normalizedAlbum = String(albumTitle || "").trim();
     if (!normalizedArtist || !normalizedAlbum) return null;
 
-    let trackName = null;
+    let pick = null;
+    if (albumMbid) {
+      try {
+        pick = this._pickTopAlbumTrackInfo(
+          await this._getMetadataAlbumTrackList(albumMbid),
+        )[0] || null;
+      } catch {}
+    }
+
+    let trackName = pick?.trackName || null;
     try {
-      const data = await lastfmRequest("album.getInfo", {
-        artist: normalizedArtist,
-        album: normalizedAlbum,
-      });
-      trackName = this._pickTopAlbumTrack(data?.album?.tracks?.track);
+      if (!trackName) {
+        const data = await this._getLastfmAlbumInfo(
+          normalizedArtist,
+          normalizedAlbum,
+        );
+        pick = this._pickTopAlbumTrackInfo(data?.album?.tracks?.track)[0] || null;
+        trackName = pick?.trackName || null;
+      }
     } catch {}
 
     if (!trackName && getLastfmApiKey()) {
       try {
         const trackList = await this._getArtistTopTrackList(normalizedArtist);
-        const albumKey = this._artistKey(normalizedAlbum);
+        const albumKey = this._releaseTitleKey(normalizedAlbum);
         const albumMatch = trackList.find((entry) => {
           const candidateAlbum = String(
             entry?.album?.title || entry?.album?.["#text"] || "",
           ).trim();
-          return candidateAlbum && this._artistKey(candidateAlbum) === albumKey;
+          return candidateAlbum && this._releaseTitleKey(candidateAlbum) === albumKey;
         });
-        trackName = String(
-          albumMatch?.name || trackList[0]?.name || "",
-        ).trim();
+        pick = albumMatch
+          ? this._pickTopAlbumTrackInfo([albumMatch])[0] || null
+          : null;
+        trackName = pick?.trackName || null;
       } catch {}
     }
 
@@ -2161,6 +2226,8 @@ export class WeeklyFlowPlaylistSource {
       albumName: normalizedAlbum,
       artistMbid: artistMbid || null,
       albumMbid,
+      trackMbid: pick?.trackMbid || null,
+      durationMs: pick?.durationMs || null,
       releaseYear,
       reason: "New release from an artist in your library",
     });
@@ -2173,6 +2240,7 @@ export class WeeklyFlowPlaylistSource {
     );
     const albums = await getRecentMissingReleases(limit, {
       artists: options?.libraryArtists,
+      includeFuture: false,
     });
     if (albums.length === 0) return [];
 

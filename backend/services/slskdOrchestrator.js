@@ -1051,83 +1051,11 @@ async function handlePoll(payload) {
       candidate,
     };
   }
-  const batch = await slskdClient.getBatch(payload.batchId);
-  if (!batch) {
-    return {
-      ...basePayload,
-      phase: "poll",
-      delaySeconds: POLL_DELAY_SECONDS,
-      pollAttempts,
-    };
-  }
-  const transfers = readBatchTransfers(batch);
-  if (transfers.length === 0) {
-    if (pollAttempts >= 3) {
-      logger.slskd("warn", "slskd batch has no transfers; trying next candidate", {
-        jobId: job.id,
-        batchId: payload.batchId,
-        candidateIndex: Number(payload.candidateIndex || 0),
-      });
-      const nextPayload = retrySameCandidateOrNext(
-        basePayload,
-        job,
-        "batch_empty",
-        "slskd batch returned no transfers",
-        { batchId: payload.batchId },
-      );
-      if (nextPayload) return nextPayload;
-      await failJob(job, "slskd batch returned no transfers");
-      return null;
-    }
-    if (pollAttempts >= MAX_EMPTY_POLL_ATTEMPTS) {
-      recordPayloadOutcome(job, basePayload, "batch_empty", "slskd batch returned no transfers");
-      await failJob(job, "slskd batch returned no transfers");
-      return null;
-    }
-    return {
-      ...basePayload,
-      phase: "poll",
-      delaySeconds: POLL_DELAY_SECONDS,
-      pollAttempts,
-    };
-  }
-  const states = transfers.map((transfer) =>
-    classifyTransferState(readTransferState(transfer)),
-  );
-  const anyFailed = states.some((state) => state === "failed");
-  const allSuccess = states.every((state) => state === "success");
-  if (anyFailed) {
-    const failedTransfer =
-      transfers.find(
-        (transfer) => classifyTransferState(readTransferState(transfer)) === "failed",
-      ) || transfers[0];
-    await cleanupTransferForPayload(basePayload, failedTransfer);
-    const nextPayload = retrySameCandidateOrNext(
-      basePayload,
-      job,
-      "transfer_failed",
-      "slskd transfer failed",
-      { transfer: failedTransfer },
-    );
-    if (nextPayload) return nextPayload;
-    await failJob(job, "slskd transfer failed");
-    return null;
-  }
-  if (!allSuccess) {
-    return {
-      ...basePayload,
-      phase: "poll",
-      delaySeconds: POLL_DELAY_SECONDS,
-      pollAttempts,
-    };
-  }
-  const candidate = getPayloadCandidate(basePayload);
   return {
     ...basePayload,
-    phase: "finalize",
-    batch,
+    phase: "poll",
+    delaySeconds: POLL_DELAY_SECONDS,
     pollAttempts,
-    candidate,
   };
 }
 
