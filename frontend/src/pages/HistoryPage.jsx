@@ -27,6 +27,70 @@ const HISTORY_TABS = [
 
 const HISTORY_PAGE_SIZE = 25;
 
+const getRequestIdentity = (request) =>
+  String(
+    request?.id ||
+      [
+        request?.source,
+        request?.kind,
+        request?.type,
+        request?.jobId,
+        request?.albumId,
+        request?.mbid,
+        request?.title,
+        request?.name,
+      ]
+        .filter(Boolean)
+        .join(":"),
+  );
+
+const buildRequestChangeSignature = (request) =>
+  JSON.stringify({
+    source: request?.source || null,
+    kind: request?.kind || null,
+    type: request?.type || null,
+    title: request?.title || null,
+    subtitle: request?.subtitle || null,
+    name: request?.name || null,
+    albumName: request?.albumName || null,
+    artistName: request?.artistName || null,
+    status: request?.status || null,
+    statusLabel: request?.statusLabel || null,
+    href: request?.href || null,
+    inQueue: request?.inQueue === true,
+    canReSearch: request?.canReSearch === true,
+  });
+
+const mergeHistoryRequests = (previousRequests, nextRequests) => {
+  const incoming = Array.isArray(nextRequests) ? nextRequests : [];
+  if (!Array.isArray(previousRequests) || previousRequests.length === 0) {
+    return incoming;
+  }
+
+  const previousById = new Map(
+    previousRequests.map((request) => [getRequestIdentity(request), request]),
+  );
+  const changedAt = new Date().toISOString();
+
+  return incoming.map((request) => {
+    const previous = previousById.get(getRequestIdentity(request));
+    if (!previous) return request;
+    if (
+      buildRequestChangeSignature(previous) !==
+      buildRequestChangeSignature(request)
+    ) {
+      return {
+        ...request,
+        requestedAt: changedAt,
+      };
+    }
+    return {
+      ...request,
+      requestedAt: previous.requestedAt || request.requestedAt,
+    };
+  });
+};
+
 const getHistorySource = (request) => {
   if (request.source === "slskd") return "slskd";
   if (request.source === "aurral") return "aurral";
@@ -156,7 +220,9 @@ function HistoryPage() {
   const sortedRequests = useMemo(
     () =>
       [...filteredRequests].sort(
-        (a, b) => new Date(b.requestedAt) - new Date(a.requestedAt),
+        (a, b) =>
+          new Date(b.requestedAt) - new Date(a.requestedAt) ||
+          String(b.id || "").localeCompare(String(a.id || "")),
       ),
     [filteredRequests],
   );
@@ -184,7 +250,7 @@ function HistoryPage() {
 
     try {
       const data = await getRequests();
-      setRequests(data);
+      setRequests((previous) => mergeHistoryRequests(previous, data));
       setError(null);
     } catch {
       setError("Failed to load history.");
@@ -255,6 +321,7 @@ function HistoryPage() {
           String(item.albumId) === String(albumId)
             ? {
                 ...item,
+                requestedAt: new Date().toISOString(),
                 status: "processing",
                 statusLabel: "Searching",
                 title: item.albumName
