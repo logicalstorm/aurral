@@ -21,7 +21,7 @@ jobs:
 
   guard-head:
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
     permissions:
       contents: read
@@ -47,7 +47,7 @@ jobs:
   compute-release:
     needs: guard-head
     if: needs.guard-head.outputs.is_current_head == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
     permissions:
       contents: read
@@ -86,7 +86,7 @@ jobs:
 
   publish-image:
     needs: compute-release
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 45
     permissions:
       contents: read
@@ -134,12 +134,18 @@ jobs:
             APP_VERSION=${{ needs.compute-release.outputs.version }}
             GITHUB_REPO=${{ github.repository }}
             RELEASE_CHANNEL=${{ needs.compute-release.outputs.channel }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=local,src=/var/cache/aurral-buildkit
+          cache-to: type=local,dest=/var/cache/aurral-buildkit-new,mode=max
+
+      - name: Rotate BuildKit cache
+        if: always()
+        run: |
+          rm -rf /var/cache/aurral-buildkit
+          mv /var/cache/aurral-buildkit-new /var/cache/aurral-buildkit || true
 
   create-tag:
     needs: [compute-release, publish-image]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
     permissions:
       contents: write
@@ -163,7 +169,7 @@ jobs:
   publish-github-release:
     needs: [compute-release, create-tag]
     if: needs.compute-release.outputs.channel == 'stable'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
     permissions:
       contents: write
