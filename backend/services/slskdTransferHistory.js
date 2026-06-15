@@ -67,7 +67,7 @@ const activePeerRowsStmt = db.prepare(`
 `);
 
 const cleanupRowsStmt = db.prepare(`
-  SELECT id, username, remote_filename, transfer_id, search_id, status
+  SELECT id, username, remote_filename, transfer_id, search_id
   FROM slskd_transfer_history
   WHERE cleaned_at IS NULL
     AND created_at >= ?
@@ -248,8 +248,6 @@ export function getSlskdCleanupTargets() {
           username,
           transferId,
           remoteFilename: normalizeText(row.remote_filename) || null,
-          status: normalizeText(row.status) || null,
-          removeFiles: isSlskdFailureStatus(row.status),
         });
       }
     }

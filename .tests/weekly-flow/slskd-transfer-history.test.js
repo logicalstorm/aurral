@@ -15,7 +15,6 @@ applyIsolatedBackendEnv(isolatedState);
 const [
   {
     buildSlskdRankingHistoryOptions,
-    getSlskdCleanupTargets,
     recordSlskdTransferOutcome,
   },
   { db },
@@ -32,7 +31,7 @@ test.after(async () => {
   await cleanupIsolatedState(isolatedState);
 });
 
-function recordOutcome(username, status, overrides = {}) {
+function recordOutcome(username, status) {
   recordSlskdTransferOutcome({
     job: {
       id: `${username}-${status}`,
@@ -46,7 +45,6 @@ function recordOutcome(username, status, overrides = {}) {
         file: "Artist/Album/01 - Track.flac",
       },
     },
-    transferId: overrides.transferId || null,
     status,
   });
 }
@@ -72,35 +70,4 @@ test("buildSlskdRankingHistoryOptions keeps successful peers eligible", () => {
 
   assert.equal(options.isUserBlacklisted("recoveredPeer"), false);
   assert.ok(options.getUserQueuePenalty("recoveredPeer") > 0);
-});
-
-test("getSlskdCleanupTargets only removes files for failed transfer outcomes", () => {
-  recordOutcome("successPeer", "success", { transferId: "success-transfer" });
-  recordOutcome("failedPeer", "transfer_failed", {
-    transferId: "failed-transfer",
-  });
-
-  const targets = getSlskdCleanupTargets();
-
-  assert.deepEqual(
-    targets.transfers
-      .map((entry) => ({
-        username: entry.username,
-        transferId: entry.transferId,
-        removeFiles: entry.removeFiles,
-      }))
-      .sort((left, right) => left.username.localeCompare(right.username)),
-    [
-      {
-        username: "failedPeer",
-        transferId: "failed-transfer",
-        removeFiles: true,
-      },
-      {
-        username: "successPeer",
-        transferId: "success-transfer",
-        removeFiles: false,
-      },
-    ],
-  );
 });
