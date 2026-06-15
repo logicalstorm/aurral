@@ -1148,6 +1148,14 @@ textarea {
   transition: margin-left 0.3s ease;
 }
 
+@supports (height: 100dvh) {
+  .app-shell,
+  .app-content {
+    height: 100dvh;
+    min-height: 100dvh;
+  }
+}
+
 .app-content--sidebar-full,
 .app-content--sidebar-icons {
   margin-left: 0;
@@ -1279,7 +1287,7 @@ textarea {
 .app-mobile-menu {
   position: fixed;
   inset-inline: 1rem;
-  bottom: calc(76px + 1.5rem);
+  bottom: calc(76px + 1.5rem + env(safe-area-inset-bottom, 0px));
   z-index: 50;
   padding: 0.5rem;
   border-radius: var(--aurral-radius);
@@ -1311,7 +1319,7 @@ textarea {
 .app-mobile-nav {
   position: fixed;
   inset-inline: 0.5rem;
-  bottom: 0.5rem;
+  bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
   z-index: 40;
   padding-top: 0.5rem;
   background: var(--aurral-black);
@@ -1343,7 +1351,16 @@ textarea {
 
 @media (max-width: 767px) {
   .app-content {
-    padding-bottom: calc(76px + 1rem);
+    --mobile-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --mobile-edge-gap: 0.5rem;
+    --mobile-nav-height: 76px;
+    --mobile-nav-top-padding: 0.5rem;
+    --mobile-nav-reserved-height: calc(
+      var(--mobile-safe-area-bottom) + var(--mobile-edge-gap) +
+        var(--mobile-nav-top-padding) + var(--mobile-nav-height)
+    );
+
+    padding-bottom: calc(var(--mobile-nav-reserved-height) + 0.5rem);
   }
 }
 
@@ -12010,13 +12027,14 @@ textarea {
   .app-content {
     --global-player-mobile-height: 4.5rem;
     --global-player-mobile-gap: 0.5rem;
-    --mobile-nav-height: 76px;
   }
 
   .global-player {
     position: fixed;
     right: 0.5rem;
-    bottom: calc(var(--mobile-nav-height) + var(--global-player-mobile-gap));
+    bottom: calc(
+      var(--mobile-nav-reserved-height) + var(--global-player-mobile-gap)
+    );
     left: 0.5rem;
     z-index: 38;
     margin-top: 0;
@@ -12069,12 +12087,19 @@ textarea {
 
   .app-content--player-active {
     padding-bottom: calc(
-      var(--mobile-nav-height) + var(--global-player-mobile-gap) +
+      var(--mobile-nav-reserved-height) + var(--global-player-mobile-gap) +
         var(--global-player-mobile-height) + 0.75rem
     );
   }
 
   .app-main--player-active {
-    scroll-padding-bottom: 0.75rem;
+    padding-bottom: calc(
+      1rem + var(--global-player-mobile-height) +
+        var(--global-player-mobile-gap)
+    );
+    scroll-padding-bottom: calc(
+      var(--global-player-mobile-height) + var(--global-player-mobile-gap) +
+        0.75rem
+    );
   }
 }
