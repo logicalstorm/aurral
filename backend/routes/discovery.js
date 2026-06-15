@@ -54,6 +54,8 @@ import {
 import { requestDiscoveryRefresh } from "../services/discoveryRefreshScheduler.js";
 
 const router = express.Router();
+const SLSKD_NOT_CONFIGURED_MESSAGE =
+  "slskd is not configured. Add your slskd URL and API key in Settings > Integrations to enable Soulseek downloads for flows and playlists.";
 
 const pendingTagRequests = new Map();
 const pendingTagSuggestRequest = { promise: null, expiry: 0 };
@@ -424,7 +426,10 @@ router.post(
 
       const { slskdClient } = await import("../services/slskdClient.js");
       if (!slskdClient.isConfigured()) {
-        return res.status(400).json({ error: "slskd not configured" });
+        return res.status(400).json({
+          error: "slskd not configured",
+          message: SLSKD_NOT_CONFIGURED_MESSAGE,
+        });
       }
 
       const { adoptDiscoverPresetAsFlow } =
@@ -454,7 +459,10 @@ router.post(
 
       const { slskdClient } = await import("../services/slskdClient.js");
       if (!slskdClient.isConfigured()) {
-        return res.status(400).json({ error: "slskd not configured" });
+        return res.status(400).json({
+          error: "slskd not configured",
+          message: SLSKD_NOT_CONFIGURED_MESSAGE,
+        });
       }
 
       const { adoptDiscoverPresetAsPlaylist } =

@@ -226,6 +226,16 @@ function readLegacyEnqueued(data) {
   return normalizeArrayPayload(readProperty(data, "enqueued", "Enqueued"));
 }
 
+function mergeLegacyDownloadResponses(responses) {
+  const enqueued = [];
+  const failures = [];
+  for (const data of responses) {
+    enqueued.push(...readLegacyEnqueued(data));
+    failures.push(...readBatchFailures(data));
+  }
+  return { enqueued, failures };
+}
+
 function shouldFallbackToLegacyDownloadEndpoint(response) {
   if (![400, 404, 405].includes(Number(response?.status))) return false;
   const message =
@@ -620,19 +630,23 @@ export class SlskdClient {
           body,
         );
         if (shouldFallbackToLegacyDownloadEndpoint(response)) {
-          const legacyResponse = await client.post(
-            `/api/v0/transfers/downloads/${encodeURIComponent(normalizedUsername)}`,
-            body.files,
-          );
-          if (![200, 201, 207].includes(legacyResponse.status)) {
-            throw new Error(
-              `slskd legacy enqueue failed: HTTP ${legacyResponse.status} ${String(
-                legacyResponse.data || "",
-              )}`,
+          const legacyResponses = [];
+          for (const file of body.files) {
+            const legacyResponse = await client.post(
+              `/api/v0/transfers/downloads/${encodeURIComponent(normalizedUsername)}`,
+              file.filename,
             );
+            if (![200, 201, 207].includes(legacyResponse.status)) {
+              throw new Error(
+                `slskd legacy enqueue failed: HTTP ${legacyResponse.status} ${String(
+                  legacyResponse.data || "",
+                )}`,
+              );
+            }
+            legacyResponses.push(legacyResponse.data);
           }
-          const enqueued = readLegacyEnqueued(legacyResponse.data);
-          const failures = readBatchFailures(legacyResponse.data);
+          const { enqueued, failures } =
+            mergeLegacyDownloadResponses(legacyResponses);
           if (body.files.length > 0 && enqueued.length === 0) {
             throw new Error(
               `slskd legacy enqueue failed: ${summarizeBatchFailures(failures)}`,
@@ -645,7 +659,9 @@ export class SlskdClient {
             transferId: readId(firstTransfer) || null,
             username: normalizedUsername,
             transfers: enqueued,
-            response: legacyResponse.data,
+            response: legacyResponses.length === 1
+              ? legacyResponses[0]
+              : { enqueued, failures },
           };
         }
         if ([200, 201, 207].includes(response.status)) {

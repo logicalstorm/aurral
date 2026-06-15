@@ -26,6 +26,8 @@ const REUSE_REPAIR_INTERVAL_MS = 30 * 60 * 1000;
 const WORKER_STOPPED_CODE = "WORKER_STOPPED";
 const PLAYLIST_MUTATION_CODE = "PLAYLIST_MUTATION_IN_PROGRESS";
 const RETRY_JOB_REGISTRY_KEY = "weeklyFlowIncompleteRetryJobs";
+const SLSKD_NOT_CONFIGURED_MESSAGE =
+  "slskd is not configured. Add your slskd URL and API key in Settings > Integrations to enable Soulseek downloads for flows and playlists.";
 
 export class WeeklyFlowWorker {
   constructor(
@@ -885,7 +887,7 @@ export class WeeklyFlowWorker {
         }
       }
       if (!slskdClient.isConfigured()) {
-        throw new Error("slskd not configured");
+        throw new Error(SLSKD_NOT_CONFIGURED_MESSAGE);
       }
       downloadTracker.enqueueSlskdPipeline(job.id);
       return;
