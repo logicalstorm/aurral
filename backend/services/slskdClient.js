@@ -214,44 +214,19 @@ function normalizeSearchFile(
 }
 
 function readBatchFailures(data) {
-  return normalizeArrayPayload(readProperty(data, "failures", "Failures"));
-}
-
-function readBatchTransfers(data) {
-  const batch = readProperty(data, "batch", "Batch") || data;
-  return normalizeArrayPayload(readProperty(batch, "transfers", "Transfers"));
+  return normalizeArrayPayload(
+    readProperty(data, "failed", "Failed", "failures", "Failures"),
+  );
 }
 
 function readLegacyEnqueued(data) {
   return normalizeArrayPayload(readProperty(data, "enqueued", "Enqueued"));
 }
 
-function mergeLegacyDownloadResponses(responses) {
-  const enqueued = [];
-  const failures = [];
-  for (const data of responses) {
-    enqueued.push(...readLegacyEnqueued(data));
-    failures.push(...readBatchFailures(data));
-  }
-  return { enqueued, failures };
-}
-
-function shouldFallbackToLegacyDownloadEndpoint(response) {
-  if (![400, 404, 405].includes(Number(response?.status))) return false;
-  const message =
-    typeof response?.data === "string"
-      ? response.data
-      : JSON.stringify(response?.data || "");
-  return (
-    response.status === 404 ||
-    message.includes("QueueDownloadRequest") ||
-    message.includes("IEnumerable")
-  );
-}
-
 function summarizeBatchFailures(failures) {
   const messages = normalizeArrayPayload(failures)
     .map((failure) => {
+      if (typeof failure === "string") return failure.trim();
       const filename = String(
         readProperty(failure, "filename", "Filename") || "",
       ).trim();
@@ -606,81 +581,38 @@ export class SlskdClient {
     return this.flattenSearchResults(completed);
   }
 
-  async enqueueBatch({ username, files, options = {} }) {
+  async enqueueBatch({ username, files }) {
     return withHonkerLock("slskd-api", async () => {
       const client = buildClient();
       const normalizedUsername = String(username || "").trim();
-      const body = {
-        id: options.batchId || randomUUID(),
-        searchId: options.searchId || null,
-        username: normalizedUsername,
-        files: (Array.isArray(files) ? files : []).map((file) => ({
-          filename: String(file.filename || file.file || "").trim(),
-          size: Number(file.size || 0),
-        })),
-        options: {
-          externalId: options.externalId || null,
-        },
-      };
+      const requests = (Array.isArray(files) ? files : []).map((file) => ({
+        filename: String(file.filename || file.file || "").trim(),
+        size: Number(file.size || 0),
+      }));
       let retryCount = 0;
       let delaySeconds = 30;
       while (retryCount <= 3) {
         const response = await client.post(
-          "/api/v0/transfers/downloads/batches",
-          body,
+          `/api/v0/transfers/downloads/${encodeURIComponent(normalizedUsername)}`,
+          requests,
         );
-        if (shouldFallbackToLegacyDownloadEndpoint(response)) {
-          const legacyResponses = [];
-          for (const file of body.files) {
-            const legacyResponse = await client.post(
-              `/api/v0/transfers/downloads/${encodeURIComponent(normalizedUsername)}`,
-              file.filename,
-            );
-            if (![200, 201, 207].includes(legacyResponse.status)) {
-              throw new Error(
-                `slskd legacy enqueue failed: HTTP ${legacyResponse.status} ${String(
-                  legacyResponse.data || "",
-                )}`,
-              );
-            }
-            legacyResponses.push(legacyResponse.data);
-          }
-          const { enqueued, failures } =
-            mergeLegacyDownloadResponses(legacyResponses);
-          if (body.files.length > 0 && enqueued.length === 0) {
+        if ([200, 201, 207].includes(response.status)) {
+          const failures = readBatchFailures(response.data);
+          const transfers = readLegacyEnqueued(response.data);
+          if (
+            requests.length > 0 &&
+            failures.length >= requests.length &&
+            transfers.length === 0
+          ) {
             throw new Error(
-              `slskd legacy enqueue failed: ${summarizeBatchFailures(failures)}`,
+              `slskd enqueue failed: ${summarizeBatchFailures(failures)}`,
             );
           }
-          const firstTransfer = enqueued[0] || null;
+          const firstTransfer = transfers[0] || null;
           return {
             batchId: null,
             legacy: true,
             transferId: readId(firstTransfer) || null,
-            username: normalizedUsername,
-            transfers: enqueued,
-            response: legacyResponses.length === 1
-              ? legacyResponses[0]
-              : { enqueued, failures },
-          };
-        }
-        if ([200, 201, 207].includes(response.status)) {
-          const failures = readBatchFailures(response.data);
-          const transfers = readBatchTransfers(response.data);
-          if (
-            body.files.length > 0 &&
-            failures.length >= body.files.length &&
-            transfers.length === 0
-          ) {
-            throw new Error(
-              `slskd batch enqueue failed: ${summarizeBatchFailures(failures)}`,
-            );
-          }
-          const batch = readProperty(response.data, "batch", "Batch") || {};
-          return {
-            batchId: readId(batch) || body.id,
-            legacy: false,
-            transferId: readId(transfers[0]) || null,
             username: normalizedUsername,
             transfers,
             response: response.data,
@@ -694,21 +626,14 @@ export class SlskdClient {
           delaySeconds *= 2;
           continue;
         }
-        throw new Error(`slskd batch enqueue failed: HTTP ${response.status}`);
+        throw new Error(
+          `slskd enqueue failed: HTTP ${response.status} ${String(
+            response.data || "",
+          )}`,
+        );
       }
-      throw new Error("slskd batch enqueue busy after retries");
+      throw new Error("slskd enqueue busy after retries");
     });
-  }
-
-  async getBatch(batchId) {
-    const client = buildClient();
-    const response = await client.get(
-      `/api/v0/transfers/downloads/batches/${batchId}`,
-    );
-    if (response.status !== 200) {
-      return null;
-    }
-    return response.data;
   }
 
   async getTransfer(username, id) {

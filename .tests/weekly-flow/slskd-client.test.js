@@ -270,27 +270,19 @@ test("createSearch sends slskd search timeout in milliseconds", async () => {
   }
 });
 
-test("enqueueBatch rejects slskd all-failed batch responses", async () => {
+test("enqueueBatch rejects slskd all-failed enqueue responses", async () => {
   const originalSettings = dbOps.getSettings();
   const mock = await createMockServer(async (request, response) => {
     request.resume();
     if (
       request.method === "POST" &&
-      request.url === "/api/v0/transfers/downloads/batches"
+      request.url === "/api/v0/transfers/downloads/peer"
     ) {
-      response.writeHead(200, { "content-type": "application/json" });
+      response.writeHead(201, { "content-type": "application/json" });
       response.end(
         JSON.stringify({
-          batch: {
-            id: "00000000-0000-4000-8000-000000000001",
-            transfers: [],
-          },
-          failures: [
-            {
-              filename: "Artist/Album/Locked.flac",
-              message: "File not shared",
-            },
-          ],
+          enqueued: [],
+          failed: ["Artist/Album/Locked.flac"],
         }),
       );
       return;
@@ -317,7 +309,7 @@ test("enqueueBatch rejects slskd all-failed batch responses", async () => {
           username: "peer",
           files: [{ filename: "Artist/Album/Locked.flac", size: 123 }],
         }),
-      /File not shared/,
+      /Artist\/Album\/Locked\.flac/,
     );
   } finally {
     dbOps.updateSettings(originalSettings);
@@ -325,7 +317,7 @@ test("enqueueBatch rejects slskd all-failed batch responses", async () => {
   }
 });
 
-test("enqueueBatch falls back to legacy slskd download endpoint", async () => {
+test("enqueueBatch uses current slskd download endpoint", async () => {
   const originalSettings = dbOps.getSettings();
   const transferId = "00000000-0000-4000-8000-000000000002";
   const calls = [];
@@ -336,18 +328,6 @@ test("enqueueBatch falls back to legacy slskd download endpoint", async () => {
     });
     request.on("end", () => {
       calls.push({ method: request.method, url: request.url, body });
-      if (
-        request.method === "POST" &&
-        request.url === "/api/v0/transfers/downloads/batches"
-      ) {
-        response.writeHead(400, { "content-type": "application/json" });
-        response.end(
-          JSON.stringify(
-            "The JSON value could not be converted to System.Collections.Generic.IEnumerable`1[slskd.Transfers.API.QueueDownloadRequest].",
-          ),
-        );
-        return;
-      }
       if (
         request.method === "POST" &&
         request.url === "/api/v0/transfers/downloads/peer"
@@ -394,12 +374,11 @@ test("enqueueBatch falls back to legacy slskd download endpoint", async () => {
     assert.equal(result.batchId, null);
     assert.deepEqual(
       calls.map((call) => call.url),
-      [
-        "/api/v0/transfers/downloads/batches",
-        "/api/v0/transfers/downloads/peer",
-      ],
+      ["/api/v0/transfers/downloads/peer"],
     );
-    assert.equal(calls[1].body, "Artist/Album/Open.flac");
+    assert.deepEqual(JSON.parse(calls[0].body), [
+      { filename: "Artist/Album/Open.flac", size: 123 },
+    ]);
   } finally {
     dbOps.updateSettings(originalSettings);
     await mock.close();
