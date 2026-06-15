@@ -182,6 +182,11 @@ api.interceptors.response.use(
   (error) => {
     const status = error?.response?.status;
     const code = error?.response?.data?.code;
+    const serverMessage =
+      error?.response?.data?.message || error?.response?.data?.error;
+    if (serverMessage) {
+      error.message = String(serverMessage);
+    }
     if (status === 401 && code === "SESSION_INVALID") {
       clearAuthStorage();
       if (typeof window !== "undefined") {

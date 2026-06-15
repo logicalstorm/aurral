@@ -31,6 +31,8 @@ const MIN_SEARCH_CANDIDATES = 3;
 const MAX_DOWNLOAD_CANDIDATES = 7;
 const MAX_TRANSFER_RETRIES_PER_CANDIDATE = 1;
 const POLL_DELAY_SECONDS = 3;
+const SLSKD_NOT_CONFIGURED_MESSAGE =
+  "slskd is not configured. Add your slskd URL and API key in Settings > Integrations to enable Soulseek downloads for flows and playlists.";
 
 export function buildSlskdSearchTierGroups(resolvedTrack) {
   return buildFlowSearchTiers(resolvedTrack);
@@ -1260,7 +1262,7 @@ export async function processPipelinePayload(payload) {
   if (!slskdClient.isConfigured()) {
     const job = downloadTracker.getJob(payload.jobId);
     if (job) {
-      await failJob(job, "slskd not configured");
+      await failJob(job, SLSKD_NOT_CONFIGURED_MESSAGE);
     }
     return null;
   }
