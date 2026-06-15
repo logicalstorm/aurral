@@ -54,6 +54,25 @@ const toIso = (createdAt) => {
 
 const resolveHistorySource = (kind) => KIND_SOURCE_MAP[kind] || "aurral";
 
+const serializeHistoryMetadata = (value) => {
+  if (!value || typeof value !== "object") return null;
+  return JSON.stringify(value);
+};
+
+const hasHistoryRecordChanged = (existing, next) => {
+  if (!existing) return true;
+  return (
+    existing.kind !== next.kind ||
+    existing.title !== next.title ||
+    existing.subtitle !== next.subtitle ||
+    existing.status !== next.status ||
+    existing.statusLabel !== next.statusLabel ||
+    existing.href !== next.href ||
+    serializeHistoryMetadata(existing.metadata) !==
+      serializeHistoryMetadata(next.metadata)
+  );
+};
+
 export const appendAurralHistory = (entry = {}) => {
   const title = String(entry.title || "").trim();
   if (!title) return null;
@@ -83,8 +102,7 @@ export const upsertAurralHistory = (entry = {}) => {
   const kind = String(entry.kind || "activity").trim();
   const id = referenceId ? stableId(kind, referenceId) : createId();
   const existing = dbOps.getAurralHistoryById(id);
-  const createdAt = existing?.createdAt || Number(entry.createdAt) || Date.now();
-  const record = {
+  const nextRecord = {
     id,
     kind,
     title,
@@ -93,7 +111,15 @@ export const upsertAurralHistory = (entry = {}) => {
     statusLabel: entry.statusLabel ? String(entry.statusLabel).trim() : null,
     href: entry.href ? String(entry.href).trim() : null,
     metadata: entry.metadata && typeof entry.metadata === "object" ? entry.metadata : null,
-    createdAt,
+  };
+  const changed = hasHistoryRecordChanged(existing, nextRecord);
+  const record = {
+    ...nextRecord,
+    createdAt: existing
+      ? changed
+        ? Number(entry.createdAt) || Date.now()
+        : existing.createdAt
+      : Number(entry.createdAt) || Date.now(),
   };
   dbOps.insertAurralHistory(record);
   dbOps.pruneAurralHistory({ maxAgeMs: MAX_AGE_MS });

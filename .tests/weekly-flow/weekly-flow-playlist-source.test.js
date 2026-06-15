@@ -60,3 +60,91 @@ test("library artist key set can be built from preloaded artists", async () => {
   assert.ok(keys.has("artist-mbid"));
   assert.ok(keys.has("library artist"));
 });
+
+test("release radar picks a release track from metadata before Last.fm fallbacks", async () => {
+  const source = new WeeklyFlowPlaylistSource();
+  source._getMetadataAlbumTrackList = async () => [
+    {
+      title: "Opening Track",
+      trackNumber: 1,
+      recordingId: "recording-mbid",
+      durationMs: 185000,
+    },
+  ];
+  source._getLastfmAlbumInfo = async () => {
+    throw new Error("Last.fm should not be needed");
+  };
+
+  const track = await source._pickTrackFromRelease({
+    artistName: "Library Artist",
+    albumTitle: "New Album",
+    albumMbid: "album-mbid",
+    artistMbid: "artist-mbid",
+    releaseYear: "2026",
+  });
+
+  assert.equal(track?.trackName, "Opening Track");
+  assert.equal(track?.albumName, "New Album");
+  assert.equal(track?.trackMbid, "recording-mbid");
+  assert.equal(track?.durationMs, 185000);
+});
+
+test("release radar does not substitute an unrelated artist top track", async () => {
+  const previousLastfmApiKey = process.env.LASTFM_API_KEY;
+  process.env.LASTFM_API_KEY = "test-key";
+  const source = new WeeklyFlowPlaylistSource();
+  source._getMetadataAlbumTrackList = async () => [];
+  source._getLastfmAlbumInfo = async () => null;
+  source._getArtistTopTrackList = async () => [
+    { name: "Sober to Death", album: { title: "Twin Fantasy (Face to Face)" } },
+  ];
+
+  try {
+    const track = await source._pickTrackFromRelease({
+      artistName: "Car Seat Headrest",
+      albumTitle: "Teen of Denial (Joe's Story)",
+      albumMbid: "album-mbid",
+      artistMbid: "artist-mbid",
+      releaseYear: "2026",
+    });
+
+    assert.equal(track, null);
+  } finally {
+    if (previousLastfmApiKey == null) {
+      delete process.env.LASTFM_API_KEY;
+    } else {
+      process.env.LASTFM_API_KEY = previousLastfmApiKey;
+    }
+  }
+});
+
+test("release radar accepts artist top track fallback only when the album matches", async () => {
+  const previousLastfmApiKey = process.env.LASTFM_API_KEY;
+  process.env.LASTFM_API_KEY = "test-key";
+  const source = new WeeklyFlowPlaylistSource();
+  source._getMetadataAlbumTrackList = async () => [];
+  source._getLastfmAlbumInfo = async () => null;
+  source._getArtistTopTrackList = async () => [
+    { name: "Sober to Death", album: { title: "Twin Fantasy (Face to Face)" } },
+    { name: "Joe Gets Kicked", album: { title: "Teen of Denial (Joe's Story)" } },
+  ];
+
+  try {
+    const track = await source._pickTrackFromRelease({
+      artistName: "Car Seat Headrest",
+      albumTitle: "Teen of Denial (Joe's Story)",
+      albumMbid: "album-mbid",
+      artistMbid: "artist-mbid",
+      releaseYear: "2026",
+    });
+
+    assert.equal(track?.trackName, "Joe Gets Kicked");
+    assert.equal(track?.albumName, "Teen of Denial (Joe's Story)");
+  } finally {
+    if (previousLastfmApiKey == null) {
+      delete process.env.LASTFM_API_KEY;
+    } else {
+      process.env.LASTFM_API_KEY = previousLastfmApiKey;
+    }
+  }
+});

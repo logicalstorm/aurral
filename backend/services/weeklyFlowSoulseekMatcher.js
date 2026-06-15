@@ -95,6 +95,12 @@ function getYear(value) {
   return match ? match[1] : null;
 }
 
+function getYears(value) {
+  return [
+    ...String(value || "").matchAll(/\b(19\d{2}|20\d{2})\b/g),
+  ].map((match) => match[1]);
+}
+
 function splitWords(value) {
   return normalizeText(value)
     .split(" ")
@@ -753,6 +759,13 @@ function scoreYearMatch(directoryText, releaseYear) {
   return directoryText.includes(expected) ? 12 : 0;
 }
 
+function hasConflictingYear(directoryText, releaseYear) {
+  const expected = getYear(releaseYear);
+  if (!expected) return false;
+  const years = getYears(directoryText);
+  return years.length > 0 && !years.includes(expected);
+}
+
 function scoreVariantCompatibility(expectedTitle, actualTitle) {
   const expected = extractVariantProfile(expectedTitle);
   const actual = extractVariantProfile(actualTitle);
@@ -854,8 +867,11 @@ function isStrongEnoughCandidate({
   titleScore,
   artistScore,
   albumScore,
+  yearScore = 0,
+  yearMismatch = false,
   variantMatch,
   trackCountScore,
+  tracklistScore = 0,
   trackNumberMismatch,
   siblingTrackPenalty,
   context,
@@ -875,6 +891,19 @@ function isStrongEnoughCandidate({
     artistScore < 45
   ) {
     return { valid: false, reason: "weak-artist-ambiguous-title-album" };
+  }
+  if (context?.artistName && isSelfTitledAlbumContext(context)) {
+    if (yearMismatch) {
+      return { valid: false, reason: "self-titled-year-mismatch" };
+    }
+    if (
+      getYear(context?.releaseYear) &&
+      yearScore <= 0 &&
+      trackCountScore < 18 &&
+      tracklistScore < 14
+    ) {
+      return { valid: false, reason: "weak-self-titled-release-context" };
+    }
   }
   if (
     artistScore < 45 &&
@@ -911,6 +940,12 @@ function pickBestArtistScore(context, text) {
   );
 }
 
+function isSelfTitledAlbumContext(context) {
+  const albumName = readComparableAlbumName(context);
+  if (!context?.artistName || !albumName) return false;
+  return scoreTextMatch(context.artistName, albumName) >= 92;
+}
+
 function readMatcherOptions(options = {}) {
   return {
     preferredFormat: options?.preferredFormat === "mp3" ? "mp3" : "flac",
@@ -932,7 +967,8 @@ function scoreReleaseFolder(group, context, options = {}) {
   if (isUserBlacklisted(group.user)) {
     return { blacklisted: true };
   }
-  const directoryText = normalizeText(group.directoryPath);
+  const rawDirectoryText = String(group.directoryPath || "");
+  const directoryText = normalizeText(rawDirectoryText);
   const albumDir = group.parts.at(-2) || "";
   const artistDir = group.parts.at(-3) || "";
   const artistScore = Math.max(
@@ -945,7 +981,7 @@ function scoreReleaseFolder(group, context, options = {}) {
         scoreTextMatch(albumDir, albumName),
       )
     : 0;
-  const yearScore = scoreYearMatch(directoryText, context?.releaseYear);
+  const yearScore = scoreYearMatch(rawDirectoryText, context?.releaseYear);
   const audioFiles = group.audioFiles || [];
   const trackCountScore = scoreTrackCount(
     context?.albumTrackCount,
@@ -953,6 +989,7 @@ function scoreReleaseFolder(group, context, options = {}) {
   );
   const tracklistMatch = scoreTracklistMatch(audioFiles, context);
   const tracklistScore = tracklistMatch.score;
+  const yearMismatch = hasConflictingYear(rawDirectoryText, context?.releaseYear);
   const availabilityScore = audioFiles.some((item) => item?.slots) ? 8 : 0;
   const speedScore = Math.min(
     12,
@@ -981,6 +1018,7 @@ function scoreReleaseFolder(group, context, options = {}) {
     artistScore,
     albumScore,
     yearScore,
+    yearMismatch,
     trackCountScore,
     tracklistScore,
     tracklistMatchedCount: tracklistMatch.matchedCount,
@@ -1084,7 +1122,9 @@ function buildGroupCandidate(group, context, options = {}) {
     artistScore,
     albumScore,
     yearScore,
+    yearMismatch,
     trackCountScore,
+    tracklistScore,
     availabilityScore,
     speedScore,
     userQueuePenaltyScore,
@@ -1131,8 +1171,11 @@ function buildGroupCandidate(group, context, options = {}) {
       titleScore,
       artistScore,
       albumScore,
+      yearScore,
+      yearMismatch,
       variantMatch,
       trackCountScore,
+      tracklistScore,
       trackNumberMismatch,
       siblingTrackPenalty,
       context,
@@ -1359,6 +1402,14 @@ export async function validateDownloadedTrack(filePath, candidate, context) {
         scoreTextMatch(remoteFilename, albumName),
       )
     : 0;
+  const yearScore = scoreYearMatch(
+    remoteFilename,
+    context?.releaseYear,
+  );
+  const yearMismatch = hasConflictingYear(
+    remoteFilename,
+    context?.releaseYear,
+  );
   const variantMatch = scoreVariantCompatibility(
     context?.trackName,
     remoteBaseName,
@@ -1386,8 +1437,11 @@ export async function validateDownloadedTrack(filePath, candidate, context) {
     titleScore,
     artistScore,
     albumScore,
+    yearScore,
+    yearMismatch,
     variantMatch,
     trackCountScore: 18,
+    tracklistScore: 0,
     trackNumberMismatch,
     siblingTrackPenalty,
     context,
