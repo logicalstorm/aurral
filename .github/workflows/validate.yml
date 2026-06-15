@@ -9,7 +9,7 @@ concurrency:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
@@ -19,6 +19,24 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
+
+      - name: Ensure image rendering dependencies
+        run: |
+          if command -v fc-match >/dev/null 2>&1; then
+            exit 0
+          fi
+
+          if [ "$(id -u)" -eq 0 ]; then
+            apt-get update
+            apt-get install -y fontconfig fonts-dejavu-core
+          elif command -v sudo >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y fontconfig fonts-dejavu-core
+          else
+            echo "fontconfig is required for sharp SVG text rendering."
+            echo "Install fontconfig and fonts-dejavu-core on the self-hosted runner."
+            exit 1
+          fi
 
       - run: npm ci
 

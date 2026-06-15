@@ -148,10 +148,16 @@ function uniqueQueries(values, limit = 12) {
 
 export function bypassBannedArtistTerm(name) {
   const trimmed = String(name || "").trim();
-  if (!trimmed || trimmed.startsWith("*") || trimmed.length < 2) {
+  if (!trimmed || trimmed.length < 2) {
     return trimmed;
   }
-  return `*${trimmed.slice(1)}`;
+  return trimmed
+    .split(/\s+/)
+    .map((word) => {
+      if (!word || word.startsWith("*") || word.length < 2) return word;
+      return `*${word.slice(1)}`;
+    })
+    .join(" ");
 }
 
 function uniqueArtistTerms(values) {
@@ -173,6 +179,41 @@ function stripParenthetical(value) {
     .replace(/\(.*?\)|\[.*?\]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+export function stripReleaseTypeSuffix(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const stripped = text
+    .replace(/\s+(?:-|–|—)\s+(?:single|ep|album)\s*$/i, "")
+    .replace(/\s+[\[(](?:single|ep|album)[\])]\s*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return stripped || text;
+}
+
+function readComparableAlbumName(context) {
+  return stripReleaseTypeSuffix(context?.albumName);
+}
+
+function hasSingleReleaseTypeSuffix(context) {
+  return (
+    /\s+(?:-|–|—)\s+(?:single|ep)\s*$/i.test(
+      String(context?.albumName || ""),
+    ) ||
+    /\s+[\[(](?:single|ep)[\])]\s*$/i.test(String(context?.albumName || ""))
+  );
+}
+
+function isAmbiguousTitleAlbumContext(context) {
+  const albumTitle = normalizeTitle(readComparableAlbumName(context));
+  const trackTitle = normalizeTitle(context?.trackName);
+  return (
+    hasSingleReleaseTypeSuffix(context) &&
+    !!albumTitle &&
+    !!trackTitle &&
+    albumTitle === trackTitle
+  );
 }
 
 function buildTrackQueryVariants(trackName) {
@@ -200,7 +241,7 @@ function buildTrackQueryVariants(trackName) {
 function readFlowSearchContext(context) {
   const artistName = String(context?.artistName || "").trim();
   const trackName = String(context?.trackName || "").trim();
-  const albumName = String(context?.albumName || "").trim();
+  const albumName = readComparableAlbumName(context);
   const releaseYear = getYear(context?.releaseYear);
   const aliases = Array.isArray(context?.artistAliases)
     ? context.artistAliases
@@ -425,14 +466,39 @@ function buildPrimaryTrackTierQueries(ctx) {
 function buildBaseAlbumTierQueries(ctx) {
   const queries = [];
   if (!ctx.artistName || !ctx.albumName) return queries;
-  if (ctx.isSelfTitled && ctx.releaseYear) {
-    queries.push(joinSearchParts(ctx.artistName, ctx.releaseYear));
-  }
-  queries.push(joinSearchParts(ctx.artistName, ctx.albumName));
   if (ctx.releaseYear) {
     queries.push(joinSearchParts(ctx.artistName, ctx.albumName, ctx.releaseYear));
   }
+  queries.push(joinSearchParts(ctx.artistName, ctx.albumName));
   return uniqueQueries(queries, 4);
+}
+
+function buildWildcardAlbumTierQueries(ctx) {
+  const queries = [];
+  if (!ctx.artistName || !ctx.albumName) return queries;
+  const wildcardArtist = bypassBannedArtistTerm(ctx.artistName);
+  if (!wildcardArtist || wildcardArtist === ctx.artistName) return queries;
+  if (ctx.releaseYear) {
+    queries.push(joinSearchParts(wildcardArtist, ctx.albumName, ctx.releaseYear));
+  }
+  queries.push(joinSearchParts(wildcardArtist, ctx.albumName));
+  return uniqueQueries(queries, 3);
+}
+
+function buildAlbumTrackTierQueries(ctx) {
+  const queries = [];
+  const primaryTrack = ctx.trackVariants[0] || ctx.trackName;
+  if (ctx.albumName && primaryTrack) {
+    queries.push(joinSearchParts(ctx.albumName, primaryTrack));
+  }
+  if (!ctx.albumName && ctx.artistName && primaryTrack) {
+    queries.push(joinSearchParts(ctx.artistName, primaryTrack));
+    const wildcardArtist = bypassBannedArtistTerm(ctx.artistName);
+    if (wildcardArtist && wildcardArtist !== ctx.artistName) {
+      queries.push(joinSearchParts(wildcardArtist, primaryTrack));
+    }
+  }
+  return uniqueQueries(queries, 3);
 }
 
 function buildVariationTierQueries(ctx) {
@@ -559,29 +625,23 @@ function buildTrackFallbackTierQueries(ctx) {
 export function buildFlowSearchTiers(context) {
   const ctx = readFlowSearchContext(context);
   const tiers = [];
-  const primaryTrack = buildPrimaryTrackTierQueries(ctx);
-  if (primaryTrack.length > 0) {
-    tiers.push({ tier: 0, name: "primary_track", queries: primaryTrack });
-  }
   const baseAlbum = buildBaseAlbumTierQueries(ctx);
   if (baseAlbum.length > 0) {
-    tiers.push({ tier: 1, name: "base_album", queries: baseAlbum });
+    tiers.push({ tier: 0, name: "base_album", queries: baseAlbum });
   }
-  const variations = buildVariationTierQueries(ctx);
-  if (variations.length > 0) {
-    tiers.push({ tier: 2, name: "variations", queries: variations });
+  const wildcardAlbum = buildWildcardAlbumTierQueries(ctx);
+  if (wildcardAlbum.length > 0) {
+    tiers.push({ tier: 1, name: "wildcard_album", queries: wildcardAlbum });
   }
-  const trimmed = buildTrimmedTierQueries(ctx);
-  if (trimmed.length > 0) {
-    tiers.push({ tier: 3, name: "trimmed", queries: trimmed });
+  const albumTrack = buildAlbumTrackTierQueries(ctx);
+  if (albumTrack.length > 0) {
+    tiers.push({ tier: 2, name: "album_track", queries: albumTrack });
   }
-  const special = buildSpecialCaseTierQueries(ctx);
-  if (special.length > 0) {
-    tiers.push({ tier: 4, name: "special", queries: special });
-  }
-  const trackFallback = buildTrackFallbackTierQueries(ctx);
-  if (trackFallback.length > 0) {
-    tiers.push({ tier: 5, name: "track_fallback", queries: trackFallback });
+  if (tiers.length === 0) {
+    const primaryTrack = buildPrimaryTrackTierQueries(ctx);
+    if (primaryTrack.length > 0) {
+      tiers.push({ tier: 0, name: "primary_track", queries: primaryTrack });
+    }
   }
   return tiers;
 }
@@ -810,6 +870,13 @@ function isStrongEnoughCandidate({
     return { valid: false, reason: "weak-title-match" };
   }
   if (
+    context?.artistName &&
+    isAmbiguousTitleAlbumContext(context) &&
+    artistScore < 45
+  ) {
+    return { valid: false, reason: "weak-artist-ambiguous-title-album" };
+  }
+  if (
     artistScore < 45 &&
     !(titleScore >= 72 && albumScore >= 35)
   ) {
@@ -861,6 +928,7 @@ function readMatcherOptions(options = {}) {
 
 function scoreReleaseFolder(group, context, options = {}) {
   const { isUserBlacklisted, getUserQueuePenalty } = readMatcherOptions(options);
+  const albumName = readComparableAlbumName(context);
   if (isUserBlacklisted(group.user)) {
     return { blacklisted: true };
   }
@@ -871,10 +939,10 @@ function scoreReleaseFolder(group, context, options = {}) {
     pickBestArtistScore(context, group.directoryPath),
     pickBestArtistScore(context, artistDir),
   );
-  const albumScore = context?.albumName
+  const albumScore = albumName
     ? Math.max(
-        scoreTextMatch(group.directoryPath, context.albumName),
-        scoreTextMatch(albumDir, context.albumName),
+        scoreTextMatch(group.directoryPath, albumName),
+        scoreTextMatch(albumDir, albumName),
       )
     : 0;
   const yearScore = scoreYearMatch(directoryText, context?.releaseYear);
@@ -924,7 +992,7 @@ function scoreReleaseFolder(group, context, options = {}) {
 }
 
 function isReleaseFolderFitting(group, context, folderScores) {
-  const albumName = String(context?.albumName || "").trim();
+  const albumName = readComparableAlbumName(context);
   if (!albumName) return true;
   const { artistScore, albumScore, trackCountScore, tracklistScore } =
     folderScores;
@@ -1100,7 +1168,9 @@ function buildGroupCandidate(group, context, options = {}) {
       isLikelyMatch:
         titleScore >= 75 &&
         (artistScore >= 55 || (albumScore >= 35 && titleScore >= 82)) &&
-        (!context?.albumName || albumScore >= 35 || trackCountScore >= 18),
+        (!readComparableAlbumName(context) ||
+          albumScore >= 35 ||
+          trackCountScore >= 18),
       breakdown: {
         artistScore,
         albumScore,
@@ -1119,7 +1189,7 @@ function buildGroupCandidate(group, context, options = {}) {
         slots: Number(item?.slots || 0),
         bitrate: Number(item?.bitrate || 0),
       },
-      resolvedAlbumName: context?.albumName || albumDir || null,
+      resolvedAlbumName: readComparableAlbumName(context) || albumDir || null,
     });
   }
   return candidates.sort((left, right) => {
@@ -1140,7 +1210,7 @@ function rankFlowSearchResultsFlat(results, context, options = {}) {
 }
 
 export function rankFlowSearchResults(results, context, options = {}) {
-  const albumName = String(context?.albumName || "").trim();
+  const albumName = readComparableAlbumName(context);
   const groups = groupFlowSearchResults(results);
   if (!albumName) {
     return rankFlowSearchResultsFlat(results, context, options);
@@ -1271,25 +1341,10 @@ export async function validateDownloadedTrack(filePath, candidate, context) {
     metadata = parsed?.common || null;
   } catch {}
 
-  if (candidate?.preDownloadValid) {
-    const { actualDurationMs } = readDownloadDurationValidation(
-      parsed,
-      expectedDuration,
-    );
-    return {
-      valid: true,
-      reason: null,
-      scores: {
-        matchReason: "pre-download-trusted",
-      },
-      actualDurationMs,
-      remoteFilename,
-    };
-  }
-
   const titleFromTags = metadata?.title || "";
   const artistFromTags = bestArtistTag(metadata);
   const albumFromTags = metadata?.album || "";
+  const albumName = readComparableAlbumName(context);
   const titleScore = Math.max(
     scoreTextMatch(titleFromTags, context?.trackName),
     scoreTextMatch(remoteFilename, context?.trackName),
@@ -1298,10 +1353,10 @@ export async function validateDownloadedTrack(filePath, candidate, context) {
     pickBestArtistScore(context, artistFromTags),
     pickBestArtistScore(context, remoteFilename),
   );
-  const albumScore = context?.albumName
+  const albumScore = albumName
     ? Math.max(
-        scoreTextMatch(albumFromTags, context.albumName),
-        scoreTextMatch(remoteFilename, context.albumName),
+        scoreTextMatch(albumFromTags, albumName),
+        scoreTextMatch(remoteFilename, albumName),
       )
     : 0;
   const variantMatch = scoreVariantCompatibility(
@@ -1358,6 +1413,7 @@ export async function validateDownloadedTrack(filePath, candidate, context) {
       variant: variantMatch.score,
       trackNumberMismatch,
       matchReason: matchCheck.reason,
+      preDownloadValid: candidate?.preDownloadValid === true,
     },
     actualDurationMs,
     remoteFilename,

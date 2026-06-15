@@ -16,25 +16,27 @@ const fataTrack = {
   artistAliases: [],
 };
 
-test("buildSlskdSearchTierGroups starts with track search then album tiers", () => {
+test("buildSlskdSearchTierGroups uses a short album-first search plan", () => {
   const tiers = buildSlskdSearchTierGroups(fataTrack);
 
-  assert.equal(tiers[0]?.name, "primary_track");
+  assert.equal(tiers[0]?.name, "base_album");
   assert.ok(
     tiers[0].queries.includes(
-      "From Autumn to Ashes The After Dinner Payback",
+      "From Autumn to Ashes The Fiction We Live 2003",
     ),
   );
   assert.ok(
     tiers.some(
       (tier) =>
-        tier.name === "base_album" &&
-        tier.queries.includes("From Autumn to Ashes The Fiction We Live"),
+        tier.name === "wildcard_album" &&
+        tier.queries.includes("*rom *utumn *o *shes The Fiction We Live"),
     ),
   );
   assert.ok(
-    tiers.some((tier) =>
-      tier.queries.some((query) => query.startsWith("*rom Autumn")),
+    tiers.some(
+      (tier) =>
+        tier.name === "album_track" &&
+        tier.queries.includes("The Fiction We Live The After Dinner Payback"),
     ),
   );
 });
@@ -62,5 +64,27 @@ test("shouldStopSlskdSearching does not stop on a small result set without valid
   assert.equal(
     shouldStopSlskdSearching(rawResults, fataTrack, { preferredFormat: "flac" }),
     false,
+  );
+});
+
+test("shouldStopSlskdSearching waits for a small floor of valid candidates", () => {
+  const validResults = Array.from({ length: 3 }, (_, index) => ({
+    user: `valid-user-${index}`,
+    file: `music\\From Autumn to Ashes\\The Fiction We Live\\01 The After Dinner Payback.flac`,
+    slots: 1,
+    speed: 700000,
+  }));
+
+  assert.equal(
+    shouldStopSlskdSearching(validResults.slice(0, 1), fataTrack, {
+      preferredFormat: "flac",
+    }),
+    false,
+  );
+  assert.equal(
+    shouldStopSlskdSearching(validResults, fataTrack, {
+      preferredFormat: "flac",
+    }),
+    true,
   );
 });
