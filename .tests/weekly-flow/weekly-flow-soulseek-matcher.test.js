@@ -354,6 +354,36 @@ test("rankFlowSearchResults prefers folders with a strong tracklist fingerprint"
   assert.equal(ranked[0].releaseFolderFit, true);
 });
 
+test("rankFlowSearchResults rejects older self-titled album folders for a new self-titled release", () => {
+  const ranked = rankFlowSearchResults(
+    [
+      {
+        user: "oldAlbumUser",
+        file: "Weezer\\Weezer (1994)\\01 - My Name Is Jonas.flac",
+        size: 100,
+        slots: true,
+        bitrate: 900,
+        speed: 900000,
+      },
+    ],
+    {
+      artistName: "Weezer",
+      trackName: "My Name Is Jonas",
+      albumName: "Weezer",
+      releaseYear: "2026",
+      artistAliases: [],
+    },
+    {
+      preferredFormat: "flac",
+      strictFormat: false,
+    },
+  );
+
+  assert.ok(ranked.length > 0);
+  assert.equal(ranked[0].preDownloadValid, false);
+  assert.equal(ranked[0].preDownloadRejectReason, "self-titled-year-mismatch");
+});
+
 test("rankFlowSearchResults prefers the fitting album folder over a higher-scoring wrong-album file", () => {
   const ranked = rankFlowSearchResults(
     [
