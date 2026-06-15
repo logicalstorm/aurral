@@ -11,6 +11,7 @@ const repoRoot = join(__dirname, "..", "..");
 
 const RESET_TABLES = [
   "sessions",
+  "slskd_transfer_history",
   "playlist_download_jobs",
   "weekly_flow_jobs",
   "users",

@@ -71,6 +71,7 @@ export function getV2MigrationStatus(db, dbHelpers) {
 export function runV2SchemaMaintenance(db, dbHelpers) {
   finalizeV2SettingsKeys(db, dbHelpers);
   migrateJobsTable(db);
+  ensureSlskdTransferHistoryTable(db);
   return { schemaVersion: getSchemaVersion(db) };
 }
 
@@ -288,6 +289,35 @@ function ensurePlaylistDownloadJobsTable(db) {
       remote_username TEXT,
       remote_filename TEXT
     );
+  `);
+}
+
+function ensureSlskdTransferHistoryTable(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS slskd_transfer_history (
+      id TEXT PRIMARY KEY,
+      job_id TEXT,
+      username TEXT NOT NULL,
+      remote_filename TEXT,
+      transfer_id TEXT,
+      search_id TEXT,
+      batch_id TEXT,
+      status TEXT NOT NULL,
+      reason TEXT,
+      score REAL,
+      artist_name TEXT,
+      track_name TEXT,
+      album_name TEXT,
+      source_path TEXT,
+      final_path TEXT,
+      actual_duration_ms INTEGER,
+      created_at INTEGER NOT NULL,
+      cleaned_at INTEGER
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_slskd_transfer_history_username ON slskd_transfer_history(username, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_slskd_transfer_history_status ON slskd_transfer_history(status, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_slskd_transfer_history_cleanup ON slskd_transfer_history(cleaned_at, created_at DESC);
   `);
 }
 
@@ -692,6 +722,7 @@ export function applyV2Migration(db, dbHelpers) {
   const run = db.transaction(() => {
     finalizeV2SettingsKeys(db, dbHelpers);
     migrateJobsTable(db);
+    ensureSlskdTransferHistoryTable(db);
     if (migrated) {
       upsertSettingStmt.run(SCHEMA_VERSION_KEY, String(TARGET_SCHEMA_VERSION));
     }

@@ -132,6 +132,27 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS slskd_transfer_history (
+    id TEXT PRIMARY KEY,
+    job_id TEXT,
+    username TEXT NOT NULL,
+    remote_filename TEXT,
+    transfer_id TEXT,
+    search_id TEXT,
+    batch_id TEXT,
+    status TEXT NOT NULL,
+    reason TEXT,
+    score REAL,
+    artist_name TEXT,
+    track_name TEXT,
+    album_name TEXT,
+    source_path TEXT,
+    final_path TEXT,
+    actual_duration_ms INTEGER,
+    created_at INTEGER NOT NULL,
+    cleaned_at INTEGER
+  );
+
   CREATE INDEX IF NOT EXISTS idx_playlist_download_jobs_status ON playlist_download_jobs(status);
   CREATE INDEX IF NOT EXISTS idx_playlist_download_jobs_playlist_id ON playlist_download_jobs(playlist_id);
   CREATE INDEX IF NOT EXISTS idx_images_cache_cache_age ON images_cache(cache_age);
@@ -140,6 +161,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
   CREATE INDEX IF NOT EXISTS idx_aurral_history_created_at ON aurral_history(created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_slskd_transfer_history_username ON slskd_transfer_history(username, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_slskd_transfer_history_status ON slskd_transfer_history(status, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_slskd_transfer_history_cleanup ON slskd_transfer_history(cleaned_at, created_at DESC);
 `);
 
 const tableColumns = db

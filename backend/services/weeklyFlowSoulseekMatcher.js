@@ -1271,22 +1271,6 @@ export async function validateDownloadedTrack(filePath, candidate, context) {
     metadata = parsed?.common || null;
   } catch {}
 
-  if (candidate?.preDownloadValid) {
-    const { actualDurationMs } = readDownloadDurationValidation(
-      parsed,
-      expectedDuration,
-    );
-    return {
-      valid: true,
-      reason: null,
-      scores: {
-        matchReason: "pre-download-trusted",
-      },
-      actualDurationMs,
-      remoteFilename,
-    };
-  }
-
   const titleFromTags = metadata?.title || "";
   const artistFromTags = bestArtistTag(metadata);
   const albumFromTags = metadata?.album || "";
@@ -1358,6 +1342,7 @@ export async function validateDownloadedTrack(filePath, candidate, context) {
       variant: variantMatch.score,
       trackNumberMismatch,
       matchReason: matchCheck.reason,
+      preDownloadValid: candidate?.preDownloadValid === true,
     },
     actualDurationMs,
     remoteFilename,

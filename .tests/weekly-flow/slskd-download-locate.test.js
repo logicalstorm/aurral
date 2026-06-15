@@ -7,6 +7,7 @@ import path from "path";
 import { importFromRepo } from "../helpers/backendTestHarness.js";
 
 const {
+  commitImportToPlaylistLibrary,
   locateCompletedDownload,
   parseSlskdRemoteFile,
   predictSlskdLocalPathCandidates,
@@ -86,5 +87,23 @@ test("locateCompletedDownload uses transfer filename when slskd reports a local 
   });
 
   assert.equal(resolved, localPath);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
+test("commitImportToPlaylistLibrary moves without overwriting existing targets", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "aurral-import-commit-"));
+  const source = path.join(root, "slskd", "Track.flac");
+  const target = path.join(root, "aurral", "Track.flac");
+  await fs.mkdir(path.dirname(source), { recursive: true });
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.writeFile(source, "new-audio", "utf8");
+  await fs.writeFile(target, "existing-audio", "utf8");
+
+  const finalPath = await commitImportToPlaylistLibrary(source, target);
+
+  assert.equal(finalPath, path.join(root, "aurral", "Track (2).flac"));
+  assert.equal(await fs.readFile(target, "utf8"), "existing-audio");
+  assert.equal(await fs.readFile(finalPath, "utf8"), "new-audio");
+  await assert.rejects(() => fs.stat(source), /ENOENT/);
   await fs.rm(root, { recursive: true, force: true });
 });
