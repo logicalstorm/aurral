@@ -1,0 +1,16 @@
+#!/bin/sh
+
+branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+
+case "$branch" in
+  main|test|dev)
+    cat >&2 <<EOF
+Direct commits to '$branch' are blocked.
+
+Create a feature branch or use release/v2 for release work.
+EOF
+    exit 1
+    ;;
+esac
+
+exit 0

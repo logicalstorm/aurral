@@ -23,7 +23,9 @@
     "desktop:build": "npm run build --prefix desktop",
     "desktop:sync-version": "npm run sync-version --prefix desktop",
     "docs:dev": "npm run dev --prefix docs",
-    "docs:build": "npm run build --prefix docs"
+    "docs:build": "npm run build --prefix docs",
+    "hooks:install": "sh scripts/install-git-hooks.sh",
+    "prepare": "sh scripts/install-git-hooks.sh"
   },
   "keywords": [
     "lidarr",
