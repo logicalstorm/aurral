@@ -59,6 +59,27 @@ const SLSKD_NOT_CONFIGURED_MESSAGE =
 
 const pendingTagRequests = new Map();
 const pendingTagSuggestRequest = { promise: null, expiry: 0 };
+
+const fetchLastfmTopTagNames = async () => {
+  const now = Date.now();
+  let data;
+  if (
+    pendingTagSuggestRequest.promise &&
+    pendingTagSuggestRequest.expiry > now
+  ) {
+    data = await pendingTagSuggestRequest.promise;
+  } else {
+    const fetchPromise = lastfmRequest("chart.getTopTags", { limit: 100 });
+    pendingTagSuggestRequest.promise = fetchPromise;
+    pendingTagSuggestRequest.expiry = now + 60000;
+    data = await fetchPromise;
+  }
+  if (!data?.tags?.tag) return [];
+  const tags = Array.isArray(data.tags.tag) ? data.tags.tag : [data.tags.tag];
+  return tags
+    .map((tag) => (tag.name != null ? String(tag.name).trim() : ""))
+    .filter(Boolean);
+};
 const DISCOVERY_REVALIDATE_COOLDOWN_MS = 60 * 1000;
 let lastDiscoveryRevalidateAt = 0;
 
@@ -502,45 +523,11 @@ router.get("/tags", async (req, res) => {
   try {
     const { q = "", limit = 10 } = req.query;
     const limitInt = Math.min(parseInt(limit) || 10, 20);
-    const prefix = String(q).trim().toLowerCase();
+    const rawPrefix = String(q).trim();
+    const prefix = rawPrefix.toLowerCase();
     let tagNames = [];
     if (getLastfmApiKey()) {
-      if (prefix.length >= 2) {
-        const data = await lastfmRequest("tag.search", {
-          tag: prefix,
-          limit: Math.max(limitInt * 4, 20),
-        });
-        const matches = data?.results?.tagmatches?.tag
-          ? Array.isArray(data.results.tagmatches.tag)
-            ? data.results.tagmatches.tag
-            : [data.results.tagmatches.tag]
-          : [];
-        tagNames = matches
-          .map((t) => (t.name != null ? String(t.name).trim() : ""))
-          .filter(Boolean);
-      } else {
-        let data;
-        const now = Date.now();
-        if (
-          pendingTagSuggestRequest.promise &&
-          pendingTagSuggestRequest.expiry > now
-        ) {
-          data = await pendingTagSuggestRequest.promise;
-        } else {
-          const fetchPromise = lastfmRequest("chart.getTopTags", { limit: 100 });
-          pendingTagSuggestRequest.promise = fetchPromise;
-          pendingTagSuggestRequest.expiry = now + 60000;
-          data = await fetchPromise;
-        }
-        if (data?.tags?.tag) {
-          const tags = Array.isArray(data.tags.tag)
-            ? data.tags.tag
-            : [data.tags.tag];
-          tagNames = tags
-            .map((t) => (t.name != null ? String(t.name).trim() : ""))
-            .filter(Boolean);
-        }
-      }
+      tagNames = await fetchLastfmTopTagNames();
     }
     if (tagNames.length === 0) {
       const discoveryCache = getDiscoveryCache();
@@ -561,6 +548,12 @@ router.get("/tags", async (req, res) => {
       seen.add(key);
       return true;
     });
+    if (
+      prefix.length >= 2 &&
+      !filtered.some((name) => name.toLowerCase() === prefix)
+    ) {
+      filtered.unshift(rawPrefix);
+    }
     res.json({ tags: filtered.slice(0, limitInt) });
   } catch (error) {
     res.status(500).json({
