@@ -46,6 +46,8 @@ const SENSITIVE_PATHS = [
   ["general", "authPassword"],
   ["lidarr", "apiKey"],
   ["slskd", "apiKey"],
+  ["prowlarr", "apiKey"],
+  ["nzbget", "password"],
   ["gotify", "token"],
   ["lastfm", "apiKey"],
 ];

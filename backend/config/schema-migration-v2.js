@@ -284,6 +284,13 @@ function ensurePlaylistDownloadJobsTable(db) {
       started_at INTEGER,
       completed_at INTEGER,
       created_at INTEGER NOT NULL,
+      download_source TEXT,
+      download_client TEXT,
+      download_client_id TEXT,
+      release_guid TEXT,
+      release_title TEXT,
+      indexer_id TEXT,
+      indexer_name TEXT,
       slskd_search_id TEXT,
       slskd_batch_id TEXT,
       remote_username TEXT,
@@ -669,6 +676,34 @@ function migrateJobsTable(db) {
   tryAddColumn(
     db,
     "ALTER TABLE playlist_download_jobs ADD COLUMN artist_aliases TEXT",
+  );
+  tryAddColumn(
+    db,
+    "ALTER TABLE playlist_download_jobs ADD COLUMN download_source TEXT",
+  );
+  tryAddColumn(
+    db,
+    "ALTER TABLE playlist_download_jobs ADD COLUMN download_client TEXT",
+  );
+  tryAddColumn(
+    db,
+    "ALTER TABLE playlist_download_jobs ADD COLUMN download_client_id TEXT",
+  );
+  tryAddColumn(
+    db,
+    "ALTER TABLE playlist_download_jobs ADD COLUMN release_guid TEXT",
+  );
+  tryAddColumn(
+    db,
+    "ALTER TABLE playlist_download_jobs ADD COLUMN release_title TEXT",
+  );
+  tryAddColumn(
+    db,
+    "ALTER TABLE playlist_download_jobs ADD COLUMN indexer_id TEXT",
+  );
+  tryAddColumn(
+    db,
+    "ALTER TABLE playlist_download_jobs ADD COLUMN indexer_name TEXT",
   );
 
   syncWeeklyFlowJobsToPlaylistDownloads(db);

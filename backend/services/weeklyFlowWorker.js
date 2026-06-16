@@ -1,7 +1,6 @@
 import path from "path";
 import fs from "fs/promises";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
-import { slskdClient } from "./slskdClient.js";
 import { playlistManager } from "./weeklyFlowPlaylistManager.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { playlistSource } from "./weeklyFlowPlaylistSource.js";
@@ -16,6 +15,10 @@ import {
 import { resolveWeeklyFlowRoot } from "./weeklyFlowPaths.js";
 import { startSlskdOrchestratorWorker } from "./slskdOrchestratorWorker.js";
 import { enqueuePlaylistRetryJob, withHonkerLock } from "./honkerDb.js";
+import {
+  getDownloadSourceNotConfiguredMessage,
+  isAnyDownloadSourceConfigured,
+} from "./downloadSourceService.js";
 
 const DEFAULT_CONCURRENCY = 3;
 const MIN_CONCURRENCY = 1;
@@ -26,9 +29,6 @@ const REUSE_REPAIR_INTERVAL_MS = 30 * 60 * 1000;
 const WORKER_STOPPED_CODE = "WORKER_STOPPED";
 const PLAYLIST_MUTATION_CODE = "PLAYLIST_MUTATION_IN_PROGRESS";
 const RETRY_JOB_REGISTRY_KEY = "weeklyFlowIncompleteRetryJobs";
-const SLSKD_NOT_CONFIGURED_MESSAGE =
-  "slskd is not configured. Add your slskd URL and API key in Settings > Integrations to enable Soulseek downloads for flows and playlists.";
-
 export class WeeklyFlowWorker {
   constructor(
     weeklyFlowRoot = resolveWeeklyFlowRoot(),
@@ -886,10 +886,10 @@ export class WeeklyFlowWorker {
           return;
         }
       }
-      if (!slskdClient.isConfigured()) {
-        throw new Error(SLSKD_NOT_CONFIGURED_MESSAGE);
+      if (!isAnyDownloadSourceConfigured()) {
+        throw new Error(getDownloadSourceNotConfiguredMessage());
       }
-      downloadTracker.enqueueSlskdPipeline(job.id);
+      downloadTracker.enqueueDownloadPipeline(job.id);
       return;
     } catch (error) {
       const cpuDelta = process.cpuUsage(perfStartCpu);

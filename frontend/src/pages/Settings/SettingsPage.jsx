@@ -10,7 +10,7 @@ import { useSettingsUsers } from "./hooks/useSettingsUsers";
 import { UnsavedModal } from "./components/UnsavedModal";
 import { CommunityGuideModal } from "./components/CommunityGuideModal";
 import { SettingsIntegrationsTab } from "./components/SettingsIntegrationsTab";
-import { SettingsPlaylistsTab } from "./components/SettingsPlaylistsTab";
+import { SettingsDownloadsTab } from "./components/SettingsDownloadsTab";
 import { SettingsDiscoverTab } from "./components/SettingsDiscoverTab";
 import { SettingsNotificationsTab } from "./components/SettingsNotificationsTab";
 import { SettingsUsersTab } from "./components/SettingsUsersTab";
@@ -50,9 +50,12 @@ function SettingsPage() {
 
   const renderTabContent = () => {
     switch (tabs.activeTab) {
-      case "integrations":
+      case "library":
         return (
           <SettingsIntegrationsTab
+            key="settings-library"
+            scope="library"
+            title="Library"
             settings={data.settings}
             updateSettings={data.updateSettings}
             health={data.health}
@@ -84,14 +87,52 @@ function SettingsPage() {
             showInfo={showInfo}
           />
         );
-      case "playlists":
+      case "downloads":
         return (
-          <SettingsPlaylistsTab
+          <SettingsDownloadsTab
             settings={data.settings}
             updateSettings={data.updateSettings}
+            health={data.health}
             hasUnsavedChanges={data.hasUnsavedChanges}
             saving={data.saving}
             handleSaveSettings={data.handleSaveSettings}
+            showSuccess={showSuccess}
+            showError={showError}
+            showInfo={showInfo}
+          />
+        );
+      case "playback":
+        return (
+          <SettingsIntegrationsTab
+            key="settings-playback"
+            scope="playback"
+            title="Playback"
+            settings={data.settings}
+            updateSettings={data.updateSettings}
+            health={data.health}
+            lidarrProfiles={data.lidarrProfiles}
+            loadingLidarrProfiles={data.loadingLidarrProfiles}
+            setLoadingLidarrProfiles={data.setLoadingLidarrProfiles}
+            setLidarrProfiles={data.setLidarrProfiles}
+            lidarrMetadataProfiles={data.lidarrMetadataProfiles}
+            loadingLidarrMetadataProfiles={data.loadingLidarrMetadataProfiles}
+            setLoadingLidarrMetadataProfiles={
+              data.setLoadingLidarrMetadataProfiles
+            }
+            setLidarrMetadataProfiles={data.setLidarrMetadataProfiles}
+            lidarrTags={data.lidarrTags}
+            loadingLidarrTags={data.loadingLidarrTags}
+            setLoadingLidarrTags={data.setLoadingLidarrTags}
+            setLidarrTags={data.setLidarrTags}
+            testingLidarr={data.testingLidarr}
+            setTestingLidarr={data.setTestingLidarr}
+            applyingCommunityGuide={data.applyingCommunityGuide}
+            showCommunityGuideModal={data.showCommunityGuideModal}
+            setShowCommunityGuideModal={data.setShowCommunityGuideModal}
+            hasUnsavedChanges={data.hasUnsavedChanges}
+            saving={data.saving}
+            handleSaveSettings={data.handleSaveSettings}
+            fetchSettings={data.fetchSettings}
             showSuccess={showSuccess}
             showError={showError}
             showInfo={showInfo}
@@ -207,7 +248,8 @@ function SettingsPage() {
         <header className="settings-page__header">
           <h1 className="settings-page__title">Settings</h1>
           <p className="settings-page__subtitle">
-            Configure application preferences and integrations
+            Configure library, downloads, playback, discovery, notifications,
+            and users
           </p>
         </header>
 

@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Server, ListMusic, Compass, Bell, Users } from "lucide-react";
+import { Bell, Compass, Download, Music, Server, Users } from "lucide-react";
 
 export function useSettingsTabs(authUser) {
-  const [activeTab, setActiveTab] = useState("integrations");
+  const [activeTab, setActiveTab] = useState("library");
   const [hoveredTabIndex, setHoveredTabIndex] = useState(null);
   const navRef = useRef(null);
   const activeBubbleRef = useRef(null);
@@ -14,8 +14,9 @@ export function useSettingsTabs(authUser) {
       return [];
     }
     return [
-      { id: "integrations", label: "Integrations", icon: Server },
-      { id: "playlists", label: "Playlists", icon: ListMusic },
+      { id: "library", label: "Library", icon: Server },
+      { id: "downloads", label: "Downloads", icon: Download },
+      { id: "playback", label: "Playback", icon: Music },
       { id: "discover", label: "Discover", icon: Compass },
       { id: "notifications", label: "Notifications", icon: Bell },
       { id: "users", label: "Users", icon: Users },

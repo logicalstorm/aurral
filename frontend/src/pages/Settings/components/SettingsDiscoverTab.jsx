@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { RefreshCw, Trash2, X } from "lucide-react";
+import { CheckCircle, RefreshCw, Trash2, X } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
 
@@ -77,6 +77,12 @@ export function SettingsDiscoverTab({
     health?.discovery?.provider === "listenbrainz-fallback";
   const showLastfmDiscoverBanner =
     isListenBrainzFallback && !lastfmBannerDismissed;
+  const localDiscoveryIncludeRecommendations =
+    settings.integrations?.ticketmaster
+      ?.localDiscoveryIncludeRecommendations !== false;
+  const localDiscoveryIncludeTrending =
+    settings.integrations?.ticketmaster?.localDiscoveryIncludeTrending !==
+    false;
 
   return (
     <div className="settings-page__panel">
@@ -121,6 +127,182 @@ export function SettingsDiscoverTab({
             </button>
           </div>
         )}
+
+        <div className="settings-page__section">
+          <div className="settings-page__section-header">
+            <h3 className="settings-page__section-title">Listening history</h3>
+            <div className="settings-page__inline-row">
+              {health?.lastfmConfigured && (
+                <span className="settings-page__status">
+                  <CheckCircle className="settings-page__status-icon" />
+                  Configured
+                </span>
+              )}
+            </div>
+          </div>
+          <fieldset className="settings-page__fields">
+            <div className="settings-page__two-col-grid">
+              <div>
+                <label className="artist-field-label">Last.fm API key</label>
+                <SettingsInput
+                  type="password"
+                  placeholder="Last.fm API Key"
+                  autoComplete="off"
+                  value={settings.integrations?.lastfm?.apiKey || ""}
+                  onChange={(e) =>
+                    updateSettings({
+                      ...settings,
+                      integrations: {
+                        ...settings.integrations,
+                        lastfm: {
+                          ...(settings.integrations?.lastfm || {}),
+                          apiKey: e.target.value,
+                        },
+                      },
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <label className="artist-field-label">Default username</label>
+                <SettingsInput
+                  type="text"
+                  placeholder="Your Last.fm username"
+                  autoComplete="off"
+                  value={settings.integrations?.lastfm?.username || ""}
+                  onChange={(e) =>
+                    updateSettings({
+                      ...settings,
+                      integrations: {
+                        ...settings.integrations,
+                        lastfm: {
+                          ...(settings.integrations?.lastfm || {}),
+                          username: e.target.value,
+                        },
+                      },
+                    })
+                  }
+                />
+                <p className="settings-page__hint">
+                  Used as the fallback for users who have not set their own
+                  Last.fm, ListenBrainz, or Koito account in Profile.
+                </p>
+              </div>
+            </div>
+          </fieldset>
+        </div>
+
+        <div className="settings-page__section">
+          <div className="settings-page__section-header">
+            <h3 className="settings-page__section-title">Local shows</h3>
+            <div className="settings-page__inline-row">
+              {health?.ticketmasterConfigured && (
+                <span className="settings-page__status">
+                  <CheckCircle className="settings-page__status-icon" />
+                  Configured
+                </span>
+              )}
+            </div>
+          </div>
+          <fieldset className="settings-page__fields">
+            <div className="settings-page__two-col-grid">
+              <div>
+                <label className="artist-field-label">Ticketmaster key</label>
+                <SettingsInput
+                  type="password"
+                  placeholder="Enter Ticketmaster Consumer Key"
+                  autoComplete="off"
+                  value={settings.integrations?.ticketmaster?.apiKey || ""}
+                  onChange={(e) =>
+                    updateSettings({
+                      ...settings,
+                      integrations: {
+                        ...settings.integrations,
+                        ticketmaster: {
+                          ...(settings.integrations?.ticketmaster || {}),
+                          apiKey: e.target.value,
+                        },
+                      },
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <label className="artist-field-label">
+                  Search radius (miles)
+                </label>
+                <SettingsInput
+                  type="number"
+                  min={5}
+                  max={250}
+                  step={5}
+                  value={
+                    settings.integrations?.ticketmaster?.searchRadiusMiles ?? 250
+                  }
+                  onChange={(e) => {
+                    const raw = Number(e.target.value);
+                    const value = Number.isFinite(raw)
+                      ? Math.max(5, Math.min(250, Math.floor(raw)))
+                      : 250;
+                    updateSettings({
+                      ...settings,
+                      integrations: {
+                        ...settings.integrations,
+                        ticketmaster: {
+                          ...(settings.integrations?.ticketmaster || {}),
+                          searchRadiusMiles: value,
+                        },
+                      },
+                    });
+                  }}
+                />
+              </div>
+            </div>
+            <div className="settings-page__field-stack--md">
+              <label className="settings-page__toggle-row">
+                <span>Include recommended artists in local shows</span>
+                <input
+                  type="checkbox"
+                  className="artist-checkbox"
+                  checked={localDiscoveryIncludeRecommendations}
+                  onChange={(e) =>
+                    updateSettings({
+                      ...settings,
+                      integrations: {
+                        ...settings.integrations,
+                        ticketmaster: {
+                          ...(settings.integrations?.ticketmaster || {}),
+                          localDiscoveryIncludeRecommendations:
+                            e.target.checked,
+                        },
+                      },
+                    })
+                  }
+                />
+              </label>
+              <label className="settings-page__toggle-row">
+                <span>Include trending artists in local shows</span>
+                <input
+                  type="checkbox"
+                  className="artist-checkbox"
+                  checked={localDiscoveryIncludeTrending}
+                  onChange={(e) =>
+                    updateSettings({
+                      ...settings,
+                      integrations: {
+                        ...settings.integrations,
+                        ticketmaster: {
+                          ...(settings.integrations?.ticketmaster || {}),
+                          localDiscoveryIncludeTrending: e.target.checked,
+                        },
+                      },
+                    })
+                  }
+                />
+              </label>
+            </div>
+          </fieldset>
+        </div>
 
         <div className="settings-page__section">
           <h3 className="settings-page__section-title">Discovery behavior</h3>

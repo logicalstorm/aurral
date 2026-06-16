@@ -965,6 +965,21 @@ export const testSlskdConnection = async () => {
   return response.data;
 };
 
+export const testProwlarrConnection = async () => {
+  const response = await api.post("/settings/prowlarr/test");
+  return response.data;
+};
+
+export const getProwlarrIndexers = async () => {
+  const response = await api.get("/settings/prowlarr/indexers");
+  return response.data;
+};
+
+export const testNzbgetConnection = async () => {
+  const response = await api.post("/settings/nzbget/test");
+  return response.data;
+};
+
 export const testLidarrConnection = async (url, apiKey) => {
   const params = new URLSearchParams();
   if (url) params.append("url", url);

@@ -104,6 +104,63 @@ router.post("/slskd/test", async (req, res) => {
   }
 });
 
+router.post("/prowlarr/test", async (req, res) => {
+  try {
+    const { prowlarrClient } = await import("../services/prowlarrClient.js");
+    const result = await prowlarrClient.testConnection({ force: true });
+    if (!result.configured) {
+      return res.status(400).json(result);
+    }
+    if (!result.ok) {
+      return res.status(502).json(result);
+    }
+    return res.json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: "Prowlarr test failed",
+      message: error.message,
+    });
+  }
+});
+
+router.get("/prowlarr/indexers", async (_req, res) => {
+  try {
+    const { prowlarrClient } = await import("../services/prowlarrClient.js");
+    const indexers = await prowlarrClient.listUsenetIndexers();
+    return res.json({ indexers });
+  } catch (error) {
+    return res.status(500).json({
+      error: "Failed to load Prowlarr indexers",
+      message: error.message,
+    });
+  }
+});
+
+router.post("/nzbget/test", async (req, res) => {
+  try {
+    const { nzbgetClient } = await import("../services/nzbgetClient.js");
+    const result = await nzbgetClient.testConnection({ force: true });
+    if (!result.configured) {
+      return res.status(400).json(result);
+    }
+    if (!result.ok) {
+      return res.status(502).json(result);
+    }
+    return res.json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: "NZBGet test failed",
+      message: error.message,
+    });
+  }
+});
+
 router.post("/", async (req, res) => {
   try {
     const {
@@ -179,6 +236,115 @@ router.post("/", async (req, res) => {
     if (integrations?.coverArtArchive) {
       delete integrations.coverArtArchive;
     }
+    if (integrations?.prowlarr) {
+      const nextProwlarr = {
+        ...(currentSettings.integrations?.prowlarr || {}),
+        ...integrations.prowlarr,
+      };
+      const trimmedUrl = String(nextProwlarr.url || "").trim();
+      if (trimmedUrl) {
+        const urlValidation = validateExternalUrl(trimmedUrl);
+        if (!urlValidation.valid) {
+          return res.status(400).json({
+            error: `Invalid Prowlarr URL: ${urlValidation.error}`,
+          });
+        }
+        nextProwlarr.url = urlValidation.url.replace(/\/+$/, "");
+      } else {
+        nextProwlarr.url = "";
+      }
+      nextProwlarr.enabled = nextProwlarr.enabled === true;
+      nextProwlarr.apiKey =
+        typeof nextProwlarr.apiKey === "string"
+          ? nextProwlarr.apiKey.trim()
+          : "";
+      nextProwlarr.categories = Array.isArray(nextProwlarr.categories)
+        ? nextProwlarr.categories
+            .map((entry) => Number.parseInt(entry, 10))
+            .filter((entry) => Number.isFinite(entry) && entry > 0)
+        : String(nextProwlarr.categories || "")
+            .split(",")
+            .map((entry) => Number.parseInt(entry.trim(), 10))
+            .filter((entry) => Number.isFinite(entry) && entry > 0);
+      if (nextProwlarr.categories.length === 0) {
+        nextProwlarr.categories = [3000];
+      }
+      const maxResults = Number.parseInt(nextProwlarr.maxResults, 10);
+      nextProwlarr.maxResults = Number.isFinite(maxResults)
+        ? Math.min(200, Math.max(10, maxResults))
+        : 60;
+      const indexers =
+        nextProwlarr.indexers && typeof nextProwlarr.indexers === "object"
+          ? nextProwlarr.indexers
+          : {};
+      nextProwlarr.indexers = Object.fromEntries(
+        Object.entries(indexers)
+          .map(([id, entry]) => {
+            const parsedId = Number.parseInt(id, 10);
+            if (!Number.isFinite(parsedId)) return null;
+            const priority = Number.parseInt(entry?.priority, 10);
+            return [
+              String(parsedId),
+              {
+                enabled: entry?.enabled !== false,
+                priority: Number.isFinite(priority)
+                  ? Math.min(1000, Math.max(1, priority))
+                  : 25,
+              },
+            ];
+          })
+          .filter(Boolean),
+      );
+      integrations.prowlarr = nextProwlarr;
+    }
+    if (integrations?.nzbget) {
+      const nextNzbget = {
+        ...(currentSettings.integrations?.nzbget || {}),
+        ...integrations.nzbget,
+      };
+      const trimmedUrl = String(nextNzbget.url || "").trim();
+      if (trimmedUrl) {
+        const urlValidation = validateExternalUrl(trimmedUrl);
+        if (!urlValidation.valid) {
+          return res.status(400).json({
+            error: `Invalid NZBGet URL: ${urlValidation.error}`,
+          });
+        }
+        nextNzbget.url = urlValidation.url.replace(/\/+$/, "");
+      } else {
+        nextNzbget.url = "";
+      }
+      nextNzbget.enabled = nextNzbget.enabled === true;
+      nextNzbget.username =
+        typeof nextNzbget.username === "string"
+          ? nextNzbget.username.trim()
+          : "";
+      nextNzbget.password =
+        typeof nextNzbget.password === "string" ? nextNzbget.password : "";
+      nextNzbget.category =
+        String(nextNzbget.category || "aurral").trim() || "aurral";
+      const priority = Number.parseInt(nextNzbget.priority, 10);
+      nextNzbget.priority = Number.isFinite(priority)
+        ? Math.min(1000, Math.max(1, priority))
+        : 20;
+      const nzbPriority = Number.parseInt(nextNzbget.nzbPriority, 10);
+      nextNzbget.nzbPriority = Number.isFinite(nzbPriority)
+        ? Math.min(900, Math.max(-100, nzbPriority))
+        : 0;
+      nextNzbget.addPaused = nextNzbget.addPaused === true;
+      nextNzbget.completedPath =
+        typeof nextNzbget.completedPath === "string"
+          ? nextNzbget.completedPath.trim()
+          : "";
+      integrations.nzbget = nextNzbget;
+    }
+    if (integrations?.slskd) {
+      const priority = Number.parseInt(integrations.slskd.priority, 10);
+      integrations.slskd.enabled = integrations.slskd.enabled !== false;
+      integrations.slskd.priority = Number.isFinite(priority)
+        ? Math.min(1000, Math.max(1, priority))
+        : 10;
+    }
 
     let mergedIntegrations =
       currentSettings.integrations || defaultData.settings.integrations || {};
@@ -220,6 +386,18 @@ router.post("/", async (req, res) => {
               ...integrations.slskd,
             }
           : mergedIntegrations.slskd,
+        prowlarr: integrations.prowlarr
+          ? {
+              ...(mergedIntegrations.prowlarr || {}),
+              ...integrations.prowlarr,
+            }
+          : mergedIntegrations.prowlarr,
+        nzbget: integrations.nzbget
+          ? {
+              ...(mergedIntegrations.nzbget || {}),
+              ...integrations.nzbget,
+            }
+          : mergedIntegrations.nzbget,
         lastfm: integrations.lastfm
           ? {
               ...(mergedIntegrations.lastfm || {}),

@@ -5,7 +5,7 @@ import {
   enqueuePendingJobsWithoutBatch,
   failPipelineJob,
 } from "./slskdOrchestrator.js";
-import { slskdClient } from "./slskdClient.js";
+import { isAnyDownloadSourceConfigured } from "./downloadSourceService.js";
 import {
   isHonkerShuttingDown,
   markHonkerWorkerLoopEnded,
@@ -20,7 +20,7 @@ let stopRequested = false;
 let loopPromise = null;
 
 async function runLoop() {
-  if (!slskdClient.isConfigured()) {
+  if (!isAnyDownloadSourceConfigured()) {
     running = false;
     return;
   }
@@ -61,14 +61,14 @@ async function runLoop() {
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startSlskdOrchestratorWorker, {
       intentional,
-      shouldRestart: () => slskdClient.isConfigured(),
+      shouldRestart: () => isAnyDownloadSourceConfigured(),
     });
   }
 }
 
 export function startSlskdOrchestratorWorker() {
   if (running || isHonkerShuttingDown()) return;
-  if (!slskdClient.isConfigured()) return;
+  if (!isAnyDownloadSourceConfigured()) return;
   running = true;
   stopRequested = false;
   enqueuePendingJobsWithoutBatch();

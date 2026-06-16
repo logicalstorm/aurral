@@ -24,6 +24,7 @@ import { websocketService } from "../services/websocketService.js";
 import { noCache } from "../middleware/cache.js";
 import { requireAuth } from "../middleware/requirePermission.js";
 import { getImageProxyCacheSizeBytes } from "../services/imageProxyService.js";
+import { getDownloadSourceStatus } from "../services/downloadSourceService.js";
 import {
   DISCOVERY_PROVIDER_LASTFM,
   DISCOVERY_PROVIDER_LISTENBRAINZ_FALLBACK,
@@ -41,6 +42,7 @@ function buildBootstrapPayload(req) {
   const currentUser = resolveRequestUser(req);
   const localNetworkBypass = getLocalNetworkBypassStatus(req);
   const lidarrConfigured = lidarrClient.isConfigured();
+  const downloadSources = getDownloadSourceStatus();
 
   const payload = {
     status: "ok",
@@ -56,6 +58,11 @@ function buildBootstrapPayload(req) {
     musicbrainzConfigured: !!settings.integrations?.metadata?.baseUrl,
     metadataConfigured: !!settings.integrations?.metadata?.baseUrl,
     searchConfigured: !!getSearchBaseUrl(),
+    slskdConfigured: downloadSources.slskd.configured,
+    prowlarrConfigured: downloadSources.usenet.prowlarrConfigured,
+    nzbgetConfigured: downloadSources.usenet.nzbgetConfigured,
+    usenetConfigured: downloadSources.usenet.configured,
+    downloadSources,
     metadataProviders: getMetadataProviderHealthSnapshot(),
     localNetworkBypass,
   };

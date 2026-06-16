@@ -17,6 +17,13 @@ import {
   buildSlskdRankingHistoryOptions,
   recordSlskdTransferOutcome,
 } from "./slskdTransferHistory.js";
+import { processUsenetPipelinePayload } from "./usenetOrchestrator.js";
+import {
+  getDownloadSourceNotConfiguredMessage,
+  getEnabledDownloadSources,
+  getSourceLabel,
+  isAnyDownloadSourceConfigured,
+} from "./downloadSourceService.js";
 
 const updateSlskdMetaStmt = db.prepare(`
   UPDATE playlist_download_jobs
@@ -328,7 +335,7 @@ export function enqueueJobPipeline(jobId) {
 }
 
 export function enqueuePendingJobsWithoutBatch() {
-  if (!slskdClient.isConfigured()) return 0;
+  if (!isAnyDownloadSourceConfigured()) return 0;
   let count = 0;
   for (const job of downloadTracker.getByStatus("pending")) {
     if (job.slskdBatchId || job.slskdSearchId) {
@@ -357,6 +364,90 @@ async function failJob(job, message) {
       error: error?.message || String(error),
     });
   }
+}
+
+function isSourceConfigured(sourceId) {
+  return getEnabledDownloadSources().some((source) => source.id === sourceId);
+}
+
+function buildNextSourcePayload(payload, failedSource = null, reason = null) {
+  const sources = getEnabledDownloadSources();
+  if (sources.length === 0) return null;
+  const tried = new Set(
+    Array.isArray(payload?.triedSources) ? payload.triedSources : [],
+  );
+  const sourceErrors = Array.isArray(payload?.sourceErrors)
+    ? [...payload.sourceErrors]
+    : [];
+  if (failedSource) {
+    tried.add(failedSource);
+    if (reason) {
+      sourceErrors.push({
+        source: failedSource,
+        message: String(reason || "").trim(),
+      });
+    }
+  }
+  const next = sources.find((source) => !tried.has(source.id));
+  if (!next) return null;
+  return {
+    ...payload,
+    source: next.id,
+    phase: "search",
+    searchId: null,
+    searchIds: [],
+    candidates: [],
+    candidate: null,
+    candidateIndex: 0,
+    candidateRetryCounts: {},
+    pollAttempts: 0,
+    batchId: null,
+    legacyTransfer: null,
+    nzbId: null,
+    history: null,
+    triedSources: [...tried],
+    sourceErrors,
+  };
+}
+
+function summarizeSourceErrors(payload, message) {
+  const errors = Array.isArray(payload?.sourceErrors)
+    ? [...payload.sourceErrors]
+    : [];
+  const source = String(payload?.source || "").trim();
+  if (source && message) {
+    errors.push({ source, message: String(message || "").trim() });
+  }
+  const summary = errors
+    .map((entry) => {
+      const label = getSourceLabel(entry.source);
+      const entryMessage = String(entry.message || "").trim();
+      return entryMessage ? `${label}: ${entryMessage}` : label;
+    })
+    .filter(Boolean)
+    .join("; ");
+  return summary || message;
+}
+
+async function failOrTryNextSource(payload, job, message, logDetails = {}) {
+  const nextPayload = buildNextSourcePayload(
+    payload,
+    payload?.source || "slskd",
+    message,
+  );
+  if (nextPayload) {
+    logger.slskd("info", "Trying next download source", {
+      jobId: job?.id,
+      failedSource: payload?.source || "slskd",
+      nextSource: nextPayload.source,
+      reason: message,
+      ...logDetails,
+    });
+    downloadTracker.clearSlskdDispatched(job.id);
+    return nextPayload;
+  }
+  await failJob(job, summarizeSourceErrors(payload, message));
+  return null;
 }
 
 export async function failPipelineJob(payload, message) {
@@ -802,6 +893,9 @@ async function handleSearch(payload) {
   if (!job) return null;
   if (job.status === "failed" || job.status === "done") return null;
   downloadTracker.setDownloading(job.id);
+  downloadTracker.updateDownloadMetadata(job.id, {
+    downloadSource: "slskd",
+  });
   import("./aurralHistoryService.js")
     .then(({ recordTrackJobSearching }) => recordTrackJobSearching(job))
     .catch(() => {});
@@ -877,8 +971,12 @@ async function handleSearch(payload) {
         .cleanupAfterRun({ searchIds, transfers: [] })
         .catch(() => {});
     }
-    await failJob(job, "No suitable slskd search results");
-    return null;
+    return failOrTryNextSource(payload, job, "No suitable slskd search results", {
+      queryCount: queries.length,
+      rawResultCount: aggregated.length,
+      rankedCount: ranked.length,
+      eligibleCount: eligible.length,
+    });
   }
   return {
     ...payload,
@@ -904,8 +1002,7 @@ async function handleDownload(payload) {
   const index = Number(payload.candidateIndex || 0);
   const candidate = candidates[index];
   if (!candidate?.raw?.user || !candidate?.raw?.file) {
-    await failJob(job, "No download candidate available");
-    return null;
+    return failOrTryNextSource(payload, job, "No download candidate available");
   }
   const searchId = payload.searchId || null;
   updateSlskdMetaStmt.run(
@@ -915,6 +1012,12 @@ async function handleDownload(payload) {
     candidate.raw.file,
     job.id,
   );
+  downloadTracker.updateDownloadMetadata(job.id, {
+    downloadSource: "slskd",
+    downloadClient: "slskd",
+    remoteUsername: candidate.raw.user,
+    remoteFilename: candidate.raw.file,
+  });
   let result;
   try {
     result = await slskdClient.enqueueBatch({
@@ -955,8 +1058,7 @@ async function handleDownload(payload) {
         pollAttempts: 0,
       };
     }
-    await failJob(job, message);
-    return null;
+    return failOrTryNextSource(payload, job, message);
   }
   updateSlskdMetaStmt.run(null, result.batchId || null, null, null, job.id);
   job.slskdBatchId = result.batchId || null;
@@ -986,8 +1088,7 @@ async function handlePoll(payload) {
   const pollAttempts = Number(payload.pollAttempts || 0) + 1;
   if (pollAttempts > MAX_POLL_ATTEMPTS) {
     recordPayloadOutcome(job, payload, "transfer_timeout", "slskd transfer polling timed out");
-    await failJob(job, "slskd transfer polling timed out");
-    return null;
+    return failOrTryNextSource(payload, job, "slskd transfer polling timed out");
   }
   const eventSignal = await pollSlskdEventsForCandidate(payload).catch(() => ({
     eventOffset: payload.eventOffset ?? null,
@@ -1031,8 +1132,7 @@ async function handlePoll(payload) {
         { transfer },
       );
       if (nextPayload) return nextPayload;
-      await failJob(job, "slskd transfer failed");
-      return null;
+      return failOrTryNextSource(basePayload, job, "slskd transfer failed");
     }
     if (state !== "success") {
       return {
@@ -1100,8 +1200,7 @@ async function handleFinalize(payload) {
       { transfer },
     );
     if (nextPayload) return nextPayload;
-    await failJob(job, `Downloaded file missing: ${expectedPath}`);
-    return null;
+    return failOrTryNextSource(payload, job, `Downloaded file missing: ${expectedPath}`);
   }
   const ext = path.extname(sourcePath).toLowerCase();
   const finalDir = joinUnderRoot(playlistRoot, destination);
@@ -1143,8 +1242,11 @@ async function handleFinalize(payload) {
       ? buildNextCandidatePayload(payload)
       : null;
     if (nextPayload) return nextPayload;
-    await failJob(job, validation.reason || "Download validation failed");
-    return null;
+    return failOrTryNextSource(
+      payload,
+      job,
+      validation.reason || "Download validation failed",
+    );
   }
   import("./aurralHistoryService.js")
     .then(({ recordTrackJobMoving }) => recordTrackJobMoving(job))
@@ -1187,12 +1289,46 @@ export async function processPipelinePayload(payload) {
   if (!payload || !payload.phase || !payload.jobId) {
     throw new Error("Invalid pipeline payload");
   }
-  if (!slskdClient.isConfigured()) {
+  if (!isAnyDownloadSourceConfigured()) {
     const job = downloadTracker.getJob(payload.jobId);
     if (job) {
-      await failJob(job, SLSKD_NOT_CONFIGURED_MESSAGE);
+      await failJob(job, getDownloadSourceNotConfiguredMessage());
     }
     return null;
+  }
+  if (!payload.source) {
+    const nextPayload = buildNextSourcePayload(payload, null, null);
+    if (!nextPayload) {
+      const job = downloadTracker.getJob(payload.jobId);
+      if (job) await failJob(job, getDownloadSourceNotConfiguredMessage());
+      return null;
+    }
+    return processPipelinePayload(nextPayload);
+  }
+  if (payload.source === "usenet") {
+    if (!isSourceConfigured("usenet")) {
+      const job = downloadTracker.getJob(payload.jobId);
+      return job
+        ? failOrTryNextSource(payload, job, "Usenet is not configured")
+        : null;
+    }
+    return processUsenetPipelinePayload(payload, { failOrTryNextSource });
+  }
+  if (payload.source !== "slskd") {
+    const job = downloadTracker.getJob(payload.jobId);
+    return job
+      ? failOrTryNextSource(
+          payload,
+          job,
+          `Unknown download source: ${payload.source}`,
+        )
+      : null;
+  }
+  if (!slskdClient.isConfigured() || !isSourceConfigured("slskd")) {
+    const job = downloadTracker.getJob(payload.jobId);
+    return job
+      ? failOrTryNextSource(payload, job, SLSKD_NOT_CONFIGURED_MESSAGE)
+      : null;
   }
   switch (payload.phase) {
     case "search":

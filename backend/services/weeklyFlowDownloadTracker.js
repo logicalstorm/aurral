@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { db } from "../config/db-sqlite.js";
 import { enqueuePipelineJob } from "./honkerDb.js";
-import { slskdClient } from "./slskdClient.js";
+import { isAnyDownloadSourceConfigured } from "./downloadSourceService.js";
 import { buildPlaylistDestination } from "./playlistPaths.js";
 
 const JOBS_TABLE = "playlist_download_jobs";
@@ -81,6 +81,13 @@ function rowToJob(row) {
     externalPath: row.external_path || null,
     error: row.error,
     createdAt: row.created_at,
+    downloadSource: row.download_source || null,
+    downloadClient: row.download_client || null,
+    downloadClientId: row.download_client_id || null,
+    releaseGuid: row.release_guid || null,
+    releaseTitle: row.release_title || null,
+    indexerId: row.indexer_id || null,
+    indexerName: row.indexer_name || null,
     slskdSearchId: row.slskd_search_id || null,
     slskdBatchId: row.slskd_batch_id || null,
     remoteUsername: row.remote_username || null,
@@ -152,10 +159,38 @@ const updatePlaylistTypeStmt = db.prepare(
 );
 const clearSlskdMetaStmt = db.prepare(`
   UPDATE ${JOBS_TABLE}
-  SET slskd_search_id = NULL,
+  SET download_source = NULL,
+      download_client = NULL,
+      download_client_id = NULL,
+      release_guid = NULL,
+      release_title = NULL,
+      indexer_id = NULL,
+      indexer_name = NULL,
+      slskd_search_id = NULL,
       slskd_batch_id = NULL,
       remote_username = NULL,
       remote_filename = NULL
+  WHERE id = ?
+`);
+
+const clearTransientPipelineMetaStmt = db.prepare(`
+  UPDATE ${JOBS_TABLE}
+  SET slskd_search_id = NULL,
+      slskd_batch_id = NULL
+  WHERE id = ?
+`);
+
+const updateDownloadMetaStmt = db.prepare(`
+  UPDATE ${JOBS_TABLE}
+  SET download_source = COALESCE(?, download_source),
+      download_client = COALESCE(?, download_client),
+      download_client_id = COALESCE(?, download_client_id),
+      release_guid = COALESCE(?, release_guid),
+      release_title = COALESCE(?, release_title),
+      indexer_id = COALESCE(?, indexer_id),
+      indexer_name = COALESCE(?, indexer_name),
+      remote_username = COALESCE(?, remote_username),
+      remote_filename = COALESCE(?, remote_filename)
   WHERE id = ?
 `);
 
@@ -231,26 +266,77 @@ export class WeeklyFlowDownloadTracker {
     this.slskdDispatched.delete(id);
   }
 
-  clearSlskdPipelineState(id) {
+  clearSlskdPipelineState(id, options = {}) {
+    const clearDownloadMetadata = options.clearDownloadMetadata !== false;
     this.clearSlskdDispatched(id);
     const job = this.jobs.get(id);
     if (job) {
+      if (clearDownloadMetadata) {
+        job.downloadSource = null;
+        job.downloadClient = null;
+        job.downloadClientId = null;
+        job.releaseGuid = null;
+        job.releaseTitle = null;
+        job.indexerId = null;
+        job.indexerName = null;
+        job.remoteUsername = null;
+        job.remoteFilename = null;
+      }
       job.slskdSearchId = null;
       job.slskdBatchId = null;
-      job.remoteUsername = null;
-      job.remoteFilename = null;
     }
-    clearSlskdMetaStmt.run(id);
+    if (clearDownloadMetadata) {
+      clearSlskdMetaStmt.run(id);
+    } else {
+      clearTransientPipelineMetaStmt.run(id);
+    }
   }
 
-  enqueueSlskdPipeline(jobId) {
-    if (!slskdClient.isConfigured()) return false;
+  updateDownloadMetadata(id, metadata = {}) {
+    const job = this.jobs.get(id);
+    if (!job || !metadata || typeof metadata !== "object") return false;
+    const assign = (key, value) => {
+      if (value == null) return;
+      const text = String(value).trim();
+      if (!text) return;
+      job[key] = text;
+    };
+    assign("downloadSource", metadata.downloadSource);
+    assign("downloadClient", metadata.downloadClient);
+    assign("downloadClientId", metadata.downloadClientId);
+    assign("releaseGuid", metadata.releaseGuid);
+    assign("releaseTitle", metadata.releaseTitle);
+    assign("indexerId", metadata.indexerId);
+    assign("indexerName", metadata.indexerName);
+    assign("remoteUsername", metadata.remoteUsername);
+    assign("remoteFilename", metadata.remoteFilename);
+    updateDownloadMetaStmt.run(
+      metadata.downloadSource ?? null,
+      metadata.downloadClient ?? null,
+      metadata.downloadClientId ?? null,
+      metadata.releaseGuid ?? null,
+      metadata.releaseTitle ?? null,
+      metadata.indexerId ?? null,
+      metadata.indexerName ?? null,
+      metadata.remoteUsername ?? null,
+      metadata.remoteFilename ?? null,
+      id,
+    );
+    return true;
+  }
+
+  enqueueDownloadPipeline(jobId) {
+    if (!isAnyDownloadSourceConfigured()) return false;
     const job = this.jobs.get(jobId);
     if (!job || job.status !== "pending") return false;
     if (this.isSlskdDispatched(jobId)) return false;
     enqueuePipelineJob(buildPipelinePayload(job));
     this.markSlskdDispatched(jobId);
     return true;
+  }
+
+  enqueueSlskdPipeline(jobId) {
+    return this.enqueueDownloadPipeline(jobId);
   }
 
   _emptyStats() {
@@ -786,7 +872,7 @@ export class WeeklyFlowDownloadTracker {
     const job = this.jobs.get(id);
     if (!job) return false;
     const previousStatus = job.status;
-    this.clearSlskdPipelineState(id);
+    this.clearSlskdPipelineState(id, { clearDownloadMetadata: false });
     this.pendingSet.delete(id);
     this.pendingRetrySet.delete(id);
     this._removeFromPendingQueues(id);
@@ -810,7 +896,7 @@ export class WeeklyFlowDownloadTracker {
     const job = this.jobs.get(id);
     if (!job) return false;
     const previousStatus = job.status;
-    this.clearSlskdPipelineState(id);
+    this.clearSlskdPipelineState(id, { clearDownloadMetadata: false });
     this.pendingSet.delete(id);
     this.pendingRetrySet.delete(id);
     this._removeFromPendingQueues(id);

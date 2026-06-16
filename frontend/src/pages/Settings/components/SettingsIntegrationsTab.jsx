@@ -9,7 +9,6 @@ import {
   getLidarrTags,
   testLidarrConnection,
   testLidarrLibraryAccess,
-  testSlskdConnection,
   startPlexAuth,
   checkPlexAuth,
   getPlexResources,
@@ -18,7 +17,14 @@ import {
   browsePaths,
 } from "../../../utils/api";
 
+const PLAYLIST_ARTWORK_STYLE_OPTIONS = [
+  { value: "photo", label: "Photo texture" },
+  { value: "aurral", label: "Aurral generated" },
+];
+
 export function SettingsIntegrationsTab({
+  scope = "all",
+  title = "Integrations",
   settings,
   updateSettings,
   health,
@@ -46,15 +52,13 @@ export function SettingsIntegrationsTab({
   showError,
   showInfo,
 }) {
-  const [collapsedSections, setCollapsedSections] = useState({
-    lidarr: false,
+  const [collapsedSections, setCollapsedSections] = useState(() => ({
+    lidarr: scope === "playback",
     lastfm: true,
     ticketmaster: true,
-    navidrome: true,
-    slskd: false,
+    navidrome: scope !== "playback",
     plex: true,
-  });
-  const [testingSlskd, setTestingSlskd] = useState(false);
+  }));
   const [lidarrTestLatencyMs, setLidarrTestLatencyMs] = useState(null);
   const [testingLidarrLibraryAccess, setTestingLidarrLibraryAccess] =
     useState(false);
@@ -84,6 +88,11 @@ export function SettingsIntegrationsTab({
     ? lidarrMetadataProfiles
     : [];
   const safeLidarrTags = Array.isArray(lidarrTags) ? lidarrTags : [];
+  const playlistArtworkStyle =
+    settings.playlistArtwork?.style === "aurral" ? "aurral" : "photo";
+  const showLibrary = scope === "all" || scope === "library";
+  const showDiscoveryServices = scope === "all";
+  const showPlayback = scope === "all" || scope === "playback";
   const toggleSection = (section) => {
     setCollapsedSections((current) => ({
       ...current,
@@ -467,7 +476,7 @@ export function SettingsIntegrationsTab({
       <div className="settings-page__panel-header">
         <h2
           className="settings-page__panel-title">
-          Integrations
+          {title}
         </h2>
         <FlipSaveButton
           saving={saving}
@@ -480,6 +489,8 @@ export function SettingsIntegrationsTab({
         className="settings-page__form"
         autoComplete="off"
       >
+        {showLibrary && (
+        <>
         <div
           className="settings-page__section"
         >
@@ -932,6 +943,42 @@ export function SettingsIntegrationsTab({
             </fieldset>
           )}
         </div>
+        <div className="settings-page__section">
+          <h3 className="settings-page__section-title">Generated playlists</h3>
+          <fieldset className="settings-page__fields">
+            <div className="settings-page__field">
+              <label
+                className="artist-field-label"
+                htmlFor="playlist-artwork-style"
+              >
+                Cover style
+              </label>
+              <SettingsSelect
+                id="playlist-artwork-style"
+                value={playlistArtworkStyle}
+                onChange={(event) =>
+                  updateSettings({
+                    ...settings,
+                    playlistArtwork: {
+                      ...(settings.playlistArtwork || {}),
+                      style: event.target.value,
+                    },
+                  })
+                }
+              >
+                {PLAYLIST_ARTWORK_STYLE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </SettingsSelect>
+            </div>
+          </fieldset>
+        </div>
+        </>
+        )}
+        {showDiscoveryServices && (
+        <>
         <div
           className="settings-page__section"
         >
@@ -1173,199 +1220,10 @@ export function SettingsIntegrationsTab({
             </fieldset>
           )}
         </div>
-        <div className="settings-page__section">
-          <div className="settings-page__section-header">
-            <button
-              type="button"
-              onClick={() => toggleSection("slskd")}
-              className="settings-page__section-toggle"
-              aria-expanded={!collapsedSections.slskd}
-            >
-              <ChevronDown
-                className={`settings-page__section-toggle-icon${collapsedSections.slskd ? " is-collapsed" : ""}`}
-              />
-              <span>slskd</span>
-            </button>
-            <div className="settings-page__inline-row">
-              {settings.integrations?.slskd?.url &&
-                settings.integrations?.slskd?.apiKey && (
-                  <span className="settings-page__status">
-                    <CheckCircle className="settings-page__status-icon" />
-                    Configured
-                  </span>
-                )}
-            </div>
-          </div>
-          {!collapsedSections.slskd && (
-            <fieldset className="settings-page__fields">
-              <div>
-                <label className="artist-field-label">Server URL</label>
-                <SettingsInput
-                  type="url"
-                  placeholder="http://localhost:5030"
-                  autoComplete="off"
-                  value={settings.integrations?.slskd?.url || ""}
-                  onChange={(e) =>
-                    updateSettings({
-                      ...settings,
-                      integrations: {
-                        ...settings.integrations,
-                        slskd: {
-                          ...(settings.integrations?.slskd || {}),
-                          url: e.target.value,
-                        },
-                      },
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <label className="artist-field-label">API key</label>
-                <div className="settings-page__field-row">
-                  <SettingsInput
-                    wrapperClassName="settings-page__field-grow"
-                    type="password"
-                    autoComplete="off"
-                    value={settings.integrations?.slskd?.apiKey || ""}
-                    onChange={(e) =>
-                      updateSettings({
-                        ...settings,
-                        integrations: {
-                          ...settings.integrations,
-                          slskd: {
-                            ...(settings.integrations?.slskd || {}),
-                            apiKey: e.target.value,
-                          },
-                        },
-                      })
-                    }
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    disabled={testingSlskd}
-                    onClick={async () => {
-                      if (
-                        !settings.integrations?.slskd?.url ||
-                        !settings.integrations?.slskd?.apiKey
-                      ) {
-                        showError("Enter slskd URL and API key first");
-                        return;
-                      }
-                      setTestingSlskd(true);
-                      try {
-                        await handleSaveSettings();
-                        const result = await testSlskdConnection();
-                        if (result.success || result.ok) {
-                          if (result.warning || result.soulseekConnected === false) {
-                            showInfo(
-                              result.message ||
-                                "slskd API is reachable, but Soulseek is not connected",
-                            );
-                          } else {
-                            showSuccess(result.message || "slskd connection OK");
-                          }
-                        } else {
-                          showError(result.message || "slskd connection failed");
-                        }
-                      } catch (error) {
-                        showError(
-                          error.response?.data?.message ||
-                            error.response?.data?.error ||
-                            error.message ||
-                            "slskd connection failed",
-                        );
-                      } finally {
-                        setTestingSlskd(false);
-                      }
-                    }}
-                  >
-                    <RefreshCw
-                      className={`artist-icon-sm${testingSlskd ? " animate-spin" : ""}`}
-                    />
-                    {testingSlskd ? "Testing..." : "Test connection"}
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label className="artist-field-label">Preferred format</label>
-                <SettingsSelect
-                  value={settings.integrations?.slskd?.preferredFormat || "flac"}
-                  onChange={(e) =>
-                    updateSettings({
-                      ...settings,
-                      integrations: {
-                        ...settings.integrations,
-                        slskd: {
-                          ...(settings.integrations?.slskd || {}),
-                          preferredFormat: e.target.value,
-                        },
-                      },
-                    })
-                  }
-                >
-                  <option value="flac">FLAC</option>
-                  <option value="mp3">MP3</option>
-                </SettingsSelect>
-              </div>
-              <div>
-                <label className="artist-checkbox-label">
-                  <input
-                    type="checkbox"
-                    className="artist-checkbox"
-                    checked={
-                      settings.integrations?.slskd?.preferredFormatStrict === true
-                    }
-                    onChange={(e) =>
-                      updateSettings({
-                        ...settings,
-                        integrations: {
-                          ...settings.integrations,
-                          slskd: {
-                            ...(settings.integrations?.slskd || {}),
-                            preferredFormatStrict: e.target.checked,
-                          },
-                        },
-                      })
-                    }
-                  />
-                  <span className="artist-field-label">Strict format only</span>
-                </label>
-                <p className="settings-page__hint settings-page__hint--indented">
-                  Used when ranking slskd search results for flows and playlists.
-                </p>
-              </div>
-              <div>
-                <label className="artist-checkbox-label">
-                  <input
-                    type="checkbox"
-                    className="artist-checkbox"
-                    checked={
-                      settings.integrations?.slskd?.cleanupAfterRuns === true
-                    }
-                    onChange={(e) =>
-                      updateSettings({
-                        ...settings,
-                        integrations: {
-                          ...settings.integrations,
-                          slskd: {
-                            ...(settings.integrations?.slskd || {}),
-                            cleanupAfterRuns: e.target.checked,
-                          },
-                        },
-                      })
-                    }
-                  />
-                  <span className="artist-field-label">Clean up after runs</span>
-                </label>
-                <p className="settings-page__hint settings-page__hint--indented">
-                  Clear completed searches and downloads from slskd when a flow or
-                  playlist run finishes.
-                </p>
-              </div>
-            </fieldset>
-          )}
-        </div>
+        </>
+        )}
+        {showPlayback && (
+        <>
         <div
           className="settings-page__section"
         >
@@ -1721,6 +1579,8 @@ export function SettingsIntegrationsTab({
             </fieldset>
           )}
         </div>
+        </>
+        )}
       </form>
     </div>
   );

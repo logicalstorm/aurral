@@ -96,6 +96,13 @@ db.exec(`
     started_at INTEGER,
     completed_at INTEGER,
     created_at INTEGER NOT NULL,
+    download_source TEXT,
+    download_client TEXT,
+    download_client_id TEXT,
+    release_guid TEXT,
+    release_title TEXT,
+    indexer_id TEXT,
+    indexer_name TEXT,
     slskd_search_id TEXT,
     slskd_batch_id TEXT,
     remote_username TEXT,
@@ -226,6 +233,41 @@ if (!tableColumns.includes("playlist_type")) {
 if (!tableColumns.includes("external_path")) {
   tryAddColumn(
     "ALTER TABLE playlist_download_jobs ADD COLUMN external_path TEXT",
+  );
+}
+if (!tableColumns.includes("download_source")) {
+  tryAddColumn(
+    "ALTER TABLE playlist_download_jobs ADD COLUMN download_source TEXT",
+  );
+}
+if (!tableColumns.includes("download_client")) {
+  tryAddColumn(
+    "ALTER TABLE playlist_download_jobs ADD COLUMN download_client TEXT",
+  );
+}
+if (!tableColumns.includes("download_client_id")) {
+  tryAddColumn(
+    "ALTER TABLE playlist_download_jobs ADD COLUMN download_client_id TEXT",
+  );
+}
+if (!tableColumns.includes("release_guid")) {
+  tryAddColumn(
+    "ALTER TABLE playlist_download_jobs ADD COLUMN release_guid TEXT",
+  );
+}
+if (!tableColumns.includes("release_title")) {
+  tryAddColumn(
+    "ALTER TABLE playlist_download_jobs ADD COLUMN release_title TEXT",
+  );
+}
+if (!tableColumns.includes("indexer_id")) {
+  tryAddColumn(
+    "ALTER TABLE playlist_download_jobs ADD COLUMN indexer_id TEXT",
+  );
+}
+if (!tableColumns.includes("indexer_name")) {
+  tryAddColumn(
+    "ALTER TABLE playlist_download_jobs ADD COLUMN indexer_name TEXT",
   );
 }
 
