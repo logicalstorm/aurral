@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useDiscoverRecent } from "../contexts/DiscoverRecentContext";
+import { useDiscoverRecent } from "../hooks/useDiscoverRecent";
 import { shouldTrackDiscoverPath } from "../utils/discoverRecentNavigation";
 
 export function useDiscoverNavigation() {

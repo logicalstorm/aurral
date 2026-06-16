@@ -19,7 +19,7 @@ function GitHubIcon({ className = "" }) {
 function UserProfileMenu() {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
-  const { authRequired, logout, user } = useAuth();
+  const { authRequired, logout } = useAuth();
 
   useEffect(() => {
     if (!menuOpen) return undefined;

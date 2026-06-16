@@ -24,7 +24,7 @@ import {
   DEFAULT_HISTORY_TAB,
   getHistoryNavItems,
 } from "../navigation/historyNavConfig";
-import { useDiscoverRecent } from "../contexts/DiscoverRecentContext";
+import { useDiscoverRecent } from "../hooks/useDiscoverRecent";
 
 function Sidebar({ mode }) {
   const location = useLocation();

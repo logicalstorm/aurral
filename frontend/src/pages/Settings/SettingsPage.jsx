@@ -114,7 +114,6 @@ function SettingsPage() {
             testingLidarr={data.testingLidarr}
             setTestingLidarr={data.setTestingLidarr}
             applyingCommunityGuide={data.applyingCommunityGuide}
-            showCommunityGuideModal={data.showCommunityGuideModal}
             setShowCommunityGuideModal={data.setShowCommunityGuideModal}
             hasUnsavedChanges={data.hasUnsavedChanges}
             saving={data.saving}

@@ -1,13 +1,12 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useState,
 } from "react";
 import PropTypes from "prop-types";
 import { useLocation } from "react-router-dom";
+import { DiscoverRecentContext } from "./discoverRecentContext";
 import {
   buildDiscoverRecentLabel,
   DISCOVER_FLOW_ACTIVE_KEY,
@@ -26,8 +25,6 @@ import {
   writeDiscoverFlowActive,
   writeDiscoverRecentPages,
 } from "../utils/discoverRecentNavigation";
-
-const DiscoverRecentContext = createContext(null);
 
 function DiscoverFlowLocationSync({
   recentPages,
@@ -199,11 +196,3 @@ export function DiscoverRecentProvider({ children }) {
 DiscoverRecentProvider.propTypes = {
   children: PropTypes.node.isRequired,
 };
-
-export function useDiscoverRecent() {
-  const context = useContext(DiscoverRecentContext);
-  if (!context) {
-    throw new Error("useDiscoverRecent must be used within DiscoverRecentProvider");
-  }
-  return context;
-}

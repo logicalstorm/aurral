@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCircle, RefreshCw } from "lucide-react";
+import { CheckCircle } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
 import {
   IntegrationCard,
@@ -26,7 +26,6 @@ export function SettingsLibraryTab({
   testingLidarr,
   setTestingLidarr,
   applyingCommunityGuide,
-  showCommunityGuideModal,
   setShowCommunityGuideModal,
   hasUnsavedChanges,
   saving,
