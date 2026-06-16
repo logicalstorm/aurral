@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import PropTypes from "prop-types";
-import { useNavigate } from "react-router-dom";
+import { useDiscoverNavigation } from "../../../hooks/useDiscoverNavigation";
 import { ArrowRight, Loader, Music, Star } from "lucide-react";
 import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
 import AddAlbumButton from "../../../components/AddAlbumButton";
@@ -27,7 +27,7 @@ export function ArtistDetailsAppearsOn({
   onVisibleCoverIdsChange,
   onViewAll,
 }) {
-  const navigate = useNavigate();
+  const navigate = useDiscoverNavigation();
   const releaseGroups = useMemo(
     () => artist["appears-on-release-groups"] || [],
     [artist],

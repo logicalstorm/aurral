@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
+import { useDiscoverNavigation } from "../../hooks/useDiscoverNavigation";
 import {
   ArrowDown,
   ArrowUp,
@@ -84,7 +85,7 @@ const sortReleaseGroups = (items, sortKey, sortDirection) =>
 function ArtistAppearsOnPage() {
   const { mbid } = useParams();
   const { state } = useLocation();
-  const navigate = useNavigate();
+  const navigate = useDiscoverNavigation();
   const { showSuccess, showError } = useToast();
   const { hasPermission } = useAuth();
   const [selectedTab, setSelectedTab] = useState("all");

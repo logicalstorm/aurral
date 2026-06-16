@@ -14,6 +14,7 @@ import { AudioPlayerProvider } from "react-use-audio-player";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ToastProvider, useToast } from "./contexts/ToastContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { DiscoverRecentProvider } from "./contexts/DiscoverRecentContext";
 import { AudioQueueProvider } from "./contexts/AudioQueueProvider";
 import ReloadPrompt from "./components/ReloadPrompt";
 import UpdateBanner from "./components/UpdateBanner";
@@ -25,9 +26,6 @@ const ShowsPage = lazy(() => import("./pages/ShowsPage"));
 const LibraryPage = lazy(() => import("./pages/LibraryPage"));
 const SettingsPage = lazy(() => import("./pages/Settings/SettingsPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
-const MetadataProvidersPage = lazy(
-  () => import("./pages/Settings/MetadataProvidersPage"),
-);
 const ArtistDetailsPage = lazy(
   () => import("./pages/ArtistDetails/ArtistDetailsPage"),
 );
@@ -177,12 +175,12 @@ function AppContent() {
         v7_relativeSplatPath: true,
       }}
     >
-      <ProtectedRoute>
-        <Layout
-          isHealthy={isHealthy}
-          rootFolderConfigured={rootFolderConfigured}
-          appVersion={appVersion}
-        >
+      <DiscoverRecentProvider>
+        <ProtectedRoute>
+          <Layout
+            isHealthy={isHealthy}
+            rootFolderConfigured={rootFolderConfigured}
+          >
           <UpdateBanner
             currentVersion={appVersion}
             visible={!user || user.role === "admin"}
@@ -230,7 +228,8 @@ function AppContent() {
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/" element={<DiscoverPage />} />
-              <Route path="/shows" element={<ShowsPage />} />
+              <Route path="/shows" element={<Navigate to="/shows/all" replace />} />
+              <Route path="/shows/:filter" element={<ShowsPage />} />
               <Route path="/search" element={<SearchResultsPage />} />
               <Route path="/discover" element={<Navigate to="/" replace />} />
               <Route path="/library" element={<LibraryPage />} />
@@ -245,7 +244,8 @@ function AppContent() {
               <Route path="/flow" element={<Navigate to="/playlists" replace />} />
               <Route path="/downloads" element={<Navigate to="/history" replace />} />
               <Route path="/requests" element={<Navigate to="/history" replace />} />
-              <Route path="/history" element={<HistoryPage />} />
+              <Route path="/history" element={<Navigate to="/history/all" replace />} />
+              <Route path="/history/:tab" element={<HistoryPage />} />
               <Route
                 path="/artist/:mbid/albums"
                 element={<ArtistAlbumsPage />}
@@ -260,26 +260,19 @@ function AppContent() {
               />
               <Route path="/artist/:mbid" element={<ArtistDetailsPage />} />
               <Route
-                path="/settings"
+                path="/settings/:tab?"
                 element={
                   <PermissionRoute permission="accessSettings">
                     <SettingsPage />
                   </PermissionRoute>
                 }
               />
-              <Route
-                path="/settings/metadata"
-                element={
-                  <PermissionRoute permission="accessSettings">
-                    <MetadataProvidersPage />
-                  </PermissionRoute>
-                }
-              />
               <Route path="/profile" element={<ProfilePage />} />
             </Routes>
           </Suspense>
-        </Layout>
-      </ProtectedRoute>
+          </Layout>
+        </ProtectedRoute>
+      </DiscoverRecentProvider>
     </Router>
   );
 }

@@ -1,19 +1,20 @@
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { Loader, Music, MapPin, AlertCircle } from "lucide-react";
 import { getNearbyShows } from "../utils/api";
 import NearbyLocationControl from "../components/NearbyLocationControl";
 import ShowCard from "../components/ShowCard";
+import { PageSectionMobileNav } from "../components/PageSectionMobileNav";
+import {
+  DEFAULT_SHOWS_FILTER,
+  normalizeShowsFilter,
+  SHOWS_FILTERS,
+} from "../navigation/showsNavConfig";
 
 const NEARBY_MODE_KEY = "discoverNearbyMode";
 const NEARBY_ZIP_KEY = "discoverNearbyZip";
 const SHOWS_PAGE_LIMIT = 60;
-const SHOW_FILTER_OPTIONS = [
-  { id: "all", label: "All" },
-  { id: "library", label: "Library" },
-  { id: "discover", label: "Discover" },
-];
 
 const DEFAULT_LOCATION_STATE = {
   locationMode: "ip",
@@ -56,12 +57,6 @@ const getShowGroups = (showsData) => ({
     : [],
 });
 
-const getSafeCount = (value, fallback) => {
-  if (value == null || value === "") return fallback;
-  const numericValue = Number(value);
-  return Number.isFinite(numericValue) ? numericValue : fallback;
-};
-
 const getShowKey = (show, index) =>
   [
     show?.id || `show-${index}`,
@@ -72,12 +67,20 @@ const getShowKey = (show, index) =>
     .join("-");
 
 function ShowsPage() {
-  useDocumentTitle("Shows");
   const navigate = useNavigate();
+  const { filter: filterParam } = useParams();
+  const showFilter = normalizeShowsFilter(filterParam);
+  const shouldRedirect =
+    filterParam && normalizeShowsFilter(filterParam) !== filterParam;
+
+  useDocumentTitle(
+    showFilter === "all"
+      ? "Shows"
+      : `${SHOWS_FILTERS.find((entry) => entry.id === showFilter)?.label || "Shows"} - Shows`,
+  );
   const [showsData, setShowsData] = useState(null);
   const [showsLoading, setShowsLoading] = useState(false);
   const [showsError, setShowsError] = useState(null);
-  const [showFilter, setShowFilter] = useState("all");
   const [{ locationMode, appliedZip }, setLocationState] = useState(
     readStoredLocationState,
   );
@@ -124,18 +127,6 @@ function ShowsPage() {
   }, [locationMode, appliedZip]);
 
   const showGroups = useMemo(() => getShowGroups(showsData), [showsData]);
-  const allTotal = getSafeCount(showsData?.total, showGroups.all.length);
-  const groupTotals = {
-    all: allTotal,
-    library: getSafeCount(
-      showsData?.counts?.matchedLibraryShows,
-      showGroups.library.length,
-    ),
-    discover: getSafeCount(
-      showsData?.counts?.matchedRecommendedShows,
-      showGroups.discover.length,
-    ),
-  };
   const shows = showGroups[showFilter] || showGroups.all;
   const hasAnyShows = Object.values(showGroups).some(
     (group) => group.length > 0,
@@ -154,6 +145,14 @@ function ShowsPage() {
       : showFilter === "discover"
         ? `We could not find local Ticketmaster shows tied to your Discover recommendations around ${locationLabel}.`
         : `We could not find local Ticketmaster shows for artists from your library or Discover around ${locationLabel}.`;
+
+  if (!filterParam) {
+    return <Navigate to={`/shows/${DEFAULT_SHOWS_FILTER}`} replace />;
+  }
+
+  if (shouldRedirect) {
+    return <Navigate to={`/shows/${showFilter}`} replace />;
+  }
 
   return (
     <div className="shows-page">
@@ -193,6 +192,13 @@ function ShowsPage() {
           />
         </div>
       </header>
+
+      <PageSectionMobileNav
+        basePath="/shows"
+        sections={SHOWS_FILTERS}
+        activeId={showFilter}
+        label="Shows"
+      />
 
       {showsData?.configured === false ? (
         <div className="search-empty-panel">
@@ -238,28 +244,6 @@ function ShowsPage() {
         </div>
       ) : hasAnyShows ? (
         <section className="shows-page__content">
-          <div className="shows-page__toolbar">
-            <div
-              className="artist-segmented shows-page__filters"
-              role="group"
-              aria-label="Show filters"
-            >
-              {SHOW_FILTER_OPTIONS.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => setShowFilter(option.id)}
-                  className={`artist-segmented-button${showFilter === option.id ? " is-active" : ""}`}
-                  aria-pressed={showFilter === option.id}
-                >
-                  <span>{option.label}</span>
-                  <span className="shows-page__filter-count">
-                    {groupTotals[option.id] ?? 0}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
           {shows.length > 0 ? (
             <div className="shows-page__grid">
               {shows.map((show, index) => (

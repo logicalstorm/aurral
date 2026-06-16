@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { User, Settings, Heart, LogOut, ExternalLink } from "lucide-react";
+import { User, Heart, LogOut, ExternalLink } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 
 function GitHubIcon({ className = "" }) {
@@ -20,8 +20,6 @@ function UserProfileMenu() {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const { authRequired, logout, user } = useAuth();
-  const canAccessSettings =
-    user?.role === "admin" || !!user?.permissions?.accessSettings;
 
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -74,19 +72,6 @@ function UserProfileMenu() {
                 <span>Profile</span>
               </Link>
             </li>
-            {canAccessSettings && (
-              <li role="none">
-                <Link
-                  to="/settings"
-                  role="menuitem"
-                  className="app-profile-menu__item"
-                  onClick={closeMenu}
-                >
-                  <Settings className="app-profile-menu__item-icon" />
-                  <span>Settings</span>
-                </Link>
-              </li>
-            )}
             <li role="none">
               <a
                 href="https://github.com/sponsors/lklynet/"

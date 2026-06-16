@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
 import {
   Loader,
   Clock,
@@ -11,25 +11,18 @@ import {
 import { getRequests, triggerAlbumSearch, checkHealth } from "../utils/api";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { TAG_COLORS } from "./ArtistDetails/constants";
+import { PageSectionMobileNav } from "../components/PageSectionMobileNav";
+import {
+  DEFAULT_HISTORY_TAB,
+  getHistoryNavItems,
+  normalizeHistoryTab,
+} from "../navigation/historyNavConfig";
 
 const HISTORY_SOURCE_COLORS = {
   lidarr: TAG_COLORS[10],
   slskd: TAG_COLORS[0],
   nzbget: TAG_COLORS[2],
   aurral: TAG_COLORS[12],
-};
-
-const BASE_HISTORY_TABS = [
-  { value: "all", label: "All" },
-  { value: "lidarr", label: "Lidarr", source: "lidarr" },
-  { value: "slskd", label: "slskd", source: "slskd" },
-  { value: "aurral", label: "Aurral", source: "aurral" },
-];
-
-const NZBGET_HISTORY_TAB = {
-  value: "nzbget",
-  label: "NZBGet",
-  source: "nzbget",
 };
 
 const HISTORY_PAGE_SIZE = 25;
@@ -215,23 +208,28 @@ function RequestStatusBadge({ request }) {
 }
 
 function HistoryPage() {
-  useDocumentTitle("History");
+  const navigate = useNavigate();
+  const { tab: tabParam } = useParams();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState("all");
   const [usenetActive, setUsenetActive] = useState(false);
   const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
   const [reSearchingAlbumIds, setReSearchingAlbumIds] = useState({});
-  const navigate = useNavigate();
 
-  const historyTabs = useMemo(() => {
-    if (!usenetActive) return BASE_HISTORY_TABS;
-    const tabs = [...BASE_HISTORY_TABS];
-    const slskdIndex = tabs.findIndex((tab) => tab.value === "slskd");
-    tabs.splice(slskdIndex + 1, 0, NZBGET_HISTORY_TAB);
-    return tabs;
-  }, [usenetActive]);
+  const historyNavItems = useMemo(
+    () => getHistoryNavItems(usenetActive),
+    [usenetActive],
+  );
+  const activeTab = normalizeHistoryTab(tabParam, usenetActive);
+  const shouldRedirect =
+    tabParam && normalizeHistoryTab(tabParam, usenetActive) !== tabParam;
+
+  useDocumentTitle(
+    activeTab === "all"
+      ? "History"
+      : `${historyNavItems.find((entry) => entry.id === activeTab)?.label || "History"} - History`,
+  );
 
   const filteredRequests = useMemo(
     () => requests.filter((request) => matchesHistoryTab(request, activeTab)),
@@ -259,12 +257,6 @@ function HistoryPage() {
     () => groupRequestsByDate(visibleRequests),
     [visibleRequests],
   );
-
-  useEffect(() => {
-    if (activeTab === "nzbget" && !usenetActive) {
-      setActiveTab("all");
-    }
-  }, [activeTab, usenetActive]);
 
   useEffect(() => {
     setVisibleCount(HISTORY_PAGE_SIZE);
@@ -517,6 +509,14 @@ function HistoryPage() {
 
   const emptyState = EMPTY_STATE_COPY[activeTab] || EMPTY_STATE_COPY.all;
 
+  if (!tabParam) {
+    return <Navigate to={`/history/${DEFAULT_HISTORY_TAB}`} replace />;
+  }
+
+  if (shouldRedirect) {
+    return <Navigate to={`/history/${activeTab}`} replace />;
+  }
+
   if (loading) {
     return (
       <div className="requests-page">
@@ -539,34 +539,12 @@ function HistoryPage() {
         </p>
       </header>
 
-      <div className="requests-page__toolbar">
-        <div
-          className="artist-tabs requests-page__tabs"
-          role="tablist"
-          aria-label="Filter history by source"
-        >
-          {historyTabs.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab.value}
-              onClick={() => setActiveTab(tab.value)}
-              className={`artist-tab${tab.source ? " requests-page__tab--source" : ""}${activeTab === tab.value ? " is-active" : ""}`}
-              style={
-                tab.source
-                  ? {
-                      "--history-source-color":
-                        HISTORY_SOURCE_COLORS[tab.source],
-                    }
-                  : undefined
-              }
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <PageSectionMobileNav
+        basePath="/history"
+        sections={historyNavItems}
+        activeId={activeTab}
+        label="History"
+      />
 
       {error && (
         <div className="artist-error-panel requests-page__error" role="alert">

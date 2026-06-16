@@ -55,26 +55,24 @@ export function useUnsavedGuard(hasUnsavedChanges, setHasUnsavedChanges) {
     const handleClick = (e) => {
       const link = e.target.closest("a[href]");
       const href = link?.getAttribute("href");
-      if (
-        link &&
-        href?.startsWith("/") &&
-        !isSettingsRoute(stripBasePath(href, basePath))
-      ) {
-        e.preventDefault();
-        e.stopPropagation();
-        const targetPath = stripBasePath(href, basePath);
-        setShowUnsavedModal(true);
-        setPendingNavigation(() => () => {
-          navigate(targetPath);
-          if (hasUnsavedChangesRef.current === false) return;
-        });
-        return false;
-      }
+      if (!link || !href?.startsWith("/")) return;
+
+      const targetPath = stripBasePath(href, basePath);
+      const currentPath = stripBasePath(location.pathname, basePath);
+      if (targetPath === currentPath) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      setShowUnsavedModal(true);
+      setPendingNavigation(() => () => {
+        navigate(targetPath);
+      });
+      return false;
     };
 
     const handlePopState = () => {
       if (isSettingsRoute(location.pathname)) {
-        window.history.pushState(null, "", settingsPath);
+        window.history.pushState(null, "", window.location.pathname);
         setShowUnsavedModal(true);
         setPendingNavigation(() => () => {
           window.history.back();

@@ -19,10 +19,11 @@ import GlobalPlayerBar from "./GlobalPlayerBar";
 import UserProfileMenu from "./UserProfileMenu";
 import { useAuth } from "../contexts/AuthContext";
 import { useAudioQueue } from "../hooks/useAudioQueue";
+import { DEFAULT_SETTINGS_TAB } from "../pages/Settings/settingsTabsConfig";
 
 const VALID_SIDEBAR_MODES = ["full", "icons", "hidden"];
 
-function Layout({ children, appVersion }) {
+function Layout({ children }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [scrollbar, setScrollbar] = useState({
     visible: false,
@@ -98,6 +99,15 @@ function Layout({ children, appVersion }) {
   const isActive = useCallback(
     (path) => {
       if (path === "/discover" && location.pathname === "/") return true;
+      if (path.startsWith("/settings")) {
+        return location.pathname.startsWith("/settings");
+      }
+      if (path.startsWith("/shows")) {
+        return location.pathname.startsWith("/shows");
+      }
+      if (path.startsWith("/history")) {
+        return location.pathname.startsWith("/history");
+      }
       return location.pathname === path;
     },
     [location.pathname],
@@ -124,11 +134,11 @@ function Layout({ children, appVersion }) {
 
   const mobileOverflowItems = useMemo(() => {
     const items = [
-      { path: "/shows", label: "Shows", icon: Ticket },
-      { path: "/history", label: "History", icon: History },
+      { path: "/shows/all", label: "Shows", icon: Ticket },
+      { path: "/history/all", label: "History", icon: History },
       { path: "/profile", label: "Profile", icon: User },
       {
-        path: "/settings",
+        path: `/settings/${DEFAULT_SETTINGS_TAB}`,
         label: "Settings",
         icon: Settings,
         permission: "accessSettings",
@@ -193,8 +203,8 @@ function Layout({ children, appVersion }) {
   );
 
   return (
-    <div className="app-shell">
-      <Sidebar appVersion={appVersion} mode={sidebarMode} />
+    <div className="app-shell" data-sidebar-mode={sidebarMode}>
+      <Sidebar mode={sidebarMode} />
 
       <div
         className={`app-content${
@@ -341,7 +351,6 @@ function Layout({ children, appVersion }) {
 
 Layout.propTypes = {
   children: PropTypes.node.isRequired,
-  appVersion: PropTypes.string,
 };
 
 export default Layout;

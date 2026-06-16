@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useState } from "react";
 import { RotateCcw } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
@@ -161,7 +162,11 @@ export function SettingsAccountTab({
                 />
                 <p className="settings-page__hint">
                   Connect Last.fm or ListenBrainz for personalized discovery
-                  recommendations based on your listening history.
+                  recommendations. Admin API defaults are in{" "}
+                  <Link to="/settings/connect" className="settings-page__link">
+                    Settings → Connect
+                  </Link>
+                  .
                 </p>
               </div>
             )}
@@ -229,8 +234,11 @@ export function SettingsAccountTab({
 
           {!lidarrConfigured && (
             <p className="settings-page__footnote">
-              Lidarr must be configured by an admin before personal library
-              defaults can be saved.
+              Lidarr must be configured by an admin in{" "}
+              <Link to="/settings/library" className="settings-page__link">
+                Settings → Library
+              </Link>{" "}
+              before personal library defaults can be saved.
             </p>
           )}
         </div>

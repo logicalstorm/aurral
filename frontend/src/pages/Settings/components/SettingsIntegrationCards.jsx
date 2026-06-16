@@ -4,16 +4,18 @@ export function IntegrationCard({ title, subtitle, status, meta, onClick }) {
   return (
     <button
       type="button"
-      className="settings-page__download-card"
+      className="settings-page__integration-card"
       onClick={onClick}
     >
-      <span className="settings-page__download-card-main">
-        <span className="settings-page__download-card-title">{title}</span>
-        <span className="settings-page__download-card-subtitle">{subtitle}</span>
-        {meta && <span className="settings-page__download-card-meta">{meta}</span>}
+      <span className="settings-page__integration-card-main">
+        <span className="settings-page__integration-card-title">{title}</span>
+        <span className="settings-page__integration-card-subtitle">{subtitle}</span>
+        {meta && (
+          <span className="settings-page__integration-card-meta">{meta}</span>
+        )}
       </span>
-      <span className="settings-page__download-card-side">
-        <span className={`settings-page__download-status ${status.className}`}>
+      <span className="settings-page__integration-card-side">
+        <span className={`settings-page__integration-status ${status.className}`}>
           {status.label}
         </span>
         <Pencil className="artist-icon-sm" aria-hidden />
@@ -22,11 +24,20 @@ export function IntegrationCard({ title, subtitle, status, meta, onClick }) {
   );
 }
 
-export function SettingsIntegrationModal({ title, children, onClose }) {
+export function SettingsIntegrationModal({
+  title,
+  children,
+  onClose,
+  saveReminder = true,
+  wide = true,
+  footerActions = null,
+}) {
   return (
     <div className="artist-modal-backdrop" onClick={onClose}>
       <div
-        className="settings-page__modal settings-page__modal--wide"
+        className={`settings-page__modal settings-page__modal--integration${
+          wide ? " settings-page__modal--wide" : ""
+        }`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="integration-settings-modal-title"
@@ -48,8 +59,16 @@ export function SettingsIntegrationModal({ title, children, onClose }) {
             <X className="artist-icon-md" />
           </button>
         </div>
-        <div className="settings-page__fields">{children}</div>
+        {saveReminder && (
+          <p className="settings-page__modal-reminder">
+            Save this settings section to apply changes.
+          </p>
+        )}
+        <div className="settings-page__modal-body">
+          <div className="settings-modal">{children}</div>
+        </div>
         <div className="settings-page__modal-actions">
+          {footerActions}
           <button type="button" className="btn btn-primary" onClick={onClose}>
             Done
           </button>

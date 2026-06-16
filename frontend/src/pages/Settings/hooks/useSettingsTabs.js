@@ -1,106 +1,49 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { Bell, Compass, Download, Music, Server, Users } from "lucide-react";
+import { useCallback, useMemo } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  DEFAULT_SETTINGS_TAB,
+  getSettingsTabById,
+  normalizeSettingsTabId,
+  SETTINGS_NAV_TABS,
+  SETTINGS_TAB_IDS,
+} from "../settingsTabsConfig";
 
 export function useSettingsTabs(authUser) {
-  const [activeTab, setActiveTab] = useState("library");
-  const [hoveredTabIndex, setHoveredTabIndex] = useState(null);
-  const navRef = useRef(null);
-  const activeBubbleRef = useRef(null);
-  const hoverBubbleRef = useRef(null);
-  const linkRefs = useRef({});
+  const navigate = useNavigate();
+  const { tab: tabParam } = useParams();
 
   const tabs = useMemo(() => {
     if (authUser?.role !== "admin") {
       return [];
     }
-    return [
-      { id: "library", label: "Library", icon: Server },
-      { id: "downloads", label: "Downloads", icon: Download },
-      { id: "playback", label: "Playback", icon: Music },
-      { id: "discover", label: "Discover", icon: Compass },
-      { id: "notifications", label: "Notifications", icon: Bell },
-      { id: "users", label: "Users", icon: Users },
-    ];
+    return SETTINGS_NAV_TABS;
   }, [authUser?.role]);
 
-  useEffect(() => {
-    const validIds = tabs.map((t) => t.id);
-    const legacyTabMap = {
-      integrations: "library",
-      playlists: "downloads",
-    };
-    const normalizedTab = legacyTabMap[activeTab] || activeTab;
-    if (normalizedTab !== activeTab && validIds.includes(normalizedTab)) {
-      setActiveTab(normalizedTab);
-      return;
-    }
-    if (!validIds.includes(activeTab)) {
-      setActiveTab(validIds[0] || "users");
-    }
-  }, [tabs, activeTab]);
+  const activeTab = useMemo(() => {
+    const normalized = normalizeSettingsTabId(tabParam);
+    return SETTINGS_TAB_IDS.includes(normalized)
+      ? normalized
+      : DEFAULT_SETTINGS_TAB;
+  }, [tabParam]);
 
-  useEffect(() => {
-    const updateActiveBubble = () => {
-      if (!navRef.current || !activeBubbleRef.current) return;
-      const activeIndex = tabs.findIndex((tab) => tab.id === activeTab);
-      if (activeIndex === -1) {
-        activeBubbleRef.current.style.opacity = "0";
-        return;
-      }
-      const activeEl = linkRefs.current[activeIndex];
-      if (!activeEl) {
-        setTimeout(updateActiveBubble, 50);
-        return;
-      }
-      const navRect = navRef.current.getBoundingClientRect();
-      const linkRect = activeEl.getBoundingClientRect();
-      activeBubbleRef.current.style.left = `${linkRect.left - navRect.left}px`;
-      activeBubbleRef.current.style.top = `${linkRect.top - navRect.top}px`;
-      activeBubbleRef.current.style.width = `${linkRect.width}px`;
-      activeBubbleRef.current.style.height = `${linkRect.height}px`;
-      activeBubbleRef.current.style.opacity = "1";
-    };
-    const timeoutId = setTimeout(updateActiveBubble, 10);
-    window.addEventListener("resize", updateActiveBubble);
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener("resize", updateActiveBubble);
-    };
-  }, [activeTab, tabs]);
+  const activeTabMeta = useMemo(
+    () => getSettingsTabById(activeTab),
+    [activeTab],
+  );
 
-  useEffect(() => {
-    const updateHoverBubble = () => {
-      if (!navRef.current || !hoverBubbleRef.current) return;
-      if (hoveredTabIndex === null) {
-        hoverBubbleRef.current.style.left = "0px";
-        hoverBubbleRef.current.style.top = "0px";
-        hoverBubbleRef.current.style.width = "100%";
-        hoverBubbleRef.current.style.height = "100%";
-        hoverBubbleRef.current.style.opacity = "0.6";
-        return;
-      }
-      const hoveredEl = linkRefs.current[hoveredTabIndex];
-      if (!hoveredEl) return;
-      const navRect = navRef.current.getBoundingClientRect();
-      const linkRect = hoveredEl.getBoundingClientRect();
-      hoverBubbleRef.current.style.left = `${linkRect.left - navRect.left}px`;
-      hoverBubbleRef.current.style.top = `${linkRect.top - navRect.top}px`;
-      hoverBubbleRef.current.style.width = `${linkRect.width}px`;
-      hoverBubbleRef.current.style.height = `${linkRect.height}px`;
-      hoverBubbleRef.current.style.opacity = "1";
-    };
-    updateHoverBubble();
-  }, [hoveredTabIndex]);
+  const setActiveTab = useCallback(
+    (tabId) => {
+      const nextTab = normalizeSettingsTabId(tabId);
+      if (nextTab === activeTab) return;
+      navigate(`/settings/${nextTab}`);
+    },
+    [activeTab, navigate],
+  );
 
   return {
     activeTab,
+    activeTabMeta,
     setActiveTab,
     tabs,
-    hoveredTabIndex,
-    setHoveredTabIndex,
-    navRef,
-    activeBubbleRef,
-    hoverBubbleRef,
-    linkRefs,
   };
 }

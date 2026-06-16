@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PropTypes from "prop-types";
-import { useNavigate } from "react-router-dom";
+import { useDiscoverNavigation } from "../hooks/useDiscoverNavigation";
 import {
   CheckCircle2,
   Crosshair,
@@ -134,7 +134,7 @@ export function DiscoverPlaylistSection({
   const [playlistMenuError, setPlaylistMenuError] = useState("");
   const expandedPanelRef = useRef(null);
   const playlistCardsRef = useRef(null);
-  const navigate = useNavigate();
+  const navigate = useDiscoverNavigation();
   const { showSuccess, showError } = useToast();
 
   const visiblePlaylists = useMemo(

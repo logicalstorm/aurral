@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import PropTypes from "prop-types";
-import { useNavigate } from "react-router-dom";
+import { useDiscoverNavigation } from "../../../hooks/useDiscoverNavigation";
 import {
   Loader,
   Music,
@@ -33,7 +33,7 @@ export function ArtistDetailsLibraryAlbums({
   onVisibleCoverIdsChange,
   artistName = "",
 }) {
-  const navigate = useNavigate();
+  const navigate = useDiscoverNavigation();
   const railRef = useRef(null);
   const visibleCoverIdsRef = useRef(new Set());
   const [canScrollLeft, setCanScrollLeft] = useState(false);

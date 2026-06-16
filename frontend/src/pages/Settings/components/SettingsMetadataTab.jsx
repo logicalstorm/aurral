@@ -10,22 +10,14 @@ export function SettingsMetadataTab({
   hasUnsavedChanges,
   saving,
   handleSaveSettings,
+  hidePanelHeader = false,
 }) {
-  return (
-    <div className="settings-page__panel">
-      <div className="settings-page__panel-header">
-        <h2 className="settings-page__panel-title">Metadata Services</h2>
-        <FlipSaveButton
-          saving={saving}
-          disabled={!hasUnsavedChanges}
-          onClick={handleSaveSettings}
-        />
-      </div>
-      <form
-        onSubmit={handleSaveSettings}
-        className="settings-page__form"
-        autoComplete="off"
-      >
+  const form = (
+    <form
+      onSubmit={handleSaveSettings}
+      className="settings-page__form"
+      autoComplete="off"
+    >
         <div className="settings-page__section">
           <div className="settings-page__section-header">
             <h3 className="settings-page__section-title">Metadata Server</h3>
@@ -127,6 +119,23 @@ export function SettingsMetadataTab({
           </div>
         </div>
       </form>
+  );
+
+  if (hidePanelHeader) {
+    return form;
+  }
+
+  return (
+    <div className="settings-page__panel">
+      <div className="settings-page__panel-header">
+        <h2 className="settings-page__panel-title">Metadata</h2>
+        <FlipSaveButton
+          saving={saving}
+          disabled={!hasUnsavedChanges}
+          onClick={handleSaveSettings}
+        />
+      </div>
+      {form}
     </div>
   );
 }

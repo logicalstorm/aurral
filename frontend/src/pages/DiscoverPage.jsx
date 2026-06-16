@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useDiscoverNavigation } from "../hooks/useDiscoverNavigation";
 import {
   Loader,
   Music,
@@ -413,7 +413,7 @@ function DiscoverPage() {
   const requestedReleaseCoversRef = useRef(new Set());
   const requestedArtistCoversRef = useRef(new Set());
   const lastDiscoveryWsMessageAtRef = useRef(0);
-  const navigate = useNavigate();
+  const navigate = useDiscoverNavigation();
   const { showSuccess, showError } = useToast();
   const canAddArtist = hasPermission("addArtist");
   const canAddAlbum = hasPermission("addAlbum");

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import PropTypes from "prop-types";
 import {
   Library,
@@ -7,35 +7,81 @@ import {
   History,
   AudioWaveform,
   Ticket,
+  Settings,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { getBootstrapStatus } from "../utils/api";
 import { useFlowWorkerActivity } from "../pages/flows/useFlowWorkerActivity";
+import {
+  DEFAULT_SETTINGS_TAB,
+  SETTINGS_NAV_TABS,
+} from "../pages/Settings/settingsTabsConfig";
+import {
+  DEFAULT_SHOWS_FILTER,
+  SHOWS_FILTERS,
+} from "../navigation/showsNavConfig";
+import {
+  DEFAULT_HISTORY_TAB,
+  getHistoryNavItems,
+} from "../navigation/historyNavConfig";
+import { useDiscoverRecent } from "../contexts/DiscoverRecentContext";
 
-function Sidebar({ appVersion, mode }) {
+function Sidebar({ mode }) {
   const location = useLocation();
   const { user } = useAuth();
   const hasFlowAccess =
     user?.role === "admin" || !!user?.permissions?.accessFlow;
+  const canAccessSettings =
+    user?.role === "admin" || !!user?.permissions?.accessSettings;
   const { hasActivity: hasRequestActivity } = useFlowWorkerActivity({
     enabled: hasFlowAccess,
   });
-  const resolvedVersion =
-    appVersion || import.meta.env.VITE_APP_VERSION || "unknown";
-  const navRef = useRef(null);
-  const activeBubbleRef = useRef(null);
-  const hoverBubbleRef = useRef(null);
-  const [hoveredIndex, setHoveredIndex] = useState(null);
-  const linkRefs = useRef({});
-  const asideRef = useRef(null);
   const [isDesktop, setIsDesktop] = useState(() =>
     typeof window !== "undefined"
       ? window.matchMedia("(min-width: 768px)").matches
       : true,
   );
   const [ticketmasterConfigured, setTicketmasterConfigured] = useState(true);
+  const [usenetConfigured, setUsenetConfigured] = useState(false);
+  const {
+    recentPages: discoverRecentPages,
+    clearRecentPages,
+    isDiscoverSectionActive,
+  } = useDiscoverRecent();
 
   const isIcons = mode === "icons" && isDesktop;
+  const currentDiscoverPath = `${location.pathname}${location.search}`;
+  const isOnSettings = location.pathname.startsWith("/settings");
+  const isOnShows = location.pathname.startsWith("/shows");
+  const isOnHistory = location.pathname.startsWith("/history");
+
+  const settingsTabs = useMemo(() => {
+    if (!canAccessSettings) return [];
+    return SETTINGS_NAV_TABS;
+  }, [canAccessSettings]);
+
+  const historyNavItems = useMemo(
+    () => getHistoryNavItems(usenetConfigured),
+    [usenetConfigured],
+  );
+
+  const activeSettingsTab = useMemo(() => {
+    if (!isOnSettings) return null;
+    const segment = location.pathname.replace(/^\/settings\/?/, "").split("/")[0];
+    return segment || DEFAULT_SETTINGS_TAB;
+  }, [isOnSettings, location.pathname]);
+
+  const activeShowsFilter = useMemo(() => {
+    if (!isOnShows) return null;
+    const segment = location.pathname.replace(/^\/shows\/?/, "").split("/")[0];
+    return segment || DEFAULT_SHOWS_FILTER;
+  }, [isOnShows, location.pathname]);
+
+  const activeHistoryTab = useMemo(() => {
+    if (!isOnHistory) return null;
+    const segment = location.pathname.replace(/^\/history\/?/, "").split("/")[0];
+    return segment || DEFAULT_HISTORY_TAB;
+  }, [isOnHistory, location.pathname]);
 
   const positionSidebarTooltip = useCallback((event) => {
     const link = event.currentTarget;
@@ -67,10 +113,12 @@ function Sidebar({ appVersion, mode }) {
         const bootstrap = await getBootstrapStatus();
         if (!cancelled) {
           setTicketmasterConfigured(!!bootstrap.ticketmasterConfigured);
+          setUsenetConfigured(!!bootstrap.usenetConfigured);
         }
       } catch {
         if (!cancelled) {
           setTicketmasterConfigured(true);
+          setUsenetConfigured(false);
         }
       }
     };
@@ -80,20 +128,40 @@ function Sidebar({ appVersion, mode }) {
     };
   }, []);
 
-  const isActive = useCallback(
-    (path) => {
-      if (path === "/discover" && location.pathname === "/") return true;
-      return location.pathname === path;
+  const isNavItemActive = useCallback(
+    (item) => {
+      if (item.section === "discover") {
+        return isDiscoverSectionActive;
+      }
+      if (item.section === "shows") return isOnShows;
+      if (item.section === "history") return isOnHistory;
+      if (item.path === "/discover" && location.pathname === "/") return true;
+      return location.pathname === item.path;
     },
-    [location.pathname],
+    [isDiscoverSectionActive, isOnHistory, isOnShows, location.pathname],
   );
 
   const navItems = useMemo(() => {
     const items = [
-      { path: "/discover", label: "Discover", icon: Sparkles },
+      {
+        path: "/discover",
+        label: "Discover",
+        icon: Sparkles,
+        section: "discover",
+        subnav: discoverRecentPages,
+      },
       { path: "/library", label: "Library", icon: Library },
       ...(ticketmasterConfigured
-        ? [{ path: "/shows", label: "Shows", icon: Ticket }]
+        ? [
+            {
+              path: `/shows/${DEFAULT_SHOWS_FILTER}`,
+              basePath: "/shows",
+              label: "Shows",
+              icon: Ticket,
+              section: "shows",
+              subnav: SHOWS_FILTERS,
+            },
+          ]
         : []),
       {
         path: "/playlists",
@@ -101,7 +169,14 @@ function Sidebar({ appVersion, mode }) {
         icon: AudioWaveform,
         permission: "accessFlow",
       },
-      { path: "/history", label: "History", icon: History },
+      {
+        path: `/history/${DEFAULT_HISTORY_TAB}`,
+        basePath: "/history",
+        label: "History",
+        icon: History,
+        section: "history",
+        subnav: historyNavItems,
+      },
     ];
     return items.filter(
       (item) =>
@@ -109,137 +184,119 @@ function Sidebar({ appVersion, mode }) {
         user?.role === "admin" ||
         !!user?.permissions?.[item.permission],
     );
-  }, [ticketmasterConfigured, user]);
-
-  useEffect(() => {
-    const updateBubblePosition = () => {
-      if (!navRef.current || !activeBubbleRef.current) return;
-
-      const activeIndex = navItems.findIndex((item) => isActive(item.path));
-      if (activeIndex === -1) {
-        activeBubbleRef.current.style.opacity = "0";
-        return;
-      }
-
-      const activeLink = linkRefs.current[activeIndex];
-      if (!activeLink) {
-        setTimeout(updateBubblePosition, 50);
-        return;
-      }
-
-      const navRect = navRef.current.getBoundingClientRect();
-      const linkRect = activeLink.getBoundingClientRect();
-
-      activeBubbleRef.current.style.left = `${linkRect.left - navRect.left}px`;
-      activeBubbleRef.current.style.top = `${linkRect.top - navRect.top}px`;
-      activeBubbleRef.current.style.width = `${linkRect.width}px`;
-      activeBubbleRef.current.style.height = `${linkRect.height}px`;
-      activeBubbleRef.current.style.opacity = "1";
-    };
-
-    const timeoutId = setTimeout(updateBubblePosition, 10);
-    window.addEventListener("resize", updateBubblePosition);
-
-    const aside = asideRef.current;
-    const onTransitionEnd = (e) => {
-      if (e.propertyName === "width") updateBubblePosition();
-    };
-    aside?.addEventListener("transitionend", onTransitionEnd);
-
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener("resize", updateBubblePosition);
-      aside?.removeEventListener("transitionend", onTransitionEnd);
-    };
-  }, [location.pathname, navItems, isActive, mode]);
-
-  useEffect(() => {
-    const updateHoverBubble = () => {
-      if (!navRef.current || !hoverBubbleRef.current) return;
-
-      if (hoveredIndex === null) {
-        hoverBubbleRef.current.style.left = "0px";
-        hoverBubbleRef.current.style.top = "0px";
-        hoverBubbleRef.current.style.width = "100%";
-        hoverBubbleRef.current.style.height = "100%";
-        hoverBubbleRef.current.style.opacity = "0.6";
-        return;
-      }
-
-      const hoveredLink = linkRefs.current[hoveredIndex];
-      if (!hoveredLink) return;
-
-      const navRect = navRef.current.getBoundingClientRect();
-      const linkRect = hoveredLink.getBoundingClientRect();
-
-      hoverBubbleRef.current.style.left = `${linkRect.left - navRect.left}px`;
-      hoverBubbleRef.current.style.top = `${linkRect.top - navRect.top}px`;
-      hoverBubbleRef.current.style.width = `${linkRect.width}px`;
-      hoverBubbleRef.current.style.height = `${linkRect.height}px`;
-      hoverBubbleRef.current.style.opacity = "1";
-    };
-
-    updateHoverBubble();
-  }, [hoveredIndex]);
+  }, [discoverRecentPages, historyNavItems, ticketmasterConfigured, user]);
 
   const translateClass =
     mode === "hidden" ? "-translate-x-full" : "translate-x-0";
 
-  return (
-    <>
-      <aside
-        ref={asideRef}
-        className={`sidebar-shell ${translateClass}`}
-        style={{
-          width: isIcons ? "56px" : "208px",
-        }}
-      >
-        <div className="sidebar-logo-row">
-          <Link to="/" className="sidebar-logo-link">
-            <img
-              src="/arralogo.svg"
-              alt="Aurral Logo"
-              className="sidebar-logo"
-            />
-            {!isIcons && <span className="sidebar-title">Aurral</span>}
-          </Link>
-        </div>
+  const renderSubnav = (item, activeId) => {
+    if (isIcons || !item.subnav?.length || !isNavItemActive(item)) {
+      return null;
+    }
 
-        <div className={`sidebar-body${isIcons ? " sidebar-body--icons" : ""}`}>
-          <div
-            ref={navRef}
-            className={`sidebar-nav-wrap${isIcons ? " sidebar-nav-wrap--icons" : ""}`}
+    if (item.section === "discover") {
+      return (
+        <nav className="sidebar-subnav" aria-label={`${item.label} recent pages`}>
+          {item.subnav.map((entry) => {
+            const active = activeId === entry.id;
+            return (
+              <Link
+                key={entry.id}
+                to={entry.path}
+                className={`sidebar-subnav-link sidebar-subnav-link--recent${
+                  active ? " is-active" : ""
+                }`}
+                aria-current={active ? "page" : undefined}
+                title={entry.label}
+              >
+                <span className="sidebar-subnav-link__text">{entry.label}</span>
+              </Link>
+            );
+          })}
+          <button
+            type="button"
+            className="sidebar-subnav-action"
+            onClick={clearRecentPages}
           >
-            <div
-              ref={activeBubbleRef}
-              className="sidebar-bubble sidebar-bubble--active"
-            />
+            Clear recent
+          </button>
+        </nav>
+      );
+    }
 
-            <div
-              ref={hoverBubbleRef}
-              className="sidebar-bubble sidebar-bubble--hover"
-            />
-
-            <nav
-              className="sidebar-nav"
-              onMouseLeave={() => setHoveredIndex(null)}
+    return (
+      <nav className="sidebar-subnav" aria-label={`${item.label} views`}>
+        {item.subnav.map((entry) => {
+          const active = activeId === entry.id;
+          return (
+            <Link
+              key={entry.id}
+              to={`${item.basePath}/${entry.id}`}
+              className={`sidebar-subnav-link${active ? " is-active" : ""}`}
+              aria-current={active ? "page" : undefined}
             >
-              {navItems.map((item, index) => {
-                const Icon = item.icon;
-                const active = isActive(item.path);
-                const showActivityDot =
-                  item.path === "/history" && hasRequestActivity;
+              {entry.label}
+            </Link>
+          );
+        })}
+      </nav>
+    );
+  };
 
-                return (
+  const getNavGroupClassName = (item, active) => {
+    const classes = ["sidebar-nav-group"];
+    if (active && item.subnav?.length && !isIcons) {
+      classes.push("is-expanded");
+    } else if (active) {
+      classes.push("is-active-row");
+    }
+    return classes.join(" ");
+  };
+
+  return (
+    <aside
+      className={`sidebar-shell ${translateClass}`}
+      style={{
+        width: isIcons ? "56px" : "208px",
+      }}
+    >
+      <div className="sidebar-logo-row">
+        <Link to="/" className="sidebar-logo-link">
+          <img src="/arralogo.svg" alt="Aurral Logo" className="sidebar-logo" />
+          {!isIcons && <span className="sidebar-title">Aurral</span>}
+        </Link>
+      </div>
+
+      <div className={`sidebar-body${isIcons ? " sidebar-body--icons" : ""}`}>
+        <div
+          className={`sidebar-nav-wrap${isIcons ? " sidebar-nav-wrap--icons" : ""}`}
+        >
+          <nav className="sidebar-nav">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const active = isNavItemActive(item);
+              const showActivityDot =
+                item.section === "history" && hasRequestActivity;
+              const activeSubnavId =
+                item.section === "discover"
+                  ? discoverRecentPages.find(
+                      (entry) => entry.path === currentDiscoverPath,
+                    )?.id
+                  : item.section === "shows"
+                    ? activeShowsFilter
+                    : item.section === "history"
+                      ? activeHistoryTab
+                      : null;
+
+              return (
+                <div
+                  key={item.path}
+                  className={getNavGroupClassName(item, active)}
+                >
                   <Link
-                    key={item.path}
-                    ref={(el) => {
-                      if (el) linkRefs.current[index] = el;
-                    }}
                     to={item.path}
                     onMouseEnter={(event) => {
                       if (isIcons) positionSidebarTooltip(event);
-                      setHoveredIndex(index);
                     }}
                     className={`sidebar-link ${
                       isIcons ? "sidebar-link--icons" : "sidebar-link--full"
@@ -255,7 +312,10 @@ function Sidebar({ appVersion, mode }) {
                     <span className="sidebar-link__icon-wrap">
                       <Icon className="sidebar-link__icon" aria-hidden="true" />
                       {showActivityDot ? (
-                        <span className="sidebar-link__activity" aria-hidden="true" />
+                        <span
+                          className="sidebar-link__activity"
+                          aria-hidden="true"
+                        />
                       ) : null}
                     </span>
                     {!isIcons && (
@@ -270,24 +330,82 @@ function Sidebar({ appVersion, mode }) {
                       <span className="sidebar-tooltip">{item.label}</span>
                     )}
                   </Link>
-                );
-              })}
-            </nav>
-          </div>
+                  {renderSubnav(item, activeSubnavId)}
+                </div>
+              );
+            })}
+          </nav>
         </div>
 
-        {!isIcons && (
-          <div className="sidebar-footer">
-            <div className="sidebar-version">v{resolvedVersion}</div>
+        {canAccessSettings && (
+          <div
+            className={`sidebar-settings-group${
+              isIcons ? "" : isOnSettings ? " sidebar-nav-group is-expanded" : ""
+            }`}
+          >
+            {isIcons ? (
+              <Link
+                to={`/settings/${DEFAULT_SETTINGS_TAB}`}
+                onMouseEnter={positionSidebarTooltip}
+                className={`sidebar-link sidebar-link--icons${
+                  isOnSettings ? " is-active" : ""
+                }`}
+                aria-label="Settings"
+              >
+                <span className="sidebar-link__icon-wrap">
+                  <Settings className="sidebar-link__icon" aria-hidden="true" />
+                </span>
+                <span className="sidebar-tooltip">Settings</span>
+              </Link>
+            ) : (
+              <>
+                <Link
+                  to={`/settings/${DEFAULT_SETTINGS_TAB}`}
+                  className={`sidebar-link sidebar-link--full${
+                    isOnSettings ? " is-active" : ""
+                  }`}
+                >
+                  <span className="sidebar-link__icon-wrap">
+                    <Settings
+                      className="sidebar-link__icon"
+                      aria-hidden="true"
+                    />
+                  </span>
+                  <span className="sidebar-link__label">Settings</span>
+                </Link>
+
+                {isOnSettings && (
+                  <nav
+                    className="sidebar-subnav"
+                    aria-label="Settings sections"
+                  >
+                    {settingsTabs.map((tab) => {
+                      const tabActive = activeSettingsTab === tab.id;
+                      return (
+                        <Link
+                          key={tab.id}
+                          to={`/settings/${tab.id}`}
+                          className={`sidebar-subnav-link${
+                            tabActive ? " is-active" : ""
+                          }`}
+                          aria-current={tabActive ? "page" : undefined}
+                        >
+                          {tab.label}
+                        </Link>
+                      );
+                    })}
+                  </nav>
+                )}
+              </>
+            )}
           </div>
         )}
-      </aside>
-    </>
+      </div>
+    </aside>
   );
 }
 
 Sidebar.propTypes = {
-  appVersion: PropTypes.string,
   mode: PropTypes.oneOf(["full", "icons", "hidden"]).isRequired,
 };
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import PropTypes from "prop-types";
-import { useNavigate } from "react-router-dom";
+import { useDiscoverNavigation } from "../../../hooks/useDiscoverNavigation";
 import {
   ArrowRight,
   Loader,
@@ -74,7 +74,7 @@ export function ArtistDetailsReleaseGroups({
   onVisibleCoverIdsChange,
   onViewAll,
 }) {
-  const navigate = useNavigate();
+  const navigate = useDiscoverNavigation();
   const [viewMode, setViewMode] = useState("popular");
   const releaseGroups = useMemo(
     () => artist["release-groups"] || [],

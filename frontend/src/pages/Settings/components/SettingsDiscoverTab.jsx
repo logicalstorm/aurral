@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { CheckCircle, RefreshCw, Trash2, X } from "lucide-react";
+import { Link } from "react-router-dom";
+import { RefreshCw, Trash2, X } from "lucide-react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
 
@@ -56,6 +57,8 @@ export function SettingsDiscoverTab({
   const [lastfmBannerDismissed, setLastfmBannerDismissed] = useState(
     readLastfmDiscoverBannerDismissed,
   );
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   const autoRefreshHours =
     settings.integrations?.lastfm?.discoveryAutoRefreshHours || 168;
   const discoveryMode =
@@ -77,12 +80,18 @@ export function SettingsDiscoverTab({
     health?.discovery?.provider === "listenbrainz-fallback";
   const showLastfmDiscoverBanner =
     isListenBrainzFallback && !lastfmBannerDismissed;
-  const localDiscoveryIncludeRecommendations =
-    settings.integrations?.ticketmaster
-      ?.localDiscoveryIncludeRecommendations !== false;
-  const localDiscoveryIncludeTrending =
-    settings.integrations?.ticketmaster?.localDiscoveryIncludeTrending !==
-    false;
+
+  const updateLastfmDiscovery = (patch) =>
+    updateSettings({
+      ...settings,
+      integrations: {
+        ...settings.integrations,
+        lastfm: {
+          ...(settings.integrations?.lastfm || {}),
+          ...patch,
+        },
+      },
+    });
 
   return (
     <div className="settings-page__panel">
@@ -107,9 +116,12 @@ export function SettingsDiscoverTab({
                 Optional Last.fm upgrade
               </p>
               <p className="settings-page__banner-text">
-                Add a free Last.fm API key in the Listening history section
-                below to unlock personalized recommendations, similar artists,
-                tag and genre search, and custom weekly flows.
+                Add a free Last.fm API key in{" "}
+                <Link to="/settings/connect" className="settings-page__link">
+                  Connect
+                </Link>{" "}
+                to unlock personalized recommendations, similar artists, tag
+                search, and custom weekly flows.
               </p>
             </div>
             <button
@@ -129,206 +141,21 @@ export function SettingsDiscoverTab({
         )}
 
         <div className="settings-page__section">
-          <div className="settings-page__section-header">
-            <h3 className="settings-page__section-title">Listening history</h3>
-            <div className="settings-page__inline-row">
-              {health?.lastfmConfigured && (
-                <span className="settings-page__status">
-                  <CheckCircle className="settings-page__status-icon" />
-                  Configured
-                </span>
-              )}
-            </div>
+          <div className="settings-page__section-intro">
+            <h3 className="settings-page__section-title">Discovery behavior</h3>
+            <p className="settings-page__section-note">
+              Controls how often Aurral refreshes recommendations and flows.
+              Listening history API keys are configured in{" "}
+              <Link to="/settings/connect" className="settings-page__link">
+                Connect
+              </Link>
+              ; per-user accounts are in{" "}
+              <Link to="/profile" className="settings-page__link">
+                Profile
+              </Link>
+              .
+            </p>
           </div>
-          <fieldset className="settings-page__fields">
-            <div className="settings-page__two-col-grid">
-              <div>
-                <label className="artist-field-label">Last.fm API key</label>
-                <SettingsInput
-                  type="password"
-                  placeholder="Last.fm API Key"
-                  autoComplete="off"
-                  value={settings.integrations?.lastfm?.apiKey || ""}
-                  onChange={(e) =>
-                    updateSettings({
-                      ...settings,
-                      integrations: {
-                        ...settings.integrations,
-                        lastfm: {
-                          ...(settings.integrations?.lastfm || {}),
-                          apiKey: e.target.value,
-                        },
-                      },
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <label className="artist-field-label">Default username</label>
-                <SettingsInput
-                  type="text"
-                  placeholder="Your Last.fm username"
-                  autoComplete="off"
-                  value={settings.integrations?.lastfm?.username || ""}
-                  onChange={(e) =>
-                    updateSettings({
-                      ...settings,
-                      integrations: {
-                        ...settings.integrations,
-                        lastfm: {
-                          ...(settings.integrations?.lastfm || {}),
-                          username: e.target.value,
-                        },
-                      },
-                    })
-                  }
-                />
-                <p className="settings-page__hint">
-                  Used as the fallback for users who have not set their own
-                  Last.fm, ListenBrainz, or Koito account in Profile.
-                </p>
-              </div>
-            </div>
-          </fieldset>
-        </div>
-
-        <div className="settings-page__section">
-          <div className="settings-page__section-header">
-            <h3 className="settings-page__section-title">Local shows</h3>
-            <div className="settings-page__inline-row">
-              {health?.ticketmasterConfigured && (
-                <span className="settings-page__status">
-                  <CheckCircle className="settings-page__status-icon" />
-                  Configured
-                </span>
-              )}
-            </div>
-          </div>
-          <fieldset className="settings-page__fields">
-            <div className="settings-page__callout">
-              <p className="artist-field-label">Get an API key</p>
-              <p className="settings-page__callout-copy">
-                Register on the developers portal. After the registration, the
-                default application will be created. The application contains a
-                Consumer Key that is used for authentication.
-              </p>
-              <a
-                href="https://developer-acct.ticketmaster.com/user/login"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="settings-page__link"
-              >
-                Open the Ticketmaster developer portal
-              </a>
-            </div>
-            <div className="settings-page__two-col-grid">
-              <div>
-                <label className="artist-field-label">Ticketmaster key</label>
-                <SettingsInput
-                  type="password"
-                  placeholder="Enter Ticketmaster Consumer Key"
-                  autoComplete="off"
-                  value={settings.integrations?.ticketmaster?.apiKey || ""}
-                  onChange={(e) =>
-                    updateSettings({
-                      ...settings,
-                      integrations: {
-                        ...settings.integrations,
-                        ticketmaster: {
-                          ...(settings.integrations?.ticketmaster || {}),
-                          apiKey: e.target.value,
-                        },
-                      },
-                    })
-                  }
-                />
-                <p className="settings-page__hint">
-                  Used for the Discover page&apos;s nearby shows section.
-                </p>
-              </div>
-              <div>
-                <label className="artist-field-label">
-                  Search radius (miles)
-                </label>
-                <SettingsInput
-                  type="number"
-                  min={5}
-                  max={250}
-                  step={5}
-                  value={
-                    settings.integrations?.ticketmaster?.searchRadiusMiles ?? 250
-                  }
-                  onChange={(e) => {
-                    const raw = Number(e.target.value);
-                    const value = Number.isFinite(raw)
-                      ? Math.max(5, Math.min(250, Math.floor(raw)))
-                      : 250;
-                    updateSettings({
-                      ...settings,
-                      integrations: {
-                        ...settings.integrations,
-                        ticketmaster: {
-                          ...(settings.integrations?.ticketmaster || {}),
-                          searchRadiusMiles: value,
-                        },
-                      },
-                    });
-                  }}
-                />
-                <p className="settings-page__hint">
-                  Controls how far from your selected area Ticketmaster events
-                  are searched.
-                </p>
-              </div>
-            </div>
-            <div className="settings-page__field-stack--md">
-              <label className="settings-page__toggle-row">
-                <span>Include recommended artists in local shows</span>
-                <input
-                  type="checkbox"
-                  className="artist-checkbox"
-                  checked={localDiscoveryIncludeRecommendations}
-                  onChange={(e) =>
-                    updateSettings({
-                      ...settings,
-                      integrations: {
-                        ...settings.integrations,
-                        ticketmaster: {
-                          ...(settings.integrations?.ticketmaster || {}),
-                          localDiscoveryIncludeRecommendations:
-                            e.target.checked,
-                        },
-                      },
-                    })
-                  }
-                />
-              </label>
-              <label className="settings-page__toggle-row">
-                <span>Include trending artists in local shows</span>
-                <input
-                  type="checkbox"
-                  className="artist-checkbox"
-                  checked={localDiscoveryIncludeTrending}
-                  onChange={(e) =>
-                    updateSettings({
-                      ...settings,
-                      integrations: {
-                        ...settings.integrations,
-                        ticketmaster: {
-                          ...(settings.integrations?.ticketmaster || {}),
-                          localDiscoveryIncludeTrending: e.target.checked,
-                        },
-                      },
-                    })
-                  }
-                />
-              </label>
-            </div>
-          </fieldset>
-        </div>
-
-        <div className="settings-page__section">
-          <h3 className="settings-page__section-title">Discovery behavior</h3>
           <fieldset className="settings-page__fields">
             <div className="settings-page__field">
               <label className="artist-field-label" htmlFor="discover-refresh">
@@ -338,15 +165,8 @@ export function SettingsDiscoverTab({
                 id="discover-refresh"
                 value={String(autoRefreshHours)}
                 onChange={(e) =>
-                  updateSettings({
-                    ...settings,
-                    integrations: {
-                      ...settings.integrations,
-                      lastfm: {
-                        ...(settings.integrations?.lastfm || {}),
-                        discoveryAutoRefreshHours: parseInt(e.target.value, 10),
-                      },
-                    },
+                  updateLastfmDiscovery({
+                    discoveryAutoRefreshHours: parseInt(e.target.value, 10),
                   })
                 }
               >
@@ -358,6 +178,52 @@ export function SettingsDiscoverTab({
               </SettingsSelect>
             </div>
             {!isListenBrainzFallback && (
+              <div className="settings-page__field">
+                <label className="artist-field-label" htmlFor="discover-mode">
+                  Discovery mode
+                </label>
+                <SettingsSelect
+                  id="discover-mode"
+                  value={discoveryMode}
+                  onChange={(e) =>
+                    updateLastfmDiscovery({ discoveryMode: e.target.value })
+                  }
+                >
+                  {DISCOVERY_MODE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </SettingsSelect>
+                <div className="settings-page__hint-list">
+                  <p>
+                    <strong>Safer:</strong> favors more obvious recommendations.
+                  </p>
+                  <p>
+                    <strong>Balanced:</strong> mixes familiar artists with
+                    exploration.
+                  </p>
+                  <p>
+                    <strong>Deeper:</strong> pushes further beyond obvious
+                    similar artists.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {!isListenBrainzFallback && (
+              <div className="settings-page__advanced-toggle-row">
+                <button
+                  type="button"
+                  className="settings-page__advanced-toggle"
+                  onClick={() => setShowAdvanced((current) => !current)}
+                >
+                  {showAdvanced ? "Hide advanced" : "Show advanced"}
+                </button>
+              </div>
+            )}
+
+            {!isListenBrainzFallback && showAdvanced && (
               <>
                 <div className="settings-page__field">
                   <label
@@ -378,22 +244,11 @@ export function SettingsDiscoverTab({
                       const value = Number.isFinite(raw)
                         ? Math.max(50, Math.min(500, Math.floor(raw)))
                         : 200;
-                      updateSettings({
-                        ...settings,
-                        integrations: {
-                          ...settings.integrations,
-                          lastfm: {
-                            ...(settings.integrations?.lastfm || {}),
-                            discoveryRecommendationsPerRefresh: value,
-                          },
-                        },
+                      updateLastfmDiscovery({
+                        discoveryRecommendationsPerRefresh: value,
                       });
                     }}
                   />
-                  <p className="settings-page__hint">
-                    How many artist recommendations to generate on each
-                    discovery refresh.
-                  </p>
                 </div>
                 <div className="settings-page__field">
                   <label
@@ -414,15 +269,8 @@ export function SettingsDiscoverTab({
                       const value = Number.isFinite(raw)
                         ? Math.max(5, Math.min(32, Math.floor(raw)))
                         : 9;
-                      updateSettings({
-                        ...settings,
-                        integrations: {
-                          ...settings.integrations,
-                          lastfm: {
-                            ...(settings.integrations?.lastfm || {}),
-                            discoveryFlowsPerRefresh: value,
-                          },
-                        },
+                      updateLastfmDiscovery({
+                        discoveryFlowsPerRefresh: value,
                       });
                     }}
                   />
@@ -431,47 +279,6 @@ export function SettingsDiscoverTab({
                     Listening History, and Release Radar, plus {focusFlowCount}{" "}
                     auto-generated focus playlists.
                   </p>
-                </div>
-                <div className="settings-page__field">
-                  <label className="artist-field-label" htmlFor="discover-mode">
-                    Discovery mode
-                  </label>
-                  <SettingsSelect
-                    id="discover-mode"
-                    value={discoveryMode}
-                    onChange={(e) =>
-                      updateSettings({
-                        ...settings,
-                        integrations: {
-                          ...settings.integrations,
-                          lastfm: {
-                            ...(settings.integrations?.lastfm || {}),
-                            discoveryMode: e.target.value,
-                          },
-                        },
-                      })
-                    }
-                  >
-                    {DISCOVERY_MODE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </SettingsSelect>
-                  <div className="settings-page__hint-list">
-                    <p>
-                      <strong>Safer:</strong> favors more obvious,
-                      high-confidence recommendations.
-                    </p>
-                    <p>
-                      <strong>Balanced:</strong> mixes familiar artists with
-                      some exploration.
-                    </p>
-                    <p>
-                      <strong>Deeper:</strong> pushes further beyond the most
-                      obvious similar artists.
-                    </p>
-                  </div>
                 </div>
               </>
             )}

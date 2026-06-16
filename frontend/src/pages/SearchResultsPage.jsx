@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
+import { useDiscoverNavigation } from "../hooks/useDiscoverNavigation";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import {
   Grid3X3,
@@ -146,7 +147,7 @@ function SearchResultsPage() {
   const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
   const sentinelRef = useRef(null);
   const albumOptionsMenuRef = useRef(null);
-  const navigate = useNavigate();
+  const navigate = useDiscoverNavigation();
   const { hasPermission } = useAuth();
   const { showSuccess, showError } = useToast();
 

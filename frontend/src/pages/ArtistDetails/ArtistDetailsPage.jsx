@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useParams, useLocation } from "react-router-dom";
+import { useDiscoverNavigation } from "../../hooks/useDiscoverNavigation";
 import { Loader, Music, X } from "lucide-react";
 import { useToast } from "../../contexts/ToastContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -68,7 +69,7 @@ const reserveUniquePlaylistName = (playlists, baseName = "Playlist") => {
 function ArtistDetailsPage() {
   const { mbid } = useParams();
   const { state: locationState } = useLocation();
-  const navigate = useNavigate();
+  const navigate = useDiscoverNavigation();
   const artistNameFromNav = locationState?.artistName;
   const initialLibraryHint = useMemo(
     () => ({

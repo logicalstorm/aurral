@@ -1,5 +1,5 @@
-import { useEffect, useMemo } from "react";
-import { Navigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useToast } from "../../contexts/ToastContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
@@ -9,26 +9,38 @@ import { useSettingsTabs } from "./hooks/useSettingsTabs";
 import { useSettingsUsers } from "./hooks/useSettingsUsers";
 import { UnsavedModal } from "./components/UnsavedModal";
 import { CommunityGuideModal } from "./components/CommunityGuideModal";
-import { SettingsIntegrationsTab } from "./components/SettingsIntegrationsTab";
-import { SettingsDownloadsTab } from "./components/SettingsDownloadsTab";
+import { SettingsMobileNav } from "./components/SettingsMobileNav";
+import { SettingsLibraryTab } from "./components/SettingsLibraryTab";
+import { SettingsIndexersTab } from "./components/SettingsIndexersTab";
+import { SettingsDownloadClientsTab } from "./components/SettingsDownloadClientsTab";
 import { SettingsPlaybackTab } from "./components/SettingsPlaybackTab";
+import { SettingsConnectTab } from "./components/SettingsConnectTab";
 import { SettingsDiscoverTab } from "./components/SettingsDiscoverTab";
-import { SettingsNotificationsTab } from "./components/SettingsNotificationsTab";
 import { SettingsUsersTab } from "./components/SettingsUsersTab";
-import { SettingsTabsNav } from "./components/SettingsTabsNav";
-import { SettingsSelect } from "./components/SettingsField";
+import { SettingsMetadataPanel } from "./components/SettingsMetadataPanel";
+import { SettingsGeneralTab } from "./components/SettingsGeneralTab";
 import SettingsSponsorBanner from "../../components/SettingsSponsorBanner";
+import FlipSaveButton from "../../components/FlipSaveButton";
+import {
+  DEFAULT_SETTINGS_TAB,
+  normalizeSettingsTabId,
+} from "./settingsTabsConfig";
 
 function SettingsPage() {
   const { showSuccess, showError, showInfo } = useToast();
   const { user: authUser } = useAuth();
+  const navigate = useNavigate();
+  const { tab: tabParam } = useParams();
+  const [pendingTab, setPendingTab] = useState(null);
 
   const data = useSettingsData(showSuccess, showError, showInfo);
   const guard = useUnsavedGuard(
     data.hasUnsavedChanges,
     data.setHasUnsavedChanges,
   );
+
   const tabs = useSettingsTabs(authUser);
+
   const users = useSettingsUsers(
     authUser,
     showSuccess,
@@ -36,27 +48,52 @@ function SettingsPage() {
     tabs.activeTab,
   );
 
+  const normalizedParam = normalizeSettingsTabId(tabParam);
+  const shouldRedirect =
+    authUser?.role === "admin" &&
+    tabParam &&
+    normalizedParam !== tabParam;
+
   const settingsTitle = useMemo(() => {
-    const activeTab = tabs.tabs.find((tab) => tab.id === tabs.activeTab);
-    return activeTab ? `${activeTab.label} - Settings` : "Settings";
-  }, [tabs.activeTab, tabs.tabs]);
+    return tabs.activeTabMeta
+      ? `${tabs.activeTabMeta.label} - Settings`
+      : "Settings";
+  }, [tabs.activeTabMeta]);
   useDocumentTitle(settingsTitle);
 
   useEffect(() => {
-    if (tabs.activeTab === "discover") {
+    if (tabs.activeTab === "discover" || tabs.activeTab === "general") {
       data.refreshHealth();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only run when switching to discover tab
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabs.activeTab]);
+
+  const handleTabSelect = (tabId) => {
+    if (data.hasUnsavedChanges && tabId !== tabs.activeTab) {
+      setPendingTab(tabId);
+      return;
+    }
+    tabs.setActiveTab(tabId);
+  };
+
+  const handleConfirmLeave = () => {
+    data.setHasUnsavedChanges(false);
+    if (pendingTab) {
+      navigate(`/settings/${pendingTab}`);
+      setPendingTab(null);
+      return;
+    }
+    guard.handleConfirmLeave();
+  };
+
+  const showUnsavedModal = guard.showUnsavedModal || Boolean(pendingTab);
 
   const renderTabContent = () => {
     switch (tabs.activeTab) {
       case "library":
         return (
-          <SettingsIntegrationsTab
+          <SettingsLibraryTab
             key="settings-library"
-            scope="library"
-            title="Library"
             settings={data.settings}
             updateSettings={data.updateSettings}
             health={data.health}
@@ -88,9 +125,23 @@ function SettingsPage() {
             showInfo={showInfo}
           />
         );
-      case "downloads":
+      case "indexers":
         return (
-          <SettingsDownloadsTab
+          <SettingsIndexersTab
+            settings={data.settings}
+            updateSettings={data.updateSettings}
+            health={data.health}
+            hasUnsavedChanges={data.hasUnsavedChanges}
+            saving={data.saving}
+            handleSaveSettings={data.handleSaveSettings}
+            showSuccess={showSuccess}
+            showError={showError}
+            showInfo={showInfo}
+          />
+        );
+      case "download-clients":
+        return (
+          <SettingsDownloadClientsTab
             settings={data.settings}
             updateSettings={data.updateSettings}
             health={data.health}
@@ -115,6 +166,21 @@ function SettingsPage() {
             showInfo={showInfo}
           />
         );
+      case "connect":
+        return (
+          <SettingsConnectTab
+            settings={data.settings}
+            updateSettings={data.updateSettings}
+            health={data.health}
+            hasUnsavedChanges={data.hasUnsavedChanges}
+            saving={data.saving}
+            handleSaveSettings={data.handleSaveSettings}
+            testingGotify={data.testingGotify}
+            setTestingGotify={data.setTestingGotify}
+            showSuccess={showSuccess}
+            showError={showError}
+          />
+        );
       case "discover":
         return (
           <SettingsDiscoverTab
@@ -132,19 +198,26 @@ function SettingsPage() {
             handleClearCache={data.handleClearCache}
           />
         );
-      case "notifications":
+      case "metadata":
         return (
-          <SettingsNotificationsTab
-            settings={data.settings}
-            updateSettings={data.updateSettings}
-            hasUnsavedChanges={data.hasUnsavedChanges}
-            saving={data.saving}
-            handleSaveSettings={data.handleSaveSettings}
-            testingGotify={data.testingGotify}
-            setTestingGotify={data.setTestingGotify}
-            showSuccess={showSuccess}
-            showError={showError}
-          />
+          <div className="settings-page__panel">
+            <div className="settings-page__panel-header">
+              <h2 className="settings-page__panel-title">Metadata</h2>
+              <FlipSaveButton
+                saving={data.saving}
+                disabled={!data.hasUnsavedChanges}
+                onClick={data.handleSaveSettings}
+              />
+            </div>
+            <SettingsMetadataPanel
+              settings={data.settings}
+              updateSettings={data.updateSettings}
+              health={data.health}
+              hasUnsavedChanges={data.hasUnsavedChanges}
+              saving={data.saving}
+              handleSaveSettings={data.handleSaveSettings}
+            />
+          </div>
         );
       case "users":
         return (
@@ -198,6 +271,8 @@ function SettingsPage() {
             showError={showError}
           />
         );
+      case "general":
+        return <SettingsGeneralTab health={data.health} />;
       default:
         return null;
     }
@@ -207,12 +282,23 @@ function SettingsPage() {
     return <Navigate to="/profile" replace />;
   }
 
+  if (!tabParam) {
+    return <Navigate to={`/settings/${DEFAULT_SETTINGS_TAB}`} replace />;
+  }
+
+  if (shouldRedirect) {
+    return <Navigate to={`/settings/${normalizedParam}`} replace />;
+  }
+
   return (
     <>
       <UnsavedModal
-        show={guard.showUnsavedModal}
-        onCancel={guard.handleCancelLeave}
-        onConfirm={guard.handleConfirmLeave}
+        show={showUnsavedModal}
+        onCancel={() => {
+          setPendingTab(null);
+          guard.handleCancelLeave();
+        }}
+        onConfirm={handleConfirmLeave}
       />
 
       <CommunityGuideModal
@@ -225,45 +311,20 @@ function SettingsPage() {
         <header className="settings-page__header">
           <h1 className="settings-page__title">Settings</h1>
           <p className="settings-page__subtitle">
-            Configure library, downloads, playback, discovery, notifications,
-            and users
+            Configure library, indexers, download clients, playback, and
+            connections
           </p>
         </header>
 
         <SettingsSponsorBanner />
 
-        <div className="settings-page__mobile-nav">
-          <label
-            htmlFor="settings-tab-select"
-            className="settings-page__mobile-label"
-          >
-            Section
-          </label>
-          <SettingsSelect
-            id="settings-tab-select"
-            value={tabs.activeTab}
-            onChange={(event) => tabs.setActiveTab(event.target.value)}
-          >
-            {tabs.tabs.map((tab) => (
-              <option key={tab.id} value={tab.id}>
-                {tab.label}
-              </option>
-            ))}
-          </SettingsSelect>
-        </div>
-
-        <SettingsTabsNav
+        <SettingsMobileNav
           tabs={tabs.tabs}
           activeTab={tabs.activeTab}
-          setActiveTab={tabs.setActiveTab}
-          navRef={tabs.navRef}
-          activeBubbleRef={tabs.activeBubbleRef}
-          hoverBubbleRef={tabs.hoverBubbleRef}
-          linkRefs={tabs.linkRefs}
-          setHoveredTabIndex={tabs.setHoveredTabIndex}
+          onSelectTab={handleTabSelect}
         />
 
-        <div>{renderTabContent()}</div>
+        <div className="settings-page__content">{renderTabContent()}</div>
       </div>
     </>
   );

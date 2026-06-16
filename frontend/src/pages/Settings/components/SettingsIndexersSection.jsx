@@ -1,0 +1,385 @@
+import { useEffect, useState } from "react";
+import { RefreshCw } from "lucide-react";
+import { SettingsInput } from "./SettingsField";
+import {
+  IntegrationCard,
+  SettingsIntegrationModal,
+} from "./SettingsIntegrationCards";
+import {
+  SettingsModalActions,
+  SettingsModalField,
+  SettingsModalSection,
+  SettingsModalToggle,
+  SettingsModalMeta,
+} from "./SettingsModalLayout";
+import {
+  getIndexerStatus,
+  getProviderStatus,
+} from "../utils/integrationStatus";
+import {
+  getProwlarrIndexers,
+  testProwlarrConnection,
+} from "../../../utils/api";
+
+function toNumber(value, fallback) {
+  const next = parseInt(value, 10);
+  return Number.isFinite(next) ? next : fallback;
+}
+
+export function SettingsIndexersSection({
+  settings,
+  updateSettings,
+  health,
+  handleSaveSettings,
+  showSuccess,
+  showError,
+  showInfo,
+}) {
+  const [activeModal, setActiveModal] = useState(null);
+  const [testingProwlarr, setTestingProwlarr] = useState(false);
+  const [loadingProwlarrIndexers, setLoadingProwlarrIndexers] =
+    useState(false);
+  const [prowlarrIndexers, setProwlarrIndexers] = useState([]);
+
+  const prowlarr = settings.integrations?.prowlarr || {};
+  const prowlarrConfigured = Boolean(prowlarr.url && prowlarr.apiKey);
+  const prowlarrEnabled = prowlarr.enabled === true;
+
+  const updateIntegration = (key, patch) =>
+    updateSettings({
+      ...settings,
+      integrations: {
+        ...settings.integrations,
+        [key]: {
+          ...(settings.integrations?.[key] || {}),
+          ...patch,
+        },
+      },
+    });
+
+  const loadProwlarrIndexers = async ({ quiet = false } = {}) => {
+    if (!health?.prowlarrConfigured) {
+      setProwlarrIndexers([]);
+      return;
+    }
+    setLoadingProwlarrIndexers(true);
+    try {
+      const result = await getProwlarrIndexers();
+      const indexers = Array.isArray(result?.indexers) ? result.indexers : [];
+      setProwlarrIndexers(indexers);
+      if (!quiet && indexers.length > 0) {
+        showSuccess(`Loaded ${indexers.length} Usenet indexer(s)`);
+      }
+      if (!quiet && indexers.length === 0) {
+        showInfo("No usable Usenet indexers found in Prowlarr");
+      }
+    } catch (error) {
+      if (!quiet) {
+        showError(
+          error.response?.data?.message ||
+            error.response?.data?.error ||
+            error.message ||
+            "Failed to load Prowlarr indexers",
+        );
+      }
+    } finally {
+      setLoadingProwlarrIndexers(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!health?.prowlarrConfigured) {
+      setProwlarrIndexers([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingProwlarrIndexers(true);
+    getProwlarrIndexers()
+      .then((result) => {
+        if (!cancelled) {
+          setProwlarrIndexers(
+            Array.isArray(result?.indexers) ? result.indexers : [],
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setProwlarrIndexers([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingProwlarrIndexers(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [health?.prowlarrConfigured]);
+
+  const updateProwlarrIndexer = (id, patch) => {
+    const key = String(id);
+    updateIntegration("prowlarr", {
+      indexers: {
+        ...(prowlarr.indexers || {}),
+        [key]: {
+          ...(prowlarr.indexers?.[key] || {}),
+          ...patch,
+        },
+      },
+    });
+  };
+
+  const getIndexerState = (indexer) => {
+    const override = prowlarr.indexers?.[String(indexer.id)] || {};
+    const aurralEnabled = override.enabled !== false;
+    const effectiveEnabled =
+      indexer.enabledInProwlarr !== false && aurralEnabled;
+    return {
+      aurralEnabled,
+      effectiveEnabled,
+      priority: override.priority ?? indexer.priority ?? 25,
+    };
+  };
+
+  const handleTestProwlarr = async () => {
+    if (!prowlarrEnabled || !prowlarr.url || !prowlarr.apiKey) {
+      showError("Enable Prowlarr and enter URL and API key first");
+      return;
+    }
+    setTestingProwlarr(true);
+    try {
+      await handleSaveSettings();
+      const result = await testProwlarrConnection();
+      setProwlarrIndexers(Array.isArray(result.indexers) ? result.indexers : []);
+      showSuccess(result.message || "Prowlarr connection OK");
+    } catch (error) {
+      showError(
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          error.message ||
+          "Prowlarr connection failed",
+      );
+    } finally {
+      setTestingProwlarr(false);
+    }
+  };
+
+  const activeIndexer = activeModal?.startsWith("indexer:")
+    ? prowlarrIndexers.find(
+        (indexer) =>
+          String(indexer.id) === activeModal.slice("indexer:".length),
+      )
+    : null;
+
+  return (
+    <>
+      <div className="settings-page__section">
+        <div className="settings-page__section-header">
+          <div className="settings-page__section-intro">
+            <h3 className="settings-page__section-title">Indexers</h3>
+            <p className="settings-page__section-note">
+              Configure Prowlarr and choose which Usenet indexers Aurral uses.
+            </p>
+          </div>
+          {loadingProwlarrIndexers && (
+            <span className="settings-page__status">
+              <RefreshCw className="settings-page__status-icon animate-spin" />
+              Loading
+            </span>
+          )}
+        </div>
+        <div className="settings-page__integration-card-grid">
+          <IntegrationCard
+            title="Prowlarr"
+            subtitle="Indexer manager"
+            status={getProviderStatus(
+              prowlarrEnabled,
+              health?.prowlarrConfigured || prowlarrConfigured,
+            )}
+            meta={
+              prowlarr.maxResults
+                ? `Audio search · ${prowlarr.maxResults} results`
+                : "Audio search"
+            }
+            onClick={() => setActiveModal("prowlarr")}
+          />
+          {prowlarrIndexers.map((indexer) => {
+            const state = getIndexerState(indexer);
+            return (
+              <IntegrationCard
+                key={indexer.id}
+                title={indexer.name}
+                subtitle="Usenet indexer"
+                status={getIndexerStatus(indexer, state.effectiveEnabled)}
+                meta={`Priority ${state.priority}`}
+                onClick={() => setActiveModal(`indexer:${indexer.id}`)}
+              />
+            );
+          })}
+        </div>
+        {health?.prowlarrConfigured &&
+          !loadingProwlarrIndexers &&
+          prowlarrIndexers.length === 0 && (
+            <p className="settings-page__muted-copy">
+              No Usenet audio indexers were returned by Prowlarr.
+            </p>
+          )}
+      </div>
+
+      {activeModal === "prowlarr" && (
+        <SettingsIntegrationModal
+          title="Prowlarr"
+          onClose={() => setActiveModal(null)}
+          footerActions={
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={testingProwlarr || loadingProwlarrIndexers}
+              onClick={handleTestProwlarr}
+            >
+              <RefreshCw
+                className={`artist-icon-sm${testingProwlarr ? " animate-spin" : ""}`}
+              />
+              {testingProwlarr ? "Testing..." : "Test connection"}
+            </button>
+          }
+        >
+          <SettingsModalSection title="General">
+            <SettingsModalToggle
+              label="Enable Prowlarr"
+              checked={prowlarrEnabled}
+              onChange={(event) =>
+                updateIntegration("prowlarr", { enabled: event.target.checked })
+              }
+            />
+          </SettingsModalSection>
+
+          <SettingsModalSection title="Connection">
+            <SettingsModalField label="Server URL">
+              <SettingsInput
+                type="url"
+                placeholder="http://localhost:9696"
+                autoComplete="off"
+                value={prowlarr.url || ""}
+                onChange={(event) =>
+                  updateIntegration("prowlarr", { url: event.target.value })
+                }
+              />
+            </SettingsModalField>
+            <SettingsModalField label="API key">
+              <SettingsInput
+                type="password"
+                autoComplete="off"
+                value={prowlarr.apiKey || ""}
+                onChange={(event) =>
+                  updateIntegration("prowlarr", { apiKey: event.target.value })
+                }
+              />
+            </SettingsModalField>
+          </SettingsModalSection>
+
+          <SettingsModalSection title="Indexing">
+            <SettingsModalField label="Music categories">
+              <SettingsInput
+                type="text"
+                value={(prowlarr.categories || [3000]).join(",")}
+                onChange={(event) =>
+                  updateIntegration("prowlarr", {
+                    categories: event.target.value
+                      .split(",")
+                      .map((entry) => parseInt(entry.trim(), 10))
+                      .filter((entry) => Number.isFinite(entry)),
+                  })
+                }
+              />
+            </SettingsModalField>
+            <SettingsModalField label="Result limit">
+              <SettingsInput
+                type="number"
+                min="10"
+                max="200"
+                value={prowlarr.maxResults ?? 60}
+                onChange={(event) =>
+                  updateIntegration("prowlarr", {
+                    maxResults: toNumber(event.target.value, 60),
+                  })
+                }
+              />
+            </SettingsModalField>
+            <SettingsModalActions>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={loadingProwlarrIndexers || !health?.prowlarrConfigured}
+                onClick={() => loadProwlarrIndexers()}
+              >
+                <RefreshCw
+                  className={`artist-icon-sm${loadingProwlarrIndexers ? " animate-spin" : ""}`}
+                />
+                {loadingProwlarrIndexers ? "Refreshing..." : "Refresh indexers"}
+              </button>
+            </SettingsModalActions>
+          </SettingsModalSection>
+        </SettingsIntegrationModal>
+      )}
+
+      {activeIndexer && (
+        <SettingsIntegrationModal
+          title={activeIndexer.name}
+          onClose={() => setActiveModal(null)}
+        >
+          {(() => {
+            const state = getIndexerState(activeIndexer);
+            return (
+              <>
+                <SettingsModalSection title="General">
+                  <SettingsModalToggle
+                    label="Enable in Aurral"
+                    checked={state.aurralEnabled}
+                    onChange={(event) =>
+                      updateProwlarrIndexer(activeIndexer.id, {
+                        enabled: event.target.checked,
+                        priority: state.priority,
+                      })
+                    }
+                  />
+                </SettingsModalSection>
+                <SettingsModalSection title="Priority">
+                  <SettingsModalField label="Priority">
+                    <SettingsInput
+                      type="number"
+                      min="1"
+                      max="1000"
+                      value={state.priority}
+                      onChange={(event) =>
+                        updateProwlarrIndexer(activeIndexer.id, {
+                          enabled: state.aurralEnabled,
+                          priority: toNumber(
+                            event.target.value,
+                            activeIndexer.priority || 25,
+                          ),
+                        })
+                      }
+                    />
+                  </SettingsModalField>
+                  <SettingsModalMeta
+                    items={[
+                      {
+                        term: "Protocol",
+                        value: activeIndexer.protocol || "usenet",
+                      },
+                      {
+                        term: "Prowlarr status",
+                        value:
+                          activeIndexer.enabledInProwlarr === false
+                            ? "Disabled"
+                            : "Enabled",
+                      },
+                    ]}
+                  />
+                </SettingsModalSection>
+              </>
+            );
+          })()}
+        </SettingsIntegrationModal>
+      )}
+    </>
+  );
+}
