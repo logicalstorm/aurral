@@ -81,6 +81,58 @@ export const deduplicateAlbums = (albums) => {
   });
 };
 
+export const normalizePlaylistNameKey = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase();
+
+export const reserveUniquePlaylistName = (playlists, baseName = "Playlist") => {
+  const normalizedBase = String(baseName || "").trim() || "Playlist";
+  const existing = new Set(
+    (Array.isArray(playlists) ? playlists : [])
+      .map((playlist) => normalizePlaylistNameKey(playlist?.name))
+      .filter(Boolean),
+  );
+  if (!existing.has(normalizedBase.toLowerCase())) {
+    return normalizedBase;
+  }
+  let index = 2;
+  while (index < 10000) {
+    const candidate = `${normalizedBase} ${index}`;
+    if (!existing.has(candidate.toLowerCase())) {
+      return candidate;
+    }
+    index += 1;
+  }
+  return `${normalizedBase} ${Date.now()}`;
+};
+
+const normalizeTrackDurationMs = (value) =>
+  value != null && Number.isFinite(Number(value)) ? Number(value) : null;
+
+export const buildSharedPlaylistTrackPayload = ({
+  artistName = "",
+  trackName = "",
+  albumName = "",
+  artistMbid = "",
+  albumMbid = "",
+  trackMbid = "",
+  releaseYear = null,
+  durationMs = null,
+  reason = null,
+} = {}) => ({
+  artistName,
+  trackName,
+  albumName,
+  artistMbid,
+  albumMbid,
+  trackMbid,
+  releaseYear: releaseYear || null,
+  durationMs: normalizeTrackDurationMs(durationMs),
+  reason,
+  artistAliases: [],
+});
+
 export const formatLifeSpan = (lifeSpan) => {
   if (!lifeSpan) return null;
   const { begin, end, ended } = lifeSpan;

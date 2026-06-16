@@ -38,6 +38,7 @@ function DiscoverFlowLocationSync({
   useEffect(() => {
     const pathname = location.pathname;
     const path = getDiscoverPathFromLocation(location);
+    const normalizedPath = normalizeDiscoverPath(path);
 
     if (isDiscoverExitPath(pathname)) {
       setDiscoverFlowActive(false);
@@ -48,7 +49,7 @@ function DiscoverFlowLocationSync({
       return;
     }
 
-    if (recentPages.some((entry) => entry.path === path)) {
+    if (recentPages.some((entry) => entry.path === normalizedPath)) {
       setDiscoverFlowActive(true);
       return;
     }
@@ -58,7 +59,7 @@ function DiscoverFlowLocationSync({
       isDiscoverBrowsePath(pathname) &&
       shouldTrackDiscoverPath(path)
     ) {
-      addRecentPage(path, location.state || {});
+      addRecentPage(normalizedPath, location.state || {});
     }
   }, [
     addRecentPage,
@@ -122,6 +123,13 @@ export function DiscoverRecentProvider({ children }) {
 
     const label = buildDiscoverRecentLabel(normalizedPath, state);
     setRecentPages((current) => {
+      if (
+        current[0]?.path === normalizedPath &&
+        current[0]?.label === label &&
+        current.length <= DISCOVER_RECENT_PAGES_LIMIT
+      ) {
+        return current;
+      }
       const next = [
         {
           id: normalizedPath,

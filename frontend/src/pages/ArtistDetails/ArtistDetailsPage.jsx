@@ -34,37 +34,15 @@ import {
   createSharedPlaylist,
   updateArtistOverrides,
 } from "../../utils/api";
-import { getArtistPosterImage } from "./utils";
+import {
+  buildSharedPlaylistTrackPayload,
+  getArtistPosterImage,
+  reserveUniquePlaylistName,
+} from "./utils";
 import { useArtistTasteFeedback } from "../../hooks/useArtistTasteFeedback";
 
 const MBID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const normalizePlaylistNameKey = (value) =>
-  String(value || "")
-    .trim()
-    .toLowerCase();
-
-const reserveUniquePlaylistName = (playlists, baseName = "Playlist") => {
-  const normalizedBase = String(baseName || "").trim() || "Playlist";
-  const existing = new Set(
-    (Array.isArray(playlists) ? playlists : [])
-      .map((playlist) => normalizePlaylistNameKey(playlist?.name))
-      .filter(Boolean),
-  );
-  if (!existing.has(normalizedBase.toLowerCase())) {
-    return normalizedBase;
-  }
-  let index = 2;
-  while (index < 10000) {
-    const candidate = `${normalizedBase} ${index}`;
-    if (!existing.has(candidate.toLowerCase())) {
-      return candidate;
-    }
-    index += 1;
-  }
-  return `${normalizedBase} ${Date.now()}`;
-};
 
 function ArtistDetailsPage() {
   const { mbid } = useParams();
@@ -381,38 +359,31 @@ function ArtistDetailsPage() {
 
   const buildReleaseTrackPayload = (track, releaseGroup) => {
     const year = String(releaseGroup?.["first-release-date"] || "").slice(0, 4);
-    return {
+    return buildSharedPlaylistTrackPayload({
       artistName: artist?.name || artistNameFromNav || "",
       trackName: track?.trackName || track?.title || "",
       albumName: releaseGroup?.title || "",
       artistMbid: mbid || "",
       albumMbid: releaseGroup?.id || "",
       trackMbid: track?.mbid || track?.id || "",
-      releaseYear: year || null,
-      durationMs:
-        track?.length != null && Number.isFinite(Number(track.length))
-          ? Number(track.length)
-          : null,
+      releaseYear: year,
+      durationMs: track?.length,
       reason: null,
-      artistAliases: [],
-    };
+    });
   };
 
-  const buildPreviewTrackPayload = (track) => ({
-    artistName: artist?.name || artistNameFromNav || "",
-    trackName: track?.title || track?.trackName || "",
-    albumName: track?.album || "",
-    artistMbid: mbid || "",
-    albumMbid: "",
-    trackMbid: track?.mbid || track?.id || "",
-    releaseYear: null,
-    durationMs:
-      track?.duration_ms != null && Number.isFinite(Number(track.duration_ms))
-        ? Number(track.duration_ms)
-        : null,
-    reason: "Artist preview",
-    artistAliases: [],
-  });
+  const buildPreviewTrackPayload = (track) =>
+    buildSharedPlaylistTrackPayload({
+      artistName: artist?.name || artistNameFromNav || "",
+      trackName: track?.title || track?.trackName || "",
+      albumName: track?.album || "",
+      artistMbid: mbid || "",
+      albumMbid: "",
+      trackMbid: track?.mbid || track?.id || "",
+      releaseYear: null,
+      durationMs: track?.duration_ms,
+      reason: "Artist preview",
+    });
 
   const saveTrackToPlaylist = async (trackPayload, target, savingKey) => {
     if (!trackPayload?.artistName || !trackPayload?.trackName) {

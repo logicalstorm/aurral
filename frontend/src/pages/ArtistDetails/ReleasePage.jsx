@@ -8,10 +8,12 @@ import { useToast } from "../../contexts/ToastContext";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { ArtistDetailsReleaseTrackList } from "./components/ArtistDetailsReleaseTrackList";
 import {
+  buildSharedPlaylistTrackPayload,
   buildLastfmAlbumUrl,
   formatAlbumDuration,
   formatReleaseDate,
   getReleaseMetric,
+  reserveUniquePlaylistName,
   resolveReleaseLibraryDisplay,
   sumTrackDurationMs,
 } from "./utils";
@@ -26,32 +28,6 @@ import {
   lookupAlbumsInLibraryBatch,
   requestAlbumFromSearch,
 } from "../../utils/api";
-
-const normalizePlaylistNameKey = (value) =>
-  String(value || "")
-    .trim()
-    .toLowerCase();
-
-const reserveUniquePlaylistName = (playlists, baseName = "Playlist") => {
-  const normalizedBase = String(baseName || "").trim() || "Playlist";
-  const existing = new Set(
-    (Array.isArray(playlists) ? playlists : [])
-      .map((playlist) => normalizePlaylistNameKey(playlist?.name))
-      .filter(Boolean),
-  );
-  if (!existing.has(normalizedBase.toLowerCase())) {
-    return normalizedBase;
-  }
-  let index = 2;
-  while (index < 10000) {
-    const candidate = `${normalizedBase} ${index}`;
-    if (!existing.has(candidate.toLowerCase())) {
-      return candidate;
-    }
-    index += 1;
-  }
-  return `${normalizedBase} ${Date.now()}`;
-};
 
 const getReleaseTypeLabel = (release) => {
   const types = [
@@ -370,21 +346,17 @@ function ReleasePage() {
   const buildReleaseTrackPayload = useCallback(
     (track) => {
       const year = String(release["first-release-date"] || "").slice(0, 4);
-      return {
+      return buildSharedPlaylistTrackPayload({
         artistName: artistName || "",
         trackName: track?.trackName || track?.title || "",
         albumName: release.title || "",
         artistMbid: artistMbid || "",
         albumMbid: releaseMbid || "",
         trackMbid: track?.mbid || track?.id || "",
-        releaseYear: year || null,
-        durationMs:
-          track?.length != null && Number.isFinite(Number(track.length))
-            ? Number(track.length)
-            : null,
+        releaseYear: year,
+        durationMs: track?.length,
         reason: null,
-        artistAliases: [],
-      };
+      });
     },
     [artistMbid, artistName, release, releaseMbid],
   );

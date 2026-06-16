@@ -24,6 +24,14 @@ import {
   getSourceLabel,
   isAnyDownloadSourceConfigured,
 } from "./downloadSourceService.js";
+import {
+  buildResolvedPlaylistTrack as buildResolvedTrack,
+  commitImportToPlaylistLibrary,
+  joinUnderRoot,
+  sanitizePathPart,
+} from "./playlistDownloadUtils.js";
+
+export { commitImportToPlaylistLibrary };
 
 const updateSlskdMetaStmt = db.prepare(`
   UPDATE playlist_download_jobs
@@ -66,52 +74,6 @@ export function shouldStopSlskdSearching(
 
 const MAX_EMPTY_POLL_ATTEMPTS = 60;
 const MAX_POLL_ATTEMPTS = 600;
-
-function sanitizePathPart(value, fallback = "Unknown") {
-  const text = String(value || "")
-    .replace(/[<>:"/\\|?*]/g, "_")
-    .trim();
-  return text || fallback;
-}
-
-function normalizePositiveInteger(value) {
-  if (value == null || !Number.isFinite(Number(value))) return null;
-  const normalized = Math.floor(Number(value));
-  return normalized > 0 ? normalized : null;
-}
-
-function normalizeTrackTitles(value) {
-  return Array.isArray(value)
-    ? value.map((entry) => String(entry || "").trim()).filter(Boolean)
-    : [];
-}
-
-function buildResolvedTrack(job, payloadTrack = {}) {
-  const track =
-    payloadTrack && typeof payloadTrack === "object" ? payloadTrack : {};
-  return {
-    artistName: job.artistName || track.artistName,
-    trackName: job.trackName || track.trackName,
-    albumName: job.albumName || track.albumName,
-    artistMbid: job.artistMbid || track.artistMbid,
-    albumMbid: job.albumMbid || track.albumMbid,
-    trackMbid: job.trackMbid || track.trackMbid,
-    releaseYear: job.releaseYear || track.releaseYear,
-    durationMs: job.durationMs ?? track.durationMs ?? null,
-    trackNumber: normalizePositiveInteger(job.trackNumber ?? track.trackNumber),
-    albumTrackCount: normalizePositiveInteger(
-      job.albumTrackCount ?? track.albumTrackCount,
-    ),
-    albumTrackTitles: normalizeTrackTitles(
-      (job.albumTrackTitles?.length ? job.albumTrackTitles : null) ||
-        track.albumTrackTitles,
-    ),
-    artistAliases:
-      Array.isArray(job.artistAliases) && job.artistAliases.length
-        ? job.artistAliases
-        : normalizeTrackTitles(track.artistAliases),
-  };
-}
 
 async function getWorkerSearchOptions() {
   const { getSlskdSearchFormatOptions } = await import("./slskdClient.js");
@@ -460,17 +422,6 @@ export async function failPipelineJob(payload, message) {
   }
 }
 
-function joinUnderRoot(root, relativePath, fileName = null) {
-  const parts = String(relativePath || "")
-    .replace(/\\/g, "/")
-    .split("/")
-    .filter(Boolean);
-  if (fileName) {
-    parts.push(fileName);
-  }
-  return path.join(root, ...parts);
-}
-
 export function parseSlskdRemoteFile(remoteFile) {
   const normalized = String(remoteFile || "").replace(/\\/g, "/").trim();
   const parts = normalized.split("/").filter(Boolean);
@@ -638,58 +589,6 @@ export async function locateCompletedDownload(
     if (found) return found;
   }
   return null;
-}
-
-async function fileExists(filePath) {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function resolveAvailableTargetPath(targetPath) {
-  if (!(await fileExists(targetPath))) return targetPath;
-  const dir = path.dirname(targetPath);
-  const ext = path.extname(targetPath);
-  const base = path.basename(targetPath, ext);
-  for (let index = 2; index < 1000; index += 1) {
-    const candidate = path.join(dir, `${base} (${index})${ext}`);
-    if (!(await fileExists(candidate))) return candidate;
-  }
-  return path.join(dir, `${base} (${Date.now()})${ext}`);
-}
-
-export async function commitImportToPlaylistLibrary(sourcePath, targetPath) {
-  await fs.mkdir(path.dirname(targetPath), { recursive: true });
-  if (path.resolve(sourcePath) === path.resolve(targetPath)) {
-    return targetPath;
-  }
-  const resolvedTarget = await resolveAvailableTargetPath(targetPath);
-  try {
-    await fs.rename(sourcePath, resolvedTarget);
-  } catch (error) {
-    if (error?.code !== "EXDEV") {
-      throw error;
-    }
-    const tempTarget = path.join(
-      path.dirname(resolvedTarget),
-      `.aurral-import-${process.pid}-${Date.now()}-${path.basename(resolvedTarget)}.tmp`,
-    );
-    await fs.copyFile(sourcePath, tempTarget);
-    const [sourceStat, tempStat] = await Promise.all([
-      fs.stat(sourcePath),
-      fs.stat(tempTarget),
-    ]);
-    if (sourceStat.size !== tempStat.size) {
-      await fs.rm(tempTarget, { force: true }).catch(() => {});
-      throw new Error("Imported file copy did not match source size");
-    }
-    await fs.rename(tempTarget, resolvedTarget);
-    await fs.rm(sourcePath, { force: true });
-  }
-  return resolvedTarget;
 }
 
 async function cleanupRejectedDownload({
