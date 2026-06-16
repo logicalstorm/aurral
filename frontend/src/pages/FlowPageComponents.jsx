@@ -38,6 +38,10 @@ import FlipSaveButton from "../components/FlipSaveButton";
 import { useAudioQueue } from "../hooks/useAudioQueue";
 import { normalizeFlowTrack } from "../utils/audioQueue";
 import {
+  getTagSuggestions,
+  searchUnified,
+} from "../utils/api";
+import {
   TrackPlaylistMenu,
   TrackPlaylistSubmenu,
 } from "./ArtistDetails/components/TrackPlaylistMenu";
@@ -73,6 +77,8 @@ const FLOW_WORKER_EXISTING_FILE_OPTIONS = [
   { id: "download", label: "Download" },
   { id: "reuse", label: "Reuse existing files" },
 ];
+const FLOW_FOCUS_SUGGESTION_DEBOUNCE_MS = 250;
+const FLOW_FOCUS_SUGGESTION_LIMIT = 8;
 const FLOW_WORKER_RETRY_CYCLE_OPTIONS = [
   { minutes: 15, label: "15 min" },
   { minutes: 30, label: "30 min" },
@@ -358,6 +364,66 @@ function buildCommaTokenInputValue(committed, pending) {
   return `${safeCommitted.join(", ")}, ${rawPending}`;
 }
 
+function normalizeFocusSuggestion(entry, fallbackMeta = "") {
+  if (typeof entry === "string" || typeof entry === "number") {
+    const label = String(entry).trim();
+    return label ? { label, meta: fallbackMeta } : null;
+  }
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+  const label = String(entry.label || entry.name || entry.title || "").trim();
+  if (!label) return null;
+  return {
+    label,
+    meta: String(entry.meta || entry.sourceLabel || fallbackMeta || "").trim(),
+  };
+}
+
+function dedupeFocusSuggestions(entries, existingEntries = []) {
+  const seen = new Set(
+    (Array.isArray(existingEntries) ? existingEntries : [])
+      .map((entry) => String(entry || "").trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const out = [];
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    const normalized = normalizeFocusSuggestion(entry);
+    const key = normalized?.label.toLowerCase();
+    if (!normalized || !key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(normalized);
+  }
+  return out;
+}
+
+async function fetchFlowTagSuggestions(query, existingEntries = []) {
+  const data = await getTagSuggestions(query, FLOW_FOCUS_SUGGESTION_LIMIT);
+  return dedupeFocusSuggestions(
+    (Array.isArray(data?.tags) ? data.tags : []).map((tag) => ({
+      label: tag,
+      meta: "Tag",
+    })),
+    existingEntries,
+  );
+}
+
+async function fetchFlowArtistSuggestions(query, existingEntries = []) {
+  const data = await searchUnified(query, {
+    mode: "suggest",
+    limit: FLOW_FOCUS_SUGGESTION_LIMIT,
+  });
+  const artistCandidates = [
+    data?.top?.type === "artist" ? data.top : null,
+    ...(Array.isArray(data?.catalog?.artists) ? data.catalog.artists : []),
+  ].filter(Boolean);
+  return dedupeFocusSuggestions(
+    artistCandidates.map((artist) => ({
+      label: artist.name,
+      meta: artist.source === "brainzmash" ? "Metadata" : "Artist",
+    })),
+    existingEntries,
+  );
+}
+
 function getFocusDraftValidation(draft, normalizeMixPercent) {
   const normalizedMix = normalizeMixPercent(draft?.mix);
   const focusEnabled = Number(normalizedMix.focus || 0) > 0;
@@ -378,12 +444,23 @@ function CommaTokenInput({
   value,
   placeholder,
   onChange,
+  fetchSuggestions,
+  suggestionLabel = "suggestions",
 }) {
   const [isFocused, setIsFocused] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const inputRef = useRef(null);
-  const { committed, pending } = getCommaTokenInputState(value, {
-    commitAll: !isFocused,
-  });
+  const debounceRef = useRef(null);
+  const suggestionGenerationRef = useRef(0);
+  const { committed, pending } = useMemo(
+    () =>
+      getCommaTokenInputState(value, {
+        commitAll: !isFocused,
+      }),
+    [isFocused, value],
+  );
   const rawValue = String(value ?? "");
 
   const commitNormalizedValue = useCallback(() => {
@@ -393,14 +470,83 @@ function CommaTokenInput({
     onChange(buildCommaTokenInputValue(nextCommitted, ""));
   }, [onChange, rawValue]);
 
+  const closeSuggestions = useCallback(() => {
+    setSuggestions([]);
+    setLoadingSuggestions(false);
+    setHighlightedIndex(-1);
+  }, []);
+
+  const selectSuggestion = useCallback(
+    (suggestion) => {
+      const normalized = normalizeFocusSuggestion(suggestion);
+      if (!normalized) return;
+      const nextCommitted = [...committed, normalized.label];
+      onChange(buildCommaTokenInputValue(nextCommitted, ""));
+      closeSuggestions();
+      window.setTimeout(() => inputRef.current?.focus(), 0);
+    },
+    [closeSuggestions, committed, onChange],
+  );
+
   useEffect(() => {
     if (!isFocused) return;
     inputRef.current?.focus();
   }, [isFocused]);
 
+  useEffect(() => {
+    if (!isFocused || typeof fetchSuggestions !== "function") {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      suggestionGenerationRef.current += 1;
+      closeSuggestions();
+      return;
+    }
+
+    const query = pending.trim();
+    if (query.length < 2) {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      suggestionGenerationRef.current += 1;
+      closeSuggestions();
+      return;
+    }
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const generation = suggestionGenerationRef.current + 1;
+    suggestionGenerationRef.current = generation;
+    debounceRef.current = setTimeout(async () => {
+      debounceRef.current = null;
+      setLoadingSuggestions(true);
+      try {
+        const nextSuggestions = await fetchSuggestions(query, committed);
+        if (generation !== suggestionGenerationRef.current) return;
+        setSuggestions(dedupeFocusSuggestions(nextSuggestions, committed));
+        setHighlightedIndex(-1);
+      } catch {
+        if (generation === suggestionGenerationRef.current) {
+          setSuggestions([]);
+          setHighlightedIndex(-1);
+        }
+      } finally {
+        if (generation === suggestionGenerationRef.current) {
+          setLoadingSuggestions(false);
+        }
+      }
+    }, FLOW_FOCUS_SUGGESTION_DEBOUNCE_MS);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      suggestionGenerationRef.current += 1;
+    };
+  }, [closeSuggestions, committed, fetchSuggestions, isFocused, pending]);
+
   return (
     <div
-      className="flow-page__token-input"
+      className={`flow-page__token-input${isFocused ? " is-focused" : ""}`}
       onClick={() => setIsFocused(true)}
     >
       {isFocused ? (
@@ -410,17 +556,44 @@ function CommaTokenInput({
           className="flow-page__token-input-field"
           placeholder={placeholder}
           value={rawValue}
+          aria-label={suggestionLabel}
+          aria-expanded={suggestions.length > 0 || loadingSuggestions}
+          aria-haspopup="listbox"
           onFocus={() => setIsFocused(true)}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
+            if (event.key === "ArrowDown" && suggestions.length > 0) {
+              event.preventDefault();
+              setHighlightedIndex((index) =>
+                index < suggestions.length - 1 ? index + 1 : 0,
+              );
+              return;
+            }
+            if (event.key === "ArrowUp" && suggestions.length > 0) {
+              event.preventDefault();
+              setHighlightedIndex((index) =>
+                index > 0 ? index - 1 : suggestions.length - 1,
+              );
+              return;
+            }
+            if (event.key === "Escape") {
+              event.preventDefault();
+              closeSuggestions();
+              return;
+            }
             if (event.key === "Enter") {
               event.preventDefault();
+              if (highlightedIndex >= 0 && suggestions[highlightedIndex]) {
+                selectSuggestion(suggestions[highlightedIndex]);
+                return;
+              }
               commitNormalizedValue();
               inputRef.current?.blur();
             }
           }}
           onBlur={() => {
             setIsFocused(false);
+            closeSuggestions();
             commitNormalizedValue();
           }}
         />
@@ -443,6 +616,46 @@ function CommaTokenInput({
           ) : null}
         </div>
       )}
+      {isFocused && (loadingSuggestions || suggestions.length > 0) ? (
+        <div
+          className="flow-page__token-suggestions"
+          role="listbox"
+          aria-label={suggestionLabel}
+        >
+          {loadingSuggestions && suggestions.length === 0 ? (
+            <div className="flow-page__token-suggestion flow-page__token-suggestion--loading">
+              <Loader2 className="artist-icon-sm animate-spin" />
+              Searching
+            </div>
+          ) : null}
+          {suggestions.map((suggestion, index) => (
+            <button
+              key={`${suggestion.label}-${index}`}
+              type="button"
+              role="option"
+              aria-selected={highlightedIndex === index}
+              className={`flow-page__token-suggestion${highlightedIndex === index ? " is-highlighted" : ""}`}
+              onMouseEnter={() => setHighlightedIndex(index)}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                selectSuggestion(suggestion);
+              }}
+            >
+              <span className="flow-page__token-suggestion-main">
+                <Search className="artist-icon-sm" />
+                <span className="flow-page__token-suggestion-label">
+                  {suggestion.label}
+                </span>
+              </span>
+              {suggestion.meta ? (
+                <span className="flow-page__token-suggestion-meta">
+                  {suggestion.meta}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -720,6 +933,8 @@ export function FlowFormFields({
             <CommaTokenInput
               value={draft.includeTags}
               placeholder="lofi, indie"
+              fetchSuggestions={fetchFlowTagSuggestions}
+              suggestionLabel="Genre tag suggestions"
               onChange={(nextValue) =>
                 updateDraft((prev) => ({
                   ...prev,
@@ -736,6 +951,8 @@ export function FlowFormFields({
             <CommaTokenInput
               value={draft.includeRelatedArtists}
               placeholder="artist a, artist b"
+              fetchSuggestions={fetchFlowArtistSuggestions}
+              suggestionLabel="Related artist suggestions"
               onChange={(nextValue) =>
                 updateDraft((prev) => ({
                   ...prev,

@@ -505,32 +505,47 @@ router.get("/tags", async (req, res) => {
     const prefix = String(q).trim().toLowerCase();
     let tagNames = [];
     if (getLastfmApiKey()) {
-      let data;
-      const now = Date.now();
-      if (
-        pendingTagSuggestRequest.promise &&
-        pendingTagSuggestRequest.expiry > now
-      ) {
-        data = await pendingTagSuggestRequest.promise;
-      } else {
-        const fetchPromise = lastfmRequest("chart.getTopTags", { limit: 100 });
-        pendingTagSuggestRequest.promise = fetchPromise;
-        pendingTagSuggestRequest.expiry = now + 60000;
-        data = await fetchPromise;
-      }
-      if (data?.tags?.tag) {
-        const tags = Array.isArray(data.tags.tag)
-          ? data.tags.tag
-          : [data.tags.tag];
-        tagNames = tags
+      if (prefix.length >= 2) {
+        const data = await lastfmRequest("tag.search", {
+          tag: prefix,
+          limit: Math.max(limitInt * 4, 20),
+        });
+        const matches = data?.results?.tagmatches?.tag
+          ? Array.isArray(data.results.tagmatches.tag)
+            ? data.results.tagmatches.tag
+            : [data.results.tagmatches.tag]
+          : [];
+        tagNames = matches
           .map((t) => (t.name != null ? String(t.name).trim() : ""))
           .filter(Boolean);
+      } else {
+        let data;
+        const now = Date.now();
+        if (
+          pendingTagSuggestRequest.promise &&
+          pendingTagSuggestRequest.expiry > now
+        ) {
+          data = await pendingTagSuggestRequest.promise;
+        } else {
+          const fetchPromise = lastfmRequest("chart.getTopTags", { limit: 100 });
+          pendingTagSuggestRequest.promise = fetchPromise;
+          pendingTagSuggestRequest.expiry = now + 60000;
+          data = await fetchPromise;
+        }
+        if (data?.tags?.tag) {
+          const tags = Array.isArray(data.tags.tag)
+            ? data.tags.tag
+            : [data.tags.tag];
+          tagNames = tags
+            .map((t) => (t.name != null ? String(t.name).trim() : ""))
+            .filter(Boolean);
+        }
       }
     }
     if (tagNames.length === 0) {
       const discoveryCache = getDiscoveryCache();
       const cached = [
-        ...(!getLastfmApiKey() ? getFallbackTagNames() : []),
+        ...getFallbackTagNames(),
         ...(discoveryCache.topTags || []),
         ...(discoveryCache.topGenres || []),
       ]
@@ -542,7 +557,7 @@ router.get("/tags", async (req, res) => {
     const filtered = tagNames.filter((name) => {
       const key = name.toLowerCase();
       if (seen.has(key)) return false;
-      if (prefix && !key.startsWith(prefix)) return false;
+      if (prefix && !key.includes(prefix)) return false;
       seen.add(key);
       return true;
     });
