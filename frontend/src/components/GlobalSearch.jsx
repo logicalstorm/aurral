@@ -678,6 +678,18 @@ function GlobalSearch() {
   };
 
   let selectableCursor = -1;
+  const emptySearchPlaceholder = inputFocused ? (
+    <span className="global-search__scope-label--full">
+      Search music, artists, or #rock
+    </span>
+  ) : (
+    <>
+      <span className="global-search__scope-label--short">Search...</span>
+      <span className="global-search__scope-label--full">Type</span>
+      <span className="global-search__key">/</span>
+      <span className="global-search__scope-label--full">to search</span>
+    </>
+  );
 
   return (
     <form
@@ -707,10 +719,7 @@ function GlobalSearch() {
           />
           {!searchQuery && (
             <div className="global-search__placeholder">
-              <span className="global-search__scope-label--short">Search...</span>
-              <span className="global-search__scope-label--full">Type</span>
-              <span className="global-search__key">/</span>
-              <span className="global-search__scope-label--full">to search</span>
+              {emptySearchPlaceholder}
             </div>
           )}
           {loadingSuggestions && (
