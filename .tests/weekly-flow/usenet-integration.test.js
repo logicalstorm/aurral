@@ -94,12 +94,21 @@ test("Prowlarr client lists enabled Usenet indexers and searches audio releases"
           priority: 1,
           capabilities: { categories: [{ id: 3000 }] },
         },
+        {
+          id: 4,
+          name: "Music Two",
+          enable: true,
+          protocol: "usenet",
+          supportsSearch: true,
+          priority: 6,
+          capabilities: { categories: [{ id: 3010 }] },
+        },
       ]);
       return;
     }
     if (url.pathname === "/api/v1/search") {
-      assert.equal(url.searchParams.get("type"), "audiosearch");
-      assert.equal(url.searchParams.get("indexerIds"), "1");
+      assert.equal(url.searchParams.get("type"), "search");
+      assert.deepEqual(url.searchParams.getAll("indexerIds"), ["1", "4"]);
       assert.deepEqual(url.searchParams.getAll("categories"), ["3000"]);
       sendJson(res, 200, [
         {
@@ -138,11 +147,11 @@ test("Prowlarr client lists enabled Usenet indexers and searches audio releases"
 
     const status = await prowlarrClient.testConnection({ force: true });
     assert.equal(status.ok, true);
-    assert.equal(status.usenetIndexerCount, 2);
-    assert.equal(status.enabledUsenetIndexerCount, 1);
+    assert.equal(status.usenetIndexerCount, 3);
+    assert.equal(status.enabledUsenetIndexerCount, 2);
 
     const indexers = await prowlarrClient.getEnabledUsenetIndexers();
-    assert.deepEqual(indexers.map((entry) => entry.id), [1]);
+    assert.deepEqual(indexers.map((entry) => entry.id), [1, 4]);
 
     const releases = await prowlarrClient.search("Artist Album");
     assert.equal(releases.length, 1);

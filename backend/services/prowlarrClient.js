@@ -182,11 +182,39 @@ function normalizeRelease(release) {
   };
 }
 
+function formatHttpErrorBody(data) {
+  if (!data) return "";
+  if (typeof data === "string") return data.trim().slice(0, 500);
+  if (Array.isArray(data)) {
+    return data
+      .map((entry) => formatHttpErrorBody(entry))
+      .filter(Boolean)
+      .join("; ")
+      .slice(0, 500);
+  }
+  if (typeof data === "object") {
+    const message =
+      data.message ||
+      data.errorMessage ||
+      data.error ||
+      data.title ||
+      data.detail ||
+      data.description;
+    if (message) return String(message).trim().slice(0, 500);
+    try {
+      return JSON.stringify(data).slice(0, 500);
+    } catch {
+      return "";
+    }
+  }
+  return String(data).trim().slice(0, 500);
+}
+
 function buildSearchParams({
   query,
   indexerIds,
   categories,
-  type = "audiosearch",
+  type = "search",
   limit,
   offset = 0,
 }) {
@@ -194,7 +222,9 @@ function buildSearchParams({
   params.set("query", String(query || "").trim());
   params.set("type", type);
   if (Array.isArray(indexerIds) && indexerIds.length > 0) {
-    params.set("indexerIds", indexerIds.join(","));
+    for (const indexerId of indexerIds) {
+      params.append("indexerIds", String(indexerId));
+    }
   }
   for (const category of normalizeCategoryList(categories)) {
     params.append("categories", String(category));
@@ -339,13 +369,16 @@ export class ProwlarrClient {
       query,
       indexerIds,
       categories: options.categories || settings.categories,
-      type: options.type || "audiosearch",
+      type: options.type || "search",
       limit: normalizePositiveInteger(options.limit, settings.maxResults),
       offset: normalizeInteger(options.offset, 0),
     });
     const response = await buildClient().get(`/api/v1/search?${queryString}`);
     if (response.status !== 200) {
-      throw new Error(`Prowlarr search failed: HTTP ${response.status}`);
+      const detail = formatHttpErrorBody(response.data);
+      throw new Error(
+        `Prowlarr search failed: HTTP ${response.status}${detail ? `: ${detail}` : ""}`,
+      );
     }
     return (Array.isArray(response.data) ? response.data : [])
       .map(normalizeRelease)
