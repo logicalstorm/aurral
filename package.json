@@ -25,7 +25,7 @@
     "docs:dev": "npm run dev --prefix docs",
     "docs:build": "npm run build --prefix docs",
     "hooks:install": "sh scripts/install-git-hooks.sh",
-    "prepare": "sh scripts/install-git-hooks.sh"
+    "prepare": "if [ -d .git ] && [ -f scripts/install-git-hooks.sh ]; then sh scripts/install-git-hooks.sh; fi"
   },
   "keywords": [
     "lidarr",
