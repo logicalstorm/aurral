@@ -95,6 +95,7 @@ export default defineConfig({
             { slug: "integrations/lastfm" },
             { slug: "integrations/koito" },
             { slug: "integrations/slskd" },
+            { slug: "integrations/usenet" },
             { slug: "integrations/navidrome" },
             { slug: "integrations/plex" },
             { slug: "integrations/ticketmaster" },

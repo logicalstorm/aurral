@@ -1,9 +1,9 @@
 ---
 title: Shared storage
-description: Mount the same media root in Aurral, Lidarr, slskd, Navidrome, and Plex.
+description: Mount the same media root in Aurral, Lidarr, slskd, NZBGet, Navidrome, and Plex.
 ---
 
-Flows, slskd handoff, Lidarr file reuse, Navidrome playback, and Plex library scanning all depend on **the same host folder mounted at the same container path** across services. This guide uses `/data`.
+Flows, download client handoff, Lidarr file reuse, Navidrome playback, and Plex library scanning all depend on **the same host folder mounted at the same container path** across services. This guide uses `/data`.
 
 Docker only exposes mounted paths. Aurral uses the literal filesystem paths Lidarr and slskd report over their APIs. If Lidarr stores a file at `/data/music/...` but Aurral does not have `/data/music` mounted, library checks and reuse will fail even when the API connection works.
 
@@ -15,6 +15,7 @@ Docker only exposes mounted paths. Aurral uses the literal filesystem paths Lida
 └── downloads/
     ├── slskd/
     │   └── complete/                   # slskd finished downloads
+    ├── nzbget/                         # optional NZBGet completed downloads
     └── aurral/                         # Aurral DOWNLOAD_FOLDER
         └── aurral-weekly-flow/           # created by Aurral
 ```
@@ -25,6 +26,7 @@ Docker only exposes mounted paths. Aurral uses the literal filesystem paths Lida
 | --- | --- | --- |
 | Lidarr | `/srv/media:/data` | Root folder `/data/music` |
 | slskd | `/srv/media:/data` | Downloads `/data/downloads/slskd/complete` |
+| NZBGet | `/srv/media:/data` | Completed `/data/downloads/nzbget/completed` (or your category path) |
 | Aurral | `/srv/media:/data` | `DOWNLOAD_FOLDER=/data/downloads/aurral` |
 | Navidrome | `/srv/media:/data:ro` | Scan `/data/music` and `/data/downloads/aurral` |
 | Plex | `/srv/media:/data` | Read `/data/downloads/aurral/aurral-weekly-flow` (Aurral creates the library via API) |
@@ -97,10 +99,10 @@ services:
 
 After changing `volumes` or `environment`, recreate the container (`docker compose up -d --force-recreate`). `docker restart` does not apply compose changes.
 
-1. Set your download folder to a path inside that mount, for example `/music/Aurral` (via `DOWNLOAD_FOLDER` or **Settings → Playlists**).
-2. In **Settings → Integrations → Lidarr**, run **Test library access**. Aurral auto-detects a mapping such as `N:\ServerFolders\Music` → `/music` when the folders line up.
-3. If auto-detect does not work, add `PATH_MAPPINGS` in compose, or open **Settings → Playlists → Path mappings**, click **Detect from Lidarr**, or add a manual **Remote path** / **Local path** pair, then save.
-4. If Navidrome runs on Windows while Aurral is in Docker, enable **Settings → Integrations → Navidrome → Use host paths in playlist files** or set `M3U_PATH_MODE=remote` in compose.
+1. Set your download folder to a path inside that mount, for example `/music/Aurral` (via `DOWNLOAD_FOLDER` or **Settings → Downloads → Downloads folder**).
+2. In **Settings → Library → Lidarr**, run **Test library access**. Aurral auto-detects a mapping such as `N:\ServerFolders\Music` → `/music` when the folders line up.
+3. If auto-detect does not work, add `PATH_MAPPINGS` in compose, or open **Settings → Downloads → Path mappings**, click **Detect from Lidarr**, or add a manual **Remote path** / **Local path** pair, then save.
+4. If Navidrome runs on Windows while Aurral is in Docker, enable **Settings → Playback → Navidrome → Use host paths in playlist files** or set `M3U_PATH_MODE=remote` in compose.
 
 ### Path mappings vs playlist file paths
 
@@ -108,7 +110,7 @@ These solve two different problems in mixed Windows/Docker setups:
 
 | Setting | Direction | Used for |
 | --- | --- | --- |
-| **Path mappings** (`PATH_MAPPINGS` or **Settings → Playlists**) | Host → container (`N:\...` → `/music/...`) | Aurral reading Lidarr/slskd files, library reuse, **Test library access** |
+| **Path mappings** (`PATH_MAPPINGS` or **Settings → Downloads**) | Host → container (`N:\...` → `/music/...`) | Aurral reading Lidarr, slskd, and NZBGet files, library reuse, **Test library access** |
 | **Playlist file paths** (`M3U_PATH_MODE=remote` or Navidrome setting) | Container → host (`/music/...` → `N:\...`) | M3U playlists Navidrome reads when it is **not** in Docker |
 | **Plex downloads path** (Plex integration setting) | Aurral → Plex library root | Plex music library location when Plex sees a different mount than Aurral |
 
@@ -117,10 +119,10 @@ Path mappings let Aurral open files inside the container. They do not change wha
 When reusing tracks from Lidarr, Aurral stores the original Lidarr path and prefers that in remote M3U output. Downloaded tracks fall back to inverting your path mappings.
 
 :::note
-`PATH_MAPPINGS` from compose is applied at runtime but does not appear under **Settings → Playlists → Path mappings**. Use the UI if you want to view or edit mappings in the app.
+`PATH_MAPPINGS` from compose is applied at runtime but does not appear under **Settings → Downloads → Path mappings**. Use the UI if you want to view or edit mappings in the app.
 :::
 
-Path mappings also apply to slskd download paths reported from native Windows installs.
+Path mappings also apply to slskd and NZBGet download paths reported from native Windows installs.
 
 You do not need to move your music library or change Lidarr's root folder path on Windows. Aurral translates the paths it receives from Lidarr and slskd into the mounted container paths.
 

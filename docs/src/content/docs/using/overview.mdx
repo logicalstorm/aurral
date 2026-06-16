@@ -27,13 +27,13 @@ Browse artists already in Lidarr with search, sorting, artwork, monitoring statu
 
 ![Aurral playlists](../../../assets/screenshots/playlists.webp)
 
-Scheduled flows, discover playlists, imported static playlists, worker settings, in-app playback, and download status. Flows regenerate on a schedule; static playlists keep fixed tracklists.
+Scheduled flows, discover playlists, imported static playlists, in-app playback, and download status. Flows regenerate on a schedule; static playlists keep fixed tracklists.
 
 ### History
 
 ![Aurral history timeline](../../../assets/screenshots/history.webp)
 
-One timeline for Lidarr requests, slskd downloads, and Aurral playlist activity.
+One timeline for Lidarr requests, download client activity (slskd and NZBGet), and Aurral playlist jobs.
 
 ### Shows
 
@@ -51,4 +51,15 @@ Per-user listening history (Last.fm, ListenBrainz, or Koito), Lidarr defaults, a
 
 ![Aurral user settings](../../../assets/screenshots/settings-user.webp)
 
-Integrations, discovery behavior, playlist workers, notifications, users, and permissions. Admins only. Metadata providers live at **Settings → Metadata Providers**.
+Admin-only configuration, organized into tabs:
+
+| Tab | What it covers |
+| --- | --- |
+| **Library** | Lidarr connection, profiles, tags, library access check |
+| **Downloads** | Prowlarr, NZBGet, slskd, downloads folder, path mappings, cover art |
+| **Playback** | Navidrome and Plex |
+| **Discover** | Last.fm, Ticketmaster, discovery refresh and mode |
+| **Notifications** | Gotify and webhooks |
+| **Users** | Accounts and permissions |
+
+Metadata providers live at **Settings → Metadata Providers** (`/settings/metadata`).

@@ -7,7 +7,7 @@ Lidarr is required. Aurral uses it to add artists and albums, read library state
 
 ## Connection
 
-During onboarding or in **Settings → Integrations → Lidarr**, provide:
+During onboarding or in **Settings → Library → Lidarr**, provide:
 
 ![Aurral Lidarr integration settings](../../../assets/screenshots/settings-lidarr.webp)
 
@@ -20,9 +20,9 @@ During onboarding or in **Settings → Integrations → Lidarr**, provide:
 
 Aurral tests that it can read files at the paths Lidarr reports. If this fails, confirm the shared `/data` mount described in [Shared storage](/getting-started/storage/).
 
-On mixed Windows and Docker setups, run **Test library access** to auto-detect path mappings. Aurral translates host paths such as `N:\Music\...` into mounted container paths such as `/music/Music/...`. You can review or edit mappings under **Settings → Playlists → Path mappings**.
+On mixed Windows and Docker setups, run **Test library access** to auto-detect path mappings. Aurral translates host paths such as `N:\Music\...` into mounted container paths such as `/music/Music/...`. You can review or edit mappings under **Settings → Downloads → Path mappings**.
 
-Path mappings apply to Aurral reading files. If Navidrome runs outside Docker, enable **Use host paths in playlist files** under **Settings → Integrations → Navidrome** so M3U playlists use host paths instead. See [Navidrome](/integrations/navidrome/#mixed-windows-and-docker-navidrome).
+Path mappings apply to Aurral reading files. If Navidrome runs outside Docker, enable **Use host paths in playlist files** under **Settings → Playback → Navidrome** so M3U playlists use host paths instead. See [Navidrome](/integrations/navidrome/#mixed-windows-and-docker-navidrome).
 
 ## Safety
 
