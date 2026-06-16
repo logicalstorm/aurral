@@ -198,6 +198,22 @@ router.post("/", async (req, res) => {
               ...integrations.navidrome,
             }
           : mergedIntegrations.navidrome,
+        plex: integrations.plex
+          ? {
+              ...(mergedIntegrations.plex || {}),
+              ...integrations.plex,
+              // Never let a blank token/clientId from the client wipe the
+              // stored credentials (the UI doesn't always carry them).
+              token:
+                integrations.plex.token ||
+                mergedIntegrations.plex?.token ||
+                "",
+              clientId:
+                integrations.plex.clientId ||
+                mergedIntegrations.plex?.clientId ||
+                "",
+            }
+          : mergedIntegrations.plex,
         slskd: integrations.slskd
           ? {
               ...(mergedIntegrations.slskd || {}),
@@ -796,6 +812,185 @@ router.post("/lidarr/apply-community-guide", async (req, res) => {
   }
 });
 
+router.get("/browse", async (req, res) => {
+  try {
+    const fs = await import("fs/promises");
+    const path = await import("path");
+    const target = path.resolve(req.query.path ? String(req.query.path) : "/");
+    const dirents = await fs.readdir(target, { withFileTypes: true });
+    const directories = (
+      await Promise.all(
+        dirents.map(async (d) => {
+          let isDir = d.isDirectory();
+          if (!isDir && d.isSymbolicLink()) {
+            try {
+              isDir = (await fs.stat(path.join(target, d.name))).isDirectory();
+            } catch {
+              isDir = false;
+            }
+          }
+          return isDir ? { name: d.name, path: path.join(target, d.name) } : null;
+        }),
+      )
+    )
+      .filter(Boolean)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    res.json({
+      path: target,
+      parent: target === "/" ? null : path.dirname(target),
+      directories,
+    });
+  } catch (error) {
+    res
+      .status(400)
+      .json({ error: "Cannot read path", message: error.message });
+  }
+});
+
+function getPlexConfig() {
+  return dbOps.getSettings()?.integrations?.plex || {};
+}
+
+router.post("/plex/auth/pin", async (req, res) => {
+  try {
+    const { PlexClient } = await import("../services/plex.js");
+    const settings = dbOps.getSettings();
+    const plex = settings.integrations?.plex || {};
+    let clientId = plex.clientId;
+    if (!clientId) {
+      clientId = PlexClient.generateClientId();
+      dbOps.updateSettings({
+        ...settings,
+        integrations: {
+          ...settings.integrations,
+          plex: { ...plex, clientId },
+        },
+      });
+    }
+    const { id, code } = await PlexClient.generatePin(clientId);
+    const forwardUrl = req.body?.forwardUrl;
+    res.json({
+      pinId: id,
+      code,
+      clientId,
+      authUrl: PlexClient.buildAuthUrl(clientId, code, forwardUrl),
+    });
+  } catch (error) {
+    console.error("[Settings] Plex PIN generation failed:", error.message);
+    res.status(500).json({
+      error: "Failed to start Plex authentication",
+      message: error.message,
+    });
+  }
+});
+
+router.post("/plex/auth/check", async (req, res) => {
+  try {
+    const { PlexClient } = await import("../services/plex.js");
+    const { pinId, code } = req.body || {};
+    if (!pinId || !code) {
+      return res.status(400).json({ error: "pinId and code are required" });
+    }
+    const clientId = getPlexConfig().clientId;
+    if (!clientId) {
+      return res.status(400).json({ error: "Plex client not initialized" });
+    }
+    const token = await PlexClient.checkPin(pinId, code, clientId);
+    if (!token) return res.json({ pending: true });
+    res.json({ token });
+  } catch (error) {
+    console.error("[Settings] Plex PIN check failed:", error.message);
+    res.status(500).json({
+      error: "Failed to check Plex authentication",
+      message: error.message,
+    });
+  }
+});
+
+router.post("/plex/resources", async (req, res) => {
+  try {
+    const { PlexClient } = await import("../services/plex.js");
+    const stored = getPlexConfig();
+    // Use the freshest token the client has (e.g. just-minted during connect),
+    // falling back to the persisted one. The clientId MUST be the stored one
+    // the token was minted under — Plex ties the token to that identifier.
+    const token = req.body?.token || stored.token;
+    const clientId = stored.clientId;
+    if (!token || !clientId) {
+      return res.status(400).json({ error: "Plex authentication required" });
+    }
+    const { servers, total } = await PlexClient.getResources(token, clientId);
+    res.json({ servers, total });
+  } catch (error) {
+    const status = error.response?.status;
+    console.error(
+      "[Settings] Plex resources failed:",
+      status ? `${status} ${JSON.stringify(error.response?.data)}` : error.message,
+    );
+    res.status(status === 401 ? 401 : 500).json({
+      error: "Failed to list Plex servers",
+      message:
+        status === 401
+          ? "Plex rejected the token (401). Reconnect your Plex account."
+          : error.message,
+    });
+  }
+});
+
+router.post("/plex/test", async (req, res) => {
+  try {
+    const { PlexClient } = await import("../services/plex.js");
+    const stored = getPlexConfig();
+    let url = (req.body?.url || stored.url || "").trim().replace(/\/+$/, "");
+    const token = req.body?.token || stored.token;
+    const clientId = stored.clientId;
+    if (!url || !token) {
+      return res.status(400).json({ error: "Server URL and token are required" });
+    }
+    const urlValidation = validateExternalUrl(url);
+    if (!urlValidation.valid) {
+      return res.status(400).json({ error: urlValidation.error });
+    }
+    url = urlValidation.url;
+    const client = new PlexClient(url, token, clientId);
+    const identity = await client.ping();
+    res.json({
+      success: true,
+      message: "Connection successful",
+      machineIdentifier: identity.machineIdentifier,
+      version: identity.version,
+    });
+  } catch (error) {
+    res.status(400).json({
+      error: "Connection failed",
+      message: error.response?.data || error.message,
+    });
+  }
+});
+
+router.post("/plex/sync", async (req, res) => {
+  try {
+    const plex = getPlexConfig();
+    if (!plex.url || !plex.token) {
+      return res.status(400).json({
+        error: "Plex not configured",
+        message: "Connect Plex and save settings before syncing",
+      });
+    }
+    const { playlistManager } = await import(
+      "../services/weeklyFlowPlaylistManager.js"
+    );
+    playlistManager.updateConfig(false);
+    const result = await playlistManager.syncPlexNow();
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error("[Settings] Plex sync failed:", error.message);
+    res.status(500).json({
+      error: "Plex sync failed",
+      message: error.response?.data || error.message,
+    });
+  }
+});
 
 router.post("/logs/level", async (req, res) => {
   try {

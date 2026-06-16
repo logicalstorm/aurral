@@ -86,6 +86,14 @@ export const normalizeSettings = (savedSettings) => {
             ? "remote"
             : "local",
       },
+      plex: {
+        url: "",
+        token: "",
+        clientId: "",
+        machineIdentifier: "",
+        downloadsPath: "",
+        ...(savedSettings.integrations?.plex || {}),
+      },
       lastfm: {
         apiKey: "",
         username: "",

@@ -1,9 +1,9 @@
 ---
 title: Shared storage
-description: Mount the same media root in Aurral, Lidarr, slskd, and Navidrome.
+description: Mount the same media root in Aurral, Lidarr, slskd, Navidrome, and Plex.
 ---
 
-Flows, slskd handoff, Lidarr file reuse, and Navidrome playback all depend on **the same host folder mounted at the same container path** across services. This guide uses `/data`.
+Flows, slskd handoff, Lidarr file reuse, Navidrome playback, and Plex library scanning all depend on **the same host folder mounted at the same container path** across services. This guide uses `/data`.
 
 Docker only exposes mounted paths. Aurral uses the literal filesystem paths Lidarr and slskd report over their APIs. If Lidarr stores a file at `/data/music/...` but Aurral does not have `/data/music` mounted, library checks and reuse will fail even when the API connection works.
 
@@ -27,6 +27,7 @@ Docker only exposes mounted paths. Aurral uses the literal filesystem paths Lida
 | slskd | `/srv/media:/data` | Downloads `/data/downloads/slskd/complete` |
 | Aurral | `/srv/media:/data` | `DOWNLOAD_FOLDER=/data/downloads/aurral` |
 | Navidrome | `/srv/media:/data:ro` | Scan `/data/music` and `/data/downloads/aurral` |
+| Plex | `/srv/media:/data` | Read `/data/downloads/aurral/aurral-weekly-flow` (Aurral creates the library via API) |
 
 Aurral app state stays in `/config` and does not need to be shared with the other apps.
 
@@ -109,8 +110,9 @@ These solve two different problems in mixed Windows/Docker setups:
 | --- | --- | --- |
 | **Path mappings** (`PATH_MAPPINGS` or **Settings → Playlists**) | Host → container (`N:\...` → `/music/...`) | Aurral reading Lidarr/slskd files, library reuse, **Test library access** |
 | **Playlist file paths** (`M3U_PATH_MODE=remote` or Navidrome setting) | Container → host (`/music/...` → `N:\...`) | M3U playlists Navidrome reads when it is **not** in Docker |
+| **Plex downloads path** (Plex integration setting) | Aurral → Plex library root | Plex music library location when Plex sees a different mount than Aurral |
 
-Path mappings let Aurral open files inside the container. They do not change what Navidrome sees in generated `.m3u` files unless you also enable host paths for playlists.
+Path mappings let Aurral open files inside the container. They do not change what Navidrome sees in generated `.m3u` files unless you also enable host paths for playlists. Plex uses its own downloads-path override instead of M3U path mode. See [Plex](/integrations/plex/#plex-downloads-path-optional).
 
 When reusing tracks from Lidarr, Aurral stores the original Lidarr path and prefers that in remote M3U output. Downloaded tracks fall back to inverting your path mappings.
 
