@@ -19,6 +19,7 @@ import {
   isVisibleLibraryAlbum,
   matchesReleaseTypeFilter,
 } from "../utils";
+import { omitKey } from "../../../utils/object";
 import { useWebSocketChannel } from "../../../hooks/useWebSocket";
 
 const DELETE_FILES_PREFERENCE_KEY = "aurral:library-delete-files";
@@ -698,11 +699,7 @@ export function useArtistDetailsLibrary({
             prev.filter((a) => a.id !== `pending-${albumId}`),
           );
         }
-        setDownloadStatuses((prev) => {
-          const next = { ...prev };
-          delete next[`pending-${albumId}`];
-          return next;
-        });
+        setDownloadStatuses((prev) => omitKey(prev, `pending-${albumId}`));
       }
       showError(`Failed to add album: ${err.message}`);
     }

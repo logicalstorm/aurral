@@ -3,18 +3,20 @@ export const RELEASE_RADAR_PRESET_ID = "release-radar";
 export const isReleaseRadarFlow = (flow) =>
   String(flow?.discoverPresetId || "").trim() === RELEASE_RADAR_PRESET_ID;
 
+const flowNumber = (value) => Number(value || 0);
+
 export const getFlowDisplayTrackCount = (flow, stats, trackListLength = 0) => {
   if (isReleaseRadarFlow(flow)) {
     const actual = Math.max(
-      Number(trackListLength || 0),
-      Number(stats?.total || 0),
+      flowNumber(trackListLength),
+      flowNumber(stats?.total),
     );
-    return actual > 0 ? actual : Number(flow?.size || 0);
+    return actual > 0 ? actual : flowNumber(flow?.size);
   }
   return Math.max(
-    Number(flow?.size || 0),
-    Number(trackListLength || 0),
-    Number(stats?.total || 0),
+    flowNumber(flow?.size),
+    flowNumber(trackListLength),
+    flowNumber(stats?.total),
   );
 };
 
@@ -27,24 +29,22 @@ export const EMPTY_FLOW_STATS = {
 };
 
 export const getDownloadedTrackCount = (stats) => {
-  const done = Number(stats?.done);
+  const done = flowNumber(stats?.done);
   return Number.isFinite(done) && done >= 0 ? done : 0;
 };
 
 export const getPlaylistDownloadProgressPct = (stats, trackCount = 0) => {
-  const done = Number(stats?.done || 0);
+  const done = flowNumber(stats?.done);
   const total = Math.max(
-    Number(trackCount || 0),
-    Number(stats?.pending || 0) +
-      Number(stats?.downloading || 0) +
-      done,
+    flowNumber(trackCount),
+    flowNumber(stats?.pending) + flowNumber(stats?.downloading) + done,
   );
   if (total <= 0) return null;
   return Math.min(100, Math.round((done / total) * 100));
 };
 
 export const formatTrackCountLabel = (trackCount, stats) => {
-  const count = Math.max(Number(trackCount || 0), Number(stats?.total || 0));
+  const count = Math.max(flowNumber(trackCount), flowNumber(stats?.total));
   const trackWord = count === 1 ? "track" : "tracks";
   const base = `${count} ${trackWord}`;
   const pct = getPlaylistDownloadProgressPct(stats, count);
@@ -52,9 +52,11 @@ export const formatTrackCountLabel = (trackCount, stats) => {
   return `${base} · ${pct}%`;
 };
 
+export const parseFlowTimestamp = (value) =>
+  typeof value === "number" ? value : Number.parseInt(value, 10);
+
 export const formatFlowLastRun = (lastRunAt) => {
-  const timestamp =
-    typeof lastRunAt === "number" ? lastRunAt : Number.parseInt(lastRunAt, 10);
+  const timestamp = parseFlowTimestamp(lastRunAt);
   if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return null;
@@ -78,10 +80,10 @@ export const buildFlowStatsFromJobs = (jobs) => {
 };
 
 export const sanitizeFlowStats = (stats) => {
-  const pending = Number(stats?.pending || 0);
-  const downloading = Number(stats?.downloading || 0);
-  const done = Number(stats?.done || 0);
-  const failed = Number(stats?.failed || 0);
+  const pending = flowNumber(stats?.pending);
+  const downloading = flowNumber(stats?.downloading);
+  const done = flowNumber(stats?.done);
+  const failed = flowNumber(stats?.failed);
   return {
     total: pending + downloading + done,
     pending,
@@ -101,11 +103,11 @@ export const getPlaylistStateFromStats = (stats) => {
 export const getCombinedActivityStats = (status) => {
   const flow = status?.stats || EMPTY_FLOW_STATS;
   const shared = status?.sharedStats || EMPTY_FLOW_STATS;
-  const pending = Number(flow.pending || 0) + Number(shared.pending || 0);
+  const pending = flowNumber(flow.pending) + flowNumber(shared.pending);
   const downloading =
-    Number(flow.downloading || 0) + Number(shared.downloading || 0);
-  const done = Number(flow.done || 0) + Number(shared.done || 0);
-  const failed = Number(flow.failed || 0) + Number(shared.failed || 0);
+    flowNumber(flow.downloading) + flowNumber(shared.downloading);
+  const done = flowNumber(flow.done) + flowNumber(shared.done);
+  const failed = flowNumber(flow.failed) + flowNumber(shared.failed);
   return {
     pending,
     downloading,

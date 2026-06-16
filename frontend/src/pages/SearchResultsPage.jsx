@@ -38,6 +38,7 @@ import {
   buildSearchArtistResults,
   resolveSearchTopResult,
 } from "../utils/searchNavigation";
+import { omitKey } from "../utils/object";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { allReleaseTypes } from "./ArtistDetails/constants";
@@ -1027,11 +1028,7 @@ function SearchResultsPage() {
             "Failed to request album",
         );
       } finally {
-        setPendingAlbumIds((prev) => {
-          const next = { ...prev };
-          delete next[album.id];
-          return next;
-        });
+        setPendingAlbumIds((prev) => omitKey(prev, album.id));
       }
     },
     [showError, showSuccess],
@@ -1122,11 +1119,7 @@ function SearchResultsPage() {
         );
         return false;
       } finally {
-        setPendingArtistIds((prev) => {
-          const next = { ...prev };
-          delete next[artistId];
-          return next;
-        });
+        setPendingArtistIds((prev) => omitKey(prev, artistId));
       }
     },
     [showError, showSuccess],

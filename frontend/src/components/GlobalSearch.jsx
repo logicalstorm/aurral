@@ -28,6 +28,7 @@ import {
   clearRecentSearches,
   readRecentSearches,
 } from "../utils/recentSearches";
+import { omitKey } from "../utils/object";
 
 const AUTOCOMPLETE_DEBOUNCE_MS = 250;
 const SUGGEST_LIMIT = 5;
@@ -484,11 +485,7 @@ function GlobalSearch() {
         );
         return false;
       } finally {
-        setPendingArtistIds((prev) => {
-          const next = { ...prev };
-          delete next[artistId];
-          return next;
-        });
+        setPendingArtistIds((prev) => omitKey(prev, artistId));
       }
     },
     [showError, showSuccess, updateSuggestionItem],
@@ -527,11 +524,7 @@ function GlobalSearch() {
             "Failed to request album",
         );
       } finally {
-        setPendingAlbumIds((prev) => {
-          const next = { ...prev };
-          delete next[album.id];
-          return next;
-        });
+        setPendingAlbumIds((prev) => omitKey(prev, album.id));
       }
     },
     [showError, showSuccess, updateSuggestionItem],

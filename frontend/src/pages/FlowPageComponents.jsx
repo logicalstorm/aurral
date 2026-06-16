@@ -321,22 +321,10 @@ function getCommaTokenInputState(value, options = {}) {
   const endsWithComma = raw.endsWith(",");
   const commitAll = options?.commitAll === true;
   const parts = raw.split(",");
-  const dedupeCommitted = (entries) => {
-    const seen = new Set();
-    return entries
-      .map((entry) => entry.trim())
-      .filter(Boolean)
-      .filter((entry) => {
-        const key = entry.toLowerCase();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-  };
-  const committedParts = dedupeCommitted(parts.slice(0, -1));
+  const committedParts = dedupeTokenEntries(parts.slice(0, -1));
   if (endsWithComma || commitAll) {
     return {
-      committed: dedupeCommitted(parts),
+      committed: dedupeTokenEntries(parts),
       pending: "",
     };
   }
@@ -347,9 +335,9 @@ function getCommaTokenInputState(value, options = {}) {
   };
 }
 
-function buildCommaTokenInputValue(committed, pending) {
+function dedupeTokenEntries(entries) {
   const seen = new Set();
-  const safeCommitted = committed
+  return entries
     .map((entry) => String(entry || "").trim())
     .filter(Boolean)
     .filter((entry) => {
@@ -358,6 +346,10 @@ function buildCommaTokenInputValue(committed, pending) {
       seen.add(key);
       return true;
     });
+}
+
+function buildCommaTokenInputValue(committed, pending) {
+  const safeCommitted = dedupeTokenEntries(committed);
   const rawPending = String(pending ?? "").replace(/^\s+/, "");
   const normalizedPending = rawPending.trim();
   if (safeCommitted.length === 0) return rawPending.replace(/^\s+/, "");

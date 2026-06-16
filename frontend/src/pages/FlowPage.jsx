@@ -43,8 +43,10 @@ import {
   formatFlowLastRun,
   getFlowDisplayTrackCount,
   isReleaseRadarFlow,
+  parseFlowTimestamp,
 } from "./flows/flowStats";
 import { getPlaylistRunActivity } from "./flows/flowRunActivity";
+import { omitKey } from "../utils/object";
 import {
   PlaylistLibraryItem,
   PlaylistDetailHero,
@@ -64,12 +66,16 @@ import {
   MoreMenu,
 } from "./FlowPageComponents";
 
-function formatNextRun(nextRunAt, now = Date.now()) {
+function getNextRunDiff(nextRunAt, now = Date.now()) {
   if (!nextRunAt) return null;
-  const ts =
-    typeof nextRunAt === "number" ? nextRunAt : parseInt(nextRunAt, 10);
+  const ts = parseFlowTimestamp(nextRunAt);
   if (!Number.isFinite(ts)) return null;
-  const diff = ts - now;
+  return ts - now;
+}
+
+function formatNextRun(nextRunAt, now = Date.now()) {
+  const diff = getNextRunDiff(nextRunAt, now);
+  if (diff === null) return null;
   if (diff <= 0) return "soon";
   const minuteMs = 60 * 1000;
   const hourMs = 60 * minuteMs;
@@ -87,11 +93,8 @@ function formatNextRun(nextRunAt, now = Date.now()) {
 }
 
 function formatNextRunShort(nextRunAt, now = Date.now()) {
-  if (!nextRunAt) return null;
-  const ts =
-    typeof nextRunAt === "number" ? nextRunAt : parseInt(nextRunAt, 10);
-  if (!Number.isFinite(ts)) return null;
-  const diff = ts - now;
+  const diff = getNextRunDiff(nextRunAt, now);
+  if (diff === null) return null;
   if (diff <= 0) return "soon";
   const dayMs = 24 * 60 * 60 * 1000;
   const days = Math.ceil(diff / dayMs);
@@ -102,8 +105,7 @@ function formatNextRunShort(nextRunAt, now = Date.now()) {
 }
 
 function formatFlowLastRunShort(lastRunAt) {
-  const timestamp =
-    typeof lastRunAt === "number" ? lastRunAt : Number.parseInt(lastRunAt, 10);
+  const timestamp = parseFlowTimestamp(lastRunAt);
   if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return null;
@@ -188,6 +190,18 @@ const buildTrackForPlaylistModal = (track) => {
     reason: track?.reason ? String(track.reason).trim() : null,
   };
 };
+
+const normalizeDurationMs = (value) => {
+  const numeric = Number(value);
+  return value != null && Number.isFinite(numeric)
+    ? Math.max(0, Math.round(numeric))
+    : null;
+};
+
+const normalizeArtistAliases = (aliases) =>
+  Array.isArray(aliases)
+    ? aliases.map((entry) => String(entry || "").trim()).filter(Boolean)
+    : [];
 
 const parseListInput = (value) =>
   String(value ?? "")
@@ -458,15 +472,6 @@ const normalizeSharedTrackEntry = (track) => {
     track.trackMbid ?? track.recordingMbid ?? track.recordingId ?? "",
   ).trim();
   const releaseYear = String(track.releaseYear ?? track.year ?? "").trim();
-  const durationMs =
-    track.durationMs != null && Number.isFinite(Number(track.durationMs))
-      ? Math.max(0, Math.round(Number(track.durationMs)))
-      : null;
-  const artistAliases = Array.isArray(track.artistAliases)
-    ? track.artistAliases
-        .map((entry) => String(entry || "").trim())
-        .filter(Boolean)
-    : [];
   return {
     artistName,
     trackName,
@@ -475,8 +480,8 @@ const normalizeSharedTrackEntry = (track) => {
     albumMbid: albumMbid || null,
     trackMbid: trackMbid || null,
     releaseYear: releaseYear || null,
-    durationMs,
-    artistAliases,
+    durationMs: normalizeDurationMs(track.durationMs),
+    artistAliases: normalizeArtistAliases(track.artistAliases),
   };
 };
 
@@ -496,15 +501,8 @@ const buildSharedTracklistPayload = ({ name, sourceName, sourceFlowId, tracks })
     albumMbid: track.albumMbid ? String(track.albumMbid).trim() : null,
     trackMbid: track.trackMbid ? String(track.trackMbid).trim() : null,
     releaseYear: track.releaseYear ? String(track.releaseYear).trim() : null,
-    durationMs:
-      track.durationMs != null && Number.isFinite(Number(track.durationMs))
-        ? Math.max(0, Math.round(Number(track.durationMs)))
-        : null,
-    artistAliases: Array.isArray(track.artistAliases)
-      ? track.artistAliases
-          .map((entry) => String(entry || "").trim())
-          .filter(Boolean)
-      : [],
+    durationMs: normalizeDurationMs(track.durationMs),
+    artistAliases: normalizeArtistAliases(track.artistAliases),
   })),
 });
 
@@ -761,21 +759,13 @@ function FlowPage() {
       ...prev,
       [flow.id]: flowToForm(flow),
     }));
-    setSimpleErrors((prev) => {
-      const next = { ...prev };
-      delete next[flow.id];
-      return next;
-    });
+    setSimpleErrors((prev) => omitKey(prev, flow.id));
     setDetailTab("tracks");
   };
 
   const handleApplySimple = async (flow) => {
     setApplyingFlowId(flow.id);
-    setSimpleErrors((prev) => {
-      const next = { ...prev };
-      delete next[flow.id];
-      return next;
-    });
+    setSimpleErrors((prev) => omitKey(prev, flow.id));
     try {
       const draft = simpleDrafts[flow.id] || flowToForm(flow);
       if (!isReleaseRadarFlow(flow)) {
@@ -815,11 +805,7 @@ function FlowPage() {
   const handleApplyFlowNameEdit = async (flow, nameOverride) => {
     if (!flow?.id) return;
     setApplyingFlowNameId(flow.id);
-    setSimpleErrors((prev) => {
-      const next = { ...prev };
-      delete next[flow.id];
-      return next;
-    });
+    setSimpleErrors((prev) => omitKey(prev, flow.id));
     try {
       const currentDraft = simpleDrafts[flow.id] ?? flowToForm(flow);
       if (!isReleaseRadarFlow(flow)) {
@@ -1021,11 +1007,7 @@ function FlowPage() {
         err.response?.data?.message || err.message || "Failed to update flow"
       );
     } finally {
-      setOptimisticEnabled((prev) => {
-        const next = { ...prev };
-        delete next[flow.id];
-        return next;
-      });
+      setOptimisticEnabled((prev) => omitKey(prev, flow.id));
       setTogglingId(null);
       setTogglingToEnabled(null);
     }
@@ -1358,11 +1340,7 @@ function FlowPage() {
   const handleApplySharedPlaylist = async (playlist, nameOverride) => {
     if (!playlist) return;
     setApplyingSharedPlaylistNameId(playlist.id);
-    setSharedPlaylistErrors((prev) => {
-      const next = { ...prev };
-      delete next[playlist.id];
-      return next;
-    });
+    setSharedPlaylistErrors((prev) => omitKey(prev, playlist.id));
     try {
       const name =
         nameOverride !== undefined
@@ -1549,11 +1527,7 @@ function FlowPage() {
     }
     setCoverArtworkError("");
     if (target.kind === "flow") {
-      setSimpleErrors((prev) => {
-        const next = { ...prev };
-        delete next[target.id];
-        return next;
-      });
+      setSimpleErrors((prev) => omitKey(prev, target.id));
       setRenameModal({
         kind: "flow",
         id: target.id,
@@ -1561,11 +1535,7 @@ function FlowPage() {
       });
       return;
     }
-    setSharedPlaylistErrors((prev) => {
-      const next = { ...prev };
-      delete next[target.id];
-      return next;
-    });
+    setSharedPlaylistErrors((prev) => omitKey(prev, target.id));
     setRenameModal({
       kind: "shared",
       id: target.id,
@@ -1709,11 +1679,7 @@ function FlowPage() {
       showError(message);
       await fetchFlowTracks(playlistId, { showSpinner: false });
     } finally {
-      setReSearchingTrackIds((prev) => {
-        const next = { ...prev };
-        delete next[jobId];
-        return next;
-      });
+      setReSearchingTrackIds((prev) => omitKey(prev, jobId));
     }
   };
 
@@ -2040,11 +2006,7 @@ function FlowPage() {
                 }
                 onClearError={() => {
                   if (simpleErrors[selectedFlow.id]) {
-                    setSimpleErrors((prev) => {
-                      const next = { ...prev };
-                      delete next[selectedFlow.id];
-                      return next;
-                    });
+                    setSimpleErrors((prev) => omitKey(prev, selectedFlow.id));
                   }
                 }}
               />
@@ -2066,11 +2028,7 @@ function FlowPage() {
                 }
                 onClearError={() => {
                   if (simpleErrors[selectedFlow.id]) {
-                    setSimpleErrors((prev) => {
-                      const next = { ...prev };
-                      delete next[selectedFlow.id];
-                      return next;
-                    });
+                    setSimpleErrors((prev) => omitKey(prev, selectedFlow.id));
                   }
                 }}
                 normalizeMixPercent={normalizeMixPercent}

@@ -27,6 +27,7 @@ import { useWebSocketChannel } from "../hooks/useWebSocket";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useAuth } from "../contexts/AuthContext";
 import { getArtistFeedbackFlags } from "../utils/discoveryFeedback";
+import { omitKey } from "../utils/object";
 import { useArtistTasteFeedback } from "../hooks/useArtistTasteFeedback";
 import { getArtistRecordId } from "../utils/artistTaste";
 import NearbyLocationControl from "../components/NearbyLocationControl";
@@ -1303,11 +1304,7 @@ function DiscoverPage() {
             "Failed to request album",
         );
       } finally {
-        setPendingRecentReleaseIds((prev) => {
-          const next = { ...prev };
-          delete next[albumKey];
-          return next;
-        });
+        setPendingRecentReleaseIds((prev) => omitKey(prev, albumKey));
       }
     },
     [getRecentReleaseKey, showError, showSuccess],
