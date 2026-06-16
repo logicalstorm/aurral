@@ -12,13 +12,13 @@ export function isDiscoverBrowsePath(pathname) {
   if (!pathname) return false;
   if (pathname.startsWith("/artist/")) return true;
   if (pathname === "/search") return true;
-  if (pathname.startsWith("/shows/")) return true;
   return false;
 }
 
 export function isDiscoverExitPath(pathname) {
   if (!pathname) return false;
   if (pathname.startsWith("/library")) return true;
+  if (pathname.startsWith("/shows")) return true;
   if (pathname.startsWith("/playlists")) return true;
   if (pathname.startsWith("/history")) return true;
   if (pathname.startsWith("/settings")) return true;
@@ -47,6 +47,7 @@ export function shouldKeepDiscoverSectionActive(
   const pathname = location?.pathname || "";
   const path = getDiscoverPathFromLocation(location);
   if (isDiscoverHomePath(pathname)) return true;
+  if (isDiscoverExitPath(pathname)) return false;
   if (recentPages.some((entry) => entry.path === path)) return true;
   return flowActive && isDiscoverBrowsePath(pathname);
 }
@@ -76,6 +77,7 @@ export function shouldTrackDiscoverPath(path) {
   const pathname = path.split("?")[0];
   if (DISCOVER_HOME_PATHS.has(pathname)) return false;
   if (pathname.startsWith("/settings")) return false;
+  if (pathname.startsWith("/shows")) return false;
   return true;
 }
 
@@ -159,6 +161,13 @@ export function buildDiscoverRecentLabel(path, state = {}) {
   }
 }
 
+export function filterDiscoverRecentPages(pages) {
+  if (!Array.isArray(pages)) return [];
+  return pages.filter(
+    (entry) => entry?.path && !entry.path.split("?")[0].startsWith("/shows"),
+  );
+}
+
 export function readDiscoverRecentPages() {
   if (typeof window === "undefined") return [];
   try {
@@ -166,8 +175,8 @@ export function readDiscoverRecentPages() {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((entry) => entry?.path && entry?.label)
+    return filterDiscoverRecentPages(parsed)
+      .filter((entry) => entry?.label)
       .slice(0, DISCOVER_RECENT_PAGES_LIMIT)
       .map((entry) => ({
         id: entry.id || entry.path,

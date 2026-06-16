@@ -12,6 +12,7 @@ import {
   DISCOVER_FLOW_ACTIVE_KEY,
   DISCOVER_RECENT_PAGES_KEY,
   DISCOVER_RECENT_PAGES_LIMIT,
+  filterDiscoverRecentPages,
   getDiscoverPathFromLocation,
   isDiscoverBrowsePath,
   isDiscoverExitPath,
@@ -141,29 +142,34 @@ export function DiscoverRecentProvider({ children }) {
     setDiscoverFlowActive(false);
   }, [setDiscoverFlowActive]);
 
+  const visibleRecentPages = useMemo(
+    () => filterDiscoverRecentPages(recentPages),
+    [recentPages],
+  );
+
   const shouldRecordNavigation = useCallback(
     (fromLocation = location) =>
       shouldRecordDiscoverNavigation(
         fromLocation,
-        recentPages,
+        visibleRecentPages,
         discoverFlowActive,
       ),
-    [discoverFlowActive, location, recentPages],
+    [discoverFlowActive, location, visibleRecentPages],
   );
 
   const isDiscoverSectionActive = useMemo(
     () =>
       shouldKeepDiscoverSectionActive(
         location,
-        recentPages,
+        visibleRecentPages,
         discoverFlowActive,
       ),
-    [discoverFlowActive, location, recentPages],
+    [discoverFlowActive, location, visibleRecentPages],
   );
 
   const value = useMemo(
     () => ({
-      recentPages,
+      recentPages: visibleRecentPages,
       discoverFlowActive,
       isDiscoverSectionActive,
       addRecentPage,
@@ -175,7 +181,7 @@ export function DiscoverRecentProvider({ children }) {
       clearRecentPages,
       discoverFlowActive,
       isDiscoverSectionActive,
-      recentPages,
+      visibleRecentPages,
       shouldRecordNavigation,
     ],
   );
