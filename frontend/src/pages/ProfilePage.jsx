@@ -14,9 +14,9 @@ function ProfilePage() {
   return (
     <div className="profile-page">
       <div className="profile-page__header">
-        <div>
-          <h1 className="profile-page__title">Profile</h1>
-          <p className="profile-page__subtitle">
+        <div className="profile-page__intro">
+          <h1 className="page-title">Profile</h1>
+          <p className="page-subtitle">
             Personal listening history and library defaults
           </p>
         </div>

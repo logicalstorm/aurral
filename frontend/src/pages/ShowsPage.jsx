@@ -159,8 +159,8 @@ function ShowsPage() {
       <header className="shows-page__header">
         <div className="shows-page__title-row">
           <div className="shows-page__title-wrap">
-            <h1 className="shows-page__title">Shows Near You</h1>
-            <p className="shows-page__subtitle">{pageSubtitle}</p>
+            <h1 className="page-title">Shows Near You</h1>
+            <p className="page-subtitle">{pageSubtitle}</p>
           </div>
           <NearbyLocationControl
             locationMode={locationMode}

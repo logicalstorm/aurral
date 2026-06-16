@@ -190,8 +190,8 @@ function LibraryPage() {
   return (
     <div className="library-page">
       <header className="library-page__header">
-        <h1 className="library-page__title">Your Library</h1>
-        <p className="library-page__subtitle">{artistCountLabel}</p>
+        <h1 className="page-title">Your Library</h1>
+        <p className="page-subtitle">{artistCountLabel}</p>
 
         <div ref={toolbarRef} className="library-page__toolbar global-search">
           <div className="global-search__box">

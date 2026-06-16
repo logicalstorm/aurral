@@ -521,7 +521,7 @@ function HistoryPage() {
     return (
       <div className="requests-page">
         <header className="requests-page__header">
-          <h1 className="requests-page__title">History</h1>
+          <h1 className="page-title">History</h1>
         </header>
         <div className="artist-loading">
           <Loader className="artist-spinner artist-spinner--large animate-spin" />
@@ -533,8 +533,8 @@ function HistoryPage() {
   return (
     <div className="requests-page">
       <header className="requests-page__header">
-        <h1 className="requests-page__title">History</h1>
-        <p className="requests-page__subtitle requests-page__subtitle--desktop">
+        <h1 className="page-title">History</h1>
+        <p className="page-subtitle requests-page__subtitle--desktop">
           A chronological log of requests and activity
         </p>
       </header>

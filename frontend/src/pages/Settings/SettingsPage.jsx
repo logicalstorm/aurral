@@ -308,8 +308,8 @@ function SettingsPage() {
 
       <div className="settings-page">
         <header className="settings-page__header">
-          <h1 className="settings-page__title">Settings</h1>
-          <p className="settings-page__subtitle">
+          <h1 className="page-title">Settings</h1>
+          <p className="page-subtitle">
             Configure library, indexers, download clients, playback, and
             connections
           </p>

@@ -1878,7 +1878,7 @@ function DiscoverPage() {
           <div className="artist-discover-hero__header">
             <div className="artist-discover-hero__title-wrap">
               <div className="artist-discover-hero__title-row">
-                <h1 className="artist-discover-hero__title">Discover</h1>
+                <h1 className="page-title">Discover</h1>
                 {(isUpdating || lastUpdated) && (
                   <span
                     className={`artist-discover-hero__updated${isUpdating ? " artist-discover-hero__updated--refreshing" : ""}`}
