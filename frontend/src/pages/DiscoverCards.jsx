@@ -69,6 +69,12 @@ const getRecommendationReason = (artist) => {
     : "Picked for your profile";
 };
 
+const handleCoverKeyDown = (event, onClick) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  onClick();
+};
+
 export const ArtistCard = memo(
   ({
     artist,
@@ -96,12 +102,14 @@ export const ArtistCard = memo(
 
     return (
       <div className="artist-discover-card artist-discover-card--artist">
-        <button
-          type="button"
+        <div
+          role="button"
+          tabIndex={hasValidMbid ? 0 : -1}
           onClick={handleClick}
+          onKeyDown={(event) => handleCoverKeyDown(event, handleClick)}
           className={`artist-discover-card__cover${hasValidMbid ? "" : " is-disabled"}`}
-          disabled={!hasValidMbid}
           aria-label={`Open ${artist.name}`}
+          aria-disabled={!hasValidMbid}
         >
           <ArtistImage
             src={artist.image || artist.imageUrl}
@@ -110,8 +118,9 @@ export const ArtistCard = memo(
             alt={artist.name}
             className="artist-discover-card__image"
             showLoading={false}
+            enablePreviewPlayback={hasValidMbid}
           />
-        </button>
+        </div>
 
         <div className="artist-discover-card__content">
           <div className="artist-discover-card__text">

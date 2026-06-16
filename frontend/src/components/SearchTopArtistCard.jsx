@@ -55,6 +55,7 @@ function TopResultArtwork({ item, artistImages, albumCovers }) {
         className="search-top-artist__image"
         showLoading={false}
         enableBackendFallback={false}
+        enablePreviewPlayback
       />
     );
   }
@@ -121,11 +122,19 @@ function SearchTopArtistCard({
     (isArtist && artistId ? libraryLookup[artistId] : false);
   const metaLabel = getMetaLabel(result);
   const previewLabel = getPreviewLabel(result, previewTracks);
+  const navigateToResult = () =>
+    navigateFromSearchResult(navigate, result, { query });
+  const handleMainKeyDown = (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    navigateToResult();
+  };
 
   return (
     <article className="search-top-artist">
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         className={`search-top-artist__main${
           gradientColors ? " search-top-artist__main--gradient" : ""
         }`}
@@ -137,9 +146,9 @@ function SearchTopArtistCard({
               }
             : undefined
         }
-        onClick={() =>
-          navigateFromSearchResult(navigate, result, { query })
-        }
+        onClick={navigateToResult}
+        onKeyDown={handleMainKeyDown}
+        aria-label={`Open ${label}`}
       >
         <span className="search-top-artist__backdrop" aria-hidden="true">
           {gradientColors ? (
@@ -190,7 +199,7 @@ function SearchTopArtistCard({
             <ChevronRight className="search-top-artist__cta-icon" />
           </span>
         </span>
-      </button>
+      </div>
     </article>
   );
 }

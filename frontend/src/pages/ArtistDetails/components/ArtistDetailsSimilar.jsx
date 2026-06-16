@@ -155,6 +155,7 @@ export function ArtistDetailsSimilar({
                       alt={similar.name}
                       className=""
                       loading="eager"
+                      enablePreviewPlayback
                     />
 
                     {similar.match && (

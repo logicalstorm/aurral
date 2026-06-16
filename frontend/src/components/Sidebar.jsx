@@ -25,6 +25,7 @@ import {
   getHistoryNavItems,
 } from "../navigation/historyNavConfig";
 import { useDiscoverRecent } from "../hooks/useDiscoverRecent";
+import { getDiscoverArtistPath } from "../utils/discoverRecentNavigation";
 
 function Sidebar({ mode }) {
   const location = useLocation();
@@ -51,6 +52,8 @@ function Sidebar({ mode }) {
 
   const isIcons = mode === "icons" && isDesktop;
   const currentDiscoverPath = `${location.pathname}${location.search}`;
+  const activeDiscoverRecentPath =
+    getDiscoverArtistPath(currentDiscoverPath) || currentDiscoverPath;
   const isOnSettings = location.pathname.startsWith("/settings");
   const isOnShows = location.pathname.startsWith("/shows");
   const isOnHistory = location.pathname.startsWith("/history");
@@ -280,7 +283,7 @@ function Sidebar({ mode }) {
               const activeSubnavId =
                 item.section === "discover"
                   ? discoverRecentPages.find(
-                      (entry) => entry.path === currentDiscoverPath,
+                      (entry) => entry.path === activeDiscoverRecentPath,
                     )?.id
                   : item.section === "shows"
                     ? activeShowsFilter

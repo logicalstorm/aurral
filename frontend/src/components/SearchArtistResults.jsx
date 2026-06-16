@@ -6,6 +6,12 @@ import { useImageGradientColors } from "../hooks/useImageGradientColors";
 import { getArtistFeedbackFlags } from "../utils/discoveryFeedback";
 import { getArtistRecordId } from "../utils/artistTaste";
 
+const handleCoverKeyDown = (event, onClick) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  onClick();
+};
+
 function TagRecommendedArtistCover({
   artist,
   artistId,
@@ -18,8 +24,12 @@ function TagRecommendedArtistCover({
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(event) => handleCoverKeyDown(event, onClick)}
       className="artist-discover-card__cover artist-discover-card__cover--recommended"
+      aria-label={`Open ${artist.name}`}
       style={
         gradientColors
           ? {
@@ -37,6 +47,7 @@ function TagRecommendedArtistCover({
         className="artist-discover-card__image"
         showLoading={false}
         enableBackendFallback={false}
+        enablePreviewPlayback
       />
     </div>
   );
@@ -162,8 +173,14 @@ function SearchArtistResults({
               />
             ) : (
               <div
+                role="button"
+                tabIndex={0}
                 onClick={() => openArtist(artist)}
+                onKeyDown={(event) =>
+                  handleCoverKeyDown(event, () => openArtist(artist))
+                }
                 className="artist-discover-card__cover"
+                aria-label={`Open ${artist.name}`}
               >
                 <ArtistImage
                   src={artistImages[artistId] || artist.image || artist.imageUrl}
@@ -173,6 +190,7 @@ function SearchArtistResults({
                   className="artist-discover-card__image"
                   showLoading={false}
                   enableBackendFallback={false}
+                  enablePreviewPlayback
                 />
               </div>
             )}

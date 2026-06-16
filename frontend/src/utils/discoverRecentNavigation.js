@@ -17,6 +17,18 @@ export function isDiscoverBrowsePath(pathname) {
   return false;
 }
 
+export function getDiscoverArtistPath(path) {
+  if (!path || typeof path !== "string") return "";
+  const pathname = path.split("?")[0];
+  const match = pathname.match(/^\/artist\/([^/]+)/);
+  return match ? `/artist/${match[1]}` : "";
+}
+
+export function isDiscoverRecentArtistPath(path) {
+  if (!path || typeof path !== "string") return false;
+  return path.split("?")[0] === getDiscoverArtistPath(path);
+}
+
 export function isDiscoverExitPath(pathname) {
   if (!pathname) return false;
   if (pathname.startsWith("/library")) return true;
@@ -76,16 +88,14 @@ export function writeDiscoverFlowActive(active) {
 
 export function shouldTrackDiscoverPath(path) {
   if (!path || typeof path !== "string") return false;
-  const pathname = path.split("?")[0];
-  if (DISCOVER_HOME_PATHS.has(pathname)) return false;
-  if (pathname.startsWith("/settings")) return false;
-  if (pathname.startsWith("/shows")) return false;
-  return true;
+  return Boolean(getDiscoverArtistPath(path));
 }
 
 export function normalizeDiscoverPath(path) {
   if (!path || typeof path !== "string") return "";
   const [pathname, search = ""] = path.split("?");
+  const artistPath = getDiscoverArtistPath(pathname);
+  if (artistPath) return artistPath;
   let normalizedPathname = pathname;
   if (normalizedPathname === "/shows") normalizedPathname = "/shows/all";
   if (normalizedPathname === "/history") normalizedPathname = "/history/all";
@@ -165,9 +175,7 @@ export function buildDiscoverRecentLabel(path, state = {}) {
 
 export function filterDiscoverRecentPages(pages) {
   if (!Array.isArray(pages)) return [];
-  return pages.filter(
-    (entry) => entry?.path && !entry.path.split("?")[0].startsWith("/shows"),
-  );
+  return pages.filter((entry) => isDiscoverRecentArtistPath(entry?.path));
 }
 
 export function readDiscoverRecentPages() {

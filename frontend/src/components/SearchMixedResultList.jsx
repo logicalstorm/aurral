@@ -8,6 +8,12 @@ import {
 import { getSearchPlaylistArtworkUrl } from "../utils/playlistArtworkUrls";
 import { getArtistRecordId } from "../utils/artistTaste";
 
+const handleMainKeyDown = (event, onClick) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  onClick();
+};
+
 function getTypeLabel(item) {
   if (item.type === "artist") return "Artist";
   if (item.type === "album") return "Album";
@@ -54,6 +60,7 @@ function ResultThumbnail({ item, artistImages, albumCovers }) {
           className="search-mixed-results__image"
           showLoading={false}
           enableBackendFallback={false}
+          enablePreviewPlayback
         />
       </span>
     );
@@ -106,18 +113,21 @@ function SearchMixedResultList({
         const primaryLabel = getPrimaryLabel(item);
         const secondaryLabel = getSecondaryLabel(item);
         const action = renderAction ? renderAction(item) : null;
+        const handleOpen = () =>
+          navigateFromSearchResult(navigate, item, {
+            query,
+          });
 
         return (
           <li key={getSearchResultKey(item, index)}>
             <div className="search-mixed-results__row">
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 className="search-mixed-results__main"
-                onClick={() =>
-                  navigateFromSearchResult(navigate, item, {
-                    query,
-                  })
-                }
+                onClick={handleOpen}
+                onKeyDown={(event) => handleMainKeyDown(event, handleOpen)}
+                aria-label={`Open ${primaryLabel}`}
               >
                 <ResultThumbnail
                   item={item}
@@ -140,7 +150,7 @@ function SearchMixedResultList({
                     </span>
                   ) : null}
                 </span>
-              </button>
+              </div>
               {typeLabel ? (
                 <span className="search-mixed-results__type-col">
                   <span className="search-mixed-results__type">{typeLabel}</span>

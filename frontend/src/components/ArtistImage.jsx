@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import PropTypes from "prop-types";
-import { Music, Loader } from "lucide-react";
+import { Music, Loader, Play } from "lucide-react";
 import { getArtistCover } from "../utils/api";
+import { useArtistPreviewPlayback } from "../hooks/useArtistPreviewPlayback";
 
 const queue = [];
 let active = 0;
@@ -51,6 +52,7 @@ const ArtistImage = ({
   className = "",
   showLoading = true,
   enableBackendFallback = true,
+  enablePreviewPlayback = false,
   loading = "lazy",
 }) => {
   const [currentSrc, setCurrentSrc] = useState(src);
@@ -60,6 +62,16 @@ const ArtistImage = ({
   const triedBackendFallbackRef = useRef(false);
   const imgRef = useRef(null);
   const abortRef = useRef(null);
+  const {
+    canPlayArtistPreview,
+    isArtistPreviewActive,
+    isLoadingPreview,
+    playArtistPreview,
+  } = useArtistPreviewPlayback({
+    mbid,
+    artistName,
+    enabled: enablePreviewPlayback,
+  });
 
   const fetchBackendCover = useCallback(
     async (mbidToFetch, nameForCover, signal, refresh = false) => {
@@ -188,12 +200,38 @@ const ArtistImage = ({
     setIsLoading(false);
   };
 
+  const handlePreviewClick = async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    await playArtistPreview();
+  };
+
+  const previewButton = canPlayArtistPreview ? (
+    <button
+      type="button"
+      className={`artist-image-preview-button${
+        isArtistPreviewActive ? " is-active" : ""
+      }`}
+      onClick={handlePreviewClick}
+      disabled={isLoadingPreview}
+      aria-label={`Play ${artistName || "artist"} top tracks`}
+      title={`Play ${artistName || "artist"} top tracks`}
+    >
+      {isLoadingPreview ? (
+        <Loader className="artist-image-preview-button__icon animate-spin" />
+      ) : (
+        <Play className="artist-image-preview-button__icon" fill="currentColor" />
+      )}
+    </button>
+  ) : null;
+
   const showPlaceholder = !currentSrc;
 
   if (hasError) {
     return (
       <div className={`artist-image-placeholder ${className}`}>
         <Music className="artist-image-icon" />
+        {previewButton}
       </div>
     );
   }
@@ -218,6 +256,7 @@ const ArtistImage = ({
             <Music className="artist-image-icon" />
           )}
         </div>
+        {previewButton}
         {isLoading && <div className="artist-image-shimmer" />}
       </div>
     );
@@ -250,6 +289,7 @@ const ArtistImage = ({
           decoding="async"
         />
       )}
+      {previewButton}
     </div>
   );
 };
@@ -262,6 +302,7 @@ ArtistImage.propTypes = {
   className: PropTypes.string,
   showLoading: PropTypes.bool,
   enableBackendFallback: PropTypes.bool,
+  enablePreviewPlayback: PropTypes.bool,
   loading: PropTypes.oneOf(["eager", "lazy"]),
 };
 
