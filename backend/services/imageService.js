@@ -4,7 +4,7 @@ import {
   musicbrainzGetArtistReleaseGroupsPreview,
 } from "./apiClients.js";
 import { warmImageProxy } from "./imageProxyService.js";
-import { getArtistByMbid } from "./metadataProvider.js";
+import { getArtistByMbid } from "./providers/brainzmashProvider.js";
 import { fetchReleaseGroupCoverUrl } from "./releaseGroupCoverService.js";
 
 const MAX_NEGATIVE_CACHE = 1000;

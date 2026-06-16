@@ -20,7 +20,7 @@ import {
   listArtistAlbums as listMetadataArtistAlbums,
   resolveAlbumByArtistAndTitle,
   resolveArtistByName as resolveMetadataArtistByName,
-} from "./metadataProvider.js";
+} from "./providers/brainzmashProvider.js";
 import { selectBestAlbumImage } from "./imageService.js";
 
 const mbCache = new NodeCache({ stdTTL: 300, checkperiod: 60, maxKeys: 500 });

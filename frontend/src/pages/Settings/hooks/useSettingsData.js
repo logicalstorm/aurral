@@ -11,6 +11,7 @@ import api, {
   applyLidarrCommunityGuide,
 } from "../../../utils/api";
 import { useWebSocketChannel } from "../../../hooks/useWebSocket";
+import { DISCOVERY_MANUAL_REFRESH_KEY } from "../../../utils/discoverRecentNavigation.js";
 import { allReleaseTypes } from "../constants";
 import {
   DEFAULT_METADATA_BASE_URL,
@@ -18,8 +19,6 @@ import {
   checkForChanges,
   normalizeSettings,
 } from "../utils";
-
-const DISCOVERY_MANUAL_REFRESH_KEY = "aurral.discovery.manualRefreshPending";
 
 const defaultSettings = {
   rootFolderPath: "",

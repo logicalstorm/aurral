@@ -1,23 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-
-const normalizeBasePath = (baseUrl) => {
-  const raw = (baseUrl || "/").trim();
-  const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
-  if (withLeadingSlash === "/") return "/";
-  return withLeadingSlash.endsWith("/")
-    ? withLeadingSlash.slice(0, -1)
-    : withLeadingSlash;
-};
-
-const stripBasePath = (href, basePath) => {
-  if (basePath === "/") return href;
-  if (href === basePath) return "/";
-  if (href.startsWith(`${basePath}/`)) {
-    return href.slice(basePath.length) || "/";
-  }
-  return href;
-};
+import { getAppBasePath, stripBasePath } from "../../../utils/basePath.js";
 
 export function useUnsavedGuard(hasUnsavedChanges, setHasUnsavedChanges) {
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
@@ -25,10 +8,7 @@ export function useUnsavedGuard(hasUnsavedChanges, setHasUnsavedChanges) {
   const location = useLocation();
   const navigate = useNavigate();
   const hasUnsavedChangesRef = useRef(false);
-  const basePath = normalizeBasePath(
-    import.meta.env.VITE_BASE_PATH || import.meta.env.BASE_URL,
-  );
-  const settingsPath = basePath === "/" ? "/settings" : `${basePath}/settings`;
+  const basePath = getAppBasePath();
   const isSettingsRoute = (path) => path === "/settings" || path.startsWith("/settings/");
 
   useEffect(() => {
@@ -86,7 +66,7 @@ export function useUnsavedGuard(hasUnsavedChanges, setHasUnsavedChanges) {
       document.removeEventListener("click", handleClick, true);
       window.removeEventListener("popstate", handlePopState);
     };
-  }, [hasUnsavedChanges, location.pathname, navigate, basePath, settingsPath]);
+  }, [hasUnsavedChanges, location.pathname, navigate, basePath]);
 
   const handleConfirmLeave = () => {
     setHasUnsavedChanges?.(false);

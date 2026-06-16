@@ -17,9 +17,9 @@ import { getWeeklyFlowStatusSnapshot } from "./services/weeklyFlowStatusSnapshot
 import settingsRouter from "./routes/settings.js";
 import onboardingRouter from "./routes/onboarding.js";
 import usersRouter from "./routes/users.js";
-import artistsRouter from "./routes/artists.js";
+import artistsRouter from "./routes/artists/index.js";
 import searchRouter from "./routes/search.js";
-import libraryRouter from "./routes/library.js";
+import libraryRouter from "./routes/library/index.js";
 import discoveryRouter from "./routes/discovery.js";
 import requestsRouter from "./routes/requests.js";
 import healthRouter from "./routes/health.js";

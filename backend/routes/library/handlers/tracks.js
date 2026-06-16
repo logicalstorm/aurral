@@ -2,7 +2,7 @@ import { libraryManager } from "../../../services/libraryManager.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
 import { noCache } from "../../../middleware/cache.js";
 import { verifyTokenAuth } from "../../../middleware/auth.js";
-import { getAlbumTracksByAlbumMbid } from "../../../services/metadataProvider.js";
+import { getAlbumTracksByAlbumMbid } from "../../../services/providers/brainzmashProvider.js";
 import { enrichTracksWithDeezerPreviews } from "../../../services/apiClients.js";
 import fs from "fs";
 import fsp from "fs/promises";

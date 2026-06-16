@@ -10,6 +10,8 @@ import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Onboarding from "./pages/Onboarding";
 import { getBootstrapStatus } from "./utils/api";
+import { getAppBasePath } from "./utils/basePath.js";
+import { DISCOVERY_MANUAL_REFRESH_KEY } from "./utils/discoverRecentNavigation.js";
 import { AudioPlayerProvider } from "react-use-audio-player";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ToastProvider, useToast } from "./contexts/ToastContext";
@@ -38,16 +40,6 @@ const ArtistAppearsOnPage = lazy(
 );
 const HistoryPage = lazy(() => import("./pages/HistoryPage"));
 const FlowPage = lazy(() => import("./pages/FlowPage"));
-const DISCOVERY_MANUAL_REFRESH_KEY = "aurral.discovery.manualRefreshPending";
-
-const normalizeBasePath = (baseUrl) => {
-  const raw = (baseUrl || "/").trim();
-  const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
-  if (withLeadingSlash === "/") return "/";
-  return withLeadingSlash.endsWith("/")
-    ? withLeadingSlash.slice(0, -1)
-    : withLeadingSlash;
-};
 
 const PageLoader = () => (
   <div className="app-loading">
@@ -96,9 +88,7 @@ ProtectedRoute.propTypes = {
 };
 
 function AppContent() {
-  const basePath = normalizeBasePath(
-    import.meta.env.VITE_BASE_PATH || import.meta.env.BASE_URL,
-  );
+  const basePath = getAppBasePath();
   const [isHealthy, setIsHealthy] = useState(null);
   const [rootFolderConfigured, setRootFolderConfigured] = useState(false);
   const [appVersion, setAppVersion] = useState(null);

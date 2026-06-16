@@ -79,6 +79,13 @@ export function buildPlaylistDestination(playlistId, artistDir, albumDir) {
   );
 }
 
+export function isPathInsideRoot(candidatePath, rootPath) {
+  const relative = path.relative(rootPath, candidatePath);
+  return (
+    relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
+  );
+}
+
 export async function resolveExistingTrackPath(
   finalPath,
   playlistRoot = resolvePlaylistRoot(),

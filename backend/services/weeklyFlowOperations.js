@@ -8,7 +8,7 @@ import {
   recordFlowTracksGenerated,
   recordPlaylistTracksAdded,
 } from "./aurralHistoryService.js";
-import { PLAYLIST_LIBRARY_DIR } from "./playlistPaths.js";
+import { PLAYLIST_LIBRARY_DIR, isPathInsideRoot } from "./playlistPaths.js";
 import {
   remapLegacyWeeklyFlowPath,
 } from "./weeklyFlowPaths.js";
@@ -17,7 +17,11 @@ import {
   flowPlaylistConfig,
   tracksShareMembership,
 } from "./weeklyFlowPlaylistConfig.js";
-import { normalizeExistingFileMode, reuseTrackForPlaylist } from "./weeklyFlowFileReuse.js";
+import {
+  normalizeExistingFileMode,
+  reuseTrackForPlaylist,
+  sortJobsForTrackReuse,
+} from "./weeklyFlowFileReuse.js";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { playlistManager } from "./weeklyFlowPlaylistManager.js";
 import { slskdClient } from "./slskdClient.js";
@@ -121,27 +125,6 @@ const getPlaylistLibraryRoot = (playlistType) =>
     PLAYLIST_LIBRARY_DIR,
     String(playlistType || "").trim(),
   );
-
-const isPathInsideRoot = (candidatePath, rootPath) => {
-  const relative = path.relative(rootPath, candidatePath);
-  return (
-    relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
-  );
-};
-
-const sortJobsForTrackReuse = (jobs) =>
-  [...jobs].sort((a, b) => {
-    const priority = (job) => {
-      if (job?.status === "done") return 0;
-      if (job?.status === "failed") return 1;
-      if (job?.status === "downloading") return 2;
-      if (job?.status === "pending") return 3;
-      return 4;
-    };
-    const priorityDiff = priority(a) - priority(b);
-    if (priorityDiff !== 0) return priorityDiff;
-    return Number(a?.createdAt || 0) - Number(b?.createdAt || 0);
-  });
 
 const reuseTracksForPlaylist = async (tracks, playlistId) => {
   const settings = weeklyFlowWorker.getWorkerSettings();

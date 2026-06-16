@@ -3,7 +3,7 @@ import { buildImageProxyUrl, warmImageProxy } from "./imageProxyService.js";
 import {
   getAlbumByMbid,
   resolveAlbumByArtistAndTitle,
-} from "./metadataProvider.js";
+} from "./providers/brainzmashProvider.js";
 
 const RG_CACHE_PREFIX = "rg:";
 const LEGACY_COVER_HOST_PATTERN =

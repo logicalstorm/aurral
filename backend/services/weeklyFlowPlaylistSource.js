@@ -2159,7 +2159,7 @@ export class WeeklyFlowPlaylistSource {
   async _getMetadataAlbumTrackList(albumMbid) {
     const safeAlbumMbid = String(albumMbid || "").trim();
     if (!safeAlbumMbid) return [];
-    const { getAlbumTracksByAlbumMbid } = await import("./metadataProvider.js");
+    const { getAlbumTracksByAlbumMbid } = await import("./providers/brainzmashProvider.js");
     return getAlbumTracksByAlbumMbid(safeAlbumMbid);
   }
 

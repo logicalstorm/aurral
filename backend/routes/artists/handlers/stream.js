@@ -20,7 +20,7 @@ import {
   attachCachedCoverUrls,
   resolveReleaseGroupCoversBatch,
 } from "../../../services/releaseGroupCoverService.js";
-import { getArtistByMbid } from "../../../services/metadataProvider.js";
+import { getArtistByMbid } from "../../../services/providers/brainzmashProvider.js";
 
 export default function registerStream(router) {
   router.get("/:mbid/stream", noCache, async (req, res) => {

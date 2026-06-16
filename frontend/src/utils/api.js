@@ -1,19 +1,9 @@
 import axios from "axios";
-
-const normalizeBasePath = (baseUrl) => {
-  const raw = (baseUrl || "/").trim();
-  const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
-  if (withLeadingSlash === "/") return "/";
-  return withLeadingSlash.endsWith("/")
-    ? withLeadingSlash.slice(0, -1)
-    : withLeadingSlash;
-};
+import { getAppBasePath } from "./basePath.js";
 
 const getDefaultApiBaseUrl = () => {
   if (import.meta.env.DEV) return "/api";
-  const basePath = normalizeBasePath(
-    import.meta.env.VITE_BASE_PATH || import.meta.env.BASE_URL,
-  );
+  const basePath = getAppBasePath();
   if (basePath === "/") return "/api";
   return `${basePath}/api`;
 };

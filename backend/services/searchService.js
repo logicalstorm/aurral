@@ -7,7 +7,7 @@ import { lidarrClient } from "./lidarrClient.js";
 import {
   searchAlbums as providerSearchAlbums,
   searchArtists as providerSearchArtists,
-} from "./metadataProvider.js";
+} from "./providers/brainzmashProvider.js";
 import {
   DISCOVERY_PROVIDER_LISTENBRAINZ_FALLBACK,
   searchFallbackGenreArtists,

@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import { cwd } from "process";
 import { resolveAppVersion } from "../lib/app-version.js";
+import { normalizeBasePathWithTrailingSlash } from "./src/utils/basePath.js";
 
 const appVersion = resolveAppVersion({
   envValue: globalThis?.process?.env?.VITE_APP_VERSION,
@@ -11,17 +12,9 @@ const appVersion = resolveAppVersion({
 const releaseChannel =
   globalThis?.process?.env?.VITE_RELEASE_CHANNEL || "stable";
 
-const normalizeBasePath = (baseUrl) => {
-  const raw = (baseUrl || "/").trim();
-  const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
-  return withLeadingSlash.endsWith("/")
-    ? withLeadingSlash
-    : `${withLeadingSlash}/`;
-};
-
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, cwd(), "");
-  const basePath = normalizeBasePath(env.VITE_BASE_PATH || "/");
+  const basePath = normalizeBasePathWithTrailingSlash(env.VITE_BASE_PATH || "/");
   const isDev = mode === "development";
 
   return {

@@ -24,15 +24,6 @@ import {
   withPlaylistMutation,
 } from "../services/weeklyFlowMutationGuards.js";
 import { getWeeklyFlowStatusSnapshot } from "../services/weeklyFlowStatusSnapshot.js";
-import {
-  normalizeExistingFileMode,
-  reuseTrackForPlaylist,
-} from "../services/weeklyFlowFileReuse.js";
-import {
-  recordFlowGenerationStarted,
-  recordFlowTracksGenerated,
-  recordPlaylistTracksAdded,
-} from "../services/aurralHistoryService.js";
 import { PLAYLIST_LIBRARY_DIR } from "../services/playlistPaths.js";
 import {
   remapLegacyWeeklyFlowPath,
@@ -162,13 +153,6 @@ const validateFlowPayload = ({
   return null;
 };
 
-const isPathInsideRoot = (candidatePath, rootPath) => {
-  const relative = path.relative(rootPath, candidatePath);
-  return (
-    relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
-  );
-};
-
 const normalizeImportedTrackList = (value) => {
   if (!Array.isArray(value)) return [];
   return dedupeSharedTracks(
@@ -232,59 +216,6 @@ const normalizeImportedTrackList = (value) => {
       })
       .filter(Boolean),
   );
-};
-
-const buildTrackIdentity = (track) => buildSharedTrackIdentity(track);
-
-const sortJobsForTrackReuse = (jobs) =>
-  [...jobs].sort((a, b) => {
-    const priority = (job) => {
-      if (job?.status === "done") return 0;
-      if (job?.status === "failed") return 1;
-      if (job?.status === "downloading") return 2;
-      if (job?.status === "pending") return 3;
-      return 4;
-    };
-    const priorityDiff = priority(a) - priority(b);
-    if (priorityDiff !== 0) return priorityDiff;
-    return Number(a?.createdAt || 0) - Number(b?.createdAt || 0);
-  });
-
-const getPlaylistLibraryRoot = (playlistType) =>
-  path.resolve(
-    weeklyFlowWorker.weeklyFlowRoot,
-    PLAYLIST_LIBRARY_DIR,
-    String(playlistType || "").trim(),
-  );
-
-const reuseTracksForPlaylist = async (tracks, playlistId) => {
-  const settings = weeklyFlowWorker.getWorkerSettings();
-  const existingFileMode = normalizeExistingFileMode(settings.existingFileMode);
-  const reusedJobIds = [];
-  const tracksToQueue = [];
-  for (const track of Array.isArray(tracks) ? tracks : []) {
-    const reuse = await reuseTrackForPlaylist(track, playlistId, {
-      existingFileMode,
-      weeklyFlowRoot: weeklyFlowWorker.weeklyFlowRoot,
-      targetPlaylistType: playlistId,
-      skipHistory: true,
-    });
-    if (reuse.reused) {
-      reusedJobIds.push(reuse.jobId);
-    } else {
-      tracksToQueue.push(track);
-    }
-  }
-  return { reusedJobIds, tracksToQueue };
-};
-
-const recordPlaylistHistory = (playlistId, { tracksQueued = 0, tracksReused = 0 } = {}) => {
-  if (tracksQueued + tracksReused <= 0) return;
-  recordPlaylistTracksAdded({
-    playlistId,
-    tracksQueued,
-    tracksReused,
-  });
 };
 
 router.get("/stream/:jobId", noCache, async (req, res) => {
@@ -867,7 +798,7 @@ router.post("/flows/:flowId/static-playlist", async (req, res) => {
 
     const uniqueCompletedJobsByIdentity = new Map();
     for (const job of completedJobs) {
-      const identity = buildTrackIdentity(job);
+      const identity = buildSharedTrackIdentity(job);
       if (uniqueCompletedJobsByIdentity.has(identity)) continue;
       uniqueCompletedJobsByIdentity.set(identity, job);
     }

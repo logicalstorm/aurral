@@ -7,7 +7,7 @@ import {
   musicbrainzResolveArtistMbidByName,
 } from "./apiClients.js";
 import { hydrateArtistImages } from "./artistImageHydration.js";
-import { getArtistGenres } from "./metadataProvider.js";
+import { getArtistGenres } from "./providers/brainzmashProvider.js";
 
 export const DISCOVERY_PROVIDER_LASTFM = "lastfm";
 export const DISCOVERY_PROVIDER_LISTENBRAINZ_FALLBACK =

@@ -24,6 +24,21 @@ export function normalizeExistingFileMode(value) {
   return DEFAULT_EXISTING_FILE_MODE;
 }
 
+export function sortJobsForTrackReuse(jobs) {
+  return [...jobs].sort((a, b) => {
+    const priority = (job) => {
+      if (job?.status === "done") return 0;
+      if (job?.status === "failed") return 1;
+      if (job?.status === "downloading") return 2;
+      if (job?.status === "pending") return 3;
+      return 4;
+    };
+    const priorityDiff = priority(a) - priority(b);
+    if (priorityDiff !== 0) return priorityDiff;
+    return Number(a?.createdAt || 0) - Number(b?.createdAt || 0);
+  });
+}
+
 function normalizeText(value) {
   return String(value || "")
     .toLowerCase()

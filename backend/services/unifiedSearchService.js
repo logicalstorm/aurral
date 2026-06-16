@@ -4,7 +4,7 @@ import {
   scoreTextMatch,
 } from "./providers/brainzmashRanking.js";
 import { getMetadataBaseUrl } from "./providers/brainzmashProvider.js";
-import { searchAlbums, searchArtists } from "./metadataProvider.js";
+import { searchAlbums, searchArtists } from "./providers/brainzmashProvider.js";
 import {
   isRemoteSearchConfigured,
   searchRemoteCatalog,

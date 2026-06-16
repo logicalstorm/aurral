@@ -10,7 +10,7 @@ import {
   getArtistByMbid,
   getAlbumByMbid,
   getAlbumTracksByAlbumMbid,
-} from "../../../services/metadataProvider.js";
+} from "../../../services/providers/brainzmashProvider.js";
 import { toLegacyReleaseGroupSummary } from "../../../services/providers/brainzmashMappers.js";
 
 function extractDeezerArtistIdFromLinks(links = []) {

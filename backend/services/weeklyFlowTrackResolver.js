@@ -11,7 +11,7 @@ import {
   getAlbumByMbid,
   listArtistAlbums,
   resolveAlbumByArtistAndTitle,
-} from "./metadataProvider.js";
+} from "./providers/brainzmashProvider.js";
 
 const CATALOG_RESOLVE_LIMIT = 8;
 const CATALOG_MIN_SCORE = 65;

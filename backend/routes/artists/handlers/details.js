@@ -10,7 +10,7 @@ import { dbOps } from "../../../config/db-helpers.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
 import { requireAuth } from "../../../middleware/requirePermission.js";
 import { buildArtistRequestKey, pendingArtistRequests } from "../utils.js";
-import { getArtistByMbid } from "../../../services/metadataProvider.js";
+import { getArtistByMbid } from "../../../services/providers/brainzmashProvider.js";
 
 export default function registerDetails(router) {
   const toLegacyRelations = (metadataArtist) =>

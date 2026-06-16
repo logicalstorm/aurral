@@ -2,6 +2,8 @@ const DISCOVER_HOME_PATHS = new Set(["/", "/discover"]);
 
 export const DISCOVER_RECENT_PAGES_KEY = "aurral.discover.recentPages";
 export const DISCOVER_FLOW_ACTIVE_KEY = "aurral.discover.flowActive";
+export const DISCOVERY_MANUAL_REFRESH_KEY =
+  "aurral.discovery.manualRefreshPending";
 export const DISCOVER_RECENT_PAGES_LIMIT = 5;
 
 export function isDiscoverHomePath(pathname) {
