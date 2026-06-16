@@ -40,6 +40,7 @@ import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useFlowStatus } from "./flows/useFlowStatus";
 import {
   formatTrackCountLabel,
+  formatFlowLastRun,
   getFlowDisplayTrackCount,
   isReleaseRadarFlow,
 } from "./flows/flowStats";
@@ -308,6 +309,7 @@ const normalizeMixPercent = (mix) => {
 const flowToForm = (flow) => {
   const tagsList = normalizeFlowEntryList(flow?.tags);
   const relatedList = normalizeFlowEntryList(flow?.relatedArtists);
+  const scheduleDays = normalizeScheduleDays(flow?.scheduleDays);
   const rawSize = Number(flow?.size || 0);
   const size =
     Number.isFinite(rawSize) && rawSize > 0
@@ -321,10 +323,7 @@ const flowToForm = (flow) => {
     deepDive: flow?.deepDive === true,
     includeTags: tagsList.join(", "),
     includeRelatedArtists: relatedList.join(", "),
-    scheduleDays:
-      normalizeScheduleDays(flow?.scheduleDays).length > 0
-        ? normalizeScheduleDays(flow?.scheduleDays)
-        : [new Date().getDay()],
+    scheduleDays: scheduleDays.length > 0 ? scheduleDays : [new Date().getDay()],
     scheduleTime: normalizeScheduleTime(flow?.scheduleTime),
   };
 };
@@ -1196,20 +1195,6 @@ function FlowPage() {
     }
     setDetailTab("tracks");
     setRenameModal(null);
-  };
-
-  const formatFlowLastRun = (lastRunAt) => {
-    const timestamp =
-      typeof lastRunAt === "number" ? lastRunAt : Number.parseInt(lastRunAt, 10);
-    if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
-    const date = new Date(timestamp);
-    if (Number.isNaN(date.getTime())) return null;
-    return date.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
   };
 
   const handleConfirmDisable = async () => {

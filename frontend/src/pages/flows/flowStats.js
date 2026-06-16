@@ -52,6 +52,20 @@ export const formatTrackCountLabel = (trackCount, stats) => {
   return `${base} · ${pct}%`;
 };
 
+export const formatFlowLastRun = (lastRunAt) => {
+  const timestamp =
+    typeof lastRunAt === "number" ? lastRunAt : Number.parseInt(lastRunAt, 10);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
 export const buildFlowStatsFromJobs = (jobs) => {
   const stats = { ...EMPTY_FLOW_STATS };
   if (!Array.isArray(jobs)) return stats;

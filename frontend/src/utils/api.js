@@ -152,6 +152,37 @@ const fetchInflightOnce = async (store, key, requestFactory) => {
   return request;
 };
 
+const responseData = (request) => request.then((response) => response.data);
+const getData = (url, config) => responseData(api.get(url, config));
+const postData = (url, data, config) => responseData(api.post(url, data, config));
+const putData = (url, data, config) => responseData(api.put(url, data, config));
+const patchData = (url, data, config) => responseData(api.patch(url, data, config));
+const deleteData = (url, config) => responseData(api.delete(url, config));
+
+const lidarrCredentialParams = (url, apiKey, { trimUrl = false } = {}) => ({
+  ...(url ? { url: trimUrl ? url.replace(/\/+$/, "") : url } : {}),
+  ...(apiKey ? { apiKey } : {}),
+});
+
+const getApiBaseUrl = () => import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
+
+const buildAuthenticatedApiUrl = (path, params = {}) => {
+  const normalizedPath = String(path || "").startsWith("/")
+    ? String(path || "")
+    : `/${String(path || "")}`;
+  const query = new URLSearchParams();
+  const { token } = getStoredAuth();
+  if (token) query.set("token", token);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value != null && value !== "") query.set(key, String(value));
+  });
+  const queryString = query.toString();
+  const separator = normalizedPath.includes("?") ? "&" : "?";
+  return `${getApiBaseUrl()}${normalizedPath}${
+    queryString ? `${separator}${queryString}` : ""
+  }`;
+};
+
 api.interceptors.request.use(
   (config) => {
     const { token } = getStoredAuth();
@@ -187,103 +218,63 @@ api.interceptors.response.use(
   },
 );
 
-export const checkHealth = async () => {
-  const response = await api.get("/health");
-  return response.data;
-};
+export const checkHealth = () => getData("/health");
 
-export const getBootstrapStatus = async () => {
-  const response = await api.get("/health/bootstrap");
-  return response.data;
-};
+export const getBootstrapStatus = () => getData("/health/bootstrap");
 
-export const browseFilesystem = async (pathValue) => {
-  const response = await api.get("/filesystem/browse", {
+export const browseFilesystem = (pathValue) =>
+  getData("/filesystem/browse", {
     params: pathValue ? { path: pathValue } : undefined,
   });
-  return response.data;
-};
 
-export const ensureFilesystemPath = async (pathValue) => {
-  const response = await api.post("/filesystem/ensure", {
+export const ensureFilesystemPath = (pathValue) =>
+  postData("/filesystem/ensure", {
     path: pathValue,
   });
-  return response.data;
-};
 
-export const loginApi = async (username, password) => {
-  const response = await api.post("/auth/login", { username, password });
-  return response.data;
-};
+export const loginApi = (username, password) =>
+  postData("/auth/login", { username, password });
 
-export const logoutApi = async () => {
-  const response = await api.post("/auth/logout");
-  return response.data;
-};
+export const logoutApi = () => postData("/auth/logout");
 
-export const getMe = async () => {
-  const response = await api.get("/auth/me");
-  return response.data;
-};
+export const getMe = () => getData("/auth/me");
 
-export const completeOnboarding = async (payload) => {
-  const response = await api.post("/onboarding/complete", payload);
-  return response.data;
-};
+export const completeOnboarding = (payload) =>
+  postData("/onboarding/complete", payload);
 
-export const testLidarrOnboarding = async (url, apiKey) => {
-  const params = new URLSearchParams();
-  if (url) params.append("url", url.replace(/\/+$/, ""));
-  if (apiKey) params.append("apiKey", apiKey);
-  const response = await api.get(
-    `/onboarding/lidarr/test${params.toString() ? `?${params.toString()}` : ""}`,
-  );
-  return response.data;
-};
+export const testLidarrOnboarding = (url, apiKey) =>
+  getData("/onboarding/lidarr/test", {
+    params: lidarrCredentialParams(url, apiKey, { trimUrl: true }),
+  });
 
-export const testNavidromeOnboarding = async (url, username, password) => {
-  const response = await api.post("/onboarding/navidrome/test", {
+export const testNavidromeOnboarding = (url, username, password) =>
+  postData("/onboarding/navidrome/test", {
     url: url?.replace(/\/+$/, ""),
     username,
     password,
   });
-  return response.data;
-};
 
-export const startPlexAuth = async (forwardUrl) => {
-  const response = await api.post("/settings/plex/auth/pin", { forwardUrl });
-  return response.data;
-};
+export const startPlexAuth = (forwardUrl) =>
+  postData("/settings/plex/auth/pin", { forwardUrl });
 
-export const checkPlexAuth = async (pinId, code) => {
-  const response = await api.post("/settings/plex/auth/check", { pinId, code });
-  return response.data;
-};
+export const checkPlexAuth = (pinId, code) =>
+  postData("/settings/plex/auth/check", { pinId, code });
 
-export const getPlexResources = async (token) => {
-  const response = await api.post("/settings/plex/resources", { token });
-  return response.data;
-};
+export const getPlexResources = (token) =>
+  postData("/settings/plex/resources", { token });
 
-export const testPlexConnection = async (url, token) => {
-  const response = await api.post("/settings/plex/test", {
+export const testPlexConnection = (url, token) =>
+  postData("/settings/plex/test", {
     url: url?.replace(/\/+$/, ""),
     token,
   });
-  return response.data;
-};
 
-export const syncPlexNow = async () => {
-  const response = await api.post("/settings/plex/sync");
-  return response.data;
-};
+export const syncPlexNow = () => postData("/settings/plex/sync");
 
-export const browsePaths = async (path) => {
-  const response = await api.get("/settings/browse", {
+export const browsePaths = (path) =>
+  getData("/settings/browse", {
     params: path ? { path } : {},
   });
-  return response.data;
-};
 
 export const searchUnified = async (
   query,
@@ -295,13 +286,12 @@ export const searchUnified = async (
   }
   const key = `search-unified:${JSON.stringify(params)}`;
   const timeoutMs = mode === "full" ? 30000 : 12000;
-  return fetchInflightOnce(searchInflightRequests, key, async () => {
-    const response = await api.get("/search/unified", {
+  return fetchInflightOnce(searchInflightRequests, key, () =>
+    getData("/search/unified", {
       params,
       timeout: timeoutMs,
-    });
-    return response.data;
-  });
+    }),
+  );
 };
 
 export const searchCatalog = async (
@@ -324,10 +314,9 @@ export const searchCatalog = async (
     }
   }
   const key = `search:${JSON.stringify(params)}`;
-  return fetchInflightOnce(searchInflightRequests, key, async () => {
-    const response = await api.get("/search", { params });
-    return response.data;
-  });
+  return fetchInflightOnce(searchInflightRequests, key, () =>
+    getData("/search", { params }),
+  );
 };
 
 export const getArtistDetails = async (
@@ -348,16 +337,13 @@ export const getArtistDetails = async (
   if (Number.isFinite(Number(appearsOnLimit)) && Number(appearsOnLimit) > 0) {
     params.appearsOnLimit = Number.parseInt(appearsOnLimit, 10);
   }
-  const response = await api.get(`/artists/${mbid}`, {
+  return getData(`/artists/${mbid}`, {
     params,
   });
-  return response.data;
 };
 
-export const getReleaseGroupDetails = async (mbid) => {
-  const response = await api.get(`/artists/release-group/${mbid}`);
-  return response.data;
-};
+export const getReleaseGroupDetails = (mbid) =>
+  getData(`/artists/release-group/${mbid}`);
 
 export const getReleaseGroupTracks = async (mbid, context = {}) => {
   const params = {};
@@ -367,10 +353,9 @@ export const getReleaseGroupTracks = async (mbid, context = {}) => {
   if (context.releaseType) params.releaseType = context.releaseType;
   if (context.releaseDate) params.releaseDate = context.releaseDate;
   if (context.deezerAlbumId) params.deezerAlbumId = context.deezerAlbumId;
-  const response = await api.get(`/artists/release-group/${mbid}/tracks`, {
+  return getData(`/artists/release-group/${mbid}/tracks`, {
     params,
   });
-  return response.data;
 };
 
 export const getArtistCover = async (mbid, artistName, refresh = false) => {
@@ -384,13 +369,11 @@ export const getArtistCover = async (mbid, artistName, refresh = false) => {
   const cacheKey = `artist:${mbid}`;
   return fetchCoverWithMemo(
     cacheKey,
-    async () => {
-      const response = await api.get(`/artists/${mbid}/cover`, {
+    () =>
+      getData(`/artists/${mbid}/cover`, {
         params,
         timeout: 4000,
-      });
-      return response.data;
-    },
+      }),
     { bypassCache: refresh },
   );
 };
@@ -418,9 +401,10 @@ export const getReleaseGroupCoversBatch = async (items = []) => {
   if (coverInflightRequests.has(batchKey)) {
     return coverInflightRequests.get(batchKey);
   }
-  const request = api
-    .post("/artists/release-groups/covers", { items: normalizedItems })
-    .then((response) => response.data?.covers || {})
+  const request = postData("/artists/release-groups/covers", {
+    items: normalizedItems,
+  })
+    .then((data) => data?.covers || {})
     .finally(() => {
       coverInflightRequests.delete(batchKey);
     });
@@ -454,13 +438,13 @@ export const getReleaseGroupCover = async (
     if (typeof albumTitle === "string" && albumTitle.trim()) {
       params.albumTitle = albumTitle.trim();
     }
-    const response = await api.get(`/artists/release-group/${mbid}/cover`, {
+    const data = await getData(`/artists/release-group/${mbid}/cover`, {
       params,
     });
-    if (!response.data?.transientError) {
-      setCoverCacheEntry(cacheKey, response.data);
+    if (!data?.transientError) {
+      setCoverCacheEntry(cacheKey, data);
     }
-    return response.data;
+    return data;
   })().finally(() => {
     coverInflightRequests.delete(cacheKey);
   });
@@ -468,12 +452,12 @@ export const getReleaseGroupCover = async (
   return request;
 };
 
-export const getSimilarArtistsForArtist = async (
+export const getSimilarArtistsForArtist = (
   mbid,
   artistName = "",
   limit = 20,
-) => {
-  const response = await api.get(`/artists/${mbid}/similar`, {
+) =>
+  getData(`/artists/${mbid}/similar`, {
     params: {
       limit,
       ...(artistName && typeof artistName === "string" && artistName.trim()
@@ -481,88 +465,48 @@ export const getSimilarArtistsForArtist = async (
         : {}),
     },
   });
-  return response.data;
-};
 
-export const getArtistPreview = async (mbid, artistName) => {
-  const response = await api.get(`/artists/${mbid}/preview`, {
+export const getArtistPreview = (mbid, artistName) =>
+  getData(`/artists/${mbid}/preview`, {
     params: artistName ? { artistName } : {},
   });
-  return response.data;
-};
 
-export const getArtistTopSongVideo = async (
+export const getArtistTopSongVideo = (
   mbid,
   artistName,
   trackTitle,
   options = {},
-) => {
-  const response = await api.get(`/artists/${mbid}/video`, {
+) =>
+  getData(`/artists/${mbid}/video`, {
     params: { artistName, trackTitle },
     signal: options.signal,
   });
-  return response.data;
-};
 
-export const getArtistOverrides = async (mbid) => {
-  const response = await api.get(`/artists/${mbid}/overrides`);
-  return response.data;
-};
+export const getArtistOverrides = (mbid) =>
+  getData(`/artists/${mbid}/overrides`);
 
-export const updateArtistOverrides = async (
+export const updateArtistOverrides = (
   mbid,
   { musicbrainzId = null, deezerArtistId = null } = {},
-) => {
-  const response = await api.put(`/artists/${mbid}/overrides`, {
+) =>
+  putData(`/artists/${mbid}/overrides`, {
     musicbrainzId,
     deezerArtistId,
   });
-  return response.data;
-};
 
-const buildStreamUrl = async (path) => {
-  const base = import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
-  let relativePath = String(path || "");
-  if (!relativePath.startsWith("/")) {
-    relativePath = `/${relativePath}`;
-  }
-  const { token } = getStoredAuth();
-  const url = `${base}${relativePath}`;
-  if (!token) return url;
-  const separator = url.includes("?") ? "&" : "?";
-  return `${url}${separator}token=${encodeURIComponent(token)}`;
-};
+const buildStreamUrl = (path) => buildAuthenticatedApiUrl(path);
 
-export const getFlowTrackStreamUrl = (jobId) => {
-  const base = import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
-  const { token } = getStoredAuth();
-  let url = `${base}/playlists/stream/${encodeURIComponent(jobId)}`;
-  if (token) {
-    url += `?token=${encodeURIComponent(token)}`;
-  }
-  return url;
-};
+export const getFlowTrackStreamUrl = (jobId) =>
+  buildAuthenticatedApiUrl(`/playlists/stream/${encodeURIComponent(jobId)}`);
 
-export const getFlowArtworkUrl = (playlistId, version) => {
-  const base = import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
-  const { token } = getStoredAuth();
-  const params = new URLSearchParams();
-  if (token) {
-    params.set("token", token);
-  }
-  if (version != null && version !== "") {
-    params.set("v", String(version));
-  }
-  const query = params.toString();
-  let url = `${base}/playlists/artwork/${encodeURIComponent(playlistId)}`;
-  if (query) {
-    url += `?${query}`;
-  }
-  return url;
-};
+export const getFlowArtworkUrl = (playlistId, version) =>
+  buildAuthenticatedApiUrl(
+    `/playlists/artwork/${encodeURIComponent(playlistId)}`,
+    { v: version },
+  );
 
-export const uploadFlowArtwork = async (playlistId, file) => {
-  const response = await api.put(
+export const uploadFlowArtwork = (playlistId, file) =>
+  putData(
     `/playlists/artwork/${encodeURIComponent(playlistId)}`,
     file,
     {
@@ -571,41 +515,29 @@ export const uploadFlowArtwork = async (playlistId, file) => {
       },
     },
   );
-  return response.data;
-};
 
-export const deleteFlowArtwork = async (playlistId) => {
-  const response = await api.delete(
+export const deleteFlowArtwork = (playlistId) =>
+  deleteData(
     `/playlists/artwork/${encodeURIComponent(playlistId)}`,
   );
-  return response.data;
-};
 
-export const generateFlowArtwork = async (playlistId) => {
-  const response = await api.post(
+export const generateFlowArtwork = (playlistId) =>
+  postData(
     `/playlists/artwork/${encodeURIComponent(playlistId)}/generate`,
   );
-  return response.data;
-};
 
-export const getLibraryArtists = async (options = {}) => {
-  const response = await api.get("/library/artists", options);
-  return response.data;
-};
+export const getLibraryArtists = (options = {}) =>
+  getData("/library/artists", options);
 
 export const getLibraryArtist = async (mbid) => {
-  const response = await api.get(`/library/artists/${mbid}`);
-  const artist = response.data;
+  const artist = await getData(`/library/artists/${mbid}`);
   if (artist && !artist.foreignArtistId) {
     artist.foreignArtistId = artist.mbid;
   }
   return artist;
 };
 
-export const lookupArtistInLibrary = async (mbid) => {
-  const response = await api.get(`/library/lookup/${mbid}`);
-  return response.data;
-};
+export const lookupArtistInLibrary = (mbid) => getData(`/library/lookup/${mbid}`);
 
 export const readLibraryLookupCache = (mbids) => {
   const result = {};
@@ -626,41 +558,32 @@ const writeLibraryLookupCache = (lookup) => {
 };
 
 export const lookupArtistsInLibraryBatch = async (mbids) => {
-  const response = await api.post("/library/lookup/batch", { mbids });
-  const data = response.data;
+  const data = await postData("/library/lookup/batch", { mbids });
   writeLibraryLookupCache(data);
   return data;
 };
 
-export const lookupAlbumsInLibraryBatch = async (mbids) => {
-  const response = await api.post("/library/albums/lookup/batch", { mbids });
-  return response.data;
-};
+export const lookupAlbumsInLibraryBatch = (mbids) =>
+  postData("/library/albums/lookup/batch", { mbids });
 
-export const addArtistToLibrary = async (artistData) => {
-  const response = await api.post("/library/artists", artistData);
-  return response.data;
-};
+export const addArtistToLibrary = (artistData) =>
+  postData("/library/artists", artistData);
 
-export const deleteArtistFromLibrary = async (mbid, deleteFiles = false) => {
-  const response = await api.delete(`/library/artists/${mbid}`, {
+export const deleteArtistFromLibrary = (mbid, deleteFiles = false) =>
+  deleteData(`/library/artists/${mbid}`, {
     params: { deleteFiles },
   });
-  return response.data;
-};
 
-export const deleteAlbumFromLibrary = async (id, deleteFiles = false) => {
-  const response = await api.delete(`/library/albums/${id}`, {
+export const deleteAlbumFromLibrary = (id, deleteFiles = false) =>
+  deleteData(`/library/albums/${id}`, {
     params: { deleteFiles },
   });
-  return response.data;
-};
 
 export const getLibraryAlbums = async (artistId) => {
-  const response = await api.get("/library/albums", {
+  const data = await getData("/library/albums", {
     params: { artistId },
   });
-  return response.data.map((album) => ({
+  return data.map((album) => ({
     ...album,
     foreignAlbumId: album.foreignAlbumId || album.mbid,
   }));
@@ -670,19 +593,15 @@ export const addLibraryAlbum = async (
   artistId,
   releaseGroupMbid,
   albumName,
-) => {
-  const response = await api.post("/library/albums", {
+) =>
+  postData("/library/albums", {
     artistId,
     releaseGroupMbid,
     albumName,
   });
-  return response.data;
-};
 
-export const requestAlbumFromSearch = async (payload) => {
-  const response = await api.post("/library/albums/request", payload);
-  return response.data;
-};
+export const requestAlbumFromSearch = (payload) =>
+  postData("/library/albums/request", payload);
 
 export const getLibraryTracks = async (
   albumId,
@@ -698,8 +617,8 @@ export const getLibraryTracks = async (
   if (context.releaseType) params.releaseType = context.releaseType;
   if (context.releaseDate) params.releaseDate = context.releaseDate;
   if (context.deezerAlbumId) params.deezerAlbumId = context.deezerAlbumId;
-  const response = await api.get("/library/tracks", { params });
-  const tracks = Array.isArray(response.data) ? response.data : [];
+  const data = await getData("/library/tracks", { params });
+  const tracks = Array.isArray(data) ? data : [];
   return Promise.all(
     tracks.map(async (track) => {
       if (!track?.streamPath) return track;
@@ -712,94 +631,57 @@ export const getLibraryTracks = async (
   );
 };
 
-export const updateLibraryAlbum = async (id, data) => {
-  const response = await api.put(`/library/albums/${id}`, data);
-  return response.data;
-};
+export const updateLibraryAlbum = (id, data) =>
+  putData(`/library/albums/${id}`, data);
 
-export const updateLibraryArtist = async (mbid, data) => {
-  const response = await api.put(`/library/artists/${mbid}`, data);
-  return response.data;
-};
+export const updateLibraryArtist = (mbid, data) =>
+  putData(`/library/artists/${mbid}`, data);
 
-export const downloadAlbum = async (artistId, albumId, options = {}) => {
-  const response = await api.post("/library/downloads/album", {
+export const downloadAlbum = (artistId, albumId, options = {}) =>
+  postData("/library/downloads/album", {
     artistId,
     albumId,
     artistMbid: options.artistMbid,
     artistName: options.artistName,
   });
-  return response.data;
-};
 
-export const triggerAlbumSearch = async (albumId) => {
-  const response = await api.post("/library/downloads/album/search", {
+export const triggerAlbumSearch = (albumId) =>
+  postData("/library/downloads/album/search", {
     albumId,
   });
-  return response.data;
-};
 
 export const getDownloadStatus = async (albumIds) => {
   const ids = Array.isArray(albumIds) ? albumIds.join(",") : albumIds;
-  const response = await api.get(`/library/downloads/status?albumIds=${ids}`);
-  return response.data;
+  return getData(`/library/downloads/status?albumIds=${ids}`);
 };
 
-export const refreshLibraryArtist = async (mbid) => {
-  const response = await api.post(`/library/artists/${mbid}/refresh`);
-  return response.data;
-};
+export const refreshLibraryArtist = (mbid) =>
+  postData(`/library/artists/${mbid}/refresh`);
 
-export const getRequests = async () => {
-  const response = await api.get("/requests");
-  return response.data;
-};
+export const getRequests = () => getData("/requests");
 
-export const getRecentlyAdded = async () => {
-  const response = await api.get("/library/recent");
-  return response.data;
-};
+export const getRecentlyAdded = () => getData("/library/recent");
 
-export const getRecentReleases = async () => {
-  const response = await api.get("/library/recent-releases");
-  return response.data;
-};
+export const getRecentReleases = () => getData("/library/recent-releases");
 
-export const getDiscovery = async (cacheBust = false) => {
+export const getDiscovery = (cacheBust = false) => {
   const params = cacheBust ? { _: Date.now() } : {};
-  const response = await api.get("/discover", { params });
-  return response.data;
+  return getData("/discover", { params });
 };
 
-export const adoptDiscoverPlaylistAsFlow = async (presetId) => {
-  const response = await api.post("/discover/playlists/adopt", { presetId });
-  return response.data;
-};
+export const adoptDiscoverPlaylistAsFlow = (presetId) =>
+  postData("/discover/playlists/adopt", { presetId });
 
-export const adoptDiscoverPlaylistAsStatic = async (presetId) => {
-  const response = await api.post("/discover/playlists/adopt-playlist", {
+export const adoptDiscoverPlaylistAsStatic = (presetId) =>
+  postData("/discover/playlists/adopt-playlist", {
     presetId,
   });
-  return response.data;
-};
 
-export const getDiscoverArtworkUrl = (presetId, version) => {
-  const base = import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
-  const { token } = getStoredAuth();
-  const params = new URLSearchParams();
-  if (token) {
-    params.set("token", token);
-  }
-  if (version != null && version !== "") {
-    params.set("v", String(version));
-  }
-  const query = params.toString();
-  let url = `${base}/discover/artwork/${encodeURIComponent(presetId)}`;
-  if (query) {
-    url += `?${query}`;
-  }
-  return url;
-};
+export const getDiscoverArtworkUrl = (presetId, version) =>
+  buildAuthenticatedApiUrl(
+    `/discover/artwork/${encodeURIComponent(presetId)}`,
+    { v: version },
+  );
 
 export const getNearbyShows = async (zipCode = "", limit, options = {}) => {
   const params = { _: Date.now() };
@@ -809,257 +691,138 @@ export const getNearbyShows = async (zipCode = "", limit, options = {}) => {
   if (Number.isFinite(limit) && limit > 0) {
     params.limit = Math.floor(limit);
   }
-  const response = await api.get("/discover/nearby-shows", {
+  return getData("/discover/nearby-shows", {
     ...options,
     params: {
       ...(options.params || {}),
       ...params,
     },
   });
-  return response.data;
 };
 
-export const getDiscoveryFeedback = async () => {
-  const response = await api.get("/discover/feedback");
-  return response.data;
-};
+export const getDiscoveryFeedback = () => getData("/discover/feedback");
 
-export const addDiscoveryFeedback = async (payload) => {
-  const response = await api.post("/discover/feedback", payload);
-  return response.data;
-};
+export const addDiscoveryFeedback = (payload) =>
+  postData("/discover/feedback", payload);
 
-export const removeDiscoveryFeedback = async (id) => {
-  const response = await api.delete(`/discover/feedback/${encodeURIComponent(id)}`);
-  return response.data;
-};
+export const removeDiscoveryFeedback = (id) =>
+  deleteData(`/discover/feedback/${encodeURIComponent(id)}`);
 
-export const resetDiscoveryFeedback = async () => {
-  const response = await api.post("/discover/feedback/reset");
-  return response.data;
-};
+export const resetDiscoveryFeedback = () => postData("/discover/feedback/reset");
 
-export const getTagSuggestions = async (q, limit = 10) => {
-  const response = await api.get("/discover/tags", {
+export const getTagSuggestions = (q, limit = 10) =>
+  getData("/discover/tags", {
     params: { q: q.trim(), limit },
   });
-  return response.data;
-};
 
-export const getUsers = async () => {
-  const response = await api.get("/users");
-  return response.data;
-};
+export const getUsers = () => getData("/users");
 
-export const createUser = async (username, password, role, permissions) => {
-  const response = await api.post("/users", {
+export const createUser = (username, password, role, permissions) =>
+  postData("/users", {
     username,
     password,
     role,
     permissions,
   });
-  return response.data;
-};
 
-export const updateUser = async (id, data) => {
-  const response = await api.patch(`/users/${id}`, data);
-  return response.data;
-};
+export const updateUser = (id, data) => patchData(`/users/${id}`, data);
 
 export const deleteUser = async (id) => {
-  await api.delete(`/users/${id}`);
+  await deleteData(`/users/${id}`);
 };
 
 export const changeMyPassword = async (currentPassword, newPassword) => {
-  await api.post("/users/me/password", { currentPassword, newPassword });
+  await postData("/users/me/password", { currentPassword, newPassword });
 };
 
-export const getMyListeningHistory = async () => {
-  const response = await api.get("/users/me/listening-history");
-  return response.data;
-};
+export const getMyListeningHistory = () => getData("/users/me/listening-history");
 
-export const getMyLidarrPreferences = async () => {
-  const response = await api.get("/users/me/lidarr-preferences");
-  return response.data;
-};
+export const getMyLidarrPreferences = () =>
+  getData("/users/me/lidarr-preferences");
 
-export const getMyDiscoverLayout = async () => {
-  const response = await api.get("/users/me/discover-layout");
-  return response.data;
-};
+export const getMyDiscoverLayout = () => getData("/users/me/discover-layout");
 
-export const updateMyListeningHistory = async (userId, payload) => {
-  const response = await api.patch(`/users/${userId}`, payload);
-  return response.data;
-};
+export const updateMyListeningHistory = (userId, payload) =>
+  patchData(`/users/${userId}`, payload);
 
-export const updateMyLidarrPreferences = async (payload) => {
-  const response = await api.patch("/users/me/lidarr-preferences", payload);
-  return response.data;
-};
+export const updateMyLidarrPreferences = (payload) =>
+  patchData("/users/me/lidarr-preferences", payload);
 
-export const updateMyDiscoverLayout = async (layout) => {
-  const response = await api.patch("/users/me/discover-layout", { layout });
-  return response.data;
-};
+export const updateMyDiscoverLayout = (layout) =>
+  patchData("/users/me/discover-layout", { layout });
 
-export const getAppSettings = async () => {
-  const response = await api.get("/settings");
-  return response.data;
-};
+export const getAppSettings = () => getData("/settings");
 
-export const updateAppSettings = async (settings) => {
-  const response = await api.post("/settings", settings);
-  return response.data;
-};
+export const updateAppSettings = (settings) => postData("/settings", settings);
 
-export const getLidarrProfiles = async (url, apiKey) => {
-  const params = new URLSearchParams();
-  if (url) params.append("url", url);
-  if (apiKey) params.append("apiKey", apiKey);
-  const queryString = params.toString();
-  const endpoint = `/settings/lidarr/profiles${
-    queryString ? `?${queryString}` : ""
-  }`;
-  const response = await api.get(endpoint);
-  return response.data;
-};
+export const getLidarrProfiles = (url, apiKey) =>
+  getData("/settings/lidarr/profiles", {
+    params: lidarrCredentialParams(url, apiKey),
+  });
 
-export const getLidarrMetadataProfiles = async (url, apiKey) => {
-  const params = new URLSearchParams();
-  if (url) params.append("url", url);
-  if (apiKey) params.append("apiKey", apiKey);
-  const queryString = params.toString();
-  const endpoint = `/settings/lidarr/metadata-profiles${
-    queryString ? `?${queryString}` : ""
-  }`;
-  const response = await api.get(endpoint);
-  return response.data;
-};
+export const getLidarrMetadataProfiles = (url, apiKey) =>
+  getData("/settings/lidarr/metadata-profiles", {
+    params: lidarrCredentialParams(url, apiKey),
+  });
 
-export const getLidarrTags = async (url, apiKey) => {
-  const params = new URLSearchParams();
-  if (url) params.append("url", url);
-  if (apiKey) params.append("apiKey", apiKey);
-  const queryString = params.toString();
-  const endpoint = `/settings/lidarr/tags${
-    queryString ? `?${queryString}` : ""
-  }`;
-  const response = await api.get(endpoint);
-  return response.data;
-};
+export const getLidarrTags = (url, apiKey) =>
+  getData("/settings/lidarr/tags", {
+    params: lidarrCredentialParams(url, apiKey),
+  });
 
-export const testSlskdConnection = async () => {
-  const response = await api.post("/settings/slskd/test");
-  return response.data;
-};
+export const testSlskdConnection = () => postData("/settings/slskd/test");
 
-export const testProwlarrConnection = async () => {
-  const response = await api.post("/settings/prowlarr/test");
-  return response.data;
-};
+export const testProwlarrConnection = () => postData("/settings/prowlarr/test");
 
-export const getProwlarrIndexers = async () => {
-  const response = await api.get("/settings/prowlarr/indexers");
-  return response.data;
-};
+export const getProwlarrIndexers = () => getData("/settings/prowlarr/indexers");
 
-export const testNzbgetConnection = async () => {
-  const response = await api.post("/settings/nzbget/test");
-  return response.data;
-};
+export const testNzbgetConnection = () => postData("/settings/nzbget/test");
 
-export const testLidarrConnection = async (url, apiKey) => {
-  const params = new URLSearchParams();
-  if (url) params.append("url", url);
-  if (apiKey) params.append("apiKey", apiKey);
-  const queryString = params.toString();
-  const endpoint = `/settings/lidarr/test${
-    queryString ? `?${queryString}` : ""
-  }`;
-  const response = await api.get(endpoint);
-  return response.data;
-};
+export const testLidarrConnection = (url, apiKey) =>
+  getData("/settings/lidarr/test", {
+    params: lidarrCredentialParams(url, apiKey),
+  });
 
-export const detectPathMappings = async () => {
-  const response = await api.post("/settings/path-mappings/detect");
-  return response.data;
-};
+export const detectPathMappings = () =>
+  postData("/settings/path-mappings/detect");
 
-export const testLidarrLibraryAccess = async (url, apiKey) => {
-  const params = new URLSearchParams();
-  if (url) params.append("url", url);
-  if (apiKey) params.append("apiKey", apiKey);
-  const queryString = params.toString();
-  const endpoint = `/settings/lidarr/test-library-access${
-    queryString ? `?${queryString}` : ""
-  }`;
-  const response = await api.get(endpoint);
-  return response.data;
-};
+export const testLidarrLibraryAccess = (url, apiKey) =>
+  getData("/settings/lidarr/test-library-access", {
+    params: lidarrCredentialParams(url, apiKey),
+  });
 
-export const testLidarrLibraryAccessOnboarding = async (url, apiKey) => {
-  const params = new URLSearchParams();
-  if (url) params.append("url", url);
-  if (apiKey) params.append("apiKey", apiKey);
-  const queryString = params.toString();
-  const endpoint = `/onboarding/lidarr/test-library-access${
-    queryString ? `?${queryString}` : ""
-  }`;
-  const response = await api.get(endpoint);
-  return response.data;
-};
+export const testLidarrLibraryAccessOnboarding = (url, apiKey) =>
+  getData("/onboarding/lidarr/test-library-access", {
+    params: lidarrCredentialParams(url, apiKey),
+  });
 
-export const getLidarrProfilesOnboarding = async (url, apiKey) => {
-  const params = new URLSearchParams();
-  if (url) params.append("url", url);
-  if (apiKey) params.append("apiKey", apiKey);
-  const queryString = params.toString();
-  const endpoint = `/onboarding/lidarr/profiles${
-    queryString ? `?${queryString}` : ""
-  }`;
-  const response = await api.get(endpoint);
-  return response.data;
-};
+export const getLidarrProfilesOnboarding = (url, apiKey) =>
+  getData("/onboarding/lidarr/profiles", {
+    params: lidarrCredentialParams(url, apiKey),
+  });
 
-export const getLidarrMetadataProfilesOnboarding = async (url, apiKey) => {
-  const params = new URLSearchParams();
-  if (url) params.append("url", url);
-  if (apiKey) params.append("apiKey", apiKey);
-  const queryString = params.toString();
-  const endpoint = `/onboarding/lidarr/metadata-profiles${
-    queryString ? `?${queryString}` : ""
-  }`;
-  const response = await api.get(endpoint);
-  return response.data;
-};
+export const getLidarrMetadataProfilesOnboarding = (url, apiKey) =>
+  getData("/onboarding/lidarr/metadata-profiles", {
+    params: lidarrCredentialParams(url, apiKey),
+  });
 
-export const applyLidarrCommunityGuideOnboarding = async (url, apiKey) => {
-  const response = await api.post("/onboarding/lidarr/apply-community-guide", {
+export const applyLidarrCommunityGuideOnboarding = (url, apiKey) =>
+  postData("/onboarding/lidarr/apply-community-guide", {
     url: url?.replace(/\/+$/, ""),
     apiKey,
   });
-  return response.data;
-};
 
-export const testSlskdOnboarding = async (url, apiKey) => {
-  const response = await api.post("/onboarding/slskd/test", {
+export const testSlskdOnboarding = (url, apiKey) =>
+  postData("/onboarding/slskd/test", {
     url: url?.replace(/\/+$/, ""),
     apiKey,
   });
-  return response.data;
-};
 
-export const testGotifyConnection = async (url, token) => {
-  const response = await api.post("/settings/gotify/test", { url, token });
-  return response.data;
-};
+export const testGotifyConnection = (url, token) =>
+  postData("/settings/gotify/test", { url, token });
 
-export const applyLidarrCommunityGuide = async () => {
-  const response = await api.post("/settings/lidarr/apply-community-guide");
-  return response.data;
-};
+export const applyLidarrCommunityGuide = () =>
+  postData("/settings/lidarr/apply-community-guide");
 
 export const getFlowStatus = async ({
   includeJobs = false,
@@ -1077,106 +840,75 @@ export const getFlowStatus = async ({
   if (jobsLimit != null) {
     params.jobsLimit = jobsLimit;
   }
-  const response = await api.get("/playlists/status", { params, signal });
-  return response.data;
+  return getData("/playlists/status", { params, signal });
 };
 
-export const getFlowJobs = async (flowId, limit = 200, options = {}) => {
-  const response = await api.get(`/playlists/jobs/${flowId}`, {
+export const getFlowJobs = (flowId, limit = 200, options = {}) =>
+  getData(`/playlists/jobs/${flowId}`, {
     ...options,
     params: {
       ...(options.params || {}),
       limit,
     },
   });
-  return response.data;
-};
 
-export const createFlow = async (payload) => {
-  const response = await api.post("/playlists/flows", payload);
-  return response.data;
-};
+export const createFlow = (payload) => postData("/playlists/flows", payload);
 
-export const updateFlow = async (flowId, payload) => {
-  const response = await api.put(`/playlists/flows/${flowId}`, payload);
-  return response.data;
-};
+export const updateFlow = (flowId, payload) =>
+  putData(`/playlists/flows/${flowId}`, payload);
 
-export const deleteFlow = async (flowId) => {
-  const response = await api.delete(`/playlists/flows/${flowId}`);
-  return response.data;
-};
+export const deleteFlow = (flowId) => deleteData(`/playlists/flows/${flowId}`);
 
-export const convertFlowToStaticPlaylist = async (flowId, payload = {}) => {
-  const response = await api.post(
+export const convertFlowToStaticPlaylist = (flowId, payload = {}) =>
+  postData(
     `/playlists/flows/${flowId}/static-playlist`,
     payload,
   );
-  return response.data;
-};
 
-export const createSharedPlaylist = async (payload) => {
-  const response = await api.post("/playlists/shared-playlists", payload);
-  return response.data;
-};
+export const createSharedPlaylist = (payload) =>
+  postData("/playlists/shared-playlists", payload);
 
-export const setFlowEnabled = async (flowId, enabled) => {
-  const response = await api.put(`/playlists/flows/${flowId}/enabled`, {
+export const setFlowEnabled = (flowId, enabled) =>
+  putData(`/playlists/flows/${flowId}/enabled`, {
     enabled,
   });
-  return response.data;
-};
 
-export const importSharedPlaylist = async (payload) => {
-  const response = await api.post(
+export const importSharedPlaylist = (payload) =>
+  postData(
     "/playlists/shared-playlists/import",
     payload,
   );
-  return response.data;
-};
 
-export const updateSharedPlaylist = async (playlistId, payload) => {
-  const response = await api.put(
+export const updateSharedPlaylist = (playlistId, payload) =>
+  putData(
     `/playlists/shared-playlists/${playlistId}`,
     payload,
   );
-  return response.data;
-};
 
-export const addSharedPlaylistTracks = async (playlistId, payload) => {
-  const response = await api.post(
+export const addSharedPlaylistTracks = (playlistId, payload) =>
+  postData(
     `/playlists/shared-playlists/${playlistId}/tracks`,
     payload,
   );
-  return response.data;
-};
 
-export const deleteSharedPlaylist = async (playlistId) => {
-  const response = await api.delete(
+export const deleteSharedPlaylist = (playlistId) =>
+  deleteData(
     `/playlists/shared-playlists/${playlistId}`,
   );
-  return response.data;
-};
 
-export const deleteSharedPlaylistTrack = async (playlistId, jobId) => {
-  const response = await api.delete(
+export const deleteSharedPlaylistTrack = (playlistId, jobId) =>
+  deleteData(
     `/playlists/shared-playlists/${playlistId}/tracks/${jobId}`,
   );
-  return response.data;
-};
 
-export const reSearchSharedPlaylistTrack = async (playlistId, jobId) => {
-  const response = await api.post(
+export const reSearchSharedPlaylistTrack = (playlistId, jobId) =>
+  postData(
     `/playlists/shared-playlists/${playlistId}/tracks/${jobId}/research`,
   );
-  return response.data;
-};
 
-export const startFlowPlaylist = async (flowId, limit = 30) => {
-  const response = await api.post(`/playlists/start/${flowId}`, {
+export const startFlowPlaylist = (flowId, limit = 30) =>
+  postData(`/playlists/start/${flowId}`, {
     limit,
   });
-  return response.data;
-};
 
 export default api;

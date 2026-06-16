@@ -32,6 +32,7 @@ import {
   getFlowTrackDisplayNumber,
   sortFlowTracks,
 } from "../utils/flowTrackSort";
+import { formatFlowLastRun } from "./flows/flowStats";
 import { Link } from "react-router-dom";
 import PillToggle from "../components/PillToggle";
 import FlipSaveButton from "../components/FlipSaveButton";
@@ -1492,20 +1493,6 @@ const shouldHandleMobileCardTap = (event) => {
     'button, a, input, textarea, select, label, [role="button"], [data-no-card-toggle="true"]',
   );
   return !interactiveTarget;
-};
-
-const formatFlowLastRun = (lastRunAt) => {
-  const timestamp =
-    typeof lastRunAt === "number" ? lastRunAt : Number.parseInt(lastRunAt, 10);
-  if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 };
 
 export function FlowCard({
