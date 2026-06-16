@@ -1,9 +1,14 @@
 import { useState } from "react";
 import FlipSaveButton from "../../../components/FlipSaveButton";
 import DownloadFolderField from "../../../components/DownloadFolderField";
-import { SettingsInput } from "./SettingsField";
+import { SettingsInput, SettingsSelect } from "./SettingsField";
 import { SettingsDownloadsSection } from "./SettingsDownloadsSection";
 import { detectPathMappings } from "../../../utils/api";
+
+const PLAYLIST_ARTWORK_STYLE_OPTIONS = [
+  { value: "photo", label: "Photo texture" },
+  { value: "aurral", label: "Aurral generated" },
+];
 
 function coercePathMappings(value) {
   if (!Array.isArray(value)) return [];
@@ -29,6 +34,8 @@ export function SettingsDownloadsTab({
   showInfo,
 }) {
   const [detectingMappings, setDetectingMappings] = useState(false);
+  const playlistArtworkStyle =
+    settings.playlistArtwork?.style === "aurral" ? "aurral" : "photo";
   const pathMappings = coercePathMappings(settings.pathMappings);
   const displayedPathMappings = withDraftPathMappingRow(pathMappings);
 
@@ -188,6 +195,44 @@ export function SettingsDownloadsTab({
             <p className="settings-page__hint">
               Fill in both paths, then save settings. Empty rows are ignored.
             </p>
+          </fieldset>
+        </div>
+
+        <div className="settings-page__section">
+          <h3 className="settings-page__section-title">Cover art</h3>
+          <fieldset className="settings-page__fields">
+            <div className="settings-page__field">
+              <label
+                className="artist-field-label"
+                htmlFor="playlist-artwork-style"
+              >
+                Generated cover style
+              </label>
+              <SettingsSelect
+                id="playlist-artwork-style"
+                value={playlistArtworkStyle}
+                onChange={(event) =>
+                  updateSettings({
+                    ...settings,
+                    playlistArtwork: {
+                      ...(settings.playlistArtwork || {}),
+                      style: event.target.value,
+                    },
+                  })
+                }
+              >
+                {PLAYLIST_ARTWORK_STYLE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </SettingsSelect>
+              <p className="settings-page__hint">
+                Applies to all flows and playlists. Photo texture uses a random
+                image from picsum with stylized typography. Aurral generated
+                uses abstract palette covers.
+              </p>
+            </div>
           </fieldset>
         </div>
       </form>

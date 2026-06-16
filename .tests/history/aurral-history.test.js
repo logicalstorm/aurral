@@ -94,3 +94,41 @@ test("upsertAurralHistory moves changed records to the top", async () => {
   assert.equal(entries[0]?.status, "failed");
   assert.equal(new Date(entries[0]?.requestedAt).getTime(), baseTime);
 });
+
+test("track download history separates NZBGet from slskd", async () => {
+  upsertAurralHistory({
+    referenceId: "job-slskd",
+    kind: "track_download",
+    title: "Searching slskd for Soulseek Song",
+    subtitle: "Artist · Playlist",
+    status: "processing",
+    statusLabel: "Searching",
+    metadata: {
+      jobId: "job-slskd",
+      trackName: "Soulseek Song",
+      artistName: "Artist",
+      downloadSource: "slskd",
+    },
+  });
+  upsertAurralHistory({
+    referenceId: "job-usenet",
+    kind: "track_download",
+    title: "Searching NZBGet for Usenet Song",
+    subtitle: "Artist · Playlist",
+    status: "processing",
+    statusLabel: "Searching",
+    metadata: {
+      jobId: "job-usenet",
+      trackName: "Usenet Song",
+      artistName: "Artist",
+      downloadSource: "usenet",
+    },
+  });
+
+  const entries = await getAurralHistoryRequests();
+  const slskdEntry = entries.find((entry) => entry.jobId === "job-slskd");
+  const usenetEntry = entries.find((entry) => entry.jobId === "job-usenet");
+
+  assert.equal(slskdEntry?.source, "slskd");
+  assert.equal(usenetEntry?.source, "nzbget");
+});

@@ -25,6 +25,15 @@ export function useSettingsTabs(authUser) {
 
   useEffect(() => {
     const validIds = tabs.map((t) => t.id);
+    const legacyTabMap = {
+      integrations: "library",
+      playlists: "downloads",
+    };
+    const normalizedTab = legacyTabMap[activeTab] || activeTab;
+    if (normalizedTab !== activeTab && validIds.includes(normalizedTab)) {
+      setActiveTab(normalizedTab);
+      return;
+    }
     if (!validIds.includes(activeTab)) {
       setActiveTab(validIds[0] || "users");
     }

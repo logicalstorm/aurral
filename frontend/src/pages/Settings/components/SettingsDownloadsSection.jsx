@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
-import { Pencil, RefreshCw, X } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
+import {
+  IntegrationCard,
+  SettingsIntegrationModal,
+} from "./SettingsIntegrationCards";
 import {
   getProwlarrIndexers,
   testNzbgetConnection,
@@ -26,62 +30,6 @@ function getIndexerStatus(indexer, enabled) {
   }
   if (enabled) return { label: "Enabled", className: "is-enabled" };
   return { label: "Disabled", className: "is-muted" };
-}
-
-function DownloadCard({ title, subtitle, status, meta, onClick }) {
-  return (
-    <button
-      type="button"
-      className="settings-page__download-card"
-      onClick={onClick}
-    >
-      <span className="settings-page__download-card-main">
-        <span className="settings-page__download-card-title">{title}</span>
-        <span className="settings-page__download-card-subtitle">{subtitle}</span>
-        {meta && <span className="settings-page__download-card-meta">{meta}</span>}
-      </span>
-      <span className="settings-page__download-card-side">
-        <span className={`settings-page__download-status ${status.className}`}>
-          {status.label}
-        </span>
-        <Pencil className="artist-icon-sm" aria-hidden />
-      </span>
-    </button>
-  );
-}
-
-function SettingsDownloadModal({ title, children, onClose }) {
-  return (
-    <div className="artist-modal-backdrop" onClick={onClose}>
-      <div
-        className="settings-page__modal settings-page__modal--wide"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="download-settings-modal-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="settings-page__modal-header">
-          <h3 id="download-settings-modal-title" className="settings-page__modal-title">
-            {title}
-          </h3>
-          <button
-            type="button"
-            className="btn btn-ghost btn-icon-square"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            <X className="artist-icon-md" />
-          </button>
-        </div>
-        <div className="settings-page__fields">{children}</div>
-        <div className="settings-page__modal-actions">
-          <button type="button" className="btn btn-primary" onClick={onClose}>
-            Done
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 export function SettingsDownloadsSection({
@@ -302,7 +250,7 @@ export function SettingsDownloadsSection({
           )}
         </div>
         <div className="settings-page__download-card-grid">
-          <DownloadCard
+          <IntegrationCard
             title="Prowlarr"
             subtitle="Indexer manager"
             status={getProviderStatus(
@@ -319,7 +267,7 @@ export function SettingsDownloadsSection({
           {prowlarrIndexers.map((indexer) => {
             const state = getIndexerState(indexer);
             return (
-              <DownloadCard
+              <IntegrationCard
                 key={indexer.id}
                 title={indexer.name}
                 subtitle="Usenet indexer"
@@ -344,14 +292,14 @@ export function SettingsDownloadsSection({
           <h3 className="settings-page__section-title">Download clients</h3>
         </div>
         <div className="settings-page__download-card-grid">
-          <DownloadCard
+          <IntegrationCard
             title="slskd"
             subtitle="Soulseek"
             status={getProviderStatus(slskdEnabled, slskdConfigured)}
             meta={`Priority ${slskd.priority ?? 10}`}
             onClick={() => setActiveModal("slskd")}
           />
-          <DownloadCard
+          <IntegrationCard
             title="NZBGet"
             subtitle="Usenet"
             status={getProviderStatus(
@@ -365,7 +313,7 @@ export function SettingsDownloadsSection({
       </div>
 
       {activeModal === "prowlarr" && (
-        <SettingsDownloadModal
+        <SettingsIntegrationModal
           title="Prowlarr"
           onClose={() => setActiveModal(null)}
         >
@@ -463,11 +411,11 @@ export function SettingsDownloadsSection({
               {loadingProwlarrIndexers ? "Refreshing..." : "Refresh indexers"}
             </button>
           </div>
-        </SettingsDownloadModal>
+        </SettingsIntegrationModal>
       )}
 
       {activeIndexer && (
-        <SettingsDownloadModal
+        <SettingsIntegrationModal
           title={activeIndexer.name}
           onClose={() => setActiveModal(null)}
         >
@@ -524,11 +472,11 @@ export function SettingsDownloadsSection({
               </>
             );
           })()}
-        </SettingsDownloadModal>
+        </SettingsIntegrationModal>
       )}
 
       {activeModal === "slskd" && (
-        <SettingsDownloadModal title="slskd" onClose={() => setActiveModal(null)}>
+        <SettingsIntegrationModal title="slskd" onClose={() => setActiveModal(null)}>
           <label className="artist-checkbox-label">
             <input
               type="checkbox"
@@ -612,6 +560,9 @@ export function SettingsDownloadsSection({
               />
               <span className="artist-field-label">Strict format only</span>
             </label>
+            <p className="settings-page__hint settings-page__hint--indented">
+              Used when ranking slskd search results for flows and playlists.
+            </p>
             <label className="artist-checkbox-label">
               <input
                 type="checkbox"
@@ -625,6 +576,10 @@ export function SettingsDownloadsSection({
               />
               <span className="artist-field-label">Clean up after runs</span>
             </label>
+            <p className="settings-page__hint settings-page__hint--indented">
+              Clear completed searches and downloads from slskd when a flow or
+              playlist run finishes.
+            </p>
           </div>
 
           <div className="settings-page__download-editor-actions">
@@ -640,11 +595,11 @@ export function SettingsDownloadsSection({
               {testingSlskd ? "Testing..." : "Test connection"}
             </button>
           </div>
-        </SettingsDownloadModal>
+        </SettingsIntegrationModal>
       )}
 
       {activeModal === "nzbget" && (
-        <SettingsDownloadModal title="NZBGet" onClose={() => setActiveModal(null)}>
+        <SettingsIntegrationModal title="NZBGet" onClose={() => setActiveModal(null)}>
           <label className="artist-checkbox-label">
             <input
               type="checkbox"
@@ -737,6 +692,23 @@ export function SettingsDownloadsSection({
             />
           </div>
 
+          <div>
+            <label className="artist-field-label">Completed download path</label>
+            <SettingsInput
+              type="text"
+              placeholder="/downloads/completed"
+              autoComplete="off"
+              value={nzbget.completedPath || ""}
+              onChange={(event) =>
+                updateIntegration("nzbget", { completedPath: event.target.value })
+              }
+            />
+            <p className="settings-page__hint">
+              Optional override for where NZBGet stores finished downloads. Leave
+              blank to use the path reported by NZBGet.
+            </p>
+          </div>
+
           <label className="artist-checkbox-label">
             <input
               type="checkbox"
@@ -762,7 +734,7 @@ export function SettingsDownloadsSection({
               {testingNzbget ? "Testing..." : "Test connection"}
             </button>
           </div>
-        </SettingsDownloadModal>
+        </SettingsIntegrationModal>
       )}
     </>
   );

@@ -11,6 +11,7 @@ import { UnsavedModal } from "./components/UnsavedModal";
 import { CommunityGuideModal } from "./components/CommunityGuideModal";
 import { SettingsIntegrationsTab } from "./components/SettingsIntegrationsTab";
 import { SettingsDownloadsTab } from "./components/SettingsDownloadsTab";
+import { SettingsPlaybackTab } from "./components/SettingsPlaybackTab";
 import { SettingsDiscoverTab } from "./components/SettingsDiscoverTab";
 import { SettingsNotificationsTab } from "./components/SettingsNotificationsTab";
 import { SettingsUsersTab } from "./components/SettingsUsersTab";
@@ -103,36 +104,12 @@ function SettingsPage() {
         );
       case "playback":
         return (
-          <SettingsIntegrationsTab
-            key="settings-playback"
-            scope="playback"
-            title="Playback"
+          <SettingsPlaybackTab
             settings={data.settings}
             updateSettings={data.updateSettings}
-            health={data.health}
-            lidarrProfiles={data.lidarrProfiles}
-            loadingLidarrProfiles={data.loadingLidarrProfiles}
-            setLoadingLidarrProfiles={data.setLoadingLidarrProfiles}
-            setLidarrProfiles={data.setLidarrProfiles}
-            lidarrMetadataProfiles={data.lidarrMetadataProfiles}
-            loadingLidarrMetadataProfiles={data.loadingLidarrMetadataProfiles}
-            setLoadingLidarrMetadataProfiles={
-              data.setLoadingLidarrMetadataProfiles
-            }
-            setLidarrMetadataProfiles={data.setLidarrMetadataProfiles}
-            lidarrTags={data.lidarrTags}
-            loadingLidarrTags={data.loadingLidarrTags}
-            setLoadingLidarrTags={data.setLoadingLidarrTags}
-            setLidarrTags={data.setLidarrTags}
-            testingLidarr={data.testingLidarr}
-            setTestingLidarr={data.setTestingLidarr}
-            applyingCommunityGuide={data.applyingCommunityGuide}
-            showCommunityGuideModal={data.showCommunityGuideModal}
-            setShowCommunityGuideModal={data.setShowCommunityGuideModal}
             hasUnsavedChanges={data.hasUnsavedChanges}
             saving={data.saving}
             handleSaveSettings={data.handleSaveSettings}
-            fetchSettings={data.fetchSettings}
             showSuccess={showSuccess}
             showError={showError}
             showInfo={showInfo}

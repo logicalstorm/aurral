@@ -8,22 +8,29 @@ import {
   Music,
   RotateCcw,
 } from "lucide-react";
-import { getRequests, triggerAlbumSearch } from "../utils/api";
+import { getRequests, triggerAlbumSearch, checkHealth } from "../utils/api";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { TAG_COLORS } from "./ArtistDetails/constants";
 
 const HISTORY_SOURCE_COLORS = {
   lidarr: TAG_COLORS[10],
   slskd: TAG_COLORS[0],
+  nzbget: TAG_COLORS[2],
   aurral: TAG_COLORS[12],
 };
 
-const HISTORY_TABS = [
+const BASE_HISTORY_TABS = [
   { value: "all", label: "All" },
   { value: "lidarr", label: "Lidarr", source: "lidarr" },
   { value: "slskd", label: "slskd", source: "slskd" },
   { value: "aurral", label: "Aurral", source: "aurral" },
 ];
+
+const NZBGET_HISTORY_TAB = {
+  value: "nzbget",
+  label: "NZBGet",
+  source: "nzbget",
+};
 
 const HISTORY_PAGE_SIZE = 25;
 
@@ -92,6 +99,7 @@ const mergeHistoryRequests = (previousRequests, nextRequests) => {
 };
 
 const getHistorySource = (request) => {
+  if (request.source === "nzbget") return "nzbget";
   if (request.source === "slskd") return "slskd";
   if (request.source === "aurral") return "aurral";
   if (request.source === "lidarr") return "lidarr";
@@ -160,6 +168,10 @@ const EMPTY_STATE_COPY = {
     title: "No slskd requests",
     message: "Track searches and downloads from slskd will appear here.",
   },
+  nzbget: {
+    title: "No NZBGet requests",
+    message: "Usenet searches and downloads from NZBGet will appear here.",
+  },
   aurral: {
     title: "No Aurral activity",
     message: "Playlist updates, discovery refreshes, and other work will appear here.",
@@ -208,9 +220,18 @@ function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("all");
+  const [usenetActive, setUsenetActive] = useState(false);
   const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
   const [reSearchingAlbumIds, setReSearchingAlbumIds] = useState({});
   const navigate = useNavigate();
+
+  const historyTabs = useMemo(() => {
+    if (!usenetActive) return BASE_HISTORY_TABS;
+    const tabs = [...BASE_HISTORY_TABS];
+    const slskdIndex = tabs.findIndex((tab) => tab.value === "slskd");
+    tabs.splice(slskdIndex + 1, 0, NZBGET_HISTORY_TAB);
+    return tabs;
+  }, [usenetActive]);
 
   const filteredRequests = useMemo(
     () => requests.filter((request) => matchesHistoryTab(request, activeTab)),
@@ -240,6 +261,12 @@ function HistoryPage() {
   );
 
   useEffect(() => {
+    if (activeTab === "nzbget" && !usenetActive) {
+      setActiveTab("all");
+    }
+  }, [activeTab, usenetActive]);
+
+  useEffect(() => {
     setVisibleCount(HISTORY_PAGE_SIZE);
   }, [activeTab]);
 
@@ -259,6 +286,20 @@ function HistoryPage() {
         setLoading(false);
       }
     }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    checkHealth()
+      .then((health) => {
+        if (!cancelled) {
+          setUsenetActive(health?.usenetConfigured === true);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -346,13 +387,14 @@ function HistoryPage() {
 
   const handleRowNavigate = (request, {
     isSlskd,
+    isNzbget,
     isAurral,
     isAlbum,
     artistMbid,
     artistName,
     displayName,
   }) => {
-    if (isSlskd && request.playlistId) {
+    if ((isSlskd || isNzbget) && request.playlistId) {
       navigate(`/playlists?selected=${encodeURIComponent(request.playlistId)}`);
       return;
     }
@@ -364,11 +406,13 @@ function HistoryPage() {
   };
 
   const renderRequestRow = (request, rowIndex = 0) => {
-    const isSlskd = request.source === "slskd" || request.kind === "track_download";
-    const isAurral = request.source === "aurral" && !isSlskd;
+    const isSlskd = request.source === "slskd";
+    const isNzbget = request.source === "nzbget";
+    const isTrackDownload = isSlskd || isNzbget || request.kind === "track_download";
+    const isAurral = request.source === "aurral" && !isTrackDownload;
     const isActivity = request.type === "activity";
     const isAlbum = request.type === "album";
-    const usesTitleSubtitle = isSlskd || isAurral || isActivity;
+    const usesTitleSubtitle = isTrackDownload || isAurral || isActivity;
     const displayName = usesTitleSubtitle
       ? request.title
       : isAlbum
@@ -380,7 +424,7 @@ function HistoryPage() {
       : artistName;
     const artistMbid = isAlbum ? request.artistMbid : request.mbid;
     const canNavigate =
-      (isSlskd && request.playlistId) ||
+      ((isSlskd || isNzbget) && request.playlistId) ||
       ((isAurral || isActivity) && request.href) ||
       (artistMbid &&
         artistMbid !== "null" &&
@@ -413,6 +457,7 @@ function HistoryPage() {
           if (!canNavigate) return;
           handleRowNavigate(request, {
             isSlskd,
+            isNzbget,
             isAurral,
             isAlbum,
             artistMbid,
@@ -500,7 +545,7 @@ function HistoryPage() {
           role="tablist"
           aria-label="Filter history by source"
         >
-          {HISTORY_TABS.map((tab) => (
+          {historyTabs.map((tab) => (
             <button
               key={tab.value}
               type="button"

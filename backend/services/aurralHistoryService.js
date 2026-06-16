@@ -52,7 +52,23 @@ const toIso = (createdAt) => {
   return new Date(value).toISOString();
 };
 
-const resolveHistorySource = (kind) => KIND_SOURCE_MAP[kind] || "aurral";
+const resolveTrackDownloadHistorySource = (downloadSource) => {
+  const normalized = String(downloadSource || "").trim().toLowerCase();
+  if (normalized === "usenet") return "nzbget";
+  return "slskd";
+};
+
+const resolveDownloadClientLabel = (downloadSource) =>
+  resolveTrackDownloadHistorySource(downloadSource) === "nzbget"
+    ? "NZBGet"
+    : "slskd";
+
+const resolveHistorySource = (kind, metadata = null) => {
+  if (kind === "track_download") {
+    return resolveTrackDownloadHistorySource(metadata?.downloadSource);
+  }
+  return KIND_SOURCE_MAP[kind] || "aurral";
+};
 
 const serializeHistoryMetadata = (value) => {
   if (!value || typeof value !== "object") return null;
@@ -405,21 +421,29 @@ export const recordTrackJobActivity = ({
   statusLabel = "Searching",
   title = null,
   subtitle = null,
+  downloadSource = null,
 } = {}) => {
   const id = String(jobId || "").trim();
   if (!id) return null;
   const playlistName = resolvePlaylistName(playlistId);
   const track = String(trackName || "Track").trim();
   const artist = String(artistName || "Artist").trim();
+  const clientLabel = resolveDownloadClientLabel(downloadSource);
   return upsertAurralHistory({
     referenceId: id,
     kind: "track_download",
-    title: title || `Searching slskd for ${track}`,
+    title: title || `Searching ${clientLabel} for ${track}`,
     subtitle: subtitle || `${artist} · ${playlistName}`,
     status,
     statusLabel,
     href: buildPlaylistHref(playlistId),
-    metadata: { jobId: id, trackName: track, artistName: artist, playlistId },
+    metadata: {
+      jobId: id,
+      trackName: track,
+      artistName: artist,
+      playlistId,
+      downloadSource: downloadSource || "slskd",
+    },
   });
 };
 
@@ -429,9 +453,10 @@ export const recordTrackJobSearching = (job) =>
     trackName: job?.trackName,
     artistName: job?.artistName,
     playlistId: job?.playlistId || job?.playlistType,
+    downloadSource: job?.downloadSource,
     status: "processing",
     statusLabel: "Searching",
-    title: `Searching slskd for ${job?.trackName || "track"}`,
+    title: `Searching ${resolveDownloadClientLabel(job?.downloadSource)} for ${job?.trackName || "track"}`,
   });
 
 export const recordTrackJobDownloading = (job) =>
@@ -440,9 +465,10 @@ export const recordTrackJobDownloading = (job) =>
     trackName: job?.trackName,
     artistName: job?.artistName,
     playlistId: job?.playlistId || job?.playlistType,
+    downloadSource: job?.downloadSource,
     status: "processing",
     statusLabel: "Downloading",
-    title: `Downloading ${job?.trackName || "track"} via slskd`,
+    title: `Downloading ${job?.trackName || "track"} via ${resolveDownloadClientLabel(job?.downloadSource)}`,
   });
 
 export const recordTrackJobMoving = (job) =>
@@ -451,6 +477,7 @@ export const recordTrackJobMoving = (job) =>
     trackName: job?.trackName,
     artistName: job?.artistName,
     playlistId: job?.playlistId || job?.playlistType,
+    downloadSource: job?.downloadSource,
     status: "processing",
     statusLabel: "Moving",
     title: `Moving ${job?.trackName || "track"} into playlist library`,
@@ -462,6 +489,7 @@ export const recordTrackJobCompleted = (job) =>
     trackName: job?.trackName,
     artistName: job?.artistName,
     playlistId: job?.playlistId || job?.playlistType,
+    downloadSource: job?.downloadSource,
     status: "completed",
     statusLabel: "Downloaded",
     title: `Downloaded ${job?.trackName || "track"}`,
@@ -474,6 +502,7 @@ export const recordTrackJobFailed = (job, message = "Download failed") =>
     trackName: job?.trackName,
     artistName: job?.artistName,
     playlistId: job?.playlistId || job?.playlistType,
+    downloadSource: job?.downloadSource,
     status: "failed",
     statusLabel: "Failed",
     title: `Failed to download ${job?.trackName || "track"}`,
@@ -482,7 +511,7 @@ export const recordTrackJobFailed = (job, message = "Download failed") =>
 
 export const toHistoryRequestItem = (entry) => {
   const kind = entry.kind || null;
-  const source = resolveHistorySource(kind);
+  const source = resolveHistorySource(kind, entry.metadata);
   return {
     id: entry.id,
     source,

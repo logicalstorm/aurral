@@ -107,9 +107,9 @@ export function SettingsDiscoverTab({
                 Optional Last.fm upgrade
               </p>
               <p className="settings-page__banner-text">
-                Add a free Last.fm API key in Integrations to unlock
-                personalized recommendations, similar artists, tag and genre
-                search, and custom weekly flows.
+                Add a free Last.fm API key in the Listening history section
+                below to unlock personalized recommendations, similar artists,
+                tag and genre search, and custom weekly flows.
               </p>
             </div>
             <button
@@ -205,6 +205,22 @@ export function SettingsDiscoverTab({
             </div>
           </div>
           <fieldset className="settings-page__fields">
+            <div className="settings-page__callout">
+              <p className="artist-field-label">Get an API key</p>
+              <p className="settings-page__callout-copy">
+                Register on the developers portal. After the registration, the
+                default application will be created. The application contains a
+                Consumer Key that is used for authentication.
+              </p>
+              <a
+                href="https://developer-acct.ticketmaster.com/user/login"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="settings-page__link"
+              >
+                Open the Ticketmaster developer portal
+              </a>
+            </div>
             <div className="settings-page__two-col-grid">
               <div>
                 <label className="artist-field-label">Ticketmaster key</label>
@@ -226,6 +242,9 @@ export function SettingsDiscoverTab({
                     })
                   }
                 />
+                <p className="settings-page__hint">
+                  Used for the Discover page&apos;s nearby shows section.
+                </p>
               </div>
               <div>
                 <label className="artist-field-label">
@@ -256,6 +275,10 @@ export function SettingsDiscoverTab({
                     });
                   }}
                 />
+                <p className="settings-page__hint">
+                  Controls how far from your selected area Ticketmaster events
+                  are searched.
+                </p>
               </div>
             </div>
             <div className="settings-page__field-stack--md">
