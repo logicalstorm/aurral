@@ -2,7 +2,6 @@ import path from "path";
 import fs from "fs/promises";
 import { randomUUID } from "crypto";
 import { dbOps } from "../config/db-helpers.js";
-import { getLastfmApiKey } from "./apiClients.js";
 import {
   recordFlowGenerationStarted,
   recordFlowTracksGenerated,
@@ -15,6 +14,7 @@ import {
 import {
   filterMissingSharedTracks,
   flowPlaylistConfig,
+  normalizeSharedTrack,
   tracksShareMembership,
 } from "./weeklyFlowPlaylistConfig.js";
 import {
@@ -32,6 +32,7 @@ import {
   withPlaylistMutation,
 } from "./weeklyFlowMutationGuards.js";
 import { withHonkerLock } from "./honkerDb.js";
+import { getUnavailableFlowSourceError } from "./weeklyFlowValidation.js";
 
 const DEFAULT_LIMIT = 30;
 const OPERATION_TOKENS_KEY = "weeklyFlowOperationTokens";
@@ -61,61 +62,9 @@ function isLatestWeeklyFlowOperationToken(scope, token) {
   return current[safeScope] === safeToken;
 }
 
-function normalizeFlowMixForValidation(mix, recipe) {
-  const source = mix && typeof mix === "object" && !Array.isArray(mix)
-    ? mix
-    : recipe && typeof recipe === "object" && !Array.isArray(recipe)
-      ? recipe
-      : {};
-  return {
-    discover: Math.max(0, Number(source?.discover || 0) || 0),
-    mix: Math.max(0, Number(source?.mix || 0) || 0),
-    trending: Math.max(0, Number(source?.trending || 0) || 0),
-    focus: Math.max(0, Number(source?.focus || 0) || 0),
-  };
-}
-
-function getUnavailableFlowSourceError(mix) {
-  if (getLastfmApiKey()) return null;
-  const normalizedMix = normalizeFlowMixForValidation(mix);
-  if (normalizedMix.discover > 0) return "Discover flow source requires Last.fm";
-  if (normalizedMix.trending > 0) return "Trending flow source requires Last.fm";
-  if (normalizedMix.focus > 0) return "Focus flow source requires Last.fm";
-  if (normalizedMix.mix > 0) {
-    return "Library flow source requires Last.fm in this version";
-  }
-  return null;
-}
-
 function normalizeTrackList(value) {
   return (Array.isArray(value) ? value : [])
-    .map((track) => {
-      if (!track || typeof track !== "object" || Array.isArray(track)) {
-        return null;
-      }
-      const artistName = String(track.artistName || "").trim();
-      const trackName = String(track.trackName || "").trim();
-      if (!artistName || !trackName) return null;
-      return {
-        artistName,
-        trackName,
-        albumName: String(track.albumName || "").trim() || null,
-        artistMbid: String(track.artistMbid || "").trim() || null,
-        albumMbid: String(track.albumMbid || "").trim() || null,
-        trackMbid: String(track.trackMbid || "").trim() || null,
-        releaseYear: String(track.releaseYear || "").trim() || null,
-        durationMs:
-          track.durationMs != null && Number.isFinite(Number(track.durationMs))
-            ? Math.max(0, Math.round(Number(track.durationMs)))
-            : null,
-        artistAliases: Array.isArray(track.artistAliases)
-          ? track.artistAliases
-              .map((entry) => String(entry || "").trim())
-              .filter(Boolean)
-          : [],
-        reason: String(track.reason || "").trim() || null,
-      };
-    })
+    .map((track) => normalizeSharedTrack(track))
     .filter(Boolean);
 }
 

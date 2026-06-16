@@ -36,7 +36,10 @@ import {
   requireAdmin,
   requirePermission,
 } from "../middleware/requirePermission.js";
-import { getLastfmApiKey } from "../services/apiClients.js";
+import {
+  getUnavailableFlowSourceError,
+  normalizeFlowMixForValidation,
+} from "../services/weeklyFlowValidation.js";
 
 const router = express.Router();
 const EXISTING_FILE_MODE_OPTIONS = ["download", "reuse"];
@@ -93,32 +96,6 @@ const normalizeFlowStringArray = (value) => {
   return single ? [single] : [];
 };
 
-const normalizeFlowMixForValidation = (mix, recipe) => {
-  const source = mix && typeof mix === "object" && !Array.isArray(mix)
-    ? mix
-    : recipe && typeof recipe === "object" && !Array.isArray(recipe)
-      ? recipe
-      : {};
-  return {
-    discover: Math.max(0, Number(source?.discover || 0) || 0),
-    mix: Math.max(0, Number(source?.mix || 0) || 0),
-    trending: Math.max(0, Number(source?.trending || 0) || 0),
-    focus: Math.max(0, Number(source?.focus || 0) || 0),
-  };
-};
-
-const getUnavailableFlowSourceError = (mix) => {
-  if (getLastfmApiKey()) return null;
-  const normalizedMix = normalizeFlowMixForValidation(mix);
-  if (normalizedMix.discover > 0) return "Discover flow source requires Last.fm";
-  if (normalizedMix.trending > 0) return "Trending flow source requires Last.fm";
-  if (normalizedMix.focus > 0) return "Focus flow source requires Last.fm";
-  if (normalizedMix.mix > 0) {
-    return "Library flow source requires Last.fm in this version";
-  }
-  return null;
-};
-
 const validateFlowPayload = ({
   name,
   mix,
@@ -155,67 +132,7 @@ const validateFlowPayload = ({
 
 const normalizeImportedTrackList = (value) => {
   if (!Array.isArray(value)) return [];
-  return dedupeSharedTracks(
-    value
-      .map((track) => {
-        if (!track || typeof track !== "object" || Array.isArray(track))
-          return null;
-        const artistName = String(
-          track.artistName ??
-            track.artist ??
-            track.artist_name ??
-            track["Artist Name(s)"] ??
-            "",
-        ).trim();
-        const trackName = String(
-          track.trackName ??
-            track.title ??
-            track.name ??
-            track.track ??
-            track["Track Name"] ??
-            "",
-        ).trim();
-        if (!artistName || !trackName) return null;
-        const albumName = String(
-          track.albumName ?? track.album ?? track["Album Name"] ?? "",
-        ).trim();
-        const artistMbid = String(
-          track.artistMbid ?? track.artistId ?? track.mbid ?? "",
-        ).trim();
-        const albumMbid = String(
-          track.albumMbid ?? track.releaseGroupMbid ?? track.albumId ?? "",
-        ).trim();
-        const trackMbid = String(
-          track.trackMbid ?? track.recordingMbid ?? track.recordingId ?? "",
-        ).trim();
-        const releaseYear = String(
-          track.releaseYear ?? track.year ?? "",
-        ).trim();
-        const durationMs =
-          track.durationMs != null && Number.isFinite(Number(track.durationMs))
-            ? Math.max(0, Math.round(Number(track.durationMs)))
-            : null;
-        const artistAliases = Array.isArray(track.artistAliases)
-          ? track.artistAliases
-              .map((entry) => String(entry || "").trim())
-              .filter(Boolean)
-          : [];
-        const reason = String(track.reason ?? "").trim();
-        return {
-          artistName,
-          trackName,
-          albumName: albumName || null,
-          artistMbid: artistMbid || null,
-          albumMbid: albumMbid || null,
-          trackMbid: trackMbid || null,
-          releaseYear: releaseYear || null,
-          durationMs,
-          artistAliases,
-          reason: reason || null,
-        };
-      })
-      .filter(Boolean),
-  );
+  return dedupeSharedTracks(value);
 };
 
 router.get("/stream/:jobId", noCache, async (req, res) => {

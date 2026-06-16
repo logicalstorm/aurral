@@ -371,7 +371,7 @@ const normalizeFlow = (flow) => {
   };
 };
 
-const normalizeSharedTrack = (track) => {
+export const normalizeSharedTrack = (track) => {
   if (!track || typeof track !== "object" || Array.isArray(track)) return null;
   const artistName = String(
     track.artistName ??
