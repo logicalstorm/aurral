@@ -32,6 +32,20 @@ async function pathIsReadable(filePath, mappings = getPathMappings()) {
   return false;
 }
 
+function normalizeForDisplayCompare(filePath) {
+  return String(filePath || "").trim().replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
+function formatPathAccessDetail(reportedPath, readablePath) {
+  const reported = String(reportedPath || "").trim();
+  const readable = String(readablePath || "").trim();
+  if (!reported || !readable) return reported || readable;
+  if (normalizeForDisplayCompare(reported) === normalizeForDisplayCompare(readable)) {
+    return reported;
+  }
+  return `${reported} -> ${readable}`;
+}
+
 async function findSampleTrackFile(lidarrClient) {
   let artists = [];
   try {
@@ -226,7 +240,16 @@ export async function runLidarrLibraryAccessTest(lidarrClient, options = {}) {
 
   steps.push(
     step("mount", "pass", "Aurral can see that folder in the container", {
-      detail: rootPaths.length === 1 ? rootPaths[0] : `${rootPaths.length} root folders`,
+      detail:
+        rootPaths.length === 1
+          ? formatPathAccessDetail(rootPaths[0], await pathIsReadable(rootPaths[0]))
+          : (
+              await Promise.all(
+                rootPaths.map(async (rootPath) =>
+                  formatPathAccessDetail(rootPath, await pathIsReadable(rootPath)),
+                ),
+              )
+            ).join(", "),
     }),
   );
 

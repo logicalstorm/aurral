@@ -56,6 +56,38 @@ test("inferPathMappings derives a shared parent mapping", async () => {
   ]);
 });
 
+test("inferPathMappings preserves POSIX leading slash", async () => {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "aurral-path-map-"));
+  const musicRoot = path.join(rootDir, "music");
+  await fs.mkdir(musicRoot, { recursive: true });
+
+  const mappings = inferPathMappings(
+    ["/data/media/music"],
+    [rootDir],
+  );
+
+  await fs.rm(rootDir, { recursive: true, force: true });
+
+  assert.deepEqual(mappings, [
+    { remote: "/data/media", local: rootDir },
+  ]);
+});
+
+test("inferPathMappings avoids filesystem-root local mappings", async () => {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "aurral-root-map-"));
+  const localMusicRoot = path.join(rootDir, "music");
+  await fs.mkdir(localMusicRoot, { recursive: true });
+
+  const externalRoot = `/data/media${localMusicRoot}`;
+  const mappings = inferPathMappings([externalRoot], ["/"]);
+
+  await fs.rm(rootDir, { recursive: true, force: true });
+
+  assert.equal(mappings.length, 1);
+  assert.notEqual(mappings[0].local, path.resolve("/"));
+  assert.equal(mappings[0].remote.startsWith("/"), true);
+});
+
 test("detectPathMappings verifies a mapped sample file", async () => {
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "aurral-path-map-"));
   const trackPath = path.join(rootDir, "Music", "Artist", "track.mp3");

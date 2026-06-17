@@ -18,8 +18,9 @@ function normalizePathSeparators(value) {
 
 function normalizePathMappingEntry(entry) {
   const remote = normalizePathSeparators(entry?.remote);
-  const local = path.resolve(String(entry?.local || "").trim());
-  if (!remote || !local) return null;
+  const localRaw = String(entry?.local || "").trim();
+  if (!remote || !localRaw) return null;
+  const local = path.resolve(localRaw);
   return { remote, local };
 }
 
@@ -84,6 +85,22 @@ function pathExists(targetPath) {
   } catch {
     return false;
   }
+}
+
+function isLocalFilesystemRoot(localRoot) {
+  const resolved = path.resolve(String(localRoot || ""));
+  return resolved === path.parse(resolved).root;
+}
+
+function buildRemotePrefix(normalizedExternalPath, parts, endIndex) {
+  const prefix = parts.slice(0, endIndex).join("/");
+  if (!prefix) {
+    if (normalizedExternalPath.startsWith("//")) return "//";
+    return normalizedExternalPath.startsWith("/") ? "/" : "";
+  }
+  if (normalizedExternalPath.startsWith("//")) return `//${prefix}`;
+  if (normalizedExternalPath.startsWith("/")) return `/${prefix}`;
+  return prefix;
 }
 
 function resolveBySuffixWalk(externalPath, localRoots = getLocalSearchRoots()) {
@@ -176,9 +193,16 @@ export function inferPathMappingForExternalPath(externalPath, localRoots) {
       const localCandidate = path.join(localRoot, ...suffixParts);
       try {
         if (fs.existsSync(localCandidate)) {
+          const rootOnlyMatch = isLocalFilesystemRoot(localRoot);
+          const remoteEndIndex = rootOnlyMatch
+            ? Math.min(index + 1, parts.length)
+            : index;
+          const localBase = rootOnlyMatch
+            ? path.join(localRoot, suffixParts[0])
+            : localRoot;
           return {
-            remote: parts.slice(0, index).join("/"),
-            local: localRoot,
+            remote: buildRemotePrefix(norm, parts, remoteEndIndex),
+            local: localBase,
           };
         }
       } catch {}
@@ -194,6 +218,7 @@ export function inferPathMappings(externalPaths, localRoots = getFilesystemBrows
   for (const externalPath of externalPaths) {
     const trimmed = String(externalPath || "").trim();
     if (!trimmed) continue;
+    if (pathExists(path.resolve(trimmed))) continue;
     const inferred = inferPathMappingForExternalPath(trimmed, localRoots);
     if (!inferred) continue;
     const key = inferred.remote.toLowerCase();

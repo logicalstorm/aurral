@@ -19,16 +19,17 @@ Aurral writes M3U playlists under `aurral-weekly-flow` with one track path per l
 
 | Navidrome deployment | Playlist path mode | Setting |
 | --- | --- | --- |
-| Docker, same mounts as Aurral (for example `/data` or `/music`) | **local** (default) | Leave **Use host paths in playlist files** off |
+| Docker, same mounts as Aurral (for example `/data` or `/music`) | **local** (default) | Leave **Use Navidrome-visible paths in playlist files** off |
+| Docker, different mount path than Aurral (for example Navidrome sees `/data/media/music` while Aurral sees `/music`) | **remote** | Enable the Navidrome setting or set `M3U_PATH_MODE=remote` |
 | Native Windows while Aurral is in Docker | **remote** | Enable the Navidrome setting or set `M3U_PATH_MODE=remote` |
 
 ### What remote mode does
 
 With path mappings, Aurral translates Lidarr's Windows paths into container paths so it can read files—for example `N:\ServerFolders\Music\Music\Artist\track.mp3` becomes `/music/Music/Artist/track.mp3` inside Docker.
 
-By default, generated M3U files use those **container paths**. Native Windows Navidrome cannot resolve `/music/...`, so playlists may appear but tracks fail to play.
+By default, generated M3U files use those **Aurral container paths**. Navidrome cannot resolve `/music/...` if it runs natively on Windows, or if its Docker container mounts the same files at a different path such as `/data/media/music`. In that case playlists may appear but tracks fail to play.
 
-**Use host paths in playlist files** (or `M3U_PATH_MODE=remote`) reverses paths **only when writing M3U files**:
+**Use Navidrome-visible paths in playlist files** (or `M3U_PATH_MODE=remote`) reverses paths **only when writing M3U files**:
 
 - Reused Lidarr tracks: Aurral writes the original Lidarr path it received
 - Downloaded tracks under `/music/Aurral/...`: Aurral inverts `PATH_MAPPINGS` (for example `/music/...` → `N:\ServerFolders\Music\...`)

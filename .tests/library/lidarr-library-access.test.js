@@ -96,6 +96,26 @@ test("runLidarrLibraryAccessTest passes when a track file is readable", async ()
   );
 });
 
+test("runLidarrLibraryAccessTest shows translated root path when mapping is used", async () => {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "aurral-lidarr-map-"));
+  const musicRoot = path.join(rootDir, "music");
+  await fs.mkdir(musicRoot, { recursive: true });
+
+  const reportedRoot = `/data/media${musicRoot}`;
+  const result = await runLidarrLibraryAccessTest(
+    createMockLidarrClient({
+      rootPath: reportedRoot,
+    }),
+  );
+
+  await fs.rm(rootDir, { recursive: true, force: true });
+
+  const mountStep = result.steps.find((step) => step.id === "mount");
+  assert.equal(result.ok, true);
+  assert.equal(mountStep?.status, "pass");
+  assert.match(mountStep?.detail || "", / -> /);
+});
+
 test("runLidarrLibraryAccessTest warns when flow and Lidarr files are on different filesystems", async () => {
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "aurral-lidarr-test-"));
   const albumDir = path.join(rootDir, "Artist", "Album");

@@ -172,7 +172,7 @@ Aurral-global reuse prevents the same imported track from being downloaded again
 
 If Lidarr runs on Windows and Aurral runs in Docker, use path mappings under **Settings → Downloads** or run **Test library access** in **Settings → Library → Lidarr** to auto-detect them. See [Shared storage](/getting-started/storage/#windows-and-mixed-docker-setups).
 
-When reuse points at Lidarr files and Navidrome runs on Windows (not in Docker), also enable **Use host paths in playlist files** under **Settings → Playback → Navidrome** so generated M3U files reference host paths. See [Navidrome](/integrations/navidrome/#mixed-windows-and-docker-navidrome).
+When reuse points at Lidarr files and Navidrome sees those files at a different path than Aurral, also enable **Use Navidrome-visible paths in playlist files** under **Settings → Playback → Navidrome** so generated M3U files reference paths Navidrome can open. See [Navidrome](/integrations/navidrome/#mixed-windows-and-docker-navidrome).
 
 For slskd handoff, Navidrome playback, and efficient hardlinks, mount the same host folder at `/data` in Aurral, Lidarr, slskd, and Navidrome. See [Shared storage](/getting-started/storage/) and [`docker-compose.example.yml`](https://github.com/lklynet/aurral/blob/main/docker-compose.example.yml).
 

@@ -208,9 +208,10 @@ export function SettingsDownloadClientsSection({
         <div className="settings-page__section-intro">
           <h3 className="settings-page__section-title">Remote path mappings</h3>
           <p className="settings-page__section-note">
-            Translate paths reported by Lidarr or download clients into paths
-            Aurral can read. Example: <code>N:\ServerFolders\Music</code> to{" "}
-            <code>/music</code>.
+            Translate paths reported by Lidarr or download clients into the
+            paths Aurral sees inside its container. Prefer the same shared mount
+            first; use mappings only when services see the same files at
+            different paths.
           </p>
         </div>
         <fieldset className="settings-page__fields">
@@ -220,10 +221,10 @@ export function SettingsDownloadClientsSection({
               key={`path-mapping-${index}`}
             >
               <div className="settings-page__field">
-                <label className="artist-field-label">Remote path</label>
+                <label className="artist-field-label">Reported path</label>
                 <SettingsInput
                   value={mapping.remote}
-                  placeholder="N:\ServerFolders\Music"
+                  placeholder="/data/media/music"
                   onChange={(event) => {
                     const nextMappings = [...displayedPathMappings];
                     nextMappings[index] = {
@@ -235,7 +236,7 @@ export function SettingsDownloadClientsSection({
                 />
               </div>
               <div className="settings-page__field">
-                <label className="artist-field-label">Local path</label>
+                <label className="artist-field-label">Aurral path</label>
                 <SettingsInput
                   value={mapping.local}
                   placeholder="/music"
@@ -274,7 +275,9 @@ export function SettingsDownloadClientsSection({
             </button>
           </div>
           <p className="settings-page__hint">
-            Fill in both paths, then save settings. Empty rows are ignored.
+            Example: Lidarr reports <code>/data/media/music</code>, but Aurral
+            reads that same folder at <code>/music</code>. Fill in both paths,
+            then save settings.
           </p>
         </fieldset>
       </div>

@@ -362,7 +362,7 @@ export function SettingsPlaybackSection({
 
           <SettingsModalSection title="Playlists">
             <SettingsModalToggle
-              label="Use host paths in playlist files"
+              label="Use Navidrome-visible paths in playlist files"
               checked={navidrome.m3uPathMode === "remote"}
               onChange={(event) =>
                 updateNavidrome({
@@ -371,9 +371,10 @@ export function SettingsPlaybackSection({
               }
             />
             <p className="settings-modal__hint">
-              Enable when Navidrome runs outside Docker but Aurral uses path
-              mappings. Playlist M3U files will reference host paths such as{" "}
-              <code>N:\Music\...</code> instead of container paths.
+              Enable when Navidrome cannot open Aurral&apos;s container paths,
+              including native Navidrome or Docker containers with different
+              mounts. Playlist M3U files will use mapped paths such as{" "}
+              <code>/data/media/music/...</code> or <code>N:\Music\...</code>.
             </p>
             <p className="settings-modal__hint">
               When using Weekly Flow: set Navidrome&apos;s{" "}
