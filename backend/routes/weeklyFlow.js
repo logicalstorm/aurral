@@ -1166,11 +1166,13 @@ router.get("/jobs/:flowId", (req, res) => {
   if (!canAccessPlaylistType(req.user, flowId)) {
     return res.status(404).json({ error: "Playlist not found" });
   }
-  const parsedLimit = Number(req.query.limit);
+  const rawLimit =
+    req.query.limit == null ? "" : String(req.query.limit).trim();
+  const parsedLimit = Number(rawLimit);
   const limit =
-    Number.isFinite(parsedLimit) && parsedLimit > 0
-      ? Math.min(Math.floor(parsedLimit), 500)
-      : 200;
+    rawLimit && Number.isFinite(parsedLimit) && parsedLimit > 0
+      ? Math.floor(parsedLimit)
+      : null;
   const jobs = filterJobsForUser(
     req.user,
     downloadTracker.getByPlaylistType(flowId, limit),

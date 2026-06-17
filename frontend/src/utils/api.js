@@ -840,14 +840,17 @@ export const getFlowStatus = async ({
   return getData("/playlists/status", { params, signal });
 };
 
-export const getFlowJobs = (flowId, limit = 200, options = {}) =>
-  getData(`/playlists/jobs/${flowId}`, {
+export const getFlowJobs = (flowId, limit = null, options = {}) => {
+  const params = { ...(options.params || {}) };
+  const parsedLimit = Number(limit);
+  if (Number.isFinite(parsedLimit) && parsedLimit > 0) {
+    params.limit = Math.floor(parsedLimit);
+  }
+  return getData(`/playlists/jobs/${flowId}`, {
     ...options,
-    params: {
-      ...(options.params || {}),
-      limit,
-    },
+    params,
   });
+};
 
 export const createFlow = (payload) => postData("/playlists/flows", payload);
 

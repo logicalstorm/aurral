@@ -428,7 +428,7 @@ function FlowPage() {
       }
       setTracksErrorByFlowId((prev) => ({ ...prev, [flowId]: "" }));
       try {
-        const jobs = await getFlowJobs(flowId, 500, { signal });
+        const jobs = await getFlowJobs(flowId, null, { signal });
         if (signal?.aborted) return;
         const normalized = (Array.isArray(jobs) ? jobs : [])
           .map((job) => ({
@@ -660,7 +660,7 @@ function FlowPage() {
     sourceFlowId = null,
   }) => {
     if (!playlistId) return;
-    const jobs = await getFlowJobs(playlistId, 500);
+    const jobs = await getFlowJobs(playlistId);
     const tracks = (Array.isArray(jobs) ? jobs : [])
       .filter((job) => job?.status !== "failed")
       .map((job) => ({

@@ -71,3 +71,19 @@ test("persists enriched album context for slskd matching", () => {
   assert.equal(job.albumTrackCount, 10);
   assert.deepEqual(job.albumTrackTitles, ["Intro", "Other Song", "Song"]);
 });
+
+test("returns complete playlist job lists unless a caller explicitly limits them", () => {
+  const tracker = new WeeklyFlowDownloadTracker();
+  const tracks = Array.from({ length: 650 }, (_, index) => ({
+    artistName: `Artist ${index}`,
+    trackName: `Song ${index}`,
+  }));
+
+  tracker.addJobs(tracks, "large-static-playlist");
+
+  assert.equal(tracker.getByPlaylistType("large-static-playlist").length, 650);
+  assert.equal(
+    tracker.getByPlaylistType("large-static-playlist", 500).length,
+    500,
+  );
+});
