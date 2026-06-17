@@ -3,9 +3,7 @@ import {
   buildTrackFileIndex,
   enrichLidarrTrackWithFiles,
 } from "./libraryManager.js";
-import { dbOps } from "../config/db-helpers.js";
 import {
-  detectPathMappings,
   getPathMappings,
   looksLikeExternalOnlyPath,
   resolveLocalPath,
@@ -17,7 +15,7 @@ function step(id, status, label, extra = {}) {
   return { id, status, label, ...extra };
 }
 
-async function pathIsReadable(filePath, mappings = getPathMappings()) {
+async function pathIsReadable(filePath, mappings = getPathMappings("lidarr")) {
   if (!filePath) return false;
   const candidates = [filePath, resolveLocalPath(filePath, mappings)];
   const uniqueCandidates = [
@@ -44,6 +42,18 @@ function formatPathAccessDetail(reportedPath, readablePath) {
     return reported;
   }
   return `${reported} -> ${readable}`;
+}
+
+function pathHasPrefix(candidate, prefix) {
+  const normalizedCandidate = normalizeForDisplayCompare(candidate);
+  const normalizedPrefix = normalizeForDisplayCompare(prefix);
+  if (!normalizedCandidate || !normalizedPrefix) return false;
+  return (
+    normalizedCandidate.toLowerCase() === normalizedPrefix.toLowerCase() ||
+    normalizedCandidate
+      .toLowerCase()
+      .startsWith(`${normalizedPrefix.toLowerCase()}/`)
+  );
 }
 
 async function findSampleTrackFile(lidarrClient) {
@@ -97,44 +107,9 @@ async function findSampleTrackFile(lidarrClient) {
   return null;
 }
 
-async function tryApplyDetectedMappings({
-  rootPaths,
-  samplePath,
-  autoApplyMappings,
-}) {
-  const externalPaths = [...rootPaths, samplePath].filter(Boolean);
-  if (!externalPaths.some(looksLikeExternalOnlyPath)) {
-    return { mappings: [], applied: false };
-  }
-
-  const detection = await detectPathMappings({
-    externalPaths: rootPaths,
-    samplePaths: samplePath ? [samplePath] : [],
-  });
-  if (!detection.verified || !detection.mappings.length) {
-    return { mappings: detection.mappings, applied: false, verified: false };
-  }
-
-  if (!autoApplyMappings) {
-    return { mappings: detection.mappings, applied: false, verified: true };
-  }
-
-  const currentSettings = dbOps.getSettings();
-  const mergedMappings = [
-    ...(Array.isArray(currentSettings.pathMappings) ? currentSettings.pathMappings : []),
-    ...detection.mappings,
-  ];
-  dbOps.updateSettings({
-    ...currentSettings,
-    pathMappings: mergedMappings,
-  });
-  return { mappings: detection.mappings, applied: true, verified: true };
-}
-
 export async function runLidarrLibraryAccessTest(lidarrClient, options = {}) {
   const shareDevice = options.pathsShareDevice || pathsShareDevice;
   const steps = [];
-  let appliedMappings = [];
 
   const connection = await lidarrClient.testConnection(true);
   if (!connection.connected) {
@@ -197,45 +172,17 @@ export async function runLidarrLibraryAccessTest(lidarrClient, options = {}) {
   const sample = await findSampleTrackFile(lidarrClient);
 
   if (unreadableRoots.length > 0) {
-    const mappingAttempt = await tryApplyDetectedMappings({
-      rootPaths,
-      samplePath: sample?.path || null,
-      autoApplyMappings: options.autoApplyMappings === true,
-    });
-    if (mappingAttempt.applied) {
-      appliedMappings = mappingAttempt.mappings;
-    }
-
-    const stillUnreadable = [];
-    for (const rootPath of unreadableRoots) {
-      if (!(await pathIsReadable(rootPath))) {
-        stillUnreadable.push(rootPath);
-      }
-    }
-
-    if (stillUnreadable.length > 0) {
-      const missingPath = stillUnreadable[0];
-      const usesHostPaths = looksLikeExternalOnlyPath(missingPath);
-      steps.push(
-        step("mount", "fail", "Aurral can see that folder in the container", {
-          detail: missingPath,
-          fix: usesHostPaths
-            ? `Lidarr reports ${missingPath}, but Aurral cannot read that path inside Docker. Mount the shared parent folder (for example N:/ServerFolders/Music:/music), then add a path mapping or run Test library access again to auto-detect it.`
-            : `Lidarr stores files at ${missingPath}, but Aurral cannot read that path. Mount the same host folder into your Aurral container at ${missingPath}, then recreate the Aurral container.`,
-          suggestedMappings: mappingAttempt.mappings,
-        }),
-      );
-      return { ok: false, steps, sample, suggestedMappings: mappingAttempt.mappings };
-    }
-
-    const mappingDetail = appliedMappings
-      .map((entry) => `${entry.remote} -> ${entry.local}`)
-      .join(", ");
+    const missingPath = unreadableRoots[0];
+    const usesHostPaths = looksLikeExternalOnlyPath(missingPath);
     steps.push(
-      step("mapping", "pass", "Path mapping applied for Lidarr files", {
-        detail: mappingDetail,
+      step("mount", "fail", "Aurral can see that folder in the container", {
+        detail: missingPath,
+        fix: usesHostPaths
+          ? `Lidarr reports ${missingPath}, but Aurral cannot read that path inside Docker. Mount the shared parent folder into Aurral, then add a manual Lidarr path mapping if the container paths differ.`
+          : `Lidarr stores files at ${missingPath}, but Aurral cannot read that path. Recommended fix: mount the same host root into Aurral and Lidarr at the same container path, such as /data.`,
       }),
     );
+    return { ok: false, steps, sample };
   }
 
   steps.push(
@@ -265,47 +212,20 @@ export async function runLidarrLibraryAccessTest(lidarrClient, options = {}) {
       steps,
       sample: null,
       partial: true,
-      appliedMappings,
     };
   }
 
   const readableSamplePath = await pathIsReadable(sample.path);
   if (!readableSamplePath) {
-    const mappingAttempt = await tryApplyDetectedMappings({
-      rootPaths,
-      samplePath: sample.path,
-      autoApplyMappings: options.autoApplyMappings === true,
-    });
-    if (mappingAttempt.applied) {
-      appliedMappings = mappingAttempt.mappings;
-    }
-    const retryReadable = await pathIsReadable(sample.path);
-    if (!retryReadable) {
-      steps.push(
-        step("file", "fail", "Aurral can read a downloaded track file", {
-          detail: sample.path,
-          fix: looksLikeExternalOnlyPath(sample.path)
-            ? "Lidarr reports a host path Aurral cannot read inside Docker. Add a path mapping under Settings → Playlists or run Test library access again to auto-detect it."
-            : "Lidarr reports this file path, but Aurral cannot read it. Check Docker mounts and folder permissions (PUID/PGID).",
-          suggestedMappings: mappingAttempt.mappings,
-        }),
-      );
-      return {
-        ok: false,
-        steps,
-        sample,
-        suggestedMappings: mappingAttempt.mappings,
-      };
-    }
-    if (mappingAttempt.applied) {
-      steps.push(
-        step("mapping", "pass", "Path mapping applied for Lidarr files", {
-          detail: mappingAttempt.mappings
-            .map((entry) => `${entry.remote} -> ${entry.local}`)
-            .join(", "),
-        }),
-      );
-    }
+    steps.push(
+      step("file", "fail", "Aurral can read a downloaded track file", {
+        detail: sample.path,
+        fix: looksLikeExternalOnlyPath(sample.path)
+          ? "Lidarr reports a host path Aurral cannot read inside Docker. Mount the parent folder into Aurral, then add a manual Lidarr path mapping under Settings → Downloads → Remote path mappings."
+          : "Lidarr reports this file path, but Aurral cannot read it. Check Docker mounts and folder permissions (PUID/PGID). If Lidarr and Aurral intentionally use different container paths, add a manual Lidarr path mapping.",
+      }),
+    );
+    return { ok: false, steps, sample };
   }
 
   const resolvedSamplePath =
@@ -314,12 +234,22 @@ export async function runLidarrLibraryAccessTest(lidarrClient, options = {}) {
     detail: resolvedSamplePath || sample.path,
   }));
 
+  if (!rootPaths.some((rootPath) => pathHasPrefix(sample.path, rootPath))) {
+    steps.push(
+      step("track-path", "warn", "Lidarr track path differs from root folder", {
+        detail: `${rootPaths.join(", ")} -> ${sample.path}`,
+        fix: "Aurral reuses the actual track file path Lidarr reports. If that path is readable, reuse can still work, but matching container paths are easier to support.",
+      }),
+    );
+  }
+
   const flowLibraryRoot = resolveWeeklyFlowRoot();
   const sharedFilesystem = await shareDevice(resolvedSamplePath || sample.path, flowLibraryRoot);
   if (sharedFilesystem) {
     steps.push(
       step("hardlink", "pass", "Lidarr and Aurral downloads share a filesystem", {
-        detail: "Playlist M3U files can reference Lidarr paths directly.",
+        detail:
+          "File moves stay on one filesystem. Navidrome still needs to scan every folder referenced by generated playlist files.",
       }),
     );
   } else {
@@ -345,6 +275,5 @@ export async function runLidarrLibraryAccessTest(lidarrClient, options = {}) {
       path: resolvedSamplePath || sample.path,
     },
     partial: !sharedFilesystem,
-    appliedMappings,
   };
 }

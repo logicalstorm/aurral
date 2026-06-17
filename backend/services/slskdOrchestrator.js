@@ -12,7 +12,7 @@ import {
   validateDownloadedTrack,
 } from "./weeklyFlowSoulseekMatcher.js";
 import { resolvePlaylistRoot } from "./playlistPaths.js";
-import { resolveLocalPath } from "./pathMappings.js";
+import { getPathMappings, resolveLocalPath } from "./pathMappings.js";
 import {
   buildSlskdRankingHistoryOptions,
   recordSlskdTransferOutcome,
@@ -467,8 +467,9 @@ function resolveTransferLocalPath(transferFilename, slskdRoot) {
   const raw = String(transferFilename || "").trim();
   if (!raw) return null;
   const normalized = raw.replace(/\\/g, path.sep);
+  const slskdMappings = getPathMappings("slskd");
   if (path.isAbsolute(normalized)) {
-    return path.resolve(resolveLocalPath(normalized));
+    return path.resolve(resolveLocalPath(normalized, slskdMappings));
   }
   const slskdBase = String(slskdRoot || "").trim();
   if (!slskdBase) return null;
@@ -1063,7 +1064,10 @@ async function handleFinalize(payload) {
   if (!job) return null;
   if (job.status === "failed" || job.status === "done") return null;
   const playlistRoot = resolvePlaylistRoot();
-  const slskdRoot = resolveLocalPath(await slskdClient.getDownloadDirectory());
+  const slskdRoot = resolveLocalPath(
+    await slskdClient.getDownloadDirectory(),
+    getPathMappings("slskd"),
+  );
   const destination = String(payload.destination || "").trim();
   const candidateIndex = Number(payload.candidateIndex || 0);
   const candidate =

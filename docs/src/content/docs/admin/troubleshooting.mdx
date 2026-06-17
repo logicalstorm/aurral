@@ -38,9 +38,9 @@ Symptoms include logs such as `Lidarr track exists but file is not accessible fr
 - Mount the parent host folder into Aurral, not separate mounts for library and downloads. Example: `N:/ServerFolders/Music:/music`.
 - Set **Settings → Downloads → Downloads folder** to a path under that mount, for example `/music/Aurral`, or set `DOWNLOAD_FOLDER=/music/Aurral` in compose.
 - After changing compose `volumes` or `environment`, recreate the container with `docker compose up -d --force-recreate`. A simple restart does not remount volumes or reload env vars.
-- Run **Settings → Library → Lidarr → Test library access** so Aurral can auto-detect path mappings.
-- If needed, set `PATH_MAPPINGS=N:/ServerFolders/Music|/music` in compose, or add mappings under **Settings → Downloads → Path mappings**. Compose `PATH_MAPPINGS` work at runtime but are not shown in the UI.
-- If Navidrome sees the files at a different path than Aurral, enable **Settings → Playback → Navidrome → Use Navidrome-visible paths in playlist files** or set `M3U_PATH_MODE=remote`.
+- Run **Settings → Library → Lidarr → Test library access** to see the exact path Aurral cannot read.
+- If needed, set `PATH_MAPPINGS=N:/ServerFolders/Music|/music` in compose, or add mappings under **Settings → Downloads → Advanced remote path mappings**. Compose `PATH_MAPPINGS` work at runtime but are not shown in the UI.
+- If Navidrome sees the files at a different path than Aurral, enable **Settings → Playback → Navidrome → Use Navidrome paths in M3U files** and add a Navidrome path mapping, or set `M3U_PATH_MODE=remote` plus `M3U_PATH_MAPPINGS`.
 - For NZBGet on Windows, set **Completed download path** in **Settings → Downloads → NZBGet** if Aurral cannot detect the folder automatically.
 
 See [Shared storage — Windows and mixed Docker setups](/getting-started/storage/#windows-and-mixed-docker-setups).
@@ -50,11 +50,11 @@ See [Shared storage — Windows and mixed Docker setups](/getting-started/storag
 Symptoms: flows or shared playlists appear in Navidrome after a scan, but playback fails or tracks are missing. Common on Windows when Aurral runs in Docker with path mappings and Navidrome runs natively.
 
 - Confirm **Test library access** passes in Lidarr settings (path mappings let Aurral read files).
-- Enable **Settings → Playback → Navidrome → Use Navidrome-visible paths in playlist files**, or set `M3U_PATH_MODE=remote` in compose and recreate the Aurral container.
+- Enable **Settings → Playback → Navidrome → Use Navidrome paths in M3U files** and add a Navidrome path mapping, or set `M3U_PATH_MODE=remote` plus `M3U_PATH_MAPPINGS` in compose and recreate the Aurral container.
 - Refresh playlists so `.m3u` files are rewritten (disable/re-enable a flow, edit a shared playlist, or trigger playlist ensure from the Playlists page).
 - Open a generated `.m3u` under `aurral-weekly-flow` and confirm track lines use paths Navidrome can open (for example `N:/ServerFolders/Music/...` on Windows, not `/music/...`).
 
-Leave **Use Navidrome-visible paths in playlist files** off when Navidrome is in Docker with the same mounts as Aurral.
+Leave **Use Navidrome paths in M3U files** off when Navidrome is in Docker with the same mounts as Aurral.
 
 See [Navidrome — Mixed Windows and Docker](/integrations/navidrome/#mixed-windows-and-docker-navidrome).
 
@@ -66,7 +66,7 @@ Symptoms: **Sync to Plex now** succeeds but playlists have no tracks, or the **A
 - If Plex and Aurral use different mounts, set **Settings → Playback → Plex → Plex downloads path** to the folder Plex sees (without `/aurral-weekly-flow`). Leave it blank when both services share the same path prefix.
 - Save settings, then run **Sync to Plex now** again. Initial music scans can take several minutes; Aurral runs background catch-up syncs while Plex indexes files.
 - Confirm flows have finished downloading tracks under `aurral-weekly-flow` before expecting Plex playlists to populate.
-- **Use Navidrome-visible paths in playlist files** under Navidrome does not apply to Plex.
+- **Use Navidrome paths in M3U files** under Navidrome does not apply to Plex.
 
 See [Plex integration](/integrations/plex/).
 

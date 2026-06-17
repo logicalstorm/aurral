@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Trash2 } from "lucide-react";
 import DownloadFolderField from "../../../components/DownloadFolderField";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
 import {
@@ -14,10 +14,25 @@ import {
 } from "./SettingsModalLayout";
 import { getProviderStatus } from "../utils/integrationStatus";
 import {
-  detectPathMappings,
   testNzbgetConnection,
   testSlskdConnection,
 } from "../../../utils/api";
+
+const PATH_MAPPING_SOURCE_OPTIONS = [
+  { value: "all", label: "All sources" },
+  { value: "lidarr", label: "Lidarr" },
+  { value: "slskd", label: "slskd" },
+  { value: "nzbget", label: "NZBGet" },
+];
+
+const PATH_MAPPING_SOURCE_VALUES = new Set(
+  PATH_MAPPING_SOURCE_OPTIONS.map((option) => option.value),
+);
+
+function normalizePathMappingSource(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return PATH_MAPPING_SOURCE_VALUES.has(normalized) ? normalized : "all";
+}
 
 function toNumber(value, fallback) {
   const next = parseInt(value, 10);
@@ -27,13 +42,16 @@ function toNumber(value, fallback) {
 function coercePathMappings(value) {
   if (!Array.isArray(value)) return [];
   return value.map((entry) => ({
+    source: normalizePathMappingSource(entry?.source),
     remote: String(entry?.remote || "").trim(),
     local: String(entry?.local || "").trim(),
   }));
 }
 
 function withDraftPathMappingRow(pathMappings) {
-  return pathMappings.length ? pathMappings : [{ remote: "", local: "" }];
+  return pathMappings.length
+    ? pathMappings
+    : [{ source: "all", remote: "", local: "" }];
 }
 
 const CLIENT_MODALS = {
@@ -53,8 +71,8 @@ export function SettingsDownloadClientsSection({
   const [activeModal, setActiveModal] = useState(null);
   const [testingSlskd, setTestingSlskd] = useState(false);
   const [testingNzbget, setTestingNzbget] = useState(false);
-  const [detectingMappings, setDetectingMappings] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showPathMappings, setShowPathMappings] = useState(false);
 
   const integrations = settings.integrations || {};
   const slskd = integrations.slskd || {};
@@ -67,6 +85,10 @@ export function SettingsDownloadClientsSection({
 
   const pathMappings = coercePathMappings(settings.pathMappings);
   const displayedPathMappings = withDraftPathMappingRow(pathMappings);
+  const hasSavedPathMappings = pathMappings.some(
+    (entry) => entry.remote || entry.local,
+  );
+  const pathMappingsVisible = showPathMappings || hasSavedPathMappings;
 
   const updateIntegration = (key, patch) =>
     updateSettings({
@@ -85,36 +107,6 @@ export function SettingsDownloadClientsSection({
       ...settings,
       pathMappings: coercePathMappings(nextMappings),
     });
-  };
-
-  const handleDetectPathMappings = async () => {
-    setDetectingMappings(true);
-    try {
-      const result = await detectPathMappings();
-      if (!result?.mappings?.length) {
-        showInfo(
-          "No path mapping was detected. Mount your shared music folder into Aurral first.",
-        );
-        return;
-      }
-      updatePathMappings(result.mappings);
-      if (result.verified) {
-        showSuccess("Detected a working path mapping. Save settings to keep it.");
-      } else {
-        showInfo(
-          "Detected a possible path mapping. Verify the local path, then save settings.",
-        );
-      }
-    } catch (error) {
-      showError(
-        error.response?.data?.message ||
-          error.response?.data?.error ||
-          error.message ||
-          "Path mapping detection failed",
-      );
-    } finally {
-      setDetectingMappings(false);
-    }
   };
 
   const handleTestNzbget = async () => {
@@ -206,84 +198,13 @@ export function SettingsDownloadClientsSection({
 
       <div className="settings-page__section">
         <div className="settings-page__section-intro">
-          <h3 className="settings-page__section-title">Remote path mappings</h3>
+          <h3 className="settings-page__section-title">Storage</h3>
           <p className="settings-page__section-note">
-            Translate paths reported by Lidarr or download clients into the
-            paths Aurral sees inside its container. Prefer the same shared mount
-            first; use mappings only when services see the same files at
-            different paths.
+            The supported setup is one shared host folder mounted into Aurral,
+            Lidarr, slskd, NZBGet, and your playback server at the same
+            container path, such as <code>/mnt/user/data:/data</code>.
           </p>
         </div>
-        <fieldset className="settings-page__fields">
-          {displayedPathMappings.map((mapping, index) => (
-            <div
-              className="settings-page__mapping-row"
-              key={`path-mapping-${index}`}
-            >
-              <div className="settings-page__field">
-                <label className="artist-field-label">Reported path</label>
-                <SettingsInput
-                  value={mapping.remote}
-                  placeholder="/data/media/music"
-                  onChange={(event) => {
-                    const nextMappings = [...displayedPathMappings];
-                    nextMappings[index] = {
-                      ...nextMappings[index],
-                      remote: event.target.value,
-                    };
-                    updatePathMappings(nextMappings);
-                  }}
-                />
-              </div>
-              <div className="settings-page__field">
-                <label className="artist-field-label">Aurral path</label>
-                <SettingsInput
-                  value={mapping.local}
-                  placeholder="/music"
-                  onChange={(event) => {
-                    const nextMappings = [...displayedPathMappings];
-                    nextMappings[index] = {
-                      ...nextMappings[index],
-                      local: event.target.value,
-                    };
-                    updatePathMappings(nextMappings);
-                  }}
-                />
-              </div>
-            </div>
-          ))}
-          <div className="settings-page__lidarr-access-row">
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() =>
-                updatePathMappings([
-                  ...displayedPathMappings,
-                  { remote: "", local: "" },
-                ])
-              }
-            >
-              Add mapping
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              disabled={detectingMappings}
-              onClick={handleDetectPathMappings}
-            >
-              {detectingMappings ? "Detecting..." : "Detect from Lidarr"}
-            </button>
-          </div>
-          <p className="settings-page__hint">
-            Example: Lidarr reports <code>/data/media/music</code>, but Aurral
-            reads that same folder at <code>/music</code>. Fill in both paths,
-            then save settings.
-          </p>
-        </fieldset>
-      </div>
-
-      <div className="settings-page__section">
-        <h3 className="settings-page__section-title">Storage</h3>
         <fieldset className="settings-page__fields">
           <div className="settings-page__field">
             <label className="artist-field-label" htmlFor="download-folder-path">
@@ -303,6 +224,136 @@ export function SettingsDownloadClientsSection({
             />
           </div>
         </fieldset>
+      </div>
+
+      <div className="settings-page__section">
+        <div className="settings-page__section-intro">
+          <h3 className="settings-page__section-title">
+            Advanced remote path mappings
+          </h3>
+          <p className="settings-page__section-note">
+            Only use mappings when another app reports a path Aurral cannot read
+            directly. Mappings do not mount folders; they only translate path
+            text after Docker has already exposed the folder to Aurral.
+          </p>
+        </div>
+        {!pathMappingsVisible ? (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setShowPathMappings(true)}
+          >
+            Show advanced mappings
+          </button>
+        ) : (
+          <fieldset className="settings-page__fields">
+            {displayedPathMappings.map((mapping, index) => (
+              <div
+                className="settings-page__mapping-row"
+                key={`path-mapping-${index}`}
+              >
+                <div className="settings-page__field">
+                  <label className="artist-field-label">Applies to</label>
+                  <SettingsSelect
+                    value={mapping.source}
+                    onChange={(event) => {
+                      const nextMappings = [...displayedPathMappings];
+                      nextMappings[index] = {
+                        ...nextMappings[index],
+                        source: event.target.value,
+                      };
+                      updatePathMappings(nextMappings);
+                    }}
+                  >
+                    {PATH_MAPPING_SOURCE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </SettingsSelect>
+                </div>
+                <div className="settings-page__field">
+                  <label className="artist-field-label">Reported path</label>
+                  <SettingsInput
+                    value={mapping.remote}
+                    placeholder="/data/media/music"
+                    onChange={(event) => {
+                      const nextMappings = [...displayedPathMappings];
+                      nextMappings[index] = {
+                        ...nextMappings[index],
+                        remote: event.target.value,
+                      };
+                      updatePathMappings(nextMappings);
+                    }}
+                  />
+                </div>
+                <div className="settings-page__field">
+                  <label className="artist-field-label">Aurral path</label>
+                  <DownloadFolderField
+                    id={`path-mapping-local-${index}`}
+                    value={mapping.local}
+                    autoApplySuggestion={false}
+                    createOnConfirm={false}
+                    onChange={(nextPath) => {
+                      const nextMappings = [...displayedPathMappings];
+                      nextMappings[index] = {
+                        ...nextMappings[index],
+                        local: nextPath,
+                      };
+                      updatePathMappings(nextMappings);
+                    }}
+                  />
+                </div>
+                <div className="settings-page__mapping-row-actions">
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-icon-square"
+                    aria-label="Remove path mapping"
+                    onClick={() => {
+                      updatePathMappings(
+                        displayedPathMappings.filter(
+                          (_entry, entryIndex) => entryIndex !== index,
+                        ),
+                      );
+                    }}
+                  >
+                    <Trash2 className="artist-icon-sm" aria-hidden />
+                  </button>
+                </div>
+              </div>
+            ))}
+            <div className="settings-page__lidarr-access-row">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() =>
+                  updatePathMappings([
+                    ...displayedPathMappings,
+                    { source: "all", remote: "", local: "" },
+                  ])
+                }
+              >
+                Add mapping
+              </button>
+              {!hasSavedPathMappings ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowPathMappings(false)}
+                >
+                  Hide mappings
+                </button>
+              ) : null}
+            </div>
+            <p className="settings-page__hint">
+              Example: Lidarr reports <code>/data/media/music</code>, but
+              Aurral reads that same folder at <code>/music</code>. Set
+              <strong> Applies to</strong> to Lidarr, reported path to{" "}
+              <code>/data/media/music</code>, and Aurral path to{" "}
+              <code>/music</code>.
+            </p>
+          </fieldset>
+        )}
       </div>
 
       {activeModal === CLIENT_MODALS.slskd && (

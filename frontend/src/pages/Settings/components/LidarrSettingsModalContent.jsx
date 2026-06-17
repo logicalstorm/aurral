@@ -38,7 +38,6 @@ export function LidarrSettingsModal({
   setTestingLidarr,
   applyingCommunityGuide,
   setShowCommunityGuideModal,
-  fetchSettings,
   showSuccess,
   showError,
   showInfo,
@@ -82,14 +81,6 @@ export function LidarrSettingsModal({
     try {
       const result = await testLidarrLibraryAccess(url, apiKey);
       setLidarrLibraryAccessResult(result);
-      if (result.appliedMappings?.length && fetchSettings) {
-        await fetchSettings();
-        showInfo(
-          `Applied path mapping: ${result.appliedMappings
-            .map((entry) => `${entry.remote} -> ${entry.local}`)
-            .join(", ")}`,
-        );
-      }
       if (result.ok) {
         if (result.partial) {
           showInfo(

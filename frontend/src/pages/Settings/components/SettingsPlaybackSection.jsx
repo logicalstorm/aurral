@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { CheckCircle, RefreshCw } from "lucide-react";
+import { CheckCircle, RefreshCw, Trash2 } from "lucide-react";
+import DownloadFolderField from "../../../components/DownloadFolderField";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
 import {
   IntegrationCard,
@@ -10,7 +11,6 @@ import {
   SettingsModalField,
   SettingsModalIntro,
   SettingsModalSection,
-  SettingsModalToggle,
 } from "./SettingsModalLayout";
 import {
   startPlexAuth,
@@ -22,6 +22,18 @@ import {
   testNavidromeOnboarding,
 } from "../../../utils/api";
 import { getConfiguredStatus } from "../utils/integrationStatus";
+
+function coerceNavidromePathMappings(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => ({
+    local: String(entry?.local || "").trim(),
+    remote: String(entry?.remote || "").trim(),
+  }));
+}
+
+function withDraftNavidromePathMappingRow(pathMappings) {
+  return pathMappings.length ? pathMappings : [{ local: "", remote: "" }];
+}
 
 export function SettingsPlaybackSection({
   settings,
@@ -38,6 +50,8 @@ export function SettingsPlaybackSection({
   const [testingNavidrome, setTestingNavidrome] = useState(false);
   const [syncingPlex, setSyncingPlex] = useState(false);
   const [plexServers, setPlexServers] = useState([]);
+  const [showNavidromePathMappings, setShowNavidromePathMappings] =
+    useState(false);
   const [browseOpen, setBrowseOpen] = useState(false);
   const [browseLoading, setBrowseLoading] = useState(false);
   const [browseState, setBrowseState] = useState({
@@ -51,6 +65,18 @@ export function SettingsPlaybackSection({
   const navidromeConfigured = Boolean(navidrome.url);
   const plexConfigured = Boolean(plex.token && plex.url);
   const plexToken = plex.token;
+  const navidromePathMappings = coerceNavidromePathMappings(
+    navidrome.pathMappings,
+  );
+  const displayedNavidromePathMappings =
+    withDraftNavidromePathMappingRow(navidromePathMappings);
+  const hasSavedNavidromePathMappings = navidromePathMappings.some(
+    (entry) => entry.local || entry.remote,
+  );
+  const navidromePathMappingsVisible =
+    navidrome.m3uPathMode === "remote" ||
+    showNavidromePathMappings ||
+    hasSavedNavidromePathMappings;
 
   const closeModal = () => {
     setActiveModal(null);
@@ -65,6 +91,12 @@ export function SettingsPlaybackSection({
         navidrome: { ...navidrome, ...patch },
       },
     });
+
+  const updateNavidromePathMappings = (nextMappings) => {
+    updateNavidrome({
+      pathMappings: coerceNavidromePathMappings(nextMappings),
+    });
+  };
 
   const updatePlex = (patch) =>
     updateSettings({
@@ -306,6 +338,151 @@ export function SettingsPlaybackSection({
         </div>
       </div>
 
+      <div className="settings-page__section">
+        <div className="settings-page__section-intro">
+          <h3 className="settings-page__section-title">
+            Navidrome playlist paths
+          </h3>
+          <p className="settings-page__section-note">
+            Only needed when Navidrome cannot open Aurral&apos;s container
+            paths, including native Navidrome or Docker containers with
+            different mounts.
+          </p>
+        </div>
+        <fieldset className="settings-page__fields">
+          <label className="artist-checkbox-label">
+            <input
+              type="checkbox"
+              className="artist-checkbox"
+              checked={navidrome.m3uPathMode === "remote"}
+              onChange={(event) =>
+                updateNavidrome({
+                  m3uPathMode: event.target.checked ? "remote" : "local",
+                })
+              }
+            />
+            <span className="settings-page__toggle-copy">
+              <span className="settings-page__download-row-title">
+                Use Navidrome paths in M3U files
+              </span>
+              <span className="settings-page__toggle-detail">
+                Generated playlists will use mapped paths that Navidrome can
+                open. Leave this off when Navidrome and Aurral share the same
+                container paths.
+              </span>
+            </span>
+          </label>
+
+          {!navidromePathMappingsVisible ? (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setShowNavidromePathMappings(true)}
+            >
+              Show Navidrome path mappings
+            </button>
+          ) : (
+            <>
+              {displayedNavidromePathMappings.map((mapping, index) => (
+                <div
+                  className="settings-page__mapping-row settings-page__mapping-row--navidrome"
+                  key={`navidrome-path-mapping-${index}`}
+                >
+                  <div className="settings-page__field">
+                    <label className="artist-field-label">Aurral path</label>
+                    <DownloadFolderField
+                      id={`navidrome-path-mapping-local-${index}`}
+                      value={mapping.local}
+                      autoApplySuggestion={false}
+                      createOnConfirm={false}
+                      onChange={(nextPath) => {
+                        const nextMappings = [
+                          ...displayedNavidromePathMappings,
+                        ];
+                        nextMappings[index] = {
+                          ...nextMappings[index],
+                          local: nextPath,
+                        };
+                        updateNavidromePathMappings(nextMappings);
+                      }}
+                    />
+                  </div>
+                  <div className="settings-page__field">
+                    <label className="artist-field-label">Navidrome path</label>
+                    <SettingsInput
+                      value={mapping.remote}
+                      placeholder="/music/aurral"
+                      onChange={(event) => {
+                        const nextMappings = [
+                          ...displayedNavidromePathMappings,
+                        ];
+                        nextMappings[index] = {
+                          ...nextMappings[index],
+                          remote: event.target.value,
+                        };
+                        updateNavidromePathMappings(nextMappings);
+                      }}
+                    />
+                  </div>
+                  <div className="settings-page__mapping-row-actions">
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-icon-square"
+                      aria-label="Remove Navidrome path mapping"
+                      onClick={() => {
+                        updateNavidromePathMappings(
+                          displayedNavidromePathMappings.filter(
+                            (_entry, entryIndex) => entryIndex !== index,
+                          ),
+                        );
+                      }}
+                    >
+                      <Trash2 className="artist-icon-sm" aria-hidden />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <div className="settings-page__integration-editor-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() =>
+                    updateNavidromePathMappings([
+                      ...displayedNavidromePathMappings,
+                      { local: "", remote: "" },
+                    ])
+                  }
+                >
+                  Add mapping
+                </button>
+                {!hasSavedNavidromePathMappings &&
+                navidrome.m3uPathMode !== "remote" ? (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setShowNavidromePathMappings(false)}
+                  >
+                    Hide mappings
+                  </button>
+                ) : null}
+              </div>
+              <p className="settings-page__hint">
+                These mappings only change track lines in generated{" "}
+                <code>.m3u</code> files. They do not help Aurral read files
+                reported by Lidarr, slskd, or NZBGet.
+              </p>
+            </>
+          )}
+
+          <p className="settings-page__hint">
+            When using Weekly Flow: set Navidrome&apos;s{" "}
+            <code>Scanner.PurgeMissing</code> to <code>always</code> or{" "}
+            <code>full</code> (e.g. <code>ND_SCANNER_PURGEMISSING=always</code>)
+            so turning off a flow removes those tracks from the library.
+          </p>
+        </fieldset>
+      </div>
+
       {activeModal === "navidrome" && (
         <SettingsIntegrationModal
           title="Subsonic / Navidrome"
@@ -358,30 +535,6 @@ export function SettingsPlaybackSection({
                 }
               />
             </SettingsModalField>
-          </SettingsModalSection>
-
-          <SettingsModalSection title="Playlists">
-            <SettingsModalToggle
-              label="Use Navidrome-visible paths in playlist files"
-              checked={navidrome.m3uPathMode === "remote"}
-              onChange={(event) =>
-                updateNavidrome({
-                  m3uPathMode: event.target.checked ? "remote" : "local",
-                })
-              }
-            />
-            <p className="settings-modal__hint">
-              Enable when Navidrome cannot open Aurral&apos;s container paths,
-              including native Navidrome or Docker containers with different
-              mounts. Playlist M3U files will use mapped paths such as{" "}
-              <code>/data/media/music/...</code> or <code>N:\Music\...</code>.
-            </p>
-            <p className="settings-modal__hint">
-              When using Weekly Flow: set Navidrome&apos;s{" "}
-              <code>Scanner.PurgeMissing</code> to <code>always</code> or{" "}
-              <code>full</code> (e.g. <code>ND_SCANNER_PURGEMISSING=always</code>)
-              so turning off a flow removes those tracks from the library.
-            </p>
           </SettingsModalSection>
         </SettingsIntegrationModal>
       )}

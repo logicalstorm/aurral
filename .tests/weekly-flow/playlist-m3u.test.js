@@ -19,24 +19,29 @@ const [
   trackerModule,
   configModule,
   m3uModule,
+  m3uPathsModule,
   { WeeklyFlowPlaylistManager },
 ] = await Promise.all([
   importFromRepo("backend/config/db-sqlite.js"),
   importFromRepo("backend/services/weeklyFlowDownloadTracker.js"),
   importFromRepo("backend/services/weeklyFlowPlaylistConfig.js"),
   importFromRepo("backend/services/playlistM3u.js"),
+  importFromRepo("backend/services/playlistM3uPaths.js"),
   importFromRepo("backend/services/weeklyFlowPlaylistManager.js"),
 ]);
 
 const { downloadTracker } = trackerModule;
 const { flowPlaylistConfig } = configModule;
 const { buildM3uContent, collectPlaylistM3uEntries } = m3uModule;
+const { syncM3uPathMappings } = m3uPathsModule;
 
 const weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER;
 
 test.beforeEach(async () => {
   await resetDatabase(db);
   downloadTracker.clearAll();
+  syncM3uPathMappings([]);
+  delete process.env.M3U_PATH_MAPPINGS;
   await fs.rm(weeklyFlowRoot, { recursive: true, force: true });
 });
 
@@ -139,14 +144,50 @@ test("collectPlaylistM3uEntries uses stored external paths in remote mode", asyn
   );
 });
 
-test("collectPlaylistM3uEntries inverts path mappings in remote mode", async () => {
+test("collectPlaylistM3uEntries uses Navidrome path mappings in remote mode", async () => {
+  const mappedRoot = path.join(weeklyFlowRoot, "navidrome-local");
+  const localPath = path.join(
+    mappedRoot,
+    "Aurral",
+    "Mapped",
+    "Artist",
+    "Song.flac",
+  );
+  const playlist = flowPlaylistConfig.createSharedPlaylist({
+    name: "Navidrome Mapped",
+    tracks: [{ artistName: "Artist", trackName: "Song", albumName: "Album" }],
+  });
+  await fs.mkdir(path.dirname(localPath), { recursive: true });
+  await fs.writeFile(localPath, "audio");
+  const jobId = downloadTracker.addJob(playlist.tracks[0], playlist.id);
+  downloadTracker.setDone(jobId, localPath, "Album");
+  syncM3uPathMappings([
+    {
+      local: mappedRoot,
+      remote: "/music/aurral",
+    },
+  ]);
+
+  const entries = await collectPlaylistM3uEntries(playlist.id, {
+    weeklyFlowRoot,
+    m3uPathMode: "remote",
+  });
+
+  assert.equal(entries.length, 1);
+  assert.equal(
+    entries[0].path,
+    "/music/aurral/Aurral/Mapped/Artist/Song.flac",
+  );
+});
+
+test("collectPlaylistM3uEntries falls back to path mappings in remote mode", async () => {
   const previousMappings = process.env.PATH_MAPPINGS;
   const mappedRoot = path.join(weeklyFlowRoot, "mapped-root");
   const localPath = path.join(mappedRoot, "Aurral", "Mapped", "Artist", "Song.flac");
   process.env.PATH_MAPPINGS = `N:/ServerFolders/Music|${mappedRoot}`;
 
   const playlist = flowPlaylistConfig.createSharedPlaylist({
-    name: "Mapped",
+    name: "Fallback Mapped",
     tracks: [{ artistName: "Artist", trackName: "Song", albumName: "Album" }],
   });
   await fs.mkdir(path.dirname(localPath), { recursive: true });

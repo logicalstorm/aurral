@@ -96,18 +96,25 @@ test("runLidarrLibraryAccessTest passes when a track file is readable", async ()
   );
 });
 
-test("runLidarrLibraryAccessTest shows translated root path when mapping is used", async () => {
+test("runLidarrLibraryAccessTest shows translated root path when manual Lidarr mapping is used", async () => {
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "aurral-lidarr-map-"));
   const musicRoot = path.join(rootDir, "music");
   await fs.mkdir(musicRoot, { recursive: true });
 
-  const reportedRoot = `/data/media${musicRoot}`;
+  const previousMappings = process.env.PATH_MAPPINGS;
+  const reportedRoot = "/data/media/music";
+  process.env.PATH_MAPPINGS = `lidarr|${reportedRoot}|${musicRoot}`;
   const result = await runLidarrLibraryAccessTest(
     createMockLidarrClient({
       rootPath: reportedRoot,
     }),
   );
 
+  if (previousMappings === undefined) {
+    delete process.env.PATH_MAPPINGS;
+  } else {
+    process.env.PATH_MAPPINGS = previousMappings;
+  }
   await fs.rm(rootDir, { recursive: true, force: true });
 
   const mountStep = result.steps.find((step) => step.id === "mount");

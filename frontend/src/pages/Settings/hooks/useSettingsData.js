@@ -27,7 +27,13 @@ const defaultSettings = {
   quality: "standard",
   releaseTypes: allReleaseTypes,
   integrations: {
-    navidrome: { url: "", username: "", password: "", m3uPathMode: "local" },
+    navidrome: {
+      url: "",
+      username: "",
+      password: "",
+      m3uPathMode: "local",
+      pathMappings: [],
+    },
     plex: {
       url: "",
       token: "",

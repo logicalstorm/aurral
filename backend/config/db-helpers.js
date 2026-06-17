@@ -17,7 +17,12 @@ import {
   normalizePathMappings,
   syncPathMappings,
 } from "../services/pathMappings.js";
-import { normalizeM3uPathMode, syncM3uPathMode } from "../services/playlistM3uPaths.js";
+import {
+  normalizeM3uPathMappings,
+  normalizeM3uPathMode,
+  syncM3uPathMappings,
+  syncM3uPathMode,
+} from "../services/playlistM3uPaths.js";
 
 const getSettingStmt = db.prepare("SELECT value FROM settings WHERE key = ?");
 const upsertSettingStmt = db.prepare(
@@ -521,8 +526,12 @@ export const dbOps = {
       result.integrations.navidrome.m3uPathMode = normalizeM3uPathMode(
         result.integrations.navidrome.m3uPathMode,
       );
+      result.integrations.navidrome.pathMappings = normalizeM3uPathMappings(
+        result.integrations.navidrome.pathMappings,
+      );
     }
     syncM3uPathMode(result.integrations?.navidrome?.m3uPathMode);
+    syncM3uPathMappings(result.integrations?.navidrome?.pathMappings);
     settingsCache = result;
     settingsCacheTime = Date.now();
     return result;
@@ -545,6 +554,17 @@ export const dbOps = {
         ) {
           nextIntegrations.soulseek = existingIntegrations.soulseek;
         }
+        if (nextIntegrations.navidrome) {
+          nextIntegrations.navidrome = {
+            ...nextIntegrations.navidrome,
+            m3uPathMode: normalizeM3uPathMode(
+              nextIntegrations.navidrome.m3uPathMode,
+            ),
+            pathMappings: normalizeM3uPathMappings(
+              nextIntegrations.navidrome.pathMappings,
+            ),
+          };
+        }
         upsertSettingStmt.run(
           "integrations",
           dbHelpers.stringifyJSON(
@@ -552,6 +572,7 @@ export const dbOps = {
           )
         );
         syncM3uPathMode(nextIntegrations?.navidrome?.m3uPathMode);
+        syncM3uPathMappings(nextIntegrations?.navidrome?.pathMappings);
       }
       if (settings.quality) {
         upsertSettingStmt.run("quality", settings.quality);

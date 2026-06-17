@@ -12,6 +12,7 @@ function normalizeConfirmedPath(pathValue, browsePath) {
 
 export default function DownloadFolderPickerModal({
   initialPath = "",
+  createOnConfirm = true,
   onConfirm,
   onCancel,
 }) {
@@ -124,6 +125,10 @@ export default function DownloadFolderPickerModal({
 
   const handleConfirm = async () => {
     const target = normalizeConfirmedPath(pathInput, browsePath);
+    if (!createOnConfirm) {
+      onConfirm?.(target);
+      return;
+    }
     const ensuredPath = await ensureDirectory(target);
     if (ensuredPath) {
       onConfirm?.(ensuredPath);
@@ -233,6 +238,7 @@ export default function DownloadFolderPickerModal({
 
 DownloadFolderPickerModal.propTypes = {
   initialPath: PropTypes.string,
+  createOnConfirm: PropTypes.bool,
   onConfirm: PropTypes.func.isRequired,
   onCancel: PropTypes.func.isRequired,
 };

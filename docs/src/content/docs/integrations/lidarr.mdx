@@ -20,9 +20,9 @@ During onboarding or in **Settings → Library → Lidarr**, provide:
 
 Aurral tests that it can read files at the paths Lidarr reports. If this fails, confirm the shared `/data` mount described in [Shared storage](/getting-started/storage/).
 
-On mixed Windows and Docker setups, run **Test library access** to auto-detect path mappings. Aurral translates host paths such as `N:\Music\...` into mounted container paths such as `/music/Music/...`. You can review or edit mappings under **Settings → Downloads → Path mappings**.
+On mixed Windows and Docker setups, **Test library access** shows the exact path Lidarr reports. If that folder is mounted at a different path inside Aurral, add a manual mapping under **Settings → Downloads → Advanced remote path mappings**. Aurral can then translate host paths such as `N:\Music\...` into mounted container paths such as `/music/Music/...`.
 
-Path mappings apply to Aurral reading files. If Navidrome sees the same files at a different path, enable **Use Navidrome-visible paths in playlist files** under **Settings → Playback → Navidrome** so M3U playlists use paths Navidrome can open. See [Navidrome](/integrations/navidrome/#mixed-windows-and-docker-navidrome).
+Path mappings apply to Aurral reading files. If Navidrome sees the same files at a different path, enable **Use Navidrome paths in M3U files** under **Settings → Playback → Navidrome** and add a Navidrome path mapping so M3U playlists use paths Navidrome can open. See [Navidrome](/integrations/navidrome/#mixed-windows-and-docker-navidrome).
 
 ## Safety
 

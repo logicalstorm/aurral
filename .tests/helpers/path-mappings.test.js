@@ -1,14 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import fs from "fs/promises";
-import { realpathSync } from "fs";
-import os from "os";
 import path from "path";
 
 import {
-  detectPathMappings,
   getPathMappings,
-  inferPathMappings,
   looksLikeExternalOnlyPath,
   normalizePathMappings,
   parsePathMappingsEnv,
@@ -39,104 +34,65 @@ test("resolveLocalPath leaves already-local paths unchanged when no mapping matc
   );
 });
 
-test("inferPathMappings derives a shared parent mapping", async () => {
-  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "aurral-path-map-"));
-  const musicRoot = path.join(rootDir, "Music");
-  await fs.mkdir(musicRoot, { recursive: true });
-
-  const mappings = inferPathMappings(
-    ["N:/ServerFolders/Music/Music"],
-    [rootDir],
-  );
-
-  await fs.rm(rootDir, { recursive: true, force: true });
-
-  assert.deepEqual(mappings, [
-    { remote: "N:/ServerFolders/Music", local: rootDir },
-  ]);
-});
-
-test("inferPathMappings preserves POSIX leading slash", async () => {
-  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "aurral-path-map-"));
-  const musicRoot = path.join(rootDir, "music");
-  await fs.mkdir(musicRoot, { recursive: true });
-
-  const mappings = inferPathMappings(
-    ["/data/media/music"],
-    [rootDir],
-  );
-
-  await fs.rm(rootDir, { recursive: true, force: true });
-
-  assert.deepEqual(mappings, [
-    { remote: "/data/media", local: rootDir },
-  ]);
-});
-
-test("inferPathMappings avoids filesystem-root local mappings", async () => {
-  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "aurral-root-map-"));
-  const localMusicRoot = path.join(rootDir, "music");
-  await fs.mkdir(localMusicRoot, { recursive: true });
-
-  const externalRoot = `/data/media${localMusicRoot}`;
-  const mappings = inferPathMappings([externalRoot], ["/"]);
-
-  await fs.rm(rootDir, { recursive: true, force: true });
-
-  assert.equal(mappings.length, 1);
-  assert.notEqual(mappings[0].local, path.resolve("/"));
-  assert.equal(mappings[0].remote.startsWith("/"), true);
-});
-
-test("detectPathMappings verifies a mapped sample file", async () => {
-  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "aurral-path-map-"));
-  const trackPath = path.join(rootDir, "Music", "Artist", "track.mp3");
-  await fs.mkdir(path.dirname(trackPath), { recursive: true });
-  await fs.writeFile(trackPath, "audio");
-
-  const detection = await detectPathMappings({
-    externalPaths: ["N:/ServerFolders/Music/Music"],
-    samplePaths: ["N:/ServerFolders/Music/Music/Artist/track.mp3"],
-    localRoots: [rootDir],
-  });
-
-  await fs.rm(rootDir, { recursive: true, force: true });
-
-  assert.equal(detection.verified, true);
-  assert.equal(detection.mappings.length, 1);
-  assert.equal(
-    detection.sampleLocalPath,
-    path.resolve(rootDir, "Music", "Artist", "track.mp3"),
-  );
-});
-
 test("parsePathMappingsEnv reads pipe-separated mappings", () => {
   const previous = process.env.PATH_MAPPINGS;
   process.env.PATH_MAPPINGS = "N:/ServerFolders/Music|/music";
   assert.deepEqual(parsePathMappingsEnv(), [
-    { remote: "N:/ServerFolders/Music", local: path.resolve("/music") },
+    {
+      source: "all",
+      remote: "N:/ServerFolders/Music",
+      local: path.resolve("/music"),
+    },
   ]);
   if (previous === undefined) delete process.env.PATH_MAPPINGS;
   else process.env.PATH_MAPPINGS = previous;
 });
 
-test("resolveLocalPath suffix-walks mounted roots without saved mappings", async () => {
-  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "aurral-path-map-"));
-  const trackPath = path.join(rootDir, "Music", "Artist", "track.mp3");
-  await fs.mkdir(path.dirname(trackPath), { recursive: true });
-  await fs.writeFile(trackPath, "audio");
+test("parsePathMappingsEnv supports source-scoped mappings", () => {
+  const previous = process.env.PATH_MAPPINGS;
+  process.env.PATH_MAPPINGS =
+    "lidarr|N:/ServerFolders/Music|/music;slskd|/downloads|/data/downloads/slskd";
+  assert.deepEqual(parsePathMappingsEnv(), [
+    {
+      source: "lidarr",
+      remote: "N:/ServerFolders/Music",
+      local: path.resolve("/music"),
+    },
+    {
+      source: "slskd",
+      remote: "/downloads",
+      local: path.resolve("/data/downloads/slskd"),
+    },
+  ]);
+  if (previous === undefined) delete process.env.PATH_MAPPINGS;
+  else process.env.PATH_MAPPINGS = previous;
+});
 
-  const previousBrowseRoots = process.env.FILE_BROWSE_ROOTS;
-  process.env.FILE_BROWSE_ROOTS = rootDir;
+test("getPathMappings filters mappings by source while keeping all-source mappings", () => {
+  const previous = process.env.PATH_MAPPINGS;
+  process.env.PATH_MAPPINGS =
+    "/shared|/data;lidarr|N:/ServerFolders/Music|/music;slskd|/downloads|/data/downloads/slskd";
+  assert.deepEqual(getPathMappings("lidarr"), [
+    {
+      source: "lidarr",
+      remote: "N:/ServerFolders/Music",
+      local: path.resolve("/music"),
+    },
+    {
+      source: "all",
+      remote: "/shared",
+      local: path.resolve("/data"),
+    },
+  ]);
+  if (previous === undefined) delete process.env.PATH_MAPPINGS;
+  else process.env.PATH_MAPPINGS = previous;
+});
 
+test("resolveLocalPath requires direct access or an explicit mapping", () => {
   assert.equal(
-    realpathSync(resolveLocalPath("N:/ServerFolders/Music/Music/Artist/track.mp3", [])),
-    realpathSync(trackPath),
+    resolveLocalPath("N:/ServerFolders/Music/Music/Artist/track.mp3", []),
+    path.resolve("N:/ServerFolders/Music/Music/Artist/track.mp3"),
   );
-
-  if (previousBrowseRoots === undefined) delete process.env.FILE_BROWSE_ROOTS;
-  else process.env.FILE_BROWSE_ROOTS = previousBrowseRoots;
-  await fs.rm(rootDir, { recursive: true, force: true });
 });
 
 test("resolveRemotePath inverts a Windows prefix mapping", () => {

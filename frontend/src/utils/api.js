@@ -783,9 +783,6 @@ export const testLidarrConnection = (url, apiKey) =>
     params: lidarrCredentialParams(url, apiKey),
   });
 
-export const detectPathMappings = () =>
-  postData("/settings/path-mappings/detect");
-
 export const testLidarrLibraryAccess = (url, apiKey) =>
   getData("/settings/lidarr/test-library-access", {
     params: lidarrCredentialParams(url, apiKey),

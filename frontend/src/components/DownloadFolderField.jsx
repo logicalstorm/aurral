@@ -9,6 +9,7 @@ export default function DownloadFolderField({
   onChange,
   disabled = false,
   autoApplySuggestion = true,
+  createOnConfirm = true,
   id,
   helperText = "",
 }) {
@@ -23,9 +24,7 @@ export default function DownloadFolderField({
 
   useEffect(() => {
     const nextValue = String(value || "").trim();
-    if (nextValue) {
-      setDraft(nextValue);
-    }
+    setDraft(nextValue);
   }, [value]);
 
   useEffect(() => {
@@ -97,6 +96,7 @@ export default function DownloadFolderField({
       {showPicker ? (
         <DownloadFolderPickerModal
           initialPath={draft || value}
+          createOnConfirm={createOnConfirm}
           onConfirm={(path) => {
             commitDraft(path);
             setShowPicker(false);
@@ -113,6 +113,7 @@ DownloadFolderField.propTypes = {
   onChange: PropTypes.func,
   disabled: PropTypes.bool,
   autoApplySuggestion: PropTypes.bool,
+  createOnConfirm: PropTypes.bool,
   id: PropTypes.string,
   helperText: PropTypes.string,
 };

@@ -7,7 +7,7 @@ import {
   remapLegacyWeeklyFlowPath,
   resolveWeeklyFlowRoot,
 } from "./weeklyFlowPaths.js";
-import { resolveLocalPath } from "./pathMappings.js";
+import { getPathMappings, resolveLocalPath } from "./pathMappings.js";
 
 export const EXISTING_FILE_MODES = new Set(["download", "reuse"]);
 const LEGACY_REUSE_MODES = new Set(["hardlink", "copy"]);
@@ -231,7 +231,9 @@ async function findLidarrSource(track) {
     }
     const matchedTrack = findMatchingTrack(Array.isArray(tracks) ? tracks : [], track);
     if (!matchedTrack || matchedTrack.hasFile !== true || !matchedTrack.path) continue;
-    const sourcePath = path.resolve(resolveLocalPath(matchedTrack.path));
+    const sourcePath = path.resolve(
+      resolveLocalPath(matchedTrack.path, getPathMappings("lidarr")),
+    );
     if (!(await fileExists(sourcePath))) {
       console.warn(
         `[WeeklyFlowReuse] Lidarr track exists but file is not accessible from Aurral: ${matchedTrack.path}`,

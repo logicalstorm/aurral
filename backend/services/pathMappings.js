@@ -1,9 +1,8 @@
 import fs from "fs";
 import path from "path";
-import { getFilesystemBrowseRoots } from "./downloadFolderConfig.js";
-import { resolvePlaylistRoot } from "./playlistPaths.js";
 
 let storedPathMappings = [];
+const PATH_MAPPING_SOURCES = new Set(["all", "lidarr", "slskd", "nzbget"]);
 
 export function syncPathMappings(value) {
   storedPathMappings = normalizePathMappings(value);
@@ -16,12 +15,22 @@ function normalizePathSeparators(value) {
     .replace(/\/+$/, "");
 }
 
+export function normalizePathMappingSource(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return PATH_MAPPING_SOURCES.has(normalized) ? normalized : "all";
+}
+
+function isExplicitPathMappingSource(value) {
+  return PATH_MAPPING_SOURCES.has(String(value || "").trim().toLowerCase());
+}
+
 function normalizePathMappingEntry(entry) {
+  const source = normalizePathMappingSource(entry?.source);
   const remote = normalizePathSeparators(entry?.remote);
   const localRaw = String(entry?.local || "").trim();
   if (!remote || !localRaw) return null;
   const local = path.resolve(localRaw);
-  return { remote, local };
+  return { source, remote, local };
 }
 
 export function normalizePathMappings(value) {
@@ -31,12 +40,21 @@ export function normalizePathMappings(value) {
   for (const entry of value) {
     const normalized = normalizePathMappingEntry(entry);
     if (!normalized) continue;
-    const key = `${normalized.remote.toLowerCase()}\0${normalized.local}`;
+    const key = `${normalized.source}\0${normalized.remote.toLowerCase()}\0${normalized.local}`;
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(normalized);
   }
-  return result.sort((left, right) => right.remote.length - left.remote.length);
+  return result.sort((left, right) => {
+    const lengthDiff = right.remote.length - left.remote.length;
+    if (lengthDiff !== 0) return lengthDiff;
+    if (left.source !== right.source) {
+      if (left.source === "all") return 1;
+      if (right.source === "all") return -1;
+      return left.source.localeCompare(right.source);
+    }
+    return left.remote.localeCompare(right.remote);
+  });
 }
 
 export function parsePathMappingsEnv() {
@@ -48,35 +66,38 @@ export function parsePathMappingsEnv() {
       .map((segment) => {
         const pipe = segment.indexOf("|");
         if (pipe === -1) return null;
-        return {
-          remote: segment.slice(0, pipe).trim(),
-          local: segment.slice(pipe + 1).trim(),
-        };
+        const first = segment.slice(0, pipe).trim();
+        const rest = segment.slice(pipe + 1);
+        if (isExplicitPathMappingSource(first)) {
+          const secondPipe = rest.indexOf("|");
+          if (secondPipe === -1) return null;
+          return {
+            source: first,
+            remote: rest.slice(0, secondPipe).trim(),
+            local: rest.slice(secondPipe + 1).trim(),
+          };
+        }
+        return { source: "all", remote: first, local: rest.trim() };
       })
       .filter(Boolean),
   );
 }
 
-export function getPathMappings() {
-  return normalizePathMappings([...storedPathMappings, ...parsePathMappingsEnv()]);
+export function getPathMappings(source = null) {
+  const mappings = normalizePathMappings([
+    ...storedPathMappings,
+    ...parsePathMappingsEnv(),
+  ]);
+  if (!source) return mappings;
+  const normalizedSource = normalizePathMappingSource(source);
+  return mappings.filter(
+    (entry) => entry.source === "all" || entry.source === normalizedSource,
+  );
 }
 
 export function looksLikeExternalOnlyPath(value) {
   const trimmed = String(value || "").trim();
   return /^[A-Za-z]:[\\/]/.test(trimmed) || /^\\\\/.test(trimmed);
-}
-
-function getLocalSearchRoots() {
-  const roots = new Set();
-  for (const entry of getFilesystemBrowseRoots()) {
-    const resolved = path.resolve(String(entry || "").trim());
-    if (resolved) roots.add(resolved);
-  }
-  try {
-    const playlistRoot = path.resolve(resolvePlaylistRoot());
-    if (playlistRoot) roots.add(playlistRoot);
-  } catch {}
-  return [...roots];
 }
 
 function pathExists(targetPath) {
@@ -85,37 +106,6 @@ function pathExists(targetPath) {
   } catch {
     return false;
   }
-}
-
-function isLocalFilesystemRoot(localRoot) {
-  const resolved = path.resolve(String(localRoot || ""));
-  return resolved === path.parse(resolved).root;
-}
-
-function buildRemotePrefix(normalizedExternalPath, parts, endIndex) {
-  const prefix = parts.slice(0, endIndex).join("/");
-  if (!prefix) {
-    if (normalizedExternalPath.startsWith("//")) return "//";
-    return normalizedExternalPath.startsWith("/") ? "/" : "";
-  }
-  if (normalizedExternalPath.startsWith("//")) return `//${prefix}`;
-  if (normalizedExternalPath.startsWith("/")) return `/${prefix}`;
-  return prefix;
-}
-
-function resolveBySuffixWalk(externalPath, localRoots = getLocalSearchRoots()) {
-  const parts = normalizePathSeparators(externalPath).split("/").filter(Boolean);
-  if (parts.length < 2) return null;
-
-  for (const base of localRoots) {
-    for (let index = 1; index < parts.length; index += 1) {
-      const candidate = path.join(base, ...parts.slice(index));
-      if (pathExists(candidate)) {
-        return candidate;
-      }
-    }
-  }
-  return null;
 }
 
 function pathMatchesPrefix(candidate, prefix) {
@@ -149,11 +139,6 @@ export function resolveLocalPath(externalPath, mappings = getPathMappings()) {
       : path.resolve(mapping.local);
   }
 
-  const suffixResolved = resolveBySuffixWalk(raw);
-  if (suffixResolved) {
-    return suffixResolved;
-  }
-
   return resolvedRaw;
 }
 
@@ -177,58 +162,6 @@ export function resolveRemotePath(localPath, mappings = getPathMappings()) {
   return resolved;
 }
 
-export function inferPathMappingForExternalPath(externalPath, localRoots) {
-  const norm = normalizePathSeparators(externalPath);
-  const parts = norm.split("/").filter(Boolean);
-  if (parts.length < 2) return null;
-
-  const roots = (Array.isArray(localRoots) ? localRoots : [])
-    .map((entry) => path.resolve(String(entry || "").trim()))
-    .filter(Boolean);
-  if (!roots.length) return null;
-
-  for (const localRoot of roots) {
-    for (let index = parts.length - 1; index >= 1; index -= 1) {
-      const suffixParts = parts.slice(index);
-      const localCandidate = path.join(localRoot, ...suffixParts);
-      try {
-        if (fs.existsSync(localCandidate)) {
-          const rootOnlyMatch = isLocalFilesystemRoot(localRoot);
-          const remoteEndIndex = rootOnlyMatch
-            ? Math.min(index + 1, parts.length)
-            : index;
-          const localBase = rootOnlyMatch
-            ? path.join(localRoot, suffixParts[0])
-            : localRoot;
-          return {
-            remote: buildRemotePrefix(norm, parts, remoteEndIndex),
-            local: localBase,
-          };
-        }
-      } catch {}
-    }
-  }
-
-  return null;
-}
-
-export function inferPathMappings(externalPaths, localRoots = getFilesystemBrowseRoots()) {
-  const mappings = [];
-  const seen = new Set();
-  for (const externalPath of externalPaths) {
-    const trimmed = String(externalPath || "").trim();
-    if (!trimmed) continue;
-    if (pathExists(path.resolve(trimmed))) continue;
-    const inferred = inferPathMappingForExternalPath(trimmed, localRoots);
-    if (!inferred) continue;
-    const key = inferred.remote.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    mappings.push(inferred);
-  }
-  return normalizePathMappings(mappings);
-}
-
 export async function verifyMappedPath(externalPath, mappings = getPathMappings()) {
   const localPath = resolveLocalPath(externalPath, mappings);
   try {
@@ -237,29 +170,4 @@ export async function verifyMappedPath(externalPath, mappings = getPathMappings(
   } catch {
     return { ok: false, localPath };
   }
-}
-
-export async function detectPathMappings({
-  externalPaths = [],
-  samplePaths = [],
-  localRoots = getFilesystemBrowseRoots(),
-} = {}) {
-  const inferred = inferPathMappings(externalPaths, localRoots);
-  if (!inferred.length) {
-    return { mappings: [], verified: false };
-  }
-
-  const samples = [...samplePaths, ...externalPaths].filter(Boolean);
-  if (!samples.length) {
-    return { mappings: inferred, verified: false };
-  }
-
-  for (const samplePath of samples) {
-    const result = await verifyMappedPath(samplePath, inferred);
-    if (result.ok) {
-      return { mappings: inferred, verified: true, sampleLocalPath: result.localPath };
-    }
-  }
-
-  return { mappings: inferred, verified: false };
 }

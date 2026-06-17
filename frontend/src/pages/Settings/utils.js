@@ -85,6 +85,11 @@ export const normalizeSettings = (savedSettings) => {
           savedSettings.integrations?.navidrome?.m3uPathMode === "remote"
             ? "remote"
             : "local",
+        pathMappings: Array.isArray(
+          savedSettings.integrations?.navidrome?.pathMappings,
+        )
+          ? savedSettings.integrations.navidrome.pathMappings
+          : [],
       },
       plex: {
         url: "",

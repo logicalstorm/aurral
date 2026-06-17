@@ -8550,8 +8550,20 @@ textarea {
 
 .settings-page__mapping-row {
   display: grid;
+  align-items: end;
   gap: 0.75rem;
   grid-template-columns: 1fr;
+}
+
+.settings-page__mapping-row--navidrome {
+  align-items: end;
+  grid-template-columns: 1fr;
+}
+
+.settings-page__mapping-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 @media (max-width: 640px) {
@@ -8578,7 +8590,11 @@ textarea {
   }
 
   .settings-page__mapping-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(8rem, 0.75fr) minmax(0, 1.2fr) minmax(0, 1.2fr) auto;
+  }
+
+  .settings-page__mapping-row--navidrome {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) auto;
   }
 }
 

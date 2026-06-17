@@ -14,7 +14,7 @@ import {
   selectRankedUsenetCandidates,
 } from "./weeklyFlowUsenetMatcher.js";
 import { resolvePlaylistRoot } from "./playlistPaths.js";
-import { resolveLocalPath } from "./pathMappings.js";
+import { getPathMappings, resolveLocalPath } from "./pathMappings.js";
 import {
   buildResolvedPlaylistTrack as buildResolvedTrack,
   commitImportToPlaylistLibrary,
@@ -124,10 +124,11 @@ async function findAudioFilesRecursive(root, depth = 0, matches = []) {
 function uniqueResolvedPaths(values) {
   const seen = new Set();
   const out = [];
+  const nzbgetMappings = getPathMappings("nzbget");
   for (const value of values) {
     const raw = String(value || "").trim();
     if (!raw) continue;
-    const resolved = path.resolve(resolveLocalPath(raw));
+    const resolved = path.resolve(resolveLocalPath(raw, nzbgetMappings));
     if (seen.has(resolved)) continue;
     seen.add(resolved);
     out.push(resolved);

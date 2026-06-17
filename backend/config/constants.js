@@ -178,7 +178,13 @@ export const defaultData = {
       "Demo",
     ],
     integrations: {
-      navidrome: { url: "", username: "", password: "", m3uPathMode: "local" },
+      navidrome: {
+        url: "",
+        username: "",
+        password: "",
+        m3uPathMode: "local",
+        pathMappings: [],
+      },
       plex: {
         url: "",
         token: "",
