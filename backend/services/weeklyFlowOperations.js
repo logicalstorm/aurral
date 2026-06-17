@@ -12,6 +12,7 @@ import {
   remapLegacyWeeklyFlowPath,
 } from "./weeklyFlowPaths.js";
 import {
+  dedupeSharedTracks,
   filterMissingSharedTracks,
   flowPlaylistConfig,
   normalizeSharedTrack,
@@ -74,6 +75,125 @@ const getPlaylistLibraryRoot = (playlistType) =>
     PLAYLIST_LIBRARY_DIR,
     String(playlistType || "").trim(),
   );
+
+const jobToSharedTrack = (job) =>
+  normalizeSharedTrack({
+    artistName: job?.artistName,
+    trackName: job?.trackName,
+    albumName: job?.albumName || null,
+    artistMbid: job?.artistMbid || null,
+    albumMbid: job?.albumMbid || null,
+    trackMbid: job?.trackMbid || null,
+    releaseYear: job?.releaseYear || null,
+    durationMs: job?.durationMs || null,
+    artistAliases: job?.artistAliases || [],
+    reason: job?.reason || null,
+  });
+
+const groupJobsByMembership = (jobs) => {
+  const groups = [];
+  for (const job of Array.isArray(jobs) ? jobs : []) {
+    let target = null;
+    for (const group of groups) {
+      if (tracksShareMembership(group[0], job)) {
+        target = group;
+        break;
+      }
+    }
+    if (target) {
+      target.push(job);
+    } else {
+      groups.push([job]);
+    }
+  }
+  return groups;
+};
+
+const sharedPlaylistTracksMatchJobs = (playlist, jobs) => {
+  const configTracks = dedupeSharedTracks(playlist?.tracks);
+  if (configTracks.length !== jobs.length) return false;
+  const unmatchedJobs = new Set(jobs.map((job) => job.id));
+  for (const track of configTracks) {
+    const match = jobs.find(
+      (job) => unmatchedJobs.has(job.id) && tracksShareMembership(job, track),
+    );
+    if (!match) return false;
+    unmatchedJobs.delete(match.id);
+  }
+  return unmatchedJobs.size === 0;
+};
+
+export async function reconcileSharedPlaylistJobs(playlistId) {
+  const safePlaylistId = String(playlistId || "").trim();
+  const playlist = flowPlaylistConfig.getSharedPlaylist(safePlaylistId);
+  if (!playlist) return { missing: true, changed: false };
+
+  const existingJobs = downloadTracker.getByPlaylistType(safePlaylistId);
+  const groups = groupJobsByMembership(existingJobs);
+  const keptJobs = [];
+  const removedJobIds = [];
+  const playlistRoot = getPlaylistLibraryRoot(safePlaylistId);
+
+  for (const group of groups) {
+    const [kept, ...dupes] = sortJobsForTrackReuse(group);
+    keptJobs.push(kept);
+    for (const dupe of dupes) {
+      if (dupe.status === "done" && typeof dupe.finalPath === "string") {
+        const keptPath =
+          kept?.status === "done" && typeof kept.finalPath === "string"
+            ? kept.finalPath
+            : null;
+        if (!keptPath || dupe.finalPath !== keptPath) {
+          const safeFinalPath = remapLegacyWeeklyFlowPath(
+            dupe.finalPath,
+            weeklyFlowWorker.weeklyFlowRoot,
+          );
+          if (isPathInsideRoot(safeFinalPath, playlistRoot)) {
+            await fs.rm(safeFinalPath, { force: true });
+          }
+        }
+      }
+      downloadTracker.removeJob(dupe.id);
+      removedJobIds.push(dupe.id);
+    }
+  }
+
+  const tracksFromJobs = keptJobs
+    .map((job) => jobToSharedTrack(job))
+    .filter(Boolean);
+  const configInSync = sharedPlaylistTracksMatchJobs(playlist, keptJobs);
+  const changed = removedJobIds.length > 0 || !configInSync;
+  let updatedPlaylist = playlist;
+  if (changed) {
+    updatedPlaylist = flowPlaylistConfig.updateSharedPlaylist(safePlaylistId, {
+      tracks: tracksFromJobs,
+    });
+    playlistManager.updateConfig(false);
+  }
+
+  return {
+    changed,
+    removedJobIds,
+    playlist: updatedPlaylist,
+    keptJobCount: keptJobs.length,
+  };
+}
+
+const syncSharedPlaylistConfigFromJobs = async (playlistId) => {
+  const safePlaylistId = String(playlistId || "").trim();
+  const playlist = flowPlaylistConfig.getSharedPlaylist(safePlaylistId);
+  if (!playlist) return null;
+  const jobs = downloadTracker.getByPlaylistType(safePlaylistId);
+  const tracksFromJobs = jobs.map((job) => jobToSharedTrack(job)).filter(Boolean);
+  if (sharedPlaylistTracksMatchJobs(playlist, jobs)) {
+    return playlist;
+  }
+  const updatedPlaylist = flowPlaylistConfig.updateSharedPlaylist(safePlaylistId, {
+    tracks: tracksFromJobs,
+  });
+  playlistManager.updateConfig(false);
+  return updatedPlaylist;
+};
 
 const reuseTracksForPlaylist = async (tracks, playlistId) => {
   const settings = weeklyFlowWorker.getWorkerSettings();
@@ -344,10 +464,10 @@ async function appendSharedPlaylistTracks({
           tracksToAdd,
         )
       : playlist;
-  const queued = await seedSharedPlaylistTracks(
-    safePlaylistId,
-    tracksToAdd.length > 0 ? tracksToAdd : tracks,
-  );
+  const queued =
+    tracksToAdd.length > 0
+      ? await seedSharedPlaylistTracks(safePlaylistId, tracksToAdd)
+      : { jobIds: [], reusedJobIds: [], tracksQueued: 0, tracksReused: 0 };
   return {
     success: true,
     playlist: updatedPlaylist,
@@ -469,33 +589,14 @@ async function deleteSharedPlaylistTrack({ playlistId, jobId } = {}) {
     { clearPending: false },
   );
   weeklyFlowWorker.pruneOrphanedJobState();
-
-  const nextTracks = Array.isArray(playlist.tracks) ? [...playlist.tracks] : [];
-  const trackIndex = nextTracks.findIndex((track) => {
-    if (!track || typeof track !== "object" || Array.isArray(track)) return false;
-    return (
-      String(track.artistName || "") === String(job.artistName || "") &&
-      String(track.trackName || "") === String(job.trackName || "") &&
-      String(track.albumName || "") === String(job.albumName || "") &&
-      String(track.reason || "") === String(job.reason || "") &&
-      String(track.artistMbid || "") === String(job.artistMbid || "") &&
-      String(track.albumMbid || "") === String(job.albumMbid || "") &&
-      String(track.trackMbid || "") === String(job.trackMbid || "") &&
-      String(track.releaseYear || "") === String(job.releaseYear || "")
-    );
-  });
-  if (trackIndex >= 0) {
-    nextTracks.splice(trackIndex, 1);
-  }
-  const updatedPlaylist = flowPlaylistConfig.updateSharedPlaylist(safePlaylistId, {
-    tracks: nextTracks,
-  });
+  const updatedPlaylist =
+    (await syncSharedPlaylistConfigFromJobs(safePlaylistId)) || playlist;
   playlistManager.updateConfig(false);
   await playlistManager.refreshPlaylist(safePlaylistId);
   await playlistManager.scheduleScanLibrary(true);
   return {
     success: true,
-    playlist: updatedPlaylist || playlist,
+    playlist: updatedPlaylist,
     removedJobId: safeJobId,
   };
 }

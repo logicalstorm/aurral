@@ -18,6 +18,7 @@ import { weeklyFlowOperationQueue } from "../services/weeklyFlowOperationQueue.j
 import {
   createWeeklyFlowOperationToken,
   markLatestWeeklyFlowOperationToken,
+  reconcileSharedPlaylistJobs,
 } from "../services/weeklyFlowOperations.js";
 import {
   restartWorkerIfPending as restartWorkerIfPendingWithLocks,
@@ -1161,10 +1162,15 @@ router.delete("/shared-playlists/:playlistId", async (req, res) => {
   }
 });
 
-router.get("/jobs/:flowId", (req, res) => {
+router.get("/jobs/:flowId", async (req, res) => {
   const { flowId } = req.params;
   if (!canAccessPlaylistType(req.user, flowId)) {
     return res.status(404).json({ error: "Playlist not found" });
+  }
+  if (flowPlaylistConfig.getSharedPlaylist(flowId)) {
+    try {
+      await reconcileSharedPlaylistJobs(flowId);
+    } catch {}
   }
   const rawLimit =
     req.query.limit == null ? "" : String(req.query.limit).trim();

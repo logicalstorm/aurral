@@ -20,6 +20,19 @@ export const getFlowDisplayTrackCount = (flow, stats, trackListLength = 0) => {
   );
 };
 
+export const getSharedPlaylistTrackCount = (
+  playlist,
+  stats,
+  trackListLength = 0,
+) => {
+  const fromJobs = Math.max(
+    flowNumber(trackListLength),
+    flowNumber(stats?.total),
+  );
+  if (fromJobs > 0) return fromJobs;
+  return flowNumber(playlist?.trackCount);
+};
+
 export const EMPTY_FLOW_STATS = {
   total: 0,
   done: 0,
@@ -44,7 +57,7 @@ export const getPlaylistDownloadProgressPct = (stats, trackCount = 0) => {
 };
 
 export const formatTrackCountLabel = (trackCount, stats) => {
-  const count = Math.max(flowNumber(trackCount), flowNumber(stats?.total));
+  const count = flowNumber(trackCount);
   const trackWord = count === 1 ? "track" : "tracks";
   const base = `${count} ${trackWord}`;
   const pct = getPlaylistDownloadProgressPct(stats, count);

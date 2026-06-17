@@ -18,7 +18,11 @@ import {
 } from "lucide-react";
 import PillToggle from "../../components/PillToggle";
 import { PlaylistArtworkThumb } from "../FlowPageComponents";
-import { formatTrackCountLabel, getFlowDisplayTrackCount } from "./flowStats";
+import {
+  formatTrackCountLabel,
+  getFlowDisplayTrackCount,
+  getSharedPlaylistTrackCount,
+} from "./flowStats";
 
 const MAIN_CONTENT_PORTAL_SELECTOR = ".app-main-wrap";
 const LIBRARY_CREATE_MENU_WIDTH = 296;
@@ -300,7 +304,7 @@ export function PlaylistLibraryItem({
   const trackCount =
     entry.kind === "flow"
       ? getFlowDisplayTrackCount(entry, stats)
-      : Number(entry.trackCount || 0);
+      : getSharedPlaylistTrackCount(entry, stats);
   const trackLabel = formatTrackCountLabel(trackCount, stats);
   const typeLabel =
     entry.kind === "flow"

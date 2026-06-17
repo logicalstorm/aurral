@@ -42,6 +42,7 @@ import {
   formatTrackCountLabel,
   formatFlowLastRun,
   getFlowDisplayTrackCount,
+  getSharedPlaylistTrackCount,
   isReleaseRadarFlow,
 } from "./flows/flowStats";
 import { getPlaylistRunActivity } from "./flows/flowRunActivity";
@@ -1207,10 +1208,10 @@ function FlowPage() {
         selectedTracks.length,
       );
     }
-    return Math.max(
-      Number(selectedPlaylist?.trackCount || 0),
+    return getSharedPlaylistTrackCount(
+      selectedPlaylist,
+      selectedStats,
       selectedTracks.length,
-      Number(selectedStats?.total || 0),
     );
   })();
   const selectedEntryTrackLabel = formatTrackCountLabel(

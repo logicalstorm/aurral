@@ -105,21 +105,33 @@ export function getWeeklyFlowStatusSnapshot({
   const flows = user
     ? flowPlaylistConfig.getFlowsForUser(user)
     : flowPlaylistConfig.getFlows();
-  const sharedPlaylists = (
-    user
-      ? flowPlaylistConfig.getSharedPlaylistsForUser(user)
-      : flowPlaylistConfig.getSharedPlaylists()
-  ).map((playlist) => ({
-    id: playlist.id,
-    name: playlist.name,
-    ownerUserId: playlist.ownerUserId ?? null,
-    sourceName: playlist.sourceName,
-    sourceFlowId: playlist.sourceFlowId,
-    importedAt: playlist.importedAt,
-    createdAt: playlist.createdAt,
-    trackCount: playlist.trackCount,
-    trackIdentities: collectPlaylistTrackIdentities(playlist.id),
-  }));
+  const rawSharedPlaylists = user
+    ? flowPlaylistConfig.getSharedPlaylistsForUser(user)
+    : flowPlaylistConfig.getSharedPlaylists();
+  const flowIds = flows.map((flow) => flow.id);
+  const sharedPlaylistIds = rawSharedPlaylists.map((playlist) => playlist.id);
+  const scopedStats = downloadTracker.getStatsByPlaylistType([
+    ...flowIds,
+    ...sharedPlaylistIds,
+  ]);
+  const sharedPlaylists = rawSharedPlaylists.map((playlist) => {
+    const playlistStats = scopedStats?.[playlist.id];
+    const jobTotal =
+      Number(playlistStats?.pending || 0) +
+      Number(playlistStats?.downloading || 0) +
+      Number(playlistStats?.done || 0);
+    return {
+      id: playlist.id,
+      name: playlist.name,
+      ownerUserId: playlist.ownerUserId ?? null,
+      sourceName: playlist.sourceName,
+      sourceFlowId: playlist.sourceFlowId,
+      importedAt: playlist.importedAt,
+      createdAt: playlist.createdAt,
+      trackCount: jobTotal > 0 ? jobTotal : playlist.trackCount,
+      trackIdentities: collectPlaylistTrackIdentities(playlist.id),
+    };
+  });
   const ownerMap = buildOwnerMap(flows, sharedPlaylists);
   const flowsWithOwners = flows.map((flow) => ({
     ...flow,
@@ -131,12 +143,6 @@ export function getWeeklyFlowStatusSnapshot({
     ownerUsername:
       ownerMap.get(Number(playlist?.ownerUserId)) || null,
   }));
-  const flowIds = flowsWithOwners.map((flow) => flow.id);
-  const sharedPlaylistIds = sharedPlaylistsWithOwners.map((playlist) => playlist.id);
-  const scopedStats = downloadTracker.getStatsByPlaylistType([
-    ...flowIds,
-    ...sharedPlaylistIds,
-  ]);
   const stats = aggregateStats(scopedStats, flowIds);
   const sharedStats = aggregateStats(scopedStats, sharedPlaylistIds);
   const nextRunMessage = formatNextRunMessage(flowsWithOwners);
