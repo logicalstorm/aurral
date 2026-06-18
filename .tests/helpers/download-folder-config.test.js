@@ -96,3 +96,26 @@ test("listBrowseDirectory only exposes directories within browse roots", async (
   if (previousRoots === undefined) delete process.env.FILE_BROWSE_ROOTS;
   else process.env.FILE_BROWSE_ROOTS = previousRoots;
 });
+
+test("getFilesystemBrowseRoots returns dedicated roots before filesystem root", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aurral-browse-roots-"));
+  const previousRoots = process.env.FILE_BROWSE_ROOTS;
+  const previousDownloadFolder = process.env.DOWNLOAD_FOLDER;
+  delete process.env.FILE_BROWSE_ROOTS;
+  process.env.DOWNLOAD_FOLDER = path.join(tempDir, "downloads", "tmp");
+  fs.mkdirSync(process.env.DOWNLOAD_FOLDER, { recursive: true });
+  const { getFilesystemBrowseRoots } = await import(
+    "../../backend/services/downloadFolderConfig.js"
+  );
+  const roots = getFilesystemBrowseRoots();
+  const downloadRoot = fs.realpathSync(process.env.DOWNLOAD_FOLDER);
+  assert.ok(roots.includes(downloadRoot), `roots=${roots.join(", ")}`);
+  assert.ok(
+    roots.some((root) => root !== path.resolve("/")),
+    "expected dedicated roots instead of only filesystem root",
+  );
+  if (previousRoots === undefined) delete process.env.FILE_BROWSE_ROOTS;
+  else process.env.FILE_BROWSE_ROOTS = previousRoots;
+  if (previousDownloadFolder === undefined) delete process.env.DOWNLOAD_FOLDER;
+  else process.env.DOWNLOAD_FOLDER = previousDownloadFolder;
+});

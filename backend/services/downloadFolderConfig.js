@@ -65,21 +65,30 @@ export function getFilesystemBrowseRoots() {
   if (configured.length) {
     return [...new Set(configured.map((entry) => fs.realpathSync(entry)))];
   }
-  if (isExistingDirectory("/")) {
-    return [path.resolve("/")];
-  }
+
   const roots = [];
   if (isExistingDirectory("/data")) {
     roots.push(fs.realpathSync("/data"));
   }
-  const defaultRoot = defaultPlaylistRoot();
+  const envDownloadFolder = resolveEnvDownloadFolder();
+  if (envDownloadFolder && isExistingDirectory(envDownloadFolder)) {
+    roots.push(fs.realpathSync(envDownloadFolder));
+  }
+  const defaultRoot = resolveDefaultPlaylistDownloadRoot();
   if (isExistingDirectory(defaultRoot)) {
     roots.push(fs.realpathSync(defaultRoot));
   }
   if (isExistingDirectory(process.cwd())) {
     roots.push(fs.realpathSync(process.cwd()));
   }
-  return [...new Set(roots)];
+  const uniqueRoots = [...new Set(roots)];
+  if (uniqueRoots.length) {
+    return uniqueRoots;
+  }
+  if (isExistingDirectory("/")) {
+    return [path.resolve("/")];
+  }
+  return [];
 }
 
 export function formatBrowseDisplayPath(pathValue) {

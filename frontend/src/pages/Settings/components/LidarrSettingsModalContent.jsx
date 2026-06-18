@@ -2,13 +2,10 @@ import { Link } from "react-router-dom";
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
-import { SettingsIntegrationModal } from "./SettingsIntegrationCards";
 import {
-  SettingsModalActions,
-  SettingsModalField,
-  SettingsModalSection,
-  SettingsModalToggle,
-} from "./SettingsModalLayout";
+  SettingsArrFieldSet,
+  SettingsArrFormGroup,
+} from "./arr/SettingsArrLayout";
 import {
   getLidarrMetadataProfiles,
   getLidarrProfiles,
@@ -16,8 +13,7 @@ import {
   testLidarrConnection,
 } from "../../../utils/api";
 
-export function LidarrSettingsModal({
-  onClose,
+export function LidarrSettingsSection({
   settings,
   updateSettings,
   health,
@@ -209,10 +205,10 @@ export function LidarrSettingsModal({
   };
 
   return (
-    <SettingsIntegrationModal
-      title="Lidarr"
-      onClose={onClose}
-      footerActions={
+    <>
+      <SettingsArrFieldSet
+        legend="Connection"
+        actions={
           <button
             type="button"
             onClick={handleTestLidarr}
@@ -221,15 +217,24 @@ export function LidarrSettingsModal({
               !settings.integrations?.lidarr?.url ||
               !settings.integrations?.lidarr?.apiKey
             }
-            className="btn btn-secondary"
+            className="arr-btn"
           >
             {testingLidarr ? "Testing..." : "Test connection"}
           </button>
-      }
-    >
-      <SettingsModalSection title="Connection">
-        <SettingsModalField label="Server URL">
+        }
+      >
+        <div className="arr-info">
+          Music library manager. File access, mounts, and path mappings are
+          checked in{" "}
+          <Link to="/settings/system" className="arr-link">
+            System
+          </Link>
+          .
+        </div>
+
+        <SettingsArrFormGroup label="Server URL" labelFor="lidarr-url">
           <SettingsInput
+            id="lidarr-url"
             type="url"
             placeholder="http://lidarr:8686"
             autoComplete="off"
@@ -239,10 +244,12 @@ export function LidarrSettingsModal({
               updateLidarr({ url: e.target.value });
             }}
           />
-        </SettingsModalField>
-        <SettingsModalField
+        </SettingsArrFormGroup>
+
+        <SettingsArrFormGroup
           label="API Key"
-          hint={
+          labelFor="lidarr-api-key"
+          help={
             <>
               Found in Settings &rarr; General &rarr; Security.
               {lidarrTestLatencyMs !== null && (
@@ -255,6 +262,7 @@ export function LidarrSettingsModal({
           }
         >
           <SettingsInput
+            id="lidarr-api-key"
             type="password"
             placeholder="Enter Lidarr API Key"
             autoComplete="off"
@@ -264,34 +272,31 @@ export function LidarrSettingsModal({
               updateLidarr({ apiKey: e.target.value });
             }}
           />
-        </SettingsModalField>
-        <SettingsModalField
+        </SettingsArrFormGroup>
+
+        <SettingsArrFormGroup
           label="External URL"
-          hint='Optional. Used only for browser-facing "View on Lidarr" links.'
+          labelFor="lidarr-external-url"
+          help='Optional. Used only for browser-facing "View on Lidarr" links.'
         >
           <SettingsInput
+            id="lidarr-external-url"
             type="url"
             placeholder="https://lidarr.example.com"
             autoComplete="off"
             value={settings.integrations?.lidarr?.externalUrl || ""}
             onChange={(e) => updateLidarr({ externalUrl: e.target.value })}
           />
-        </SettingsModalField>
-      </SettingsModalSection>
+        </SettingsArrFormGroup>
+      </SettingsArrFieldSet>
 
-      <SettingsModalSection title="Library files">
-        <p className="settings-modal__hint">
-          File access, mounts, and path mappings are checked in{" "}
-          <Link to="/settings/system" className="settings-page__link">
-            Settings → System
-          </Link>
-          .
-        </p>
-      </SettingsModalSection>
-
-      <SettingsModalSection title="Defaults">
-        <SettingsModalField label="Default Quality Profile">
+      <SettingsArrFieldSet legend="Defaults">
+        <SettingsArrFormGroup
+          label="Default Quality Profile"
+          labelFor="lidarr-quality-profile"
+        >
           <SettingsSelect
+            id="lidarr-quality-profile"
             value={
               settings.integrations?.lidarr?.qualityProfileId
                 ? String(settings.integrations.lidarr.qualityProfileId)
@@ -319,7 +324,7 @@ export function LidarrSettingsModal({
               </option>
             ))}
           </SettingsSelect>
-          <SettingsModalActions>
+          <div className="arr-form-control-actions">
             <button
               type="button"
               onClick={handleRefreshProfiles}
@@ -328,7 +333,7 @@ export function LidarrSettingsModal({
                 !settings.integrations?.lidarr?.url ||
                 !settings.integrations?.lidarr?.apiKey
               }
-              className="btn btn-secondary"
+              className="arr-btn"
             >
               <RefreshCw
                 className={`artist-icon-sm${
@@ -337,10 +342,15 @@ export function LidarrSettingsModal({
               />
               Refresh profiles
             </button>
-          </SettingsModalActions>
-        </SettingsModalField>
-        <SettingsModalField label="Default Metadata Profile">
+          </div>
+        </SettingsArrFormGroup>
+
+        <SettingsArrFormGroup
+          label="Default Metadata Profile"
+          labelFor="lidarr-metadata-profile"
+        >
           <SettingsSelect
+            id="lidarr-metadata-profile"
             value={
               settings.integrations?.lidarr?.metadataProfileId
                 ? String(settings.integrations.lidarr.metadataProfileId)
@@ -368,7 +378,7 @@ export function LidarrSettingsModal({
               </option>
             ))}
           </SettingsSelect>
-          <SettingsModalActions>
+          <div className="arr-form-control-actions">
             <button
               type="button"
               onClick={handleRefreshMetadataProfiles}
@@ -377,7 +387,7 @@ export function LidarrSettingsModal({
                 !settings.integrations?.lidarr?.url ||
                 !settings.integrations?.lidarr?.apiKey
               }
-              className="btn btn-secondary"
+              className="arr-btn"
             >
               <RefreshCw
                 className={`artist-icon-sm${
@@ -386,10 +396,12 @@ export function LidarrSettingsModal({
               />
               Refresh profiles
             </button>
-          </SettingsModalActions>
-        </SettingsModalField>
-        <SettingsModalField label="Tag">
+          </div>
+        </SettingsArrFormGroup>
+
+        <SettingsArrFormGroup label="Tag" labelFor="lidarr-tag">
           <SettingsSelect
+            id="lidarr-tag"
             value={
               settings.integrations?.lidarr?.tagId
                 ? String(settings.integrations.lidarr.tagId)
@@ -415,7 +427,7 @@ export function LidarrSettingsModal({
               </option>
             ))}
           </SettingsSelect>
-          <SettingsModalActions>
+          <div className="arr-form-control-actions">
             <button
               type="button"
               onClick={handleRefreshTags}
@@ -424,7 +436,7 @@ export function LidarrSettingsModal({
                 !settings.integrations?.lidarr?.url ||
                 !settings.integrations?.lidarr?.apiKey
               }
-              className="btn btn-secondary"
+              className="arr-btn"
             >
               <RefreshCw
                 className={`artist-icon-sm${
@@ -433,10 +445,15 @@ export function LidarrSettingsModal({
               />
               Refresh tags
             </button>
-          </SettingsModalActions>
-        </SettingsModalField>
-        <SettingsModalField label="Default Monitoring Option">
+          </div>
+        </SettingsArrFormGroup>
+
+        <SettingsArrFormGroup
+          label="Default Monitoring Option"
+          labelFor="lidarr-monitor-option"
+        >
           <SettingsSelect
+            id="lidarr-monitor-option"
             value={
               settings.integrations?.lidarr?.defaultMonitorOption || "none"
             }
@@ -452,26 +469,33 @@ export function LidarrSettingsModal({
             <option value="latest">Latest Album</option>
             <option value="first">First Album</option>
           </SettingsSelect>
-        </SettingsModalField>
-        <SettingsModalToggle
-          label="Search on Add"
-          checked={settings.integrations?.lidarr?.searchOnAdd || false}
-          onChange={(e) => updateLidarr({ searchOnAdd: e.target.checked })}
-        />
-      </SettingsModalSection>
+        </SettingsArrFormGroup>
 
-      <div className="settings-page__advanced-toggle-row">
+        <SettingsArrFormGroup label="Search on Add">
+          <label className="artist-checkbox-label">
+            <input
+              type="checkbox"
+              className="artist-checkbox"
+              checked={settings.integrations?.lidarr?.searchOnAdd || false}
+              onChange={(e) => updateLidarr({ searchOnAdd: e.target.checked })}
+            />
+            <span>Search for missing albums when artists are added</span>
+          </label>
+        </SettingsArrFormGroup>
+      </SettingsArrFieldSet>
+
+      <div className="arr-advanced-toggle">
         <button
           type="button"
-          className="settings-page__advanced-toggle"
+          className="arr-link arr-link--button"
           onClick={() => setShowAdvanced((current) => !current)}
         >
           {showAdvanced ? "Hide advanced" : "Show advanced"}
         </button>
       </div>
 
-      {showAdvanced && (
-        <SettingsModalSection title="Community guide">
+      {showAdvanced ? (
+        <SettingsArrFieldSet legend="Community guide">
           <button
             type="button"
             onClick={() => {
@@ -485,26 +509,26 @@ export function LidarrSettingsModal({
               setShowCommunityGuideModal(true);
             }}
             disabled={applyingCommunityGuide || !health?.lidarrConfigured}
-            className="btn btn-primary btn--full"
+            className="arr-btn arr-btn--primary"
           >
             {applyingCommunityGuide
               ? "Applying..."
               : "Apply Davo's Recommended Settings"}
           </button>
-          <p className="settings-modal__hint">
+          <p className="arr-form-help arr-form-help--spaced">
             Creates quality profile, updates quality definitions, adds custom
             formats, and updates naming scheme.{" "}
             <a
               href="https://wiki.servarr.com/lidarr/community-guide"
               target="_blank"
               rel="noopener noreferrer"
-              className="settings-page__link"
+              className="arr-link"
             >
               Read more
             </a>
           </p>
-        </SettingsModalSection>
-      )}
-    </SettingsIntegrationModal>
+        </SettingsArrFieldSet>
+      ) : null}
+    </>
   );
 }

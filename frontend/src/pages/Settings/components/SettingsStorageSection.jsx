@@ -157,7 +157,7 @@ export function SettingsStorageSection({
         <p className="arr-form-help">
           Verifies Aurral, Lidarr, download clients, and Navidrome all see the
           same files on disk. Mount one shared host folder at the same container
-          path, such as <code>/mnt/user/data:/data</code>.
+          path in every app, such as <code>/mnt/user/data:/data</code>.
         </p>
         <StorageHealthDashboard result={healthResult} loading={checkingHealth} />
       </SettingsArrFieldSet>

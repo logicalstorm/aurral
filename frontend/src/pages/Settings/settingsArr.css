@@ -476,6 +476,11 @@
   max-width: 650px;
 }
 
+.arr-form-control-actions {
+  display: flex;
+  margin-top: 8px;
+}
+
 .arr-form-actions {
   margin: 0 0 20px 270px;
   max-width: 650px;

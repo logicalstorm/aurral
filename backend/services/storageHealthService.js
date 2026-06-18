@@ -159,17 +159,22 @@ function summarizeResult(sections) {
   };
 }
 
+function isFilesystemRootPath(value) {
+  const normalized = normalizePathCompare(value);
+  return normalized === "/" || normalized === "";
+}
+
 async function checkSharedVolumeSection() {
   const steps = [];
   const browseRoots = getFilesystemBrowseRoots();
-  const hasDataMount = browseRoots.some(
-    (root) => normalizePathCompare(root) === "/data",
+  const dedicatedRoots = browseRoots.filter(
+    (root) => !isFilesystemRootPath(root),
   );
 
   if (browseRoots.length === 0) {
     steps.push(
       healthStep("roots", "fail", "Aurral can browse a shared media folder", {
-        fix: "Mount your host media folder into the Aurral container, for example /mnt/user/data:/data. Recreate the container after changing volumes.",
+        fix: "Mount your host media folder into the Aurral container at a dedicated path, such as /mnt/user/data:/data. Use the same path in every container. Recreate the container after changing volumes.",
       }),
     );
     return buildSection("volume", "Shared volume", steps);
@@ -181,18 +186,29 @@ async function checkSharedVolumeSection() {
     }),
   );
 
-  if (hasDataMount) {
+  if (dedicatedRoots.length > 0) {
     steps.push(
-      healthStep("data-mount", "pass", "Recommended /data mount detected", {
-        detail: "Use the same /data mount in Lidarr, slskd, NZBGet, and Navidrome.",
-      }),
+      healthStep(
+        "shared-mount",
+        "pass",
+        "Dedicated shared media folder mounted",
+        {
+          detail: dedicatedRoots.join(", "),
+          fix: "Use the same container path in Lidarr, slskd, NZBGet, and Navidrome. /data is a common convention but any matching path works.",
+        },
+      ),
     );
   } else {
     steps.push(
-      healthStep("data-mount", "warn", "No /data mount detected", {
-        detail: browseRoots.join(", "),
-        fix: "The supported layout mounts one host folder at /data in every container. Mixed mounts usually need manual path mappings.",
-      }),
+      healthStep(
+        "shared-mount",
+        "warn",
+        "No dedicated shared media folder detected",
+        {
+          detail: browseRoots.join(", "),
+          fix: "Mount one host media folder at a dedicated path in every container (for example /data). If Aurral can only browse /, it usually cannot see your library mounts.",
+        },
+      ),
     );
   }
 

@@ -113,3 +113,12 @@ test("runStorageHealthCheck skips optional integrations when unset", async () =>
   assert.equal(slskd?.status, "skip");
   assert.equal(navidrome?.status, "skip");
 });
+
+test("runStorageHealthCheck passes shared volume when dedicated browse roots exist", async () => {
+  const result = await runStorageHealthCheck();
+  const volume = result.sections.find((section) => section.id === "volume");
+  assert.ok(volume);
+  const sharedMount = volume.steps.find((step) => step.id === "shared-mount");
+  assert.ok(sharedMount);
+  assert.equal(sharedMount.status, "pass");
+});
