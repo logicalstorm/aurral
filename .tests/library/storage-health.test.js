@@ -188,3 +188,28 @@ test("runStorageHealthCheck passes shared volume when dedicated browse roots exi
   assert.ok(sharedMount);
   assert.equal(sharedMount.status, "pass");
 });
+
+test("storage health fix guidance points at current settings locations", async () => {
+  const files = [
+    "backend/services/storageHealthService.js",
+    "backend/services/lidarrLibraryAccessTest.js",
+    "backend/services/downloadSourceService.js",
+    "backend/services/weeklyFlowOperations.js",
+    "backend/services/slskdOrchestrator.js",
+    "backend/routes/discovery.js",
+    "backend/routes/weeklyFlow.js",
+  ];
+  const source = (
+    await Promise.all(
+      files.map((file) => fs.readFile(path.join(process.cwd(), file), "utf8")),
+    )
+  ).join("\n");
+
+  assert.equal(source.includes("Settings → System → Storage"), false);
+  assert.equal(source.includes("Settings > Integrations"), false);
+  assert.equal(source.includes("Ensure playlists"), false);
+  assert.equal(source.includes("playlist ensure"), false);
+  assert.equal(source.includes("Advanced remote path mappings"), false);
+  assert.match(source, /Settings → Download Clients → Remote Path Mappings/);
+  assert.match(source, /Settings → Playback → Navidrome Playlist Paths/);
+});

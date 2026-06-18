@@ -178,7 +178,7 @@ export async function runLidarrLibraryAccessTest(lidarrClient, options = {}) {
       step("mount", "fail", "Aurral can see that folder in the container", {
         detail: missingPath,
         fix: usesHostPaths
-          ? `Lidarr reports ${missingPath}, but Aurral cannot read that path inside Docker. Mount the shared parent folder into Aurral, then add a manual Lidarr path mapping if the container paths differ.`
+          ? `Lidarr reports ${missingPath}, but Aurral cannot read that path inside Docker. Mount the shared parent folder into Aurral, then add a Lidarr mapping under Settings → Download Clients → Remote Path Mappings if the container paths differ.`
           : `Lidarr stores files at ${missingPath}, but Aurral cannot read that path. Recommended fix: mount the same host root into Aurral and Lidarr at the same container path, such as /data.`,
       }),
     );
@@ -221,8 +221,8 @@ export async function runLidarrLibraryAccessTest(lidarrClient, options = {}) {
       step("file", "fail", "Sample Lidarr track file is readable from Aurral", {
         detail: sample.path,
         fix: looksLikeExternalOnlyPath(sample.path)
-          ? "Lidarr reports a host path Aurral cannot read inside Docker. Mount the parent folder into Aurral, then add a manual Lidarr path mapping under Settings → System → Storage."
-          : "Lidarr reports this file path, but Aurral cannot read it. Check Docker mounts and folder permissions (PUID/PGID). If Lidarr and Aurral intentionally use different container paths, add a manual Lidarr path mapping.",
+          ? "Lidarr reports a host path Aurral cannot read inside Docker. Mount the parent folder into Aurral, then add a Lidarr mapping under Settings → Download Clients → Remote Path Mappings."
+          : "Lidarr reports this file path, but Aurral cannot read it. Check Docker mounts and folder permissions (PUID/PGID). If Lidarr and Aurral intentionally use different container paths, add a Lidarr mapping under Settings → Download Clients → Remote Path Mappings.",
       }),
     );
     return { ok: false, steps, sample };
@@ -256,7 +256,7 @@ export async function runLidarrLibraryAccessTest(lidarrClient, options = {}) {
     steps.push(
       step("hardlink", "warn", "Lidarr and Aurral downloads are on different filesystems", {
         detail: `Lidarr files are under ${resolvedSamplePath || sample.path}, but Aurral writes downloads under ${flowLibraryRoot}.`,
-        fix: "Mount the same shared root into Aurral, slskd, and Navidrome, then choose that shared downloads path in Settings (for example /data/downloads/aurral).",
+        fix: "Mount the same shared root into Aurral, slskd, NZBGet, and Navidrome, then choose that shared downloads path under Settings → Download Clients → Downloads Folder.",
       }),
     );
   }

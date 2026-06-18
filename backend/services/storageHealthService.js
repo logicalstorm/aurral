@@ -655,8 +655,8 @@ async function checkSlskdSection() {
       healthStep("path-readable", "fail", "Aurral can read slskd completed files", {
         detail: downloadPath,
         fix: looksLikeExternalOnlyPath(downloadPath)
-          ? "slskd reports a host path Aurral cannot read inside Docker. Mount the shared parent folder into both containers, or add an slskd path mapping under Settings → System → Storage."
-          : `Mount the same host folder into Aurral at the path slskd uses, or add a path mapping for ${downloadPath}.`,
+          ? "slskd reports a host path Aurral cannot read inside Docker. Mount the shared parent folder into both containers, or add an slskd mapping under Settings → Download Clients → Remote Path Mappings."
+          : `Mount the same host folder into Aurral at the path slskd uses, or add an slskd mapping for ${downloadPath} under Settings → Download Clients → Remote Path Mappings.`,
       }),
     );
     return buildSection("slskd", "slskd downloads", steps);
@@ -760,7 +760,7 @@ async function checkNzbgetSection() {
     steps.push(
       healthStep("path-readable", "fail", "Aurral can read NZBGet completed files", {
         detail: completedPath,
-        fix: "Mount the same host folder into Aurral and NZBGet, or add an NZBGet path mapping under Settings → System → Storage.",
+        fix: "Mount the same host folder into Aurral and NZBGet, or add an NZBGet mapping under Settings → Download Clients → Remote Path Mappings.",
       }),
     );
     return buildSection("nzbget", "NZBGet downloads", steps);
@@ -951,7 +951,7 @@ async function checkNavidromeSection({ lidarrRootPaths = [], lidarrSample = null
           fix:
             m3uMode === "remote"
               ? "This is expected when Navidrome runs on Windows or uses different mounts. The M3U path checks below verify that generated playlists use Navidrome-visible paths."
-              : "Mount each Navidrome music library into Aurral at the same container path, or add path mappings under Settings → System → Storage.",
+              : "Mount each Navidrome music library into Aurral at the same path, or enable Settings → Playback → Navidrome Playlist Paths → Use Navidrome paths in M3U files and add Navidrome path mappings.",
         },
       ),
     );
@@ -982,7 +982,7 @@ async function checkNavidromeSection({ lidarrRootPaths = [], lidarrSample = null
     steps.push(
       healthStep("aurral-library", "warn", "Navidrome scans the Aurral playlist folder", {
         detail: formatLimitedList(expectedLibraryCandidates),
-        fix: "Save Navidrome settings or run Ensure playlists so Aurral can create the playlist library, then scan it in Navidrome.",
+        fix: "Save Navidrome settings, then create or update a playlist or flow so Aurral can create the playlist library. Add that folder as a music library in Navidrome and scan it.",
       }),
     );
   }
@@ -999,7 +999,7 @@ async function checkNavidromeSection({ lidarrRootPaths = [], lidarrSample = null
     steps.push(
       healthStep("lidarr-library", "warn", "Navidrome scans Lidarr library folders", {
         detail: formatLimitedList(uncoveredRoots),
-        fix: "Reused playlist tracks point at your Lidarr library. Add those folders as Navidrome music libraries, or add Navidrome path mappings when Navidrome sees them at different paths.",
+        fix: "Reused playlist tracks point at your Lidarr library. Add those folders as Navidrome music libraries, or use Settings → Playback → Navidrome Playlist Paths when Navidrome sees them at different paths.",
       }),
     );
   } else if (lidarrRootPaths.length > 0) {
@@ -1062,7 +1062,7 @@ async function checkPlaylistFilesSection() {
             : playlistLibraryPath,
           fix: visiblePlaylistPath
             ? "Remote mode is appropriate when Navidrome sees different paths than Aurral."
-            : "Add a Navidrome path mapping from the Aurral playlist folder to the path Navidrome scans, or turn off remote mode when both apps share the same paths.",
+            : "Add a Navidrome path mapping under Settings → Playback → Navidrome Playlist Paths from the Aurral playlist folder to the path Navidrome scans, or turn off remote mode when both apps share the same paths.",
         },
       ),
     );
@@ -1082,7 +1082,7 @@ async function checkPlaylistFilesSection() {
     steps.push(
       healthStep("tracked", "warn", "Completed playlist files are accessible", {
         detail: "No completed playlist tracks to verify yet.",
-        fix: "Run or import a playlist, then run this check again.",
+        fix: "Create or import a playlist, or run a flow, then run this check again.",
       }),
     );
     return buildSection("playlists", "Playlist files", steps);
@@ -1126,8 +1126,8 @@ async function checkPlaylistFilesSection() {
       healthStep("tracked", "fail", "Completed playlist files are accessible", {
         detail: `${totalMissing} of ${doneJobs.length} completed tracks are missing on disk`,
         fix: sampleMissing
-          ? `Example missing path: ${sampleMissing}. Fix mounts or path mappings, then run Ensure playlists.`
-          : "Fix mounts or path mappings, then run Ensure playlists.",
+          ? `Example missing path: ${sampleMissing}. Restore the missing file or fix the mount that should contain it, then update the affected playlist or flow so Aurral rewrites its playlist files.`
+          : "Restore the missing files or fix the mount that should contain them, then update the affected playlist or flow so Aurral rewrites its playlist files.",
       }),
     );
     return buildSection("playlists", "Playlist files", steps);
@@ -1150,8 +1150,8 @@ async function checkPlaylistFilesSection() {
       healthStep("tracked-nonempty", "warn", "Completed playlist files are non-empty", {
         detail: `${totalEmpty} of ${doneJobs.length} completed tracks are zero bytes`,
         fix: sampleEmpty
-          ? `Example empty path: ${sampleEmpty}. Re-run or repair the affected playlist so Aurral replaces the empty file.`
-          : "Re-run or repair the affected playlist so Aurral replaces empty files.",
+          ? `Example empty path: ${sampleEmpty}. Re-run the affected flow, or remove and add the track again in the affected playlist, so Aurral replaces the empty file.`
+          : "Re-run the affected flow, or remove and add the tracks again in the affected playlist, so Aurral replaces empty files.",
       }),
     );
   }

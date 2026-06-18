@@ -251,7 +251,7 @@ router.use(requirePermission("accessFlow"));
 const DEFAULT_LIMIT = 30;
 const QUEUE_LIMIT = 50;
 const SLSKD_NOT_CONFIGURED_MESSAGE =
-  "slskd is not configured. Add your slskd URL and API key in Settings > Integrations to enable Soulseek downloads for flows and playlists.";
+  "slskd is not configured. Add your slskd URL and API key in Settings > Download Clients to enable Soulseek downloads for flows and playlists.";
 
 const markFlowMutationToken = (flowId) => {
   const token = createWeeklyFlowOperationToken();

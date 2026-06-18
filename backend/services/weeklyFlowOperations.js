@@ -38,7 +38,7 @@ import { getUnavailableFlowSourceError } from "./weeklyFlowValidation.js";
 const DEFAULT_LIMIT = 30;
 const OPERATION_TOKENS_KEY = "weeklyFlowOperationTokens";
 const SLSKD_NOT_CONFIGURED_MESSAGE =
-  "slskd is not configured. Add your slskd URL and API key in Settings > Integrations to enable Soulseek downloads for flows and playlists.";
+  "slskd is not configured. Add your slskd URL and API key in Settings > Download Clients to enable Soulseek downloads for flows and playlists.";
 
 export function createWeeklyFlowOperationToken() {
   return `${Date.now()}-${randomUUID()}`;

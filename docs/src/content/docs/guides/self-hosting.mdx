@@ -80,7 +80,7 @@ If you want Soulseek-backed **album** downloads inside Lidarr:
 4. Add slskd in Lidarr as both an indexer and download client.
 5. Align download paths or configure remote path mapping so imports land in `/data/music`.
 
-For **Aurral flows and playlists**, connect download clients in **Settings → Downloads**:
+For **Aurral flows and playlists**, connect download clients in **Settings → Download Clients**:
 
 - **slskd** for Soulseek — Aurral sends searches, selects the best candidate, and moves completed files from slskd's download directory into your `DOWNLOAD_FOLDER`.
 - **Prowlarr + NZBGet** for Usenet — Aurral searches indexers via Prowlarr, queues NZBs in NZBGet, and imports completed files the same way. See [Usenet](/integrations/usenet/).

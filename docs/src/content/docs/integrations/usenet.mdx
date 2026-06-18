@@ -5,14 +5,14 @@ description: Usenet-backed downloads for flows and playlists.
 
 Usenet downloads use **Prowlarr** for indexer search and **NZBGet** as the download client. Aurral treats them as one download source and uses the same pipeline as slskd for flows and playlists.
 
-Both services must be enabled and connected in **Settings → Downloads** before Usenet downloads work.
+Both services must be enabled and connected in **Settings → Download Clients** before Usenet downloads work.
 
 ## Setup overview
 
 1. Run Prowlarr with at least one Usenet audio indexer configured.
 2. Run NZBGet with a category Aurral can use (default `aurral`).
 3. Mount the same storage root into Aurral and NZBGet so Aurral can read completed files.
-4. In Aurral, open **Settings → Downloads**:
+4. In Aurral, open **Settings → Download Clients**:
    - Enable **Prowlarr**, enter URL and API key, then **Test connection** and **Refresh indexers**.
    - Enable each indexer you want Aurral to use and set indexer priority.
    - Enable **NZBGet**, enter URL and credentials, then **Test connection**.
@@ -46,7 +46,7 @@ Open the **NZBGet** card under **Download clients**:
 
 Aurral polls NZBGet until the download completes, then imports the best matching audio file into your `DOWNLOAD_FOLDER` under `aurral-weekly-flow`.
 
-If NZBGet runs on Windows and reports host paths such as `N:\...`, mount the parent folder into Aurral and configure a manual NZBGet mapping under **Settings → Downloads → Advanced remote path mappings**. See [Shared storage](/getting-started/storage/#windows-and-mixed-docker-setups).
+If NZBGet runs on Windows and reports host paths such as `N:\...`, mount the parent folder into Aurral and configure a manual NZBGet mapping under **Settings → Download Clients → Remote Path Mappings**. See [Shared storage](/getting-started/storage/#windows-and-mixed-docker-setups).
 
 ## Download source priority and fallback
 
