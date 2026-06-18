@@ -140,9 +140,7 @@ function ReleasePage() {
   const releaseMeta = [
     releaseDateLabel,
     releaseTypeLabel,
-    trackCount > 0
-      ? `${trackCount} track${trackCount === 1 ? "" : "s"}`
-      : null,
+    trackCount > 0 ? `${trackCount} track${trackCount === 1 ? "" : "s"}` : null,
     durationLabel,
     metric.label
       ? metric.type === "rating"
@@ -303,13 +301,7 @@ function ReleasePage() {
     return () => {
       cancelled = true;
     };
-  }, [
-    artistMbid,
-    artistName,
-    release,
-    releaseMbid,
-    showError,
-  ]);
+  }, [artistMbid, artistName, release, releaseMbid, showError]);
 
   const loadSharedPlaylists = useCallback(async () => {
     setPlaylistModalLoading(true);
@@ -475,14 +467,22 @@ function ReleasePage() {
     <div className="artist-details-page release-page">
       <div className="artist-page-header">
         <div>
-          <Link
-            to={`/artist/${artistMbid}/albums`}
-            state={artistLinkState}
-            className="artist-title-link"
-          >
-            <span>{artistName || "Artist"}</span>
-            <CornerUpLeft className="artist-icon-lg" />
-          </Link>
+          <div className="artist-title-link release-page__title-nav">
+            <Link to={`/artist/${artistMbid}`} state={artistLinkState}>
+              <span>{artistName || "Artist"}</span>
+            </Link>
+            <span className="release-page__title-nav-separator" aria-hidden="true">
+              /
+            </span>
+            <Link
+              to={`/artist/${artistMbid}/albums`}
+              state={artistLinkState}
+              className="release-page__title-nav-albums"
+            >
+              <span>Albums</span>
+              <CornerUpLeft className="artist-icon-lg" />
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -503,13 +503,13 @@ function ReleasePage() {
         </div>
         <div className="release-page__copy">
           <h1 className="release-page__title">{releaseTitle}</h1>
-          {artistName ? (
+          {artistMbid ? (
             <Link
               to={`/artist/${artistMbid}`}
               state={artistLinkState}
               className="artist-link-button release-page__artist"
             >
-              {artistName}
+              {artistName || "Artist"}
             </Link>
           ) : null}
           {releaseMeta ? (

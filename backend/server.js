@@ -101,6 +101,7 @@ app.use(
           "https://*.archive.org",
           "https://*.last.fm",
           "https://lastfm.freetls.fastly.net",
+          "https://*.fanart.tv",
         ],
         connectSrc: ["'self'", "ws:", "wss:", "https://api.github.com"],
         mediaSrc: ["'self'", "https://*.dzcdn.net", "https://*.deezer.com"],

@@ -2304,7 +2304,8 @@ textarea {
   }
 
   .app-content {
-    padding: var(--aurral-space-outer) var(--aurral-space-outer) var(--aurral-space-outer) 0;
+    padding: var(--aurral-space-outer) var(--aurral-space-outer)
+      var(--aurral-space-outer) 0;
   }
 
   .app-content--sidebar-full {
@@ -2333,7 +2334,9 @@ textarea {
     padding-inline: var(--aurral-space-page-lg);
   }
 
-  .app-main--artist-details .artist-details-page > .artist-page-header:first-child {
+  .app-main--artist-details
+    .artist-details-page
+    > .artist-page-header:first-child {
     padding-top: var(--aurral-space-page);
   }
 
@@ -2431,6 +2434,29 @@ textarea {
   font-size: clamp(1.5rem, 3vw, 2.25rem);
   font-weight: 800;
   line-height: 1.1;
+}
+
+.release-page__title-nav {
+  gap: 0.5rem;
+}
+
+.release-page__title-nav > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--aurral-white);
+}
+
+.release-page__title-nav > a:hover {
+  color: var(--aurral-gray-light);
+}
+
+.release-page__title-nav-separator {
+  color: var(--aurral-gray-light);
+}
+
+.release-page__title-nav-albums {
+  gap: 0.5rem;
 }
 
 .release-page__artist {
@@ -3231,7 +3257,11 @@ textarea {
 }
 
 .artist-track-row.is-search-focused {
-  background: color-mix(in srgb, var(--aurral-green) 14%, var(--aurral-surface));
+  background: color-mix(
+    in srgb,
+    var(--aurral-green) 14%,
+    var(--aurral-surface)
+  );
   outline: 1px solid color-mix(in srgb, var(--aurral-green) 35%, transparent);
 }
 
@@ -3782,7 +3812,9 @@ textarea {
   margin-bottom: 1.75rem;
 }
 
-.app-main--artist-details .artist-details-page > .artist-page-header:first-child {
+.app-main--artist-details
+  .artist-details-page
+  > .artist-page-header:first-child {
   padding-top: 1rem;
 }
 
@@ -3791,12 +3823,17 @@ textarea {
   align-items: center;
   gap: 0.5rem;
   color: var(--aurral-white);
-  font-size: clamp(2.25rem, 6vw, 3rem);
-  font-weight: 900;
-  line-height: 1;
+  font-size: clamp(1.125rem, 2.5vw, 1.5rem);
+  font-weight: 800;
+  line-height: 1.2;
 }
 
-.artist-title-link:hover {
+.artist-title-link .artist-icon-lg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.artist-title-link:is(a):hover {
   color: var(--aurral-gray-light);
 }
 
@@ -4307,7 +4344,8 @@ textarea {
   color: var(--aurral-white);
 }
 
-.artist-playlist-menu--search-suggestion .artist-menu-item:hover:not(:disabled) {
+.artist-playlist-menu--search-suggestion
+  .artist-menu-item:hover:not(:disabled) {
   background: var(--aurral-overlay-hover);
   color: var(--aurral-white);
 }
@@ -5023,7 +5061,9 @@ textarea {
   transition: color 0.18s ease;
 }
 
-.artist-discover-card:not(.artist-discover-card--album):not(.artist-discover-card--playlist)
+.artist-discover-card:not(.artist-discover-card--album):not(
+    .artist-discover-card--playlist
+  )
   .artist-card-title--discover,
 .artist-discover-card--artist .artist-card-title--discover,
 .artist-similar-name,
@@ -5575,12 +5615,14 @@ textarea {
   transition: opacity 0.22s ease;
 }
 
-.artist-discover-card--playlist.is-expanded .artist-discover-card__cover::after {
+.artist-discover-card--playlist.is-expanded
+  .artist-discover-card__cover::after {
   opacity: 1;
 }
 
 .artist-discover-card--playlist.is-expanded .artist-discover-card__image,
-.artist-discover-card--playlist.is-expanded .artist-media-placeholder--discover {
+.artist-discover-card--playlist.is-expanded
+  .artist-media-placeholder--discover {
   filter: brightness(1.06);
 }
 
@@ -5791,7 +5833,9 @@ textarea {
   opacity: 0.72;
 }
 
-.artist-customize-section-row:hover:not(.artist-customize-section-row--dragging) {
+.artist-customize-section-row:hover:not(
+    .artist-customize-section-row--dragging
+  ) {
   background-color: var(--aurral-overlay-hover);
 }
 
@@ -6285,8 +6329,16 @@ textarea {
 
 .search-page__filter:hover,
 .search-page__filter.is-active {
-  border-color: color-mix(in srgb, var(--aurral-green) 45%, var(--aurral-border));
-  background: color-mix(in srgb, var(--aurral-green) 12%, var(--aurral-surface));
+  border-color: color-mix(
+    in srgb,
+    var(--aurral-green) 45%,
+    var(--aurral-border)
+  );
+  background: color-mix(
+    in srgb,
+    var(--aurral-green) 12%,
+    var(--aurral-surface)
+  );
   color: var(--aurral-white);
 }
 
@@ -8762,7 +8814,9 @@ textarea {
   }
 
   .settings-page__mapping-row {
-    grid-template-columns: minmax(8rem, 0.75fr) minmax(0, 1.2fr) minmax(0, 1.2fr) auto;
+    grid-template-columns:
+      minmax(8rem, 0.75fr) minmax(0, 1.2fr) minmax(0, 1.2fr)
+      auto;
   }
 
   .settings-page__mapping-row--navidrome {
