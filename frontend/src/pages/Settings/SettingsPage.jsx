@@ -14,6 +14,7 @@ import { SettingsStorageTab } from "./components/SettingsStorageTab";
 import { SettingsLibraryTab } from "./components/SettingsLibraryTab";
 import { SettingsIndexersTab } from "./components/SettingsIndexersTab";
 import { SettingsDownloadClientsTab } from "./components/SettingsDownloadClientsTab";
+import { SettingsTasksTab } from "./components/SettingsTasksTab";
 import { SettingsPlaybackTab } from "./components/SettingsPlaybackTab";
 import { SettingsConnectTab } from "./components/SettingsConnectTab";
 import { SettingsDiscoverTab } from "./components/SettingsDiscoverTab";
@@ -166,6 +167,8 @@ function SettingsPage() {
             showInfo={showInfo}
           />
         );
+      case "tasks":
+        return <SettingsTasksTab showError={showError} />;
       case "playback":
         return (
           <SettingsPlaybackTab
@@ -313,6 +316,7 @@ function SettingsPage() {
           hasPendingChanges={data.hasUnsavedChanges}
           isSaving={data.saving}
           onSave={data.handleSaveSettings}
+          showSave={tabs.activeTab !== "tasks"}
         />
 
         <div className="settings-arr__body">

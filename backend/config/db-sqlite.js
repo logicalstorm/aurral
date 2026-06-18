@@ -160,6 +160,24 @@ db.exec(`
     cleaned_at INTEGER
   );
 
+  CREATE TABLE IF NOT EXISTS honker_task_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER NOT NULL,
+    queue TEXT NOT NULL,
+    name TEXT,
+    payload TEXT,
+    worker_id TEXT,
+    attempt INTEGER,
+    status TEXT NOT NULL,
+    error TEXT,
+    queued_at INTEGER,
+    run_at INTEGER,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    duration_ms INTEGER,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  );
+
   CREATE INDEX IF NOT EXISTS idx_playlist_download_jobs_status ON playlist_download_jobs(status);
   CREATE INDEX IF NOT EXISTS idx_playlist_download_jobs_playlist_id ON playlist_download_jobs(playlist_id);
   CREATE INDEX IF NOT EXISTS idx_images_cache_cache_age ON images_cache(cache_age);
@@ -171,6 +189,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_slskd_transfer_history_username ON slskd_transfer_history(username, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_slskd_transfer_history_status ON slskd_transfer_history(status, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_slskd_transfer_history_cleanup ON slskd_transfer_history(cleaned_at, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_honker_task_runs_started_at ON honker_task_runs(started_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_honker_task_runs_queue_started ON honker_task_runs(queue, started_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_honker_task_runs_job ON honker_task_runs(job_id, queue);
 `);
 
 const tableColumns = db

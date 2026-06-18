@@ -576,6 +576,20 @@ router.get("/logs/stats", async (req, res) => {
   }
 });
 
+router.get("/tasks", noCache, async (_req, res) => {
+  try {
+    const { getHonkerTaskStatus } = await import(
+      "../services/honkerTaskStatus.js"
+    );
+    res.json(await getHonkerTaskStatus());
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to get task status",
+      message: error.message,
+    });
+  }
+});
+
 router.get("/lidarr/profiles", async (req, res) => {
   try {
     const { lidarrClient } = await import("../services/lidarrClient.js");

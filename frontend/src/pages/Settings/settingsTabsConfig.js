@@ -3,6 +3,7 @@ import {
   Compass,
   Database,
   Download,
+  ListChecks,
   Monitor,
   Music,
   Radar,
@@ -12,6 +13,7 @@ import {
 
 export const SETTINGS_TABS = [
   { id: "system", label: "System", icon: Monitor },
+  { id: "tasks", label: "Tasks", icon: ListChecks },
   { id: "library", label: "Library", icon: Server },
   { id: "indexers", label: "Indexers", icon: Radar },
   { id: "download-clients", label: "Download Clients", icon: Download },

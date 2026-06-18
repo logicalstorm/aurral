@@ -39,6 +39,33 @@ function releaseHeldGlobalRefreshLock() {
   heldGlobalRefreshLock = null;
 }
 
+function clearDiscoveryRefreshJobs() {
+  const tx = honkerDbModule.getHonkerDb().transaction();
+  try {
+    tx.execute("DELETE FROM _honker_live WHERE queue = ?", [
+      "discovery-refresh",
+    ]);
+    tx.execute("DELETE FROM _honker_dead WHERE queue = ?", [
+      "discovery-refresh",
+    ]);
+    tx.commit();
+  } catch (error) {
+    try {
+      tx.rollback();
+    } catch {}
+    throw error;
+  }
+}
+
+function countDiscoveryRefreshJobs() {
+  return Number(
+    honkerDbModule.getHonkerDb().query(
+      "SELECT COUNT(*) AS count FROM _honker_live WHERE queue = ?",
+      ["discovery-refresh"],
+    )[0]?.count || 0,
+  );
+}
+
 test.beforeEach(() => {
   markDiscoveryRefreshDequeued();
   getDiscoveryCache().isUpdating = false;
@@ -129,4 +156,19 @@ test("scheduleNextDiscoveryRefresh enqueues future job without marking updating"
   const result = scheduleNextDiscoveryRefresh();
   assert.equal(result.enqueued, true);
   assert.equal(cache.isUpdating, false);
+});
+
+test("scheduleNextDiscoveryRefresh deduplicates existing future refresh", () => {
+  clearDiscoveryRefreshJobs();
+  const cache = getDiscoveryCache();
+  cache.isUpdating = false;
+  cache.lastUpdated = new Date().toISOString();
+
+  const first = scheduleNextDiscoveryRefresh();
+  const second = scheduleNextDiscoveryRefresh();
+
+  assert.equal(first.enqueued, true);
+  assert.equal(second.enqueued, false);
+  assert.equal(second.reason, "already_scheduled");
+  assert.equal(countDiscoveryRefreshJobs(), 1);
 });

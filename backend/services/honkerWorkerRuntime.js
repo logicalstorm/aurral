@@ -9,7 +9,15 @@ export function isHonkerShuttingDown() {
   return shuttingDown;
 }
 
-export function withJobHeartbeat(job, queue, fn, extendSeconds = null) {
+export async function withJobHeartbeat(job, queue, fn, extendSeconds = null) {
+  let runId = null;
+  let recordFinished = null;
+  try {
+    const taskStatus = await import("./honkerTaskStatus.js");
+    runId = taskStatus.recordHonkerTaskRunStarted(job, queue);
+    recordFinished = taskStatus.recordHonkerTaskRunFinished;
+  } catch {}
+
   const visibilityTimeoutS = Number(queue?.visibilityTimeoutS) || 300;
   const extendS =
     extendSeconds != null
@@ -21,11 +29,33 @@ export function withJobHeartbeat(job, queue, fn, extendSeconds = null) {
       job.heartbeat(extendS);
     } catch {}
   }, heartbeatMs);
-  return Promise.resolve(fn()).finally(() => clearInterval(heartbeat));
+  try {
+    const result = await Promise.resolve(fn());
+    if (recordFinished) {
+      recordFinished(runId, "completed");
+    }
+    return result;
+  } catch (error) {
+    if (recordFinished) {
+      recordFinished(runId, "failed", error?.message || String(error));
+    }
+    throw error;
+  } finally {
+    clearInterval(heartbeat);
+  }
 }
 
 export function registerHonkerWorker(name, { start, stop, isRunning }) {
   workers.set(String(name), { start, stop, isRunning });
+}
+
+export function getHonkerWorkerStatuses() {
+  return [...workers.entries()]
+    .map(([name, entry]) => ({
+      name,
+      running: entry?.isRunning?.() === true,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function registerHonkerShutdownHandler(handler) {

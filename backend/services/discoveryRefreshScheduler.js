@@ -3,6 +3,7 @@ import { getLastfmApiKey } from "./apiClients.js";
 import { libraryManager } from "./libraryManager.js";
 import {
   enqueueDiscoveryRefreshJob,
+  getHonkerDb,
   isDiscoveryRefreshQueueLocked,
   isHonkerLockHeld,
   tryAcquireDiscoveryRefreshQueueLock,
@@ -16,6 +17,41 @@ import {
 } from "./discoveryService.js";
 
 const DISCOVERY_GLOBAL_REFRESH_LOCK = "discovery-global-refresh";
+
+function parseQueuedPayload(payload) {
+  try {
+    return JSON.parse(String(payload || "{}"));
+  } catch {
+    return {};
+  }
+}
+
+function getPendingScheduledDiscoveryRefresh(targetRunAtMs = null) {
+  try {
+    const targetRunAtS =
+      targetRunAtMs != null ? Math.floor(Number(targetRunAtMs) / 1000) : null;
+    const rows = getHonkerDb().query(
+      `
+        SELECT id, payload, run_at
+        FROM _honker_live
+        WHERE queue = 'discovery-refresh'
+          AND state = 'pending'
+          AND run_at > ?
+        ORDER BY run_at ASC, id ASC
+      `,
+      [Math.floor(Date.now() / 1000)],
+    );
+    return rows.find((row) => {
+      const payload = parseQueuedPayload(row.payload);
+      if (payload?.scheduleOnly !== true) return false;
+      if (String(payload?.reason || "") !== "scheduled") return false;
+      if (targetRunAtS == null) return true;
+      return Number(row.run_at || 0) <= targetRunAtS + 60;
+    }) || null;
+  } catch {
+    return null;
+  }
+}
 
 export function isDiscoveryRefreshPending() {
   return isDiscoveryRefreshQueueLocked();
@@ -87,6 +123,13 @@ export function enqueueDiscoveryRefresh(options = {}) {
   }
 
   try {
+    if (
+      scheduleOnly &&
+      reason === "scheduled" &&
+      getPendingScheduledDiscoveryRefresh(runAt)
+    ) {
+      return { enqueued: false, reason: "already_scheduled" };
+    }
     enqueueDiscoveryRefreshJob(
       {
         reason,

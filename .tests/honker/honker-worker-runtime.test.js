@@ -14,6 +14,7 @@ await importFromRepo("backend/config/db-sqlite.js");
 
 const honkerDb = await importFromRepo("backend/services/honkerDb.js");
 const runtime = await importFromRepo("backend/services/honkerWorkerRuntime.js");
+const taskStatus = await importFromRepo("backend/services/honkerTaskStatus.js");
 const operationQueueModule = await importFromRepo(
   "backend/services/weeklyFlowOperationQueue.js",
 );
@@ -40,6 +41,79 @@ test("withJobHeartbeat extends job claim while work runs", async () => {
   });
   assert.ok(job.claimExpiresAt >= initialExpiry);
   job.ack();
+});
+
+test("withJobHeartbeat records completed task runs", async () => {
+  const queue = honkerDb.getImagePrefetchQueue();
+  const jobId = queue.enqueue({ mbids: ["recorded-mbid"] });
+  const job = queue.claimOne(honkerDb.getWorkerId());
+  assert.equal(job?.id, jobId);
+
+  await runtime.withJobHeartbeat(job, queue, async () => {});
+  job.ack();
+
+  const status = await taskStatus.getHonkerTaskStatus();
+  const recorded = status.queue.find(
+    (entry) =>
+      entry.source === "run" &&
+      entry.jobId === jobId &&
+      entry.queue === "image-prefetch",
+  );
+  assert.equal(recorded?.status, "completed");
+  assert.match(recorded?.name || "", /Image Prefetch/);
+});
+
+test("task status groups duplicate scheduled live jobs", async () => {
+  const queue = honkerDb.getDiscoveryRefreshQueue();
+  const runAt = Math.floor(Date.now() / 1000) + 86400;
+  queue.enqueue(
+    { reason: "scheduled", requestedAt: Date.now(), scheduleOnly: true },
+    { runAt },
+  );
+  queue.enqueue(
+    {
+      reason: "scheduled",
+      requestedAt: Date.now() + 1000,
+      scheduleOnly: true,
+    },
+    { runAt },
+  );
+
+  const status = await taskStatus.getHonkerTaskStatus();
+  const grouped = status.queue.filter(
+    (entry) =>
+      entry.queue === "discovery-refresh" &&
+      entry.name === "Discovery Auto Refresh",
+  );
+
+  assert.equal(grouped.length, 1);
+  assert.equal(grouped[0].duplicateCount, 2);
+  const worker = status.workers.find(
+    (entry) => entry.queue === "discovery-refresh",
+  );
+  assert.equal(worker?.scheduled, 1);
+});
+
+test("task status groups duplicate completed system task runs", async () => {
+  const queue = honkerDb.getSystemTaskQueue();
+  for (let index = 0; index < 2; index += 1) {
+    queue.enqueue({ kind: "discovery-bootstrap" });
+    const job = queue.claimOne(honkerDb.getWorkerId());
+    assert.ok(job);
+    await runtime.withJobHeartbeat(job, queue, async () => {});
+    job.ack();
+  }
+
+  const status = await taskStatus.getHonkerTaskStatus();
+  const grouped = status.queue.filter(
+    (entry) =>
+      entry.queue === "system-task" &&
+      entry.name === "Discovery Startup Check",
+  );
+
+  assert.equal(grouped.length, 1);
+  assert.equal(grouped[0].duplicateCount, 2);
+  assert.equal(grouped[0].payloadSummary, "");
 });
 
 test("weekly flow operation queue status reflects worker state and depth", () => {

@@ -6,6 +6,7 @@ import {
   updateDiscoveryCache,
 } from "./discoveryService.js";
 import {
+  discoveryNeedsRefresh,
   isDiscoveryRefreshConfigured,
   markDiscoveryRefreshDequeued,
   scheduleNextDiscoveryRefresh,
@@ -27,6 +28,10 @@ async function runDiscoveryRefresh(payload) {
   if (!(await isDiscoveryRefreshConfigured())) {
     getDiscoveryCache().isUpdating = false;
     clearDiscoveryUpdateProgress();
+    return;
+  }
+
+  if (payload?.scheduleOnly === true && !discoveryNeedsRefresh()) {
     return;
   }
 

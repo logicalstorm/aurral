@@ -27,7 +27,7 @@ let honkerSchedulerStarted = false;
 let honkerSchedulerAbort = null;
 const WORKER_ID = `aurral-${process.pid}`;
 
-const SCHEDULED_SYSTEM_TASKS = [
+export const SCHEDULED_SYSTEM_TASKS = [
   {
     name: "weekly-flow-refresh",
     queue: "system-task",
