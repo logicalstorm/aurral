@@ -218,10 +218,10 @@ export async function runLidarrLibraryAccessTest(lidarrClient, options = {}) {
   const readableSamplePath = await pathIsReadable(sample.path);
   if (!readableSamplePath) {
     steps.push(
-      step("file", "fail", "Aurral can read a downloaded track file", {
+      step("file", "fail", "Sample Lidarr track file is readable from Aurral", {
         detail: sample.path,
         fix: looksLikeExternalOnlyPath(sample.path)
-          ? "Lidarr reports a host path Aurral cannot read inside Docker. Mount the parent folder into Aurral, then add a manual Lidarr path mapping under Settings → Downloads → Remote path mappings."
+          ? "Lidarr reports a host path Aurral cannot read inside Docker. Mount the parent folder into Aurral, then add a manual Lidarr path mapping under Settings → System → Storage."
           : "Lidarr reports this file path, but Aurral cannot read it. Check Docker mounts and folder permissions (PUID/PGID). If Lidarr and Aurral intentionally use different container paths, add a manual Lidarr path mapping.",
       }),
     );
@@ -230,7 +230,7 @@ export async function runLidarrLibraryAccessTest(lidarrClient, options = {}) {
 
   const resolvedSamplePath =
     readableSamplePath || (await pathIsReadable(sample.path));
-  steps.push(step("file", "pass", "Aurral can read a downloaded track file", {
+  steps.push(step("file", "pass", "Sample Lidarr track file is readable from Aurral", {
     detail: resolvedSamplePath || sample.path,
   }));
 

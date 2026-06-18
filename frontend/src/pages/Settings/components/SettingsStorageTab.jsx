@@ -1,8 +1,6 @@
 import { SettingsStorageSection } from "./SettingsStorageSection";
 
 export function SettingsStorageTab({
-  settings,
-  updateSettings,
   hasUnsavedChanges,
   handleSaveSettings,
   health,
@@ -17,8 +15,6 @@ export function SettingsStorageTab({
         autoComplete="off"
       >
         <SettingsStorageSection
-          settings={settings}
-          updateSettings={updateSettings}
           hasUnsavedChanges={hasUnsavedChanges}
           handleSaveSettings={handleSaveSettings}
           health={health}

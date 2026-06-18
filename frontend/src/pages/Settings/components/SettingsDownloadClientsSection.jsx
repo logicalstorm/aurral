@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { Plus, RefreshCw, Trash2, Wrench } from "lucide-react";
+import DownloadFolderField from "../../../components/DownloadFolderField";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
 import {
   IntegrationCard,
@@ -11,15 +12,48 @@ import {
   SettingsModalToggle,
   SettingsModalToggleGroup,
 } from "./SettingsModalLayout";
+import {
+  SettingsArrFieldSet,
+  SettingsArrFormGroup,
+} from "./arr/SettingsArrLayout";
 import { getProviderStatus } from "../utils/integrationStatus";
+import {
+  PATH_MAPPING_SOURCE_OPTIONS,
+  PathMappingModal,
+} from "./PathMappingModal";
 import {
   testNzbgetConnection,
   testSlskdConnection,
 } from "../../../utils/api";
 
+const PATH_MAPPING_SOURCE_VALUES = new Set(
+  PATH_MAPPING_SOURCE_OPTIONS.map((option) => option.value),
+);
+
 function toNumber(value, fallback) {
   const next = parseInt(value, 10);
   return Number.isFinite(next) ? next : fallback;
+}
+
+function normalizePathMappingSource(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return PATH_MAPPING_SOURCE_VALUES.has(normalized) ? normalized : "all";
+}
+
+function coercePathMappings(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => ({
+    source: normalizePathMappingSource(entry?.source),
+    remote: String(entry?.remote || "").trim(),
+    local: String(entry?.local || "").trim(),
+  }));
+}
+
+function sourceLabel(source) {
+  return (
+    PATH_MAPPING_SOURCE_OPTIONS.find((option) => option.value === source)?.label ||
+    source
+  );
 }
 
 const CLIENT_MODALS = {
@@ -40,10 +74,14 @@ export function SettingsDownloadClientsSection({
   const [testingSlskd, setTestingSlskd] = useState(false);
   const [testingNzbget, setTestingNzbget] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [mappingModal, setMappingModal] = useState(null);
 
   const integrations = settings.integrations || {};
   const slskd = integrations.slskd || {};
   const nzbget = integrations.nzbget || {};
+  const pathMappings = coercePathMappings(settings.pathMappings).filter(
+    (entry) => entry.remote || entry.local,
+  );
 
   const slskdConfigured = Boolean(slskd.url && slskd.apiKey);
   const nzbgetConfigured = Boolean(nzbget.url);
@@ -61,6 +99,40 @@ export function SettingsDownloadClientsSection({
         },
       },
     });
+
+  const updatePathMappings = (nextMappings) => {
+    updateSettings({
+      ...settings,
+      pathMappings: coercePathMappings(nextMappings),
+    });
+  };
+
+  const openAddMapping = () => {
+    setMappingModal({ mode: "add", index: null });
+  };
+
+  const openEditMapping = (index) => {
+    setMappingModal({ mode: "edit", index });
+  };
+
+  const closeMappingModal = () => {
+    setMappingModal(null);
+  };
+
+  const saveMapping = (mapping) => {
+    if (mappingModal?.mode === "edit" && mappingModal.index != null) {
+      const nextMappings = [...pathMappings];
+      nextMappings[mappingModal.index] = mapping;
+      updatePathMappings(nextMappings);
+    } else {
+      updatePathMappings([...pathMappings, mapping]);
+    }
+    closeMappingModal();
+  };
+
+  const deleteMapping = (index) => {
+    updatePathMappings(pathMappings.filter((_entry, entryIndex) => entryIndex !== index));
+  };
 
   const handleTestNzbget = async () => {
     if (!nzbgetEnabled || !nzbget.url) {
@@ -148,6 +220,116 @@ export function SettingsDownloadClientsSection({
           />
         </div>
       </div>
+
+      <SettingsArrFieldSet legend="Downloads Folder">
+        <SettingsArrFormGroup
+          label="Path"
+          labelFor="download-clients-download-folder"
+          help="Example: /data/media/aurral_flow or /data/downloads/aurral"
+        >
+          <DownloadFolderField
+            id="download-clients-download-folder"
+            value={settings.downloadFolderPath || ""}
+            autoApplySuggestion={false}
+            onChange={(nextPath) =>
+              updateSettings({
+                ...settings,
+                downloadFolderPath: nextPath,
+              })
+            }
+          />
+        </SettingsArrFormGroup>
+      </SettingsArrFieldSet>
+
+      <SettingsArrFieldSet legend="Remote Path Mappings">
+        <div className="arr-info">
+          Remote path mappings are rarely required. If Aurral and your download
+          clients share the same container mounts, match paths instead of adding
+          mappings here.
+        </div>
+
+        <div className="arr-table-wrap">
+          <table className="arr-table">
+            <thead>
+              <tr>
+                <th scope="col">Source</th>
+                <th scope="col">Remote Path</th>
+                <th scope="col">Local Path</th>
+                <th scope="col" className="arr-table__actions-head">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {pathMappings.length === 0 ? (
+                <tr className="arr-table__empty-row">
+                  <td colSpan={4}>No path mappings configured.</td>
+                </tr>
+              ) : (
+                pathMappings.map((mapping, index) => (
+                  <tr key={`path-mapping-${index}`}>
+                    <td>{sourceLabel(mapping.source)}</td>
+                    <td>
+                      <code className="arr-table__path">{mapping.remote}</code>
+                    </td>
+                    <td>
+                      <code className="arr-table__path">{mapping.local}</code>
+                    </td>
+                    <td className="arr-table__actions">
+                      <div className="arr-table__actions-inner">
+                        <button
+                          type="button"
+                          className="arr-btn arr-btn--ghost arr-btn--icon"
+                          aria-label={`Edit path mapping ${index + 1}`}
+                          onClick={() => openEditMapping(index)}
+                        >
+                          <Wrench className="artist-icon-sm" aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          className="arr-btn arr-btn--ghost arr-btn--icon"
+                          aria-label={`Delete path mapping ${index + 1}`}
+                          onClick={() => deleteMapping(index)}
+                        >
+                          <Trash2 className="artist-icon-sm" aria-hidden />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="arr-table-footer">
+          <button
+            type="button"
+            className="arr-btn arr-btn--ghost arr-btn--icon"
+            aria-label="Add path mapping"
+            onClick={openAddMapping}
+          >
+            <Plus className="artist-icon-sm" aria-hidden />
+          </button>
+        </div>
+      </SettingsArrFieldSet>
+
+      {mappingModal ? (
+        <PathMappingModal
+          title={
+            mappingModal.mode === "edit"
+              ? "Edit Remote Path Mapping"
+              : "Add Remote Path Mapping"
+          }
+          initialValue={
+            mappingModal.mode === "edit" && mappingModal.index != null
+              ? pathMappings[mappingModal.index]
+              : undefined
+          }
+          onClose={closeMappingModal}
+          onSave={saveMapping}
+        />
+      ) : null}
 
       {activeModal === CLIENT_MODALS.slskd && (
         <SettingsIntegrationModal

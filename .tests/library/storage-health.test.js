@@ -14,6 +14,8 @@ import {
 
 const isolatedState = await createIsolatedStateDir("storage-health");
 applyIsolatedBackendEnv(isolatedState);
+const previousFileBrowseRoots = process.env.FILE_BROWSE_ROOTS;
+const previousPathMappings = process.env.PATH_MAPPINGS;
 
 const [{ db }, { dbOps }, { runStorageHealthCheck }, { resolvePlaylistRoot }] =
   await Promise.all([
@@ -31,6 +33,8 @@ test.beforeEach(async () => {
   downloadTracker.clearAll();
   const downloadFolder = process.env.DOWNLOAD_FOLDER;
   await fs.mkdir(downloadFolder, { recursive: true });
+  process.env.FILE_BROWSE_ROOTS = downloadFolder;
+  delete process.env.PATH_MAPPINGS;
   dbOps.updateSettings({
     ...dbOps.getSettings(),
     downloadFolderPath: downloadFolder,
@@ -42,10 +46,20 @@ test.beforeEach(async () => {
 });
 
 test.after(async () => {
+  if (previousFileBrowseRoots === undefined) {
+    delete process.env.FILE_BROWSE_ROOTS;
+  } else {
+    process.env.FILE_BROWSE_ROOTS = previousFileBrowseRoots;
+  }
+  if (previousPathMappings === undefined) {
+    delete process.env.PATH_MAPPINGS;
+  } else {
+    process.env.PATH_MAPPINGS = previousPathMappings;
+  }
   await cleanupIsolatedState(isolatedState);
 });
 
-test("runStorageHealthCheck reports missing downloads folder", async () => {
+test("runStorageHealthCheck passes when downloads folder is writable", async () => {
   const result = await runStorageHealthCheck();
   const downloads = result.sections.find((section) => section.id === "downloads");
   assert.ok(downloads);
@@ -104,6 +118,58 @@ test("runStorageHealthCheck passes when completed playlist files exist", async (
   const playlists = result.sections.find((section) => section.id === "playlists");
   assert.ok(playlists);
   assert.equal(playlists.status, "pass");
+});
+
+test("runStorageHealthCheck warns when completed playlist files are empty", async () => {
+  const { downloadTracker } = await importFromRepo(
+    "backend/services/weeklyFlowDownloadTracker.js",
+  );
+  const playlistRoot = resolvePlaylistRoot();
+  const trackPath = path.join(
+    playlistRoot,
+    "aurral-weekly-flow",
+    "health-playlist-empty",
+    "Artist",
+    "Album",
+    "empty-track.flac",
+  );
+  await fs.mkdir(path.dirname(trackPath), { recursive: true });
+  await fs.writeFile(trackPath, "");
+  const jobId = downloadTracker.addJob(
+    { artistName: "Artist", trackName: "Empty" },
+    "health-playlist-empty",
+  );
+  downloadTracker.setDone(jobId, trackPath, "Album");
+
+  const result = await runStorageHealthCheck();
+  const playlists = result.sections.find((section) => section.id === "playlists");
+  assert.ok(playlists);
+  assert.equal(playlists.status, "warn");
+  assert.equal(
+    playlists.steps.some(
+      (step) => step.id === "tracked-nonempty" && step.status === "warn",
+    ),
+    true,
+  );
+});
+
+test("runStorageHealthCheck fails when a path mapping local folder is missing", async () => {
+  dbOps.updateSettings({
+    ...dbOps.getSettings(),
+    pathMappings: [
+      {
+        source: "lidarr",
+        remote: "/mnt/music",
+        local: path.join(isolatedState.baseDir, "missing-mapped-music"),
+      },
+    ],
+  });
+
+  const result = await runStorageHealthCheck();
+  const mappings = result.sections.find((section) => section.id === "path-mappings");
+  assert.ok(mappings);
+  assert.equal(mappings.status, "fail");
+  assert.equal(result.ok, false);
 });
 
 test("runStorageHealthCheck skips optional integrations when unset", async () => {

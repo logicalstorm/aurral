@@ -1,49 +1,141 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus, RefreshCw, Trash2, Wrench } from "lucide-react";
-import DownloadFolderField from "../../../components/DownloadFolderField";
+import { RefreshCw } from "lucide-react";
 import { StorageHealthDashboard } from "./StorageHealthDashboard";
 import {
   getStorageHealthCache,
   refreshStorageHealth,
   subscribeStorageHealth,
 } from "../../../hooks/storageHealthStatus";
-import {
-  SettingsArrFieldSet,
-  SettingsArrFormGroup,
-} from "./arr/SettingsArrLayout";
-import {
-  PATH_MAPPING_SOURCE_OPTIONS,
-  PathMappingModal,
-} from "./PathMappingModal";
+import { SettingsArrFieldSet } from "./arr/SettingsArrLayout";
 
-const PATH_MAPPING_SOURCE_VALUES = new Set(
-  PATH_MAPPING_SOURCE_OPTIONS.map((option) => option.value),
-);
-
-function normalizePathMappingSource(value) {
-  const normalized = String(value || "").trim().toLowerCase();
-  return PATH_MAPPING_SOURCE_VALUES.has(normalized) ? normalized : "all";
+function formatBytes(bytes) {
+  const value = Number(bytes);
+  if (!Number.isFinite(value) || value < 0) return "—";
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let size = value;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  const decimals = size >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${size.toFixed(decimals)} ${units[unitIndex]}`;
 }
 
-function coercePathMappings(value) {
-  if (!Array.isArray(value)) return [];
-  return value.map((entry) => ({
-    source: normalizePathMappingSource(entry?.source),
-    remote: String(entry?.remote || "").trim(),
-    local: String(entry?.local || "").trim(),
-  }));
+function formatUptime(seconds) {
+  if (!Number.isFinite(Number(seconds))) return null;
+  const total = Math.max(0, Math.floor(Number(seconds || 0)));
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const parts = [];
+  if (days) parts.push(`${days}d`);
+  if (hours || days) parts.push(`${hours}h`);
+  parts.push(`${minutes}m`);
+  return parts.join(" ");
 }
 
-function sourceLabel(source) {
+function healthMessages(healthResult, health) {
+  const messages = [];
+  if (health?.onboardingRequired) {
+    messages.push({
+      status: "warn",
+      text: "Onboarding is not complete.",
+    });
+  }
+  if (!healthResult) {
+    messages.push({
+      status: "warn",
+      text: "Storage checks have not run in this session.",
+    });
+    return messages;
+  }
+  if (healthResult.failedCount > 0) {
+    messages.push({
+      status: "fail",
+      text: `${healthResult.failedCount} storage check${healthResult.failedCount === 1 ? "" : "s"} failed.`,
+    });
+  }
+  if (healthResult.warningCount > 0) {
+    messages.push({
+      status: "warn",
+      text: `${healthResult.warningCount} storage warning${healthResult.warningCount === 1 ? "" : "s"} found.`,
+    });
+  }
+  return messages;
+}
+
+function DiskSpaceTable({ entries = [] }) {
+  if (!entries.length) {
+    return <p className="arr-form-help">Disk space data is not available.</p>;
+  }
+
   return (
-    PATH_MAPPING_SOURCE_OPTIONS.find((option) => option.value === source)?.label ||
-    source
+    <div className="arr-table-wrap">
+      <table className="arr-table arr-table--disk">
+        <thead>
+          <tr>
+            <th scope="col">Location</th>
+            <th scope="col">Role</th>
+            <th scope="col">Free Space</th>
+            <th scope="col">Total Space</th>
+            <th scope="col">Used</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((entry) => {
+            const usedPercent = Number(entry.usedPercent || 0);
+            return (
+              <tr key={`${entry.role || "disk"}-${entry.location}`}>
+                <td>
+                  <code className="arr-table__path">{entry.location}</code>
+                  {entry.statTarget && entry.statTarget !== entry.location ? (
+                    <span className="arr-table__subtle">
+                      Stats from {entry.statTarget}
+                    </span>
+                  ) : null}
+                </td>
+                <td>{entry.role || "—"}</td>
+                <td>{entry.available ? formatBytes(entry.freeBytes) : "—"}</td>
+                <td>{entry.available ? formatBytes(entry.totalBytes) : "—"}</td>
+                <td>
+                  {entry.available ? (
+                    <div className="arr-disk-meter">
+                      <div className="arr-disk-meter__bar" aria-hidden>
+                        <span
+                          className="arr-disk-meter__fill"
+                          style={{ width: `${usedPercent}%` }}
+                        />
+                      </div>
+                      <span className="arr-disk-meter__label">
+                        {usedPercent}%
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="arr-table__subtle">
+                      {entry.error || "Unavailable"}
+                    </span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function MetaRow({ label, children }) {
+  return (
+    <div>
+      <dt className="arr-meta-term">{label}</dt>
+      <dd className="arr-meta-value">{children || "—"}</dd>
+    </div>
   );
 }
 
 export function SettingsStorageSection({
-  settings,
-  updateSettings,
   hasUnsavedChanges,
   handleSaveSettings,
   health,
@@ -54,22 +146,10 @@ export function SettingsStorageSection({
     () => getStorageHealthCache().result,
   );
   const [checkingHealth, setCheckingHealth] = useState(false);
-  const [mappingModal, setMappingModal] = useState(null);
 
   useEffect(() => subscribeStorageHealth((cache) => {
     setHealthResult(cache.result);
   }), []);
-
-  const pathMappings = coercePathMappings(settings.pathMappings).filter(
-    (entry) => entry.remote || entry.local,
-  );
-
-  const updatePathMappings = (nextMappings) => {
-    updateSettings({
-      ...settings,
-      pathMappings: coercePathMappings(nextMappings),
-    });
-  };
 
   const runHealthCheck = useCallback(
     async ({ notify = true } = {}) => {
@@ -122,35 +202,32 @@ export function SettingsStorageSection({
     };
   }, []);
 
-  const openAddMapping = () => {
-    setMappingModal({ mode: "add", index: null });
-  };
-
-  const openEditMapping = (index) => {
-    setMappingModal({ mode: "edit", index });
-  };
-
-  const closeMappingModal = () => {
-    setMappingModal(null);
-  };
-
-  const saveMapping = (mapping) => {
-    if (mappingModal?.mode === "edit" && mappingModal.index != null) {
-      const nextMappings = [...pathMappings];
-      nextMappings[mappingModal.index] = mapping;
-      updatePathMappings(nextMappings);
-    } else {
-      updatePathMappings([...pathMappings, mapping]);
-    }
-    closeMappingModal();
-  };
-
-  const deleteMapping = (index) => {
-    updatePathMappings(pathMappings.filter((_entry, entryIndex) => entryIndex !== index));
-  };
+  const system = health?.system || {};
+  const messages = healthMessages(healthResult, health);
 
   return (
     <>
+      <SettingsArrFieldSet legend="Health">
+        {messages.length === 0 ? (
+          <p className="arr-health-line">No issues with your configuration</p>
+        ) : (
+          <ul className="arr-health-list">
+            {messages.map((message, index) => (
+              <li
+                key={`${message.status}-${index}`}
+                className={`arr-health-list__item is-${message.status}`}
+              >
+                {message.text}
+              </li>
+            ))}
+          </ul>
+        )}
+      </SettingsArrFieldSet>
+
+      <SettingsArrFieldSet legend="Disk Space">
+        <DiskSpaceTable entries={system.diskSpace || []} />
+      </SettingsArrFieldSet>
+
       <SettingsArrFieldSet
         legend="Storage Health"
         actions={
@@ -175,135 +252,42 @@ export function SettingsStorageSection({
         <StorageHealthDashboard result={healthResult} loading={checkingHealth} />
       </SettingsArrFieldSet>
 
-      <SettingsArrFieldSet legend="Downloads Folder">
-        <SettingsArrFormGroup
-          label="Path"
-          labelFor="storage-download-folder"
-          help="Example: /data/media/aurral_flow or /data/downloads/aurral"
-        >
-          <DownloadFolderField
-            id="storage-download-folder"
-            value={settings.downloadFolderPath || ""}
-            autoApplySuggestion={false}
-            onChange={(nextPath) =>
-              updateSettings({
-                ...settings,
-                downloadFolderPath: nextPath,
-              })
-            }
-          />
-        </SettingsArrFormGroup>
-      </SettingsArrFieldSet>
-
-      <SettingsArrFieldSet legend="Remote Path Mappings">
-        <div className="arr-info">
-          Remote path mappings are rarely required. If Aurral and your download
-          clients share the same container mounts, match paths instead of adding
-          mappings here.
-        </div>
-
-        <div className="arr-table-wrap">
-          <table className="arr-table">
-            <thead>
-              <tr>
-                <th scope="col">Source</th>
-                <th scope="col">Remote Path</th>
-                <th scope="col">Local Path</th>
-                <th scope="col" className="arr-table__actions-head">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {pathMappings.length === 0 ? (
-                <tr className="arr-table__empty-row">
-                  <td colSpan={4}>No path mappings configured.</td>
-                </tr>
-              ) : (
-                pathMappings.map((mapping, index) => (
-                  <tr key={`path-mapping-${index}`}>
-                    <td>{sourceLabel(mapping.source)}</td>
-                    <td>
-                      <code className="arr-table__path">{mapping.remote}</code>
-                    </td>
-                    <td>
-                      <code className="arr-table__path">{mapping.local}</code>
-                    </td>
-                    <td className="arr-table__actions">
-                      <div className="arr-table__actions-inner">
-                        <button
-                          type="button"
-                          className="arr-btn arr-btn--ghost arr-btn--icon"
-                          aria-label={`Edit path mapping ${index + 1}`}
-                          onClick={() => openEditMapping(index)}
-                        >
-                          <Wrench className="artist-icon-sm" aria-hidden />
-                        </button>
-                        <button
-                          type="button"
-                          className="arr-btn arr-btn--ghost arr-btn--icon"
-                          aria-label={`Delete path mapping ${index + 1}`}
-                          onClick={() => deleteMapping(index)}
-                        >
-                          <Trash2 className="artist-icon-sm" aria-hidden />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="arr-table-footer">
-          <button
-            type="button"
-            className="arr-btn arr-btn--ghost arr-btn--icon"
-            aria-label="Add path mapping"
-            onClick={openAddMapping}
-          >
-            <Plus className="artist-icon-sm" aria-hidden />
-          </button>
-        </div>
-      </SettingsArrFieldSet>
-
-      {mappingModal ? (
-        <PathMappingModal
-          title={
-            mappingModal.mode === "edit"
-              ? "Edit Remote Path Mapping"
-              : "Add Remote Path Mapping"
-          }
-          initialValue={
-            mappingModal.mode === "edit" && mappingModal.index != null
-              ? pathMappings[mappingModal.index]
-              : undefined
-          }
-          onClose={closeMappingModal}
-          onSave={saveMapping}
-        />
-      ) : null}
-
       <SettingsArrFieldSet legend="About">
         <dl className="arr-meta-grid arr-meta-grid--two-col">
-          <div>
-            <dt className="arr-meta-term">Version</dt>
-            <dd className="arr-meta-value">{health?.appVersion || "—"}</dd>
-          </div>
-          <div>
-            <dt className="arr-meta-term">Documentation</dt>
-            <dd className="arr-meta-value">
+          <MetaRow label="Version">{system.version || health?.appVersion}</MetaRow>
+          <MetaRow label="Node">{system.nodeVersion}</MetaRow>
+          <MetaRow label="Platform">
+            {system.platform && system.arch
+              ? `${system.platform} ${system.arch}`
+              : null}
+          </MetaRow>
+          <MetaRow label="Docker">
+            {system.docker == null ? null : system.docker ? "Yes" : "No"}
+          </MetaRow>
+          <MetaRow label="Database">{system.database?.label}</MetaRow>
+          <MetaRow label="App Data Directory">{system.dataDir}</MetaRow>
+          <MetaRow label="Database Path">{system.databasePath}</MetaRow>
+          <MetaRow label="Startup Directory">{system.startupDirectory}</MetaRow>
+          <MetaRow label="Mode">{system.mode}</MetaRow>
+          <MetaRow label="Uptime">{formatUptime(system.uptimeSeconds)}</MetaRow>
+          <MetaRow label="Hostname">{system.hostname}</MetaRow>
+        </dl>
+      </SettingsArrFieldSet>
+
+      <SettingsArrFieldSet legend="More Info">
+        <dl className="arr-meta-grid arr-meta-grid--two-col">
+          {(system.links || []).map((link) => (
+            <MetaRow key={link.label} label={link.label}>
               <a
-                href="https://aurral.github.io/Aurral/"
+                href={link.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="arr-link"
               >
-                Aurral docs
+                {link.value || link.url}
               </a>
-            </dd>
-          </div>
+            </MetaRow>
+          ))}
         </dl>
       </SettingsArrFieldSet>
     </>
