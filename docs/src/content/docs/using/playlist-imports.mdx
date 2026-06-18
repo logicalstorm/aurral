@@ -170,7 +170,7 @@ Aurral keeps every generated playlist entry inside its own playlist folder under
 
 Aurral-global reuse prevents the same imported track from being downloaded again for another playlist. Lidarr-aware reuse requires Aurral to read the files at the paths Lidarr reports. In a standard all-Docker setup, that means the same `/data` mount and root folder path (for example `/data/music`).
 
-If Lidarr runs on Windows and Aurral runs in Docker, run **Test library access** in **Settings → Library → Lidarr** to see the exact reported path, then add a manual Lidarr mapping under **Settings → Download Clients → Remote Path Mappings** if the path differs inside Aurral. See [Shared storage](/getting-started/storage/#windows-and-mixed-docker-setups).
+If Lidarr runs on Windows and Aurral runs in Docker, run **Test library access** in **Settings → Library → Lidarr** to see the exact reported path, then add a manual Lidarr mapping under **Settings → Downloads → Advanced remote path mappings** if the path differs inside Aurral. See [Shared storage](/getting-started/storage/#windows-and-mixed-docker-setups).
 
 When reuse points at Lidarr files and Navidrome sees those files at a different path than Aurral, also enable **Use Navidrome paths in M3U files** under **Settings → Playback → Navidrome** and add a Navidrome path mapping so generated M3U files reference paths Navidrome can open. See [Navidrome](/integrations/navidrome/#mixed-windows-and-docker-navidrome).
 

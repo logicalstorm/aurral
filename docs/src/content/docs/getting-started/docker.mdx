@@ -39,7 +39,7 @@ Open `http://localhost:3001` and follow onboarding.
 | Host media root | `/data` | Shared library, downloads, and generated playlists |
 | Host config folder | `/config` | Aurral database, settings, users, and jobs |
 
-`DOWNLOAD_FOLDER` is configured during onboarding or in **Settings → Download Clients → Downloads Folder**. It must live inside the `/data` mount, for example `/data/downloads/aurral`.
+`DOWNLOAD_FOLDER` is configured during onboarding or in **Settings → Downloads → Downloads folder**. It must live inside the `/data` mount, for example `/data/downloads/aurral`.
 
 :::note
 `/config` replaces the older `/app/backend/data` path from Aurral v1. Existing databases in either location are detected automatically on startup.

@@ -55,7 +55,7 @@ import { requestDiscoveryRefresh } from "../services/discoveryRefreshScheduler.j
 
 const router = express.Router();
 const SLSKD_NOT_CONFIGURED_MESSAGE =
-  "slskd is not configured. Add your slskd URL and API key in Settings > Download Clients to enable Soulseek downloads for flows and playlists.";
+  "slskd is not configured. Add your slskd URL and API key in Settings > Integrations to enable Soulseek downloads for flows and playlists.";
 
 const pendingTagRequests = new Map();
 const pendingTagSuggestRequest = { promise: null, expiry: 0 };

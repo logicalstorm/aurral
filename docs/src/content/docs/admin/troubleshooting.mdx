@@ -18,7 +18,7 @@ description: Common setup and runtime issues.
 
 ## Playlists are not downloading
 
-- Confirm at least one download client is configured in **Settings → Download Clients** (slskd and/or Prowlarr + NZBGet).
+- Confirm at least one download client is configured in **Settings → Downloads** (slskd and/or Prowlarr + NZBGet).
 - For slskd: check connection and Soulseek login status.
 - For Usenet: confirm Prowlarr indexers are enabled in Aurral and NZBGet can reach completed files.
 - Open the **slskd** card and try disabling **Strict format only**, or switch preferred format to MP3 if FLAC matches are scarce.
@@ -36,12 +36,12 @@ description: Common setup and runtime issues.
 Symptoms include logs such as `Lidarr track exists but file is not accessible from Aurral`, completed slskd or NZBGet files not moving, or **Test library access** failing while Lidarr itself works.
 
 - Mount the parent host folder into Aurral, not separate mounts for library and downloads. Example: `N:/ServerFolders/Music:/music`.
-- Set **Settings → Download Clients → Downloads Folder** to a path under that mount, for example `/music/Aurral`, or set `DOWNLOAD_FOLDER=/music/Aurral` in compose.
+- Set **Settings → Downloads → Downloads folder** to a path under that mount, for example `/music/Aurral`, or set `DOWNLOAD_FOLDER=/music/Aurral` in compose.
 - After changing compose `volumes` or `environment`, recreate the container with `docker compose up -d --force-recreate`. A simple restart does not remount volumes or reload env vars.
 - Run **Settings → Library → Lidarr → Test library access** to see the exact path Aurral cannot read.
-- If needed, set `PATH_MAPPINGS=N:/ServerFolders/Music|/music` in compose, or add mappings under **Settings → Download Clients → Remote Path Mappings**. Compose `PATH_MAPPINGS` work at runtime but are not shown in the UI.
+- If needed, set `PATH_MAPPINGS=N:/ServerFolders/Music|/music` in compose, or add mappings under **Settings → Downloads → Advanced remote path mappings**. Compose `PATH_MAPPINGS` work at runtime but are not shown in the UI.
 - If Navidrome sees the files at a different path than Aurral, enable **Settings → Playback → Navidrome → Use Navidrome paths in M3U files** and add a Navidrome path mapping, or set `M3U_PATH_MODE=remote` plus `M3U_PATH_MAPPINGS`.
-- For NZBGet on Windows, set **Completed download path** in **Settings → Download Clients → NZBGet** if Aurral cannot detect the folder automatically.
+- For NZBGet on Windows, set **Completed download path** in **Settings → Downloads → NZBGet** if Aurral cannot detect the folder automatically.
 
 See [Shared storage — Windows and mixed Docker setups](/getting-started/storage/#windows-and-mixed-docker-setups).
 

@@ -11,15 +11,15 @@ slskd handles Soulseek acquisition for flow and playlist tracks. Aurral can also
 
 1. Run slskd with the same `/data` mount as Aurral.
 2. Set slskd's download directory to `/data/downloads/slskd/complete`.
-3. Connect slskd in Aurral onboarding or **Settings → Download Clients → slskd**.
+3. Connect slskd in Aurral onboarding or **Settings → Downloads → slskd**.
 
 Aurral picks up completed files from slskd's download path and moves them into your `DOWNLOAD_FOLDER`.
 
-If slskd runs on Windows and reports host paths such as `N:\...`, mount the parent folder into Aurral and configure a manual slskd path mapping under **Settings → Download Clients → Remote Path Mappings**. See [Shared storage](/getting-started/storage/#windows-and-mixed-docker-setups).
+If slskd runs on Windows and reports host paths such as `N:\...`, mount the parent folder into Aurral and configure a manual slskd path mapping under **Settings → Downloads → Advanced remote path mappings**. See [Shared storage](/getting-started/storage/#windows-and-mixed-docker-setups).
 
 ## Worker settings
 
-Open the **slskd** card in **Settings → Download Clients** to configure:
+Open the **slskd** card in **Settings → Downloads** to configure:
 
 - **Source priority** — order relative to Usenet (default `10`)
 - **Preferred format** and **Strict format only** — ranking for search results

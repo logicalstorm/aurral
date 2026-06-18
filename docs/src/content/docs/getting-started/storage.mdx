@@ -100,9 +100,9 @@ services:
 
 After changing `volumes` or `environment`, recreate the container (`docker compose up -d --force-recreate`). `docker restart` does not apply compose changes.
 
-1. Set your download folder to a path inside that mount, for example `/music/Aurral` (via `DOWNLOAD_FOLDER` or **Settings → Download Clients → Downloads Folder**).
+1. Set your download folder to a path inside that mount, for example `/music/Aurral` (via `DOWNLOAD_FOLDER` or **Settings → Downloads → Downloads folder**).
 2. In **Settings → Library → Lidarr**, run **Test library access**. The check shows the exact Lidarr path Aurral is trying to read.
-3. If the reported path is mounted at a different path inside Aurral, add `PATH_MAPPINGS` in compose or open **Settings → Download Clients → Remote Path Mappings** and add a manual **Remote Path** / **Local Path** pair.
+3. If the reported path is mounted at a different path inside Aurral, add `PATH_MAPPINGS` in compose or open **Settings → Downloads → Advanced remote path mappings** and add a manual **Reported path** / **Aurral path** pair.
 4. If Navidrome cannot open the paths Aurral writes into `.m3u` files, enable **Settings → Playback → Navidrome → Use Navidrome paths in M3U files** and add a Navidrome path mapping, or set `M3U_PATH_MODE=remote` plus `M3U_PATH_MAPPINGS` in compose.
 
 ### Path mappings vs playlist file paths
@@ -111,7 +111,7 @@ These solve two different problems in mixed Windows/Docker setups:
 
 | Setting | Direction | Used for |
 | --- | --- | --- |
-| **Path mappings** (`PATH_MAPPINGS` or **Settings → Download Clients → Remote Path Mappings**) | Host → container (`N:\...` → `/music/...`) | Aurral reading Lidarr, slskd, and NZBGet files, library reuse, **Test library access** |
+| **Path mappings** (`PATH_MAPPINGS` or **Settings → Downloads → Advanced remote path mappings**) | Host → container (`N:\...` → `/music/...`) | Aurral reading Lidarr, slskd, and NZBGet files, library reuse, **Test library access** |
 | **Navidrome playlist mappings** (`M3U_PATH_MAPPINGS` or **Settings → Playback → Navidrome → Navidrome path mappings**) | Aurral path → Navidrome path (`/music/...` → `/data/media/music/...` or `N:\...`) | M3U playlists Navidrome reads when it has a different filesystem view |
 | **Plex downloads path** (Plex integration setting) | Aurral → Plex library root | Plex music library location when Plex sees a different mount than Aurral |
 

@@ -47,7 +47,7 @@ const MAX_DOWNLOAD_CANDIDATES = 7;
 const MAX_TRANSFER_RETRIES_PER_CANDIDATE = 1;
 const POLL_DELAY_SECONDS = 3;
 const SLSKD_NOT_CONFIGURED_MESSAGE =
-  "slskd is not configured. Add your slskd URL and API key in Settings > Download Clients to enable Soulseek downloads for flows and playlists.";
+  "slskd is not configured. Add your slskd URL and API key in Settings > Integrations to enable Soulseek downloads for flows and playlists.";
 
 export function buildSlskdSearchTierGroups(resolvedTrack) {
   return buildFlowSearchTiers(resolvedTrack);

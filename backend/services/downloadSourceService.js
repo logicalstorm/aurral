@@ -77,7 +77,7 @@ export function getDownloadSourceNotConfiguredMessage() {
   const pieces = [];
   if (!status.slskd.configured) pieces.push("slskd");
   if (!status.usenet.configured) pieces.push("Prowlarr + NZBGet");
-  return `No download source is configured. Configure ${pieces.join(" or ")} in Settings > Download Clients to enable downloads for flows and playlists.`;
+  return `No download source is configured. Configure ${pieces.join(" or ")} in Settings > Integrations to enable downloads for flows and playlists.`;
 }
 
 export function getSourceLabel(sourceId) {
