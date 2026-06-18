@@ -117,7 +117,8 @@ export const getDiscoveryRecommendationsPerRefresh = () => {
   );
 };
 
-const getDiscoveryRecommendationPoolLimit = () => DISCOVERY_RECOMMENDATIONS_MAX;
+export const getDiscoveryRecommendationPoolLimit = () =>
+  DISCOVERY_RECOMMENDATIONS_MAX;
 
 const createDiscoveryRunId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -1432,6 +1433,7 @@ const buildDiscoveryUpdatePayload = (
     recommendations: rerankCachedRecommendations({
       recommendations: discoveryData.recommendations || [],
       discoveryMode: getDiscoveryMode(),
+      limit: getDiscoveryRecommendationPoolLimit(),
     }),
     globalTop: discoveryData.globalTop || [],
     basedOn: discoveryData.basedOn || [],

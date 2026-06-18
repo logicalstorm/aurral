@@ -13,6 +13,7 @@ import {
   removeDiscoveryFeedback,
   resetDiscoveryFeedback,
   rerankCachedRecommendations,
+  getDiscoveryRecommendationPoolLimit,
   getLocalDiscoveryPreferences,
 } from "../services/discoveryService.js";
 import {
@@ -331,6 +332,7 @@ router.get("/", requireAuth, async (req, res) => {
     recommendations,
     feedback,
     discoveryMode,
+    limit: getDiscoveryRecommendationPoolLimit(),
   });
 
   const parsedLastUpdated = lastUpdated ? new Date(lastUpdated).getTime() : 0;
@@ -985,6 +987,7 @@ router.get("/filtered", requireAuth, async (req, res) => {
       recommendations,
       feedback,
       discoveryMode,
+      limit: getDiscoveryRecommendationPoolLimit(),
     });
 
     res.json({
