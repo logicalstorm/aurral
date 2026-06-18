@@ -45,6 +45,14 @@ const normalizeMbid = (value) => {
   return MBID_REGEX.test(normalized) ? normalized : null;
 };
 
+const buildSeedIdentityKeys = (mbid, artistName) => {
+  const keys = [];
+  if (mbid) keys.push(`mbid:${mbid}`);
+  const normalizedName = normalizeText(artistName);
+  if (normalizedName) keys.push(`name:${normalizedName}`);
+  return keys;
+};
+
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const normalizeDiscoveryMode = (value) => {
@@ -80,6 +88,11 @@ const mergeTags = (target, sourceTags = []) => {
   }
 };
 
+const normalizeTagList = (tags = []) =>
+  (Array.isArray(tags) ? tags : [])
+    .map(normalizeText)
+    .filter(Boolean);
+
 export const normalizeArtistIdentityKeys = (artist) => {
   const keys = [];
   const mbids = [artist?.id, artist?.mbid, artist?.foreignArtistId]
@@ -105,6 +118,65 @@ export const buildExistingArtistKeySet = (artists = []) => {
     }
   }
   return keys;
+};
+
+export const applyHydratedCandidateTags = (
+  recommendation,
+  candidateTags = [],
+  profileTagWeights = new Map(),
+  options = {},
+) => {
+  const normalizedTags = normalizeTagList(candidateTags);
+  if (!recommendation || normalizedTags.length === 0) return recommendation;
+
+  if (!(profileTagWeights instanceof Map) || profileTagWeights.size === 0) {
+    return {
+      ...recommendation,
+      tags: normalizedTags,
+      candidateTagsHydrated: true,
+      tagSource: "lastfm_artist",
+    };
+  }
+
+  const matchedTagWeights = new Map();
+  for (const tag of normalizedTags) {
+    if (!profileTagWeights.has(tag)) continue;
+    matchedTagWeights.set(tag, Number(profileTagWeights.get(tag) || 0));
+  }
+  const matchedTags = topKeysFromMap(matchedTagWeights, 4);
+  const tagWeightSum = matchedTags.reduce(
+    (sum, tag) => sum + Number(profileTagWeights.get(tag) || 0),
+    0,
+  );
+  const tagAffinityMultiplier = clamp(
+    Number(
+      options.tagAffinityMultiplier ??
+        (Number(recommendation.discoveryDepth || 1) >= 2 ? 0.55 : 1),
+    ),
+    0,
+    1,
+  );
+  const scoreTagAffinity =
+    Math.min(45, tagWeightSum * 6 + matchedTags.length * 3) *
+    tagAffinityMultiplier;
+  const previousScoreTagAffinity = Number(recommendation.scoreTagAffinity || 0);
+  const previousTotal = Number(
+    recommendation.scoreTotal || recommendation.score || 0,
+  );
+  const scoreTotal = Math.round(
+    previousTotal - previousScoreTagAffinity + scoreTagAffinity,
+  );
+
+  return {
+    ...recommendation,
+    tags: normalizedTags,
+    matchedTags,
+    scoreTagAffinity: Math.round(scoreTagAffinity),
+    scoreTotal,
+    score: scoreTotal,
+    candidateTagsHydrated: true,
+    tagSource: "lastfm_artist",
+  };
 };
 
 const calculateSeedWeight = (seed, index) => {
@@ -139,9 +211,10 @@ export const buildDiscoverySeedList = ({
       artist?.mbid || artist?.id || artist?.foreignArtistId,
     );
     const artistName = String(artist?.artistName || artist?.name || "").trim();
-    if (!mbid || !artistName) continue;
+    if (!artistName) continue;
 
-    const key = `mbid:${mbid}`;
+    const identityKeys = buildSeedIdentityKeys(mbid, artistName);
+    if (identityKeys.length === 0) continue;
     const source = normalizeText(artist?.source) || "library";
     const nextWeight = calculateSeedWeight(
       {
@@ -152,8 +225,13 @@ export const buildDiscoverySeedList = ({
     );
     const profileBucket = normalizeText(artist?.profileBucket) || null;
 
-    if (seen.has(key)) {
-      const existing = seeds.find((entry) => entry.mbid === mbid);
+    const existingKey = identityKeys.find((key) => seen.has(key));
+    if (existingKey) {
+      const existing = seeds.find((entry) =>
+        Array.isArray(entry.identityKeys)
+          ? entry.identityKeys.some((key) => identityKeys.includes(key))
+          : entry.mbid === mbid,
+      );
       if (existing) {
         existing.weight = Math.max(existing.weight, nextWeight);
         existing.playcount = Math.max(
@@ -170,15 +248,25 @@ export const buildDiscoverySeedList = ({
         if (!existing.profileBucket && profileBucket) {
           existing.profileBucket = profileBucket;
         }
+        for (const key of identityKeys) {
+          if (!existing.identityKeys.includes(key)) {
+            existing.identityKeys.push(key);
+          }
+          seen.add(key);
+        }
+        if (!existing.mbid && mbid) {
+          existing.mbid = mbid;
+        }
       }
       continue;
     }
 
-    seen.add(key);
+    identityKeys.forEach((key) => seen.add(key));
     seeds.push({
       mbid,
       artistName,
       source,
+      identityKeys,
       playcount: Math.max(0, Number(artist?.playcount || 0)),
       weight: nextWeight,
       affinityWeight: Math.max(
@@ -210,12 +298,14 @@ const buildReasonCodes = ({
   scoreNovelty,
   scorePopularityPenalty,
   discoveryMode,
+  discoveryDepth,
 }) => {
   const codes = [];
   if (tagOverlapCount >= 2) codes.push("tag_affinity_strong");
   else if (tagOverlapCount >= 1) codes.push("tag_affinity");
   if (seedCoverage >= 3) codes.push("multi_seed");
   else if (seedCoverage >= 2) codes.push("seed_consensus");
+  if (discoveryDepth >= 2) codes.push("two_hop");
   if ((sourceTypes || []).some((entry) => entry !== "library")) {
     codes.push("history_aligned");
   }
@@ -254,6 +344,20 @@ export const addRecommendationCandidate = (
   const seedWeight = Number(seed?.weight || 1);
   const affinityWeight = Math.max(seedWeight, Number(seed?.affinityWeight || 0));
   const matchScore = clamp(Number(candidate?.match || 0), 0, 1);
+  const similarityMultiplier = clamp(
+    Number(candidate?.similarityMultiplier ?? seed?.similarityMultiplier ?? 1),
+    0,
+    1,
+  );
+  const tagAffinityMultiplier = clamp(
+    Number(candidate?.tagAffinityMultiplier ?? seed?.tagAffinityMultiplier ?? 1),
+    0,
+    1,
+  );
+  const discoveryDepth = Math.max(
+    1,
+    Math.round(Number(candidate?.discoveryDepth ?? seed?.discoveryDepth ?? 1) || 1),
+  );
   const normalizedTags = (Array.isArray(sourceTags) ? sourceTags : [])
     .map(normalizeText)
     .filter(Boolean);
@@ -262,8 +366,13 @@ export const addRecommendationCandidate = (
     (sum, tag) => sum + Number(profileTagWeights.get(tag) || 0),
     0,
   );
-  const scoreSimilarity = Math.max(0, matchScore * 100 * seedWeight);
-  const scoreTagAffinity = Math.min(45, tagWeightSum * 6 + matchedTags.length * 3);
+  const scoreSimilarity = Math.max(
+    0,
+    matchScore * 100 * seedWeight * similarityMultiplier,
+  );
+  const scoreTagAffinity =
+    Math.min(45, tagWeightSum * 6 + matchedTags.length * 3) *
+    tagAffinityMultiplier;
   const perSeedContribution = scoreSimilarity + scoreTagAffinity + affinityWeight * 4;
 
   const existing = accumulator.get(candidateKey);
@@ -297,6 +406,10 @@ export const addRecommendationCandidate = (
     if (mbid && !existing.id) {
       existing.id = mbid;
     }
+    existing.discoveryDepth = Math.min(
+      Number(existing.discoveryDepth || discoveryDepth),
+      discoveryDepth,
+    );
     return;
   }
 
@@ -319,6 +432,7 @@ export const addRecommendationCandidate = (
     tags,
     seedWeights: [seedWeight],
     matchedTagWeights,
+    discoveryDepth,
     sourceTypes: new Set([seed.source || "library"]),
     supportingSeeds: new Map([
       [
@@ -364,6 +478,7 @@ const finalizeRecommendationEntry = (entry, discoveryMode = "balanced") => {
     scoreNovelty,
     scorePopularityPenalty,
     discoveryMode,
+    discoveryDepth: Number(entry.discoveryDepth || 1),
   });
   const confidence = clamp(
     Math.round(
@@ -410,6 +525,7 @@ const finalizeRecommendationEntry = (entry, discoveryMode = "balanced") => {
       entry.sourceTypes.size === 1 ? [...entry.sourceTypes][0] : "blended",
     sourceTypes: [...entry.sourceTypes],
     sourceMix: [...entry.sourceTypes],
+    discoveryDepth: Number(entry.discoveryDepth || 1),
     bestMatch: entry.bestMatch,
     reasonCodes,
     discoveryTier,
@@ -485,8 +601,12 @@ const feedbackBoostForCandidate = (candidate, feedbackList = []) => {
         else if (contextualMatch) adjustment += 10 + tagOverlap * 2;
         break;
       case "less_like_this":
-        if (exactMatch) adjustment -= 20;
-        else if (contextualMatch) adjustment -= 10 + tagOverlap * 2;
+        if (exactMatch) {
+          hidden = true;
+          adjustment -= 100000;
+        } else if (contextualMatch) {
+          adjustment -= 10 + tagOverlap * 2;
+        }
         break;
       default:
         break;
@@ -553,7 +673,9 @@ const rerankSingleRecommendation = (
     Number(recommendation.scoreSeedCoverage || 0) * multipliers.seedCoverage +
     Number(recommendation.scoreNovelty || 0) * multipliers.novelty -
     Number(recommendation.scorePopularityPenalty || 0) *
-      multipliers.popularityPenalty;
+      multipliers.popularityPenalty +
+    Number(recommendation.scoreFreshnessBoost || 0) -
+    Number(recommendation.scoreAgingPenalty || 0);
 
   const scoreTotal = Math.round(
     baseScore - diversityPenalty * multipliers.diversityPenalty + adjustment,
@@ -605,6 +727,7 @@ export const rerankRecommendations = (
             : [],
       reasonCodes: Array.isArray(entry?.reasonCodes) ? [...entry.reasonCodes] : [],
       discoveryTier: entry?.discoveryTier || mode,
+      discoveryDepth: Number(entry?.discoveryDepth || 1) || 1,
       confidence: Number(entry?.confidence || 0) || 0,
     }))
     .sort((left, right) => {
@@ -645,6 +768,140 @@ export const rerankRecommendations = (
   }
 
   return selected;
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const parseTimeMs = (value, fallback = Date.now()) => {
+  const time = new Date(value || "").getTime();
+  return Number.isFinite(time) ? time : fallback;
+};
+
+const getRecommendationPoolKeys = (recommendation) => {
+  const keys = normalizeArtistIdentityKeys(recommendation);
+  if (keys.length > 0) return keys;
+  const name = normalizeText(recommendation?.name);
+  return name ? [`name:${name}`] : [];
+};
+
+const buildRecommendationPoolMetadataMap = (recommendations = []) => {
+  const metadata = new Map();
+  for (const recommendation of Array.isArray(recommendations)
+    ? recommendations
+    : []) {
+    const keys = getRecommendationPoolKeys(recommendation);
+    if (keys.length === 0) continue;
+    const entry = {
+      firstDiscoveredAt:
+        recommendation.firstDiscoveredAt ||
+        recommendation.discoveredAt ||
+        recommendation.lastRecommendedAt ||
+        null,
+      lastRecommendedAt:
+        recommendation.lastRecommendedAt ||
+        recommendation.discoveredAt ||
+        recommendation.firstDiscoveredAt ||
+        null,
+    };
+    for (const key of keys) {
+      metadata.set(key, entry);
+    }
+  }
+  return metadata;
+};
+
+const findRecommendationPoolMetadata = (recommendation, metadataMap) => {
+  for (const key of getRecommendationPoolKeys(recommendation)) {
+    const metadata = metadataMap.get(key);
+    if (metadata) return metadata;
+  }
+  return null;
+};
+
+const applyRecommendationPoolMetadata = (
+  recommendation,
+  {
+    fresh = false,
+    index = 0,
+    metadata = null,
+    runStartedAt,
+    runStartedMs,
+  } = {},
+) => {
+  const firstDiscoveredAt =
+    metadata?.firstDiscoveredAt ||
+    recommendation.firstDiscoveredAt ||
+    recommendation.discoveredAt ||
+    runStartedAt;
+  const firstDiscoveredMs = parseTimeMs(firstDiscoveredAt, runStartedMs);
+  const ageDays = Math.max(0, (runStartedMs - firstDiscoveredMs) / DAY_MS);
+  const agingPenalty = fresh ? 0 : Math.min(80, Math.round(ageDays * 0.45));
+  const freshnessBoost = fresh ? Math.max(8, 18 - index * 0.04) : 0;
+
+  return {
+    ...recommendation,
+    firstDiscoveredAt,
+    discoveredAt: recommendation.discoveredAt || firstDiscoveredAt,
+    lastRecommendedAt: fresh
+      ? runStartedAt
+      : metadata?.lastRecommendedAt ||
+        recommendation.lastRecommendedAt ||
+        firstDiscoveredAt,
+    recommendationPoolState: fresh ? "fresh" : "retained",
+    scoreFreshnessBoost: Number(freshnessBoost.toFixed(2)),
+    scoreAgingPenalty: Number(agingPenalty.toFixed(2)),
+  };
+};
+
+export const mergeRetainedRecommendationPool = ({
+  freshRecommendations = [],
+  existingRecommendations = [],
+  existingArtistKeys = new Set(),
+  limit = 500,
+  runStartedAt = new Date().toISOString(),
+  discoveryMode = "balanced",
+  feedback = [],
+} = {}) => {
+  const normalizedLimit = Math.max(1, Number(limit) || 500);
+  const runStartedMs = parseTimeMs(runStartedAt);
+  const existingMetadata = buildRecommendationPoolMetadataMap(
+    existingRecommendations,
+  );
+  const fresh = (Array.isArray(freshRecommendations)
+    ? freshRecommendations
+    : []
+  ).map((recommendation, index) =>
+    applyRecommendationPoolMetadata(recommendation, {
+      fresh: true,
+      index,
+      metadata: findRecommendationPoolMetadata(recommendation, existingMetadata),
+      runStartedAt,
+      runStartedMs,
+    }),
+  );
+  const retained = (Array.isArray(existingRecommendations)
+    ? existingRecommendations
+    : []
+  ).map((recommendation, index) =>
+    applyRecommendationPoolMetadata(recommendation, {
+      fresh: false,
+      index,
+      runStartedAt,
+      runStartedMs,
+    }),
+  );
+  const merged = mergeResolvedRecommendations(
+    [...fresh, ...retained],
+    existingArtistKeys,
+  );
+
+  return rerankRecommendations(merged, normalizedLimit, {
+    discoveryMode,
+    feedback,
+  }).map((recommendation, index) => ({
+    ...recommendation,
+    recommendationPoolRank: index + 1,
+  }));
 };
 
 export const mergeResolvedRecommendations = (
@@ -699,6 +956,7 @@ export const mergeResolvedRecommendations = (
         popularityRank: recommendation?.popularityRank || null,
         listeners: Number(recommendation?.listeners || 0) || 0,
         playcount: Number(recommendation?.playcount || 0) || 0,
+        discoveryDepth: Number(recommendation?.discoveryDepth || 1) || 1,
       };
       merged.set(identity, entry);
       for (const key of identityKeys) {
@@ -761,6 +1019,10 @@ export const mergeResolvedRecommendations = (
     );
     existing.discoveryTier =
       existing.discoveryTier || recommendation.discoveryTier || "balanced";
+    existing.discoveryDepth = Math.min(
+      Number(existing.discoveryDepth || recommendation.discoveryDepth || 1) || 1,
+      Number(recommendation.discoveryDepth || 1) || 1,
+    );
     existing.sourceArtists = [
       ...new Set([
         ...existing.sourceArtists,

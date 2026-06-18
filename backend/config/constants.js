@@ -124,18 +124,6 @@ export const APP_VERSION = resolveAppVersion({
   cwd: process.cwd(),
 });
 
-export const defaultDiscoveryPreferences = {
-  excludedGenres: [],
-  excludedTags: [],
-  preferredDecades: [],
-  excludedArtists: [],
-  minPopularity: 0,
-  maxRecommendations: 50,
-  includeFromLastfm: true,
-  includeFromLibrary: true,
-  includeTrending: true,
-};
-
 export const defaultData = {
   discovery: {
     recommendations: [],

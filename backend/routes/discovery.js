@@ -29,7 +29,6 @@ import {
   buildImageProxyUrl,
   clearImageProxyCache,
 } from "../services/imageProxyService.js";
-import { defaultDiscoveryPreferences } from "../config/constants.js";
 import {
   requireAuth,
   requireAdmin,
@@ -83,8 +82,6 @@ const fetchLastfmTopTagNames = async () => {
 const DISCOVERY_REVALIDATE_COOLDOWN_MS = 60 * 1000;
 let lastDiscoveryRevalidateAt = 0;
 
-let discoveryPreferences = { ...defaultDiscoveryPreferences };
-
 const getDiscoveryStaleMs = () =>
   getDiscoveryAutoRefreshHours() * 60 * 60 * 1000;
 
@@ -120,6 +117,22 @@ const normalizeTextList = (value) => {
     out.push(normalized);
   }
   return out;
+};
+
+const isLibraryArtist = (artist, existingArtistKeys) => {
+  if (!artist || !existingArtistKeys?.size) return false;
+  return [
+    artist.id,
+    artist.mbid,
+    artist.foreignArtistId,
+    artist.name,
+    artist.artistName,
+  ].some((value) => {
+    const key = String(value || "")
+      .trim()
+      .toLowerCase();
+    return key && existingArtistKeys.has(key);
+  });
 };
 
 router.post("/refresh", requireAuth, requireAdmin, (req, res) => {
@@ -194,7 +207,9 @@ router.get("/", requireAuth, async (req, res) => {
   ) {
     const staleness = getUserDiscoveryCacheStaleness(userCacheNamespace);
     if (staleness > getDiscoveryStaleMs()) {
-      requestUserDiscoveryRefresh(listenHistoryProfile).catch((err) => {
+      requestUserDiscoveryRefresh(listenHistoryProfile, {
+        feedbackUserId: req.user?.id || null,
+      }).catch((err) => {
         console.error(
           `[Discover] On-demand refresh for ${listenHistoryProfile.listenHistoryProvider}:${listenHistoryProfile.listenHistoryUsername} failed:`,
           err.message,
@@ -258,16 +273,14 @@ router.get("/", requireAuth, async (req, res) => {
   const feedback = getDiscoveryFeedback(req.user?.id || "global");
   const discoveryMode = getDiscoveryMode();
 
-  const existingArtistIds = new Set(
-    libraryArtists
-      .map((a) => a.mbid || a.foreignArtistId || a.id)
-      .filter(Boolean),
-  );
+  const existingArtistKeys = buildArtistKeySet(libraryArtists);
 
   recommendations = recommendations.filter(
-    (artist) => !existingArtistIds.has(artist.id),
+    (artist) => !isLibraryArtist(artist, existingArtistKeys),
   );
-  globalTop = globalTop.filter((artist) => !existingArtistIds.has(artist.id));
+  globalTop = globalTop.filter(
+    (artist) => !isLibraryArtist(artist, existingArtistKeys),
+  );
   recommendations = await hydrateArtistImages(recommendations, {
     limit: Math.min(recommendations.length, 36),
     batchSize: 8,
@@ -801,11 +814,6 @@ router.get("/nearby-shows", requireAuth, async (req, res) => {
 router.get("/preferences", requireAuth, (req, res) => {
   const localDiscoveryPreferences = getLocalDiscoveryPreferences();
   res.json({
-    minPopularity: 0,
-    maxRecommendations: 50,
-    includeFromLastfm: true,
-    includeFromLibrary: true,
-    includeTrending: true,
     discoveryMode: getDiscoveryMode(),
     localDiscoveryIncludeRecommendations:
       localDiscoveryPreferences.includeRecommendations,
@@ -941,16 +949,14 @@ router.get("/filtered", requireAuth, async (req, res) => {
     let globalTop = discoveryCache.globalTop || [];
 
     const libraryArtists = await libraryManager.getAllArtists();
-    const existingArtistIds = new Set(
-      libraryArtists
-        .map((a) => a.mbid || a.foreignArtistId || a.id)
-        .filter(Boolean),
-    );
+    const existingArtistKeys = buildArtistKeySet(libraryArtists);
 
     recommendations = recommendations.filter(
-      (artist) => !existingArtistIds.has(artist.id),
+      (artist) => !isLibraryArtist(artist, existingArtistKeys),
     );
-    globalTop = globalTop.filter((artist) => !existingArtistIds.has(artist.id));
+    globalTop = globalTop.filter(
+      (artist) => !isLibraryArtist(artist, existingArtistKeys),
+    );
     recommendations = rerankCachedRecommendations({
       recommendations,
       feedback,

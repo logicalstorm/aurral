@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 
 import {
   addRecommendationCandidate,
+  applyHydratedCandidateTags,
   buildDiscoverySeedList,
   finalizeRecommendationAccumulator,
+  mergeRetainedRecommendationPool,
   mergeResolvedRecommendations,
   rerankRecommendations,
 } from "../../backend/services/discoveryRecommendations.js";
@@ -126,7 +128,41 @@ test("mergeResolvedRecommendations collapses name and mbid variants of the same 
   );
 });
 
-test("rerankRecommendations can deprioritize feedback and favor deeper mode diversification", () => {
+test("applyHydratedCandidateTags replaces route tags with candidate tags for scoring", () => {
+  const recommendation = {
+    id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    name: "Hydrated Pick",
+    tags: ["shoegaze"],
+    matchedTags: ["shoegaze"],
+    scoreSimilarity: 50,
+    scoreTagAffinity: 27,
+    scoreSeedCoverage: 8,
+    scoreNovelty: 10,
+    scorePopularityPenalty: 2,
+    scoreTotal: 93,
+    seedCount: 1,
+  };
+
+  const hydrated = applyHydratedCandidateTags(
+    recommendation,
+    ["Industrial", "Noise Rock"],
+    new Map([
+      ["industrial", 4],
+      ["noise rock", 2],
+      ["shoegaze", 4],
+    ]),
+  );
+
+  assert.deepEqual(hydrated.tags, ["industrial", "noise rock"]);
+  assert.deepEqual(hydrated.matchedTags, ["industrial", "noise rock"]);
+  assert.equal(hydrated.scoreTagAffinity, 42);
+  assert.equal(hydrated.scoreTotal, 108);
+  assert.equal(hydrated.score, 108);
+  assert.equal(hydrated.candidateTagsHydrated, true);
+  assert.equal(hydrated.tagSource, "lastfm_artist");
+});
+
+test("rerankRecommendations hides exact negative feedback and favors deeper mode diversification", () => {
   const recommendations = [
     {
       id: "55555555-5555-5555-5555-555555555555",
@@ -168,11 +204,100 @@ test("rerankRecommendations can deprioritize feedback and favor deeper mode dive
       },
     ],
   });
-  assert.equal(deprioritized.length, 2);
+  assert.equal(deprioritized.length, 1);
   assert.equal(deprioritized[0].name, "Deeper Pick");
+  assert.equal(
+    deprioritized.some((item) => item.name === "Safe Pick"),
+    false,
+  );
 
   const deeper = rerankRecommendations(recommendations, 2, {
     discoveryMode: "deeper",
   });
   assert.equal(deeper[0].name, "Deeper Pick");
+});
+
+test("mergeRetainedRecommendationPool preserves repeats and trims stale low scores", () => {
+  const runStartedAt = "2026-06-18T00:00:00.000Z";
+  const existingRecommendations = [
+    {
+      id: "77777777-7777-7777-7777-777777777777",
+      name: "Returning Pick",
+      matchedTags: ["dream-pop"],
+      supportingSeeds: [{ artistName: "Seed One", weight: 1.6 }],
+      scoreSimilarity: 80,
+      scoreTagAffinity: 22,
+      scoreSeedCoverage: 14,
+      scoreNovelty: 6,
+      scorePopularityPenalty: 4,
+      scoreTotal: 118,
+      seedCount: 2,
+      firstDiscoveredAt: "2026-05-01T00:00:00.000Z",
+      lastRecommendedAt: "2026-05-01T00:00:00.000Z",
+    },
+    {
+      id: "88888888-8888-8888-8888-888888888888",
+      name: "Stale Weak Pick",
+      matchedTags: ["indie"],
+      supportingSeeds: [{ artistName: "Old Seed", weight: 0.8 }],
+      scoreSimilarity: 8,
+      scoreTagAffinity: 2,
+      scoreSeedCoverage: 2,
+      scoreNovelty: 1,
+      scorePopularityPenalty: 0,
+      scoreTotal: 13,
+      seedCount: 1,
+      firstDiscoveredAt: "2025-01-01T00:00:00.000Z",
+      lastRecommendedAt: "2025-01-01T00:00:00.000Z",
+    },
+  ];
+  const freshRecommendations = [
+    {
+      id: "77777777-7777-7777-7777-777777777777",
+      name: "Returning Pick",
+      matchedTags: ["dream-pop", "shoegaze"],
+      supportingSeeds: [{ artistName: "Seed Two", weight: 1.8 }],
+      scoreSimilarity: 85,
+      scoreTagAffinity: 24,
+      scoreSeedCoverage: 16,
+      scoreNovelty: 7,
+      scorePopularityPenalty: 4,
+      scoreTotal: 128,
+      seedCount: 2,
+    },
+    {
+      id: "99999999-9999-9999-9999-999999999999",
+      name: "Fresh Pick",
+      matchedTags: ["ethereal"],
+      supportingSeeds: [{ artistName: "Fresh Seed", weight: 1.4 }],
+      scoreSimilarity: 44,
+      scoreTagAffinity: 12,
+      scoreSeedCoverage: 8,
+      scoreNovelty: 14,
+      scorePopularityPenalty: 2,
+      scoreTotal: 76,
+      seedCount: 1,
+    },
+  ];
+
+  const merged = mergeRetainedRecommendationPool({
+    freshRecommendations,
+    existingRecommendations,
+    limit: 2,
+    runStartedAt,
+    discoveryMode: "balanced",
+  });
+
+  assert.equal(merged.length, 2);
+  assert.deepEqual(
+    merged.map((item) => item.name).sort(),
+    ["Fresh Pick", "Returning Pick"],
+  );
+  const returning = merged.find((item) => item.name === "Returning Pick");
+  assert.equal(returning.firstDiscoveredAt, "2026-05-01T00:00:00.000Z");
+  assert.equal(returning.lastRecommendedAt, runStartedAt);
+  assert.equal(
+    merged.some((item) => item.name === "Stale Weak Pick"),
+    false,
+  );
 });

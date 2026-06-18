@@ -34,7 +34,9 @@ async function processDiscoveryUserRefresh(payload = {}) {
   if (wasRefreshedSince(profile, Number(payload?.requestedAt))) {
     return { skipped: true, reason: "already_refreshed" };
   }
-  await updateUserDiscoveryCache(profile);
+  await updateUserDiscoveryCache(profile, {
+    feedbackUserId: payload?.feedbackUserId || null,
+  });
   return { refreshed: true };
 }
 

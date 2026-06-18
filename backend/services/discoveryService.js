@@ -28,9 +28,11 @@ import {
 } from "./listenbrainzDiscoveryFallback.js";
 import {
   addRecommendationCandidate,
+  applyHydratedCandidateTags,
   buildDiscoverySeedList,
   buildExistingArtistKeySet,
   finalizeRecommendationAccumulator,
+  mergeRetainedRecommendationPool,
   mergeResolvedRecommendations,
   rerankRecommendations,
 } from "./discoveryRecommendations.js";
@@ -70,11 +72,6 @@ const getListenbrainzRange = (discoveryPeriod) => {
   return LISTENBRAINZ_RANGE_BY_PERIOD[discoveryPeriod] || "month";
 };
 
-const clampInt = (value, fallback, min, max) => {
-  const parsed = parseInt(value, 10);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.min(max, Math.max(min, parsed));
-};
 const normalizeTextList = (value) => {
   if (!Array.isArray(value)) return [];
   const seen = new Set();
@@ -113,6 +110,81 @@ export const getDiscoveryRecommendationsPerRefresh = () => {
   return Math.min(
     DISCOVERY_RECOMMENDATIONS_MAX,
     Math.max(DISCOVERY_RECOMMENDATIONS_MIN, parsed),
+  );
+};
+
+const getDiscoveryRecommendationPoolLimit = () => DISCOVERY_RECOMMENDATIONS_MAX;
+
+const getDiscoveryTagSeedLimit = (count, failureRatio) => {
+  const target = getDiscoveryRecommendationsPerRefresh();
+  const sampleBase = Math.min(
+    count,
+    Math.max(25, Math.min(45, Math.ceil(target / 5))),
+  );
+  if (failureRatio >= 0.5) return Math.min(12, sampleBase);
+  if (failureRatio >= 0.3) return Math.min(24, sampleBase);
+  return sampleBase;
+};
+
+const getDiscoveryRecommendationSeedLimit = (count, failureRatio) => {
+  const target = getDiscoveryRecommendationsPerRefresh();
+  const sampleBase = Math.min(
+    count,
+    Math.max(32, Math.min(56, Math.ceil(target / 4))),
+  );
+  if (failureRatio >= 0.5) return Math.min(16, sampleBase);
+  if (failureRatio >= 0.3) return Math.min(32, sampleBase);
+  return sampleBase;
+};
+
+const getSimilarArtistSampling = (failureRatio) => {
+  if (failureRatio >= 0.5) {
+    return { similarLimit: 12, maxPerSeed: 10 };
+  }
+  if (failureRatio >= 0.3) {
+    return { similarLimit: 20, maxPerSeed: 14 };
+  }
+  const target = getDiscoveryRecommendationsPerRefresh();
+  const maxPerSeed = Math.min(24, Math.max(16, Math.ceil(target / 9)));
+  return {
+    similarLimit: Math.min(40, Math.max(25, maxPerSeed + 12)),
+    maxPerSeed,
+  };
+};
+
+const getSecondHopArtistSampling = (failureRatio) => {
+  if (failureRatio >= 0.5) {
+    return { seedLimit: 0, similarLimit: 0, maxPerSeed: 0 };
+  }
+  if (failureRatio >= 0.3) {
+    return { seedLimit: 16, similarLimit: 10, maxPerSeed: 5 };
+  }
+  const target = getDiscoveryRecommendationsPerRefresh();
+  return {
+    seedLimit: Math.min(40, Math.max(25, Math.ceil(target / 6))),
+    similarLimit: 15,
+    maxPerSeed: 8,
+  };
+};
+
+const getSecondHopRecommendationLimit = () =>
+  Math.ceil(getDiscoveryRecommendationsPerRefresh() * 0.35);
+
+const getCandidateTagHydrationLimit = (count, failureRatio, depth = 1) => {
+  if (count <= 0) return 0;
+  const target = getDiscoveryRecommendationsPerRefresh();
+  if (failureRatio >= 0.5) return Math.min(count, depth >= 2 ? 0 : 40);
+  if (failureRatio >= 0.3) {
+    return Math.min(
+      count,
+      depth >= 2 ? 24 : Math.max(80, Math.ceil(target * 0.75)),
+    );
+  }
+  return Math.min(
+    count,
+    depth >= 2
+      ? getSecondHopRecommendationLimit()
+      : Math.max(target, Math.ceil(target * 1.5)),
   );
 };
 
@@ -267,26 +339,26 @@ const buildTasteProfile = ({
   );
   const bucketedLibrarySeeds = [];
 
-  recentLibraryArtists.slice(0, 18).forEach((artist, index) => {
+  recentLibraryArtists.slice(0, 28).forEach((artist, index) => {
     if (!artist?.mbid || !artist?.artistName) return;
     bucketedLibrarySeeds.push({
       mbid: artist.mbid,
       artistName: artist.artistName,
       source: "library",
-      profileBucket: index < 8 ? "recent_interest" : "core_favorites",
-      affinityWeight: 1.65 - Math.min(index, 12) * 0.04,
+      profileBucket: index < 12 ? "recent_interest" : "core_favorites",
+      affinityWeight: 1.7 - Math.min(index, 20) * 0.035,
     });
   });
 
-  allLibraryArtists.slice(0, 20).forEach((artist, index) => {
+  allLibraryArtists.slice(0, 42).forEach((artist, index) => {
     if (!artist?.mbid || !artist?.artistName) return;
     if (recentIds.has(String(artist.mbid).trim().toLowerCase())) return;
     bucketedLibrarySeeds.push({
       mbid: artist.mbid,
       artistName: artist.artistName,
       source: "library",
-      profileBucket: index < 10 ? "collection_anchor" : "exploratory_seed",
-      affinityWeight: index < 10 ? 1.1 : 0.95,
+      profileBucket: index < 16 ? "collection_anchor" : "exploratory_seed",
+      affinityWeight: index < 16 ? 1.12 : 0.92,
     });
   });
 
@@ -605,10 +677,21 @@ const collectListeningHistoryRefreshProfiles = () => {
     const profile = getListenHistoryProfile(user);
     const cacheNamespace = getListenHistoryCacheNamespace(profile);
     if (!cacheNamespace || !hasListenHistoryProfile(profile)) continue;
-    profiles.set(cacheNamespace, profile);
+    profiles.set(cacheNamespace, {
+      profile,
+      feedbackUserId: user.id || null,
+    });
   }
-  for (const [cacheNamespace, profile] of pendingUserDiscoveryProfiles) {
-    profiles.set(cacheNamespace, profile);
+  for (const [cacheNamespace, entry] of pendingUserDiscoveryProfiles) {
+    profiles.set(
+      cacheNamespace,
+      entry?.profile
+        ? entry
+        : {
+            profile: entry,
+            feedbackUserId: null,
+          },
+    );
   }
   pendingUserDiscoveryProfiles.clear();
   return [...profiles.values()];
@@ -619,12 +702,15 @@ const refreshListeningHistoryUserCaches = async ({ onProgress } = {}) => {
   if (profiles.length === 0) return;
 
   let completed = 0;
-  for (const profile of profiles) {
+  for (const entry of profiles) {
     try {
-      await updateUserDiscoveryCache(profile, { duringGlobalRefresh: true });
+      await updateUserDiscoveryCache(entry.profile, {
+        duringGlobalRefresh: true,
+        feedbackUserId: entry.feedbackUserId,
+      });
     } catch (error) {
       console.error(
-        `[Discovery] Per-user refresh failed for ${profile.listenHistoryProvider}:${profile.listenHistoryUsername}: ${error.message}`,
+        `[Discovery] Per-user refresh failed for ${entry.profile.listenHistoryProvider}:${entry.profile.listenHistoryUsername}: ${error.message}`,
       );
     }
     completed += 1;
@@ -634,30 +720,47 @@ const refreshListeningHistoryUserCaches = async ({ onProgress } = {}) => {
 
 const flushPendingUserDiscoveryRefreshes = async () => {
   if (pendingUserDiscoveryProfiles.size === 0) return;
-  const profiles = [...pendingUserDiscoveryProfiles.values()];
+  const entries = [...pendingUserDiscoveryProfiles.values()].map((entry) =>
+    entry?.profile
+      ? entry
+      : {
+          profile: entry,
+          feedbackUserId: null,
+        },
+  );
   pendingUserDiscoveryProfiles.clear();
-  for (const profile of profiles) {
+  for (const entry of entries) {
     try {
-      await updateUserDiscoveryCache(profile, { duringGlobalRefresh: true });
+      await updateUserDiscoveryCache(entry.profile, {
+        duringGlobalRefresh: true,
+        feedbackUserId: entry.feedbackUserId,
+      });
     } catch (error) {
       console.error(
-        `[Discovery] Deferred per-user refresh failed for ${profile.listenHistoryProvider}:${profile.listenHistoryUsername}: ${error.message}`,
+        `[Discovery] Deferred per-user refresh failed for ${entry.profile.listenHistoryProvider}:${entry.profile.listenHistoryUsername}: ${error.message}`,
       );
     }
   }
 };
 
-export const requestUserDiscoveryRefresh = (listenHistoryProfile) => {
+export const requestUserDiscoveryRefresh = (
+  listenHistoryProfile,
+  { feedbackUserId = null } = {},
+) => {
   const profile = getListenHistoryProfile(listenHistoryProfile);
   const cacheNamespace = getListenHistoryCacheNamespace(profile);
   if (!cacheNamespace || !getLastfmApiKey()) {
     return Promise.resolve(null);
   }
   if (isGlobalDiscoveryRefreshInProgress()) {
-    pendingUserDiscoveryProfiles.set(cacheNamespace, profile);
+    pendingUserDiscoveryProfiles.set(cacheNamespace, {
+      profile,
+      feedbackUserId,
+    });
     enqueueDiscoveryUserRefreshJob(
       {
         listenHistoryProfile: profile,
+        feedbackUserId,
         requestedAt: Date.now(),
         reason: "global_refresh_in_progress",
       },
@@ -670,6 +773,7 @@ export const requestUserDiscoveryRefresh = (listenHistoryProfile) => {
   }
   const operationId = enqueueDiscoveryUserRefreshJob({
     listenHistoryProfile: profile,
+    feedbackUserId,
     requestedAt: Date.now(),
     reason: "manual",
   });
@@ -704,14 +808,13 @@ const fetchListenHistoryArtists = async (
           : artist.artist_mbid || null;
         const resolvedMbid =
           mbid || musicbrainzGetCachedArtistMbidByName(artist.artist_name);
-        if (!resolvedMbid) return null;
         return {
-          mbid: resolvedMbid,
+          mbid: resolvedMbid || null,
           artistName: artist.artist_name,
           playcount: parseInt(artist.listen_count || 0, 10) || 0,
         };
       })
-      .filter(Boolean);
+      .filter((artist) => artist.artistName);
   }
 
   if (profile.listenHistoryProvider === "koito") {
@@ -743,10 +846,14 @@ const fetchListenHistoryArtists = async (
 
   return artists
     .map((artist) => {
-      if (!artist.mbid) return null;
+      const artistName = String(artist?.name || "").trim();
+      if (!artistName) return null;
       return {
-        mbid: artist.mbid,
-        artistName: artist.name,
+        mbid:
+          String(artist.mbid || "").trim() ||
+          musicbrainzGetCachedArtistMbidByName(artistName) ||
+          null,
+        artistName,
         playcount: parseInt(artist.playcount || 0, 10) || 0,
       };
     })
@@ -754,10 +861,7 @@ const fetchListenHistoryArtists = async (
 };
 
 const getSeedSampleSize = (count, failureRatio) => {
-  const sampleBase = Math.min(25, count);
-  if (failureRatio >= 0.5) return Math.min(8, sampleBase);
-  if (failureRatio >= 0.3) return Math.min(14, sampleBase);
-  return sampleBase;
+  return getDiscoveryTagSeedLimit(count, failureRatio);
 };
 
 const selectDiscoverySeedSample = (seeds, failureRatio) => {
@@ -836,9 +940,10 @@ const collectSeedTagsAndGenres = async (
   await Promise.all(
     seeds.map(async (seed) => {
       try {
-        const data = await lastfmRequest("artist.getTopTags", {
-          mbid: seed.mbid,
-        });
+        const data = await lastfmRequest(
+          "artist.getTopTags",
+          seed.mbid ? { mbid: seed.mbid } : { artist: seed.artistName },
+        );
         recordLastfmResult(lastfmHealth, data);
         if (!data?.toptags?.tag) return;
 
@@ -851,9 +956,7 @@ const collectSeedTagsAndGenres = async (
           .filter(Boolean);
         if (names.length === 0) return;
 
-        const tagMapKey = String(seed?.mbid || "")
-          .trim()
-          .toLowerCase();
+        const tagMapKey = getSeedTagMapKey(seed);
         if (tagMapKey) {
           tagMap.set(tagMapKey, names);
         }
@@ -897,7 +1000,7 @@ const collectSeedTagsAndGenres = async (
 };
 
 const getSeedTagMapKey = (seed) =>
-  String(seed?.mbid || seed?.id || "")
+  String(seed?.mbid || seed?.id || seed?.artistName || seed?.name || "")
     .trim()
     .toLowerCase();
 
@@ -906,6 +1009,72 @@ const normalizeSeedTagList = (tags) =>
     .slice(0, 15)
     .map((tag) => String(tag || "").trim())
     .filter(Boolean);
+
+const wait = (delayMs) =>
+  delayMs > 0
+    ? new Promise((resolve) => {
+        setTimeout(resolve, delayMs);
+      })
+    : Promise.resolve();
+
+const fetchArtistTagNames = async (artist, lastfmHealth) => {
+  const artistName = String(artist?.name || artist?.artistName || "").trim();
+  const mbid = String(artist?.id || artist?.mbid || "").trim();
+  if (!artistName && !mbid) return [];
+
+  const data = await lastfmRequest(
+    "artist.getTopTags",
+    mbid ? { mbid } : { artist: artistName },
+  );
+  recordLastfmResult(lastfmHealth, data);
+  if (!data?.toptags?.tag) return [];
+
+  const tags = Array.isArray(data.toptags.tag)
+    ? data.toptags.tag
+    : [data.toptags.tag];
+  return normalizeSeedTagList(tags.map((tag) => tag?.name));
+};
+
+const hydrateRecommendationCandidateTags = async ({
+  recommendations = [],
+  lastfmHealth,
+  profileTagWeights,
+  limit,
+  depth = 1,
+}) => {
+  const items = Array.isArray(recommendations) ? [...recommendations] : [];
+  const hydrationLimit = Math.min(items.length, Math.max(0, Number(limit) || 0));
+  if (hydrationLimit <= 0) return items;
+
+  const batchSize = 8;
+  const delayMs = 25;
+  for (let index = 0; index < hydrationLimit; index += batchSize) {
+    const batch = items.slice(index, index + batchSize);
+    const hydrated = await Promise.all(
+      batch.map(async (item) => {
+        try {
+          const tags = await fetchArtistTagNames(item, lastfmHealth);
+          return applyHydratedCandidateTags(item, tags, profileTagWeights, {
+            tagAffinityMultiplier: depth >= 2 ? 0.55 : 1,
+          });
+        } catch (error) {
+          console.warn(
+            `Failed to hydrate candidate tags for ${item?.name || "artist"}: ${error.message}`,
+          );
+          return item;
+        }
+      }),
+    );
+    hydrated.forEach((item, offset) => {
+      items[index + offset] = item;
+    });
+    if (index + batchSize < hydrationLimit) {
+      await wait(delayMs);
+    }
+  }
+
+  return items;
+};
 
 const resolveRecommendationCandidates = async (
   recommendations,
@@ -967,8 +1136,10 @@ const buildRecommendationsFromSeeds = async ({
   seedTagMap = new Map(),
   discoveryMode,
 }) => {
-  const recommendations = new Map();
-  const maxPerSeed = getLastfmFailureRatio(lastfmHealth) >= 0.3 ? 10 : 16;
+  const directRecommendations = new Map();
+  const { similarLimit, maxPerSeed } = getSimilarArtistSampling(
+    getLastfmFailureRatio(lastfmHealth),
+  );
 
   await Promise.all(
     seeds.map(async (seed) => {
@@ -978,9 +1149,10 @@ const buildRecommendationsFromSeeds = async ({
         if (sourceTags.length > 0) {
           recordLastfmResult(lastfmHealth, { cached: true });
         } else {
-          const tagData = await lastfmRequest("artist.getTopTags", {
-            mbid: seed.mbid,
-          });
+          const tagData = await lastfmRequest(
+            "artist.getTopTags",
+            seed.mbid ? { mbid: seed.mbid } : { artist: seed.artistName },
+          );
           recordLastfmResult(lastfmHealth, tagData);
           if (tagData?.toptags?.tag) {
             const tags = Array.isArray(tagData.toptags.tag)
@@ -992,10 +1164,12 @@ const buildRecommendationsFromSeeds = async ({
           }
         }
 
-        const similar = await lastfmRequest("artist.getSimilar", {
-          mbid: seed.mbid,
-          limit: getLastfmFailureRatio(lastfmHealth) >= 0.3 ? 12 : 25,
-        });
+        const similar = await lastfmRequest(
+          "artist.getSimilar",
+          seed.mbid
+            ? { mbid: seed.mbid, limit: similarLimit }
+            : { artist: seed.artistName, limit: similarLimit },
+        );
         recordLastfmResult(lastfmHealth, similar);
         if (!similar?.similarartists?.artist) return;
 
@@ -1003,12 +1177,13 @@ const buildRecommendationsFromSeeds = async ({
           ? similar.similarartists.artist
           : [similar.similarartists.artist];
         for (const artist of artists.slice(0, maxPerSeed)) {
-          addRecommendationCandidate(recommendations, {
+          addRecommendationCandidate(directRecommendations, {
             candidate: {
               mbid: artist?.mbid,
               name: artist?.name,
               image: pickLastfmImage(artist?.image),
               match: artist?.match,
+              discoveryDepth: 1,
             },
             seed,
             sourceTags,
@@ -1024,9 +1199,142 @@ const buildRecommendationsFromSeeds = async ({
     }),
   );
 
-  return finalizeRecommendationAccumulator(
-    recommendations,
-    Math.max(140, getDiscoveryRecommendationsPerRefresh() * 5),
+  const rawLimit = Math.max(140, getDiscoveryRecommendationsPerRefresh() * 5);
+  let directList = finalizeRecommendationAccumulator(
+    directRecommendations,
+    rawLimit,
+    { discoveryMode },
+  );
+  directList = await hydrateRecommendationCandidateTags({
+    recommendations: directList,
+    lastfmHealth,
+    profileTagWeights,
+    limit: getCandidateTagHydrationLimit(
+      directList.length,
+      getLastfmFailureRatio(lastfmHealth),
+      1,
+    ),
+    depth: 1,
+  });
+  directList = rerankRecommendations(directList, rawLimit, { discoveryMode });
+
+  const secondHopSampling = getSecondHopArtistSampling(
+    getLastfmFailureRatio(lastfmHealth),
+  );
+  if (secondHopSampling.seedLimit <= 0 || directList.length === 0) {
+    return directList;
+  }
+
+  const secondHopRecommendations = new Map();
+  const bridgeSeeds = directList
+    .filter((candidate) => candidate?.name)
+    .filter((candidate) => {
+      const tags = Array.isArray(candidate.matchedTags)
+        ? candidate.matchedTags
+        : candidate.tags || [];
+      return tags.length > 0;
+    })
+    .slice(0, secondHopSampling.seedLimit);
+
+  await Promise.all(
+    bridgeSeeds.map(async (bridge) => {
+      try {
+        const bridgeTags = normalizeSeedTagList(
+          bridge.matchedTags?.length ? bridge.matchedTags : bridge.tags,
+        );
+        if (bridgeTags.length === 0) return;
+
+        const bridgeWeight = Math.min(
+          0.78,
+          Math.max(
+            0.45,
+            0.42 +
+              Number(bridge.bestMatch || 0) * 0.25 +
+              Math.min(Number(bridge.seedCount || 0), 3) * 0.04,
+          ),
+        );
+        const bridgeSeed = {
+          mbid: bridge.id || bridge.mbid || null,
+          artistName: bridge.name,
+          source: "lastfm_related",
+          profileBucket: "two_hop_bridge",
+          weight: bridgeWeight,
+          affinityWeight: bridgeWeight,
+          discoveryDepth: 2,
+          similarityMultiplier: 0.55,
+          tagAffinityMultiplier: 0.55,
+        };
+        const similar = await lastfmRequest(
+          "artist.getSimilar",
+          bridgeSeed.mbid
+            ? { mbid: bridgeSeed.mbid, limit: secondHopSampling.similarLimit }
+            : {
+                artist: bridgeSeed.artistName,
+                limit: secondHopSampling.similarLimit,
+              },
+        );
+        recordLastfmResult(lastfmHealth, similar);
+        if (!similar?.similarartists?.artist) return;
+
+        const artists = Array.isArray(similar.similarartists.artist)
+          ? similar.similarartists.artist
+          : [similar.similarartists.artist];
+        for (const artist of artists.slice(0, secondHopSampling.maxPerSeed)) {
+          addRecommendationCandidate(secondHopRecommendations, {
+            candidate: {
+              mbid: artist?.mbid,
+              name: artist?.name,
+              image: pickLastfmImage(artist?.image),
+              match: artist?.match,
+              discoveryDepth: 2,
+              similarityMultiplier: 0.55,
+              tagAffinityMultiplier: 0.55,
+            },
+            seed: bridgeSeed,
+            sourceTags: bridgeTags,
+            profileTagWeights,
+            existingArtistKeys,
+          });
+        }
+      } catch (error) {
+        console.warn(
+          `Error getting second-hop similar artists for ${bridge.name}: ${error.message}`,
+        );
+      }
+    }),
+  );
+
+  let secondHopList = finalizeRecommendationAccumulator(
+    secondHopRecommendations,
+    getSecondHopRecommendationLimit(),
+    { discoveryMode },
+  );
+  secondHopList = await hydrateRecommendationCandidateTags({
+    recommendations: secondHopList,
+    lastfmHealth,
+    profileTagWeights,
+    limit: getCandidateTagHydrationLimit(
+      secondHopList.length,
+      getLastfmFailureRatio(lastfmHealth),
+      2,
+    ),
+    depth: 2,
+  });
+  secondHopList = rerankRecommendations(
+    secondHopList,
+    getSecondHopRecommendationLimit(),
+    { discoveryMode },
+  );
+  if (secondHopList.length === 0) {
+    return directList;
+  }
+
+  return rerankRecommendations(
+    mergeResolvedRecommendations(
+      [...directList, ...secondHopList],
+      existingArtistKeys,
+    ),
+    rawLimit,
     { discoveryMode },
   );
 };
@@ -1564,14 +1872,12 @@ export const updateDiscoveryCache = async (options = {}) => {
 
     const recSample = seeds.slice(
       0,
-      Math.max(
-        18,
-        Math.min(
-          seeds.length,
-          getLastfmFailureRatio(lastfmHealth) >= 0.3 ? 20 : 32,
-        ),
+      getDiscoveryRecommendationSeedLimit(
+        seeds.length,
+        getLastfmFailureRatio(lastfmHealth),
       ),
     );
+    const recommendationRunStartedAt = new Date().toISOString();
 
     console.log(
       `Generating recommendations based on ${recSample.length} seed artists...`,
@@ -1604,9 +1910,19 @@ export const updateDiscoveryCache = async (options = {}) => {
         existingArtistKeys,
         maxResolve,
       );
-      recommendationsArray = rerankCachedRecommendations({
+      const freshRecommendations = rerankCachedRecommendations({
         recommendations: recommendationsArray,
         discoveryMode: getDiscoveryMode(),
+        limit: getDiscoveryRecommendationsPerRefresh(),
+      });
+      recommendationsArray = mergeRetainedRecommendationPool({
+        freshRecommendations,
+        existingRecommendations: discoveryCache.recommendations || [],
+        existingArtistKeys,
+        limit: getDiscoveryRecommendationPoolLimit(),
+        runStartedAt: recommendationRunStartedAt,
+        discoveryMode: getDiscoveryMode(),
+        feedback: getDiscoveryFeedback("global"),
       });
     } else {
       console.warn("Last.fm API key required for similar artist discovery.");
@@ -1632,7 +1948,7 @@ export const updateDiscoveryCache = async (options = {}) => {
       fallbackGenres: [],
       fallbackGenrePools: {},
       discoverPlaylists: discoveryCache.discoverPlaylists || [],
-      lastUpdated: new Date().toISOString(),
+      lastUpdated: recommendationRunStartedAt,
     };
 
     const allToHydrate = [
@@ -1872,14 +2188,12 @@ export const updateUserDiscoveryCache = async (
     });
     const recSample = seeds.slice(
       0,
-      Math.max(
-        18,
-        Math.min(
-          seeds.length,
-          getLastfmFailureRatio(lastfmHealth) >= 0.3 ? 20 : 32,
-        ),
+      getDiscoveryRecommendationSeedLimit(
+        seeds.length,
+        getLastfmFailureRatio(lastfmHealth),
       ),
     );
+    const recommendationRunStartedAt = new Date().toISOString();
     const rawRecommendations = await buildRecommendationsFromSeeds({
       seeds: recSample,
       existingArtistKeys,
@@ -1893,9 +2207,22 @@ export const updateUserDiscoveryCache = async (
       existingArtistKeys,
       40,
     );
-    recommendationsArray = rerankCachedRecommendations({
+    const freshRecommendations = rerankCachedRecommendations({
       recommendations: recommendationsArray,
       discoveryMode: getDiscoveryMode(),
+      limit: getDiscoveryRecommendationsPerRefresh(),
+    });
+    recommendationsArray = mergeRetainedRecommendationPool({
+      freshRecommendations,
+      existingRecommendations:
+        dbOps.getDiscoveryCache(cacheNamespace).recommendations || [],
+      existingArtistKeys,
+      limit: getDiscoveryRecommendationPoolLimit(),
+      runStartedAt: recommendationRunStartedAt,
+      discoveryMode: getDiscoveryMode(),
+      feedback: options.feedbackUserId
+        ? getDiscoveryFeedback(options.feedbackUserId)
+        : [],
     });
 
     await hydrateArtistImages(recommendationsArray, {
