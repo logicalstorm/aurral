@@ -10,6 +10,7 @@ import { startNotificationOutboxWorker } from "./notificationOutboxWorker.js";
 import { startSlskdOrchestratorWorker } from "./slskdOrchestratorWorker.js";
 import { startDiscoveryRefreshWorker } from "./discoveryRefreshWorker.js";
 import { startDiscoveryPlaylistBuildWorker } from "./discoveryPlaylistBuildWorker.js";
+import { startDiscoveryRecommendationEnrichmentWorker } from "./discoveryRecommendationEnrichmentWorker.js";
 import { startDiscoveryUserRefreshWorker } from "./discoveryUserRefreshWorker.js";
 import { startWeeklyFlowOperationWorker } from "./weeklyFlowOperationWorker.js";
 import { startWeeklyFlowPlaylistRetryWorker } from "./weeklyFlowPlaylistRetryWorker.js";
@@ -35,6 +36,7 @@ export function startBackgroundWorkers({ logger = console } = {}) {
   startSlskdOrchestratorWorker();
   startDiscoveryRefreshWorker();
   startDiscoveryPlaylistBuildWorker();
+  startDiscoveryRecommendationEnrichmentWorker();
   startDiscoveryUserRefreshWorker();
   startWeeklyFlowOperationWorker();
   startWeeklyFlowPlaylistRetryWorker();

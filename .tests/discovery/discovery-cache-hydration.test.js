@@ -46,3 +46,24 @@ test("getDiscoveryCache preserves lastUpdated after an empty completed refresh",
   assert.deepEqual(cache.topGenres, []);
   assert.equal(cache.isUpdating, false);
 });
+
+test("getDiscoveryCache persists recommendation enrichment metadata", async () => {
+  resetDatabase(db);
+
+  dbOps.updateDiscoveryCache({
+    recommendations: [{ id: "artist-1", name: "Initial Artist" }],
+    recommendationQuality: "initial",
+    isEnriching: true,
+    discoveryRunId: "run-1",
+    enrichmentStartedAt: "2026-06-18T00:00:00.000Z",
+    enrichmentProgressMessage: "Improving recommendations",
+  });
+
+  const cache = dbOps.getDiscoveryCache();
+
+  assert.equal(cache.recommendationQuality, "initial");
+  assert.equal(cache.isEnriching, true);
+  assert.equal(cache.discoveryRunId, "run-1");
+  assert.equal(cache.enrichmentStartedAt, "2026-06-18T00:00:00.000Z");
+  assert.equal(cache.enrichmentProgressMessage, "Improving recommendations");
+});

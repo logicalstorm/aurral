@@ -71,6 +71,14 @@ const QUEUE_DEFINITIONS = [
     worker: "discovery-playlist-build",
   },
   {
+    queue: "discovery-recommendation-enrichment",
+    label: "Discovery Recommendation Enrichment",
+    workerLabel: "Discovery Enrichment Worker",
+    description:
+      "Hydrates, expands, and reranks discovery recommendations after the initial pool is available.",
+    worker: "discovery-recommendation-enrichment",
+  },
+  {
     queue: "discovery-user-refresh",
     label: "Listening History Refreshes",
     workerLabel: "Listening History Worker",
@@ -368,6 +376,12 @@ export function describeHonkerTask(queue, payloadValue) {
       : "Discovery Playlist Build";
   }
 
+  if (safeQueue === "discovery-recommendation-enrichment") {
+    return payload?.cacheNamespace
+      ? `Discovery Enrichment: ${formatPayloadLabel(payload.cacheNamespace)}`
+      : "Discovery Enrichment";
+  }
+
   if (safeQueue === "discovery-user-refresh") {
     const profile = payload?.listenHistoryProfile || {};
     return profile?.listenHistoryUsername
@@ -433,6 +447,11 @@ function describeHonkerTaskDetail(queue, payloadValue) {
   }
   if (safeQueue === "discovery-playlist-build") {
     return queueDescription(safeQueue);
+  }
+  if (safeQueue === "discovery-recommendation-enrichment") {
+    return payload?.discoveryRunId
+      ? `Finishes recommendation scoring for run ${formatPayloadLabel(payload.discoveryRunId)}.`
+      : queueDescription(safeQueue);
   }
   if (safeQueue === "discovery-user-refresh") {
     const profile = payload?.listenHistoryProfile || {};

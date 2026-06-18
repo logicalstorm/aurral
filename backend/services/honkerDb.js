@@ -15,6 +15,7 @@ let openedHonkerDbPath = null;
 let pipelineQueue = null;
 let discoveryRefreshQueue = null;
 let discoveryPlaylistBuildQueue = null;
+let discoveryRecommendationEnrichmentQueue = null;
 let discoveryUserRefreshQueue = null;
 let weeklyFlowOperationQueue = null;
 let playlistRetryQueue = null;
@@ -178,6 +179,42 @@ export function enqueueDiscoveryPlaylistBuildJob(payload, options = {}) {
   import("./discoveryPlaylistBuildWorker.js")
     .then(({ startDiscoveryPlaylistBuildWorker }) =>
       startDiscoveryPlaylistBuildWorker(),
+    )
+    .catch(() => {});
+  return jobId;
+}
+
+export function getDiscoveryRecommendationEnrichmentQueue() {
+  if (!discoveryRecommendationEnrichmentQueue) {
+    discoveryRecommendationEnrichmentQueue = getHonkerDb().queue(
+      "discovery-recommendation-enrichment",
+      {
+        visibilityTimeoutS: 3600,
+        maxAttempts: 4,
+      },
+    );
+  }
+  return discoveryRecommendationEnrichmentQueue;
+}
+
+export function enqueueDiscoveryRecommendationEnrichmentJob(
+  payload,
+  options = {},
+) {
+  const queue = getDiscoveryRecommendationEnrichmentQueue();
+  const runAt =
+    options.runAt != null
+      ? Math.floor(Number(options.runAt) / 1000)
+      : options.delaySeconds != null
+        ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
+        : null;
+  const jobId = queue.enqueue(payload, {
+    priority: Number(options.priority || 0),
+    runAt,
+  });
+  import("./discoveryRecommendationEnrichmentWorker.js")
+    .then(({ startDiscoveryRecommendationEnrichmentWorker }) =>
+      startDiscoveryRecommendationEnrichmentWorker(),
     )
     .catch(() => {});
   return jobId;
@@ -527,6 +564,7 @@ export function closeHonkerDb() {
   pipelineQueue = null;
   discoveryRefreshQueue = null;
   discoveryPlaylistBuildQueue = null;
+  discoveryRecommendationEnrichmentQueue = null;
   discoveryUserRefreshQueue = null;
   weeklyFlowOperationQueue = null;
   playlistRetryQueue = null;

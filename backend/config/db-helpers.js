@@ -93,6 +93,14 @@ const getDiscoveryCacheStmt = db.prepare(
 const upsertDiscoveryCacheStmt = db.prepare(
   "INSERT OR REPLACE INTO discovery_cache (key, value, last_updated) VALUES (?, ?, ?)"
 );
+const DISCOVERY_METADATA_FIELDS = [
+  "recommendationQuality",
+  "isEnriching",
+  "discoveryRunId",
+  "enrichmentStartedAt",
+  "enrichmentCompletedAt",
+  "enrichmentProgressMessage",
+];
 
 const getImageStmt = db.prepare("SELECT * FROM images_cache WHERE mbid = ?");
 const upsertImageStmt = db.prepare(
@@ -690,6 +698,9 @@ export const dbOps = {
 
   getDiscoveryCache(cacheNamespace = null) {
     const prefix = cacheNamespace ? `${cacheNamespace}:` : "";
+    const metadata =
+      dbHelpers.parseJSON(getDiscoveryCacheStmt.get(`${prefix}metadata`)?.value) ||
+      {};
     const recommendations = dbHelpers.parseJSON(
       getDiscoveryCacheStmt.get(`${prefix}recommendations`)?.value
     );
@@ -740,6 +751,13 @@ export const dbOps = {
       discoverPlaylists: discoverPlaylists || [],
       provider,
       lastUpdated,
+      metadata,
+      recommendationQuality: metadata.recommendationQuality || null,
+      isEnriching: metadata.isEnriching === true,
+      discoveryRunId: metadata.discoveryRunId || null,
+      enrichmentStartedAt: metadata.enrichmentStartedAt || null,
+      enrichmentCompletedAt: metadata.enrichmentCompletedAt || null,
+      enrichmentProgressMessage: metadata.enrichmentProgressMessage || null,
     };
   },
 
@@ -805,6 +823,33 @@ export const dbOps = {
       }
       if (discovery.provider) {
         upsertDiscoveryCacheStmt.run(`${prefix}provider`, discovery.provider, now);
+      }
+      const hasMetadataUpdate =
+        (discovery.metadata && typeof discovery.metadata === "object") ||
+        DISCOVERY_METADATA_FIELDS.some((field) =>
+          Object.prototype.hasOwnProperty.call(discovery, field),
+        );
+      if (hasMetadataUpdate) {
+        const existingMetadata =
+          dbHelpers.parseJSON(
+            getDiscoveryCacheStmt.get(`${prefix}metadata`)?.value,
+          ) || {};
+        const nextMetadata = {
+          ...existingMetadata,
+          ...(discovery.metadata && typeof discovery.metadata === "object"
+            ? discovery.metadata
+            : {}),
+        };
+        for (const field of DISCOVERY_METADATA_FIELDS) {
+          if (Object.prototype.hasOwnProperty.call(discovery, field)) {
+            nextMetadata[field] = discovery[field];
+          }
+        }
+        upsertDiscoveryCacheStmt.run(
+          `${prefix}metadata`,
+          dbHelpers.stringifyJSON(nextMetadata),
+          now,
+        );
       }
       if (cacheNamespace) {
         upsertDiscoveryCacheStmt.run(
