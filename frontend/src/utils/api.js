@@ -788,6 +788,8 @@ export const testLidarrLibraryAccess = (url, apiKey) =>
     params: lidarrCredentialParams(url, apiKey),
   });
 
+export const getStorageHealth = () => getData("/settings/storage-health");
+
 export const testLidarrLibraryAccessOnboarding = (url, apiKey) =>
   getData("/onboarding/lidarr/test-library-access", {
     params: lidarrCredentialParams(url, apiKey),

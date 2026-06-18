@@ -56,7 +56,7 @@ function pathHasPrefix(candidate, prefix) {
   );
 }
 
-async function findSampleTrackFile(lidarrClient) {
+export async function findSampleTrackFile(lidarrClient) {
   let artists = [];
   try {
     artists = await lidarrClient.request("/artist");

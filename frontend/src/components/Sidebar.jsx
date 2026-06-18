@@ -26,6 +26,7 @@ import {
 } from "../navigation/historyNavConfig";
 import { useDiscoverRecent } from "../hooks/useDiscoverRecent";
 import { getDiscoverArtistPath } from "../utils/discoverRecentNavigation";
+import { useStorageHealth } from "../hooks/useStorageHealth";
 
 function Sidebar({ mode }) {
   const location = useLocation();
@@ -36,6 +37,9 @@ function Sidebar({ mode }) {
     user?.role === "admin" || !!user?.permissions?.accessSettings;
   const { hasActivity: hasRequestActivity } = useFlowWorkerActivity({
     enabled: hasFlowAccess,
+  });
+  const { hasFailure: hasStorageFailure } = useStorageHealth({
+    enabled: canAccessSettings,
   });
   const [isDesktop, setIsDesktop] = useState(() =>
     typeof window !== "undefined"
@@ -353,10 +357,18 @@ function Sidebar({ mode }) {
                 className={`sidebar-link sidebar-link--icons${
                   isOnSettings ? " is-active" : ""
                 }`}
-                aria-label="Settings"
+                aria-label={
+                  hasStorageFailure ? "Settings (storage issues)" : "Settings"
+                }
               >
                 <span className="sidebar-link__icon-wrap">
                   <Settings className="sidebar-link__icon" aria-hidden="true" />
+                  {hasStorageFailure ? (
+                    <span
+                      className="sidebar-link__activity sidebar-link__activity--alert"
+                      aria-hidden="true"
+                    />
+                  ) : null}
                 </span>
                 <span className="sidebar-tooltip">Settings</span>
               </Link>
@@ -373,8 +385,19 @@ function Sidebar({ mode }) {
                       className="sidebar-link__icon"
                       aria-hidden="true"
                     />
+                    {hasStorageFailure ? (
+                      <span
+                        className="sidebar-link__activity sidebar-link__activity--alert"
+                        aria-hidden="true"
+                      />
+                    ) : null}
                   </span>
-                  <span className="sidebar-link__label">Settings</span>
+                  <span className="sidebar-link__label">
+                    Settings
+                    {hasStorageFailure ? (
+                      <span className="sr-only"> (storage issues)</span>
+                    ) : null}
+                  </span>
                 </Link>
 
                 {isOnSettings && (
@@ -384,6 +407,8 @@ function Sidebar({ mode }) {
                   >
                     {settingsTabs.map((tab) => {
                       const tabActive = activeSettingsTab === tab.id;
+                      const showStorageAlert =
+                        tab.id === "storage" && hasStorageFailure;
                       return (
                         <Link
                           key={tab.id}
@@ -393,7 +418,13 @@ function Sidebar({ mode }) {
                           }`}
                           aria-current={tabActive ? "page" : undefined}
                         >
-                          {tab.label}
+                          {showStorageAlert ? (
+                            <span
+                              className="sidebar-subnav-link__alert"
+                              aria-hidden="true"
+                            />
+                          ) : null}
+                          <span>{tab.label}</span>
                         </Link>
                       );
                     })}

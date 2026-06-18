@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
@@ -8,13 +9,11 @@ import {
   SettingsModalSection,
   SettingsModalToggle,
 } from "./SettingsModalLayout";
-import { LidarrLibraryAccessCheck } from "./LidarrLibraryAccessCheck";
 import {
   getLidarrMetadataProfiles,
   getLidarrProfiles,
   getLidarrTags,
   testLidarrConnection,
-  testLidarrLibraryAccess,
 } from "../../../utils/api";
 
 export function LidarrSettingsModal({
@@ -43,10 +42,6 @@ export function LidarrSettingsModal({
   showInfo,
 }) {
   const [lidarrTestLatencyMs, setLidarrTestLatencyMs] = useState(null);
-  const [testingLidarrLibraryAccess, setTestingLidarrLibraryAccess] =
-    useState(false);
-  const [lidarrLibraryAccessResult, setLidarrLibraryAccessResult] =
-    useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const safeLidarrProfiles = Array.isArray(lidarrProfiles)
@@ -68,41 +63,6 @@ export function LidarrSettingsModal({
         },
       },
     });
-
-  const handleTestLidarrLibraryAccess = async () => {
-    const url = settings.integrations?.lidarr?.url;
-    const apiKey = settings.integrations?.lidarr?.apiKey;
-    if (!url || !apiKey) {
-      showError("Please enter both URL and API key");
-      return;
-    }
-    setTestingLidarrLibraryAccess(true);
-    setLidarrLibraryAccessResult(null);
-    try {
-      const result = await testLidarrLibraryAccess(url, apiKey);
-      setLidarrLibraryAccessResult(result);
-      if (result.ok) {
-        if (result.partial) {
-          showInfo(
-            "Folders are reachable, but no downloaded tracks were found to verify yet.",
-          );
-        } else {
-          showSuccess("Library access looks good.");
-        }
-      } else {
-        showError("Library access check failed. See the results below.");
-      }
-    } catch (error) {
-      const message =
-        error.response?.data?.message ||
-        error.response?.data?.error ||
-        error.message ||
-        "Library access check failed";
-      showError(message);
-    } finally {
-      setTestingLidarrLibraryAccess(false);
-    }
-  };
 
   const handleTestLidarr = async () => {
     const url = settings.integrations?.lidarr?.url;
@@ -253,28 +213,11 @@ export function LidarrSettingsModal({
       title="Lidarr"
       onClose={onClose}
       footerActions={
-        <>
-          <button
-            type="button"
-            onClick={handleTestLidarrLibraryAccess}
-            disabled={
-              testingLidarrLibraryAccess ||
-              testingLidarr ||
-              !settings.integrations?.lidarr?.url ||
-              !settings.integrations?.lidarr?.apiKey
-            }
-            className="btn btn-secondary"
-          >
-            {testingLidarrLibraryAccess
-              ? "Checking library access..."
-              : "Test library access"}
-          </button>
           <button
             type="button"
             onClick={handleTestLidarr}
             disabled={
               testingLidarr ||
-              testingLidarrLibraryAccess ||
               !settings.integrations?.lidarr?.url ||
               !settings.integrations?.lidarr?.apiKey
             }
@@ -282,7 +225,6 @@ export function LidarrSettingsModal({
           >
             {testingLidarr ? "Testing..." : "Test connection"}
           </button>
-        </>
       }
     >
       <SettingsModalSection title="Connection">
@@ -294,7 +236,6 @@ export function LidarrSettingsModal({
             value={settings.integrations?.lidarr?.url || ""}
             onChange={(e) => {
               setLidarrTestLatencyMs(null);
-              setLidarrLibraryAccessResult(null);
               updateLidarr({ url: e.target.value });
             }}
           />
@@ -320,7 +261,6 @@ export function LidarrSettingsModal({
             value={settings.integrations?.lidarr?.apiKey || ""}
             onChange={(e) => {
               setLidarrTestLatencyMs(null);
-              setLidarrLibraryAccessResult(null);
               updateLidarr({ apiKey: e.target.value });
             }}
           />
@@ -339,11 +279,14 @@ export function LidarrSettingsModal({
         </SettingsModalField>
       </SettingsModalSection>
 
-      <SettingsModalSection title="Library access">
+      <SettingsModalSection title="Library files">
         <p className="settings-modal__hint">
-          Verifies Aurral can read files from Lidarr&apos;s music folders.
+          File access, mounts, and path mappings are checked in{" "}
+          <Link to="/settings/storage" className="settings-page__link">
+            Settings → Storage
+          </Link>
+          .
         </p>
-        <LidarrLibraryAccessCheck result={lidarrLibraryAccessResult} />
       </SettingsModalSection>
 
       <SettingsModalSection title="Defaults">

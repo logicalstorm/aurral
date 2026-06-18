@@ -750,6 +750,24 @@ router.get("/lidarr/tags", async (req, res) => {
   }
 });
 
+router.get("/storage-health", noCache, async (req, res) => {
+  try {
+    const { runStorageHealthCheck } =
+      await import("../services/storageHealthService.js");
+    const result = await runStorageHealthCheck();
+    res.json({
+      success: result.ok,
+      ...result,
+    });
+  } catch (error) {
+    console.error("[Settings] Storage health check error:", error);
+    res.status(500).json({
+      error: "Storage health check failed",
+      message: error.message,
+    });
+  }
+});
+
 router.get("/lidarr/test-library-access", async (req, res) => {
   try {
     const { lidarrClient } = await import("../services/lidarrClient.js");

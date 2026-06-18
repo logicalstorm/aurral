@@ -10,6 +10,7 @@ import { useSettingsUsers } from "./hooks/useSettingsUsers";
 import { UnsavedModal } from "./components/UnsavedModal";
 import { CommunityGuideModal } from "./components/CommunityGuideModal";
 import { SettingsMobileNav } from "./components/SettingsMobileNav";
+import { SettingsStorageTab } from "./components/SettingsStorageTab";
 import { SettingsLibraryTab } from "./components/SettingsLibraryTab";
 import { SettingsIndexersTab } from "./components/SettingsIndexersTab";
 import { SettingsDownloadClientsTab } from "./components/SettingsDownloadClientsTab";
@@ -90,6 +91,19 @@ function SettingsPage() {
 
   const renderTabContent = () => {
     switch (tabs.activeTab) {
+      case "storage":
+        return (
+          <SettingsStorageTab
+            key="settings-storage"
+            settings={data.settings}
+            updateSettings={data.updateSettings}
+            hasUnsavedChanges={data.hasUnsavedChanges}
+            saving={data.saving}
+            handleSaveSettings={data.handleSaveSettings}
+            showSuccess={showSuccess}
+            showError={showError}
+          />
+        );
       case "library":
         return (
           <SettingsLibraryTab
