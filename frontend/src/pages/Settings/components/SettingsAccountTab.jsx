@@ -235,8 +235,8 @@ export function SettingsAccountTab({
           {!lidarrConfigured && (
             <p className="settings-page__footnote">
               Lidarr must be configured by an admin in{" "}
-              <Link to="/settings/library" className="settings-page__link">
-                Settings → Library
+              <Link to="/settings/lidarr" className="settings-page__link">
+                Settings → Lidarr
               </Link>{" "}
               before personal library defaults can be saved.
             </p>

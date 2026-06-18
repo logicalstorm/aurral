@@ -14,7 +14,7 @@ import {
 export const SETTINGS_TABS = [
   { id: "system", label: "System", icon: Monitor },
   { id: "tasks", label: "Tasks", icon: ListChecks },
-  { id: "library", label: "Library", icon: Server },
+  { id: "lidarr", label: "Lidarr", icon: Server },
   { id: "indexers", label: "Indexers", icon: Radar },
   { id: "download-clients", label: "Download Clients", icon: Download },
   { id: "playback", label: "Playback", icon: Music },
@@ -31,7 +31,8 @@ export const SETTINGS_TAB_IDS = SETTINGS_TABS.map((tab) => tab.id);
 export const DEFAULT_SETTINGS_TAB = "system";
 
 export const LEGACY_SETTINGS_TAB_MAP = {
-  integrations: "library",
+  integrations: "lidarr",
+  library: "lidarr",
   playlists: "download-clients",
   downloads: "system",
   storage: "system",

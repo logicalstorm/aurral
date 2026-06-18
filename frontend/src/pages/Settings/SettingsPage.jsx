@@ -105,10 +105,10 @@ function SettingsPage() {
             showError={showError}
           />
         );
-      case "library":
+      case "lidarr":
         return (
           <SettingsLibraryTab
-            key="settings-library"
+            key="settings-lidarr"
             settings={data.settings}
             updateSettings={data.updateSettings}
             health={data.health}

@@ -38,7 +38,6 @@ export function LidarrSettingsSection({
   showInfo,
 }) {
   const [lidarrTestLatencyMs, setLidarrTestLatencyMs] = useState(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const safeLidarrProfiles = Array.isArray(lidarrProfiles)
     ? lidarrProfiles
@@ -126,7 +125,12 @@ export function LidarrSettingsSection({
     }
   };
 
-  const handleRefreshProfiles = async () => {
+  const refreshingProfilesTags =
+    loadingLidarrProfiles ||
+    loadingLidarrMetadataProfiles ||
+    loadingLidarrTags;
+
+  const handleRefreshProfilesAndTags = async () => {
     const url = settings.integrations?.lidarr?.url;
     const apiKey = settings.integrations?.lidarr?.apiKey;
     if (!url || !apiKey) {
@@ -134,93 +138,102 @@ export function LidarrSettingsSection({
       return;
     }
     setLoadingLidarrProfiles(true);
-    try {
-      const profiles = await getLidarrProfiles(url, apiKey);
-      const nextProfiles = Array.isArray(profiles) ? profiles : [];
-      setLidarrProfiles(nextProfiles);
-      if (nextProfiles.length > 0) {
-        showSuccess(`Loaded ${nextProfiles.length} quality profile(s)`);
-      } else {
-        showInfo("No quality profiles found in Lidarr");
-      }
-    } catch (err) {
-      const errorMsg =
-        err.response?.data?.message || err.response?.data?.error || err.message;
-      showError(`Failed to load profiles: ${errorMsg}`);
-    } finally {
-      setLoadingLidarrProfiles(false);
-    }
-  };
-
-  const handleRefreshMetadataProfiles = async () => {
-    const url = settings.integrations?.lidarr?.url;
-    const apiKey = settings.integrations?.lidarr?.apiKey;
-    if (!url || !apiKey) {
-      showError("Please enter Lidarr URL and API key first");
-      return;
-    }
     setLoadingLidarrMetadataProfiles(true);
-    try {
-      const profiles = await getLidarrMetadataProfiles(url, apiKey);
-      const nextProfiles = Array.isArray(profiles) ? profiles : [];
-      setLidarrMetadataProfiles(nextProfiles);
-      if (nextProfiles.length > 0) {
-        showSuccess(`Loaded ${nextProfiles.length} metadata profile(s)`);
-      } else {
-        showInfo("No metadata profiles found in Lidarr");
-      }
-    } catch (err) {
-      const errorMsg =
-        err.response?.data?.message || err.response?.data?.error || err.message;
-      showError(`Failed to load metadata profiles: ${errorMsg}`);
-    } finally {
-      setLoadingLidarrMetadataProfiles(false);
-    }
-  };
-
-  const handleRefreshTags = async () => {
-    const url = settings.integrations?.lidarr?.url;
-    const apiKey = settings.integrations?.lidarr?.apiKey;
-    if (!url || !apiKey) {
-      showError("Please enter Lidarr URL and API key first");
-      return;
-    }
     setLoadingLidarrTags(true);
     try {
-      const tags = await getLidarrTags(url, apiKey);
+      const [profiles, metadataProfiles, tags] = await Promise.all([
+        getLidarrProfiles(url, apiKey),
+        getLidarrMetadataProfiles(url, apiKey),
+        getLidarrTags(url, apiKey),
+      ]);
+      const nextProfiles = Array.isArray(profiles) ? profiles : [];
+      const nextMetadataProfiles = Array.isArray(metadataProfiles)
+        ? metadataProfiles
+        : [];
       const nextTags = Array.isArray(tags) ? tags : [];
+      setLidarrProfiles(nextProfiles);
+      setLidarrMetadataProfiles(nextMetadataProfiles);
       setLidarrTags(nextTags);
-      if (nextTags.length > 0) {
-        showSuccess(`Loaded ${nextTags.length} tag(s)`);
+      if (
+        nextProfiles.length === 0 &&
+        nextMetadataProfiles.length === 0 &&
+        nextTags.length === 0
+      ) {
+        showInfo("No profiles or tags found in Lidarr");
       } else {
-        showInfo("No tags found in Lidarr");
+        const parts = [];
+        if (nextProfiles.length > 0) {
+          parts.push(`${nextProfiles.length} quality profile(s)`);
+        }
+        if (nextMetadataProfiles.length > 0) {
+          parts.push(`${nextMetadataProfiles.length} metadata profile(s)`);
+        }
+        if (nextTags.length > 0) {
+          parts.push(`${nextTags.length} tag(s)`);
+        }
+        showSuccess(`Loaded ${parts.join(", ")}`);
       }
     } catch (err) {
       const errorMsg =
         err.response?.data?.message || err.response?.data?.error || err.message;
-      showError(`Failed to load tags: ${errorMsg}`);
+      showError(`Failed to load profiles and tags: ${errorMsg}`);
     } finally {
+      setLoadingLidarrProfiles(false);
+      setLoadingLidarrMetadataProfiles(false);
       setLoadingLidarrTags(false);
     }
   };
 
   return (
     <>
+      <div className="settings-page__section">
+        <div className="settings-page__section-header">
+          <div className="settings-page__section-intro">
+            <h3 className="settings-page__section-title">Lidarr</h3>
+            <p className="settings-page__section-note">
+              Connect Aurral to your Lidarr instance and configure library
+              defaults.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <SettingsArrFieldSet
         legend="Connection"
         actions={
-          <button
-            type="button"
-            onClick={handleTestLidarr}
-            disabled={
-              testingLidarr ||
-              !settings.integrations?.lidarr?.url ||
-              !settings.integrations?.lidarr?.apiKey
-            }
-            className="arr-btn"
-          >
-            {testingLidarr ? "Testing..." : "Test connection"}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={handleRefreshProfilesAndTags}
+              disabled={
+                refreshingProfilesTags ||
+                !settings.integrations?.lidarr?.url ||
+                !settings.integrations?.lidarr?.apiKey
+              }
+              className="arr-btn"
+            >
+              <RefreshCw
+                className={`artist-icon-sm${
+                  refreshingProfilesTags ? " animate-spin" : ""
+                }`}
+              />
+              {refreshingProfilesTags
+                ? "Refreshing..."
+                : "Refresh profiles/tags"}
+            </button>
+            <button
+              type="button"
+              onClick={handleTestLidarr}
+              disabled={
+                testingLidarr ||
+                !settings.integrations?.lidarr?.url ||
+                !settings.integrations?.lidarr?.apiKey
+              }
+              className="arr-btn"
+            >
+              {testingLidarr ? "Testing..." : "Test connection"}
+            </button>
+          </>
         }
       >
         <div className="arr-info">
@@ -324,25 +337,6 @@ export function LidarrSettingsSection({
               </option>
             ))}
           </SettingsSelect>
-          <div className="arr-form-control-actions">
-            <button
-              type="button"
-              onClick={handleRefreshProfiles}
-              disabled={
-                loadingLidarrProfiles ||
-                !settings.integrations?.lidarr?.url ||
-                !settings.integrations?.lidarr?.apiKey
-              }
-              className="arr-btn"
-            >
-              <RefreshCw
-                className={`artist-icon-sm${
-                  loadingLidarrProfiles ? " animate-spin" : ""
-                }`}
-              />
-              Refresh profiles
-            </button>
-          </div>
         </SettingsArrFormGroup>
 
         <SettingsArrFormGroup
@@ -378,25 +372,6 @@ export function LidarrSettingsSection({
               </option>
             ))}
           </SettingsSelect>
-          <div className="arr-form-control-actions">
-            <button
-              type="button"
-              onClick={handleRefreshMetadataProfiles}
-              disabled={
-                loadingLidarrMetadataProfiles ||
-                !settings.integrations?.lidarr?.url ||
-                !settings.integrations?.lidarr?.apiKey
-              }
-              className="arr-btn"
-            >
-              <RefreshCw
-                className={`artist-icon-sm${
-                  loadingLidarrMetadataProfiles ? " animate-spin" : ""
-                }`}
-              />
-              Refresh profiles
-            </button>
-          </div>
         </SettingsArrFormGroup>
 
         <SettingsArrFormGroup label="Tag" labelFor="lidarr-tag">
@@ -427,25 +402,6 @@ export function LidarrSettingsSection({
               </option>
             ))}
           </SettingsSelect>
-          <div className="arr-form-control-actions">
-            <button
-              type="button"
-              onClick={handleRefreshTags}
-              disabled={
-                loadingLidarrTags ||
-                !settings.integrations?.lidarr?.url ||
-                !settings.integrations?.lidarr?.apiKey
-              }
-              className="arr-btn"
-            >
-              <RefreshCw
-                className={`artist-icon-sm${
-                  loadingLidarrTags ? " animate-spin" : ""
-                }`}
-              />
-              Refresh tags
-            </button>
-          </div>
         </SettingsArrFormGroup>
 
         <SettingsArrFormGroup
@@ -484,51 +440,39 @@ export function LidarrSettingsSection({
         </SettingsArrFormGroup>
       </SettingsArrFieldSet>
 
-      <div className="arr-advanced-toggle">
+      <SettingsArrFieldSet legend="Community guide">
         <button
           type="button"
-          className="arr-link arr-link--button"
-          onClick={() => setShowAdvanced((current) => !current)}
+          onClick={() => {
+            if (
+              !settings.integrations?.lidarr?.url ||
+              !settings.integrations?.lidarr?.apiKey
+            ) {
+              showError("Please configure Lidarr URL and API key first");
+              return;
+            }
+            setShowCommunityGuideModal(true);
+          }}
+          disabled={applyingCommunityGuide || !health?.lidarrConfigured}
+          className="arr-btn arr-btn--primary"
         >
-          {showAdvanced ? "Hide advanced" : "Show advanced"}
+          {applyingCommunityGuide
+            ? "Applying..."
+            : "Apply Davo's Recommended Settings"}
         </button>
-      </div>
-
-      {showAdvanced ? (
-        <SettingsArrFieldSet legend="Community guide">
-          <button
-            type="button"
-            onClick={() => {
-              if (
-                !settings.integrations?.lidarr?.url ||
-                !settings.integrations?.lidarr?.apiKey
-              ) {
-                showError("Please configure Lidarr URL and API key first");
-                return;
-              }
-              setShowCommunityGuideModal(true);
-            }}
-            disabled={applyingCommunityGuide || !health?.lidarrConfigured}
-            className="arr-btn arr-btn--primary"
+        <p className="arr-form-help arr-form-help--spaced">
+          Creates quality profile, updates quality definitions, adds custom
+          formats, and updates naming scheme.{" "}
+          <a
+            href="https://wiki.servarr.com/lidarr/community-guide"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="arr-link"
           >
-            {applyingCommunityGuide
-              ? "Applying..."
-              : "Apply Davo's Recommended Settings"}
-          </button>
-          <p className="arr-form-help arr-form-help--spaced">
-            Creates quality profile, updates quality definitions, adds custom
-            formats, and updates naming scheme.{" "}
-            <a
-              href="https://wiki.servarr.com/lidarr/community-guide"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="arr-link"
-            >
-              Read more
-            </a>
-          </p>
-        </SettingsArrFieldSet>
-      ) : null}
+            Read more
+          </a>
+        </p>
+      </SettingsArrFieldSet>
     </>
   );
 }
