@@ -26,10 +26,8 @@ function parseQueuedPayload(payload) {
   }
 }
 
-function getPendingScheduledDiscoveryRefresh(targetRunAtMs = null) {
+function getPendingScheduledDiscoveryRefresh() {
   try {
-    const targetRunAtS =
-      targetRunAtMs != null ? Math.floor(Number(targetRunAtMs) / 1000) : null;
     const rows = getHonkerDb().query(
       `
         SELECT id, payload, run_at
@@ -41,15 +39,58 @@ function getPendingScheduledDiscoveryRefresh(targetRunAtMs = null) {
       `,
       [Math.floor(Date.now() / 1000)],
     );
-    return rows.find((row) => {
-      const payload = parseQueuedPayload(row.payload);
-      if (payload?.scheduleOnly !== true) return false;
-      if (String(payload?.reason || "") !== "scheduled") return false;
-      if (targetRunAtS == null) return true;
-      return Number(row.run_at || 0) <= targetRunAtS + 60;
-    }) || null;
+    return (
+      rows.find((row) => {
+        const payload = parseQueuedPayload(row.payload);
+        return (
+          payload?.scheduleOnly === true &&
+          String(payload?.reason || "") === "scheduled"
+        );
+      }) || null
+    );
   } catch {
     return null;
+  }
+}
+
+export function pruneDuplicateScheduledDiscoveryRefreshes() {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const rows = getHonkerDb().query(
+      `
+        SELECT id, payload, run_at
+        FROM _honker_live
+        WHERE queue = 'discovery-refresh'
+          AND state = 'pending'
+          AND run_at > ?
+        ORDER BY run_at ASC, id ASC
+      `,
+      [now],
+    );
+    const scheduled = rows.filter((row) => {
+      const payload = parseQueuedPayload(row.payload);
+      return (
+        payload?.scheduleOnly === true &&
+        String(payload?.reason || "") === "scheduled"
+      );
+    });
+    if (scheduled.length <= 1) return 0;
+    const removeIds = scheduled.slice(1).map((row) => row.id);
+    const tx = getHonkerDb().transaction();
+    try {
+      for (const id of removeIds) {
+        tx.execute("DELETE FROM _honker_live WHERE id = ?", [id]);
+      }
+      tx.commit();
+    } catch (error) {
+      try {
+        tx.rollback();
+      } catch {}
+      throw error;
+    }
+    return removeIds.length;
+  } catch {
+    return 0;
   }
 }
 
@@ -126,7 +167,7 @@ export function enqueueDiscoveryRefresh(options = {}) {
     if (
       scheduleOnly &&
       reason === "scheduled" &&
-      getPendingScheduledDiscoveryRefresh(runAt)
+      getPendingScheduledDiscoveryRefresh()
     ) {
       return { enqueued: false, reason: "already_scheduled" };
     }
@@ -149,6 +190,7 @@ export function enqueueDiscoveryRefresh(options = {}) {
 }
 
 export function scheduleNextDiscoveryRefresh() {
+  pruneDuplicateScheduledDiscoveryRefreshes();
   const cache = getDiscoveryCache();
   const refreshMs = getDiscoveryAutoRefreshHours() * 60 * 60 * 1000;
   const base = cache.lastUpdated

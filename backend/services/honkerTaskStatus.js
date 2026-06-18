@@ -147,6 +147,7 @@ let schemaEnsured = false;
 let insertRunStatement = null;
 let updateRunStatement = null;
 let pruneRunsStatement = null;
+let pruneDeadJobsStatement = null;
 
 function ensureRunSchema() {
   if (schemaEnsured) return;
@@ -200,6 +201,10 @@ function ensureRunSchema() {
     WHERE status != 'running'
       AND COALESCE(ended_at, started_at) < ?
   `);
+  pruneDeadJobsStatement = db.prepare(`
+    DELETE FROM _honker_dead
+    WHERE COALESCE(died_at, created_at) < ?
+  `);
   schemaEnsured = true;
 }
 
@@ -207,9 +212,34 @@ function getRunLedgerCutoffUnix() {
   return Math.floor((Date.now() - RUN_LEDGER_MAX_AGE_MS) / 1000);
 }
 
-function pruneExpiredRuns() {
+async function pruneExpiredRuns() {
   ensureRunSchema();
-  pruneRunsStatement.run(getRunLedgerCutoffUnix());
+  const cutoff = getRunLedgerCutoffUnix();
+  pruneRunsStatement.run(cutoff);
+  try {
+    pruneDeadJobsStatement.run(cutoff);
+  } catch {}
+  try {
+    const { pruneDuplicateScheduledDiscoveryRefreshes } = await import(
+      "./discoveryRefreshScheduler.js"
+    );
+    pruneDuplicateScheduledDiscoveryRefreshes();
+  } catch {}
+}
+
+function isActiveQueueRow(row) {
+  return (
+    row.status === "running" ||
+    row.status === "queued" ||
+    row.status === "scheduled"
+  );
+}
+
+function isWithinTaskHistoryWindow(row) {
+  if (isActiveQueueRow(row)) return true;
+  const sortAt = Number(row.sortAt || 0);
+  if (!Number.isFinite(sortAt) || sortAt <= 0) return true;
+  return sortAt >= getRunLedgerCutoffUnix();
 }
 
 function safeQuery(sql, params = []) {
@@ -719,25 +749,31 @@ function readLiveJobs() {
 }
 
 function readDeadJobs() {
+  const cutoff = getRunLedgerCutoffUnix();
   return safeQuery(
     `
       SELECT id, queue, payload, priority, run_at, attempts, max_attempts,
              last_error, created_at, died_at
       FROM _honker_dead
+      WHERE COALESCE(died_at, created_at) >= ?
       ORDER BY died_at DESC, id DESC
       LIMIT ?
     `,
-    [DEAD_JOB_LIMIT],
+    [cutoff, DEAD_JOB_LIMIT],
   );
 }
 
 function readQueueStats(liveRows = []) {
   const currentTime = nowUnix();
-  const deadStats = safeQuery(`
+  const deadStats = safeQuery(
+    `
     SELECT queue, COUNT(*) AS failed_count
     FROM _honker_dead
+    WHERE COALESCE(died_at, created_at) >= ?
     GROUP BY queue
-  `);
+  `,
+    [getRunLedgerCutoffUnix()],
+  );
   const runStats = safeQuery(
     `
     SELECT queue, MAX(started_at) AS last_run_at
@@ -928,7 +964,8 @@ function normalizeQueueRows(liveRows, deadRows, runRows) {
         return (aActive ?? 10) - (bActive ?? 10);
       }
       return Number(b.sortAt || 0) - Number(a.sortAt || 0);
-    });
+    })
+    .filter(isWithinTaskHistoryWindow);
 }
 
 function shouldGroupQueueRow(row) {
@@ -1039,13 +1076,13 @@ export function recordHonkerTaskRunFinished(runId, status, error = null) {
       durationMs,
       id,
     );
-    pruneExpiredRuns();
+    void pruneExpiredRuns();
   } catch {}
 }
 
 export async function getHonkerTaskStatus() {
   ensureRunSchema();
-  pruneExpiredRuns();
+  await pruneExpiredRuns();
   const scheduledRows = readScheduledRows();
   const latestRunsByTask = readLatestRunsByTask();
   const liveRows = readLiveJobs();

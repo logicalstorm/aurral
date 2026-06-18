@@ -172,3 +172,25 @@ test("scheduleNextDiscoveryRefresh deduplicates existing future refresh", () => 
   assert.equal(second.reason, "already_scheduled");
   assert.equal(countDiscoveryRefreshJobs(), 1);
 });
+
+test("pruneDuplicateScheduledDiscoveryRefreshes collapses stacked future refreshes", async () => {
+  clearDiscoveryRefreshJobs();
+  const { pruneDuplicateScheduledDiscoveryRefreshes } = await importFromRepo(
+    "backend/services/discoveryRefreshScheduler.js",
+  );
+  const queue = honkerDbModule.getDiscoveryRefreshQueue();
+  const runAt = Math.floor(Date.now() / 1000) + 3600;
+  for (let index = 0; index < 3; index += 1) {
+    queue.enqueue(
+      {
+        reason: "scheduled",
+        requestedAt: Date.now() + index,
+        scheduleOnly: true,
+      },
+      { runAt: runAt + index * 120 },
+    );
+  }
+  assert.equal(countDiscoveryRefreshJobs(), 3);
+  assert.equal(pruneDuplicateScheduledDiscoveryRefreshes(), 2);
+  assert.equal(countDiscoveryRefreshJobs(), 1);
+});

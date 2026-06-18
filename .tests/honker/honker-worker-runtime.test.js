@@ -63,7 +63,7 @@ test("withJobHeartbeat records completed task runs", async () => {
   assert.match(recorded?.name || "", /Image Prefetch/);
 });
 
-test("task status groups duplicate scheduled live jobs", async () => {
+test("task status collapses duplicate scheduled discovery refresh jobs", async () => {
   const queue = honkerDb.getDiscoveryRefreshQueue();
   const runAt = Math.floor(Date.now() / 1000) + 86400;
   queue.enqueue(
@@ -87,7 +87,7 @@ test("task status groups duplicate scheduled live jobs", async () => {
   );
 
   assert.equal(grouped.length, 1);
-  assert.equal(grouped[0].duplicateCount, 2);
+  assert.equal(grouped[0].duplicateCount, 1);
   const worker = status.workers.find(
     (entry) => entry.queue === "discovery-refresh",
   );
@@ -114,6 +114,48 @@ test("task status groups duplicate completed system task runs", async () => {
   assert.equal(grouped.length, 1);
   assert.equal(grouped[0].duplicateCount, 2);
   assert.equal(grouped[0].payloadSummary, "");
+});
+
+test("task run ledger prunes dead jobs older than one hour", async () => {
+  const { db } = await importFromRepo("backend/config/db-sqlite.js");
+  const twoHoursAgo = Math.floor(Date.now() / 1000) - 7200;
+  db.prepare(
+    `
+      INSERT INTO _honker_dead (
+        queue,
+        payload,
+        priority,
+        run_at,
+        attempts,
+        max_attempts,
+        last_error,
+        created_at,
+        died_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+  ).run(
+    "slskd-pipeline",
+    JSON.stringify({ phase: "finalize" }),
+    0,
+    twoHoursAgo,
+    4,
+    5,
+    "stale failure",
+    twoHoursAgo,
+    twoHoursAgo,
+  );
+
+  const status = await taskStatus.getHonkerTaskStatus();
+  assert.equal(
+    status.queue.some((entry) => entry.error === "stale failure"),
+    false,
+  );
+  const remaining = db
+    .prepare(
+      "SELECT COUNT(*) AS count FROM _honker_dead WHERE last_error = 'stale failure'",
+    )
+    .get();
+  assert.equal(Number(remaining?.count || 0), 0);
 });
 
 test("task run ledger prunes entries older than one hour", async () => {
