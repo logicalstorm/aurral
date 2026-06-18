@@ -37,15 +37,16 @@ export function StorageHealthDashboard({ result, loading = false }) {
     setExpanded(defaultExpandedBySection(sections));
   }, [result?.checkedAt, sections]);
 
-  if (loading) {
-    return (
-      <div className="arr-health" role="status">
-        <p className="arr-health__loading">Running storage checks…</p>
-      </div>
-    );
+  if (!result?.sections?.length) {
+    if (loading) {
+      return (
+        <div className="arr-health" role="status">
+          <p className="arr-health__loading">Running storage checks…</p>
+        </div>
+      );
+    }
+    return null;
   }
-
-  if (!result?.sections?.length) return null;
 
   const activeSections = result.sections.filter(
     (section) => section.status !== "skip",

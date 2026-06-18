@@ -2,8 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { Plus, RefreshCw, Trash2, Wrench } from "lucide-react";
 import DownloadFolderField from "../../../components/DownloadFolderField";
 import { StorageHealthDashboard } from "./StorageHealthDashboard";
-import { getStorageHealth } from "../../../utils/api";
-import { setStorageHealthResult } from "../../../hooks/storageHealthStatus";
+import {
+  getStorageHealthCache,
+  refreshStorageHealth,
+  subscribeStorageHealth,
+} from "../../../hooks/storageHealthStatus";
 import {
   SettingsArrFieldSet,
   SettingsArrFormGroup,
@@ -47,10 +50,15 @@ export function SettingsStorageSection({
   showSuccess,
   showError,
 }) {
-  const [healthResult, setHealthResult] = useState(null);
+  const [healthResult, setHealthResult] = useState(
+    () => getStorageHealthCache().result,
+  );
   const [checkingHealth, setCheckingHealth] = useState(false);
-  const [autoChecked, setAutoChecked] = useState(false);
   const [mappingModal, setMappingModal] = useState(null);
+
+  useEffect(() => subscribeStorageHealth((cache) => {
+    setHealthResult(cache.result);
+  }), []);
 
   const pathMappings = coercePathMappings(settings.pathMappings).filter(
     (entry) => entry.remote || entry.local,
@@ -70,9 +78,7 @@ export function SettingsStorageSection({
         if (hasUnsavedChanges) {
           await handleSaveSettings();
         }
-        const result = await getStorageHealth();
-        setHealthResult(result);
-        setStorageHealthResult(result);
+        const result = await refreshStorageHealth({ force: true });
         if (notify) {
           if (result.ok && !result.partial) {
             showSuccess("Storage checks passed");
@@ -94,7 +100,6 @@ export function SettingsStorageSection({
         if (notify) {
           showError(message);
         }
-        setHealthResult(null);
         return null;
       } finally {
         setCheckingHealth(false);
@@ -104,10 +109,18 @@ export function SettingsStorageSection({
   );
 
   useEffect(() => {
-    if (autoChecked) return;
-    setAutoChecked(true);
-    runHealthCheck({ notify: false });
-  }, [autoChecked, runHealthCheck]);
+    if (getStorageHealthCache().result) return undefined;
+    let cancelled = false;
+    setCheckingHealth(true);
+    refreshStorageHealth()
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setCheckingHealth(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const openAddMapping = () => {
     setMappingModal({ mode: "add", index: null });
