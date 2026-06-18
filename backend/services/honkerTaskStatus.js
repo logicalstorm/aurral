@@ -1,10 +1,9 @@
 import { db } from "../config/db-sqlite.js";
 import { SCHEDULED_SYSTEM_TASKS } from "./honkerDb.js";
 
-const RECENT_RUN_LIMIT = 100;
+const RUN_LEDGER_MAX_AGE_MS = 60 * 60 * 1000;
 const LIVE_JOB_LIMIT = 500;
 const DEAD_JOB_LIMIT = 50;
-const RUN_LEDGER_KEEP = 1000;
 
 const QUEUE_DEFINITIONS = [
   {
@@ -198,14 +197,19 @@ function ensureRunSchema() {
   `);
   pruneRunsStatement = db.prepare(`
     DELETE FROM honker_task_runs
-    WHERE id NOT IN (
-      SELECT id
-      FROM honker_task_runs
-      ORDER BY started_at DESC, id DESC
-      LIMIT ?
-    )
+    WHERE status != 'running'
+      AND COALESCE(ended_at, started_at) < ?
   `);
   schemaEnsured = true;
+}
+
+function getRunLedgerCutoffUnix() {
+  return Math.floor((Date.now() - RUN_LEDGER_MAX_AGE_MS) / 1000);
+}
+
+function pruneExpiredRuns() {
+  ensureRunSchema();
+  pruneRunsStatement.run(getRunLedgerCutoffUnix());
 }
 
 function safeQuery(sql, params = []) {
@@ -662,26 +666,33 @@ function readScheduledRows() {
   }));
 }
 
-function readRecentRuns(limit = RECENT_RUN_LIMIT) {
+function readRecentRuns() {
   ensureRunSchema();
+  const cutoff = getRunLedgerCutoffUnix();
   return safeQuery(
     `
       SELECT *
       FROM honker_task_runs
+      WHERE started_at >= ?
+         OR status = 'running'
       ORDER BY started_at DESC, id DESC
-      LIMIT ?
     `,
-    [limit],
+    [cutoff],
   );
 }
 
 function readLatestRunsByTask() {
-  const rows = safeQuery(`
-    SELECT *
-    FROM honker_task_runs
-    ORDER BY started_at DESC, id DESC
-    LIMIT 500
-  `);
+  const cutoff = getRunLedgerCutoffUnix();
+  const rows = safeQuery(
+    `
+      SELECT *
+      FROM honker_task_runs
+      WHERE started_at >= ?
+         OR status = 'running'
+      ORDER BY started_at DESC, id DESC
+    `,
+    [cutoff],
+  );
   const latest = new Map();
   for (const row of rows) {
     const payload = parsePayload(row.payload);
@@ -727,11 +738,15 @@ function readQueueStats(liveRows = []) {
     FROM _honker_dead
     GROUP BY queue
   `);
-  const runStats = safeQuery(`
+  const runStats = safeQuery(
+    `
     SELECT queue, MAX(started_at) AS last_run_at
     FROM honker_task_runs
+    WHERE started_at >= ?
     GROUP BY queue
-  `);
+  `,
+    [getRunLedgerCutoffUnix()],
+  );
 
   const stats = new Map();
   for (const definition of QUEUE_DEFINITIONS) {
@@ -913,8 +928,7 @@ function normalizeQueueRows(liveRows, deadRows, runRows) {
         return (aActive ?? 10) - (bActive ?? 10);
       }
       return Number(b.sortAt || 0) - Number(a.sortAt || 0);
-    })
-    .slice(0, RECENT_RUN_LIMIT);
+    });
 }
 
 function shouldGroupQueueRow(row) {
@@ -1025,17 +1039,18 @@ export function recordHonkerTaskRunFinished(runId, status, error = null) {
       durationMs,
       id,
     );
-    pruneRunsStatement.run(RUN_LEDGER_KEEP);
+    pruneExpiredRuns();
   } catch {}
 }
 
 export async function getHonkerTaskStatus() {
   ensureRunSchema();
+  pruneExpiredRuns();
   const scheduledRows = readScheduledRows();
   const latestRunsByTask = readLatestRunsByTask();
   const liveRows = readLiveJobs();
   const deadRows = readDeadJobs();
-  const runRows = readRecentRuns(RECENT_RUN_LIMIT);
+  const runRows = readRecentRuns();
   const queueStats = readQueueStats(liveRows);
   const workerStatuses = await readWorkerStatuses();
 

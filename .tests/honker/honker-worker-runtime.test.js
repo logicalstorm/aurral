@@ -116,6 +116,56 @@ test("task status groups duplicate completed system task runs", async () => {
   assert.equal(grouped[0].payloadSummary, "");
 });
 
+test("task run ledger prunes entries older than one hour", async () => {
+  const { db } = await importFromRepo("backend/config/db-sqlite.js");
+  const twoHoursAgo = Math.floor(Date.now() / 1000) - 7200;
+  db.prepare(
+    `
+      INSERT INTO honker_task_runs (
+        job_id,
+        queue,
+        name,
+        payload,
+        worker_id,
+        attempt,
+        status,
+        queued_at,
+        run_at,
+        started_at,
+        ended_at,
+        duration_ms,
+        created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+  ).run(
+    424242,
+    "system-task",
+    "Stale Task",
+    null,
+    null,
+    0,
+    "completed",
+    twoHoursAgo,
+    twoHoursAgo,
+    twoHoursAgo,
+    twoHoursAgo,
+    100,
+    twoHoursAgo,
+  );
+
+  const status = await taskStatus.getHonkerTaskStatus();
+  assert.equal(
+    status.queue.some((entry) => entry.name === "Stale Task"),
+    false,
+  );
+  const remaining = db
+    .prepare(
+      "SELECT COUNT(*) AS count FROM honker_task_runs WHERE name = 'Stale Task'",
+    )
+    .get();
+  assert.equal(Number(remaining?.count || 0), 0);
+});
+
 test("weekly flow operation queue status reflects worker state and depth", () => {
   operationQueueModule.setWeeklyFlowOperationWorkerState({
     running: true,
