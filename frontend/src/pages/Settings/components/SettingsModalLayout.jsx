@@ -49,16 +49,3 @@ export function SettingsModalCallout({ children }) {
 export function SettingsModalActions({ children }) {
   return <div className="settings-modal__actions">{children}</div>;
 }
-
-export function SettingsModalMeta({ items }) {
-  return (
-    <dl className="settings-modal__meta">
-      {items.map(({ term, value }) => (
-        <div key={term}>
-          <dt>{term}</dt>
-          <dd>{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}

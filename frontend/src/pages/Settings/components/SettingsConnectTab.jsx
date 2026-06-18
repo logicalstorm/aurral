@@ -1,12 +1,16 @@
 import { useState, useRef } from "react";
 import { Plus, Trash2, GripVertical } from "lucide-react";
 import { Link } from "react-router-dom";
-import FlipSaveButton from "../../../components/FlipSaveButton";
 import { SettingsInput, SettingsTextarea } from "./SettingsField";
 import {
   IntegrationCard,
   SettingsIntegrationModal,
 } from "./SettingsIntegrationCards";
+import {
+  SettingsArrCardGrid,
+  SettingsArrFieldSet,
+  SettingsArrFormGroup,
+} from "./arr/SettingsArrLayout";
 import {
   SettingsModalCallout,
   SettingsModalField,
@@ -179,32 +183,18 @@ export function SettingsConnectTab({
   };
 
   return (
-    <div className="settings-page__panel">
-      <div className="settings-page__panel-header">
-        <h2 className="settings-page__panel-title">Connect</h2>
-        <FlipSaveButton
-          saving={saving}
-          disabled={!hasUnsavedChanges}
-          onClick={handleSave}
-        />
-      </div>
-
+    <div className="arr-page">
       <form
         onSubmit={handleSave}
-        className="settings-page__form"
+        className="arr-form"
         autoComplete="off"
       >
-        <div className="settings-page__section">
-          <div className="settings-page__section-header">
-            <div className="settings-page__section-intro">
-              <h3 className="settings-page__section-title">Connections</h3>
-              <p className="settings-page__section-note">
-                External services Aurral integrates with for notifications and
-                discovery data.
-              </p>
-            </div>
+        <SettingsArrFieldSet legend="Connections">
+          <div className="arr-info">
+            External services Aurral integrates with for notifications and
+            discovery data.
           </div>
-          <div className="settings-page__integration-card-grid">
+          <SettingsArrCardGrid>
             <IntegrationCard
               title="Gotify"
               subtitle="Push notifications"
@@ -226,109 +216,113 @@ export function SettingsConnectTab({
               meta={`${ticketmaster.searchRadiusMiles ?? 250} mi radius`}
               onClick={() => setActiveModal("ticketmaster")}
             />
-          </div>
-        </div>
+          </SettingsArrCardGrid>
+        </SettingsArrFieldSet>
 
-        <div className="settings-page__section">
-          <div className="settings-page__section-header">
-            <h3 className="settings-page__section-title">Webhooks</h3>
+        <SettingsArrFieldSet
+          legend="Webhooks"
+          actions={
             <button
               type="button"
-              className="btn btn-secondary btn-sm"
+              className="arr-btn"
               onClick={addWebhook}
               disabled={webhooks.length >= 5}
             >
-              <Plus className="artist-icon-xs" />
+              <Plus className="artist-icon-xs" aria-hidden />
               Add webhook
             </button>
-          </div>
-
-          {!webhooks.length && (
-            <p className="settings-page__muted-copy">
+          }
+        >
+          {!webhooks.length ? (
+            <p className="arr-form-help">
               No webhooks configured. Click &ldquo;Add webhook&rdquo; to create
               one.
             </p>
-          )}
+          ) : null}
 
-          <div className="settings-page__fields">
-            {webhooks.map((wh, index) => (
-              <div
-                key={index}
-                draggable
-                onDragStart={(e) => {
-                  if (allowDragRef.current !== index) {
-                    e.preventDefault();
-                    return;
-                  }
-                  setDragIdx(index);
-                }}
-                onDragOver={(e) => {
+          {webhooks.map((wh, index) => (
+            <div
+              key={index}
+              draggable
+              onDragStart={(e) => {
+                if (allowDragRef.current !== index) {
                   e.preventDefault();
-                  if (dragIdx !== null && dragIdx !== index) {
-                    moveWebhook(dragIdx, index);
-                    setDragIdx(index);
-                  }
-                }}
-                onDragEnd={() => {
-                  setDragIdx(null);
-                  allowDragRef.current = null;
-                }}
-                className={`settings-page__webhook-card${dragIdx === index ? " is-dragging" : ""}`}
+                  return;
+                }
+                setDragIdx(index);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (dragIdx !== null && dragIdx !== index) {
+                  moveWebhook(dragIdx, index);
+                  setDragIdx(index);
+                }
+              }}
+              onDragEnd={() => {
+                setDragIdx(null);
+                allowDragRef.current = null;
+              }}
+              className={`arr-webhook-card${
+                dragIdx === index ? " is-dragging" : ""
+              }`}
+            >
+              <div className="arr-webhook-card__header">
+                <div className="arr-webhook-card__title">
+                  <GripVertical
+                    className="arr-webhook-card__drag artist-icon-xs"
+                    onMouseDown={() => {
+                      allowDragRef.current = index;
+                    }}
+                    onMouseUp={() => {
+                      allowDragRef.current = null;
+                    }}
+                  />
+                  <span>Webhook #{index + 1}</span>
+                </div>
+                <button
+                  type="button"
+                  className="arr-btn arr-btn--ghost arr-btn--icon"
+                  onClick={() => removeWebhook(index)}
+                  aria-label="Remove webhook"
+                >
+                  <Trash2 className="artist-icon-sm" aria-hidden />
+                </button>
+              </div>
+
+              <SettingsArrFormGroup
+                label="URL"
+                labelFor={`webhook-url-${index}`}
+                size="large"
               >
-                <div className="settings-page__webhook-header">
-                  <div className="settings-page__webhook-title">
-                    <GripVertical
-                      className="settings-page__drag-handle artist-icon-xs"
-                      onMouseDown={() => {
-                        allowDragRef.current = index;
-                      }}
-                      onMouseUp={() => {
-                        allowDragRef.current = null;
-                      }}
-                    />
-                    <span>Webhook #{index + 1}</span>
-                  </div>
+                <SettingsInput
+                  id={`webhook-url-${index}`}
+                  type="url"
+                  placeholder="https://example.com/webhook"
+                  value={wh.url || ""}
+                  onChange={(e) => updateWebhook(index, { url: e.target.value })}
+                />
+              </SettingsArrFormGroup>
+
+              <SettingsArrFormGroup
+                label="Body"
+                size="large"
+                help={
+                  wh.body === null
+                    ? "Optional JSON or text payload sent with each webhook."
+                    : undefined
+                }
+              >
+                {wh.body === null ? (
                   <button
                     type="button"
-                    className="btn btn-sm btn-ghost-danger"
-                    onClick={() => removeWebhook(index)}
-                    aria-label="Remove webhook"
+                    className="arr-btn"
+                    onClick={() => updateWebhook(index, { body: "" })}
                   >
-                    <Trash2 className="artist-icon-xs" />
+                    <Plus className="artist-icon-xs" aria-hidden />
+                    Add body
                   </button>
-                </div>
-                <div>
-                  <label className="artist-field-label">URL</label>
-                  <SettingsInput
-                    type="url"
-                    placeholder="https://example.com/webhook"
-                    value={wh.url || ""}
-                    onChange={(e) => updateWebhook(index, { url: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <div className="settings-page__section-header">
-                    <label className="artist-field-label">Body</label>
-                    {wh.body === null ? (
-                      <button
-                        type="button"
-                        className="btn btn-secondary settings-page__btn--compact"
-                        onClick={() => updateWebhook(index, { body: "" })}
-                      >
-                        <Plus />
-                        Add body
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-ghost-danger"
-                        onClick={() => updateWebhook(index, { body: null })}
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                  {wh.body !== null && (
+                ) : (
+                  <>
                     <SettingsTextarea
                       rows={3}
                       maxLength={1000}
@@ -339,123 +333,111 @@ export function SettingsConnectTab({
                       spellCheck={false}
                       autoComplete="off"
                     />
-                  )}
-                </div>
-                <div>
-                  <div className="settings-page__section-header">
-                    <label className="artist-field-label">Headers</label>
                     <button
                       type="button"
-                      className="btn btn-secondary settings-page__btn--compact"
-                      onClick={() => addHeader(index)}
-                      disabled={(wh.headers || []).length >= 10}
+                      className="arr-btn arr-webhook-card__inline-action"
+                      onClick={() => updateWebhook(index, { body: null })}
                     >
-                      <Plus />
-                      Add header
+                      Remove body
                     </button>
-                  </div>
-                  {(wh.headers || []).length > 0 && (
-                    <div className="settings-page__field-stack--md">
-                      {(wh.headers || []).map((header, hIndex) => (
-                        <div
-                          key={hIndex}
-                          className="settings-page__header-fields-row"
-                        >
-                          <SettingsInput
-                            wrapperClassName="settings-page__field-grow"
-                            className="settings-page__mono-input"
-                            placeholder="Header-Name"
-                            spellCheck={false}
-                            value={header.key || ""}
-                            onChange={(e) =>
-                              updateHeader(index, hIndex, {
-                                key: e.target.value,
-                              })
-                            }
-                          />
-                          <SettingsInput
-                            wrapperClassName="settings-page__field-grow"
-                            className="settings-page__mono-input"
-                            placeholder="value"
-                            spellCheck={false}
-                            value={header.value || ""}
-                            onChange={(e) =>
-                              updateHeader(index, hIndex, {
-                                value: e.target.value,
-                              })
-                            }
-                          />
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-ghost-danger"
-                            onClick={() => removeHeader(index, hIndex)}
-                            aria-label="Remove header"
-                          >
-                            <Trash2 className="artist-icon-xs" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+                  </>
+                )}
+              </SettingsArrFormGroup>
 
-        <div className="settings-page__section">
-          <h3 className="settings-page__section-title">Notification events</h3>
-          <div className="settings-page__split settings-page__fields">
-            <div className="settings-page__inline-row settings-page__inline-row--between">
-              <span className="artist-field-label">
-                Notify when daily Discover is updated
-              </span>
-              <PillToggle
-                checked={webhookEvents.notifyDiscoveryUpdated || false}
-                onChange={(e) =>
-                  updateWebhookEvents({
-                    notifyDiscoveryUpdated: e.target.checked,
-                  })
-                }
-              />
+              <SettingsArrFormGroup label="Headers" size="large">
+                {(wh.headers || []).length > 0 ? (
+                  <div className="arr-webhook-card__header-rows">
+                    {(wh.headers || []).map((header, hIndex) => (
+                      <div
+                        key={hIndex}
+                        className="arr-webhook-card__header-row"
+                      >
+                        <SettingsInput
+                          className="settings-page__mono-input"
+                          placeholder="Header-Name"
+                          spellCheck={false}
+                          value={header.key || ""}
+                          onChange={(e) =>
+                            updateHeader(index, hIndex, {
+                              key: e.target.value,
+                            })
+                          }
+                        />
+                        <SettingsInput
+                          className="settings-page__mono-input"
+                          placeholder="value"
+                          spellCheck={false}
+                          value={header.value || ""}
+                          onChange={(e) =>
+                            updateHeader(index, hIndex, {
+                              value: e.target.value,
+                            })
+                          }
+                        />
+                        <button
+                          type="button"
+                          className="arr-btn arr-btn--ghost arr-btn--icon"
+                          onClick={() => removeHeader(index, hIndex)}
+                          aria-label="Remove header"
+                        >
+                          <Trash2 className="artist-icon-sm" aria-hidden />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  className="arr-btn"
+                  onClick={() => addHeader(index)}
+                  disabled={(wh.headers || []).length >= 10}
+                >
+                  <Plus className="artist-icon-xs" aria-hidden />
+                  Add header
+                </button>
+              </SettingsArrFormGroup>
             </div>
-            <div className="settings-page__inline-row settings-page__inline-row--between">
-              <span className="artist-field-label">
-                Notify when weekly flow finishes
-              </span>
-              <PillToggle
-                checked={webhookEvents.notifyWeeklyFlowDone || false}
-                onChange={(e) =>
-                  updateWebhookEvents({
-                    notifyWeeklyFlowDone: e.target.checked,
-                  })
-                }
-              />
-            </div>
-            <div className="settings-page__inline-row settings-page__inline-row--between">
-              <span className="artist-field-label">
-                Gotify: daily Discover updated
-              </span>
-              <PillToggle
-                checked={gotify.notifyDiscoveryUpdated || false}
-                onChange={(e) =>
-                  updateGotify({ notifyDiscoveryUpdated: e.target.checked })
-                }
-              />
-            </div>
-            <div className="settings-page__inline-row settings-page__inline-row--between">
-              <span className="artist-field-label">
-                Gotify: weekly flow finished
-              </span>
-              <PillToggle
-                checked={gotify.notifyWeeklyFlowDone || false}
-                onChange={(e) =>
-                  updateGotify({ notifyWeeklyFlowDone: e.target.checked })
-                }
-              />
-            </div>
-          </div>
-        </div>
+          ))}
+        </SettingsArrFieldSet>
+
+        <SettingsArrFieldSet legend="Notification Events">
+          <SettingsArrFormGroup label="Discover updated">
+            <PillToggle
+              checked={webhookEvents.notifyDiscoveryUpdated || false}
+              onChange={(e) =>
+                updateWebhookEvents({
+                  notifyDiscoveryUpdated: e.target.checked,
+                })
+              }
+            />
+          </SettingsArrFormGroup>
+          <SettingsArrFormGroup label="Weekly flow finished">
+            <PillToggle
+              checked={webhookEvents.notifyWeeklyFlowDone || false}
+              onChange={(e) =>
+                updateWebhookEvents({
+                  notifyWeeklyFlowDone: e.target.checked,
+                })
+              }
+            />
+          </SettingsArrFormGroup>
+          <SettingsArrFormGroup label="Gotify: Discover updated">
+            <PillToggle
+              checked={gotify.notifyDiscoveryUpdated || false}
+              onChange={(e) =>
+                updateGotify({ notifyDiscoveryUpdated: e.target.checked })
+              }
+            />
+          </SettingsArrFormGroup>
+          <SettingsArrFormGroup label="Gotify: Weekly flow finished">
+            <PillToggle
+              checked={gotify.notifyWeeklyFlowDone || false}
+              onChange={(e) =>
+                updateGotify({ notifyWeeklyFlowDone: e.target.checked })
+              }
+            />
+          </SettingsArrFormGroup>
+        </SettingsArrFieldSet>
       </form>
 
       {activeModal === "gotify" && (

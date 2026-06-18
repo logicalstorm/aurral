@@ -1,7 +1,12 @@
-import { UserPlus, Lock, Trash2, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Lock, Trash2, UserPlus, X } from "lucide-react";
 import { GRANULAR_PERMISSIONS, granularPerms } from "../constants";
 import { loginApi, setStoredAuth } from "../../../utils/api";
 import { SettingsInput } from "./SettingsField";
+import {
+  SettingsArrFieldSet,
+  SettingsArrFormGroup,
+} from "./arr/SettingsArrLayout";
 
 function getLocalBypassStatus(status) {
   if (!status) {
@@ -73,6 +78,41 @@ function getLocalBypassStatus(status) {
   }
 }
 
+function formatListenHistory(user) {
+  if (!user.listenHistoryUsername && !user.listenHistoryUrl) {
+    return "—";
+  }
+  if (user.listenHistoryProvider === "koito") {
+    return `Koito: ${user.listenHistoryUrl}`;
+  }
+  const provider =
+    user.listenHistoryProvider === "listenbrainz" ? "ListenBrainz" : "Last.fm";
+  return `${provider}: ${user.listenHistoryUsername}`;
+}
+
+function PermissionChecklist({ permissions, onChange }) {
+  return (
+    <div className="arr-permissions">
+      {granularPerms.map(({ key, label }) => (
+        <label key={key} className="artist-checkbox-label">
+          <input
+            type="checkbox"
+            className="artist-checkbox"
+            checked={!!permissions[key]}
+            onChange={(event) =>
+              onChange({
+                ...permissions,
+                [key]: event.target.checked,
+              })
+            }
+          />
+          <span>{label}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
 export function SettingsUsersTab({
   authUser,
   usersList,
@@ -127,39 +167,21 @@ export function SettingsUsersTab({
   const localBypassEnabled =
     settings?.security?.localNetworkBypass?.enabled === true;
 
-  return (
-    <div className="settings-page__panel">
-      <div className="settings-page__panel-header">
-        <h2 className="settings-page__panel-title">Users</h2>
-        {authUser?.role === "admin" && (
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => {
-              setNewUserUsername("");
-              setNewUserPassword("");
-              setNewUserPermissions({ ...GRANULAR_PERMISSIONS });
-              setShowAddUserModal(true);
-            }}
-          >
-            <UserPlus className="artist-icon-xs" />
-            Add user
-          </button>
-        )}
-      </div>
+  const openAddUserModal = () => {
+    setNewUserUsername("");
+    setNewUserPassword("");
+    setNewUserPermissions({ ...GRANULAR_PERMISSIONS });
+    setShowAddUserModal(true);
+  };
 
+  return (
+    <div className="arr-page">
       {authUser?.role !== "admin" ? (
-        <div
-          className="settings-page__section settings-page__section--narrow"
-        >
-          <h3 className="settings-page__section-title">
-            <Lock className="settings-page__panel-title-icon" />
-            Change my password
-          </h3>
+        <SettingsArrFieldSet legend="Change Password">
           <form
-            className="settings-page__fields"
-            onSubmit={async (e) => {
-              e.preventDefault();
+            className="arr-form"
+            onSubmit={async (event) => {
+              event.preventDefault();
               if (changePwNew !== changePwConfirm) {
                 showError("New passwords do not match");
                 return;
@@ -179,616 +201,585 @@ export function SettingsUsersTab({
                 showError(
                   err.response?.data?.error ||
                     err.message ||
-                    "Failed to change password"
+                    "Failed to change password",
                 );
               } finally {
                 setChangingPassword(false);
               }
             }}
           >
-            <div className="settings-page__field-stack">
-              <label htmlFor="change-pw-current" className="label">
-                Current password
-              </label>
-              <SettingsInput id="change-pw-current"
+            <SettingsArrFormGroup
+              label="Current password"
+              labelFor="change-pw-current"
+            >
+              <SettingsInput
+                id="change-pw-current"
                 type="password"
-
                 placeholder="Current password"
                 autoComplete="current-password"
                 value={changePwCurrent}
-                onChange={(e) => setChangePwCurrent(e.target.value)}
+                onChange={(event) => setChangePwCurrent(event.target.value)}
                 required
               />
-            </div>
-            <div className="settings-page__field-stack">
-              <label htmlFor="change-pw-new" className="label">
-                New password
-              </label>
-              <SettingsInput id="change-pw-new"
+            </SettingsArrFormGroup>
+            <SettingsArrFormGroup label="New password" labelFor="change-pw-new">
+              <SettingsInput
+                id="change-pw-new"
                 type="password"
-
                 placeholder="New password"
                 autoComplete="new-password"
                 value={changePwNew}
-                onChange={(e) => setChangePwNew(e.target.value)}
+                onChange={(event) => setChangePwNew(event.target.value)}
                 required
               />
-            </div>
-            <div className="settings-page__field-stack">
-              <label htmlFor="change-pw-confirm" className="label">
-                Confirm new password
-              </label>
-              <SettingsInput id="change-pw-confirm"
+            </SettingsArrFormGroup>
+            <SettingsArrFormGroup
+              label="Confirm password"
+              labelFor="change-pw-confirm"
+            >
+              <SettingsInput
+                id="change-pw-confirm"
                 type="password"
-
                 placeholder="Confirm new password"
                 autoComplete="new-password"
                 value={changePwConfirm}
-                onChange={(e) => setChangePwConfirm(e.target.value)}
+                onChange={(event) => setChangePwConfirm(event.target.value)}
                 required
               />
+            </SettingsArrFormGroup>
+            <div className="arr-form-actions">
+              <button
+                type="submit"
+                className="arr-btn arr-btn--primary"
+                disabled={
+                  changingPassword ||
+                  !changePwCurrent ||
+                  !changePwNew ||
+                  changePwNew !== changePwConfirm
+                }
+              >
+                {changingPassword ? "Changing…" : "Change password"}
+              </button>
             </div>
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={
-                changingPassword ||
-                !changePwCurrent ||
-                !changePwNew ||
-                changePwNew !== changePwConfirm
-              }
-            >
-              {changingPassword ? "Changing…" : "Change password"}
-            </button>
           </form>
-        </div>
+        </SettingsArrFieldSet>
       ) : (
         <>
-          <div
-            className="settings-page__section"
-          >
-            <div className="settings-page__toggle-row">
-              <div className="settings-page__toggle-copy">
-                <h3 className="settings-page__section-title">
-                  Auto-login from local network
-                </h3>
-                <p className="settings-page__hint">
-                  {localBypassStatus.title}
-                </p>
-              </div>
+          <SettingsArrFieldSet legend="Local Network Auto-login">
+            <SettingsArrFormGroup
+              label="Auto-login"
+              help={`${localBypassStatus.title}. ${localBypassStatus.detail}`}
+            >
               <label className="artist-checkbox-label">
-                <span className="settings-page__hint">
-                  {localBypassEnabled ? "On" : "Off"}
-                </span>
                 <input
                   type="checkbox"
                   className="artist-checkbox"
                   checked={localBypassEnabled}
                   disabled={!localBypassStatus.canToggle}
-                  onChange={async (e) => {
+                  onChange={async (event) => {
                     const nextSettings = {
                       ...settings,
                       security: {
                         ...(settings.security || {}),
                         localNetworkBypass: {
-                          enabled: e.target.checked,
+                          enabled: event.target.checked,
                         },
                       },
                     };
                     updateSettings(nextSettings);
                     try {
                       await handleSaveSettings(null, nextSettings);
-                    } catch {
-                      // handleSaveSettings already reports failure and resets local state.
-                    }
+                    } catch {}
                   }}
                 />
+                <span>{localBypassEnabled ? "Enabled" : "Disabled"}</span>
               </label>
-            </div>
-            <p className="settings-page__toggle-detail">
-              {localBypassStatus.detail}
-            </p>
-          </div>
+            </SettingsArrFormGroup>
+          </SettingsArrFieldSet>
 
-          <div className="settings-page__users-list">
-            {loadingUsers ? (
-              <div className="settings-page__loading">Loading…</div>
-            ) : (
-              <ul>
-                {usersList.map((u) => (
-                  <li
-                    key={u.id}
-                    className="settings-page__user-row"
+          <SettingsArrFieldSet
+            legend="Users"
+            actions={
+              <button
+                type="button"
+                className="arr-btn arr-btn--primary"
+                onClick={openAddUserModal}
+              >
+                <UserPlus className="artist-icon-xs" aria-hidden />
+                Add user
+              </button>
+            }
+          >
+            <div className="arr-table-wrap">
+              <table className="arr-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Username</th>
+                    <th scope="col">Role</th>
+                    <th scope="col">Listening history</th>
+                    <th scope="col" className="arr-table__actions-head">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingUsers ? (
+                    <tr className="arr-table__empty-row">
+                      <td colSpan={4}>Loading users…</td>
+                    </tr>
+                  ) : usersList.length === 0 ? (
+                    <tr className="arr-table__empty-row">
+                      <td colSpan={4}>No users configured.</td>
+                    </tr>
+                  ) : (
+                    usersList.map((user) => (
+                      <tr key={user.id}>
+                        <td>{user.username}</td>
+                        <td>
+                          <span
+                            className={`arr-badge${
+                              user.role === "admin" ? " arr-badge--admin" : ""
+                            }`}
+                          >
+                            {user.role}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="arr-table__path">
+                            {formatListenHistory(user)}
+                          </span>
+                        </td>
+                        <td className="arr-table__actions">
+                          <div className="arr-table__actions-inner">
+                            <button
+                              type="button"
+                              className="arr-btn arr-btn--ghost arr-btn--icon"
+                              aria-label={`Manage ${user.username}`}
+                              onClick={() => {
+                                setEditUser(user);
+                                setEditPassword("");
+                                setEditCurrentPassword("");
+                                setEditPermissions(
+                                  user.permissions
+                                    ? {
+                                        ...GRANULAR_PERMISSIONS,
+                                        ...user.permissions,
+                                      }
+                                    : { ...GRANULAR_PERMISSIONS },
+                                );
+                              }}
+                            >
+                              <Lock className="artist-icon-sm" aria-hidden />
+                            </button>
+                            <button
+                              type="button"
+                              className="arr-btn arr-btn--ghost arr-btn--icon"
+                              aria-label={`Delete ${user.username}`}
+                              disabled={user.role === "admin"}
+                              onClick={() =>
+                                user.role !== "admin" &&
+                                setDeleteUserTarget(user)
+                              }
+                            >
+                              <Trash2 className="artist-icon-sm" aria-hidden />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </SettingsArrFieldSet>
+
+          {deleteUserTarget
+            ? createPortal(
+                <div className="arr-portal">
+                  <div
+                    className="arr-modal-backdrop"
+                    onClick={() => !deletingUser && setDeleteUserTarget(null)}
                   >
-                    <div className="settings-page__user-main">
-                      <span className="settings-page__user-name">
-                        {u.username}
-                      </span>
-                      <span className="badge badge-primary settings-page__role-badge">
-                        {u.role}
-                      </span>
-                      {(u.listenHistoryUsername || u.listenHistoryUrl) && (
-                        <span
-                          className="settings-page__user-meta"
-                          title={
-                            u.listenHistoryProvider === "koito"
-                              ? `Koito: ${u.listenHistoryUrl}`
-                              : `${
-                                  u.listenHistoryProvider === "listenbrainz"
-                                    ? "ListenBrainz"
-                                    : "Last.fm"
-                                }: ${u.listenHistoryUsername}`
-                          }
+                    <div
+                      className="arr-modal"
+                      role="dialog"
+                      aria-modal="true"
+                      aria-labelledby="delete-user-modal-title"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <div className="arr-modal__header">
+                        <h3
+                          id="delete-user-modal-title"
+                          className="arr-modal__title"
                         >
-                          {u.listenHistoryProvider === "koito"
-                            ? "Koito"
-                            : u.listenHistoryProvider === "listenbrainz"
-                              ? "ListenBrainz"
-                              : "Last.fm"}
-                          :{" "}
-                          {u.listenHistoryProvider === "koito"
-                            ? u.listenHistoryUrl
-                            : u.listenHistoryUsername}
-                        </span>
-                      )}
+                          Delete user
+                        </h3>
+                        <button
+                          type="button"
+                          className="arr-btn arr-btn--ghost arr-btn--icon"
+                          onClick={() =>
+                            !deletingUser && setDeleteUserTarget(null)
+                          }
+                          aria-label="Close"
+                          disabled={deletingUser}
+                        >
+                          <X className="artist-icon-md" />
+                        </button>
+                      </div>
+                      <div className="arr-modal__body">
+                        <p className="arr-modal__copy">
+                          Are you sure you want to delete{" "}
+                          <strong>{deleteUserTarget.username}</strong>? This
+                          cannot be undone.
+                        </p>
+                      </div>
+                      <div className="arr-modal__footer">
+                        <button
+                          type="button"
+                          className="arr-btn"
+                          onClick={() =>
+                            !deletingUser && setDeleteUserTarget(null)
+                          }
+                          disabled={deletingUser}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="arr-btn arr-btn--primary"
+                          disabled={deletingUser}
+                          onClick={async () => {
+                            setDeletingUser(true);
+                            try {
+                              await deleteUser(deleteUserTarget.id);
+                              showSuccess("User deleted");
+                              setDeleteUserTarget(null);
+                              await refreshUsers();
+                              await refreshSettingsData();
+                            } catch (err) {
+                              showError(
+                                err.response?.data?.error || "Failed to delete",
+                              );
+                            } finally {
+                              setDeletingUser(false);
+                            }
+                          }}
+                        >
+                          {deletingUser ? "Deleting…" : "Delete"}
+                        </button>
+                      </div>
                     </div>
-                    <div className="settings-page__user-actions">
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-ghost"
-                        onClick={() => {
-                          setEditUser(u);
-                          setEditPassword("");
-                          setEditCurrentPassword("");
-                          setEditPermissions(
-                            u.permissions
-                              ? {
-                                  ...GRANULAR_PERMISSIONS,
-                                  ...u.permissions,
-                                }
-                              : { ...GRANULAR_PERMISSIONS }
-                          );
+                  </div>
+                </div>,
+                document.body,
+              )
+            : null}
+
+          {showAddUserModal
+            ? createPortal(
+                <div className="arr-portal">
+                  <div
+                    className="arr-modal-backdrop"
+                    onClick={() => setShowAddUserModal(false)}
+                  >
+                    <div
+                      className="arr-modal"
+                      role="dialog"
+                      aria-modal="true"
+                      aria-labelledby="add-user-modal-title"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <div className="arr-modal__header">
+                        <h3 id="add-user-modal-title" className="arr-modal__title">
+                          Add user
+                        </h3>
+                        <button
+                          type="button"
+                          className="arr-btn arr-btn--ghost arr-btn--icon"
+                          onClick={() => setShowAddUserModal(false)}
+                          aria-label="Close"
+                        >
+                          <X className="artist-icon-md" />
+                        </button>
+                      </div>
+                      <form
+                        onSubmit={async (event) => {
+                          event.preventDefault();
+                          if (!newUserUsername.trim() || !newUserPassword) {
+                            showError("Username and password required");
+                            return;
+                          }
+                          setCreatingUser(true);
+                          try {
+                            const shouldWarnLocalBypass =
+                              health?.localNetworkBypass?.enabled === true &&
+                              usersList.length === 1;
+                            await createUser(
+                              newUserUsername.trim(),
+                              newUserPassword,
+                              "user",
+                              newUserPermissions,
+                            );
+                            showSuccess(
+                              shouldWarnLocalBypass
+                                ? "User created. Local-network auto-login was disabled."
+                                : "User created",
+                            );
+                            setShowAddUserModal(false);
+                            setNewUserUsername("");
+                            setNewUserPassword("");
+                            setNewUserPermissions({ ...GRANULAR_PERMISSIONS });
+                            await refreshUsers();
+                            await refreshSettingsData();
+                          } catch (err) {
+                            showError(
+                              err.response?.data?.error ||
+                                err.message ||
+                                "Failed to create user",
+                            );
+                          } finally {
+                            setCreatingUser(false);
+                          }
                         }}
                       >
-                        <Lock className="artist-icon-sm" />
-                        Manage
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-ghost-danger"
-                        disabled={u.role === "admin"}
-                        onClick={() =>
-                          u.role !== "admin" && setDeleteUserTarget(u)
-                        }
-                      >
-                        <Trash2 className="artist-icon-sm" />
-                        Delete
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {deleteUserTarget && (
-            <div
-              className="artist-modal-backdrop"
-              onClick={() => !deletingUser && setDeleteUserTarget(null)}
-            >
-              <div
-                className="settings-page__modal"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="settings-page__modal-header">
-                  <h3 className="settings-page__modal-title">
-                    Delete user
-                  </h3>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-icon-square"
-                    onClick={() =>
-                      !deletingUser && setDeleteUserTarget(null)
-                    }
-                    aria-label="Close"
-                    disabled={deletingUser}
-                  >
-                    <X className="artist-icon-md" />
-                  </button>
-                </div>
-                <p className="settings-page__modal-copy">
-                  Are you sure you want to delete{" "}
-                  <span className="settings-page__meta-value">
-                    {deleteUserTarget.username}
-                  </span>
-                  ? This cannot be undone.
-                </p>
-                <div
-                  className="settings-page__modal-actions"
-                >
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() =>
-                      !deletingUser && setDeleteUserTarget(null)
-                    }
-                    disabled={deletingUser}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    disabled={deletingUser}
-                    onClick={async () => {
-                      setDeletingUser(true);
-                      try {
-                        await deleteUser(deleteUserTarget.id);
-                        showSuccess("User deleted");
-                        setDeleteUserTarget(null);
-                        await refreshUsers();
-                        await refreshSettingsData();
-                      } catch (err) {
-                        showError(
-                          err.response?.data?.error || "Failed to delete"
-                        );
-                      } finally {
-                        setDeletingUser(false);
-                      }
-                    }}
-                  >
-                    {deletingUser ? "Deleting…" : "Delete"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {showAddUserModal && (
-            <div
-              className="artist-modal-backdrop"
-              onClick={() => setShowAddUserModal(false)}
-            >
-              <div
-                className="settings-page__modal settings-page__modal--wide"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="settings-page__panel-header">
-                  <h3 className="settings-page__modal-title">
-                    Add user
-                  </h3>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-icon-square"
-                    onClick={() => setShowAddUserModal(false)}
-                    aria-label="Close"
-                  >
-                    <X className="artist-icon-md" />
-                  </button>
-                </div>
-                <form
-                  className="settings-page__form"
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    if (!newUserUsername.trim() || !newUserPassword) {
-                      showError("Username and password required");
-                      return;
-                    }
-                    setCreatingUser(true);
-                    try {
-                      const shouldWarnLocalBypass =
-                        health?.localNetworkBypass?.enabled === true &&
-                        usersList.length === 1;
-                      await createUser(
-                        newUserUsername.trim(),
-                        newUserPassword,
-                        "user",
-                        newUserPermissions
-                      );
-                      showSuccess(
-                        shouldWarnLocalBypass
-                          ? "User created. Local-network auto-login was disabled."
-                          : "User created"
-                      );
-                      setShowAddUserModal(false);
-                      setNewUserUsername("");
-                      setNewUserPassword("");
-                      setNewUserPermissions({ ...GRANULAR_PERMISSIONS });
-                      await refreshUsers();
-                      await refreshSettingsData();
-                    } catch (err) {
-                      showError(
-                        err.response?.data?.error ||
-                          err.message ||
-                          "Failed to create user"
-                      );
-                    } finally {
-                      setCreatingUser(false);
-                    }
-                  }}
-                >
-                  <div className="settings-page__fields">
-                    <label className="settings-page__section-label">
-                      Account
-                    </label>
-                    <div className="settings-page__two-col-grid">
-                      <div className="settings-page__field-stack">
-                        <label
-                          htmlFor="add-user-username"
-                          className="artist-field-label"
-                        >
-                          Username
-                        </label>
-                        <SettingsInput id="add-user-username"
-                          type="text"
-
-                          placeholder="Username"
-                          autoComplete="off"
-                          value={newUserUsername}
-                          onChange={(e) =>
-                            setNewUserUsername(e.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="settings-page__field-stack">
-                        <label
-                          htmlFor="add-user-password"
-                          className="artist-field-label"
-                        >
-                          Password
-                        </label>
-                        <SettingsInput id="add-user-password"
-                          type="password"
-
-                          placeholder="Password"
-                          autoComplete="new-password"
-                          value={newUserPassword}
-                          onChange={(e) =>
-                            setNewUserPassword(e.target.value)
-                          }
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="settings-page__field-stack--md">
-                    <label className="settings-page__section-label">
-                      Permissions
-                    </label>
-                    <div
-                      className="settings-page__permissions"
-                    >
-                      {granularPerms.map(({ key, label }) => (
-                        <label
-                          key={key}
-                          className="artist-checkbox-label"
-                        >
-                          <input
-                            type="checkbox"
-                            className="artist-checkbox"
-                            checked={!!newUserPermissions[key]}
-                            onChange={(e) =>
-                              setNewUserPermissions((p) => ({
-                                ...p,
-                                [key]: e.target.checked,
-                              }))
-                            }
-                          />
-                          <span className="settings-page__muted-copy">{label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  <div
-                    className="settings-page__modal-actions"
-                  >
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => setShowAddUserModal(false)}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="btn btn-primary"
-                      disabled={creatingUser}
-                    >
-                      {creatingUser ? "Creating…" : "Create user"}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-
-          {editUser && (
-            <div
-              className="artist-modal-backdrop"
-              onClick={() => setEditUser(null)}
-            >
-              <div
-                className="settings-page__modal settings-page__modal--wide"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="settings-page__panel-header">
-                  <h3 className="settings-page__modal-title">
-                    Manage {editUser.username}
-                  </h3>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-icon-square"
-                    onClick={() => setEditUser(null)}
-                    aria-label="Close"
-                  >
-                    <X className="artist-icon-md" />
-                  </button>
-                </div>
-                <form
-                  className="settings-page__form"
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    if (isSelfEdit) {
-                      if (!editPassword) {
-                        setEditUser(null);
-                        return;
-                      }
-                      if (!editCurrentPassword) {
-                        showError("Current password required");
-                        return;
-                      }
-                      setSavingEdit(true);
-                      try {
-                        await updateUser(editUser.id, {
-                          currentPassword: editCurrentPassword,
-                          password: editPassword,
-                        });
-                        const result = await loginApi(authUser?.username, editPassword);
-                        if (result?.token) {
-                          setStoredAuth({ token: result.token });
-                        }
-                        showSuccess("Password changed");
-                        setEditUser(null);
-                      } catch (err) {
-                        showError(
-                          err.response?.data?.error ||
-                            err.message ||
-                            "Failed to update"
-                        );
-                      } finally {
-                        setSavingEdit(false);
-                      }
-                      return;
-                    }
-                    setSavingEdit(true);
-                    try {
-                      await updateUser(editUser.id, {
-                        ...(editPassword
-                          ? { password: editPassword }
-                          : {}),
-                        permissions: editPermissions,
-                      });
-                      showSuccess("User updated");
-                      setEditUser(null);
-                      await refreshUsers();
-                      await refreshSettingsData();
-                    } catch (err) {
-                      showError(
-                        err.response?.data?.error ||
-                          err.message ||
-                          "Failed to update"
-                      );
-                    } finally {
-                      setSavingEdit(false);
-                    }
-                  }}
-                >
-                  <div className="settings-page__fields">
-                    <label className="settings-page__section-label">
-                      {isSelfEdit
-                        ? "Change password"
-                        : "Password (optional)"}
-                    </label>
-                    {isSelfEdit ? (
-                      <div className="settings-page__field-stack--md">
-                        <div className="settings-page__field-stack">
-                          <label
-                            htmlFor="edit-current-password"
-                            className="artist-field-label"
+                        <div className="arr-modal__body">
+                          <SettingsArrFormGroup
+                            label="Username"
+                            labelFor="add-user-username"
                           >
-                            Current password
-                          </label>
-                          <SettingsInput id="edit-current-password"
-                            type="password"
-
-                            placeholder="Current password"
-                            autoComplete="current-password"
-                            value={editCurrentPassword}
-                            onChange={(e) =>
-                              setEditCurrentPassword(e.target.value)
-                            }
-                          />
-                        </div>
-                        <div className="settings-page__field-stack">
-                          <label
-                            htmlFor="edit-new-password"
-                            className="artist-field-label"
-                          >
-                            New password
-                          </label>
-                          <SettingsInput id="edit-new-password"
-                            type="password"
-
-                            placeholder="New password"
-                            autoComplete="new-password"
-                            value={editPassword}
-                            onChange={(e) =>
-                              setEditPassword(e.target.value)
-                            }
-                          />
-                        </div>
-                      </div>
-                    ) : (
-                      <SettingsInput type="password"
-
-                        placeholder="Leave blank to keep current password"
-                        autoComplete="new-password"
-                        value={editPassword}
-                        onChange={(e) => setEditPassword(e.target.value)}
-                      />
-                    )}
-                  </div>
-                  {!isSelfEdit && (
-                    <div className="settings-page__field-stack--md">
-                      <label className="settings-page__section-label">
-                        Permissions
-                      </label>
-                      <div
-                        className="settings-page__permissions"
-                      >
-                        {granularPerms.map(({ key, label }) => (
-                          <label
-                            key={key}
-                            className="artist-checkbox-label"
-                          >
-                            <input
-                              type="checkbox"
-                              className="artist-checkbox"
-                              checked={!!editPermissions[key]}
-                              onChange={(e) =>
-                                setEditPermissions((p) => ({
-                                  ...p,
-                                  [key]: e.target.checked,
-                                }))
+                            <SettingsInput
+                              id="add-user-username"
+                              type="text"
+                              placeholder="Username"
+                              autoComplete="off"
+                              value={newUserUsername}
+                              onChange={(event) =>
+                                setNewUserUsername(event.target.value)
                               }
                             />
-                            <span className="settings-page__muted-copy">{label}</span>
-                          </label>
-                        ))}
-                      </div>
+                          </SettingsArrFormGroup>
+                          <SettingsArrFormGroup
+                            label="Password"
+                            labelFor="add-user-password"
+                          >
+                            <SettingsInput
+                              id="add-user-password"
+                              type="password"
+                              placeholder="Password"
+                              autoComplete="new-password"
+                              value={newUserPassword}
+                              onChange={(event) =>
+                                setNewUserPassword(event.target.value)
+                              }
+                            />
+                          </SettingsArrFormGroup>
+                          <SettingsArrFormGroup
+                            label="Permissions"
+                            size="large"
+                          >
+                            <PermissionChecklist
+                              permissions={newUserPermissions}
+                              onChange={setNewUserPermissions}
+                            />
+                          </SettingsArrFormGroup>
+                        </div>
+                        <div className="arr-modal__footer">
+                          <button
+                            type="button"
+                            className="arr-btn"
+                            onClick={() => setShowAddUserModal(false)}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            className="arr-btn arr-btn--primary"
+                            disabled={creatingUser}
+                          >
+                            {creatingUser ? "Creating…" : "Create user"}
+                          </button>
+                        </div>
+                      </form>
                     </div>
-                  )}
-                  <div
-                    className="settings-page__modal-actions"
-                  >
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => setEditUser(null)}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="btn btn-primary"
-                      disabled={savingEdit}
-                    >
-                      {savingEdit ? "Saving…" : "Save"}
-                    </button>
                   </div>
-                </form>
-              </div>
-            </div>
-          )}
+                </div>,
+                document.body,
+              )
+            : null}
+
+          {editUser
+            ? createPortal(
+                <div className="arr-portal">
+                  <div
+                    className="arr-modal-backdrop"
+                    onClick={() => setEditUser(null)}
+                  >
+                    <div
+                      className="arr-modal"
+                      role="dialog"
+                      aria-modal="true"
+                      aria-labelledby="edit-user-modal-title"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <div className="arr-modal__header">
+                        <h3 id="edit-user-modal-title" className="arr-modal__title">
+                          Manage {editUser.username}
+                        </h3>
+                        <button
+                          type="button"
+                          className="arr-btn arr-btn--ghost arr-btn--icon"
+                          onClick={() => setEditUser(null)}
+                          aria-label="Close"
+                        >
+                          <X className="artist-icon-md" />
+                        </button>
+                      </div>
+                      <form
+                        onSubmit={async (event) => {
+                          event.preventDefault();
+                          if (isSelfEdit) {
+                            if (!editPassword) {
+                              setEditUser(null);
+                              return;
+                            }
+                            if (!editCurrentPassword) {
+                              showError("Current password required");
+                              return;
+                            }
+                            setSavingEdit(true);
+                            try {
+                              await updateUser(editUser.id, {
+                                currentPassword: editCurrentPassword,
+                                password: editPassword,
+                              });
+                              const result = await loginApi(
+                                authUser?.username,
+                                editPassword,
+                              );
+                              if (result?.token) {
+                                setStoredAuth({ token: result.token });
+                              }
+                              showSuccess("Password changed");
+                              setEditUser(null);
+                            } catch (err) {
+                              showError(
+                                err.response?.data?.error ||
+                                  err.message ||
+                                  "Failed to update",
+                              );
+                            } finally {
+                              setSavingEdit(false);
+                            }
+                            return;
+                          }
+                          setSavingEdit(true);
+                          try {
+                            await updateUser(editUser.id, {
+                              ...(editPassword ? { password: editPassword } : {}),
+                              permissions: editPermissions,
+                            });
+                            showSuccess("User updated");
+                            setEditUser(null);
+                            await refreshUsers();
+                            await refreshSettingsData();
+                          } catch (err) {
+                            showError(
+                              err.response?.data?.error ||
+                                err.message ||
+                                "Failed to update",
+                            );
+                          } finally {
+                            setSavingEdit(false);
+                          }
+                        }}
+                      >
+                        <div className="arr-modal__body">
+                          {isSelfEdit ? (
+                            <>
+                              <SettingsArrFormGroup
+                                label="Current password"
+                                labelFor="edit-current-password"
+                              >
+                                <SettingsInput
+                                  id="edit-current-password"
+                                  type="password"
+                                  placeholder="Current password"
+                                  autoComplete="current-password"
+                                  value={editCurrentPassword}
+                                  onChange={(event) =>
+                                    setEditCurrentPassword(event.target.value)
+                                  }
+                                />
+                              </SettingsArrFormGroup>
+                              <SettingsArrFormGroup
+                                label="New password"
+                                labelFor="edit-new-password"
+                              >
+                                <SettingsInput
+                                  id="edit-new-password"
+                                  type="password"
+                                  placeholder="New password"
+                                  autoComplete="new-password"
+                                  value={editPassword}
+                                  onChange={(event) =>
+                                    setEditPassword(event.target.value)
+                                  }
+                                />
+                              </SettingsArrFormGroup>
+                            </>
+                          ) : (
+                            <>
+                              <SettingsArrFormGroup
+                                label="Password"
+                                labelFor="edit-user-password"
+                                help="Leave blank to keep the current password."
+                              >
+                                <SettingsInput
+                                  id="edit-user-password"
+                                  type="password"
+                                  placeholder="New password"
+                                  autoComplete="new-password"
+                                  value={editPassword}
+                                  onChange={(event) =>
+                                    setEditPassword(event.target.value)
+                                  }
+                                />
+                              </SettingsArrFormGroup>
+                              <SettingsArrFormGroup
+                                label="Permissions"
+                                size="large"
+                              >
+                                <PermissionChecklist
+                                  permissions={editPermissions}
+                                  onChange={setEditPermissions}
+                                />
+                              </SettingsArrFormGroup>
+                            </>
+                          )}
+                        </div>
+                        <div className="arr-modal__footer">
+                          <button
+                            type="button"
+                            className="arr-btn"
+                            onClick={() => setEditUser(null)}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            className="arr-btn arr-btn--primary"
+                            disabled={savingEdit}
+                          >
+                            {savingEdit ? "Saving…" : "Save"}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>,
+                document.body,
+              )
+            : null}
         </>
       )}
     </div>

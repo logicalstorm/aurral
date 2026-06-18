@@ -1,29 +1,19 @@
-import FlipSaveButton from "../../../components/FlipSaveButton";
 import { SettingsStorageSection } from "./SettingsStorageSection";
 
 export function SettingsStorageTab({
   settings,
   updateSettings,
   hasUnsavedChanges,
-  saving,
   handleSaveSettings,
+  health,
   showSuccess,
   showError,
 }) {
   return (
-    <div className="settings-page__panel">
-      <div className="settings-page__panel-header">
-        <h2 className="settings-page__panel-title">Storage</h2>
-        <FlipSaveButton
-          saving={saving}
-          disabled={!hasUnsavedChanges}
-          onClick={handleSaveSettings}
-        />
-      </div>
-
+    <div className="arr-page">
       <form
         onSubmit={handleSaveSettings}
-        className="settings-page__form"
+        className="arr-form"
         autoComplete="off"
       >
         <SettingsStorageSection
@@ -31,6 +21,7 @@ export function SettingsStorageTab({
           updateSettings={updateSettings}
           hasUnsavedChanges={hasUnsavedChanges}
           handleSaveSettings={handleSaveSettings}
+          health={health}
           showSuccess={showSuccess}
           showError={showError}
         />

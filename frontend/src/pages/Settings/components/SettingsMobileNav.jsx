@@ -2,11 +2,8 @@ import { SettingsSelect } from "./SettingsField";
 
 export function SettingsMobileNav({ tabs, activeTab, onSelectTab }) {
   return (
-    <div className="settings-page__mobile-nav">
-      <label
-        htmlFor="settings-tab-select"
-        className="settings-page__mobile-label"
-      >
+    <div className="settings-arr__mobile-nav">
+      <label htmlFor="settings-tab-select" className="settings-arr__mobile-label">
         Section
       </label>
       <SettingsSelect

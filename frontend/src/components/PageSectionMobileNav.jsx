@@ -15,6 +15,7 @@ export function PageSectionMobileNav({
         {label}
       </label>
       <SettingsSelect
+        legacyStyle
         id="page-section-select"
         value={activeId}
         onChange={(event) =>

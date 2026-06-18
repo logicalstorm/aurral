@@ -52,6 +52,7 @@ function Layout({ children }) {
     /^\/artist\/[^/]+(\/(albums|appears-on|release\/[^/]+))?$/.test(
       location.pathname,
     );
+  const isSettingsRoute = location.pathname.startsWith("/settings");
 
   const updateMainScrollbar = useCallback(() => {
     const node = mainScrollRef.current;
@@ -239,7 +240,11 @@ function Layout({ children }) {
 
         <div className="app-main-wrap">
           <main
-            className={`app-main${isArtistDetailsRoute ? " app-main--artist-details" : ""}${isPlayerActive ? " app-main--player-active" : ""}`}
+            className={`app-main${
+              isArtistDetailsRoute ? " app-main--artist-details" : ""
+            }${isSettingsRoute ? " app-main--settings" : ""}${
+              isPlayerActive ? " app-main--player-active" : ""
+            }`}
             ref={mainScrollRef}
             onScroll={() => {
               updateMainScrollbar();

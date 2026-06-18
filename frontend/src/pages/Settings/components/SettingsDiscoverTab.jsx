@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { RefreshCw, Trash2, X } from "lucide-react";
-import FlipSaveButton from "../../../components/FlipSaveButton";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
+import {
+  SettingsArrFieldSet,
+  SettingsArrFormGroup,
+} from "./arr/SettingsArrLayout";
 
 const AUTO_REFRESH_OPTIONS = [
   { value: 24, label: "Daily" },
@@ -80,6 +83,14 @@ export function SettingsDiscoverTab({
     health?.discovery?.provider === "listenbrainz-fallback";
   const showLastfmDiscoverBanner =
     isListenBrainzFallback && !lastfmBannerDismissed;
+  const activeProgress =
+    discoveryProgress ?? health?.discovery?.updateProgress;
+  const showProgress =
+    health?.discovery?.isUpdating || refreshingDiscovery;
+  const progressMessage =
+    discoveryProgressMessage ||
+    health?.discovery?.updateProgressMessage ||
+    "Refreshing discovery";
 
   const updateLastfmDiscovery = (patch) =>
     updateSettings({
@@ -94,19 +105,10 @@ export function SettingsDiscoverTab({
     });
 
   return (
-    <div className="settings-page__panel">
-      <div className="settings-page__panel-header">
-        <h2 className="settings-page__panel-title">Discover</h2>
-        <FlipSaveButton
-          saving={saving}
-          disabled={!hasUnsavedChanges}
-          onClick={handleSaveSettings}
-        />
-      </div>
-
+    <div className="arr-page">
       <form
         onSubmit={handleSaveSettings}
-        className="settings-page__form"
+        className="arr-form"
         autoComplete="off"
       >
         {showLastfmDiscoverBanner && (
@@ -117,7 +119,7 @@ export function SettingsDiscoverTab({
               </p>
               <p className="settings-page__banner-text">
                 Add a free Last.fm API key in{" "}
-                <Link to="/settings/connect" className="settings-page__link">
+                <Link to="/settings/connect" className="arr-link">
                   Connect
                 </Link>{" "}
                 to unlock personalized recommendations, similar artists, tag
@@ -126,7 +128,7 @@ export function SettingsDiscoverTab({
             </div>
             <button
               type="button"
-              className="btn btn-ghost btn-icon-square"
+              className="arr-btn arr-btn--ghost arr-btn--icon"
               onClick={() => {
                 setLastfmBannerDismissed(true);
                 try {
@@ -135,262 +137,223 @@ export function SettingsDiscoverTab({
               }}
               aria-label="Dismiss Last.fm upgrade reminder"
             >
-              <X className="settings-page__tab-icon" />
+              <X className="artist-icon-sm" />
             </button>
           </div>
         )}
 
-        <div className="settings-page__section">
-          <div className="settings-page__section-intro">
-            <h3 className="settings-page__section-title">Discovery behavior</h3>
-            <p className="settings-page__section-note">
-              Controls how often Aurral refreshes recommendations and flows.
-              Listening history API keys are configured in{" "}
-              <Link to="/settings/connect" className="settings-page__link">
-                Connect
-              </Link>
-              ; per-user accounts are in{" "}
-              <Link to="/profile" className="settings-page__link">
-                Profile
-              </Link>
-              .
-            </p>
+        <SettingsArrFieldSet legend="Discovery Behavior">
+          <div className="arr-info">
+            Controls how often Aurral refreshes recommendations and flows.
+            Listening history API keys are configured in{" "}
+            <Link to="/settings/connect" className="arr-link">
+              Connect
+            </Link>
+            ; per-user accounts are in{" "}
+            <Link to="/profile" className="arr-link">
+              Profile
+            </Link>
+            .
           </div>
-          <fieldset className="settings-page__fields">
-            <div className="settings-page__field">
-              <label className="artist-field-label" htmlFor="discover-refresh">
-                Auto-refresh frequency
-              </label>
+
+          <SettingsArrFormGroup
+            label="Auto-refresh frequency"
+            labelFor="discover-refresh"
+          >
+            <SettingsSelect
+              id="discover-refresh"
+              value={String(autoRefreshHours)}
+              onChange={(e) =>
+                updateLastfmDiscovery({
+                  discoveryAutoRefreshHours: parseInt(e.target.value, 10),
+                })
+              }
+            >
+              {AUTO_REFRESH_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </SettingsSelect>
+          </SettingsArrFormGroup>
+
+          {!isListenBrainzFallback ? (
+            <SettingsArrFormGroup
+              label="Discovery mode"
+              labelFor="discover-mode"
+              help={
+                <>
+                  <strong>Safer</strong> favors more obvious recommendations.{" "}
+                  <strong>Balanced</strong> mixes familiar artists with
+                  exploration. <strong>Deeper</strong> pushes further beyond
+                  obvious similar artists.
+                </>
+              }
+            >
               <SettingsSelect
-                id="discover-refresh"
-                value={String(autoRefreshHours)}
+                id="discover-mode"
+                value={discoveryMode}
                 onChange={(e) =>
-                  updateLastfmDiscovery({
-                    discoveryAutoRefreshHours: parseInt(e.target.value, 10),
-                  })
+                  updateLastfmDiscovery({ discoveryMode: e.target.value })
                 }
               >
-                {AUTO_REFRESH_OPTIONS.map((option) => (
+                {DISCOVERY_MODE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
                 ))}
               </SettingsSelect>
-            </div>
-            {!isListenBrainzFallback && (
-              <div className="settings-page__field">
-                <label className="artist-field-label" htmlFor="discover-mode">
-                  Discovery mode
-                </label>
-                <SettingsSelect
-                  id="discover-mode"
-                  value={discoveryMode}
-                  onChange={(e) =>
-                    updateLastfmDiscovery({ discoveryMode: e.target.value })
-                  }
-                >
-                  {DISCOVERY_MODE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </SettingsSelect>
-                <div className="settings-page__hint-list">
-                  <p>
-                    <strong>Safer:</strong> favors more obvious recommendations.
-                  </p>
-                  <p>
-                    <strong>Balanced:</strong> mixes familiar artists with
-                    exploration.
-                  </p>
-                  <p>
-                    <strong>Deeper:</strong> pushes further beyond obvious
-                    similar artists.
-                  </p>
-                </div>
-              </div>
-            )}
+            </SettingsArrFormGroup>
+          ) : null}
 
-            {!isListenBrainzFallback && (
-              <div className="settings-page__advanced-toggle-row">
-                <button
-                  type="button"
-                  className="settings-page__advanced-toggle"
-                  onClick={() => setShowAdvanced((current) => !current)}
-                >
-                  {showAdvanced ? "Hide advanced" : "Show advanced"}
-                </button>
-              </div>
-            )}
-
-            {!isListenBrainzFallback && showAdvanced && (
-              <>
-                <div className="settings-page__field">
-                  <label
-                    className="artist-field-label"
-                    htmlFor="discover-recommendations"
-                  >
-                    Recommended artists per refresh
-                  </label>
-                  <SettingsInput
-                    id="discover-recommendations"
-                    type="number"
-                    min={50}
-                    max={500}
-                    step={10}
-                    value={discoveryRecommendationsPerRefresh}
-                    onChange={(e) => {
-                      const raw = Number(e.target.value);
-                      const value = Number.isFinite(raw)
-                        ? Math.max(50, Math.min(500, Math.floor(raw)))
-                        : 200;
-                      updateLastfmDiscovery({
-                        discoveryRecommendationsPerRefresh: value,
-                      });
-                    }}
-                  />
-                </div>
-                <div className="settings-page__field">
-                  <label
-                    className="artist-field-label"
-                    htmlFor="discover-flows"
-                  >
-                    Generated flows per refresh
-                  </label>
-                  <SettingsInput
-                    id="discover-flows"
-                    type="number"
-                    min={5}
-                    max={32}
-                    step={1}
-                    value={discoveryFlowsPerRefresh}
-                    onChange={(e) => {
-                      const raw = Number(e.target.value);
-                      const value = Number.isFinite(raw)
-                        ? Math.max(5, Math.min(32, Math.floor(raw)))
-                        : 9;
-                      updateLastfmDiscovery({
-                        discoveryFlowsPerRefresh: value,
-                      });
-                    }}
-                  />
-                  <p className="settings-page__hint">
-                    Includes Discover Weekly, Trending Mix, Library Blend,
-                    Listening History, and Release Radar, plus {focusFlowCount}{" "}
-                    auto-generated focus playlists.
-                  </p>
-                </div>
-              </>
-            )}
-          </fieldset>
-        </div>
-
-        <div className="settings-page__section">
-          <h3 className="settings-page__section-title">Cache status</h3>
-          <div className="settings-page__cache-layout">
-            <div className="settings-page__meta-grid">
-              <dl className="settings-page__meta-grid settings-page__meta-grid--two-col">
-                <div className="settings-page__meta-item">
-                  <dt className="settings-page__meta-term">Provider</dt>
-                  <dd className="settings-page__meta-value">
-                    {discoveryProvider}
-                  </dd>
-                </div>
-                <div className="settings-page__meta-item">
-                  <dt className="settings-page__meta-term">Last updated</dt>
-                  <dd className="settings-page__meta-value">
-                    {health?.discovery?.lastUpdated
-                      ? new Date(health.discovery.lastUpdated).toLocaleString()
-                      : "—"}
-                  </dd>
-                </div>
-                <div className="settings-page__meta-item">
-                  <dt className="settings-page__meta-term">Image cache size</dt>
-                  <dd className="settings-page__meta-value">
-                    {formatBytes(health?.discovery?.cachedImagesSizeBytes)}
-                  </dd>
-                </div>
-                <div className="settings-page__meta-item">
-                  <dt className="settings-page__meta-term">Cached images</dt>
-                  <dd className="settings-page__meta-value">
-                    {health?.discovery?.cachedImagesCount ?? "—"}
-                  </dd>
-                </div>
-              </dl>
-              {(health?.discovery?.isUpdating || refreshingDiscovery) && (
-                <div className="settings-page__discovery-progress">
-                  <p className="settings-page__progress-line">
-                    <RefreshCw className="artist-icon-xs animate-spin" />
-                    <span className="settings-page__progress-text">
-                      {discoveryProgressMessage ||
-                        health?.discovery?.updateProgressMessage ||
-                        "Refreshing discovery"}
-                    </span>
-                    {typeof (
-                      discoveryProgress ?? health?.discovery?.updateProgress
-                    ) === "number" && (
-                      <span className="settings-page__progress-pct">
-                        {discoveryProgress ?? health?.discovery?.updateProgress}
-                        %
-                      </span>
-                    )}
-                  </p>
-                  {typeof (
-                    discoveryProgress ?? health?.discovery?.updateProgress
-                  ) === "number" && (
-                    <div className="settings-page__progress-bar">
-                      <div
-                        className="settings-page__progress-fill"
-                        style={{
-                          width: `${discoveryProgress ?? health?.discovery?.updateProgress}%`,
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-              {!refreshingDiscovery &&
-                !health?.discovery?.isUpdating &&
-                discoveryProgressMessage && (
-                  <p className="settings-page__success-line">
-                    {discoveryProgressMessage}
-                  </p>
-                )}
+          {!isListenBrainzFallback ? (
+            <div className="arr-advanced-toggle">
+              <button
+                type="button"
+                className="arr-link arr-link--button"
+                onClick={() => setShowAdvanced((current) => !current)}
+              >
+                {showAdvanced ? "Hide advanced" : "Show advanced"}
+              </button>
             </div>
-            <div className="settings-page__cache-actions">
-              <div className="settings-page__action-card">
-                <p className="settings-page__action-card-label">
-                  Discovery data
-                </p>
-                <button
-                  type="button"
-                  onClick={handleRefreshDiscovery}
-                  disabled={refreshingDiscovery}
-                  className="btn btn-primary btn--full"
-                >
-                  <RefreshCw
-                    className={`artist-icon-xs${refreshingDiscovery ? " animate-spin" : ""}`}
-                  />
-                  {refreshingDiscovery ? "Refreshing..." : "Refresh Discovery"}
-                </button>
-              </div>
-              <div className="settings-page__action-card">
-                <p className="settings-page__action-card-label">Image cache</p>
-                <button
-                  type="button"
-                  onClick={handleClearCache}
-                  disabled={clearingCache}
-                  className="btn btn-secondary btn--full"
-                >
-                  <Trash2
-                    className={`artist-icon-xs${clearingCache ? " animate-spin" : ""}`}
-                  />
-                  {clearingCache ? "Clearing..." : "Clear Image Cache"}
-                </button>
-              </div>
+          ) : null}
+
+          {!isListenBrainzFallback && showAdvanced ? (
+            <>
+              <SettingsArrFormGroup
+                label="Recommended artists"
+                labelFor="discover-recommendations"
+                help="Number of recommended artists generated on each refresh."
+              >
+                <SettingsInput
+                  id="discover-recommendations"
+                  type="number"
+                  min={50}
+                  max={500}
+                  step={10}
+                  value={discoveryRecommendationsPerRefresh}
+                  onChange={(e) => {
+                    const raw = Number(e.target.value);
+                    const value = Number.isFinite(raw)
+                      ? Math.max(50, Math.min(500, Math.floor(raw)))
+                      : 200;
+                    updateLastfmDiscovery({
+                      discoveryRecommendationsPerRefresh: value,
+                    });
+                  }}
+                />
+              </SettingsArrFormGroup>
+              <SettingsArrFormGroup
+                label="Generated flows"
+                labelFor="discover-flows"
+                help={`Includes Discover Weekly, Trending Mix, Library Blend, Listening History, and Release Radar, plus ${focusFlowCount} auto-generated focus playlists.`}
+              >
+                <SettingsInput
+                  id="discover-flows"
+                  type="number"
+                  min={5}
+                  max={32}
+                  step={1}
+                  value={discoveryFlowsPerRefresh}
+                  onChange={(e) => {
+                    const raw = Number(e.target.value);
+                    const value = Number.isFinite(raw)
+                      ? Math.max(5, Math.min(32, Math.floor(raw)))
+                      : 9;
+                    updateLastfmDiscovery({
+                      discoveryFlowsPerRefresh: value,
+                    });
+                  }}
+                />
+              </SettingsArrFormGroup>
+            </>
+          ) : null}
+        </SettingsArrFieldSet>
+
+        <SettingsArrFieldSet
+          legend="Cache Status"
+          actions={
+            <>
+              <button
+                type="button"
+                className="arr-btn arr-btn--primary"
+                onClick={handleRefreshDiscovery}
+                disabled={refreshingDiscovery}
+              >
+                <RefreshCw
+                  className={`artist-icon-xs${refreshingDiscovery ? " animate-spin" : ""}`}
+                  aria-hidden
+                />
+                {refreshingDiscovery ? "Refreshing…" : "Refresh Discovery"}
+              </button>
+              <button
+                type="button"
+                className="arr-btn"
+                onClick={handleClearCache}
+                disabled={clearingCache}
+              >
+                <Trash2
+                  className={`artist-icon-xs${clearingCache ? " animate-spin" : ""}`}
+                  aria-hidden
+                />
+                {clearingCache ? "Clearing…" : "Clear Image Cache"}
+              </button>
+            </>
+          }
+        >
+          <dl className="arr-meta-grid arr-meta-grid--two-col">
+            <div>
+              <dt className="arr-meta-term">Provider</dt>
+              <dd className="arr-meta-value">{discoveryProvider}</dd>
             </div>
-          </div>
-        </div>
+            <div>
+              <dt className="arr-meta-term">Last updated</dt>
+              <dd className="arr-meta-value">
+                {health?.discovery?.lastUpdated
+                  ? new Date(health.discovery.lastUpdated).toLocaleString()
+                  : "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="arr-meta-term">Image cache size</dt>
+              <dd className="arr-meta-value">
+                {formatBytes(health?.discovery?.cachedImagesSizeBytes)}
+              </dd>
+            </div>
+            <div>
+              <dt className="arr-meta-term">Cached images</dt>
+              <dd className="arr-meta-value">
+                {health?.discovery?.cachedImagesCount ?? "—"}
+              </dd>
+            </div>
+          </dl>
+
+          {showProgress ? (
+            <div className="arr-progress">
+              <p className="arr-progress__line">
+                <RefreshCw className="artist-icon-xs animate-spin" aria-hidden />
+                <span>{progressMessage}</span>
+                {typeof activeProgress === "number" ? (
+                  <span className="arr-progress__pct">{activeProgress}%</span>
+                ) : null}
+              </p>
+              {typeof activeProgress === "number" ? (
+                <div className="arr-progress__bar">
+                  <div
+                    className="arr-progress__fill"
+                    style={{ width: `${activeProgress}%` }}
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {!showProgress && discoveryProgressMessage ? (
+            <p className="arr-form-help arr-form-help--success">
+              {discoveryProgressMessage}
+            </p>
+          ) : null}
+        </SettingsArrFieldSet>
       </form>
     </div>
   );

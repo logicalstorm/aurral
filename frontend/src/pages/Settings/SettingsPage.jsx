@@ -19,13 +19,12 @@ import { SettingsConnectTab } from "./components/SettingsConnectTab";
 import { SettingsDiscoverTab } from "./components/SettingsDiscoverTab";
 import { SettingsUsersTab } from "./components/SettingsUsersTab";
 import { SettingsMetadataPanel } from "./components/SettingsMetadataPanel";
-import { SettingsGeneralTab } from "./components/SettingsGeneralTab";
-import SettingsSponsorBanner from "../../components/SettingsSponsorBanner";
-import FlipSaveButton from "../../components/FlipSaveButton";
+import { SettingsArrToolbar } from "./components/SettingsArrToolbar";
 import {
   DEFAULT_SETTINGS_TAB,
   normalizeSettingsTabId,
 } from "./settingsTabsConfig";
+import "./settingsArr.css";
 
 function SettingsPage() {
   const { showSuccess, showError, showInfo } = useToast();
@@ -63,7 +62,7 @@ function SettingsPage() {
   useDocumentTitle(settingsTitle);
 
   useEffect(() => {
-    if (tabs.activeTab === "discover" || tabs.activeTab === "general") {
+    if (tabs.activeTab === "discover" || tabs.activeTab === "system") {
       data.refreshHealth();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -91,15 +90,16 @@ function SettingsPage() {
 
   const renderTabContent = () => {
     switch (tabs.activeTab) {
-      case "storage":
+      case "system":
         return (
           <SettingsStorageTab
-            key="settings-storage"
+            key="settings-system"
             settings={data.settings}
             updateSettings={data.updateSettings}
             hasUnsavedChanges={data.hasUnsavedChanges}
             saving={data.saving}
             handleSaveSettings={data.handleSaveSettings}
+            health={data.health}
             showSuccess={showSuccess}
             showError={showError}
           />
@@ -213,24 +213,14 @@ function SettingsPage() {
         );
       case "metadata":
         return (
-          <div className="settings-page__panel">
-            <div className="settings-page__panel-header">
-              <h2 className="settings-page__panel-title">Metadata</h2>
-              <FlipSaveButton
-                saving={data.saving}
-                disabled={!data.hasUnsavedChanges}
-                onClick={data.handleSaveSettings}
-              />
-            </div>
-            <SettingsMetadataPanel
-              settings={data.settings}
-              updateSettings={data.updateSettings}
-              health={data.health}
-              hasUnsavedChanges={data.hasUnsavedChanges}
-              saving={data.saving}
-              handleSaveSettings={data.handleSaveSettings}
-            />
-          </div>
+          <SettingsMetadataPanel
+            settings={data.settings}
+            updateSettings={data.updateSettings}
+            health={data.health}
+            hasUnsavedChanges={data.hasUnsavedChanges}
+            saving={data.saving}
+            handleSaveSettings={data.handleSaveSettings}
+          />
         );
       case "users":
         return (
@@ -284,8 +274,6 @@ function SettingsPage() {
             showError={showError}
           />
         );
-      case "general":
-        return <SettingsGeneralTab health={data.health} />;
       default:
         return null;
     }
@@ -320,24 +308,24 @@ function SettingsPage() {
         onApply={data.handleApplyCommunityGuide}
       />
 
-      <div className="settings-page">
-        <header className="settings-page__header">
-          <h1 className="page-title">Settings</h1>
-          <p className="page-subtitle">
-            Configure library, indexers, download clients, playback, and
-            connections
-          </p>
-        </header>
-
-        <SettingsSponsorBanner />
-
-        <SettingsMobileNav
-          tabs={tabs.tabs}
-          activeTab={tabs.activeTab}
-          onSelectTab={handleTabSelect}
+      <div className="settings-arr">
+        <SettingsArrToolbar
+          hasPendingChanges={data.hasUnsavedChanges}
+          isSaving={data.saving}
+          onSave={data.handleSaveSettings}
         />
 
-        <div className="settings-page__content">{renderTabContent()}</div>
+        <div className="settings-arr__body">
+          <div className="settings-arr__content">
+            <SettingsMobileNav
+              tabs={tabs.tabs}
+              activeTab={tabs.activeTab}
+              onSelectTab={handleTabSelect}
+            />
+
+            {renderTabContent()}
+          </div>
+        </div>
       </div>
     </>
   );

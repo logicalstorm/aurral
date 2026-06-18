@@ -1,46 +1,42 @@
-export function SettingsField({ select = false, textarea = false, className = "", children }) {
-  const kind = select
-    ? ""
-    : textarea
-      ? " artist-modal-field--textarea"
-      : " artist-modal-field--text";
+export function SettingsInput({ legacyStyle = false, className = "", ...props }) {
   return (
-    <div
-      className={`artist-modal-field aurral-radius-round${kind}${className ? ` ${className}` : ""}`}
+    <input
+      className={
+        legacyStyle
+          ? `artist-input${className ? ` ${className}` : ""}`
+          : `arr-input${className ? ` ${className}` : ""}`
+      }
+      {...props}
+    />
+  );
+}
+
+export function SettingsSelect({ legacyStyle = false, className = "", children, ...props }) {
+  return (
+    <select
+      className={
+        legacyStyle
+          ? `artist-modal-select${className ? ` ${className}` : ""}`
+          : `arr-input arr-select${className ? ` ${className}` : ""}`
+      }
+      {...props}
     >
       {children}
-    </div>
+    </select>
   );
 }
 
-export function SettingsInput({ wrapperClassName = "", className = "", ...props }) {
+export function SettingsTextarea({ legacyStyle = false, className = "", ...props }) {
   return (
-    <SettingsField className={wrapperClassName}>
-      <input className={`artist-input${className ? ` ${className}` : ""}`} {...props} />
-    </SettingsField>
-  );
-}
-
-export function SettingsSelect({ wrapperClassName = "", className = "", children, ...props }) {
-  return (
-    <SettingsField select className={wrapperClassName}>
-      <select
-        className={`artist-modal-select${className ? ` ${className}` : ""}`}
-        {...props}
-      >
-        {children}
-      </select>
-    </SettingsField>
-  );
-}
-
-export function SettingsTextarea({ wrapperClassName = "", className = "", ...props }) {
-  return (
-    <SettingsField textarea className={wrapperClassName}>
-      <textarea
-        className={`settings-page__code-input settings-page__code-input--inner${className ? ` ${className}` : ""}`}
-        {...props}
-      />
-    </SettingsField>
+    <textarea
+      className={
+        legacyStyle
+          ? `settings-page__code-input settings-page__code-input--inner${
+              className ? ` ${className}` : ""
+            }`
+          : `arr-input arr-textarea${className ? ` ${className}` : ""}`
+      }
+      {...props}
+    />
   );
 }

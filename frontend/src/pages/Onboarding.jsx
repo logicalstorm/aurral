@@ -616,21 +616,21 @@ function Onboarding() {
                   copy="Create a local account to sign in to Aurral."
                 />
                 <div className="onboarding-fields">
-                  <SettingsInput
+                  <SettingsInput legacyStyle
                     type="text"
                     autoComplete="off"
                     placeholder="Username"
                     value={authUser}
                     onChange={(e) => setAuthUser(e.target.value)}
                   />
-                  <SettingsInput
+                  <SettingsInput legacyStyle
                     type="password"
                     autoComplete="new-password"
                     placeholder="Password"
                     value={authPassword}
                     onChange={(e) => setAuthPassword(e.target.value)}
                   />
-                  <SettingsInput
+                  <SettingsInput legacyStyle
                     type="password"
                     autoComplete="new-password"
                     placeholder="Confirm password"
@@ -669,7 +669,7 @@ function Onboarding() {
                   copy="Aurral uses Lidarr to manage your music library and downloads."
                 />
                 <div className="onboarding-fields">
-                  <SettingsInput
+                  <SettingsInput legacyStyle
                     type="url"
                     autoComplete="off"
                     placeholder="Lidarr URL (e.g. http://localhost:8686)"
@@ -683,7 +683,7 @@ function Onboarding() {
                       setDavoApplied(false);
                     }}
                   />
-                  <SettingsInput
+                  <SettingsInput legacyStyle
                     type="password"
                     autoComplete="off"
                     placeholder="API key"
@@ -778,7 +778,7 @@ function Onboarding() {
                 />
                 <div className="onboarding-fields">
                   <OnboardingFieldGroup label="Default quality profile">
-                    <SettingsSelect
+                    <SettingsSelect legacyStyle
                       value={lidarrQualityProfileId}
                       onChange={(e) =>
                         setLidarrQualityProfileId(e.target.value)
@@ -800,7 +800,7 @@ function Onboarding() {
                     </SettingsSelect>
                   </OnboardingFieldGroup>
                   <OnboardingFieldGroup label="Default metadata profile">
-                    <SettingsSelect
+                    <SettingsSelect legacyStyle
                       value={lidarrMetadataProfileId}
                       onChange={(e) =>
                         setLidarrMetadataProfileId(e.target.value)
@@ -825,7 +825,7 @@ function Onboarding() {
                     label="Default monitoring option"
                     hint="Aurral uses a pick-and-choose album workflow. We recommend None (Artist Only) so new artists are not fully monitored automatically."
                   >
-                    <SettingsSelect
+                    <SettingsSelect legacyStyle
                       value={lidarrDefaultMonitorOption}
                       onChange={(e) =>
                         setLidarrDefaultMonitorOption(e.target.value)
@@ -865,7 +865,7 @@ function Onboarding() {
                   copy="Recommended for streaming and playlists. Leave blank to skip and add later in settings."
                 />
                 <div className="onboarding-fields">
-                  <SettingsInput
+                  <SettingsInput legacyStyle
                     type="url"
                     autoComplete="off"
                     placeholder="Navidrome URL"
@@ -875,7 +875,7 @@ function Onboarding() {
                       setNavidromeTestSuccess(false);
                     }}
                   />
-                  <SettingsInput
+                  <SettingsInput legacyStyle
                     type="text"
                     autoComplete="off"
                     placeholder="Username"
@@ -885,7 +885,7 @@ function Onboarding() {
                       setNavidromeTestSuccess(false);
                     }}
                   />
-                  <SettingsInput
+                  <SettingsInput legacyStyle
                     type="password"
                     autoComplete="off"
                     placeholder="Password"
@@ -906,14 +906,14 @@ function Onboarding() {
                   copy="Recommended for personalized discovery, related artists, full tag search, and flows. If you skip it, Discover will use ListenBrainz trending artists and default genre shelves."
                 />
                 <div className="onboarding-fields">
-                  <SettingsInput
+                  <SettingsInput legacyStyle
                     type="text"
                     autoComplete="off"
                     placeholder="Last.fm username"
                     value={lastfmUsername}
                     onChange={(e) => setLastfmUsername(e.target.value)}
                   />
-                  <SettingsInput
+                  <SettingsInput legacyStyle
                     type="password"
                     autoComplete="off"
                     placeholder="Last.fm API key"
@@ -931,7 +931,7 @@ function Onboarding() {
                   copy="Recommended for Soulseek-based downloads in flows and playlists. Leave blank to skip and add later in settings."
                 />
                 <div className="onboarding-fields">
-                  <SettingsInput
+                  <SettingsInput legacyStyle
                     type="url"
                     autoComplete="off"
                     placeholder="slskd URL (e.g. http://localhost:5030)"
@@ -941,7 +941,7 @@ function Onboarding() {
                       setSlskdTestSuccess(false);
                     }}
                   />
-                  <SettingsInput
+                  <SettingsInput legacyStyle
                     type="password"
                     autoComplete="off"
                     placeholder="API key"
@@ -976,7 +976,7 @@ function Onboarding() {
                       to get a Consumer Key used for authentication.
                     </p>
                   </div>
-                  <SettingsInput
+                  <SettingsInput legacyStyle
                     type="password"
                     autoComplete="off"
                     placeholder="Consumer key"
@@ -987,7 +987,7 @@ function Onboarding() {
                     label="Search radius (miles)"
                     hint="How far from your location to search for nearby shows."
                   >
-                    <SettingsInput
+                    <SettingsInput legacyStyle
                       type="number"
                       min={5}
                       max={250}

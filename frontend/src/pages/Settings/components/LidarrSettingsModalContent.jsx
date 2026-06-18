@@ -282,8 +282,8 @@ export function LidarrSettingsModal({
       <SettingsModalSection title="Library files">
         <p className="settings-modal__hint">
           File access, mounts, and path mappings are checked in{" "}
-          <Link to="/settings/storage" className="settings-page__link">
-            Settings → Storage
+          <Link to="/settings/system" className="settings-page__link">
+            Settings → System
           </Link>
           .
         </p>

@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import PropTypes from "prop-types";
+import { ChevronDown } from "lucide-react";
 
 const STATUS_LABELS = {
   pass: "PASS",
@@ -14,23 +16,30 @@ function formatCheckedAt(value) {
   return date.toLocaleString();
 }
 
-function buildRows(sections) {
-  const rows = [];
+function defaultExpandedBySection(sections) {
+  const next = {};
   for (const section of sections) {
-    rows.push({ kind: "section", section });
-    if (section.status === "skip") continue;
-    for (const step of section.steps || []) {
-      rows.push({ kind: "step", section, step });
+    if (section.status === "skip") {
+      next[section.id] = false;
+      continue;
     }
+    next[section.id] = section.status !== "pass";
   }
-  return rows;
+  return next;
 }
 
 export function StorageHealthDashboard({ result, loading = false }) {
+  const [expanded, setExpanded] = useState({});
+
+  useEffect(() => {
+    if (!result?.sections?.length) return;
+    setExpanded(defaultExpandedBySection(result.sections));
+  }, [result?.checkedAt]);
+
   if (loading) {
     return (
-      <div className="storage-health" role="status">
-        <p className="storage-health__loading">Running storage checks…</p>
+      <div className="arr-health" role="status">
+        <p className="arr-health__loading">Running storage checks…</p>
       </div>
     );
   }
@@ -51,18 +60,24 @@ export function StorageHealthDashboard({ result, loading = false }) {
       : "Healthy"
     : "Failed";
   const checkedAt = formatCheckedAt(result.checkedAt);
-  const rows = buildRows(result.sections);
+
+  const toggleSection = (sectionId) => {
+    setExpanded((current) => ({
+      ...current,
+      [sectionId]: !current[sectionId],
+    }));
+  };
 
   return (
-    <div className="storage-health" role="status">
-      <div className={`storage-health__summary is-${summaryStatus}`}>
-        <div className="storage-health__summary-main">
+    <div className="arr-health" role="status">
+      <div className={`arr-health__summary is-${summaryStatus}`}>
+        <div className="arr-health__summary-main">
           <span
-            className={`storage-health__badge storage-health__badge--${summaryStatus}`}
+            className={`arr-health__badge arr-health__badge--${summaryStatus}`}
           >
             {summaryLabel}
           </span>
-          <span className="storage-health__summary-text">
+          <span className="arr-health__summary-text">
             {activeSections.length} sections checked
             {result.failedCount > 0 ? ` · ${result.failedCount} failed` : ""}
             {result.warningCount > 0
@@ -71,12 +86,12 @@ export function StorageHealthDashboard({ result, loading = false }) {
           </span>
         </div>
         {checkedAt ? (
-          <span className="storage-health__summary-time">Last checked {checkedAt}</span>
+          <span className="arr-health__summary-time">Last checked {checkedAt}</span>
         ) : null}
       </div>
 
-      <div className="storage-health__table-wrap">
-        <table className="storage-health__table">
+      <div className="arr-health__table-wrap">
+        <table className="arr-health__table">
           <thead>
             <tr>
               <th scope="col">Status</th>
@@ -86,60 +101,19 @@ export function StorageHealthDashboard({ result, loading = false }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => {
-              if (row.kind === "section") {
-                const { section } = row;
-                return (
-                  <tr
-                    key={`section-${section.id}`}
-                    className={`storage-health__section-row is-${section.status}`}
-                  >
-                    <td colSpan={4}>
-                      <div className="storage-health__section-cell">
-                        <span
-                          className={`storage-health__badge storage-health__badge--${section.status}`}
-                        >
-                          {STATUS_LABELS[section.status] || section.status}
-                        </span>
-                        <span className="storage-health__section-title">
-                          {section.title}
-                        </span>
-                        {section.skipReason ? (
-                          <span className="storage-health__section-skip">
-                            {section.skipReason}
-                          </span>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              }
+            {result.sections.map((section) => {
+              const isExpanded = expanded[section.id] === true;
+              const isCollapsible =
+                section.status !== "skip" && (section.steps?.length ?? 0) > 0;
 
-              const { section, step } = row;
               return (
-                <tr
-                  key={`${section.id}-${step.id}`}
-                  className={`storage-health__step-row is-${step.status}`}
-                >
-                  <td>
-                    <span
-                      className={`storage-health__badge storage-health__badge--${step.status}`}
-                    >
-                      {STATUS_LABELS[step.status] || step.status}
-                    </span>
-                  </td>
-                  <td className="storage-health__check">{step.label}</td>
-                  <td className="storage-health__detail">
-                    {step.detail ? (
-                      <code className="storage-health__path">{step.detail}</code>
-                    ) : (
-                      <span className="storage-health__muted">—</span>
-                    )}
-                  </td>
-                  <td className="storage-health__fix">
-                    {step.fix ? step.fix : <span className="storage-health__muted">—</span>}
-                  </td>
-                </tr>
+                <SectionGroup
+                  key={section.id}
+                  section={section}
+                  isExpanded={isExpanded}
+                  isCollapsible={isCollapsible}
+                  onToggle={() => toggleSection(section.id)}
+                />
               );
             })}
           </tbody>
@@ -148,6 +122,94 @@ export function StorageHealthDashboard({ result, loading = false }) {
     </div>
   );
 }
+
+function SectionGroup({ section, isExpanded, isCollapsible, onToggle }) {
+  return (
+    <>
+      <tr
+        className={`arr-health__section-row is-${section.status}${
+          isCollapsible ? " is-collapsible" : ""
+        }`}
+      >
+        <td colSpan={4}>
+          {isCollapsible ? (
+            <button
+              type="button"
+              className="arr-health__section-toggle"
+              onClick={onToggle}
+              aria-expanded={isExpanded}
+            >
+              <ChevronDown
+                className={`arr-health__section-chevron${
+                  isExpanded ? "" : " is-collapsed"
+                }`}
+                aria-hidden
+              />
+              <span
+                className={`arr-health__badge arr-health__badge--${section.status}`}
+              >
+                {STATUS_LABELS[section.status] || section.status}
+              </span>
+              <span className="arr-health__section-title">{section.title}</span>
+            </button>
+          ) : (
+            <div className="arr-health__section-cell">
+              <span
+                className={`arr-health__badge arr-health__badge--${section.status}`}
+              >
+                {STATUS_LABELS[section.status] || section.status}
+              </span>
+              <span className="arr-health__section-title">{section.title}</span>
+              {section.skipReason ? (
+                <span className="arr-health__section-skip">{section.skipReason}</span>
+              ) : null}
+            </div>
+          )}
+        </td>
+      </tr>
+      {isExpanded
+        ? (section.steps || []).map((step) => (
+            <tr
+              key={`${section.id}-${step.id}`}
+              className={`arr-health__step-row is-${step.status}`}
+            >
+              <td>
+                <span
+                  className={`arr-health__badge arr-health__badge--${step.status}`}
+                >
+                  {STATUS_LABELS[step.status] || step.status}
+                </span>
+              </td>
+              <td className="arr-health__check">{step.label}</td>
+              <td className="arr-health__detail">
+                {step.detail ? (
+                  <code className="arr-health__path">{step.detail}</code>
+                ) : (
+                  <span className="arr-health__muted">—</span>
+                )}
+              </td>
+              <td className="arr-health__fix">
+                {step.fix ? step.fix : <span className="arr-health__muted">—</span>}
+              </td>
+            </tr>
+          ))
+        : null}
+    </>
+  );
+}
+
+SectionGroup.propTypes = {
+  isCollapsible: PropTypes.bool.isRequired,
+  isExpanded: PropTypes.bool.isRequired,
+  onToggle: PropTypes.func.isRequired,
+  section: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    title: PropTypes.string.isRequired,
+    status: PropTypes.oneOf(["pass", "fail", "warn", "skip"]).isRequired,
+    skipReason: PropTypes.string,
+    steps: PropTypes.array,
+  }).isRequired,
+};
 
 StorageHealthDashboard.propTypes = {
   loading: PropTypes.bool,

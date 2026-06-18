@@ -408,7 +408,7 @@ function Sidebar({ mode }) {
                     {settingsTabs.map((tab) => {
                       const tabActive = activeSettingsTab === tab.id;
                       const showStorageAlert =
-                        tab.id === "storage" && hasStorageFailure;
+                        tab.id === "system" && hasStorageFailure;
                       return (
                         <Link
                           key={tab.id}

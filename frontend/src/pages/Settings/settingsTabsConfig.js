@@ -3,16 +3,15 @@ import {
   Compass,
   Database,
   Download,
-  HardDrive,
+  Monitor,
   Music,
   Radar,
   Server,
-  SlidersHorizontal,
   Users,
 } from "lucide-react";
 
 export const SETTINGS_TABS = [
-  { id: "storage", label: "Storage", icon: HardDrive },
+  { id: "system", label: "System", icon: Monitor },
   { id: "library", label: "Library", icon: Server },
   { id: "indexers", label: "Indexers", icon: Radar },
   { id: "download-clients", label: "Download Clients", icon: Download },
@@ -21,19 +20,20 @@ export const SETTINGS_TABS = [
   { id: "discover", label: "Discover", icon: Compass },
   { id: "metadata", label: "Metadata", icon: Database, hidden: true },
   { id: "users", label: "Users", icon: Users },
-  { id: "general", label: "General", icon: SlidersHorizontal },
 ];
 
 export const SETTINGS_NAV_TABS = SETTINGS_TABS.filter((tab) => !tab.hidden);
 
 export const SETTINGS_TAB_IDS = SETTINGS_TABS.map((tab) => tab.id);
 
-export const DEFAULT_SETTINGS_TAB = "storage";
+export const DEFAULT_SETTINGS_TAB = "system";
 
 export const LEGACY_SETTINGS_TAB_MAP = {
   integrations: "library",
   playlists: "download-clients",
-  downloads: "storage",
+  downloads: "system",
+  storage: "system",
+  general: "system",
   notifications: "connect",
 };
 

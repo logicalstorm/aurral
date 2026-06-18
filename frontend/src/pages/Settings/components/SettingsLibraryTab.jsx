@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { CheckCircle } from "lucide-react";
-import FlipSaveButton from "../../../components/FlipSaveButton";
 import {
   IntegrationCard,
 } from "./SettingsIntegrationCards";
+import { SettingsArrCardGrid, SettingsArrFieldSet } from "./arr/SettingsArrLayout";
 import { LidarrSettingsModal } from "./LidarrSettingsModalContent";
 import { getConfiguredStatus } from "../utils/integrationStatus";
 
@@ -48,37 +47,14 @@ export function SettingsLibraryTab({
       : "Music library";
 
   return (
-    <div className="settings-page__panel">
-      <div className="settings-page__panel-header">
-        <h2 className="settings-page__panel-title">Library</h2>
-        <FlipSaveButton
-          saving={saving}
-          disabled={!hasUnsavedChanges}
-          onClick={handleSaveSettings}
-        />
-      </div>
-
+    <div className="arr-page">
       <form
         onSubmit={handleSaveSettings}
-        className="settings-page__form"
+        className="arr-form"
         autoComplete="off"
       >
-        <div className="settings-page__section">
-          <div className="settings-page__section-header">
-            <div className="settings-page__section-intro">
-              <h3 className="settings-page__section-title">Music library</h3>
-              <p className="settings-page__section-note">
-                Connect Lidarr to add artists and albums from Aurral.
-              </p>
-            </div>
-            {lidarrConfigured && (
-              <span className="settings-page__status">
-                <CheckCircle className="settings-page__status-icon" />
-                Connected
-              </span>
-            )}
-          </div>
-          <div className="settings-page__integration-card-grid">
+        <SettingsArrFieldSet legend="Music Library">
+          <SettingsArrCardGrid>
             <IntegrationCard
               title="Lidarr"
               subtitle="Music library manager"
@@ -86,8 +62,8 @@ export function SettingsLibraryTab({
               meta={lidarrMeta}
               onClick={() => setActiveModal("lidarr")}
             />
-          </div>
-        </div>
+          </SettingsArrCardGrid>
+        </SettingsArrFieldSet>
       </form>
 
       {activeModal === "lidarr" && (

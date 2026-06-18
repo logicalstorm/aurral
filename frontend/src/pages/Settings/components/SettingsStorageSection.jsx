@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
-import { RefreshCw, Trash2 } from "lucide-react";
+import { Plus, RefreshCw, Trash2, Wrench } from "lucide-react";
 import DownloadFolderField from "../../../components/DownloadFolderField";
-import { SettingsInput, SettingsSelect } from "./SettingsField";
 import { StorageHealthDashboard } from "./StorageHealthDashboard";
 import { getStorageHealth } from "../../../utils/api";
 import { setStorageHealthResult } from "../../../hooks/storageHealthStatus";
-
-const PATH_MAPPING_SOURCE_OPTIONS = [
-  { value: "all", label: "All sources" },
-  { value: "lidarr", label: "Lidarr" },
-  { value: "slskd", label: "slskd" },
-  { value: "nzbget", label: "NZBGet" },
-];
+import {
+  SettingsArrFieldSet,
+  SettingsArrFormGroup,
+} from "./arr/SettingsArrLayout";
+import {
+  PATH_MAPPING_SOURCE_OPTIONS,
+  PathMappingModal,
+} from "./PathMappingModal";
 
 const PATH_MAPPING_SOURCE_VALUES = new Set(
   PATH_MAPPING_SOURCE_OPTIONS.map((option) => option.value),
@@ -31,10 +31,11 @@ function coercePathMappings(value) {
   }));
 }
 
-function withDraftPathMappingRow(pathMappings) {
-  return pathMappings.length
-    ? pathMappings
-    : [{ source: "all", remote: "", local: "" }];
+function sourceLabel(source) {
+  return (
+    PATH_MAPPING_SOURCE_OPTIONS.find((option) => option.value === source)?.label ||
+    source
+  );
 }
 
 export function SettingsStorageSection({
@@ -42,20 +43,18 @@ export function SettingsStorageSection({
   updateSettings,
   hasUnsavedChanges,
   handleSaveSettings,
+  health,
   showSuccess,
   showError,
 }) {
   const [healthResult, setHealthResult] = useState(null);
   const [checkingHealth, setCheckingHealth] = useState(false);
-  const [showPathMappings, setShowPathMappings] = useState(false);
   const [autoChecked, setAutoChecked] = useState(false);
+  const [mappingModal, setMappingModal] = useState(null);
 
-  const pathMappings = coercePathMappings(settings.pathMappings);
-  const displayedPathMappings = withDraftPathMappingRow(pathMappings);
-  const hasSavedPathMappings = pathMappings.some(
+  const pathMappings = coercePathMappings(settings.pathMappings).filter(
     (entry) => entry.remote || entry.local,
   );
-  const pathMappingsVisible = showPathMappings || hasSavedPathMappings;
 
   const updatePathMappings = (nextMappings) => {
     updateSettings({
@@ -110,184 +109,190 @@ export function SettingsStorageSection({
     runHealthCheck({ notify: false });
   }, [autoChecked, runHealthCheck]);
 
+  const openAddMapping = () => {
+    setMappingModal({ mode: "add", index: null });
+  };
+
+  const openEditMapping = (index) => {
+    setMappingModal({ mode: "edit", index });
+  };
+
+  const closeMappingModal = () => {
+    setMappingModal(null);
+  };
+
+  const saveMapping = (mapping) => {
+    if (mappingModal?.mode === "edit" && mappingModal.index != null) {
+      const nextMappings = [...pathMappings];
+      nextMappings[mappingModal.index] = mapping;
+      updatePathMappings(nextMappings);
+    } else {
+      updatePathMappings([...pathMappings, mapping]);
+    }
+    closeMappingModal();
+  };
+
+  const deleteMapping = (index) => {
+    updatePathMappings(pathMappings.filter((_entry, entryIndex) => entryIndex !== index));
+  };
+
   return (
     <>
-      <div className="settings-page__section">
-        <div className="settings-page__section-header">
-          <div className="settings-page__section-intro">
-            <h3 className="settings-page__section-title">Storage health</h3>
-            <p className="settings-page__section-note">
-              Verifies Aurral, Lidarr, download clients, and Navidrome all see
-              the same files on disk. Mount one shared host folder at the same
-              container path, such as <code>/mnt/user/data:/data</code>.
-            </p>
-          </div>
+      <SettingsArrFieldSet
+        legend="Storage Health"
+        actions={
           <button
             type="button"
-            className="btn btn-secondary"
+            className="arr-btn"
             onClick={() => runHealthCheck({ notify: true })}
             disabled={checkingHealth}
           >
             <RefreshCw
               className={`artist-icon-sm${checkingHealth ? " animate-spin" : ""}`}
             />
-            {checkingHealth ? "Checking…" : "Run checks"}
+            {checkingHealth ? "Checking…" : "Run Checks"}
           </button>
-        </div>
+        }
+      >
+        <p className="arr-form-help">
+          Verifies Aurral, Lidarr, download clients, and Navidrome all see the
+          same files on disk. Mount one shared host folder at the same container
+          path, such as <code>/mnt/user/data:/data</code>.
+        </p>
         <StorageHealthDashboard result={healthResult} loading={checkingHealth} />
-      </div>
+      </SettingsArrFieldSet>
 
-      <div className="settings-page__section">
-        <div className="settings-page__section-intro">
-          <h3 className="settings-page__section-title">Downloads folder</h3>
-          <p className="settings-page__section-note">
-            Aurral writes generated playlists and imported tracks here. Navidrome
-            and your download clients should use paths under the same shared
-            mount.
-          </p>
-        </div>
-        <fieldset className="settings-page__fields">
-          <div className="settings-page__field">
-            <label className="artist-field-label" htmlFor="storage-download-folder">
-              Path
-            </label>
-            <DownloadFolderField
-              id="storage-download-folder"
-              value={settings.downloadFolderPath || ""}
-              autoApplySuggestion={false}
-              onChange={(nextPath) =>
-                updateSettings({
-                  ...settings,
-                  downloadFolderPath: nextPath,
-                })
-              }
-              helperText="Example: /data/media/aurral_flow or /data/downloads/aurral"
-            />
-          </div>
-        </fieldset>
-      </div>
+      <SettingsArrFieldSet legend="Downloads Folder">
+        <SettingsArrFormGroup
+          label="Path"
+          labelFor="storage-download-folder"
+          help="Example: /data/media/aurral_flow or /data/downloads/aurral"
+        >
+          <DownloadFolderField
+            id="storage-download-folder"
+            value={settings.downloadFolderPath || ""}
+            autoApplySuggestion={false}
+            onChange={(nextPath) =>
+              updateSettings({
+                ...settings,
+                downloadFolderPath: nextPath,
+              })
+            }
+          />
+        </SettingsArrFormGroup>
+      </SettingsArrFieldSet>
 
-      <div className="settings-page__section">
-        <div className="settings-page__section-intro">
-          <h3 className="settings-page__section-title">
-            Advanced path mappings
-          </h3>
-          <p className="settings-page__section-note">
-            Only needed when another app reports a path Aurral cannot read
-            directly. Prefer fixing Docker mounts first.
-          </p>
+      <SettingsArrFieldSet legend="Remote Path Mappings">
+        <div className="arr-info">
+          Remote path mappings are rarely required. If Aurral and your download
+          clients share the same container mounts, match paths instead of adding
+          mappings here.
         </div>
-        {!pathMappingsVisible ? (
+
+        <div className="arr-table-wrap">
+          <table className="arr-table">
+            <thead>
+              <tr>
+                <th scope="col">Source</th>
+                <th scope="col">Remote Path</th>
+                <th scope="col">Local Path</th>
+                <th scope="col" className="arr-table__actions-head">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {pathMappings.length === 0 ? (
+                <tr className="arr-table__empty-row">
+                  <td colSpan={4}>No path mappings configured.</td>
+                </tr>
+              ) : (
+                pathMappings.map((mapping, index) => (
+                  <tr key={`path-mapping-${index}`}>
+                    <td>{sourceLabel(mapping.source)}</td>
+                    <td>
+                      <code className="arr-table__path">{mapping.remote}</code>
+                    </td>
+                    <td>
+                      <code className="arr-table__path">{mapping.local}</code>
+                    </td>
+                    <td className="arr-table__actions">
+                      <div className="arr-table__actions-inner">
+                        <button
+                          type="button"
+                          className="arr-btn arr-btn--ghost arr-btn--icon"
+                          aria-label={`Edit path mapping ${index + 1}`}
+                          onClick={() => openEditMapping(index)}
+                        >
+                          <Wrench className="artist-icon-sm" aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          className="arr-btn arr-btn--ghost arr-btn--icon"
+                          aria-label={`Delete path mapping ${index + 1}`}
+                          onClick={() => deleteMapping(index)}
+                        >
+                          <Trash2 className="artist-icon-sm" aria-hidden />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="arr-table-footer">
           <button
             type="button"
-            className="btn btn-secondary"
-            onClick={() => setShowPathMappings(true)}
+            className="arr-btn arr-btn--ghost arr-btn--icon"
+            aria-label="Add path mapping"
+            onClick={openAddMapping}
           >
-            Show path mappings
+            <Plus className="artist-icon-sm" aria-hidden />
           </button>
-        ) : (
-          <fieldset className="settings-page__fields">
-            {displayedPathMappings.map((mapping, index) => (
-              <div
-                className="settings-page__mapping-row"
-                key={`path-mapping-${index}`}
+        </div>
+      </SettingsArrFieldSet>
+
+      {mappingModal ? (
+        <PathMappingModal
+          title={
+            mappingModal.mode === "edit"
+              ? "Edit Remote Path Mapping"
+              : "Add Remote Path Mapping"
+          }
+          initialValue={
+            mappingModal.mode === "edit" && mappingModal.index != null
+              ? pathMappings[mappingModal.index]
+              : undefined
+          }
+          onClose={closeMappingModal}
+          onSave={saveMapping}
+        />
+      ) : null}
+
+      <SettingsArrFieldSet legend="About">
+        <dl className="arr-meta-grid arr-meta-grid--two-col">
+          <div>
+            <dt className="arr-meta-term">Version</dt>
+            <dd className="arr-meta-value">{health?.appVersion || "—"}</dd>
+          </div>
+          <div>
+            <dt className="arr-meta-term">Documentation</dt>
+            <dd className="arr-meta-value">
+              <a
+                href="https://aurral.github.io/Aurral/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="arr-link"
               >
-                <div className="settings-page__field">
-                  <label className="artist-field-label">Applies to</label>
-                  <SettingsSelect
-                    value={mapping.source}
-                    onChange={(event) => {
-                      const nextMappings = [...displayedPathMappings];
-                      nextMappings[index] = {
-                        ...nextMappings[index],
-                        source: event.target.value,
-                      };
-                      updatePathMappings(nextMappings);
-                    }}
-                  >
-                    {PATH_MAPPING_SOURCE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </SettingsSelect>
-                </div>
-                <div className="settings-page__field">
-                  <label className="artist-field-label">Reported path</label>
-                  <SettingsInput
-                    value={mapping.remote}
-                    placeholder="/data/media/music"
-                    onChange={(event) => {
-                      const nextMappings = [...displayedPathMappings];
-                      nextMappings[index] = {
-                        ...nextMappings[index],
-                        remote: event.target.value,
-                      };
-                      updatePathMappings(nextMappings);
-                    }}
-                  />
-                </div>
-                <div className="settings-page__field">
-                  <label className="artist-field-label">Aurral path</label>
-                  <DownloadFolderField
-                    id={`storage-path-mapping-local-${index}`}
-                    value={mapping.local}
-                    autoApplySuggestion={false}
-                    createOnConfirm={false}
-                    onChange={(nextPath) => {
-                      const nextMappings = [...displayedPathMappings];
-                      nextMappings[index] = {
-                        ...nextMappings[index],
-                        local: nextPath,
-                      };
-                      updatePathMappings(nextMappings);
-                    }}
-                  />
-                </div>
-                <div className="settings-page__mapping-row-actions">
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-icon-square"
-                    aria-label="Remove path mapping"
-                    onClick={() => {
-                      updatePathMappings(
-                        displayedPathMappings.filter(
-                          (_entry, entryIndex) => entryIndex !== index,
-                        ),
-                      );
-                    }}
-                  >
-                    <Trash2 className="artist-icon-sm" aria-hidden />
-                  </button>
-                </div>
-              </div>
-            ))}
-            <div className="settings-page__lidarr-access-row">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() =>
-                  updatePathMappings([
-                    ...displayedPathMappings,
-                    { source: "all", remote: "", local: "" },
-                  ])
-                }
-              >
-                Add mapping
-              </button>
-              {!hasSavedPathMappings ? (
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowPathMappings(false)}
-                >
-                  Hide mappings
-                </button>
-              ) : null}
-            </div>
-          </fieldset>
-        )}
-      </div>
+                Aurral docs
+              </a>
+            </dd>
+          </div>
+        </dl>
+      </SettingsArrFieldSet>
     </>
   );
 }

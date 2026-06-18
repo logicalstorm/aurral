@@ -10,7 +10,6 @@ import {
   SettingsModalField,
   SettingsModalSection,
   SettingsModalToggle,
-  SettingsModalMeta,
 } from "./SettingsModalLayout";
 import {
   getIndexerStatus,
@@ -359,21 +358,24 @@ export function SettingsIndexersSection({
                       }
                     />
                   </SettingsModalField>
-                  <SettingsModalMeta
-                    items={[
-                      {
-                        term: "Protocol",
-                        value: activeIndexer.protocol || "usenet",
-                      },
-                      {
-                        term: "Prowlarr status",
-                        value:
-                          activeIndexer.enabledInProwlarr === false
-                            ? "Disabled"
-                            : "Enabled",
-                      },
-                    ]}
-                  />
+                </SettingsModalSection>
+                <SettingsModalSection title="Details">
+                  <SettingsModalField label="Protocol">
+                    <SettingsInput
+                      value={activeIndexer.protocol || "usenet"}
+                      readOnly
+                    />
+                  </SettingsModalField>
+                  <SettingsModalField label="Prowlarr status">
+                    <SettingsInput
+                      value={
+                        activeIndexer.enabledInProwlarr === false
+                          ? "Disabled"
+                          : "Enabled"
+                      }
+                      readOnly
+                    />
+                  </SettingsModalField>
                 </SettingsModalSection>
               </>
             );
