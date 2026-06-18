@@ -71,7 +71,6 @@ const mergeHistoryRequests = (previousRequests, nextRequests) => {
   const previousById = new Map(
     previousRequests.map((request) => [getRequestIdentity(request), request]),
   );
-  const changedAt = new Date().toISOString();
 
   return incoming.map((request) => {
     const previous = previousById.get(getRequestIdentity(request));
@@ -80,10 +79,7 @@ const mergeHistoryRequests = (previousRequests, nextRequests) => {
       buildRequestChangeSignature(previous) !==
       buildRequestChangeSignature(request)
     ) {
-      return {
-        ...request,
-        requestedAt: changedAt,
-      };
+      return request;
     }
     return {
       ...request,

@@ -125,10 +125,18 @@ function EmptyRows({ colSpan }) {
   );
 }
 
-function ScheduledTable({ scheduled = [] }) {
+function LoadingRows({ colSpan }) {
+  return (
+    <tr className="arr-table__empty-row">
+      <td colSpan={colSpan}>Loading task data...</td>
+    </tr>
+  );
+}
+
+function ScheduledTable({ scheduled = [], loading = false }) {
   return (
     <div className="arr-table-wrap">
-      <table className="arr-table arr-table--tasks">
+      <table className="arr-table arr-table--tasks" aria-busy={loading}>
         <thead>
           <tr>
             <th scope="col">Name</th>
@@ -140,7 +148,9 @@ function ScheduledTable({ scheduled = [] }) {
           </tr>
         </thead>
         <tbody>
-          {scheduled.length === 0 ? (
+          {loading ? (
+            <LoadingRows colSpan={6} />
+          ) : scheduled.length === 0 ? (
             <EmptyRows colSpan={6} />
           ) : (
             scheduled.map((task) => (
@@ -173,10 +183,10 @@ function ScheduledTable({ scheduled = [] }) {
   );
 }
 
-function WorkersTable({ workers = [] }) {
+function WorkersTable({ workers = [], loading = false }) {
   return (
     <div className="arr-table-wrap">
-      <table className="arr-table arr-table--tasks">
+      <table className="arr-table arr-table--tasks" aria-busy={loading}>
         <thead>
           <tr>
             <th scope="col">Worker</th>
@@ -189,7 +199,9 @@ function WorkersTable({ workers = [] }) {
           </tr>
         </thead>
         <tbody>
-          {workers.length === 0 ? (
+          {loading ? (
+            <LoadingRows colSpan={7} />
+          ) : workers.length === 0 ? (
             <EmptyRows colSpan={7} />
           ) : (
             workers.map((worker) => (
@@ -231,10 +243,13 @@ function WorkersTable({ workers = [] }) {
   );
 }
 
-function QueueTable({ queue = [] }) {
+function QueueTable({ queue = [], loading = false }) {
   return (
     <div className="arr-table-wrap">
-      <table className="arr-table arr-table--tasks arr-table--task-queue">
+      <table
+        className="arr-table arr-table--tasks arr-table--task-queue"
+        aria-busy={loading}
+      >
         <thead>
           <tr>
             <th scope="col">Name</th>
@@ -247,7 +262,9 @@ function QueueTable({ queue = [] }) {
           </tr>
         </thead>
         <tbody>
-          {queue.length === 0 ? (
+          {loading ? (
+            <LoadingRows colSpan={7} />
+          ) : queue.length === 0 ? (
             <EmptyRows colSpan={7} />
           ) : (
             queue.map((task) => (
@@ -305,25 +322,32 @@ export function SettingsTasksTab({ showError }) {
   const [tasks, setTasks] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState(null);
 
   const refreshTasks = useCallback(
-    async ({ notify = false } = {}) => {
-      setRefreshing(true);
+    async ({ notify = false, manual = false } = {}) => {
+      if (manual) {
+        setRefreshing(true);
+      }
       try {
         const result = await getSettingsTasks();
         setTasks(result);
+        setLoadError(null);
       } catch (error) {
+        const message =
+          error.response?.data?.message ||
+          error.response?.data?.error ||
+          error.message ||
+          "Failed to load tasks";
+        setLoadError(message);
         if (notify) {
-          showError(
-            error.response?.data?.message ||
-              error.response?.data?.error ||
-              error.message ||
-              "Failed to load tasks",
-          );
+          showError(message);
         }
       } finally {
         setLoading(false);
-        setRefreshing(false);
+        if (manual) {
+          setRefreshing(false);
+        }
       }
     },
     [showError],
@@ -351,7 +375,7 @@ export function SettingsTasksTab({ showError }) {
           <button
             type="button"
             className="arr-btn"
-            onClick={() => refreshTasks({ notify: true })}
+            onClick={() => refreshTasks({ notify: true, manual: true })}
             disabled={refreshing}
           >
             <RefreshCw
@@ -362,19 +386,20 @@ export function SettingsTasksTab({ showError }) {
           </button>
         }
       >
-        <ScheduledTable scheduled={tasks?.scheduled || []} />
+        {loadError ? (
+          <p className="arr-form-help arr-form-help--error" role="alert">
+            {loadError}
+          </p>
+        ) : null}
+        <ScheduledTable scheduled={tasks?.scheduled || []} loading={loading} />
       </SettingsArrFieldSet>
 
       <SettingsArrFieldSet legend="Workers">
-        <WorkersTable workers={tasks?.workers || []} />
+        <WorkersTable workers={tasks?.workers || []} loading={loading} />
       </SettingsArrFieldSet>
 
       <SettingsArrFieldSet legend="Queue">
-        {loading ? (
-          <p className="arr-form-help">Loading tasks…</p>
-        ) : (
-          <QueueTable queue={tasks?.queue || []} />
-        )}
+        <QueueTable queue={tasks?.queue || []} loading={loading} />
       </SettingsArrFieldSet>
     </div>
   );

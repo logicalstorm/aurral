@@ -255,6 +255,10 @@
   color: var(--aurral-warning);
 }
 
+.arr-form-help--error {
+  color: var(--aurral-danger);
+}
+
 .arr-form-help--spaced {
   margin-bottom: 16px;
 }
