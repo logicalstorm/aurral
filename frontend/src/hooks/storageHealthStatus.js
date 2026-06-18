@@ -35,7 +35,7 @@ export function setStorageHealthResult(result) {
 }
 
 export async function refreshStorageHealth({ force = false } = {}) {
-  if (inflight) return inflight;
+  if (inflight && !force) return inflight;
   inflight = getStorageHealth()
     .then((result) => {
       setStorageHealthResult(result);

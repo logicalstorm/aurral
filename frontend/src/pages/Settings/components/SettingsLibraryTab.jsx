@@ -26,8 +26,6 @@ export function SettingsLibraryTab({
   setTestingLidarr,
   applyingCommunityGuide,
   setShowCommunityGuideModal,
-  hasUnsavedChanges,
-  saving,
   handleSaveSettings,
   fetchSettings,
   showSuccess,

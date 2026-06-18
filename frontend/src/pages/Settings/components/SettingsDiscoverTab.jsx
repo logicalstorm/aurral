@@ -47,8 +47,6 @@ export function SettingsDiscoverTab({
   settings,
   updateSettings,
   health,
-  hasUnsavedChanges,
-  saving,
   handleSaveSettings,
   refreshingDiscovery,
   discoveryProgress,

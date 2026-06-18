@@ -30,11 +30,12 @@ function defaultExpandedBySection(sections) {
 
 export function StorageHealthDashboard({ result, loading = false }) {
   const [expanded, setExpanded] = useState({});
+  const sections = result?.sections;
 
   useEffect(() => {
-    if (!result?.sections?.length) return;
-    setExpanded(defaultExpandedBySection(result.sections));
-  }, [result?.checkedAt]);
+    if (!sections?.length) return;
+    setExpanded(defaultExpandedBySection(sections));
+  }, [result?.checkedAt, sections]);
 
   if (loading) {
     return (

@@ -11,7 +11,6 @@ export function SettingsPlaybackTab({
   settings,
   updateSettings,
   hasUnsavedChanges,
-  saving,
   handleSaveSettings,
   showSuccess,
   showError,

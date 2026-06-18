@@ -27,8 +27,6 @@ export function SettingsConnectTab({
   settings,
   updateSettings,
   health,
-  hasUnsavedChanges,
-  saving,
   handleSaveSettings,
   testingGotify,
   setTestingGotify,
