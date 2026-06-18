@@ -283,6 +283,7 @@ export class LibraryManager {
       const lidarrSettings = getSettings();
       const lidarrArtist = await lidarr.addArtist(mbid, artistName, {
         albumOnly: options.albumOnly === true,
+        albumMbid: options.albumMbid,
         monitorOption: options.monitorOption || "none",
         rootFolderPath: options.rootFolderPath,
         savedRootFolderPath: options.savedRootFolderPath,
@@ -331,9 +332,11 @@ export class LibraryManager {
     const defaultMonitorOption =
       settings.integrations?.lidarr?.defaultMonitorOption || "none";
     const requestedMonitorOption =
-      options.monitorOption && options.monitorOption !== "none"
-        ? options.monitorOption
-        : defaultMonitorOption;
+      options.albumOnly === true
+        ? "none"
+        : options.monitorOption && options.monitorOption !== "none"
+          ? options.monitorOption
+          : defaultMonitorOption;
     const currentUser =
       options.user?.id != null ? userOps.getUserById(options.user.id) : null;
     const preparedAddOptions = await lidarr.resolveArtistAddConfiguration({
@@ -347,6 +350,8 @@ export class LibraryManager {
     return {
       quality: options.quality || settings.quality || "standard",
       monitorOption: requestedMonitorOption,
+      albumOnly: options.albumOnly === true,
+      albumMbid: options.albumMbid || null,
       rootFolderPath: preparedAddOptions?.resolved?.rootFolderPath || null,
       qualityProfileId: preparedAddOptions?.resolved?.qualityProfileId ?? null,
       tagId: options.tagId ?? null,
@@ -542,9 +547,12 @@ export class LibraryManager {
   }
 
   async addArtistWithResolvedOptions(mbid, artistName, options = {}) {
+    const albumOnly = options.albumOnly === true;
     const requestedMonitorOption = options.monitorOption || "none";
     const artist = await this.addArtist(mbid, artistName, {
       quality: options.quality,
+      albumOnly,
+      albumMbid: options.albumMbid,
       monitorOption: requestedMonitorOption,
       rootFolderPath: options.rootFolderPath,
       qualityProfileId: options.qualityProfileId,
@@ -553,7 +561,7 @@ export class LibraryManager {
     if (artist?.error) {
       return artist;
     }
-    if (requestedMonitorOption !== "none") {
+    if (!albumOnly && requestedMonitorOption !== "none") {
       const albums = await this.waitForArtistAlbums(artist.id);
       await this.applyArtistMonitoringDefaults(artist, albums);
     }
@@ -565,7 +573,11 @@ export class LibraryManager {
     if (resolvedOptions?.error) {
       return resolvedOptions;
     }
-    return this.addArtistWithResolvedOptions(mbid, artistName, resolvedOptions);
+    return this.addArtistWithResolvedOptions(mbid, artistName, {
+      ...resolvedOptions,
+      albumOnly: options.albumOnly === true,
+      albumMbid: options.albumMbid || resolvedOptions.albumMbid || null,
+    });
   }
 
   async fetchArtistAlbums(artistId, mbid) {
@@ -1224,7 +1236,11 @@ export class LibraryManager {
       const created = await this.addArtistWithResolvedOptions(
         normalizedArtistMbid,
         normalizedArtistName,
-        resolvedArtistAddOptions,
+        {
+          ...resolvedArtistAddOptions,
+          albumOnly: true,
+          albumMbid: normalizedAlbumMbid,
+        },
       );
       if (created?.error) {
         const error = new Error(created.error);

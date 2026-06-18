@@ -503,6 +503,8 @@ export default function registerDownloads(router) {
             {
               user: req.user,
               quality: dbOps.getSettings().quality || "standard",
+              albumOnly: true,
+              albumMbid: album.mbid || album.foreignAlbumId,
             },
           );
           if (artist?.error) artist = null;

@@ -541,6 +541,32 @@ test("POST /library/artists preserves artist-only none monitoring defaults", asy
   assert.equal(posted.addOptions.monitor, "none");
 });
 
+test("POST /library/artists uses album-only add when releaseGroupMbid is provided", async () => {
+  await saveLidarrSettings({
+    defaultMonitorOption: "existing",
+    searchOnAdd: true,
+  });
+
+  const mbid = "58585858-5858-5858-5858-585858585858";
+  const albumMbid = "59595959-5959-5959-5959-595959595959";
+  const { response, payload } = await apiFetch("/api/library/artists", {
+    method: "POST",
+    body: JSON.stringify({
+      foreignArtistId: mbid,
+      artistName: "Album Only Artist",
+      releaseGroupMbid: albumMbid,
+    }),
+  });
+
+  assert.equal(response.status, 202, JSON.stringify(payload));
+
+  const posted = await waitForPostedArtist(mbid);
+  assert.equal(posted.monitor, "none");
+  assert.equal(posted.addOptions.monitor, "none");
+  assert.equal(posted.addOptions.searchForMissingAlbums, false);
+  assert.deepEqual(posted.addOptions.albumsToMonitor, [albumMbid]);
+});
+
 test("POST /library/artists repairs Lidarr artist checkbox when none add returns unmonitored", async () => {
   fakeLidarr.state.forceUnmonitoredArtistOnPost = true;
 

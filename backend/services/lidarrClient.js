@@ -886,12 +886,11 @@ export class LidarrClient {
     const requestedMonitorOption = normalizeMonitorOption(
       options.monitorOption || options.monitor || "none",
     );
-    const monitoring = getArtistMonitoringPayload(
-      albumOnly && requestedMonitorOption === "none"
-        ? "missing"
-        : requestedMonitorOption,
-    );
+    const monitoring = getArtistMonitoringPayload(requestedMonitorOption);
     const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
+    const albumMbid = String(options.albumMbid || "").trim();
+    const albumsToMonitor =
+      albumOnly && albumMbid ? [albumMbid] : [];
 
     const qualityProfileId = resolved.qualityProfileId;
     const defaultMetadataProfileId =
@@ -923,10 +922,10 @@ export class LidarrClient {
       monitor: monitoring.monitor,
       monitorNewItems: monitoring.monitorNewItems,
       tags: tags,
-      albumsToMonitor: [],
       addOptions: {
         monitor: monitoring.monitor,
-        searchForMissingAlbums: searchOnAdd,
+        searchForMissingAlbums: albumOnly ? false : searchOnAdd,
+        ...(albumsToMonitor.length > 0 ? { albumsToMonitor } : {}),
       },
     };
 

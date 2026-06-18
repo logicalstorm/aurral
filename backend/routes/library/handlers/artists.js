@@ -64,6 +64,7 @@ export default function registerArtists(router) {
           rootFolderPath,
           qualityProfileId,
           tagId,
+          releaseGroupMbid,
         } = req.body;
 
         if (!mbid || !artistName) {
@@ -106,6 +107,8 @@ export default function registerArtists(router) {
             rootFolderPath,
             qualityProfileId,
             tagId,
+            albumOnly: Boolean(releaseGroupMbid),
+            albumMbid: releaseGroupMbid || null,
           });
         } catch (error) {
           const statusCode =

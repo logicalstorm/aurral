@@ -512,6 +512,7 @@ export function useArtistDetailsLibrary({
           foreignArtistId: artist.id,
           artistName: artist.name,
           quality: appSettings?.quality || "standard",
+          releaseGroupMbid: albumId,
         });
         let fullArtist = await resolveArtistFromAddResponse(result, {
           refresh: false,
