@@ -24,6 +24,7 @@ import {
   restartWorkerIfPending as restartWorkerIfPendingWithLocks,
   withPlaylistMutation,
 } from "../services/weeklyFlowMutationGuards.js";
+import { schedulePlaylistMbidEnrichment } from "../services/playlistMbidEnrichmentService.js";
 import { getWeeklyFlowStatusSnapshot } from "../services/weeklyFlowStatusSnapshot.js";
 import { PLAYLIST_LIBRARY_DIR } from "../services/playlistPaths.js";
 import {
@@ -774,6 +775,10 @@ router.post("/flows/:flowId/static-playlist", async (req, res) => {
     playlistManager.updateConfig(false);
     await playlistManager.ensureSmartPlaylists();
     await playlistManager.scheduleScanLibrary(true);
+    schedulePlaylistMbidEnrichment(playlist.id, {
+      reason: "flow-static-playlist",
+      priority: 5,
+    });
 
     res.json({
       success: true,

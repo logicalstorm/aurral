@@ -14,6 +14,7 @@ import { startDiscoveryUserRefreshWorker } from "./discoveryUserRefreshWorker.js
 import { startWeeklyFlowOperationWorker } from "./weeklyFlowOperationWorker.js";
 import { startWeeklyFlowPlaylistRetryWorker } from "./weeklyFlowPlaylistRetryWorker.js";
 import { startWeeklyFlowPlaylistReserveBuildWorker } from "./weeklyFlowPlaylistReserveBuildWorker.js";
+import { startPlaylistMbidEnrichmentWorker } from "./playlistMbidEnrichmentWorker.js";
 
 let backgroundWorkersStarted = false;
 
@@ -38,6 +39,7 @@ export function startBackgroundWorkers({ logger = console } = {}) {
   startWeeklyFlowOperationWorker();
   startWeeklyFlowPlaylistRetryWorker();
   startWeeklyFlowPlaylistReserveBuildWorker();
+  startPlaylistMbidEnrichmentWorker();
   return true;
 }
 

@@ -43,6 +43,13 @@ const QUEUE_DEFINITIONS = [
     worker: "playlist-reserve-build",
   },
   {
+    queue: "playlist-mbid-enrichment",
+    label: "Playlist MBID Enrichment",
+    workerLabel: "Playlist MBID Worker",
+    description: "Finds and fills missing MusicBrainz IDs on imported playlist tracks.",
+    worker: "playlist-mbid-enrichment",
+  },
+  {
     queue: "library-scan",
     label: "Library Scans",
     workerLabel: "Library Scan Worker",
@@ -341,6 +348,12 @@ export function describeHonkerTask(queue, payloadValue) {
       : "Reserve Build";
   }
 
+  if (safeQueue === "playlist-mbid-enrichment") {
+    return payload?.playlistId
+      ? `Playlist MBID Enrichment: ${formatPayloadLabel(payload.playlistId)}`
+      : "Playlist MBID Enrichment";
+  }
+
   if (safeQueue === "library-scan") {
     return payload?.force ? "Manual Library Scan" : "Library Scan";
   }
@@ -407,6 +420,11 @@ function describeHonkerTaskDetail(queue, payloadValue) {
     return payload?.playlistType
       ? `Builds reserve tracks for ${formatPayloadLabel(payload.playlistType)}.`
       : queueDescription(safeQueue);
+  }
+  if (safeQueue === "playlist-mbid-enrichment") {
+    return payload?.playlistId
+      ? `Finds missing MusicBrainz IDs for ${formatPayloadLabel(payload.playlistId)}.`
+      : "Scans playlists for tracks missing MusicBrainz IDs and queues enrichment jobs.";
   }
   if (safeQueue === "library-scan") {
     return payload?.force

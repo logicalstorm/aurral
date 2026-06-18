@@ -19,6 +19,7 @@ let discoveryUserRefreshQueue = null;
 let weeklyFlowOperationQueue = null;
 let playlistRetryQueue = null;
 let playlistReserveBuildQueue = null;
+let playlistMbidEnrichmentQueue = null;
 let systemTaskQueue = null;
 let libraryScanQueue = null;
 let imagePrefetchQueue = null;
@@ -51,6 +52,12 @@ export const SCHEDULED_SYSTEM_TASKS = [
     queue: "system-task",
     schedule: "@every 15m",
     payload: { kind: "discovery-refresh-check" },
+  },
+  {
+    name: "playlist-mbid-enrichment-sweep",
+    queue: "playlist-mbid-enrichment",
+    schedule: "@every 6h",
+    payload: { kind: "playlist-mbid-enrichment-sweep", reason: "schedule" },
   },
 ];
 
@@ -296,6 +303,39 @@ export function enqueuePlaylistReserveBuildJob(payload, options = {}) {
   return jobId;
 }
 
+export function getPlaylistMbidEnrichmentQueue() {
+  if (!playlistMbidEnrichmentQueue) {
+    playlistMbidEnrichmentQueue = getHonkerDb().queue(
+      "playlist-mbid-enrichment",
+      {
+        visibilityTimeoutS: 3600,
+        maxAttempts: 4,
+      },
+    );
+  }
+  return playlistMbidEnrichmentQueue;
+}
+
+export function enqueuePlaylistMbidEnrichmentJob(payload = {}, options = {}) {
+  const queue = getPlaylistMbidEnrichmentQueue();
+  const runAt =
+    options.runAt != null
+      ? Math.floor(Number(options.runAt) / 1000)
+      : options.delaySeconds != null
+        ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
+        : null;
+  const jobId = queue.enqueue(payload, {
+    priority: Number(options.priority || 0),
+    runAt,
+  });
+  import("./playlistMbidEnrichmentWorker.js")
+    .then(({ startPlaylistMbidEnrichmentWorker }) =>
+      startPlaylistMbidEnrichmentWorker(),
+    )
+    .catch(() => {});
+  return jobId;
+}
+
 export function getSystemTaskQueue() {
   if (!systemTaskQueue) {
     systemTaskQueue = getHonkerDb().queue("system-task", {
@@ -440,6 +480,10 @@ export function enqueueHonkerStartupTasks() {
     { kind: "discovery-bootstrap" },
     { delaySeconds: 15, priority: 5 },
   );
+  enqueuePlaylistMbidEnrichmentJob(
+    { kind: "playlist-mbid-enrichment-sweep", reason: "startup" },
+    { delaySeconds: 30, priority: -5 },
+  );
 }
 
 export function startHonkerScheduler() {
@@ -487,6 +531,7 @@ export function closeHonkerDb() {
   weeklyFlowOperationQueue = null;
   playlistRetryQueue = null;
   playlistReserveBuildQueue = null;
+  playlistMbidEnrichmentQueue = null;
   systemTaskQueue = null;
   libraryScanQueue = null;
   imagePrefetchQueue = null;

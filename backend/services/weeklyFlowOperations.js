@@ -34,6 +34,7 @@ import {
 } from "./weeklyFlowMutationGuards.js";
 import { withHonkerLock } from "./honkerDb.js";
 import { getUnavailableFlowSourceError } from "./weeklyFlowValidation.js";
+import { schedulePlaylistMbidEnrichment } from "./playlistMbidEnrichmentService.js";
 
 const DEFAULT_LIMIT = 30;
 const OPERATION_TOKENS_KEY = "weeklyFlowOperationTokens";
@@ -454,6 +455,12 @@ async function createSharedPlaylist({
     : { jobIds: [], reusedJobIds: [], tracksQueued: 0, tracksReused: 0 };
   playlistManager.updateConfig(false);
   await playlistManager.ensureSmartPlaylists();
+  if (normalizedTracks.length > 0) {
+    schedulePlaylistMbidEnrichment(safePlaylistId, {
+      reason: "shared-playlist-create",
+      priority: 5,
+    });
+  }
   return {
     success: true,
     playlist,
@@ -482,6 +489,12 @@ async function appendSharedPlaylistTracks({
     tracksToAdd.length > 0
       ? await seedSharedPlaylistTracks(safePlaylistId, tracksToAdd)
       : { jobIds: [], reusedJobIds: [], tracksQueued: 0, tracksReused: 0 };
+  if (tracksToAdd.length > 0) {
+    schedulePlaylistMbidEnrichment(safePlaylistId, {
+      reason: "shared-playlist-append",
+      priority: 5,
+    });
+  }
   return {
     success: true,
     playlist: updatedPlaylist,
@@ -573,6 +586,12 @@ async function updateSharedPlaylist({
     await wakeDownloadWorker();
     recordPlaylistHistory(safePlaylistId, { tracksQueued });
   }
+  schedulePlaylistMbidEnrichment(safePlaylistId, {
+    reason: hasTracksUpdate
+      ? "shared-playlist-track-update"
+      : "shared-playlist-update",
+    priority: 5,
+  });
   return { success: true, playlist, tracksQueued };
 }
 
