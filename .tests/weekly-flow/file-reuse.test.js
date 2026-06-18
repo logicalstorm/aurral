@@ -27,6 +27,7 @@ const {
   reuseTrackForPlaylist,
   repairCompletedTrackLink,
   repairReusableTrackLinks,
+  restoreCompletedTrack,
 } = reuseModule;
 
 const weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER;
@@ -216,5 +217,57 @@ test("repairReusableTrackLinks does nothing when reuse is disabled", async () =>
 
   assert.equal(result.scanned, 0);
   assert.equal(result.repaired, 0);
+  assert.equal(result.requeued, 0);
   assert.equal(await fs.readFile(playlistPath, "utf8"), "audio");
+});
+
+test("restoreCompletedTrack requeues done jobs when the file and reuse source are missing", async () => {
+  const track = {
+    artistName: "Deftones",
+    trackName: "Change",
+    albumName: "White Pony",
+  };
+  const missingPath = path.join(
+    weeklyFlowRoot,
+    "aurral-weekly-flow",
+    "flow-playlist",
+    "Change.flac",
+  );
+  const jobId = downloadTracker.addJob(track, "flow-playlist");
+  downloadTracker.setDone(jobId, missingPath, track.albumName);
+
+  const result = await restoreCompletedTrack(downloadTracker.getJob(jobId), {
+    existingFileMode: "reuse",
+    weeklyFlowRoot,
+    resolveSource: async () => ({ source: null, reason: "No source" }),
+  });
+
+  assert.equal(result.action, "requeued");
+  assert.equal(downloadTracker.getJob(jobId)?.status, "pending");
+  assert.equal(downloadTracker.getJob(jobId)?.finalPath, null);
+});
+
+test("repairReusableTrackLinks requeues missing completed tracks and refreshes playlists", async () => {
+  const track = {
+    artistName: "Portishead",
+    trackName: "Glory Box",
+    albumName: "Dummy",
+  };
+  const missingPath = path.join(
+    weeklyFlowRoot,
+    "aurral-weekly-flow",
+    "flow-playlist",
+    "Glory Box.flac",
+  );
+  const jobId = downloadTracker.addJob(track, "flow-playlist");
+  downloadTracker.setDone(jobId, missingPath, track.albumName);
+
+  const result = await repairReusableTrackLinks({
+    existingFileMode: "reuse",
+    weeklyFlowRoot,
+    resolveSource: async () => ({ source: null, reason: "No source" }),
+  });
+
+  assert.equal(result.requeued, 1);
+  assert.equal(downloadTracker.getJob(jobId)?.status, "pending");
 });

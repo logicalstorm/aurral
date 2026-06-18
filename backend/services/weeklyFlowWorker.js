@@ -795,6 +795,7 @@ export class WeeklyFlowWorker {
     };
 
     this.processLoop();
+    this.scheduleReuseLinkRepair(true);
   }
 
   _requestStop() {

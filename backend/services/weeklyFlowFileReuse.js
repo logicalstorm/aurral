@@ -275,13 +275,13 @@ export async function resolveRepairTrackSource(track, options = {}) {
   return { source: null, reason: "No reusable Aurral or Lidarr file found" };
 }
 
-export async function repairCompletedTrackLink(job, options = {}) {
+export async function restoreCompletedTrack(job, options = {}) {
   const mode = normalizeExistingFileMode(options.existingFileMode);
   if (mode === "download") {
-    return { repaired: false, reason: "Existing file reuse is disabled" };
+    return { action: "skipped", reason: "Existing file reuse is disabled" };
   }
   if (!job || job.status !== "done" || !job.finalPath) {
-    return { repaired: false, reason: "Track is not completed" };
+    return { action: "skipped", reason: "Track is not completed" };
   }
 
   const weeklyFlowRoot = path.resolve(
@@ -291,7 +291,7 @@ export async function repairCompletedTrackLink(job, options = {}) {
     remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowRoot),
   );
   if (await fileExists(finalPath)) {
-    return { repaired: false, reason: "Playlist file exists" };
+    return { action: "ok", reason: "Playlist file exists" };
   }
 
   const resolveSource = options.resolveSource || resolveRepairTrackSource;
@@ -301,32 +301,66 @@ export async function repairCompletedTrackLink(job, options = {}) {
     targetPlaylistType: job.playlistType,
     excludeJobIds: [job.id],
   });
-  if (!source) {
-    return { repaired: false, reason: reason || "No reusable source found" };
+  if (source) {
+    const sourcePath = path.resolve(source.sourcePath);
+    if (await fileExists(sourcePath)) {
+      if (finalPath === sourcePath) {
+        return { action: "ok", reason: "Already using source path" };
+      }
+      downloadTracker.setDone(
+        job.id,
+        sourcePath,
+        source.albumName || job.albumName || null,
+        source.externalPath || null,
+      );
+      console.log(
+        `[WeeklyFlowReuse] Repaired ${job.playlistType} path from ${source.sourceType}: ${job.artistName} - ${job.trackName}`,
+      );
+      return {
+        action: "repaired",
+        sourceType: source.sourceType,
+        sourcePath,
+        finalPath: sourcePath,
+      };
+    }
   }
 
-  const sourcePath = path.resolve(source.sourcePath);
-  if (!(await fileExists(sourcePath))) {
-    return { repaired: false, reason: "Source file is missing" };
-  }
-  if (finalPath === sourcePath) {
-    return { repaired: false, reason: "Already using source path" };
+  if (options.requeueOnMissing === false) {
+    return {
+      action: "skipped",
+      reason: reason || "No reusable source found",
+    };
   }
 
-  downloadTracker.setDone(
-    job.id,
-    sourcePath,
-    source.albumName || job.albumName || null,
-    source.externalPath || null,
-  );
+  const requeued = downloadTracker.setPending(job.id, "Track file is missing");
+  if (!requeued) {
+    return { action: "skipped", reason: "Failed to requeue track" };
+  }
   console.log(
-    `[WeeklyFlowReuse] Repaired ${job.playlistType} path from ${source.sourceType}: ${job.artistName} - ${job.trackName}`,
+    `[WeeklyFlowReuse] Requeued missing track for ${job.playlistType}: ${job.artistName} - ${job.trackName}`,
   );
   return {
-    repaired: true,
-    sourceType: source.sourceType,
-    sourcePath,
-    finalPath: sourcePath,
+    action: "requeued",
+    reason: reason || "No reusable source found",
+  };
+}
+
+export async function repairCompletedTrackLink(job, options = {}) {
+  const result = await restoreCompletedTrack(job, {
+    ...options,
+    requeueOnMissing: false,
+  });
+  if (result.action === "repaired") {
+    return {
+      repaired: true,
+      sourceType: result.sourceType,
+      sourcePath: result.sourcePath,
+      finalPath: result.finalPath,
+    };
+  }
+  return {
+    repaired: false,
+    reason: result.reason || "No reusable source found",
   };
 }
 
@@ -338,6 +372,7 @@ export async function repairReusableTrackLinks(options = {}) {
     return {
       scanned: 0,
       repaired: 0,
+      requeued: 0,
       skipped: 0,
       failures: 0,
       nextCursor: 0,
@@ -366,17 +401,28 @@ export async function repairReusableTrackLinks(options = {}) {
   }
 
   let repaired = 0;
+  let requeued = 0;
   let skipped = 0;
   let failures = 0;
+  const changedPlaylistTypes = new Set();
   for (const job of batch) {
     try {
-      const result = await repairCompletedTrackLink(job, {
+      const result = await restoreCompletedTrack(job, {
         ...options,
         existingFileMode: mode,
         weeklyFlowRoot,
+        requeueOnMissing: true,
       });
-      if (result.repaired) {
+      if (result.action === "repaired") {
         repaired += 1;
+        if (job?.playlistType) {
+          changedPlaylistTypes.add(String(job.playlistType));
+        }
+      } else if (result.action === "requeued") {
+        requeued += 1;
+        if (job?.playlistType) {
+          changedPlaylistTypes.add(String(job.playlistType));
+        }
       } else {
         skipped += 1;
       }
@@ -390,24 +436,30 @@ export async function repairReusableTrackLinks(options = {}) {
 
   const nextCursor =
     sortedJobs.length === 0 ? 0 : (cursor + batch.length) % sortedJobs.length;
-  if (repaired > 0) {
+  if (repaired > 0 || requeued > 0) {
     console.log(
-      `[WeeklyFlowReuse] Path repair sweep repaired ${repaired} of ${batch.length} checked tracks`,
-    );
-    const playlistTypes = new Set(
-      batch
-        .filter((job) => job?.playlistType)
-        .map((job) => String(job.playlistType)),
+      `[WeeklyFlowReuse] Track health sweep repaired ${repaired}, requeued ${requeued} of ${batch.length} checked tracks`,
     );
     const { playlistManager } = await import("./weeklyFlowPlaylistManager.js");
-    for (const playlistType of playlistTypes) {
+    for (const playlistType of changedPlaylistTypes) {
       await playlistManager.refreshPlaylist(playlistType).catch(() => {});
     }
     playlistManager.scheduleScanLibrary();
+    if (requeued > 0) {
+      const [{ weeklyFlowWorker }, { restartWorkerIfPending }] = await Promise.all([
+        import("./weeklyFlowWorker.js"),
+        import("./weeklyFlowMutationGuards.js"),
+      ]);
+      await restartWorkerIfPending();
+      if (weeklyFlowWorker.running) {
+        weeklyFlowWorker.wake();
+      }
+    }
   }
   return {
     scanned: batch.length,
     repaired,
+    requeued,
     skipped,
     failures,
     nextCursor,

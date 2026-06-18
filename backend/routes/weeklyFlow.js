@@ -1079,6 +1079,58 @@ router.delete(
   },
 );
 
+router.post("/flows/:flowId/tracks/:jobId/research", async (req, res) => {
+  try {
+    const { flowId, jobId } = req.params;
+    const flow = getAccessibleFlow(req.user, flowId);
+    if (!flow) {
+      return res.status(404).json({ error: "Flow not found" });
+    }
+
+    const job = downloadTracker.getJob(jobId);
+    if (!job || job.playlistType !== flowId) {
+      return res.status(404).json({ error: "Track not found" });
+    }
+
+    if (job.status === "pending" || job.status === "downloading") {
+      return res.status(409).json({
+        error: "Track is already being processed",
+      });
+    }
+
+    const result = await weeklyFlowOperationQueue.enqueuePayload({
+      kind: "shared-playlist-research-track",
+      label: `flow:${flowId}:track:${jobId}:research`,
+      playlistId: flowId,
+      jobId,
+    });
+    if (result?.missingPlaylist) {
+      return res.status(404).json({ error: "Flow not found" });
+    }
+    if (result?.missingJob) {
+      return res.status(404).json({ error: "Track not found" });
+    }
+    if (result?.alreadyProcessing) {
+      return res.status(409).json({
+        error: "Track is already being processed",
+      });
+    }
+
+    res.json({
+      success: true,
+      jobId,
+      playlistId: flowId,
+      reused: result?.reused === true,
+      queued: result?.queued === true,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to re-search flow track",
+      message: error.message,
+    });
+  }
+});
+
 router.post(
   "/shared-playlists/:playlistId/tracks/:jobId/research",
   async (req, res) => {
@@ -1122,6 +1174,7 @@ router.post(
         success: true,
         jobId,
         playlistId,
+        reused: result?.reused === true,
         queued: result?.queued === true,
       });
     } catch (error) {

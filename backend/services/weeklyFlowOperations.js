@@ -76,6 +76,18 @@ const getPlaylistLibraryRoot = (playlistType) =>
     String(playlistType || "").trim(),
   );
 
+const removePlaylistLocalTrackFile = async (job, playlistId) => {
+  if (!job || typeof job.finalPath !== "string") return;
+  const playlistRoot = getPlaylistLibraryRoot(playlistId);
+  const safeFinalPath = remapLegacyWeeklyFlowPath(
+    job.finalPath,
+    weeklyFlowWorker.weeklyFlowRoot,
+  );
+  if (isPathInsideRoot(safeFinalPath, playlistRoot)) {
+    await fs.rm(safeFinalPath, { force: true });
+  }
+};
+
 const jobToSharedTrack = (job) =>
   normalizeSharedTrack({
     artistName: job?.artistName,
@@ -169,6 +181,8 @@ export async function reconcileSharedPlaylistJobs(playlistId) {
       tracks: tracksFromJobs,
     });
     playlistManager.updateConfig(false);
+    await playlistManager.refreshPlaylist(safePlaylistId);
+    playlistManager.scheduleScanLibrary();
   }
 
   return {
@@ -574,15 +588,8 @@ async function deleteSharedPlaylistTrack({ playlistId, jobId } = {}) {
   await withPlaylistMutation(
     safePlaylistId,
     async () => {
-      const playlistRoot = getPlaylistLibraryRoot(safePlaylistId);
       if (job.status === "done" && typeof job.finalPath === "string") {
-        const safeFinalPath = remapLegacyWeeklyFlowPath(
-          job.finalPath,
-          weeklyFlowWorker.weeklyFlowRoot,
-        );
-        if (isPathInsideRoot(safeFinalPath, playlistRoot)) {
-          await fs.rm(safeFinalPath, { force: true });
-        }
+        await removePlaylistLocalTrackFile(job, safePlaylistId);
       }
       downloadTracker.removeJob(safeJobId);
     },
@@ -601,11 +608,12 @@ async function deleteSharedPlaylistTrack({ playlistId, jobId } = {}) {
   };
 }
 
-async function researchSharedPlaylistTrack({ playlistId, jobId } = {}) {
+async function researchPlaylistTrack({ playlistId, jobId } = {}) {
   const safePlaylistId = String(playlistId || "").trim();
   const safeJobId = String(jobId || "").trim();
-  const playlist = flowPlaylistConfig.getSharedPlaylist(safePlaylistId);
-  if (!playlist) return { missingPlaylist: true };
+  const sharedPlaylist = flowPlaylistConfig.getSharedPlaylist(safePlaylistId);
+  const flow = flowPlaylistConfig.getFlow(safePlaylistId);
+  if (!sharedPlaylist && !flow) return { missingPlaylist: true };
   const job = downloadTracker.getJob(safeJobId);
   if (!job || job.playlistType !== safePlaylistId) {
     return { missingJob: true };
@@ -613,19 +621,40 @@ async function researchSharedPlaylistTrack({ playlistId, jobId } = {}) {
   if (job.status === "pending" || job.status === "downloading") {
     return { alreadyProcessing: true };
   }
+  const previousFinalPath = job.finalPath;
+  let reused = false;
   await withPlaylistMutation(
     safePlaylistId,
     async () => {
-      if (job.status === "done" && typeof job.finalPath === "string") {
-        const playlistRoot = getPlaylistLibraryRoot(safePlaylistId);
-        const safeFinalPath = remapLegacyWeeklyFlowPath(
-          job.finalPath,
-          weeklyFlowWorker.weeklyFlowRoot,
-        );
-        if (isPathInsideRoot(safeFinalPath, playlistRoot)) {
-          await fs.rm(safeFinalPath, { force: true });
+      const { existingFileMode } = weeklyFlowWorker.getWorkerSettings();
+      const mode = normalizeExistingFileMode(existingFileMode);
+      if (
+        mode !== "download" &&
+        (job.status === "done" || job.status === "failed")
+      ) {
+        const reuse = await reuseTrackForPlaylist(job, safePlaylistId, {
+          existingFileMode: mode,
+          weeklyFlowRoot: weeklyFlowWorker.weeklyFlowRoot,
+          existingJobId: safeJobId,
+          excludeJobIds: [safeJobId],
+        });
+        if (reuse.reused) {
+          reused = true;
+          const updatedJob = downloadTracker.getJob(safeJobId);
+          if (
+            previousFinalPath &&
+            updatedJob?.finalPath &&
+            updatedJob.finalPath !== previousFinalPath
+          ) {
+            await removePlaylistLocalTrackFile(
+              { finalPath: previousFinalPath },
+              safePlaylistId,
+            );
+          }
+          return;
         }
       }
+      await removePlaylistLocalTrackFile(job, safePlaylistId);
       const reset = downloadTracker.setPending(safeJobId, null);
       if (!reset) {
         throw new Error("Failed to requeue track");
@@ -636,11 +665,18 @@ async function researchSharedPlaylistTrack({ playlistId, jobId } = {}) {
   playlistManager.updateConfig(false);
   await playlistManager.refreshPlaylist(safePlaylistId);
   playlistManager.scheduleScanLibrary();
-  await restartWorkerIfPending();
-  if (weeklyFlowWorker.running) {
-    weeklyFlowWorker.wake();
+  if (!reused) {
+    await restartWorkerIfPending();
+    if (weeklyFlowWorker.running) {
+      weeklyFlowWorker.wake();
+    }
   }
-  return { success: true, jobId: safeJobId, playlistId: safePlaylistId };
+  return {
+    success: true,
+    reused,
+    jobId: safeJobId,
+    playlistId: safePlaylistId,
+  };
 }
 
 async function deleteSharedPlaylist({ playlistId } = {}) {
@@ -696,7 +732,7 @@ export async function processWeeklyFlowOperation(payload = {}) {
         case "shared-playlist-delete-track":
           return deleteSharedPlaylistTrack(payload);
         case "shared-playlist-research-track":
-          return researchSharedPlaylistTrack(payload);
+          return researchPlaylistTrack(payload);
         case "shared-playlist-delete":
           return deleteSharedPlaylist(payload);
         default:
