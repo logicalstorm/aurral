@@ -18,6 +18,7 @@ import {
   isDiscoverExitPath,
   isDiscoverHomePath,
   normalizeDiscoverPath,
+  pickDiscoverRecentPageState,
   readDiscoverFlowActive,
   readDiscoverRecentPages,
   shouldRecordDiscoverNavigation,
@@ -122,10 +123,12 @@ export function DiscoverRecentProvider({ children }) {
     if (!normalizedPath || !shouldTrackDiscoverPath(normalizedPath)) return;
 
     const label = buildDiscoverRecentLabel(normalizedPath, state);
+    const pageState = pickDiscoverRecentPageState(state);
     setRecentPages((current) => {
       if (
         current[0]?.path === normalizedPath &&
         current[0]?.label === label &&
+        JSON.stringify(current[0]?.state || {}) === JSON.stringify(pageState) &&
         current.length <= DISCOVER_RECENT_PAGES_LIMIT
       ) {
         return current;
@@ -135,6 +138,7 @@ export function DiscoverRecentProvider({ children }) {
           id: normalizedPath,
           path: normalizedPath,
           label,
+          state: pageState,
         },
         ...current.filter((entry) => entry.path !== normalizedPath),
       ].slice(0, DISCOVER_RECENT_PAGES_LIMIT);

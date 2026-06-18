@@ -107,6 +107,28 @@ export function normalizeDiscoverPath(path) {
     : normalizedPathname;
 }
 
+const MBID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function pickDiscoverRecentPageState(state) {
+  if (!state || typeof state !== "object") return {};
+  const next = {};
+  if (state.artistName) next.artistName = String(state.artistName);
+  if (typeof state.inLibrary === "boolean") next.inLibrary = state.inLibrary;
+  if (state.libraryArtist) next.libraryArtist = state.libraryArtist;
+  return next;
+}
+
+export function getDiscoverRecentPageLinkState(entry) {
+  const storedState = pickDiscoverRecentPageState(entry?.state);
+  if (storedState.artistName) return storedState;
+  const label = String(entry?.label || "").trim();
+  if (!label || label === "Artist" || MBID_REGEX.test(label)) {
+    return storedState;
+  }
+  return { ...storedState, artistName: label };
+}
+
 export function buildDiscoverRecentLabel(path, state = {}) {
   const pathname = path.split("?")[0];
   const params = new URLSearchParams(path.includes("?") ? path.split("?")[1] : "");
@@ -192,6 +214,7 @@ export function readDiscoverRecentPages() {
         id: entry.id || entry.path,
         path: normalizeDiscoverPath(entry.path),
         label: String(entry.label),
+        state: pickDiscoverRecentPageState(entry.state),
       }));
   } catch {
     return [];

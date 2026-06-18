@@ -25,7 +25,7 @@ import {
   getHistoryNavItems,
 } from "../navigation/historyNavConfig";
 import { useDiscoverRecent } from "../hooks/useDiscoverRecent";
-import { getDiscoverArtistPath } from "../utils/discoverRecentNavigation";
+import { getDiscoverArtistPath, getDiscoverRecentPageLinkState } from "../utils/discoverRecentNavigation";
 import { useStorageHealth } from "../hooks/useStorageHealth";
 
 function Sidebar({ mode }) {
@@ -210,6 +210,7 @@ function Sidebar({ mode }) {
               <Link
                 key={entry.id}
                 to={entry.path}
+                state={getDiscoverRecentPageLinkState(entry)}
                 className={`sidebar-subnav-link sidebar-subnav-link--recent${
                   active ? " is-active" : ""
                 }`}
