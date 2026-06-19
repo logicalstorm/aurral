@@ -1,20 +1,20 @@
 ---
-title: History
-description: Track Lidarr requests, download clients, and Aurral playlist activity.
+title: Activity
+description: Track active downloads, Lidarr requests, and Aurral playlist jobs.
 ---
 
-History replaces the older Requests and Downloads views with one timeline.
+Activity replaces the older Requests and Downloads views. Use **Queue** for work in progress and **History** for completed and failed events.
 
-![Aurral history timeline](../../../assets/screenshots/history.webp)
+![Aurral activity timeline](../../../assets/screenshots/history.webp)
 
-Filter by source:
+Filter each view by source:
 
 - **Lidarr** — artist and album requests, queue progress, and import status
 - **slskd** — Soulseek download activity for flows and playlists
 - **NZBGet** — Usenet download activity for flows and playlists (shown when Prowlarr and NZBGet are configured)
 - **Aurral** — playlist generation and download jobs
 
-Use History when you want a single place to see what is processing, what failed, and what finished.
+Use **Queue** when you want to see what is downloading or processing right now. Use **History** when you want a chronological log of what finished or failed.
 
 When an album request fails in Lidarr, you can retry the search from History when the entry supports it.
 

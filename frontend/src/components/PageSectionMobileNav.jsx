@@ -6,20 +6,26 @@ export function PageSectionMobileNav({
   sections,
   activeId,
   label = "View",
+  getSectionPath,
+  selectId = "page-section-select",
 }) {
   const navigate = useNavigate();
 
   return (
     <div className="page-section-mobile-nav">
-      <label htmlFor="page-section-select" className="page-section-mobile-nav__label">
+      <label htmlFor={selectId} className="page-section-mobile-nav__label">
         {label}
       </label>
       <SettingsSelect
         legacyStyle
-        id="page-section-select"
+        id={selectId}
         value={activeId}
         onChange={(event) =>
-          navigate(`${basePath}/${event.target.value}`)
+          navigate(
+            getSectionPath
+              ? getSectionPath(event.target.value)
+              : `${basePath}/${event.target.value}`,
+          )
         }
       >
         {sections.map((section) => (

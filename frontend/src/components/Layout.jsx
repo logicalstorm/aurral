@@ -5,7 +5,7 @@ import {
   Menu,
   Sparkles,
   Library,
-  History,
+  Activity,
   Ellipsis,
   Ticket,
   AudioWaveform,
@@ -106,8 +106,11 @@ function Layout({ children }) {
       if (path.startsWith("/shows")) {
         return location.pathname.startsWith("/shows");
       }
+      if (path.startsWith("/activity")) {
+        return location.pathname.startsWith("/activity");
+      }
       if (path.startsWith("/history")) {
-        return location.pathname.startsWith("/history");
+        return location.pathname.startsWith("/activity");
       }
       return location.pathname === path;
     },
@@ -136,7 +139,7 @@ function Layout({ children }) {
   const mobileOverflowItems = useMemo(() => {
     const items = [
       { path: "/shows/all", label: "Shows", icon: Ticket },
-      { path: "/history/all", label: "History", icon: History },
+      { path: "/activity/queue/all", label: "Activity", icon: Activity },
       { path: "/profile", label: "Profile", icon: User },
       {
         path: `/settings/${DEFAULT_SETTINGS_TAB}`,

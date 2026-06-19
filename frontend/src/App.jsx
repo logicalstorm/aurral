@@ -21,6 +21,11 @@ import { AudioQueueProvider } from "./contexts/AudioQueueProvider";
 import ReloadPrompt from "./components/ReloadPrompt";
 import UpdateBanner from "./components/UpdateBanner";
 import { useWebSocketChannel } from "./hooks/useWebSocket";
+import {
+  ActivityPartialRedirect,
+  ActivityRootRedirect,
+  LegacyHistoryRedirect,
+} from "./navigation/ActivityRedirects";
 
 const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
 const DiscoverPage = lazy(() => import("./pages/DiscoverPage"));
@@ -38,7 +43,7 @@ const ReleasePage = lazy(() => import("./pages/ArtistDetails/ReleasePage"));
 const ArtistAppearsOnPage = lazy(
   () => import("./pages/ArtistDetails/ArtistAppearsOnPage"),
 );
-const HistoryPage = lazy(() => import("./pages/HistoryPage"));
+const ActivityPage = lazy(() => import("./pages/ActivityPage"));
 const FlowPage = lazy(() => import("./pages/FlowPage"));
 
 const PageLoader = () => (
@@ -237,10 +242,13 @@ function AppContent() {
                 }
               />
               <Route path="/flow" element={<Navigate to="/playlists" replace />} />
-              <Route path="/downloads" element={<Navigate to="/history" replace />} />
-              <Route path="/requests" element={<Navigate to="/history" replace />} />
-              <Route path="/history" element={<Navigate to="/history/all" replace />} />
-              <Route path="/history/:tab" element={<HistoryPage />} />
+              <Route path="/downloads" element={<Navigate to="/activity/queue/all" replace />} />
+              <Route path="/requests" element={<Navigate to="/activity/queue/all" replace />} />
+              <Route path="/history" element={<Navigate to="/activity/history/all" replace />} />
+              <Route path="/history/:legacyTab" element={<LegacyHistoryRedirect />} />
+              <Route path="/activity" element={<ActivityRootRedirect />} />
+              <Route path="/activity/:view" element={<ActivityPartialRedirect />} />
+              <Route path="/activity/:view/:source" element={<ActivityPage />} />
               <Route
                 path="/artist/:mbid/albums"
                 element={<ArtistAlbumsPage />}

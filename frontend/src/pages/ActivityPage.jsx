@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import {
   Loader,
   Clock,
@@ -14,19 +14,29 @@ import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { TAG_COLORS } from "./ArtistDetails/constants";
 import { PageSectionMobileNav } from "../components/PageSectionMobileNav";
 import {
-  DEFAULT_HISTORY_TAB,
-  getHistoryNavItems,
-  normalizeHistoryTab,
-} from "../navigation/historyNavConfig";
+  ACTIVITY_VIEWS,
+  DEFAULT_ACTIVITY_SOURCE,
+  DEFAULT_ACTIVITY_VIEW,
+  buildActivityPath,
+  getActivitySourceItems,
+  matchesActivitySource,
+  matchesActivityView,
+  normalizeActivitySource,
+  normalizeActivityView,
+  getActivityRequestSource,
+} from "../navigation/activityNavConfig";
 
-const HISTORY_SOURCE_COLORS = {
+const ACTIVITY_SOURCE_COLORS = {
+  all: "var(--aurral-gray)",
   lidarr: TAG_COLORS[10],
   slskd: TAG_COLORS[0],
   nzbget: TAG_COLORS[2],
   aurral: TAG_COLORS[12],
 };
 
-const HISTORY_PAGE_SIZE = 25;
+const ACTIVITY_PAGE_SIZE = 25;
+const QUEUE_POLL_INTERVAL_MS = 15000;
+const HISTORY_POLL_INTERVAL_MS = 60000;
 
 const getRequestIdentity = (request) =>
   String(
@@ -62,7 +72,7 @@ const buildRequestChangeSignature = (request) =>
     canReSearch: request?.canReSearch === true,
   });
 
-const mergeHistoryRequests = (previousRequests, nextRequests) => {
+const mergeActivityRequests = (previousRequests, nextRequests) => {
   const incoming = Array.isArray(nextRequests) ? nextRequests : [];
   if (!Array.isArray(previousRequests) || previousRequests.length === 0) {
     return incoming;
@@ -88,20 +98,6 @@ const mergeHistoryRequests = (previousRequests, nextRequests) => {
   });
 };
 
-const getHistorySource = (request) => {
-  if (request.source === "nzbget") return "nzbget";
-  if (request.source === "slskd") return "slskd";
-  if (request.source === "aurral") return "aurral";
-  if (request.source === "lidarr") return "lidarr";
-  if (request.type === "album" || request.albumId) return "lidarr";
-  return "aurral";
-};
-
-const matchesHistoryTab = (request, tab) => {
-  if (tab === "all") return true;
-  return getHistorySource(request) === tab;
-};
-
 const formatTimelineTime = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
@@ -115,8 +111,16 @@ const formatDateGroupLabel = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Unknown date";
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  );
+  const startOfDate = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  );
   const diffDays = Math.round(
     (startOfToday.getTime() - startOfDate.getTime()) / (24 * 60 * 60 * 1000),
   );
@@ -144,27 +148,83 @@ const groupRequestsByDate = (requests) => {
   return groups;
 };
 
-const EMPTY_STATE_COPY = {
+const compareActivityRequests = (a, b) => {
+  const aReSearchable = a?.canReSearch === true ? 1 : 0;
+  const bReSearchable = b?.canReSearch === true ? 1 : 0;
+  if (aReSearchable !== bReSearchable) {
+    return bReSearchable - aReSearchable;
+  }
+  return (
+    new Date(b.requestedAt) - new Date(a.requestedAt) ||
+    String(b.id || "").localeCompare(String(a.id || ""))
+  );
+};
+
+const buildHistoryListEntries = (requests) => {
+  const reSearchable = [];
+  const rest = [];
+  for (const request of requests) {
+    if (request?.canReSearch === true) {
+      reSearchable.push(request);
+    } else {
+      rest.push(request);
+    }
+  }
+  const entries = reSearchable.map((request) => ({
+    type: "item",
+    request,
+    key: request.id || request.mbid,
+  }));
+  return [...entries, ...groupRequestsByDate(rest)];
+};
+
+const QUEUE_EMPTY_STATE_COPY = {
   all: {
-    title: "No requests yet",
+    title: "Queue is empty",
+    message: "Active album requests, downloads, and jobs will appear here.",
+  },
+  lidarr: {
+    title: "No Lidarr downloads in progress",
+    message:
+      "Album requests from Lidarr will appear here while they are active.",
+  },
+  slskd: {
+    title: "No slskd downloads in progress",
+    message: "Active Soulseek searches and downloads will appear here.",
+  },
+  nzbget: {
+    title: "No NZBGet downloads in progress",
+    message: "Active Usenet downloads will appear here.",
+  },
+  aurral: {
+    title: "No Aurral jobs in progress",
+    message:
+      "Playlist updates, discovery refreshes, and other active work will appear here.",
+  },
+};
+
+const HISTORY_EMPTY_STATE_COPY = {
+  all: {
+    title: "No activity yet",
     message:
       "A chronological log of album requests, track downloads, and other activity will appear here.",
   },
   lidarr: {
-    title: "No Lidarr requests",
-    message: "Album requests from Lidarr will appear here.",
+    title: "No Lidarr history",
+    message: "Completed and failed Lidarr album requests will appear here.",
   },
   slskd: {
-    title: "No slskd requests",
-    message: "Track searches and downloads from slskd will appear here.",
+    title: "No slskd history",
+    message: "Completed and failed Soulseek downloads will appear here.",
   },
   nzbget: {
-    title: "No NZBGet requests",
-    message: "Usenet searches and downloads from NZBGet will appear here.",
+    title: "No NZBGet history",
+    message: "Completed and failed Usenet downloads will appear here.",
   },
   aurral: {
-    title: "No Aurral activity",
-    message: "Playlist updates, discovery refreshes, and other work will appear here.",
+    title: "No Aurral history",
+    message:
+      "Completed playlist updates, discovery refreshes, and other work will appear here.",
   },
 };
 
@@ -204,43 +264,56 @@ function RequestStatusBadge({ request }) {
   );
 }
 
-function HistoryPage() {
+function ActivityPage() {
   const navigate = useNavigate();
-  const { tab: tabParam } = useParams();
+  const { view: viewParam, source: sourceParam } = useParams();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [usenetActive, setUsenetActive] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
+  const [visibleCount, setVisibleCount] = useState(ACTIVITY_PAGE_SIZE);
   const [reSearchingAlbumIds, setReSearchingAlbumIds] = useState({});
   const fetchRequestsInFlightRef = useRef(false);
 
-  const historyNavItems = useMemo(
-    () => getHistoryNavItems(usenetActive),
+  const sourceNavItems = useMemo(
+    () => getActivitySourceItems(usenetActive),
     [usenetActive],
   );
-  const activeTab = normalizeHistoryTab(tabParam, usenetActive);
-  const shouldRedirect =
-    tabParam && normalizeHistoryTab(tabParam, usenetActive) !== tabParam;
+  const activeView = normalizeActivityView(viewParam);
+  const activeSource = normalizeActivitySource(sourceParam, usenetActive);
+  const isQueueView = activeView === "queue";
+  const shouldRedirectView =
+    viewParam && normalizeActivityView(viewParam) !== viewParam;
+  const shouldRedirectSource =
+    sourceParam &&
+    normalizeActivitySource(sourceParam, usenetActive) !== sourceParam;
+
+  const activeViewLabel =
+    ACTIVITY_VIEWS.find((entry) => entry.id === activeView)?.label ||
+    "Activity";
+  const activeSourceLabel =
+    sourceNavItems.find((entry) => entry.id === activeSource)?.label || "All";
 
   useDocumentTitle(
-    activeTab === "all"
-      ? "History"
-      : `${historyNavItems.find((entry) => entry.id === activeTab)?.label || "History"} - History`,
+    activeView === "queue" && activeSource === "all"
+      ? "Queue - Activity"
+      : activeView === "history" && activeSource === "all"
+        ? "Activity"
+        : `${activeSourceLabel} - ${activeViewLabel} - Activity`,
   );
 
   const filteredRequests = useMemo(
-    () => requests.filter((request) => matchesHistoryTab(request, activeTab)),
-    [requests, activeTab],
+    () =>
+      requests.filter(
+        (request) =>
+          matchesActivityView(request, activeView) &&
+          matchesActivitySource(request, activeSource),
+      ),
+    [requests, activeView, activeSource],
   );
 
   const sortedRequests = useMemo(
-    () =>
-      [...filteredRequests].sort(
-        (a, b) =>
-          new Date(b.requestedAt) - new Date(a.requestedAt) ||
-          String(b.id || "").localeCompare(String(a.id || "")),
-      ),
+    () => [...filteredRequests].sort(compareActivityRequests),
     [filteredRequests],
   );
 
@@ -249,16 +322,22 @@ function HistoryPage() {
     [sortedRequests, visibleCount],
   );
 
-  const hasMoreHistory = visibleCount < sortedRequests.length;
+  const hasMoreItems = visibleCount < sortedRequests.length;
 
-  const timelineGroups = useMemo(
-    () => groupRequestsByDate(visibleRequests),
-    [visibleRequests],
-  );
+  const listEntries = useMemo(() => {
+    if (isQueueView) {
+      return visibleRequests.map((request) => ({
+        type: "item",
+        request,
+        key: request.id || request.mbid,
+      }));
+    }
+    return buildHistoryListEntries(visibleRequests);
+  }, [isQueueView, visibleRequests]);
 
   useEffect(() => {
-    setVisibleCount(HISTORY_PAGE_SIZE);
-  }, [activeTab]);
+    setVisibleCount(ACTIVITY_PAGE_SIZE);
+  }, [activeView, activeSource]);
 
   const fetchRequests = useCallback(async ({ silent = false } = {}) => {
     if (fetchRequestsInFlightRef.current) return;
@@ -269,10 +348,10 @@ function HistoryPage() {
 
     try {
       const data = await getRequests();
-      setRequests((previous) => mergeHistoryRequests(previous, data));
+      setRequests((previous) => mergeActivityRequests(previous, data));
       setError(null);
     } catch {
-      setError("Failed to load history.");
+      setError("Failed to load activity.");
     } finally {
       fetchRequestsInFlightRef.current = false;
       if (!silent) {
@@ -322,18 +401,22 @@ function HistoryPage() {
   }, [fetchRequests]);
 
   useEffect(() => {
-    const hasOpen = requests.some(
-      (request) =>
-        request.status === "processing" || request.status === "pending",
-    );
-    const intervalMs = hasOpen ? 15000 : 60000;
+    const intervalMs = isQueueView
+      ? QUEUE_POLL_INTERVAL_MS
+      : HISTORY_POLL_INTERVAL_MS;
     const interval = setInterval(() => {
       fetchRequests({ silent: true });
     }, intervalMs);
     return () => clearInterval(interval);
-  }, [requests, fetchRequests]);
+  }, [isQueueView, fetchRequests]);
 
-  const navigateToArtist = (request, isAlbum, artistMbid, artistName, displayName) => {
+  const navigateToArtist = (
+    request,
+    isAlbum,
+    artistMbid,
+    artistName,
+    displayName,
+  ) => {
     if (!artistMbid || artistMbid === "null" || artistMbid === "undefined") {
       return;
     }
@@ -360,8 +443,10 @@ function HistoryPage() {
                 statusLabel: "Searching",
                 title: item.albumName
                   ? `Searching Lidarr for ${item.albumName}`
-                  : item.title?.replace(/^No results for /, "Searching Lidarr for ") ||
-                    item.title,
+                  : item.title?.replace(
+                      /^No results for /,
+                      "Searching Lidarr for ",
+                    ) || item.title,
                 canReSearch: false,
               }
             : item,
@@ -374,15 +459,18 @@ function HistoryPage() {
     }
   };
 
-  const handleRowNavigate = (request, {
-    isSlskd,
-    isNzbget,
-    isAurral,
-    isAlbum,
-    artistMbid,
-    artistName,
-    displayName,
-  }) => {
+  const handleRowNavigate = (
+    request,
+    {
+      isSlskd,
+      isNzbget,
+      isAurral,
+      isAlbum,
+      artistMbid,
+      artistName,
+      displayName,
+    },
+  ) => {
     if ((isSlskd || isNzbget) && request.playlistId) {
       navigate(`/playlists?selected=${encodeURIComponent(request.playlistId)}`);
       return;
@@ -397,7 +485,8 @@ function HistoryPage() {
   const renderRequestRow = (request, rowIndex = 0) => {
     const isSlskd = request.source === "slskd";
     const isNzbget = request.source === "nzbget";
-    const isTrackDownload = isSlskd || isNzbget || request.kind === "track_download";
+    const isTrackDownload =
+      isSlskd || isNzbget || request.kind === "track_download";
     const isAurral = request.source === "aurral" && !isTrackDownload;
     const isActivity = request.type === "activity";
     const isAlbum = request.type === "album";
@@ -408,18 +497,14 @@ function HistoryPage() {
         ? request.albumName
         : request.name;
     const artistName = isAlbum ? request.artistName : null;
-    const metaLine = usesTitleSubtitle
-      ? request.subtitle || null
-      : artistName;
+    const metaLine = usesTitleSubtitle ? request.subtitle || null : artistName;
     const artistMbid = isAlbum ? request.artistMbid : request.mbid;
     const canNavigate =
       ((isSlskd || isNzbget) && request.playlistId) ||
       ((isAurral || isActivity) && request.href) ||
-      (artistMbid &&
-        artistMbid !== "null" &&
-        artistMbid !== "undefined");
-    const historySource = getHistorySource(request);
-    const sourceColor = HISTORY_SOURCE_COLORS[historySource];
+      (artistMbid && artistMbid !== "null" && artistMbid !== "undefined");
+    const requestSource = getActivityRequestSource(request);
+    const sourceColor = ACTIVITY_SOURCE_COLORS[requestSource];
     const timelineTime = formatTimelineTime(request.requestedAt);
     const canReSearch =
       request.canReSearch === true &&
@@ -440,7 +525,7 @@ function HistoryPage() {
     return (
       <article
         key={request.id || request.mbid}
-        className={`requests-page__row requests-page__row--${historySource}${rowIndex % 2 === 1 ? " requests-page__row--alt" : ""}${canNavigate ? " is-clickable" : ""}`}
+        className={`requests-page__row requests-page__row--${requestSource}${rowIndex % 2 === 1 ? " requests-page__row--alt" : ""}${canNavigate ? " is-clickable" : ""}`}
         style={{ "--history-source-color": sourceColor }}
         onClick={() => {
           if (!canNavigate) return;
@@ -470,13 +555,14 @@ function HistoryPage() {
                 </time>
               )}
               {timelineTime && metaLine && (
-                <span className="requests-page__meta-separator" aria-hidden="true">
+                <span
+                  className="requests-page__meta-separator"
+                  aria-hidden="true"
+                >
                   ·
                 </span>
               )}
-              {metaLine && (
-                <span className="artist-truncate">{metaLine}</span>
-              )}
+              {metaLine && <span className="artist-truncate">{metaLine}</span>}
             </div>
           )}
         </div>
@@ -504,21 +590,33 @@ function HistoryPage() {
     );
   };
 
-  const emptyState = EMPTY_STATE_COPY[activeTab] || EMPTY_STATE_COPY.all;
+  const emptyStateCopy = isQueueView
+    ? QUEUE_EMPTY_STATE_COPY
+    : HISTORY_EMPTY_STATE_COPY;
+  const emptyState = emptyStateCopy[activeSource] || emptyStateCopy.all;
+  const activityPath = buildActivityPath(activeView, activeSource);
 
-  if (!tabParam) {
-    return <Navigate to={`/history/${DEFAULT_HISTORY_TAB}`} replace />;
+  if (!viewParam || !sourceParam) {
+    return (
+      <Navigate
+        to={buildActivityPath(
+          viewParam || DEFAULT_ACTIVITY_VIEW,
+          sourceParam || DEFAULT_ACTIVITY_SOURCE,
+        )}
+        replace
+      />
+    );
   }
 
-  if (shouldRedirect) {
-    return <Navigate to={`/history/${activeTab}`} replace />;
+  if (shouldRedirectView || shouldRedirectSource) {
+    return <Navigate to={activityPath} replace />;
   }
 
   if (loading) {
     return (
       <div className="requests-page">
         <header className="requests-page__header">
-          <h1 className="page-title">History</h1>
+          <h1 className="page-title">Activity</h1>
         </header>
         <div className="artist-loading">
           <Loader className="artist-spinner artist-spinner--large animate-spin" />
@@ -530,23 +628,46 @@ function HistoryPage() {
   return (
     <div className="requests-page">
       <header className="requests-page__header">
-        <h1 className="page-title">History</h1>
-        <p className="page-subtitle requests-page__subtitle--desktop">
-          A chronological log of requests and activity
-        </p>
+        <h1 className="page-title">Activity</h1>
       </header>
 
+      <div className="requests-page__toolbar">
+        <div
+          className="artist-tabs requests-page__tabs"
+          role="tablist"
+          aria-label="Source"
+        >
+          {sourceNavItems.map((entry) => (
+            <Link
+              key={entry.id}
+              to={buildActivityPath(activeView, entry.id)}
+              className={`artist-tab requests-page__tab--source${
+                activeSource === entry.id ? " is-active" : ""
+              }`}
+              style={{
+                "--history-source-color": ACTIVITY_SOURCE_COLORS[entry.id],
+              }}
+              role="tab"
+              aria-selected={activeSource === entry.id}
+            >
+              {entry.label}
+            </Link>
+          ))}
+        </div>
+      </div>
+
       <PageSectionMobileNav
-        basePath="/history"
-        sections={historyNavItems}
-        activeId={activeTab}
-        label="History"
+        sections={sourceNavItems}
+        activeId={activeSource}
+        label="Source"
+        selectId="activity-source-select"
+        getSectionPath={(source) => buildActivityPath(activeView, source)}
       />
 
       {error && (
         <div className="artist-error-panel requests-page__error" role="alert">
           <AlertCircle className="artist-error-icon" aria-hidden="true" />
-          <h2 className="artist-error-title">Unable to load history</h2>
+          <h2 className="artist-error-title">Unable to load activity</h2>
           <p className="artist-error-copy">{error}</p>
           <button
             type="button"
@@ -565,7 +686,7 @@ function HistoryPage() {
           </div>
           <h2 className="search-empty-panel__title">{emptyState.title}</h2>
           <p className="search-empty-panel__message">{emptyState.message}</p>
-          {activeTab === "all" && (
+          {isQueueView && activeSource === "all" && (
             <button
               type="button"
               onClick={() => navigate("/")}
@@ -580,13 +701,10 @@ function HistoryPage() {
           <div className="requests-page__list">
             {(() => {
               let rowIndex = 0;
-              return timelineGroups.map((entry) => {
+              return listEntries.map((entry) => {
                 if (entry.type === "date") {
                   return (
-                    <div
-                      key={entry.key}
-                      className="requests-page__date-group"
-                    >
+                    <div key={entry.key} className="requests-page__date-group">
                       {entry.label}
                     </div>
                   );
@@ -596,12 +714,12 @@ function HistoryPage() {
                 return row;
               });
             })()}
-            {hasMoreHistory && (
+            {hasMoreItems && (
               <div className="requests-page__load-more">
                 <button
                   type="button"
                   onClick={() =>
-                    setVisibleCount((count) => count + HISTORY_PAGE_SIZE)
+                    setVisibleCount((count) => count + ACTIVITY_PAGE_SIZE)
                   }
                   className="btn btn-secondary btn--bold btn-min-h"
                 >
@@ -616,4 +734,4 @@ function HistoryPage() {
   );
 }
 
-export default HistoryPage;
+export default ActivityPage;

@@ -85,7 +85,7 @@ export default defineConfig({
             { slug: "using/playlists" },
             { slug: "using/flows" },
             { slug: "using/playlist-imports" },
-            { slug: "using/history" },
+            { slug: "using/activity" },
           ],
         },
         {

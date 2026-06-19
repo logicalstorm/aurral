@@ -22,7 +22,7 @@
   --aurral-radius-sm: 8px;
   --aurral-radius-round: 9999px;
   --aurral-danger: #f87171;
-  --aurral-warning: #c8b491;
+  --aurral-warning: #f3ab30;
   --aurral-focus: rgba(132, 204, 22, 0.42);
   --aurral-border: color-mix(in srgb, var(--aurral-white) 8%, transparent);
   --aurral-space-outer: 0.25rem;
@@ -7211,12 +7211,17 @@ textarea {
   margin-bottom: 0;
 }
 
-.requests-page__tab--source.is-active {
-  background-color: var(--history-source-color);
+.requests-page__tabs .artist-tab.requests-page__tab--source {
+  background: var(--aurral-gray);
   color: var(--aurral-white);
 }
 
-.requests-page__tab--source:not(.is-active) {
+.requests-page__tabs .artist-tab.requests-page__tab--source.is-active {
+  background: var(--history-source-color);
+  color: var(--aurral-white);
+}
+
+.requests-page__tabs .artist-tab.requests-page__tab--source:not(.is-active) {
   color: color-mix(
     in srgb,
     var(--history-source-color) 72%,
@@ -7241,8 +7246,6 @@ textarea {
   display: grid;
   gap: 0.125rem;
   overflow: hidden;
-  border-radius: var(--aurral-radius-sm);
-  background: var(--aurral-surface);
 }
 
 .requests-page__date-group {

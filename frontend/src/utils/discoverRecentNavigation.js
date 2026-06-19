@@ -34,6 +34,7 @@ export function isDiscoverExitPath(pathname) {
   if (pathname.startsWith("/library")) return true;
   if (pathname.startsWith("/shows")) return true;
   if (pathname.startsWith("/playlists")) return true;
+  if (pathname.startsWith("/activity")) return true;
   if (pathname.startsWith("/history")) return true;
   if (pathname.startsWith("/settings")) return true;
   if (pathname === "/profile") return true;
@@ -98,7 +99,12 @@ export function normalizeDiscoverPath(path) {
   if (artistPath) return artistPath;
   let normalizedPathname = pathname;
   if (normalizedPathname === "/shows") normalizedPathname = "/shows/all";
-  if (normalizedPathname === "/history") normalizedPathname = "/history/all";
+  if (normalizedPathname === "/history") {
+    normalizedPathname = "/activity/history/all";
+  }
+  if (normalizedPathname === "/activity") {
+    normalizedPathname = "/activity/queue/all";
+  }
   if (!search) return normalizedPathname;
   const params = new URLSearchParams(search);
   const normalizedSearch = params.toString();

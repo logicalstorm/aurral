@@ -4,7 +4,7 @@ import PropTypes from "prop-types";
 import {
   Library,
   Sparkles,
-  History,
+  Activity,
   AudioWaveform,
   Ticket,
   Settings,
@@ -21,9 +21,11 @@ import {
   SHOWS_FILTERS,
 } from "../navigation/showsNavConfig";
 import {
-  DEFAULT_HISTORY_TAB,
-  getHistoryNavItems,
-} from "../navigation/historyNavConfig";
+  ACTIVITY_VIEWS,
+  DEFAULT_ACTIVITY_VIEW,
+  DEFAULT_ACTIVITY_SOURCE,
+  buildActivityPath,
+} from "../navigation/activityNavConfig";
 import { useDiscoverRecent } from "../hooks/useDiscoverRecent";
 import { getDiscoverArtistPath, getDiscoverRecentPageLinkState } from "../utils/discoverRecentNavigation";
 import { useStorageHealth } from "../hooks/useStorageHealth";
@@ -47,7 +49,6 @@ function Sidebar({ mode }) {
       : true,
   );
   const [ticketmasterConfigured, setTicketmasterConfigured] = useState(true);
-  const [usenetConfigured, setUsenetConfigured] = useState(false);
   const {
     recentPages: discoverRecentPages,
     clearRecentPages,
@@ -60,17 +61,16 @@ function Sidebar({ mode }) {
     getDiscoverArtistPath(currentDiscoverPath) || currentDiscoverPath;
   const isOnSettings = location.pathname.startsWith("/settings");
   const isOnShows = location.pathname.startsWith("/shows");
-  const isOnHistory = location.pathname.startsWith("/history");
+  const isOnActivity =
+    location.pathname.startsWith("/activity") ||
+    location.pathname.startsWith("/history");
 
   const settingsTabs = useMemo(() => {
     if (!canAccessSettings) return [];
     return SETTINGS_NAV_TABS;
   }, [canAccessSettings]);
 
-  const historyNavItems = useMemo(
-    () => getHistoryNavItems(usenetConfigured),
-    [usenetConfigured],
-  );
+  const activityViewItems = useMemo(() => ACTIVITY_VIEWS, []);
 
   const activeSettingsTab = useMemo(() => {
     if (!isOnSettings) return null;
@@ -84,11 +84,39 @@ function Sidebar({ mode }) {
     return segment || DEFAULT_SHOWS_FILTER;
   }, [isOnShows, location.pathname]);
 
-  const activeHistoryTab = useMemo(() => {
-    if (!isOnHistory) return null;
-    const segment = location.pathname.replace(/^\/history\/?/, "").split("/")[0];
-    return segment || DEFAULT_HISTORY_TAB;
-  }, [isOnHistory, location.pathname]);
+  const activeActivityView = useMemo(() => {
+    if (!isOnActivity) return null;
+    if (location.pathname.startsWith("/history")) {
+      const legacySegment = location.pathname
+        .replace(/^\/history\/?/, "")
+        .split("/")[0];
+      if (legacySegment === "queue" || legacySegment === "history") {
+        return legacySegment;
+      }
+      return "history";
+    }
+    const segment = location.pathname.replace(/^\/activity\/?/, "").split("/")[0];
+    return segment || DEFAULT_ACTIVITY_VIEW;
+  }, [isOnActivity, location.pathname]);
+
+  const activeActivitySource = useMemo(() => {
+    if (!isOnActivity) return DEFAULT_ACTIVITY_SOURCE;
+    if (location.pathname.startsWith("/history")) {
+      const legacySegment = location.pathname
+        .replace(/^\/history\/?/, "")
+        .split("/")[0];
+      if (
+        legacySegment &&
+        legacySegment !== "queue" &&
+        legacySegment !== "history"
+      ) {
+        return legacySegment;
+      }
+      return DEFAULT_ACTIVITY_SOURCE;
+    }
+    const segments = location.pathname.replace(/^\/activity\/?/, "").split("/");
+    return segments[1] || DEFAULT_ACTIVITY_SOURCE;
+  }, [isOnActivity, location.pathname]);
 
   const positionSidebarTooltip = useCallback((event) => {
     const link = event.currentTarget;
@@ -120,12 +148,10 @@ function Sidebar({ mode }) {
         const bootstrap = await getBootstrapStatus();
         if (!cancelled) {
           setTicketmasterConfigured(!!bootstrap.ticketmasterConfigured);
-          setUsenetConfigured(!!bootstrap.usenetConfigured);
         }
       } catch {
         if (!cancelled) {
           setTicketmasterConfigured(true);
-          setUsenetConfigured(false);
         }
       }
     };
@@ -141,11 +167,11 @@ function Sidebar({ mode }) {
         return isDiscoverSectionActive;
       }
       if (item.section === "shows") return isOnShows;
-      if (item.section === "history") return isOnHistory;
+      if (item.section === "activity") return isOnActivity;
       if (item.path === "/discover" && location.pathname === "/") return true;
       return location.pathname === item.path;
     },
-    [isDiscoverSectionActive, isOnHistory, isOnShows, location.pathname],
+    [isDiscoverSectionActive, isOnActivity, isOnShows, location.pathname],
   );
 
   const navItems = useMemo(() => {
@@ -177,12 +203,12 @@ function Sidebar({ mode }) {
         permission: "accessFlow",
       },
       {
-        path: `/history/${DEFAULT_HISTORY_TAB}`,
-        basePath: "/history",
-        label: "History",
-        icon: History,
-        section: "history",
-        subnav: historyNavItems,
+        path: buildActivityPath(DEFAULT_ACTIVITY_VIEW, "all"),
+        basePath: "/activity",
+        label: "Activity",
+        icon: Activity,
+        section: "activity",
+        subnav: activityViewItems,
       },
     ];
     return items.filter(
@@ -191,7 +217,7 @@ function Sidebar({ mode }) {
         user?.role === "admin" ||
         !!user?.permissions?.[item.permission],
     );
-  }, [discoverRecentPages, historyNavItems, ticketmasterConfigured, user]);
+  }, [discoverRecentPages, activityViewItems, ticketmasterConfigured, user]);
 
   const translateClass =
     mode === "hidden" ? "-translate-x-full" : "translate-x-0";
@@ -236,10 +262,14 @@ function Sidebar({ mode }) {
       <nav className="sidebar-subnav" aria-label={`${item.label} views`}>
         {item.subnav.map((entry) => {
           const active = activeId === entry.id;
+          const targetPath =
+            item.section === "activity"
+              ? buildActivityPath(entry.id, activeActivitySource)
+              : `${item.basePath}/${entry.id}`;
           return (
             <Link
               key={entry.id}
-              to={`${item.basePath}/${entry.id}`}
+              to={targetPath}
               className={`sidebar-subnav-link${active ? " is-active" : ""}`}
               aria-current={active ? "page" : undefined}
             >
@@ -284,7 +314,7 @@ function Sidebar({ mode }) {
               const Icon = item.icon;
               const active = isNavItemActive(item);
               const showActivityDot =
-                item.section === "history" && hasRequestActivity;
+                item.section === "activity" && hasRequestActivity;
               const activeSubnavId =
                 item.section === "discover"
                   ? discoverRecentPages.find(
@@ -292,8 +322,8 @@ function Sidebar({ mode }) {
                     )?.id
                   : item.section === "shows"
                     ? activeShowsFilter
-                    : item.section === "history"
-                      ? activeHistoryTab
+                    : item.section === "activity"
+                      ? activeActivityView
                       : null;
 
               return (
