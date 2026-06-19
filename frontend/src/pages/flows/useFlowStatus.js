@@ -14,8 +14,21 @@ export function useFlowStatus() {
   const [flowStatsById, setFlowStatsById] = useState({});
   const [countdownNow, setCountdownNow] = useState(() => Date.now());
   const lastFlowWsMessageAtRef = useRef(0);
+  const statusFetchStateRef = useRef({
+    id: 0,
+    inFlight: false,
+    signal: null,
+  });
 
   const fetchStatus = useCallback(async (options = {}) => {
+    const current = statusFetchStateRef.current;
+    if (current.inFlight && !current.signal?.aborted) return;
+    const requestId = current.id + 1;
+    statusFetchStateRef.current = {
+      id: requestId,
+      inFlight: true,
+      signal: options.signal || null,
+    };
     try {
       const data = await getFlowStatus({ signal: options.signal });
       if (options.signal?.aborted) return;
@@ -26,6 +39,13 @@ export function useFlowStatus() {
     } finally {
       if (!options.signal?.aborted) {
         setLoading(false);
+      }
+      if (statusFetchStateRef.current.id === requestId) {
+        statusFetchStateRef.current = {
+          id: requestId,
+          inFlight: false,
+          signal: null,
+        };
       }
     }
   }, []);
@@ -113,7 +133,10 @@ export function useFlowStatus() {
     if (!activeFlowIds.length) return;
 
     const controller = new AbortController();
+    let fetchInFlight = false;
     const fetchIncrementalJobs = async () => {
+      if (fetchInFlight) return;
+      fetchInFlight = true;
       try {
         const results = await Promise.all(
           activeFlowIds.map((flowId) =>
@@ -133,7 +156,10 @@ export function useFlowStatus() {
           }
           return next;
         });
-      } catch {}
+      } catch {
+      } finally {
+        fetchInFlight = false;
+      }
     };
 
     fetchIncrementalJobs();

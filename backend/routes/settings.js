@@ -768,7 +768,8 @@ router.get("/storage-health", noCache, async (req, res) => {
   try {
     const { runStorageHealthCheck } =
       await import("../services/storageHealthService.js");
-    const result = await runStorageHealthCheck();
+    const force = req.query.force === "1" || req.query.force === "true";
+    const result = await runStorageHealthCheck({ force });
     res.json({
       success: result.ok,
       ...result,

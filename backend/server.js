@@ -187,12 +187,15 @@ websocketService.initialize(httpServer);
 
 const DOWNLOAD_STATUS_INTERVAL_MS = 10000;
 let lastDownloadStatusesPayload = null;
+let downloadStatusBroadcastInFlight = false;
 const hasWsSubscribers = (channel) => {
   const stats = websocketService.getStats();
   const total = Number(stats?.channels?.[channel] || 0);
   return total > 0;
 };
 const broadcastDownloadStatuses = async () => {
+  if (downloadStatusBroadcastInFlight) return;
+  downloadStatusBroadcastInFlight = true;
   try {
     if (!hasWsSubscribers("downloads")) return;
     const statuses = await getAllDownloadStatuses();
@@ -206,40 +209,66 @@ const broadcastDownloadStatuses = async () => {
     }
   } catch (error) {
     console.warn("Failed to broadcast download statuses:", error.message);
+  } finally {
+    downloadStatusBroadcastInFlight = false;
   }
 };
 
 const WEEKLY_FLOW_STATUS_INTERVAL_MS = 4000;
-const lastWeeklyFlowStatusPayloadByUser = new Map();
+let weeklyFlowStatusBroadcastInFlight = false;
 const broadcastWeeklyFlowStatus = async () => {
+  if (weeklyFlowStatusBroadcastInFlight) return;
+  weeklyFlowStatusBroadcastInFlight = true;
   try {
     if (!hasWsSubscribers("weekly-flow") && !hasWsSubscribers("playlists")) {
       return;
     }
-    const buildPayload = (client) => {
-      const status = getWeeklyFlowStatusSnapshot({
-        user: client?.user || null,
-      });
+    const payloadByAudience = new Map();
+    const buildPayload = (channel) => (client) => {
       const cacheKey =
         client?.user?.role === "admin"
           ? "admin"
           : client?.user?.id != null
             ? `user:${client.user.id}`
             : `anon:${client?.id || "unknown"}`;
-      const payload = JSON.stringify(status);
-      if (lastWeeklyFlowStatusPayloadByUser.get(cacheKey) === payload) {
+      let cached = payloadByAudience.get(cacheKey);
+      if (!cached) {
+        const status = getWeeklyFlowStatusSnapshot({
+          user: client?.user || null,
+        });
+        cached = {
+          payload: JSON.stringify(status),
+          message: {
+            type: "playlist_status",
+            status,
+          },
+        };
+        payloadByAudience.set(cacheKey, cached);
+      }
+      if (!client._lastWeeklyFlowStatusPayloadByChannel) {
+        client._lastWeeklyFlowStatusPayloadByChannel = new Map();
+      }
+      if (
+        client._lastWeeklyFlowStatusPayloadByChannel.get(channel) ===
+        cached.payload
+      ) {
         return null;
       }
-      lastWeeklyFlowStatusPayloadByUser.set(cacheKey, payload);
-      return {
-        type: "playlist_status",
-        status,
-      };
+      client._lastWeeklyFlowStatusPayloadByChannel.set(
+        channel,
+        cached.payload,
+      );
+      return cached.message;
     };
-    websocketService.broadcastPerClient("weekly-flow", buildPayload);
-    websocketService.broadcastPerClient("playlists", buildPayload);
+    websocketService.broadcastPerClient(
+      "weekly-flow",
+      buildPayload("weekly-flow"),
+    );
+    websocketService.broadcastPerClient("playlists", buildPayload("playlists"));
   } catch (error) {
     console.warn("Failed to broadcast weekly flow status:", error.message);
+  } finally {
+    weeklyFlowStatusBroadcastInFlight = false;
   }
 };
 

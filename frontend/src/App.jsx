@@ -93,6 +93,7 @@ function AppContent() {
   const [rootFolderConfigured, setRootFolderConfigured] = useState(false);
   const [appVersion, setAppVersion] = useState(null);
   const discoveryToastShownRef = useRef(false);
+  const healthCheckInFlightRef = useRef(false);
   const { isAuthenticated, user } = useAuth();
   const { showSuccess, showError } = useToast();
 
@@ -132,6 +133,8 @@ function AppContent() {
       if (document.visibilityState === "hidden") {
         return;
       }
+      if (healthCheckInFlightRef.current) return;
+      healthCheckInFlightRef.current = true;
       try {
         const bootstrap = await getBootstrapStatus();
         setIsHealthy(bootstrap.status === "ok");
@@ -140,6 +143,8 @@ function AppContent() {
       } catch {
         setIsHealthy(false);
         setAppVersion(null);
+      } finally {
+        healthCheckInFlightRef.current = false;
       }
     };
 

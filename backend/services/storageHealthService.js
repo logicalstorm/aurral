@@ -46,6 +46,20 @@ const MEDIA_EXTENSIONS = new Set([
 
 const DOWNLOAD_SPACE_WARNING_BYTES = 1024 ** 3;
 const DETAIL_LIST_LIMIT = 6;
+const STORAGE_HEALTH_CACHE_TTL_MS = Math.max(
+  0,
+  Math.floor(Number(process.env.AURRAL_STORAGE_HEALTH_CACHE_MS) || 60 * 1000),
+);
+const PLAYLIST_FILE_HEALTH_SAMPLE_LIMIT = Math.max(
+  50,
+  Math.floor(Number(process.env.AURRAL_PLAYLIST_FILE_HEALTH_SAMPLE_LIMIT) || 500),
+);
+
+let storageHealthCache = null;
+let storageHealthCacheExpiresAt = 0;
+let storageHealthCacheKey = "";
+let storageHealthInflight = null;
+let storageHealthInflightKey = "";
 
 function healthStep(id, status, label, extra = {}) {
   return { id, status, label, ...extra };
@@ -306,6 +320,20 @@ function summarizeResult(sections) {
     failedCount: active.filter((entry) => entry.status === "fail").length,
     warningCount: active.filter((entry) => entry.status === "warn").length,
   };
+}
+
+function getStorageHealthCacheKey() {
+  const settings = dbOps.getSettings();
+  return JSON.stringify({
+    settings,
+    downloadTrackerRevision: downloadTracker.getRevision(),
+    env: {
+      DOWNLOAD_FOLDER: process.env.DOWNLOAD_FOLDER || "",
+      FILE_BROWSE_ROOTS: process.env.FILE_BROWSE_ROOTS || "",
+      PATH_MAPPINGS: process.env.PATH_MAPPINGS || "",
+      AURRAL_DB_PATH: process.env.AURRAL_DB_PATH || "",
+    },
+  });
 }
 
 function isFilesystemRootPath(value) {
@@ -1074,9 +1102,10 @@ async function checkPlaylistFilesSection() {
     );
   }
 
-  const doneJobs = downloadTracker
-    .getAll()
-    .filter((job) => job?.status === "done" && typeof job?.finalPath === "string");
+  const totalDoneJobs = Number(downloadTracker.getStats()?.done || 0);
+  const doneJobs = downloadTracker.getDoneWithFinalPath(
+    PLAYLIST_FILE_HEALTH_SAMPLE_LIMIT,
+  );
 
   if (doneJobs.length === 0) {
     steps.push(
@@ -1158,14 +1187,17 @@ async function checkPlaylistFilesSection() {
 
   steps.push(
     healthStep("tracked", "pass", "Completed playlist files are accessible", {
-      detail: `${doneJobs.length} completed track${doneJobs.length === 1 ? "" : "s"} verified`,
+      detail:
+        totalDoneJobs > doneJobs.length
+          ? `${doneJobs.length} of ${totalDoneJobs} completed tracks sampled`
+          : `${doneJobs.length} completed track${doneJobs.length === 1 ? "" : "s"} verified`,
     }),
   );
 
   return buildSection("playlists", "Playlist files", steps);
 }
 
-export async function runStorageHealthCheck() {
+async function buildStorageHealthCheck() {
   const volumeSection = await checkSharedVolumeSection();
   const downloadsSection = await checkDownloadsSection();
   const {
@@ -1191,4 +1223,41 @@ export async function runStorageHealthCheck() {
     ...summary,
     sections,
   };
+}
+
+export async function runStorageHealthCheck({ force = false } = {}) {
+  const now = Date.now();
+  const cacheKey = getStorageHealthCacheKey();
+  if (
+    !force &&
+    storageHealthCache &&
+    storageHealthCacheKey === cacheKey &&
+    STORAGE_HEALTH_CACHE_TTL_MS > 0 &&
+    now < storageHealthCacheExpiresAt
+  ) {
+    return {
+      ...storageHealthCache,
+      cached: true,
+    };
+  }
+
+  if (!force && storageHealthInflight && storageHealthInflightKey === cacheKey) {
+    return storageHealthInflight;
+  }
+
+  storageHealthInflightKey = cacheKey;
+  storageHealthInflight = buildStorageHealthCheck()
+    .then((result) => {
+      storageHealthCache = result;
+      storageHealthCacheKey = cacheKey;
+      storageHealthCacheExpiresAt =
+        Date.now() + STORAGE_HEALTH_CACHE_TTL_MS;
+      return result;
+    })
+    .finally(() => {
+      storageHealthInflight = null;
+      storageHealthInflightKey = "";
+    });
+
+  return storageHealthInflight;
 }

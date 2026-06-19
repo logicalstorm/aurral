@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import {
   Loader,
@@ -213,6 +213,7 @@ function HistoryPage() {
   const [usenetActive, setUsenetActive] = useState(false);
   const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
   const [reSearchingAlbumIds, setReSearchingAlbumIds] = useState({});
+  const fetchRequestsInFlightRef = useRef(false);
 
   const historyNavItems = useMemo(
     () => getHistoryNavItems(usenetActive),
@@ -260,6 +261,8 @@ function HistoryPage() {
   }, [activeTab]);
 
   const fetchRequests = useCallback(async ({ silent = false } = {}) => {
+    if (fetchRequestsInFlightRef.current) return;
+    fetchRequestsInFlightRef.current = true;
     if (!silent) {
       setLoading(true);
     }
@@ -271,6 +274,7 @@ function HistoryPage() {
     } catch {
       setError("Failed to load history.");
     } finally {
+      fetchRequestsInFlightRef.current = false;
       if (!silent) {
         setLoading(false);
       }

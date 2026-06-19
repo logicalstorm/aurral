@@ -2,6 +2,8 @@ import { getImagePrefetchQueue, getWorkerId } from "./honkerDb.js";
 import { dbOps } from "../config/db-helpers.js";
 import { getArtistImage } from "./imageService.js";
 import {
+  createIdleAbortController,
+  getWorkerIdleStopMs,
   isHonkerShuttingDown,
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
@@ -13,6 +15,7 @@ const WORKER_NAME = "image-prefetch";
 let running = false;
 let stopRequested = false;
 let loopPromise = null;
+let idleController = null;
 
 async function processImagePrefetch(payload = {}) {
   const mbids = (Array.isArray(payload?.mbids) ? payload.mbids : [])
@@ -40,8 +43,16 @@ async function processImagePrefetch(payload = {}) {
 async function runLoop() {
   const queue = getImagePrefetchQueue();
   const workerId = getWorkerId();
+  idleController = createIdleAbortController({
+    idleStopMs: getWorkerIdleStopMs(),
+  });
+  idleController.arm();
   try {
-    for await (const job of queue.claim(workerId, { idlePollS: 10 })) {
+    for await (const job of queue.claim(workerId, {
+      idlePollS: 10,
+      signal: idleController.signal,
+    })) {
+      idleController.disarm();
       if (!running || stopRequested) break;
       try {
         await withJobHeartbeat(job, queue, () => processImagePrefetch(job.payload));
@@ -54,13 +65,19 @@ async function runLoop() {
           job.retry(60, message);
         }
       }
+      idleController.arm();
     }
   } catch (error) {
-    console.error("[imagePrefetchWorker] loop error:", error);
+    if (!idleController?.idleStopped && !stopRequested) {
+      console.error("[imagePrefetchWorker] loop error:", error);
+    }
   } finally {
+    const idleStopped = idleController?.idleStopped === true;
+    idleController?.dispose();
+    idleController = null;
     running = false;
     loopPromise = null;
-    const intentional = stopRequested;
+    const intentional = stopRequested || idleStopped;
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startImagePrefetchWorker, {
       intentional,
@@ -78,6 +95,7 @@ export function startImagePrefetchWorker() {
 export function stopImagePrefetchWorker() {
   stopRequested = true;
   running = false;
+  idleController?.abort();
 }
 
 export function isImagePrefetchWorkerRunning() {

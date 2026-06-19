@@ -200,7 +200,12 @@ export class WeeklyFlowDownloadTracker {
     this.pendingSet = new Set();
     this.pendingRetrySet = new Set();
     this.slskdDispatched = new Set();
+    this.revision = 0;
     this._load();
+  }
+
+  _touchRevision() {
+    this.revision += 1;
   }
 
   isSlskdDispatched(id) {
@@ -462,6 +467,7 @@ export class WeeklyFlowDownloadTracker {
       job.completedAt ?? null,
       createdAt,
     );
+    this._touchRevision();
   }
 
   _update(job) {
@@ -486,6 +492,7 @@ export class WeeklyFlowDownloadTracker {
       stringifyStringListJson(job.artistAliases),
       job.id,
     );
+    this._touchRevision();
   }
 
   addJob(track, playlistType) {
@@ -628,6 +635,7 @@ export class WeeklyFlowDownloadTracker {
     this._removeFromPendingQueues(id);
     this._applyStatusDelta(job.playlistType, job.status, null);
     deleteStmt.run(id);
+    this._touchRevision();
     return true;
   }
 
@@ -891,6 +899,7 @@ export class WeeklyFlowDownloadTracker {
       }
     }
     this._rebuildStatsByPlaylistType();
+    if (count > 0) this._touchRevision();
     return count;
   }
 
@@ -957,6 +966,22 @@ export class WeeklyFlowDownloadTracker {
     return sortByCreatedAt(Array.from(this.jobs.values()));
   }
 
+  getDoneWithFinalPath(limit = 500) {
+    const max =
+      Number.isFinite(Number(limit)) && Number(limit) > 0
+        ? Math.floor(Number(limit))
+        : 500;
+    const jobs = [];
+    for (const job of this.jobs.values()) {
+      if (job?.status !== "done" || typeof job?.finalPath !== "string") {
+        continue;
+      }
+      jobs.push(job);
+      if (jobs.length >= max) break;
+    }
+    return jobs;
+  }
+
   getStats() {
     return this._cloneStats(this.globalStats);
   }
@@ -1002,6 +1027,7 @@ export class WeeklyFlowDownloadTracker {
     }
     if (toDelete.length > 0) {
       this._rebuildStatsByPlaylistType();
+      this._touchRevision();
     }
     return toDelete.length;
   }
@@ -1033,7 +1059,12 @@ export class WeeklyFlowDownloadTracker {
     this.pendingSet = new Set();
     this.pendingRetrySet = new Set();
     deleteAllStmt.run();
+    this._touchRevision();
     return count;
+  }
+
+  getRevision() {
+    return this.revision;
   }
 }
 

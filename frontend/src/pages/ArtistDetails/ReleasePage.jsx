@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { CornerUpLeft, ExternalLink, Music } from "lucide-react";
 import SearchLibraryCheck from "../../components/SearchLibraryCheck";
@@ -113,6 +113,7 @@ function ReleasePage() {
   const [playlistModalLoading, setPlaylistModalLoading] = useState(false);
   const [playlistModalError, setPlaylistModalError] = useState("");
   const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
+  const downloadStatusPollInFlightRef = useRef(false);
 
   const releaseTitle = release.title || "Release";
   const pageTitle = artistName
@@ -218,6 +219,8 @@ function ReleasePage() {
 
     let cancelled = false;
     const interval = window.setInterval(async () => {
+      if (downloadStatusPollInFlightRef.current) return;
+      downloadStatusPollInFlightRef.current = true;
       try {
         const statuses = await getDownloadStatus([libraryInfo.libraryAlbumId]);
         if (cancelled) return;
@@ -230,7 +233,10 @@ function ReleasePage() {
             setLibraryInfo(entry);
           }
         }
-      } catch {}
+      } catch {
+      } finally {
+        downloadStatusPollInFlightRef.current = false;
+      }
     }, 5000);
 
     return () => {

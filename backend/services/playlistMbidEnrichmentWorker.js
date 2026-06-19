@@ -7,6 +7,8 @@ import {
   schedulePlaylistMbidEnrichmentForMissingPlaylists,
 } from "./playlistMbidEnrichmentService.js";
 import {
+  createIdleAbortController,
+  getWorkerIdleStopMs,
   isHonkerShuttingDown,
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
@@ -18,6 +20,7 @@ const WORKER_NAME = "playlist-mbid-enrichment";
 let running = false;
 let stopRequested = false;
 let loopPromise = null;
+let idleController = null;
 
 async function processPlaylistMbidEnrichment(payload = {}) {
   const kind = String(payload?.kind || payload?.type || "").trim();
@@ -45,8 +48,16 @@ async function processPlaylistMbidEnrichment(payload = {}) {
 async function runLoop() {
   const queue = getPlaylistMbidEnrichmentQueue();
   const workerId = getWorkerId();
+  idleController = createIdleAbortController({
+    idleStopMs: getWorkerIdleStopMs(),
+  });
+  idleController.arm();
   try {
-    for await (const job of queue.claim(workerId, { idlePollS: 10 })) {
+    for await (const job of queue.claim(workerId, {
+      idlePollS: 10,
+      signal: idleController.signal,
+    })) {
+      idleController.disarm();
       if (!running || stopRequested) break;
       try {
         await withJobHeartbeat(job, queue, () =>
@@ -61,13 +72,19 @@ async function runLoop() {
           job.retry(300, message);
         }
       }
+      idleController.arm();
     }
   } catch (error) {
-    console.error("[playlistMbidEnrichmentWorker] loop error:", error);
+    if (!idleController?.idleStopped && !stopRequested) {
+      console.error("[playlistMbidEnrichmentWorker] loop error:", error);
+    }
   } finally {
+    const idleStopped = idleController?.idleStopped === true;
+    idleController?.dispose();
+    idleController = null;
     running = false;
     loopPromise = null;
-    const intentional = stopRequested;
+    const intentional = stopRequested || idleStopped;
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startPlaylistMbidEnrichmentWorker, {
       intentional,
@@ -85,6 +102,7 @@ export function startPlaylistMbidEnrichmentWorker() {
 export function stopPlaylistMbidEnrichmentWorker() {
   stopRequested = true;
   running = false;
+  idleController?.abort();
 }
 
 export function isPlaylistMbidEnrichmentWorkerRunning() {

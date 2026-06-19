@@ -1,6 +1,8 @@
 import { getPlaylistReserveBuildQueue, getWorkerId } from "./honkerDb.js";
 import { weeklyFlowWorker } from "./weeklyFlowWorker.js";
 import {
+  createIdleAbortController,
+  getWorkerIdleStopMs,
   isHonkerShuttingDown,
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
@@ -12,12 +14,21 @@ const WORKER_NAME = "playlist-reserve-build";
 let running = false;
 let stopRequested = false;
 let loopPromise = null;
+let idleController = null;
 
 async function runLoop() {
   const queue = getPlaylistReserveBuildQueue();
   const workerId = getWorkerId();
+  idleController = createIdleAbortController({
+    idleStopMs: getWorkerIdleStopMs(),
+  });
+  idleController.arm();
   try {
-    for await (const job of queue.claim(workerId, { idlePollS: 10 })) {
+    for await (const job of queue.claim(workerId, {
+      idlePollS: 10,
+      signal: idleController.signal,
+    })) {
+      idleController.disarm();
       if (!running || stopRequested) break;
       try {
         await withJobHeartbeat(job, queue, () =>
@@ -32,13 +43,19 @@ async function runLoop() {
           job.retry(120, message);
         }
       }
+      idleController.arm();
     }
   } catch (error) {
-    console.error("[weeklyFlowPlaylistReserveBuildWorker] loop error:", error);
+    if (!idleController?.idleStopped && !stopRequested) {
+      console.error("[weeklyFlowPlaylistReserveBuildWorker] loop error:", error);
+    }
   } finally {
+    const idleStopped = idleController?.idleStopped === true;
+    idleController?.dispose();
+    idleController = null;
     running = false;
     loopPromise = null;
-    const intentional = stopRequested;
+    const intentional = stopRequested || idleStopped;
     stopRequested = false;
     markHonkerWorkerLoopEnded(
       WORKER_NAME,
@@ -58,6 +75,7 @@ export function startWeeklyFlowPlaylistReserveBuildWorker() {
 export function stopWeeklyFlowPlaylistReserveBuildWorker() {
   stopRequested = true;
   running = false;
+  idleController?.abort();
 }
 
 export function isWeeklyFlowPlaylistReserveBuildWorkerRunning() {

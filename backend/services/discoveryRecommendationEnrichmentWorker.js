@@ -7,6 +7,8 @@ import {
   runDiscoveryRecommendationEnrichment,
 } from "./discoveryService.js";
 import {
+  createIdleAbortController,
+  getWorkerIdleStopMs,
   isHonkerShuttingDown,
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
@@ -18,12 +20,21 @@ const WORKER_NAME = "discovery-recommendation-enrichment";
 let running = false;
 let stopRequested = false;
 let loopPromise = null;
+let idleController = null;
 
 async function runLoop() {
   const queue = getDiscoveryRecommendationEnrichmentQueue();
   const workerId = getWorkerId();
+  idleController = createIdleAbortController({
+    idleStopMs: getWorkerIdleStopMs(),
+  });
+  idleController.arm();
   try {
-    for await (const job of queue.claim(workerId, { idlePollS: 10 })) {
+    for await (const job of queue.claim(workerId, {
+      idlePollS: 10,
+      signal: idleController.signal,
+    })) {
+      idleController.disarm();
       if (!running || stopRequested) break;
       try {
         await withJobHeartbeat(job, queue, () =>
@@ -39,13 +50,19 @@ async function runLoop() {
           job.retry(300, message);
         }
       }
+      idleController.arm();
     }
   } catch (error) {
-    console.error("[discoveryRecommendationEnrichmentWorker] loop error:", error);
+    if (!idleController?.idleStopped && !stopRequested) {
+      console.error("[discoveryRecommendationEnrichmentWorker] loop error:", error);
+    }
   } finally {
+    const idleStopped = idleController?.idleStopped === true;
+    idleController?.dispose();
+    idleController = null;
     running = false;
     loopPromise = null;
-    const intentional = stopRequested;
+    const intentional = stopRequested || idleStopped;
     stopRequested = false;
     markHonkerWorkerLoopEnded(
       WORKER_NAME,
@@ -65,6 +82,7 @@ export function startDiscoveryRecommendationEnrichmentWorker() {
 export function stopDiscoveryRecommendationEnrichmentWorker() {
   stopRequested = true;
   running = false;
+  idleController?.abort();
 }
 
 export function isDiscoveryRecommendationEnrichmentWorkerRunning() {

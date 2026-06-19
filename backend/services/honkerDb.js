@@ -709,3 +709,14 @@ export function getHonkerQueueDepth(queueName) {
   )[0];
   return Number(row?.count) || 0;
 }
+
+export function getHonkerQueueNextClaimAt(queueName) {
+  const safeQueue = String(queueName || "").trim();
+  if (!safeQueue) return null;
+  const value = getHonkerDb().query(
+    "SELECT honker_queue_next_claim_at(?) AS nextClaimAt",
+    [safeQueue],
+  )[0]?.nextClaimAt;
+  const timestamp = Number(value);
+  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
+}

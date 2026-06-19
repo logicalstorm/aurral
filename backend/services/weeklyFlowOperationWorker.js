@@ -8,6 +8,8 @@ import {
   setWeeklyFlowOperationWorkerState,
 } from "./weeklyFlowOperationQueue.js";
 import {
+  createIdleAbortController,
+  getWorkerIdleStopMs,
   isHonkerShuttingDown,
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
@@ -25,6 +27,7 @@ let running = false;
 let stopRequested = false;
 let loopPromise = null;
 let currentLabel = null;
+let idleController = null;
 
 function syncWorkerState() {
   setWeeklyFlowOperationWorkerState({
@@ -36,8 +39,16 @@ function syncWorkerState() {
 async function runLoop() {
   const queue = getWeeklyFlowOperationQueue();
   const workerId = getWorkerId();
+  idleController = createIdleAbortController({
+    idleStopMs: getWorkerIdleStopMs(),
+  });
+  idleController.arm();
   try {
-    for await (const job of queue.claim(workerId, { idlePollS: 5 })) {
+    for await (const job of queue.claim(workerId, {
+      idlePollS: 5,
+      signal: idleController.signal,
+    })) {
+      idleController.disarm();
       if (!running || stopRequested) break;
       currentLabel = job.payload?.label || job.payload?.kind || null;
       syncWorkerState();
@@ -60,15 +71,21 @@ async function runLoop() {
         currentLabel = null;
         syncWorkerState();
       }
+      idleController.arm();
     }
   } catch (error) {
-    console.error("[weeklyFlowOperationWorker] loop error:", error);
+    if (!idleController?.idleStopped && !stopRequested) {
+      console.error("[weeklyFlowOperationWorker] loop error:", error);
+    }
   } finally {
+    const idleStopped = idleController?.idleStopped === true;
+    idleController?.dispose();
+    idleController = null;
     running = false;
     loopPromise = null;
     currentLabel = null;
     syncWorkerState();
-    const intentional = stopRequested;
+    const intentional = stopRequested || idleStopped;
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startWeeklyFlowOperationWorker, {
       intentional,
@@ -87,6 +104,7 @@ export function startWeeklyFlowOperationWorker() {
 export function stopWeeklyFlowOperationWorker() {
   stopRequested = true;
   running = false;
+  idleController?.abort();
   syncWorkerState();
 }
 

@@ -3,6 +3,8 @@ import { getDiscoveryUserRefreshQueue, getWorkerId } from "./honkerDb.js";
 import { updateUserDiscoveryCache } from "./discoveryService.js";
 import { getListenHistoryCacheNamespace } from "./listeningHistory.js";
 import {
+  createIdleAbortController,
+  getWorkerIdleStopMs,
   isHonkerShuttingDown,
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
@@ -14,6 +16,7 @@ const WORKER_NAME = "discovery-user-refresh";
 let running = false;
 let stopRequested = false;
 let loopPromise = null;
+let idleController = null;
 
 function wasRefreshedSince(profile, requestedAt) {
   const cacheNamespace = getListenHistoryCacheNamespace(profile);
@@ -43,8 +46,16 @@ async function processDiscoveryUserRefresh(payload = {}) {
 async function runLoop() {
   const queue = getDiscoveryUserRefreshQueue();
   const workerId = getWorkerId();
+  idleController = createIdleAbortController({
+    idleStopMs: getWorkerIdleStopMs(),
+  });
+  idleController.arm();
   try {
-    for await (const job of queue.claim(workerId, { idlePollS: 10 })) {
+    for await (const job of queue.claim(workerId, {
+      idlePollS: 10,
+      signal: idleController.signal,
+    })) {
+      idleController.disarm();
       if (!running || stopRequested) break;
       try {
         await withJobHeartbeat(job, queue, () =>
@@ -59,13 +70,19 @@ async function runLoop() {
           job.retry(300, message);
         }
       }
+      idleController.arm();
     }
   } catch (error) {
-    console.error("[discoveryUserRefreshWorker] loop error:", error);
+    if (!idleController?.idleStopped && !stopRequested) {
+      console.error("[discoveryUserRefreshWorker] loop error:", error);
+    }
   } finally {
+    const idleStopped = idleController?.idleStopped === true;
+    idleController?.dispose();
+    idleController = null;
     running = false;
     loopPromise = null;
-    const intentional = stopRequested;
+    const intentional = stopRequested || idleStopped;
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startDiscoveryUserRefreshWorker, {
       intentional,
@@ -83,6 +100,7 @@ export function startDiscoveryUserRefreshWorker() {
 export function stopDiscoveryUserRefreshWorker() {
   stopRequested = true;
   running = false;
+  idleController?.abort();
 }
 
 export function isDiscoveryUserRefreshWorkerRunning() {

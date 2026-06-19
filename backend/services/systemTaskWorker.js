@@ -1,6 +1,8 @@
 import { getSystemTaskQueue, getWorkerId } from "./honkerDb.js";
 import { cleanExpiredSessions } from "../config/session-helpers.js";
 import {
+  createIdleAbortController,
+  getWorkerIdleStopMs,
   isHonkerShuttingDown,
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
@@ -12,6 +14,7 @@ const WORKER_NAME = "system-task";
 let running = false;
 let stopRequested = false;
 let loopPromise = null;
+let idleController = null;
 
 async function processSystemTask(payload = {}) {
   const kind = String(payload?.kind || "").trim();
@@ -90,8 +93,16 @@ async function processSystemTask(payload = {}) {
 async function runLoop() {
   const queue = getSystemTaskQueue();
   const workerId = getWorkerId();
+  idleController = createIdleAbortController({
+    idleStopMs: getWorkerIdleStopMs(),
+  });
+  idleController.arm();
   try {
-    for await (const job of queue.claim(workerId, { idlePollS: 10 })) {
+    for await (const job of queue.claim(workerId, {
+      idlePollS: 10,
+      signal: idleController.signal,
+    })) {
+      idleController.disarm();
       if (!running || stopRequested) break;
       try {
         await withJobHeartbeat(job, queue, () => processSystemTask(job.payload));
@@ -104,13 +115,19 @@ async function runLoop() {
           job.retry(120, message);
         }
       }
+      idleController.arm();
     }
   } catch (error) {
-    console.error("[systemTaskWorker] loop error:", error);
+    if (!idleController?.idleStopped && !stopRequested) {
+      console.error("[systemTaskWorker] loop error:", error);
+    }
   } finally {
+    const idleStopped = idleController?.idleStopped === true;
+    idleController?.dispose();
+    idleController = null;
     running = false;
     loopPromise = null;
-    const intentional = stopRequested;
+    const intentional = stopRequested || idleStopped;
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startSystemTaskWorker, {
       intentional,
@@ -128,6 +145,7 @@ export function startSystemTaskWorker() {
 export function stopSystemTaskWorker() {
   stopRequested = true;
   running = false;
+  idleController?.abort();
 }
 
 export function isSystemTaskWorkerRunning() {

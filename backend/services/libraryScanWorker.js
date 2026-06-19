@@ -1,6 +1,9 @@
 import { dbOps } from "../config/db-helpers.js";
 import { enqueueLibraryScanJob, getLibraryScanQueue, getWorkerId } from "./honkerDb.js";
 import {
+  createIdleAbortController,
+  getWorkerIdleStopMs,
+  isHonkerDatabaseClosedError,
   isHonkerShuttingDown,
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
@@ -57,16 +60,27 @@ export function scheduleLibraryScan(force = false) {
 let running = false;
 let stopRequested = false;
 let loopPromise = null;
+let idleController = null;
 
 async function runLoop() {
   const queue = getLibraryScanQueue();
   const workerId = getWorkerId();
+  idleController = createIdleAbortController({
+    idleStopMs: getWorkerIdleStopMs(),
+  });
+  let databaseClosed = false;
+  idleController.arm();
   try {
-    for await (const job of queue.claim(workerId, { idlePollS: 10 })) {
+    for await (const job of queue.claim(workerId, {
+      idlePollS: 10,
+      signal: idleController.signal,
+    })) {
+      idleController.disarm();
       if (!running || stopRequested) break;
       const scheduledJobId = getScheduledLibraryScanJobId();
       if (scheduledJobId != null && scheduledJobId !== job.id) {
         job.ack();
+        idleController.arm();
         continue;
       }
       clearScheduledLibraryScan(job.id);
@@ -85,13 +99,20 @@ async function runLoop() {
           job.retry(60, message);
         }
       }
+      idleController.arm();
     }
   } catch (error) {
-    console.error("[libraryScanWorker] loop error:", error);
+    databaseClosed = isHonkerDatabaseClosedError(error);
+    if (!databaseClosed && !idleController?.idleStopped && !stopRequested) {
+      console.error("[libraryScanWorker] loop error:", error);
+    }
   } finally {
+    const idleStopped = idleController?.idleStopped === true;
+    idleController?.dispose();
+    idleController = null;
     running = false;
     loopPromise = null;
-    const intentional = stopRequested;
+    const intentional = stopRequested || idleStopped || databaseClosed;
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startLibraryScanWorker, {
       intentional,
@@ -109,6 +130,7 @@ export function startLibraryScanWorker() {
 export function stopLibraryScanWorker() {
   stopRequested = true;
   running = false;
+  idleController?.abort();
 }
 
 export function isLibraryScanWorkerRunning() {

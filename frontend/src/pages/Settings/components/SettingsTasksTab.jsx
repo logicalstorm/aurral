@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   Check,
@@ -323,9 +323,12 @@ export function SettingsTasksTab({ showError }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState(null);
+  const refreshInFlightRef = useRef(false);
 
   const refreshTasks = useCallback(
     async ({ notify = false, manual = false } = {}) => {
+      if (refreshInFlightRef.current) return;
+      refreshInFlightRef.current = true;
       if (manual) {
         setRefreshing(true);
       }
@@ -344,6 +347,7 @@ export function SettingsTasksTab({ showError }) {
           showError(message);
         }
       } finally {
+        refreshInFlightRef.current = false;
         setLoading(false);
         if (manual) {
           setRefreshing(false);

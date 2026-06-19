@@ -425,6 +425,7 @@ function DiscoverPage() {
   const requestedReleaseCoversRef = useRef(new Set());
   const requestedArtistCoversRef = useRef(new Set());
   const lastDiscoveryWsMessageAtRef = useRef(0);
+  const discoveryPollInFlightRef = useRef(false);
   const navigate = useDiscoverNavigation();
   const { showSuccess, showError } = useToast();
   const canAddArtist = hasPermission("addArtist");
@@ -687,6 +688,8 @@ function DiscoverPage() {
       Date.now() - lastDiscoveryWsMessageAtRef.current < 20000;
     if (isDiscoverySocketConnected && hasRecentWsUpdate) return;
     const pollDiscovery = () => {
+      if (discoveryPollInFlightRef.current) return;
+      discoveryPollInFlightRef.current = true;
       getDiscovery(true)
         .then((next) => {
           const normalizedData = normalizeDiscoveryData(next);
@@ -694,7 +697,10 @@ function DiscoverPage() {
           writeStoredDiscoveryData(normalizedData, authUser?.id);
           setError(null);
         })
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => {
+          discoveryPollInFlightRef.current = false;
+        });
     };
     pollDiscovery();
     const id = setInterval(pollDiscovery, 10000);

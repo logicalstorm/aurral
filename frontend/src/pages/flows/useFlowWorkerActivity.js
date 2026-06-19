@@ -9,14 +9,19 @@ const WS_RECENT_MS = 3000;
 export function useFlowWorkerActivity({ enabled = true } = {}) {
   const [status, setStatus] = useState(null);
   const lastFlowWsMessageAtRef = useRef(0);
+  const fetchInFlightRef = useRef(false);
 
   const fetchStatus = useCallback(async () => {
     if (!enabled) return;
+    if (fetchInFlightRef.current) return;
+    fetchInFlightRef.current = true;
     try {
       const data = await getFlowStatus();
       setStatus(data);
     } catch {
       setStatus(null);
+    } finally {
+      fetchInFlightRef.current = false;
     }
   }, [enabled]);
 

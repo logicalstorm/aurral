@@ -58,7 +58,45 @@ function aggregateStats(statsByType, ids) {
   return base;
 }
 
-function collectPlaylistTrackIdentities(playlistId) {
+const sharedPlaylistIdentityCache = new Map();
+const sharedPlaylistStaticIdentityKeyCache = new Map();
+
+function getSharedPlaylistStaticIdentityKey(playlist) {
+  const playlistId = String(playlist?.id || "");
+  const cached = sharedPlaylistStaticIdentityKeyCache.get(playlistId);
+  if (cached?.playlist === playlist) return cached.key;
+  const key = (Array.isArray(playlist?.tracks) ? playlist.tracks : [])
+    .map((track) => buildSharedTrackIdentity(track))
+    .filter(Boolean)
+    .join("\u0002");
+  sharedPlaylistStaticIdentityKeyCache.set(playlistId, {
+    playlist,
+    key,
+  });
+  return key;
+}
+
+function buildSharedPlaylistIdentityCacheKey(playlist, stats) {
+  return [
+    downloadTracker.getRevision(),
+    playlist?.trackCount || 0,
+    playlist?.createdAt || 0,
+    Number(stats?.pending || 0),
+    Number(stats?.downloading || 0),
+    Number(stats?.done || 0),
+    Number(stats?.failed || 0),
+    getSharedPlaylistStaticIdentityKey(playlist),
+  ].join("|");
+}
+
+function collectPlaylistTrackIdentities(playlist, stats) {
+  const playlistId = String(playlist?.id || "");
+  if (!playlistId) return [];
+  const cacheKey = buildSharedPlaylistIdentityCacheKey(playlist, stats);
+  const cached = sharedPlaylistIdentityCache.get(playlistId);
+  if (cached?.cacheKey === cacheKey) {
+    return cached.identities;
+  }
   const seen = new Set();
   const identities = [];
   const addIdentity = (track) => {
@@ -70,11 +108,24 @@ function collectPlaylistTrackIdentities(playlistId) {
   for (const job of downloadTracker.getByPlaylistType(playlistId)) {
     addIdentity(job);
   }
-  const playlist = flowPlaylistConfig.getSharedPlaylist(playlistId);
   for (const track of Array.isArray(playlist?.tracks) ? playlist.tracks : []) {
     addIdentity(track);
   }
+  sharedPlaylistIdentityCache.set(playlistId, {
+    cacheKey,
+    identities,
+  });
   return identities;
+}
+
+function pruneSharedPlaylistIdentityCaches(activeIds) {
+  const active = new Set(activeIds.map((id) => String(id || "")));
+  for (const key of sharedPlaylistIdentityCache.keys()) {
+    if (!active.has(key)) sharedPlaylistIdentityCache.delete(key);
+  }
+  for (const key of sharedPlaylistStaticIdentityKeyCache.keys()) {
+    if (!active.has(key)) sharedPlaylistStaticIdentityKeyCache.delete(key);
+  }
 }
 
 function buildOwnerMap(flows, sharedPlaylists) {
@@ -110,6 +161,7 @@ export function getWeeklyFlowStatusSnapshot({
     : flowPlaylistConfig.getSharedPlaylists();
   const flowIds = flows.map((flow) => flow.id);
   const sharedPlaylistIds = rawSharedPlaylists.map((playlist) => playlist.id);
+  pruneSharedPlaylistIdentityCaches(sharedPlaylistIds);
   const scopedStats = downloadTracker.getStatsByPlaylistType([
     ...flowIds,
     ...sharedPlaylistIds,
@@ -129,7 +181,7 @@ export function getWeeklyFlowStatusSnapshot({
       importedAt: playlist.importedAt,
       createdAt: playlist.createdAt,
       trackCount: jobTotal > 0 ? jobTotal : playlist.trackCount,
-      trackIdentities: collectPlaylistTrackIdentities(playlist.id),
+      trackIdentities: collectPlaylistTrackIdentities(playlist, playlistStats),
     };
   });
   const ownerMap = buildOwnerMap(flows, sharedPlaylists);

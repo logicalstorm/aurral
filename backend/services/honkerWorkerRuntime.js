@@ -2,11 +2,25 @@ const workers = new Map();
 const restartTimers = new Map();
 const restartAttempts = new Map();
 const shutdownHandlers = [];
+const DEFAULT_WORKER_IDLE_STOP_MS = 60 * 1000;
 
 let shuttingDown = false;
 
+export function getWorkerIdleStopMs() {
+  const configured = Number(process.env.AURRAL_WORKER_IDLE_STOP_MS);
+  if (!Number.isFinite(configured)) return DEFAULT_WORKER_IDLE_STOP_MS;
+  if (configured <= 0) return 0;
+  return Math.max(5000, Math.floor(configured));
+}
+
 export function isHonkerShuttingDown() {
   return shuttingDown;
+}
+
+export function isHonkerDatabaseClosedError(error) {
+  return String(error?.message || "")
+    .toLowerCase()
+    .includes("database is closed");
 }
 
 export async function withJobHeartbeat(job, queue, fn, extendSeconds = null) {
@@ -43,6 +57,55 @@ export async function withJobHeartbeat(job, queue, fn, extendSeconds = null) {
   } finally {
     clearInterval(heartbeat);
   }
+}
+
+export function createIdleAbortController({
+  idleStopMs = 0,
+  onIdleStop = null,
+} = {}) {
+  const controller = new AbortController();
+  const timeoutMs = Math.max(0, Math.floor(Number(idleStopMs) || 0));
+  let timer = null;
+  let idleStopped = false;
+
+  const clear = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+
+  const arm = () => {
+    clear();
+    if (!timeoutMs || controller.signal.aborted) return;
+    timer = setTimeout(() => {
+      timer = null;
+      idleStopped = true;
+      if (typeof onIdleStop === "function") {
+        try {
+          onIdleStop();
+        } catch {}
+      }
+      controller.abort();
+    }, timeoutMs);
+    if (typeof timer.unref === "function") timer.unref();
+  };
+
+  const abort = () => {
+    clear();
+    controller.abort();
+  };
+
+  return {
+    signal: controller.signal,
+    arm,
+    disarm: clear,
+    abort,
+    dispose: clear,
+    get idleStopped() {
+      return idleStopped;
+    },
+  };
 }
 
 export function registerHonkerWorker(name, { start, stop, isRunning }) {

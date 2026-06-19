@@ -12,6 +12,8 @@ import {
   scheduleNextDiscoveryRefresh,
 } from "./discoveryRefreshScheduler.js";
 import {
+  createIdleAbortController,
+  getWorkerIdleStopMs,
   isHonkerShuttingDown,
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
@@ -23,6 +25,7 @@ const WORKER_NAME = "discovery-refresh";
 let running = false;
 let stopRequested = false;
 let loopPromise = null;
+let idleController = null;
 
 async function runDiscoveryRefresh(payload) {
   if (!(await isDiscoveryRefreshConfigured())) {
@@ -52,8 +55,16 @@ async function runDiscoveryRefresh(payload) {
 async function runLoop() {
   const queue = getDiscoveryRefreshQueue();
   const workerId = getWorkerId();
+  idleController = createIdleAbortController({
+    idleStopMs: getWorkerIdleStopMs(),
+  });
+  idleController.arm();
   try {
-    for await (const job of queue.claim(workerId, { idlePollS: 5 })) {
+    for await (const job of queue.claim(workerId, {
+      idlePollS: 5,
+      signal: idleController.signal,
+    })) {
+      idleController.disarm();
       if (!running || stopRequested) break;
       markDiscoveryRefreshDequeued();
       try {
@@ -70,13 +81,19 @@ async function runLoop() {
           job.retry(300, message);
         }
       }
+      idleController.arm();
     }
   } catch (error) {
-    console.error("[discoveryRefreshWorker] loop error:", error);
+    if (!idleController?.idleStopped && !stopRequested) {
+      console.error("[discoveryRefreshWorker] loop error:", error);
+    }
   } finally {
+    const idleStopped = idleController?.idleStopped === true;
+    idleController?.dispose();
+    idleController = null;
     running = false;
     loopPromise = null;
-    const intentional = stopRequested;
+    const intentional = stopRequested || idleStopped;
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startDiscoveryRefreshWorker, {
       intentional,
@@ -94,6 +111,7 @@ export function startDiscoveryRefreshWorker() {
 export function stopDiscoveryRefreshWorker() {
   stopRequested = true;
   running = false;
+  idleController?.abort();
 }
 
 export function isDiscoveryRefreshWorkerRunning() {
