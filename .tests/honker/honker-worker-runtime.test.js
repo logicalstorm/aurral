@@ -29,6 +29,13 @@ test("getHonkerQueueDepth counts claimable pending jobs", () => {
   assert.ok(depth >= 1);
 });
 
+test("getHonkerQueueNextClaimAt reports delayed queue work", () => {
+  const runAt = Math.floor(Date.now() / 1000) + 120;
+  honkerDb.getLibraryScanQueue().enqueue({ kind: "delayed-test" }, { runAt });
+  const nextClaimAt = honkerDb.getHonkerQueueNextClaimAt("library-scan");
+  assert.equal(nextClaimAt, runAt);
+});
+
 test("withJobHeartbeat extends job claim while work runs", async () => {
   const queue = honkerDb.getImagePrefetchQueue();
   const jobId = queue.enqueue({ mbids: ["test-mbid"] });

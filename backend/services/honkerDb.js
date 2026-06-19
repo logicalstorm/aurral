@@ -710,13 +710,47 @@ export function getHonkerQueueDepth(queueName) {
   return Number(row?.count) || 0;
 }
 
+function getHonkerQueueByName(queueName) {
+  switch (queueName) {
+    case "slskd-pipeline":
+      return getPipelineQueue();
+    case "discovery-refresh":
+      return getDiscoveryRefreshQueue();
+    case "discovery-playlist-build":
+      return getDiscoveryPlaylistBuildQueue();
+    case "discovery-recommendation-enrichment":
+      return getDiscoveryRecommendationEnrichmentQueue();
+    case "discovery-user-refresh":
+      return getDiscoveryUserRefreshQueue();
+    case "weekly-flow-operation":
+      return getWeeklyFlowOperationQueue();
+    case "playlist-retry":
+      return getPlaylistRetryQueue();
+    case "playlist-reserve-build":
+      return getPlaylistReserveBuildQueue();
+    case "playlist-mbid-enrichment":
+      return getPlaylistMbidEnrichmentQueue();
+    case "system-task":
+      return getSystemTaskQueue();
+    case "library-scan":
+      return getLibraryScanQueue();
+    case "image-prefetch":
+      return getImagePrefetchQueue();
+    case "_outbox:notifications":
+      return getNotificationOutbox().queue;
+    default:
+      return null;
+  }
+}
+
 export function getHonkerQueueNextClaimAt(queueName) {
   const safeQueue = String(queueName || "").trim();
   if (!safeQueue) return null;
-  const value = getHonkerDb().query(
-    "SELECT honker_queue_next_claim_at(?) AS nextClaimAt",
-    [safeQueue],
-  )[0]?.nextClaimAt;
+  const queue = getHonkerQueueByName(safeQueue);
+  const value =
+    queue && typeof queue._nextClaimAt === "function"
+      ? queue._nextClaimAt()
+      : null;
   const timestamp = Number(value);
   return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
 }
