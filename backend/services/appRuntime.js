@@ -150,6 +150,16 @@ export function startBackgroundWorkers({ logger = console } = {}) {
         error?.message || error,
       );
     });
+  import("./aurralHistoryService.js")
+    .then(({ syncProcessingActivityHistory }) =>
+      syncProcessingActivityHistory(),
+    )
+    .catch((error) => {
+      logger.warn?.(
+        "[AppRuntime] Failed to reconcile stuck activity history on startup:",
+        error?.message || error,
+      );
+    });
   enqueueHonkerStartupTasks();
   startWorkerSupervisor();
   return true;

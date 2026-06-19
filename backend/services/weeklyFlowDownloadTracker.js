@@ -941,6 +941,7 @@ export class WeeklyFlowDownloadTracker {
 
   failActiveJobsForPlaylist(playlistType, error = "Retry cycle paused") {
     let count = 0;
+    const failedJobs = [];
     for (const job of this.jobs.values()) {
       if (job.playlistType !== playlistType) continue;
       if (job.status !== "pending" && job.status !== "downloading") continue;
@@ -957,7 +958,17 @@ export class WeeklyFlowDownloadTracker {
       job.error = typeof error === "string" ? error : String(error || "");
       this._update(job);
       this._applyStatusDelta(job.playlistType, previousStatus, job.status);
+      failedJobs.push(job);
       count += 1;
+    }
+    if (failedJobs.length > 0) {
+      import("./aurralHistoryService.js")
+        .then(({ recordTrackJobFailed }) => {
+          for (const job of failedJobs) {
+            recordTrackJobFailed(job, job.error || error);
+          }
+        })
+        .catch(() => {});
     }
     return count;
   }

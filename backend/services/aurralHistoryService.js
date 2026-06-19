@@ -3,6 +3,8 @@ import { dbOps } from "../config/db-helpers.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const STALE_TRACK_JOB_MS = 15 * 60 * 1000;
+const STALE_AURRAL_JOB_MS = 60 * 60 * 1000;
 
 const KIND_SOURCE_MAP = {
   track_download: "slskd",
@@ -267,6 +269,182 @@ export const recordAlbumSearchFailed = ({
     href: buildArtistHref(artistMbid),
     metadata: { albumId, albumName: name, artistName: artist, artistMbid },
   });
+};
+
+const parseHonkerPayload = (value) => {
+  if (value && typeof value === "object") return value;
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
+const isHonkerQueueActive = async (queueName, predicate) => {
+  try {
+    const { getHonkerDb } = await import("./honkerDb.js");
+    const rows = getHonkerDb().query(
+      `
+        SELECT payload
+        FROM _honker_live
+        WHERE queue = ?
+          AND state IN ('pending', 'processing')
+      `,
+      [String(queueName || "").trim()],
+    );
+    for (const row of rows) {
+      const payload = parseHonkerPayload(row?.payload);
+      if (payload && predicate(payload)) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+};
+
+const isPipelineActiveForJob = async (jobId) =>
+  isHonkerQueueActive("slskd-pipeline", (payload) => payload?.jobId === jobId);
+
+const buildHistoryJobFromEntry = (entry) => ({
+  id: entry.metadata?.jobId || entry.id,
+  trackName: entry.metadata?.trackName || null,
+  artistName: entry.metadata?.artistName || null,
+  playlistId: entry.metadata?.playlistId || null,
+  playlistType: entry.metadata?.playlistId || null,
+  downloadSource: entry.metadata?.downloadSource || null,
+});
+
+export const syncTrackDownloadHistory = async () => {
+  const { downloadTracker } = await import("./weeklyFlowDownloadTracker.js");
+  const cutoff = Date.now() - MAX_AGE_MS;
+  const pendingEntries = dbOps
+    .getAurralHistory({ since: cutoff, limit: 300 })
+    .filter(
+      (entry) =>
+        entry.kind === "track_download" &&
+        (entry.status === "processing" || entry.status === "pending"),
+    );
+  if (!pendingEntries.length) return;
+
+  for (const entry of pendingEntries) {
+    const jobId = String(entry.metadata?.jobId || "").trim();
+    if (!jobId) {
+      if (Date.now() - Number(entry.createdAt || 0) >= STALE_TRACK_JOB_MS) {
+        recordTrackJobFailed(
+          buildHistoryJobFromEntry(entry),
+          "Download no longer active",
+        );
+      }
+      continue;
+    }
+
+    const job = downloadTracker.getJob(jobId);
+    if (!job) {
+      if (Date.now() - Number(entry.createdAt || 0) >= STALE_TRACK_JOB_MS) {
+        recordTrackJobFailed(
+          buildHistoryJobFromEntry(entry),
+          "Download no longer active",
+        );
+      }
+      continue;
+    }
+
+    if (job.status === "done") {
+      recordTrackJobCompleted(job);
+      continue;
+    }
+
+    if (job.status === "failed") {
+      recordTrackJobFailed(job, job.error || "Download failed");
+      continue;
+    }
+
+    const anchorTime = Math.max(
+      Number(job.startedAt || 0),
+      Number(job.createdAt || 0),
+      Number(entry.createdAt || 0),
+    );
+    if (!anchorTime || Date.now() - anchorTime < STALE_TRACK_JOB_MS) {
+      continue;
+    }
+
+    if (await isPipelineActiveForJob(jobId)) {
+      continue;
+    }
+
+    const message = "Download timed out";
+    downloadTracker.setFailed(jobId, message);
+    recordTrackJobFailed(job, message);
+  }
+};
+
+const syncDiscoveryRefreshHistory = async () => {
+  const cutoff = Date.now() - MAX_AGE_MS;
+  const pendingEntries = dbOps
+    .getAurralHistory({ since: cutoff, limit: 300 })
+    .filter(
+      (entry) =>
+        entry.kind === "discovery_refresh" && entry.status === "processing",
+    );
+  if (!pendingEntries.length) return;
+
+  const discoveryActive = await isHonkerQueueActive(
+    "discovery-refresh",
+    () => true,
+  );
+  if (discoveryActive) return;
+
+  for (const entry of pendingEntries) {
+    if (Date.now() - Number(entry.createdAt || 0) < STALE_AURRAL_JOB_MS) {
+      continue;
+    }
+    recordDiscoveryRefreshFailed("Discovery refresh timed out");
+  }
+};
+
+const syncFlowGenerationHistory = async () => {
+  const cutoff = Date.now() - MAX_AGE_MS;
+  const pendingEntries = dbOps
+    .getAurralHistory({ since: cutoff, limit: 300 })
+    .filter(
+      (entry) =>
+        entry.kind === "flow_generating" && entry.status === "processing",
+    );
+  if (!pendingEntries.length) return;
+
+  for (const entry of pendingEntries) {
+    const flowId = String(entry.metadata?.flowId || "").trim();
+    if (!flowId) continue;
+    if (Date.now() - Number(entry.createdAt || 0) < STALE_AURRAL_JOB_MS) {
+      continue;
+    }
+    const flowActive = await isHonkerQueueActive(
+      "weekly-flow-operation",
+      (payload) =>
+        String(payload?.flowId || payload?.playlistId || "").trim() === flowId,
+    );
+    if (flowActive) continue;
+    upsertAurralHistory({
+      referenceId: flowId,
+      kind: "flow_generating",
+      title: `Failed to generate playlist for ${resolvePlaylistName(flowId)}`,
+      subtitle: entry.subtitle || null,
+      status: "failed",
+      statusLabel: "Failed",
+      href: buildPlaylistHref(flowId),
+      metadata: entry.metadata,
+    });
+  }
+};
+
+export const syncProcessingActivityHistory = async (lidarrClient = null) => {
+  await syncTrackDownloadHistory();
+  await syncDiscoveryRefreshHistory();
+  await syncFlowGenerationHistory();
+  if (lidarrClient) {
+    await syncAlbumSearchHistory(lidarrClient);
+  }
 };
 
 export const syncAlbumSearchHistory = async (lidarrClient) => {
@@ -535,9 +713,7 @@ export const toHistoryRequestItem = (entry) => {
 };
 
 export const getAurralHistoryRequests = async (lidarrClient = null) => {
-  if (lidarrClient) {
-    await syncAlbumSearchHistory(lidarrClient);
-  }
+  await syncProcessingActivityHistory(lidarrClient);
   const cutoff = Date.now() - MAX_AGE_MS;
   const entries = dbOps.getAurralHistory({ since: cutoff, limit: 300 });
   return entries.map(toHistoryRequestItem);

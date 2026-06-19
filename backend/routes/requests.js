@@ -253,15 +253,20 @@ const buildLidarrRequests = async (lidarrClient) => {
       eventType !== "albumimportincomplete";
     const isStaleGrabbed =
       isGrabbed && !hasQueue && Date.now() - recordTime > STALE_GRABBED_MS;
+    const isActive =
+      hasQueue || (isGrabbed && !isStaleGrabbed);
+    if (!isActive && !isSuccessfulImport) {
+      if (!(isFailedImport || isFailedDownload || isStaleGrabbed)) {
+        continue;
+      }
+    }
     const status = hasQueue
       ? "processing"
       : isSuccessfulImport
         ? "available"
         : isFailedImport || isFailedDownload || isStaleGrabbed
           ? "failed"
-          : isGrabbed
-            ? "processing"
-            : "processing";
+          : "processing";
     const statusLabel =
       status === "available"
         ? "Complete"
