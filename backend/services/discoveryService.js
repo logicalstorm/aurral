@@ -107,6 +107,14 @@ const DISCOVERY_QUALITY_ENRICHED = "enriched";
 const DISCOVERY_NETWORK_CONCURRENCY = 6;
 const DISCOVERY_CANDIDATE_MULTIPLIER = 2.5;
 
+const getDiscoveryUserRefreshDelaySeconds = () => {
+  const parsed = Number(
+    process.env.AURRAL_DISCOVERY_USER_REFRESH_DELAY_SECONDS,
+  );
+  if (!Number.isFinite(parsed)) return 300;
+  return Math.max(30, Math.min(3600, Math.floor(parsed)));
+};
+
 export const getDiscoveryRecommendationsPerRefresh = () => {
   const settings = dbOps.getSettings();
   const parsed = parseInt(
@@ -779,50 +787,31 @@ const collectListeningHistoryRefreshProfiles = () => {
   return [...profiles.values()];
 };
 
-const refreshListeningHistoryUserCaches = async ({ onProgress } = {}) => {
+const enqueueListeningHistoryUserRefreshes = ({
+  reason = "global_refresh_completed",
+  delaySeconds = getDiscoveryUserRefreshDelaySeconds(),
+  staggerSeconds = 30,
+  onProgress,
+} = {}) => {
   const profiles = collectListeningHistoryRefreshProfiles();
-  if (profiles.length === 0) return;
+  if (profiles.length === 0) return 0;
 
-  let completed = 0;
-  for (const entry of profiles) {
-    try {
-      await updateUserDiscoveryCache(entry.profile, {
-        duringGlobalRefresh: true,
-        feedbackUserId: entry.feedbackUserId,
-      });
-    } catch (error) {
-      console.error(
-        `[Discovery] Per-user refresh failed for ${entry.profile.listenHistoryProvider}:${entry.profile.listenHistoryUsername}: ${error.message}`,
-      );
-    }
-    completed += 1;
-    onProgress?.({ completed, total: profiles.length });
-  }
-};
-
-const flushPendingUserDiscoveryRefreshes = async () => {
-  if (pendingUserDiscoveryProfiles.size === 0) return;
-  const entries = [...pendingUserDiscoveryProfiles.values()].map((entry) =>
-    entry?.profile
-      ? entry
-      : {
-          profile: entry,
-          feedbackUserId: null,
-        },
-  );
-  pendingUserDiscoveryProfiles.clear();
-  for (const entry of entries) {
-    try {
-      await updateUserDiscoveryCache(entry.profile, {
-        duringGlobalRefresh: true,
-        feedbackUserId: entry.feedbackUserId,
-      });
-    } catch (error) {
-      console.error(
-        `[Discovery] Deferred per-user refresh failed for ${entry.profile.listenHistoryProvider}:${entry.profile.listenHistoryUsername}: ${error.message}`,
-      );
-    }
-  }
+  profiles.forEach((entry, index) => {
+    enqueueDiscoveryUserRefreshJob(
+      {
+        listenHistoryProfile: entry.profile,
+        feedbackUserId: entry.feedbackUserId || null,
+        requestedAt: Date.now(),
+        reason,
+      },
+      {
+        delaySeconds: delaySeconds + index * Math.max(0, staggerSeconds),
+        priority: -10,
+      },
+    );
+    onProgress?.({ completed: index + 1, total: profiles.length });
+  });
+  return profiles.length;
 };
 
 export const requestUserDiscoveryRefresh = (
@@ -846,7 +835,7 @@ export const requestUserDiscoveryRefresh = (
         requestedAt: Date.now(),
         reason: "global_refresh_in_progress",
       },
-      { delaySeconds: 300 },
+      { delaySeconds: getDiscoveryUserRefreshDelaySeconds(), priority: -10 },
     );
     return Promise.resolve({
       enqueued: true,
@@ -2419,11 +2408,16 @@ export const updateDiscoveryCache = async (options = {}) => {
           ? "Initial discovery recommendations ready"
           : "Discovery refresh completed",
       });
-      refreshListeningHistoryUserCaches().catch((error) => {
-        console.error(
-          `[Discovery] Background per-user refresh failed: ${error.message}`,
-        );
+      const queuedUserRefreshes = enqueueListeningHistoryUserRefreshes({
+        reason: "global_refresh_completed",
       });
+      if (queuedUserRefreshes > 0) {
+        console.log(
+          `[Discovery] Queued ${queuedUserRefreshes} per-user refresh${
+            queuedUserRefreshes === 1 ? "" : "es"
+          } after global refresh.`,
+        );
+      }
     } else {
       if (!enrichmentJobId) {
         scheduleDiscoverPlaylistBuild({
@@ -2487,11 +2481,16 @@ export const updateDiscoveryCache = async (options = {}) => {
       .catch(() => {});
   } finally {
     if (pendingUserDiscoveryProfiles.size > 0) {
-      flushPendingUserDiscoveryRefreshes().catch((error) => {
-        console.error(
-          `[Discovery] Failed to flush deferred per-user refreshes: ${error.message}`,
-        );
+      const queuedUserRefreshes = enqueueListeningHistoryUserRefreshes({
+        reason: "global_refresh_finished",
       });
+      if (queuedUserRefreshes > 0) {
+        console.log(
+          `[Discovery] Queued ${queuedUserRefreshes} deferred per-user refresh${
+            queuedUserRefreshes === 1 ? "" : "es"
+          }.`,
+        );
+      }
     }
     discoveryCache.isUpdating = false;
     clearDiscoveryUpdateProgress();

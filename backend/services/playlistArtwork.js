@@ -1,4 +1,4 @@
-import sharp from "sharp";
+import sharp from "./sharpResourcePolicy.js";
 
 const TAG_COLORS = [
   "#845336",

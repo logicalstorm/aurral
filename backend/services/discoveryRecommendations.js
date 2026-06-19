@@ -696,6 +696,7 @@ export const rerankRecommendations = (
   options = {},
 ) => {
   const mode = normalizeDiscoveryMode(options.discoveryMode);
+  const multipliers = DISCOVERY_MODE_MULTIPLIERS[mode];
   const input = (Array.isArray(recommendations) ? recommendations : [])
     .map((entry) => ({
       ...entry,
@@ -725,11 +726,54 @@ export const rerankRecommendations = (
           : entry?.sourceType
             ? [entry.sourceType]
             : [],
-      reasonCodes: Array.isArray(entry?.reasonCodes) ? [...entry.reasonCodes] : [],
+      reasonCodes: Array.isArray(entry?.reasonCodes)
+        ? [...entry.reasonCodes]
+        : [],
       discoveryTier: entry?.discoveryTier || mode,
       discoveryDepth: Number(entry?.discoveryDepth || 1) || 1,
       confidence: Number(entry?.confidence || 0) || 0,
     }))
+    .map((entry) => {
+      const candidateTags = [
+        ...new Set(
+          (Array.isArray(entry.matchedTags)
+            ? entry.matchedTags
+            : entry.tags || []
+          )
+            .map(normalizeText)
+            .filter(Boolean),
+        ),
+      ];
+      const candidateSeeds = [
+        ...new Set(
+          (Array.isArray(entry.supportingSeeds) ? entry.supportingSeeds : [])
+            .map((seed) => normalizeText(seed?.artistName))
+            .filter(Boolean),
+        ),
+      ];
+      const { adjustment, hidden } = feedbackBoostForCandidate(
+        entry,
+        options.feedback || [],
+      );
+      const baseScore =
+        Number(entry.scoreSimilarity || 0) * multipliers.similarity +
+        Number(entry.scoreTagAffinity || 0) * multipliers.tagAffinity +
+        Number(entry.scoreSeedCoverage || 0) * multipliers.seedCoverage +
+        Number(entry.scoreNovelty || 0) * multipliers.novelty -
+        Number(entry.scorePopularityPenalty || 0) *
+          multipliers.popularityPenalty +
+        Number(entry.scoreFreshnessBoost || 0) -
+        Number(entry.scoreAgingPenalty || 0);
+      return {
+        ...entry,
+        __rerankBaseScore: baseScore,
+        __rerankFeedbackAdjustment: adjustment,
+        __rerankHidden: hidden,
+        __rerankTags: candidateTags,
+        __rerankSeeds: candidateSeeds,
+      };
+    })
+    .filter((entry) => !entry.__rerankHidden)
     .sort((left, right) => {
       const leftScore = Number(left.scoreTotal || left.score || 0);
       const rightScore = Number(right.scoreTotal || right.score || 0);
@@ -742,32 +786,73 @@ export const rerankRecommendations = (
 
   const selected = [];
   const pool = [...input];
+  const selectedTagCounts = new Map();
+  const selectedSeedCounts = new Map();
+  const scoreCandidate = (candidate) => {
+    let diversityPenalty = 0;
+    for (const tag of candidate.__rerankTags) {
+      diversityPenalty += (selectedTagCounts.get(tag) || 0) * 1.8;
+    }
+    for (const seed of candidate.__rerankSeeds) {
+      diversityPenalty += (selectedSeedCounts.get(seed) || 0) * 2.6;
+    }
+    const scoreTotal = Math.round(
+      candidate.__rerankBaseScore -
+        diversityPenalty * multipliers.diversityPenalty +
+        candidate.__rerankFeedbackAdjustment,
+    );
+    return {
+      ...candidate,
+      scoreDiversityPenalty: Math.round(diversityPenalty),
+      scoreTotal,
+      score: scoreTotal,
+      hiddenByFeedback: false,
+    };
+  };
+  const stripRerankMetadata = (candidate) => {
+    const {
+      __rerankBaseScore,
+      __rerankFeedbackAdjustment,
+      __rerankHidden,
+      __rerankTags,
+      __rerankSeeds,
+      ...clean
+    } = candidate;
+    return clean;
+  };
+  const addSelectedSignals = (candidate) => {
+    for (const tag of candidate.__rerankTags) {
+      selectedTagCounts.set(tag, (selectedTagCounts.get(tag) || 0) + 1);
+    }
+    for (const seed of candidate.__rerankSeeds) {
+      selectedSeedCounts.set(seed, (selectedSeedCounts.get(seed) || 0) + 1);
+    }
+  };
 
-  while (pool.length > 0 && selected.length < Math.max(1, Number(limit) || 100)) {
+  while (
+    pool.length > 0 &&
+    selected.length < Math.max(1, Number(limit) || 100)
+  ) {
     let bestIndex = 0;
-    let bestCandidate = rerankSingleRecommendation(pool[0], selected, {
-      discoveryMode: mode,
-      feedback: options.feedback,
-    });
+    let bestCandidate = scoreCandidate(pool[0]);
 
     for (let index = 1; index < pool.length; index += 1) {
-      const candidate = rerankSingleRecommendation(pool[index], selected, {
-        discoveryMode: mode,
-        feedback: options.feedback,
-      });
-      if (candidate.hiddenByFeedback) continue;
-      if (bestCandidate.hiddenByFeedback || candidate.scoreTotal > bestCandidate.scoreTotal) {
+      const candidate = scoreCandidate(pool[index]);
+      if (
+        bestCandidate.hiddenByFeedback ||
+        candidate.scoreTotal > bestCandidate.scoreTotal
+      ) {
         bestCandidate = candidate;
         bestIndex = index;
       }
     }
 
     pool.splice(bestIndex, 1);
-    if (bestCandidate.hiddenByFeedback) continue;
+    addSelectedSignals(bestCandidate);
     selected.push(bestCandidate);
   }
 
-  return selected;
+  return selected.map(stripRerankMetadata);
 };
 
 export const filterRecommendationsForServe = (

@@ -72,6 +72,12 @@ export async function generateDiscoverPlaylistArtwork(playlist, options = {}) {
   const style = options.style || getPlaylistArtworkStyle();
   await ensureDiscoverArtworkDirectory();
   const outputPath = getDiscoverArtworkFilePath(presetId, style);
+  if (options.force !== true) {
+    try {
+      await fs.access(outputPath);
+      return outputPath;
+    } catch {}
+  }
   return writeGeneratedPlaylistArtwork({
     outputPath,
     title,

@@ -9,7 +9,15 @@ import {
 } from "../config/discoverPlaylistPresets.js";
 
 const FOCUS_PLAYLIST_SIZE = 20;
-const PLAYLIST_BUILD_CONCURRENCY = 3;
+const PLAYLIST_BUILD_CONCURRENCY = Math.max(
+  1,
+  Math.min(
+    3,
+    Math.floor(
+      Number(process.env.AURRAL_DISCOVERY_PLAYLIST_BUILD_CONCURRENCY) || 1,
+    ),
+  ),
+);
 const FOCUS_MIX = { discover: 0, mix: 0, trending: 0, focus: 100 };
 const LISTENING_HISTORY_PLAYLIST_ID = "focus-listening-history";
 
@@ -522,11 +530,6 @@ export async function generateDiscoverPlaylists({
     libraryArtistKeys,
   };
   const playlistPresets = [...DISCOVER_PLAYLIST_PRESETS, ...focusCandidates];
-  const releaseRadarPromise = buildReleaseRadarPlaylist({
-    listenHistoryProfile,
-    basedOn,
-    libraryArtists,
-  });
   const { playlists: presetPlaylists, totalSteps } =
     await buildPlaylistsFromPresets(
       playlistPresets,
@@ -536,7 +539,11 @@ export async function generateDiscoverPlaylists({
 
   const playlists = [...presetPlaylists];
 
-  const releaseRadarPlaylist = await releaseRadarPromise;
+  const releaseRadarPlaylist = await buildReleaseRadarPlaylist({
+    listenHistoryProfile,
+    basedOn,
+    libraryArtists,
+  });
   if (releaseRadarPlaylist) {
     playlists.push(releaseRadarPlaylist);
   }

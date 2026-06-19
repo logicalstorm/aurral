@@ -1,5 +1,5 @@
 import axios from "axios";
-import sharp from "sharp";
+import sharp from "./sharpResourcePolicy.js";
 import { FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS } from "../config/discoverPlaylistPresets.js";
 
 const ARTWORK_SIZE = 1200;
