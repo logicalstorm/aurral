@@ -97,6 +97,8 @@ app.use(
           "https://ticketmaster.com",
           "https://*.ticketmaster.com",
           "https://caa.lkly.net",
+          "https://imagecache.lidarr.audio",
+          "https://*.lidarr.audio",
           "https://archive.org",
           "https://*.archive.org",
           "https://*.last.fm",
