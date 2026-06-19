@@ -4,6 +4,7 @@ import { useToast } from "../contexts/ToastContext";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useAccountSettings } from "./Settings/hooks/useAccountSettings";
 import { SettingsAccountTab } from "./Settings/components/SettingsAccountTab";
+import "./Settings/settingsArr.css";
 
 function ProfilePage() {
   useDocumentTitle("Profile");
@@ -23,7 +24,7 @@ function ProfilePage() {
         {!account.loading && (
           <FlipSaveButton
             saving={account.saving}
-            disabled={!account.hasUnsavedChanges}
+            disabled={!account.canSave}
             onClick={account.handleSave}
           />
         )}
@@ -45,6 +46,7 @@ function ProfilePage() {
         lidarrQualityProfileId={account.lidarrQualityProfileId}
         setLidarrQualityProfileId={account.setLidarrQualityProfileId}
         hasUnsavedChanges={account.hasUnsavedChanges}
+        canSave={account.canSave}
         loading={account.loading}
         saving={account.saving}
         handleSave={account.handleSave}

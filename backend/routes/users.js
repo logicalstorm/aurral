@@ -53,11 +53,9 @@ const buildListenHistoryUpdates = (body, existing) => {
       : existing.listenHistoryUrl;
     const trimmedUrl = normalizeListenHistoryUrl(rawUrl);
     if (!trimmedUrl) {
-      return {
-        listenHistoryProvider: "koito",
-        listenHistoryUrl: null,
-        listenHistoryUsername: null,
-      };
+      const error = new Error("Koito URL is required");
+      error.statusCode = 400;
+      throw error;
     }
     const urlValidation = validateExternalUrl(trimmedUrl);
     if (!urlValidation.valid) {

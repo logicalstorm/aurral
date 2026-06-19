@@ -20,6 +20,7 @@ export function SettingsAccountTab({
   lidarrQualityProfileId,
   setLidarrQualityProfileId,
   hasUnsavedChanges,
+  canSave = hasUnsavedChanges,
   loading,
   saving,
   handleSave,
@@ -76,7 +77,7 @@ export function SettingsAccountTab({
           <h2 className="settings-page__panel-title">Profile</h2>
           <FlipSaveButton
             saving={saving}
-            disabled={!hasUnsavedChanges}
+            disabled={!canSave}
             onClick={handleSave}
           />
         </div>
@@ -130,8 +131,9 @@ export function SettingsAccountTab({
                 >
                   Koito URL
                 </label>
-                <SettingsInput type="url"
-
+                <SettingsInput
+                  type="url"
+                  required
                   placeholder="https://koito.example.com:4110"
                   autoComplete="off"
                   value={listenHistoryUrl}

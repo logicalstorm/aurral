@@ -34,6 +34,12 @@ export function useAccountSettings(authUser, showSuccess, showError) {
     lidarrRootFolderPath !== savedLidarrRootFolderPath ||
     lidarrQualityProfileId !== savedLidarrQualityProfileId;
 
+  const isListenHistoryValid =
+    listenHistoryProvider !== "koito" ||
+    !!listenHistoryUrl.trim().replace(/\/+$/, "");
+
+  const canSave = hasUnsavedChanges && isListenHistoryValid;
+
   const fetchListeningHistory = useCallback(async () => {
     try {
       setLoading(true);
@@ -82,10 +88,14 @@ export function useAccountSettings(authUser, showSuccess, showError) {
 
   const handleSave = useCallback(async () => {
     if (!authUser?.id) return;
+    const trimmedUsername = listenHistoryUsername.trim();
+    const trimmedUrl = listenHistoryUrl.trim().replace(/\/+$/, "");
+    if (listenHistoryProvider === "koito" && !trimmedUrl) {
+      showError("Koito URL is required");
+      return;
+    }
     try {
       setSaving(true);
-      const trimmedUsername = listenHistoryUsername.trim();
-      const trimmedUrl = listenHistoryUrl.trim().replace(/\/+$/, "");
       const lidarrData = await Promise.all([
         updateMyListeningHistory(authUser.id, {
           listenHistoryProvider,
@@ -157,6 +167,7 @@ export function useAccountSettings(authUser, showSuccess, showError) {
     lidarrQualityProfileId,
     setLidarrQualityProfileId,
     hasUnsavedChanges,
+    canSave,
     loading,
     saving,
     handleSave,
