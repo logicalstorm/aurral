@@ -27,6 +27,8 @@ import {
 } from "./settingsTabsConfig";
 import "./settingsArr.css";
 
+const SETTINGS_TABS_WITHOUT_SAVE = new Set(["system", "tasks"]);
+
 function SettingsPage() {
   const { showSuccess, showError, showInfo } = useToast();
   const { user: authUser } = useAuth();
@@ -312,12 +314,13 @@ function SettingsPage() {
       />
 
       <div className="settings-arr">
-        <SettingsArrToolbar
-          hasPendingChanges={data.hasUnsavedChanges}
-          isSaving={data.saving}
-          onSave={data.handleSaveSettings}
-          showSave={tabs.activeTab !== "tasks"}
-        />
+        {SETTINGS_TABS_WITHOUT_SAVE.has(tabs.activeTab) ? null : (
+          <SettingsArrToolbar
+            hasPendingChanges={data.hasUnsavedChanges}
+            isSaving={data.saving}
+            onSave={data.handleSaveSettings}
+          />
+        )}
 
         <div className="settings-arr__body">
           <div className="settings-arr__content">
