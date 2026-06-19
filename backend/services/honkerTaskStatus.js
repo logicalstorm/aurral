@@ -2,6 +2,7 @@ import { db } from "../config/db-sqlite.js";
 import { SCHEDULED_SYSTEM_TASKS } from "./honkerDb.js";
 
 const RUN_LEDGER_MAX_AGE_MS = 60 * 60 * 1000;
+const STALE_RUNNING_MS = 60 * 60 * 1000;
 const LIVE_JOB_LIMIT = 500;
 const DEAD_JOB_LIMIT = 50;
 
@@ -484,7 +485,7 @@ function describeHonkerTaskDetail(queue, payloadValue) {
   }
   if (safeQueue === "discovery-recommendation-enrichment") {
     return payload?.discoveryRunId
-      ? `Finishes recommendation scoring for run ${formatPayloadLabel(payload.discoveryRunId)}.`
+      ? "Finishes scoring and ranking for the current discovery refresh."
       : queueDescription(safeQueue);
   }
   if (safeQueue === "discovery-user-refresh") {
@@ -517,6 +518,10 @@ function summarizePayload(queue, payloadValue) {
 
   if (queue === "discovery-refresh" && payload.reason) {
     return "";
+  }
+
+  if (queue === "discovery-recommendation-enrichment" && payload.discoveryRunId) {
+    return `Run: ${String(payload.discoveryRunId)}`;
   }
 
   const parts = [];
@@ -612,7 +617,77 @@ function normalizeRunRow(row) {
   };
 }
 
-function normalizeLiveJobRow(row) {
+function readRunningStartsByJobId() {
+  ensureRunSchema();
+  const rows = safeQuery(`
+    SELECT job_id, queue, started_at
+    FROM honker_task_runs
+    WHERE status = 'running'
+  `);
+  const map = new Map();
+  for (const row of rows) {
+    map.set(`${row.queue}:${row.job_id}`, Number(row.started_at));
+  }
+  return map;
+}
+
+function enrichQueueRow(row) {
+  let runningForMs = null;
+  let isStale = false;
+  if (row.status === "running") {
+    const startedMs =
+      Date.parse(row.startedAt || "") || Date.parse(row.queuedAt || "");
+    if (Number.isFinite(startedMs) && startedMs > 0) {
+      runningForMs = Math.max(0, Date.now() - startedMs);
+      isStale = runningForMs > STALE_RUNNING_MS;
+    }
+  }
+  return {
+    ...row,
+    runningForMs,
+    isStale,
+  };
+}
+
+function buildTaskSummary(queueRows, workerRows) {
+  let activeCount = 0;
+  let staleCount = 0;
+  let failedCount = 0;
+  let completedCount = 0;
+
+  for (const row of queueRows) {
+    if (isActiveQueueRow(row)) {
+      activeCount += 1;
+    }
+    if (row.isStale) {
+      staleCount += 1;
+    }
+    if (row.status === "failed") {
+      failedCount += 1;
+    }
+    if (row.status === "completed") {
+      completedCount += Number(row.duplicateCount || 1);
+    }
+  }
+
+  let workersFailedCount = 0;
+  for (const worker of workerRows) {
+    if (Number(worker.failed || 0) > 0) {
+      workersFailedCount += 1;
+    }
+  }
+
+  return {
+    healthy: staleCount === 0 && failedCount === 0 && workersFailedCount === 0,
+    activeCount,
+    staleCount,
+    failedCount,
+    workersFailedCount,
+    completedCount,
+  };
+}
+
+function normalizeLiveJobRow(row, runningStartsByJobId = new Map()) {
   const payload = parsePayload(row.payload);
   const currentTime = nowUnix();
   const state = String(row.state || "pending");
@@ -622,6 +697,10 @@ function normalizeLiveJobRow(row) {
       : Number(row.run_at) > currentTime
         ? "scheduled"
         : "queued";
+  const startedUnix =
+    state === "processing"
+      ? runningStartsByJobId.get(`${row.queue}:${row.id}`)
+      : null;
 
   return {
     source: "live",
@@ -640,7 +719,7 @@ function normalizeLiveJobRow(row) {
     priority: row.priority,
     queuedAt: unixToIso(row.created_at),
     runAt: unixToIso(row.run_at),
-    startedAt: null,
+    startedAt: startedUnix ? unixToIso(startedUnix) : null,
     endedAt: null,
     durationMs: null,
     error: null,
@@ -934,23 +1013,31 @@ function normalizeScheduledRows(rows, latestRunsByTask) {
   });
 }
 
-function normalizeQueueRows(liveRows, deadRows, runRows) {
-  const normalizedLive = groupQueueRows(liveRows.map(normalizeLiveJobRow));
+function normalizeQueueRows(liveRows, deadRows, runRows, runningStartsByJobId) {
+  const normalizedLive = groupQueueRows(
+    liveRows.map((row) => normalizeLiveJobRow(row, runningStartsByJobId)),
+  );
+  const liveJobKeys = new Set(
+    liveRows.map((row) => `${row.queue}:${row.id}`),
+  );
   const runJobKeys = new Set();
-  const normalizedRuns = runRows.map((row) => {
-    runJobKeys.add(`${row.queue}:${row.job_id}`);
-    const run = normalizeRunRow(row);
-    return {
-      ...run,
-      source: "run",
-      id: `run-${run.id}`,
-      maxAttempts: null,
-      priority: null,
-      state: run.status,
-      sortAt: Date.parse(run.endedAt || run.startedAt || run.queuedAt || 0) / 1000,
-      duplicateCount: 1,
-    };
-  });
+  const normalizedRuns = runRows
+    .filter((row) => !liveJobKeys.has(`${row.queue}:${row.job_id}`))
+    .map((row) => {
+      runJobKeys.add(`${row.queue}:${row.job_id}`);
+      const run = normalizeRunRow(row);
+      return {
+        ...run,
+        source: "run",
+        id: `run-${run.id}`,
+        maxAttempts: null,
+        priority: null,
+        state: run.status,
+        sortAt:
+          Date.parse(run.endedAt || run.startedAt || run.queuedAt || 0) / 1000,
+        duplicateCount: 1,
+      };
+    });
   const normalizedDead = deadRows
     .filter((row) => !runJobKeys.has(`${row.queue}:${row.id}`))
     .map(normalizeDeadJobRow);
@@ -965,7 +1052,8 @@ function normalizeQueueRows(liveRows, deadRows, runRows) {
       }
       return Number(b.sortAt || 0) - Number(a.sortAt || 0);
     })
-    .filter(isWithinTaskHistoryWindow);
+    .filter(isWithinTaskHistoryWindow)
+    .map(enrichQueueRow);
 }
 
 function shouldGroupQueueRow(row) {
@@ -1080,6 +1168,109 @@ export function recordHonkerTaskRunFinished(runId, status, error = null) {
   } catch {}
 }
 
+export async function clearStaleHonkerJobs() {
+  ensureRunSchema();
+  const { sweepAllHonkerQueues, getHonkerDb, getHonkerQueueByName } =
+    await import("./honkerDb.js");
+  const honkerDb = getHonkerDb();
+  const now = nowUnix();
+  const staleCutoff = now - Math.floor(STALE_RUNNING_MS / 1000);
+  const clearedReason = "Cleared stuck background job";
+
+  let swept = sweepAllHonkerQueues();
+  let cleared = 0;
+  const errors = [];
+
+  const staleRows = honkerDb.query(
+    `
+      SELECT live.id, live.queue, live.worker_id, live.state, live.created_at,
+             runs.id AS run_id, runs.started_at
+      FROM _honker_live live
+      LEFT JOIN honker_task_runs runs
+        ON runs.job_id = live.id
+       AND runs.queue = live.queue
+       AND runs.status = 'running'
+      WHERE live.state = 'processing'
+        AND COALESCE(runs.started_at, live.created_at) < ?
+    `,
+    [staleCutoff],
+  );
+
+  for (const row of staleRows) {
+    try {
+      const queue = getHonkerQueueByName(row.queue);
+      if (queue) {
+        honkerDb.query(`UPDATE _honker_live SET claim_expires_at = ? WHERE id = ?`, [
+          now - 1,
+          row.id,
+        ]);
+        swept += Number(queue.sweepExpired()) || 0;
+      }
+
+      const stillLive = honkerDb.query(
+        `SELECT id FROM _honker_live WHERE id = ? LIMIT 1`,
+        [row.id],
+      );
+      if (stillLive.length > 0) {
+        const tx = honkerDb.transaction();
+        try {
+          tx.execute("DELETE FROM _honker_live WHERE id = ?", [row.id]);
+          tx.commit();
+        } catch (error) {
+          try {
+            tx.rollback();
+          } catch {}
+          throw error;
+        }
+      }
+
+      if (row.run_id) {
+        recordHonkerTaskRunFinished(
+          Number(row.run_id),
+          "failed",
+          clearedReason,
+        );
+      }
+      cleared += 1;
+    } catch (error) {
+      errors.push({
+        jobId: row.id,
+        queue: row.queue,
+        message: error?.message || String(error),
+      });
+    }
+  }
+
+  const orphanRuns = honkerDb.query(
+    `
+      SELECT runs.id
+      FROM honker_task_runs runs
+      LEFT JOIN _honker_live live
+        ON live.id = runs.job_id
+       AND live.queue = runs.queue
+      WHERE runs.status = 'running'
+        AND live.id IS NULL
+        AND runs.started_at < ?
+    `,
+    [staleCutoff],
+  );
+
+  for (const run of orphanRuns) {
+    try {
+      recordHonkerTaskRunFinished(Number(run.id), "failed", clearedReason);
+      cleared += 1;
+    } catch (error) {
+      errors.push({
+        jobId: null,
+        queue: null,
+        message: error?.message || String(error),
+      });
+    }
+  }
+
+  return { swept, cleared, errors };
+}
+
 export async function getHonkerTaskStatus() {
   ensureRunSchema();
   await pruneExpiredRuns();
@@ -1088,13 +1279,22 @@ export async function getHonkerTaskStatus() {
   const liveRows = readLiveJobs();
   const deadRows = readDeadJobs();
   const runRows = readRecentRuns();
+  const runningStartsByJobId = readRunningStartsByJobId();
   const queueStats = readQueueStats(liveRows);
   const workerStatuses = await readWorkerStatuses();
+  const workers = normalizeWorkerRows(workerStatuses, queueStats);
+  const queue = normalizeQueueRows(
+    liveRows,
+    deadRows,
+    runRows,
+    runningStartsByJobId,
+  );
 
   return {
     timestamp: new Date().toISOString(),
+    summary: buildTaskSummary(queue, workers),
     scheduled: normalizeScheduledRows(scheduledRows, latestRunsByTask),
-    workers: normalizeWorkerRows(workerStatuses, queueStats),
-    queue: normalizeQueueRows(liveRows, deadRows, runRows),
+    workers,
+    queue,
   };
 }

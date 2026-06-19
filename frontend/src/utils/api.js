@@ -795,6 +795,9 @@ export const getStorageHealth = ({ force = false } = {}) =>
 
 export const getSettingsTasks = () => getData("/settings/tasks");
 
+export const clearSettingsStaleTasks = () =>
+  postData("/settings/tasks/clear-stale");
+
 export const testLidarrLibraryAccessOnboarding = (url, apiKey) =>
   getData("/onboarding/lidarr/test-library-access", {
     params: lidarrCredentialParams(url, apiKey),

@@ -710,7 +710,35 @@ export function getHonkerQueueDepth(queueName) {
   return Number(row?.count) || 0;
 }
 
-function getHonkerQueueByName(queueName) {
+export const HONKER_QUEUE_NAMES = [
+  "system-task",
+  "weekly-flow-operation",
+  "slskd-pipeline",
+  "playlist-retry",
+  "playlist-reserve-build",
+  "playlist-mbid-enrichment",
+  "library-scan",
+  "discovery-refresh",
+  "discovery-playlist-build",
+  "discovery-recommendation-enrichment",
+  "discovery-user-refresh",
+  "image-prefetch",
+  "_outbox:notifications",
+];
+
+export function sweepAllHonkerQueues() {
+  let swept = 0;
+  for (const queueName of HONKER_QUEUE_NAMES) {
+    const queue = getHonkerQueueByName(queueName);
+    if (!queue) continue;
+    try {
+      swept += Number(queue.sweepExpired()) || 0;
+    } catch {}
+  }
+  return swept;
+}
+
+export function getHonkerQueueByName(queueName) {
   switch (queueName) {
     case "slskd-pipeline":
       return getPipelineQueue();

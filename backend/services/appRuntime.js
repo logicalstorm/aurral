@@ -135,6 +135,21 @@ export function startBackgroundWorkers({ logger = console } = {}) {
   }
   backgroundWorkersStarted = true;
   ensurePlaylistFilesystemLayout({ logger });
+  import("./honkerTaskStatus.js")
+    .then(({ clearStaleHonkerJobs }) => clearStaleHonkerJobs())
+    .then((result) => {
+      if (Number(result?.cleared || 0) > 0) {
+        logger.info?.(
+          `[AppRuntime] Cleared ${result.cleared} stuck background job(s) on startup`,
+        );
+      }
+    })
+    .catch((error) => {
+      logger.warn?.(
+        "[AppRuntime] Failed to clear stuck background jobs on startup:",
+        error?.message || error,
+      );
+    });
   enqueueHonkerStartupTasks();
   startWorkerSupervisor();
   return true;

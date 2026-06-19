@@ -1,13 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  AlertCircle,
-  Check,
-  Clock,
-  Loader2,
-  RefreshCw,
-  XCircle,
-} from "lucide-react";
-import { getSettingsTasks } from "../../../utils/api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, Check, Clock, Loader2, XCircle } from "lucide-react";
+import { getSettingsTasks, clearSettingsStaleTasks } from "../../../utils/api";
 import { SettingsArrFieldSet } from "./arr/SettingsArrLayout";
 
 const POLL_INTERVAL_MS = 5000;
@@ -21,36 +14,43 @@ const STATUS_META = {
     label: "Completed",
     tone: "ok",
     icon: Check,
+    title: null,
   },
   failed: {
     label: "Failed",
     tone: "danger",
     icon: XCircle,
+    title: null,
   },
   running: {
     label: "Running",
     tone: "active",
     icon: Loader2,
+    title: null,
   },
   queued: {
     label: "Queued",
     tone: "queued",
     icon: Clock,
+    title: null,
   },
   scheduled: {
     label: "Scheduled",
     tone: "queued",
     icon: Clock,
+    title: null,
   },
   idle: {
     label: "Idle",
     tone: "muted",
     icon: Check,
+    title: "Processor is loaded and waiting for work",
   },
   not_loaded: {
     label: "Standby",
     tone: "muted",
     icon: AlertCircle,
+    title: "Processor is stopped until new work arrives",
   },
 };
 
@@ -83,6 +83,7 @@ function formatDuration(ms) {
   if (ms == null || ms === "") return "—";
   const value = Number(ms);
   if (!Number.isFinite(value) || value < 0) return "—";
+  if (value < 1000) return "<1s";
   const totalSeconds = Math.floor(value / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -97,15 +98,32 @@ function formatCount(value) {
   return Number.isFinite(count) ? count : 0;
 }
 
+function isFutureRunAt(task) {
+  if (task.status !== "scheduled") return false;
+  const runAt = parseDate(task.runAt);
+  return runAt ? runAt.getTime() > Date.now() : false;
+}
+
+function formatQueueDuration(task) {
+  if (task.status === "running") {
+    return formatDuration(task.runningForMs);
+  }
+  return formatDuration(task.durationMs);
+}
+
 function StatusBadge({ status }) {
   const meta = STATUS_META[status] || {
     label: status || "Unknown",
     tone: "muted",
     icon: AlertCircle,
+    title: null,
   };
   const Icon = meta.icon;
   return (
-    <span className={`arr-task-status arr-task-status--${meta.tone}`}>
+    <span
+      className={`arr-task-status arr-task-status--${meta.tone}`}
+      title={meta.title || undefined}
+    >
       <Icon
         className={`arr-task-status__icon${
           status === "running" ? " animate-spin" : ""
@@ -130,6 +148,84 @@ function LoadingRows({ colSpan }) {
     <tr className="arr-table__empty-row">
       <td colSpan={colSpan}>Loading task data...</td>
     </tr>
+  );
+}
+
+function TasksHealthSummary({
+  summary,
+  loading,
+  clearing = false,
+  onClearStale,
+}) {
+  if (loading || !summary) {
+    return (
+      <div className="arr-info arr-info--tasks">
+        Loading background task status...
+      </div>
+    );
+  }
+
+  const {
+    healthy,
+    activeCount,
+    staleCount,
+    failedCount,
+    workersFailedCount,
+    completedCount,
+  } = summary;
+  const needsAttention = !healthy;
+
+  return (
+    <div
+      className={`arr-info arr-info--tasks${
+        healthy ? "" : " arr-info--tasks-warning"
+      }`}
+    >
+      {healthy ? (
+        <p className="arr-info__lead">
+          Background tasks are healthy.
+          {completedCount > 0
+            ? ` ${completedCount} job${completedCount === 1 ? "" : "s"} completed in the last hour.`
+            : ""}
+        </p>
+      ) : (
+        <>
+          <p className="arr-info__lead">
+            {staleCount > 0
+              ? `${staleCount} job${staleCount === 1 ? "" : "s"} running longer than expected. `
+              : ""}
+            {failedCount > 0
+              ? `${failedCount} failed job${failedCount === 1 ? "" : "s"} in the last hour. `
+              : ""}
+            {workersFailedCount > 0
+              ? `${workersFailedCount} worker${workersFailedCount === 1 ? "" : "s"} reported failures. `
+              : ""}
+            {activeCount > 0
+              ? `${activeCount} active job${activeCount === 1 ? "" : "s"} in progress.`
+              : ""}
+          </p>
+          {staleCount > 0 ? (
+            <p className="arr-info__help">
+              These are usually leftover job records from an earlier run, not
+              active workers. Clear them to reset the queue. Aurral will
+              re-enqueue normal startup work if needed.
+            </p>
+          ) : null}
+        </>
+      )}
+      {needsAttention && staleCount > 0 && onClearStale ? (
+        <div className="arr-info__actions">
+          <button
+            type="button"
+            className="arr-btn arr-btn--primary"
+            onClick={onClearStale}
+            disabled={clearing}
+          >
+            {clearing ? "Clearing stuck jobs…" : "Clear stuck jobs"}
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -183,62 +279,78 @@ function ScheduledTable({ scheduled = [], loading = false }) {
   );
 }
 
-function WorkersTable({ workers = [], loading = false }) {
+function isIdleWorker(worker) {
+  return (
+    worker.status === "not_loaded" &&
+    formatCount(worker.processing) === 0 &&
+    formatCount(worker.queued) === 0 &&
+    formatCount(worker.scheduled) === 0 &&
+    formatCount(worker.failed) === 0 &&
+    !worker.lastRunAt
+  );
+}
+
+function WorkersTable({ workers = [], loading = false, showAllWorkers = false }) {
+  const visibleWorkers = useMemo(() => {
+    if (showAllWorkers) return workers;
+    return workers.filter((worker) => !isIdleWorker(worker));
+  }, [showAllWorkers, workers]);
+
   return (
     <div className="arr-table-wrap">
-      <table className="arr-table arr-table--tasks" aria-busy={loading}>
-        <thead>
-          <tr>
-            <th scope="col">Worker</th>
-            <th scope="col">Status</th>
-            <th scope="col">Active</th>
-            <th scope="col">Queued</th>
-            <th scope="col">Scheduled</th>
-            <th scope="col">Failed</th>
-            <th scope="col">Last Run</th>
-          </tr>
-        </thead>
-        <tbody>
-          {loading ? (
-            <LoadingRows colSpan={7} />
-          ) : workers.length === 0 ? (
-            <EmptyRows colSpan={7} />
-          ) : (
-            workers.map((worker) => (
-              <tr key={worker.queue}>
-                <td>
-                  <span className="arr-table__primary">
-                    {worker.name || worker.queueLabel}
-                  </span>
-                  {worker.description ? (
-                    <span className="arr-table__subtle">
-                      {worker.description}
+        <table className="arr-table arr-table--tasks" aria-busy={loading}>
+          <thead>
+            <tr>
+              <th scope="col">Worker</th>
+              <th scope="col">Status</th>
+              <th scope="col">Active</th>
+              <th scope="col">Queued</th>
+              <th scope="col">Scheduled</th>
+              <th scope="col">Failed</th>
+              <th scope="col">Last Run</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <LoadingRows colSpan={7} />
+            ) : visibleWorkers.length === 0 ? (
+              <EmptyRows colSpan={7} />
+            ) : (
+              visibleWorkers.map((worker) => (
+                <tr key={worker.queue}>
+                  <td>
+                    <span className="arr-table__primary">
+                      {worker.name || worker.queueLabel}
                     </span>
-                  ) : null}
-                </td>
-                <td>
-                  <StatusBadge status={worker.status} />
-                </td>
-                <td>{formatCount(worker.processing)}</td>
-                <td>{formatCount(worker.queued)}</td>
-                <td>{formatCount(worker.scheduled)}</td>
-                <td>
-                  <span
-                    className={
-                      formatCount(worker.failed) > 0
-                        ? "arr-task-count arr-task-count--danger"
-                        : "arr-task-count"
-                    }
-                  >
-                    {formatCount(worker.failed)}
-                  </span>
-                </td>
-                <td>{formatRelative(worker.lastRunAt)}</td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+                    {worker.description ? (
+                      <span className="arr-table__subtle">
+                        {worker.description}
+                      </span>
+                    ) : null}
+                  </td>
+                  <td>
+                    <StatusBadge status={worker.status} />
+                  </td>
+                  <td>{formatCount(worker.processing)}</td>
+                  <td>{formatCount(worker.queued)}</td>
+                  <td>{formatCount(worker.scheduled)}</td>
+                  <td>
+                    <span
+                      className={
+                        formatCount(worker.failed) > 0
+                          ? "arr-task-count arr-task-count--danger"
+                          : "arr-task-count"
+                      }
+                    >
+                      {formatCount(worker.failed)}
+                    </span>
+                  </td>
+                  <td>{formatRelative(worker.lastRunAt)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
     </div>
   );
 }
@@ -254,11 +366,20 @@ function QueueTable({ queue = [], loading = false }) {
           <tr>
             <th scope="col">Name</th>
             <th scope="col">Status</th>
-            <th scope="col">Queued</th>
+            <th scope="col">Created</th>
             <th scope="col">Started</th>
             <th scope="col">Ended</th>
-            <th scope="col">Duration</th>
-            <th scope="col">Attempt</th>
+            <th scope="col">
+              {queue.some((task) => task.status === "running")
+                ? "Running for"
+                : "Duration"}
+            </th>
+            <th
+              scope="col"
+              title="Retry count for jobs that can fail and re-run"
+            >
+              Attempt
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -268,7 +389,10 @@ function QueueTable({ queue = [], loading = false }) {
             <EmptyRows colSpan={7} />
           ) : (
             queue.map((task) => (
-              <tr key={task.id}>
+              <tr
+                key={task.id}
+                className={task.isStale ? "arr-table__row--warning" : undefined}
+              >
                 <td>
                   <span className="arr-table__primary">{task.name}</span>
                   {task.description || task.payloadSummary ? (
@@ -279,6 +403,11 @@ function QueueTable({ queue = [], loading = false }) {
                   {task.error ? (
                     <span className="arr-table__subtle arr-table__subtle--danger">
                       {task.error}
+                    </span>
+                  ) : null}
+                  {task.isStale ? (
+                    <span className="arr-table__subtle arr-table__subtle--warning">
+                      Running longer than expected
                     </span>
                   ) : null}
                   {Number(task.duplicateCount || 1) > 1 ? (
@@ -296,12 +425,19 @@ function QueueTable({ queue = [], loading = false }) {
                 </td>
                 <td>{formatRelative(task.queuedAt, "—")}</td>
                 <td>
-                  {task.startedAt
-                    ? formatRelative(task.startedAt)
-                    : formatRelative(task.runAt, "—")}
+                  {isFutureRunAt(task) ? (
+                    <span title="Runs at">
+                      <span className="arr-table__subtle">Runs at </span>
+                      {formatRelative(task.runAt, "—")}
+                    </span>
+                  ) : task.startedAt ? (
+                    formatRelative(task.startedAt)
+                  ) : (
+                    "—"
+                  )}
                 </td>
                 <td>{formatRelative(task.endedAt, "—")}</td>
-                <td>{formatDuration(task.durationMs)}</td>
+                <td>{formatQueueDuration(task)}</td>
                 <td>
                   {task.maxAttempts
                     ? `${formatCount(task.attempt)} / ${formatCount(
@@ -318,44 +454,60 @@ function QueueTable({ queue = [], loading = false }) {
   );
 }
 
-export function SettingsTasksTab({ showError }) {
+export function SettingsTasksTab({ showError, showSuccess }) {
   const [tasks, setTasks] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [loadError, setLoadError] = useState(null);
+  const [showAllWorkers, setShowAllWorkers] = useState(false);
   const refreshInFlightRef = useRef(false);
 
-  const refreshTasks = useCallback(
-    async ({ notify = false, manual = false } = {}) => {
-      if (refreshInFlightRef.current) return;
-      refreshInFlightRef.current = true;
-      if (manual) {
-        setRefreshing(true);
+  const refreshTasks = useCallback(async () => {
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
+    try {
+      const result = await getSettingsTasks();
+      setTasks(result);
+      setLoadError(null);
+    } catch (error) {
+      const message =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Failed to load tasks";
+      setLoadError(message);
+    } finally {
+      refreshInFlightRef.current = false;
+      setLoading(false);
+    }
+  }, []);
+
+  const clearStaleJobs = useCallback(async () => {
+    setClearing(true);
+    try {
+      const result = await clearSettingsStaleTasks();
+      setTasks(result.tasks || null);
+      setLoadError(null);
+      const cleared = Number(result.cleared || 0);
+      if (cleared > 0) {
+        showSuccess?.(
+          `Cleared ${cleared} stuck job${cleared === 1 ? "" : "s"}.`,
+        );
+      } else {
+        showSuccess?.("No stuck jobs needed clearing.");
       }
-      try {
-        const result = await getSettingsTasks();
-        setTasks(result);
-        setLoadError(null);
-      } catch (error) {
-        const message =
-          error.response?.data?.message ||
-          error.response?.data?.error ||
-          error.message ||
-          "Failed to load tasks";
-        setLoadError(message);
-        if (notify) {
-          showError(message);
-        }
-      } finally {
-        refreshInFlightRef.current = false;
-        setLoading(false);
-        if (manual) {
-          setRefreshing(false);
-        }
-      }
-    },
-    [showError],
-  );
+    } catch (error) {
+      const message =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Failed to clear stuck jobs";
+      setLoadError(message);
+      showError(message);
+    } finally {
+      setClearing(false);
+    }
+  }, [showError, showSuccess]);
 
   useEffect(() => {
     let cancelled = false;
@@ -371,35 +523,52 @@ export function SettingsTasksTab({ showError }) {
     };
   }, [refreshTasks]);
 
+  const idleWorkerCount = useMemo(() => {
+    const workerRows = tasks?.workers || [];
+    return workerRows.filter((worker) => isIdleWorker(worker)).length;
+  }, [tasks?.workers]);
+  const workers = tasks?.workers || [];
+
   return (
     <div className="arr-page">
-      <SettingsArrFieldSet
-        legend="Scheduled"
-        actions={
-          <button
-            type="button"
-            className="arr-btn"
-            onClick={() => refreshTasks({ notify: true, manual: true })}
-            disabled={refreshing}
-          >
-            <RefreshCw
-              className={`artist-icon-sm${refreshing ? " animate-spin" : ""}`}
-              aria-hidden
-            />
-            {refreshing ? "Refreshing…" : "Refresh"}
-          </button>
-        }
-      >
-        {loadError ? (
-          <p className="arr-form-help arr-form-help--error" role="alert">
-            {loadError}
-          </p>
-        ) : null}
+      {loadError ? (
+        <p className="arr-form-help arr-form-help--error" role="alert">
+          {loadError}
+        </p>
+      ) : null}
+
+      <TasksHealthSummary
+        summary={tasks?.summary}
+        loading={loading}
+        clearing={clearing}
+        onClearStale={clearStaleJobs}
+      />
+
+      <SettingsArrFieldSet legend="Scheduled">
         <ScheduledTable scheduled={tasks?.scheduled || []} loading={loading} />
       </SettingsArrFieldSet>
 
-      <SettingsArrFieldSet legend="Workers">
-        <WorkersTable workers={tasks?.workers || []} loading={loading} />
+      <SettingsArrFieldSet
+        legend="Workers"
+        actions={
+          idleWorkerCount > 0 ? (
+            <button
+              type="button"
+              className="arr-btn arr-btn--ghost"
+              onClick={() => setShowAllWorkers((value) => !value)}
+            >
+              {showAllWorkers
+                ? "Hide idle workers"
+                : `Show all workers (${workers.length})`}
+            </button>
+          ) : null
+        }
+      >
+        <WorkersTable
+          workers={workers}
+          loading={loading}
+          showAllWorkers={showAllWorkers}
+        />
       </SettingsArrFieldSet>
 
       <SettingsArrFieldSet legend="Queue">

@@ -19,6 +19,8 @@ const operationQueueModule = await importFromRepo(
   "backend/services/weeklyFlowOperationQueue.js",
 );
 
+const STALE_RUNNING_MS = 60 * 60 * 1000;
+
 test.after(async () => {
   await cleanupIsolatedState(isolatedState);
 });
@@ -68,6 +70,152 @@ test("withJobHeartbeat records completed task runs", async () => {
   );
   assert.equal(recorded?.status, "completed");
   assert.match(recorded?.name || "", /Image Prefetch/);
+  assert.ok(status.summary);
+  assert.equal(status.summary.healthy, true);
+  assert.ok(status.summary.completedCount >= 1);
+});
+
+test("task status exposes startedAt and runningForMs for live processing jobs", async () => {
+  const queue = honkerDb.getImagePrefetchQueue();
+  const jobId = queue.enqueue({ mbids: ["live-started-mbid"] });
+  const job = queue.claimOne(honkerDb.getWorkerId());
+  assert.equal(job?.id, jobId);
+
+  let resolveWork;
+  const work = new Promise((resolve) => {
+    resolveWork = resolve;
+  });
+  const heartbeatPromise = runtime.withJobHeartbeat(job, queue, async () => {
+    await work;
+  });
+
+  const status = await taskStatus.getHonkerTaskStatus();
+  const live = status.queue.find(
+    (entry) =>
+      entry.source === "live" &&
+      entry.jobId === jobId &&
+      entry.status === "running",
+  );
+  assert.ok(live?.startedAt);
+  assert.ok(Number(live?.runningForMs) >= 0);
+  assert.equal(live?.isStale, false);
+
+  resolveWork();
+  await heartbeatPromise;
+  job.ack();
+});
+
+test("task status marks long-running jobs as stale", async () => {
+  const { db } = await importFromRepo("backend/config/db-sqlite.js");
+  const queue = honkerDb.getImagePrefetchQueue();
+  const jobId = queue.enqueue({ mbids: ["stale-mbid"] });
+  const job = queue.claimOne(honkerDb.getWorkerId());
+  assert.equal(job?.id, jobId);
+
+  const twoHoursAgo = Math.floor(Date.now() / 1000) - 7200;
+  db.prepare(
+    `
+      INSERT INTO honker_task_runs (
+        job_id,
+        queue,
+        name,
+        payload,
+        worker_id,
+        attempt,
+        status,
+        queued_at,
+        run_at,
+        started_at,
+        created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?)
+    `,
+  ).run(
+    jobId,
+    "image-prefetch",
+    "Image Prefetch",
+    JSON.stringify({ mbids: ["stale-mbid"] }),
+    honkerDb.getWorkerId(),
+    0,
+    twoHoursAgo,
+    twoHoursAgo,
+    twoHoursAgo,
+    twoHoursAgo,
+  );
+
+  const status = await taskStatus.getHonkerTaskStatus();
+  const live = status.queue.find(
+    (entry) =>
+      entry.source === "live" &&
+      entry.jobId === jobId &&
+      entry.status === "running",
+  );
+  assert.equal(live?.isStale, true);
+  assert.ok(Number(live?.runningForMs) >= STALE_RUNNING_MS);
+
+  assert.ok(status.summary.staleCount >= 1);
+  assert.equal(status.summary.healthy, false);
+
+  job.ack();
+});
+
+test("clearStaleHonkerJobs removes long-running processing jobs", async () => {
+  const { db } = await importFromRepo("backend/config/db-sqlite.js");
+  const queue = honkerDb.getSystemTaskQueue();
+  const jobId = queue.enqueue({ kind: "playlist-startup-migration" });
+  const job = queue.claimOne(honkerDb.getWorkerId());
+  assert.equal(job?.id, jobId);
+
+  const twoHoursAgo = Math.floor(Date.now() / 1000) - 7200;
+  db.prepare(
+    `
+      INSERT INTO honker_task_runs (
+        job_id,
+        queue,
+        name,
+        payload,
+        worker_id,
+        attempt,
+        status,
+        queued_at,
+        run_at,
+        started_at,
+        created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?)
+    `,
+  ).run(
+    jobId,
+    "system-task",
+    "Playlist Startup Migration",
+    JSON.stringify({ kind: "playlist-startup-migration" }),
+    honkerDb.getWorkerId(),
+    0,
+    twoHoursAgo,
+    twoHoursAgo,
+    twoHoursAgo,
+    twoHoursAgo,
+  );
+
+  const before = await taskStatus.getHonkerTaskStatus();
+  assert.ok(
+    before.queue.some(
+      (entry) =>
+        entry.jobId === jobId &&
+        entry.status === "running" &&
+        entry.isStale === true,
+    ),
+  );
+
+  const result = await taskStatus.clearStaleHonkerJobs();
+  assert.ok(result.cleared >= 1);
+
+  const after = await taskStatus.getHonkerTaskStatus();
+  assert.equal(
+    after.queue.some(
+      (entry) => entry.jobId === jobId && entry.status === "running",
+    ),
+    false,
+  );
+  assert.equal(after.summary.staleCount, 0);
 });
 
 test("task status collapses duplicate scheduled discovery refresh jobs", async () => {
@@ -99,6 +247,21 @@ test("task status collapses duplicate scheduled discovery refresh jobs", async (
     (entry) => entry.queue === "discovery-refresh",
   );
   assert.equal(worker?.scheduled, 1);
+});
+
+test("discovery enrichment uses user-facing description", async () => {
+  const queue = honkerDb.getDiscoveryRecommendationEnrichmentQueue();
+  queue.enqueue({ discoveryRunId: "1781824554740 H4di59hk" });
+
+  const status = await taskStatus.getHonkerTaskStatus();
+  const entry = status.queue.find(
+    (row) => row.queue === "discovery-recommendation-enrichment",
+  );
+  assert.match(
+    entry?.description || "",
+    /Finishes scoring and ranking for the current discovery refresh/,
+  );
+  assert.match(entry?.payloadSummary || "", /Run: 1781824554740 H4di59hk/);
 });
 
 test("task status groups duplicate completed system task runs", async () => {

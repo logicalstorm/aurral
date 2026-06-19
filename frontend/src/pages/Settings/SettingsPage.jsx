@@ -168,7 +168,7 @@ function SettingsPage() {
           />
         );
       case "tasks":
-        return <SettingsTasksTab showError={showError} />;
+        return <SettingsTasksTab showError={showError} showSuccess={showSuccess} />;
       case "playback":
         return (
           <SettingsPlaybackTab
