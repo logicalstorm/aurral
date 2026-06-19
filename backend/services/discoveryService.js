@@ -103,6 +103,8 @@ const DISCOVERY_RECOMMENDATIONS_DEFAULT = 200;
 const DISCOVERY_QUALITY_INITIAL = "initial";
 const DISCOVERY_QUALITY_ENRICHING = "enriching";
 const DISCOVERY_QUALITY_ENRICHED = "enriched";
+const DISCOVERY_NETWORK_CONCURRENCY = 6;
+const DISCOVERY_CANDIDATE_MULTIPLIER = 2.5;
 
 export const getDiscoveryRecommendationsPerRefresh = () => {
   const settings = dbOps.getSettings();
@@ -119,6 +121,17 @@ export const getDiscoveryRecommendationsPerRefresh = () => {
 
 export const getDiscoveryRecommendationPoolLimit = () =>
   DISCOVERY_RECOMMENDATIONS_MAX;
+
+const getDiscoveryCandidateLimit = () =>
+  Math.min(
+    getDiscoveryRecommendationPoolLimit(),
+    Math.max(
+      160,
+      Math.ceil(
+        getDiscoveryRecommendationsPerRefresh() * DISCOVERY_CANDIDATE_MULTIPLIER,
+      ),
+    ),
+  );
 
 const createDiscoveryRunId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -986,6 +999,33 @@ const buildTrendingArtistEntry = (artist) => {
   };
 };
 
+const wait = (delayMs) =>
+  delayMs > 0
+    ? new Promise((resolve) => {
+        setTimeout(resolve, delayMs);
+      })
+    : Promise.resolve();
+
+const mapWithConcurrency = async (items, concurrency, worker) => {
+  const list = Array.isArray(items) ? items : [];
+  const limit = Math.max(1, Number(concurrency) || 1);
+  if (list.length === 0) return [];
+  const results = new Array(list.length);
+  let nextIndex = 0;
+  const runners = Array.from(
+    { length: Math.min(limit, list.length) },
+    async () => {
+      while (nextIndex < list.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        results[index] = await worker(list[index], index);
+      }
+    },
+  );
+  await Promise.all(runners);
+  return results;
+};
+
 const collectSeedTagsAndGenres = async (
   seeds,
   lastfmHealth,
@@ -1000,8 +1040,10 @@ const collectSeedTagsAndGenres = async (
   }
 
   let tagsFound = 0;
-  await Promise.all(
-    seeds.map(async (seed) => {
+  await mapWithConcurrency(
+    seeds,
+    DISCOVERY_NETWORK_CONCURRENCY,
+    async (seed) => {
       try {
         const data = await lastfmRequest(
           "artist.getTopTags",
@@ -1049,7 +1091,7 @@ const collectSeedTagsAndGenres = async (
           `Failed to get Last.fm tags for ${seed.artistName}: ${error.message}`,
         );
       }
-    }),
+    },
   );
 
   return {
@@ -1072,13 +1114,6 @@ const normalizeSeedTagList = (tags) =>
     .slice(0, 15)
     .map((tag) => String(tag || "").trim())
     .filter(Boolean);
-
-const wait = (delayMs) =>
-  delayMs > 0
-    ? new Promise((resolve) => {
-        setTimeout(resolve, delayMs);
-      })
-    : Promise.resolve();
 
 const fetchArtistTagNames = async (artist, lastfmHealth) => {
   const artistName = String(artist?.name || artist?.artistName || "").trim();
@@ -1155,8 +1190,10 @@ const resolveRecommendationCandidates = async (
     Math.min(recommendations.length, resolveLimit),
   );
 
-  await Promise.all(
-    shortlist.map(async (item) => {
+  await mapWithConcurrency(
+    shortlist,
+    DISCOVERY_NETWORK_CONCURRENCY,
+    async (item) => {
       if (item?.id || !item?.name) return;
       const cached = musicbrainzGetCachedArtistMbidByName(item.name);
       const resolved =
@@ -1164,7 +1201,7 @@ const resolveRecommendationCandidates = async (
       if (!resolved) return;
       item.id = resolved;
       item.navigateTo = resolved;
-    }),
+    },
   );
 
   const merged = mergeResolvedRecommendations(
@@ -1190,7 +1227,7 @@ const resolveRecommendationCandidates = async (
 
   return merged.slice(
     0,
-    Math.max(120, getDiscoveryRecommendationsPerRefresh() * 4),
+    Math.max(120, getDiscoveryRecommendationsPerRefresh() * 2),
   );
 };
 
@@ -1209,8 +1246,10 @@ const buildRecommendationsFromSeeds = async ({
     getLastfmFailureRatio(lastfmHealth),
   );
 
-  await Promise.all(
-    seeds.map(async (seed) => {
+  await mapWithConcurrency(
+    seeds,
+    DISCOVERY_NETWORK_CONCURRENCY,
+    async (seed) => {
       try {
         const seedTagKey = getSeedTagMapKey(seed);
         let sourceTags = normalizeSeedTagList(seedTagMap.get(seedTagKey));
@@ -1264,13 +1303,13 @@ const buildRecommendationsFromSeeds = async ({
           `Error getting similar artists for ${seed.artistName}: ${error.message}`,
         );
       }
-    }),
+    },
   );
 
-  const rawLimit = Math.max(140, getDiscoveryRecommendationsPerRefresh() * 5);
+  const candidateLimit = getDiscoveryCandidateLimit();
   let directList = finalizeRecommendationAccumulator(
     directRecommendations,
-    rawLimit,
+    candidateLimit,
     { discoveryMode },
   );
   if (includeCandidateTagHydration) {
@@ -1286,7 +1325,9 @@ const buildRecommendationsFromSeeds = async ({
       depth: 1,
     });
   }
-  directList = rerankRecommendations(directList, rawLimit, { discoveryMode });
+  directList = rerankRecommendations(directList, candidateLimit, {
+    discoveryMode,
+  });
 
   if (!includeSecondHop) {
     return directList;
@@ -1310,8 +1351,10 @@ const buildRecommendationsFromSeeds = async ({
     })
     .slice(0, secondHopSampling.seedLimit);
 
-  await Promise.all(
-    bridgeSeeds.map(async (bridge) => {
+  await mapWithConcurrency(
+    bridgeSeeds,
+    DISCOVERY_NETWORK_CONCURRENCY,
+    async (bridge) => {
       try {
         const bridgeTags = normalizeSeedTagList(
           bridge.matchedTags?.length ? bridge.matchedTags : bridge.tags,
@@ -1375,7 +1418,7 @@ const buildRecommendationsFromSeeds = async ({
           `Error getting second-hop similar artists for ${bridge.name}: ${error.message}`,
         );
       }
-    }),
+    },
   );
 
   let secondHopList = finalizeRecommendationAccumulator(
@@ -1408,7 +1451,7 @@ const buildRecommendationsFromSeeds = async ({
       [...directList, ...secondHopList],
       existingArtistKeys,
     ),
-    rawLimit,
+    candidateLimit,
     { discoveryMode },
   );
 };
@@ -1855,12 +1898,11 @@ export const runDiscoveryRecommendationEnrichment = async (payload = {}) => {
         : getDiscoveryFeedback("global"),
   });
 
-  await hydrateArtistImages(recommendationsArray, {
-    limit: recommendationsArray.length,
-    batchSize: 10,
+  await hydrateArtistImages(freshRecommendations, {
+    limit: freshRecommendations.length,
+    batchSize: 6,
     delayMs: 50,
   });
-
   const enrichedAt = new Date().toISOString();
   const enrichedData = {
     recommendations: recommendationsArray,
@@ -2209,8 +2251,10 @@ export const updateDiscoveryCache = async (options = {}) => {
         const globalFailureRatio = getLastfmFailureRatio(lastfmHealth);
         const maxGlobalResolve =
           globalFailureRatio >= 0.5 ? 10 : globalFailureRatio >= 0.3 ? 18 : 30;
-        await Promise.all(
-          globalTop.slice(0, maxGlobalResolve).map(async (item) => {
+        await mapWithConcurrency(
+          globalTop.slice(0, maxGlobalResolve),
+          DISCOVERY_NETWORK_CONCURRENCY,
+          async (item) => {
             if (!item?.name || item?.id) return;
             const resolved =
               musicbrainzGetCachedArtistMbidByName(item.name) ||
@@ -2218,7 +2262,7 @@ export const updateDiscoveryCache = async (options = {}) => {
             if (!resolved) return;
             item.id = resolved;
             item.navigateTo = resolved;
-          }),
+          },
         );
 
         discoveryCache.globalTop = mergeResolvedRecommendations(
@@ -2623,9 +2667,9 @@ export const updateUserDiscoveryCache = async (
         : [],
     });
 
-    await hydrateArtistImages(recommendationsArray, {
-      limit: recommendationsArray.length,
-      batchSize: 10,
+    await hydrateArtistImages(freshRecommendations, {
+      limit: freshRecommendations.length,
+      batchSize: 6,
       delayMs: 50,
     });
 
