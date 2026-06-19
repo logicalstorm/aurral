@@ -32,6 +32,7 @@ import {
   buildDiscoverySeedList,
   buildExistingArtistKeySet,
   finalizeRecommendationAccumulator,
+  filterRecommendationsForServe,
   mergeRetainedRecommendationPool,
   mergeResolvedRecommendations,
   rerankRecommendations,
@@ -429,6 +430,11 @@ export const rerankCachedRecommendations = ({
     feedback,
     discoveryMode,
   });
+
+export const serveCachedRecommendations = ({
+  recommendations = [],
+  feedback = [],
+} = {}) => filterRecommendationsForServe(recommendations, feedback);
 
 const createLastfmHealth = () => ({
   success: 0,
@@ -1473,11 +1479,7 @@ const buildDiscoveryUpdatePayload = (
     clearDiscoverPlaylistBuildProgress();
   }
   return {
-    recommendations: rerankCachedRecommendations({
-      recommendations: discoveryData.recommendations || [],
-      discoveryMode: getDiscoveryMode(),
-      limit: getDiscoveryRecommendationPoolLimit(),
-    }),
+    recommendations: discoveryData.recommendations || [],
     globalTop: discoveryData.globalTop || [],
     basedOn: discoveryData.basedOn || [],
     topTags: discoveryData.topTags || [],

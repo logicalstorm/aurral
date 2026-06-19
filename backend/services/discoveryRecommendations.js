@@ -770,6 +770,15 @@ export const rerankRecommendations = (
   return selected;
 };
 
+export const filterRecommendationsForServe = (
+  recommendations = [],
+  feedback = [],
+) =>
+  (Array.isArray(recommendations) ? recommendations : []).filter(
+    (recommendation) =>
+      !feedbackBoostForCandidate(recommendation, feedback).hidden,
+  );
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const parseTimeMs = (value, fallback = Date.now()) => {

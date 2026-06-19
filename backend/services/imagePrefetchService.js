@@ -31,16 +31,22 @@ class ImagePrefetchService {
     enqueueUncachedMbids(mbids);
   }
 
-  async prefetchDiscoveryImages(discoveryData) {
+  async prefetchDiscoveryImages(discoveryData, { recommendationLimit = 48 } = {}) {
     const mbids = [];
     if (discoveryData?.recommendations) {
       mbids.push(
-        ...discoveryData.recommendations.map((artist) => artist.id).filter(Boolean),
+        ...discoveryData.recommendations
+          .slice(0, Math.max(0, Number(recommendationLimit) || 0))
+          .map((artist) => artist.id)
+          .filter(Boolean),
       );
     }
     if (discoveryData?.globalTop) {
       mbids.push(
-        ...discoveryData.globalTop.map((artist) => artist.id).filter(Boolean),
+        ...discoveryData.globalTop
+          .slice(0, 18)
+          .map((artist) => artist.id)
+          .filter(Boolean),
       );
     }
     this.enqueue(mbids);

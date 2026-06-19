@@ -12,8 +12,7 @@ import {
   addDiscoveryFeedback,
   removeDiscoveryFeedback,
   resetDiscoveryFeedback,
-  rerankCachedRecommendations,
-  getDiscoveryRecommendationPoolLimit,
+  serveCachedRecommendations,
   getLocalDiscoveryPreferences,
 } from "../services/discoveryService.js";
 import {
@@ -328,11 +327,9 @@ router.get("/", requireAuth, async (req, res) => {
     }
   }
 
-  recommendations = rerankCachedRecommendations({
+  recommendations = serveCachedRecommendations({
     recommendations,
     feedback,
-    discoveryMode,
-    limit: getDiscoveryRecommendationPoolLimit(),
   });
 
   const parsedLastUpdated = lastUpdated ? new Date(lastUpdated).getTime() : 0;
@@ -804,12 +801,10 @@ router.get("/nearby-shows", requireAuth, async (req, res) => {
     const discoveryCache = getDiscoveryCache(userCacheNamespace);
     const feedback = getDiscoveryFeedback(req.user?.id || "global");
     const recommendedArtists = localDiscoveryPreferences.includeRecommendations
-      ? rerankCachedRecommendations({
+      ? serveCachedRecommendations({
           recommendations: discoveryCache.recommendations || [],
           feedback,
-          discoveryMode: getDiscoveryMode(),
-          limit: 24,
-        })
+        }).slice(0, 24)
       : [];
     const trendingArtists = localDiscoveryPreferences.includeTrending
       ? (discoveryCache.globalTop || []).slice(0, 18)
@@ -983,11 +978,9 @@ router.get("/filtered", requireAuth, async (req, res) => {
     globalTop = globalTop.filter(
       (artist) => !isLibraryArtist(artist, existingArtistKeys),
     );
-    recommendations = rerankCachedRecommendations({
+    recommendations = serveCachedRecommendations({
       recommendations,
       feedback,
-      discoveryMode,
-      limit: getDiscoveryRecommendationPoolLimit(),
     });
 
     res.json({

@@ -10,9 +10,8 @@ import {
 const isolatedState = await createIsolatedStateDir("discovery-recommendation-pool");
 applyIsolatedBackendEnv(isolatedState);
 
-const { mergeRetainedRecommendationPool } = await importFromRepo(
-  "backend/services/discoveryRecommendations.js",
-);
+const { mergeRetainedRecommendationPool, filterRecommendationsForServe } =
+  await importFromRepo("backend/services/discoveryRecommendations.js");
 const {
   getDiscoveryRecommendationsPerRefresh,
   getDiscoveryRecommendationPoolLimit,
@@ -212,7 +211,24 @@ test("full two-phase refresh cycles reach the 500 pool cap", () => {
   );
 });
 
-test("rerankCachedRecommendations serves the full stored pool when pool limit is used", () => {
+test("filterRecommendationsForServe keeps stored order and hides exact negative feedback", () => {
+  const storedPool = makeBatch(5, 180, "stored");
+  const hidden = storedPool[2];
+  const filtered = filterRecommendationsForServe(storedPool, [
+    {
+      artistId: hidden.id,
+      action: "less_like_this",
+    },
+  ]);
+
+  assert.equal(filtered.length, 4);
+  assert.deepEqual(
+    filtered.map((item) => item.name),
+    storedPool.filter((item) => item.id !== hidden.id).map((item) => item.name),
+  );
+});
+
+test("rerankCachedRecommendations still trims refresh batches to the per-refresh limit", () => {
   resetArtistIds();
   const storedPool = makeBatch(350, 180, "stored");
   const servedWithRefreshLimit = rerankCachedRecommendations({
