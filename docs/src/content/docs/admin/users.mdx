@@ -23,6 +23,12 @@ Admins can control whether users may:
 - Optional local-network auto-login for single-admin home setups
 - Reverse-proxy authentication for SSO setups
 
+## Reverse-proxy auth
+
+Set `AUTH_PROXY_ENABLED=true` or provide `AUTH_PROXY_HEADER` to let a trusted reverse proxy authenticate users before requests reach Aurral. The default username header is `x-forwarded-user`.
+
+When a proxied username first reaches Aurral, Aurral creates a matching local user with the default user permissions. Set `AUTH_PROXY_DEFAULT_ROLE=admin`, `AUTH_PROXY_ADMIN_USERS`, or `AUTH_PROXY_ROLE_HEADER` if your proxy should create admins. Proxy-created users cannot use local password login until an admin sets a password. After creation, admins can manage the account and permissions from **Settings -> Users**.
+
 ## Reset admin password
 
 From the repository root:

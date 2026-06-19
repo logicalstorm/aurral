@@ -392,6 +392,17 @@ export function reconcileLocalNetworkBypassSetting() {
   };
 }
 
+function createProxyUser(username, role) {
+  const passwordHash = bcrypt.hashSync(
+    crypto.randomBytes(32).toString("hex"),
+    10,
+  );
+  const created = userOps.createUser(username, passwordHash, role, null);
+  return created
+    ? toResolvedUser(userOps.getUserByUsername(created.username) || created)
+    : toResolvedUser(userOps.getUserByUsername(username));
+}
+
 export function resolveProxyUser(req) {
   if (!isProxyAuthEnabled()) return null;
   if (!isTrustedProxy(req)) return null;
@@ -423,12 +434,7 @@ export function resolveProxyUser(req) {
     headerRole === "admin" || adminUsers.includes(username.toLowerCase())
       ? "admin"
       : defaultRole;
-  return {
-    id: -1,
-    username,
-    role,
-    permissions: buildPermissions(role),
-  };
+  return createProxyUser(username, role);
 }
 
 function migrateLegacyAdmin() {

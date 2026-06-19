@@ -14,7 +14,12 @@ Most setup happens in the web UI. These environment variables matter for Docker 
 | `M3U_PATH_MODE` | Playlist file path style: `local` (default, Aurral container paths in `.m3u` files) or `remote` (paths Navidrome can open when it sees files differently). Can also be set under **Settings → Playback → Navidrome → Use Navidrome paths in M3U files** |
 | `M3U_PATH_MAPPINGS` | Optional Navidrome playlist path translations, for example `/music|N:/ServerFolders/Music`. Use `Aurral path|Navidrome path` pairs separated by `;`. Applied at runtime; not shown in **Settings → Playback → Navidrome → Navidrome path mappings** |
 | `TRUST_PROXY` | Set when Aurral is behind a reverse proxy |
-| `AUTH_PROXY_*` | Reverse-proxy authentication headers |
+| `AUTH_PROXY_ENABLED` | Enable reverse-proxy authentication with the default `x-forwarded-user` header |
+| `AUTH_PROXY_HEADER` | Header containing the authenticated username when using a custom proxy header |
+| `AUTH_PROXY_TRUSTED_IPS` | Optional comma-separated proxy IP allowlist allowed to supply auth headers |
+| `AUTH_PROXY_DEFAULT_ROLE` | Role for newly created proxy-auth users: `user` or `admin` |
+| `AUTH_PROXY_ADMIN_USERS` | Optional comma-separated usernames that should be created as admins |
+| `AUTH_PROXY_ROLE_HEADER` | Optional header whose value can promote a new proxy-auth user to admin |
 | `AURRAL_VERBOSE_LOGS` | Fuller server logs while troubleshooting |
 
 Example:
