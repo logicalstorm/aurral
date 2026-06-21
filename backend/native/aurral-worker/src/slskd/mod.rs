@@ -4,10 +4,7 @@ pub mod scoring;
 pub mod types;
 pub mod validate;
 
-use crate::slskd::types::{
-    FlowTrackContext, MatcherOptions, RankedCandidate, RawSearchResult, SearchTier,
-    SlskdMatcherJob, SlskdMatcherPayload, ValidationResult,
-};
+use crate::slskd::types::{SlskdMatcherJob, SlskdMatcherPayload};
 
 pub fn dispatch(job: SlskdMatcherJob) -> Result<SlskdMatcherPayload, String> {
     match job {

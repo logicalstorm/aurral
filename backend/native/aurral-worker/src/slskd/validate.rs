@@ -13,7 +13,7 @@ use serde_json::Value;
 use std::path::Path;
 
 fn score_year_match(directory_text: &str, release_year: Option<&str>) -> i32 {
-    use crate::slskd::normalize::{get_year, get_years};
+    use crate::slskd::normalize::get_year;
     let expected = release_year.and_then(|value| get_year(value));
     let Some(expected) = expected else {
         return 0;

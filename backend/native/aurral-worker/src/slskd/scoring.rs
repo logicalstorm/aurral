@@ -2,9 +2,9 @@ use crate::slskd::normalize::{
     extract_track_number, extract_variant_profile, get_file_base_name, get_file_extension,
     get_file_name, get_path_parts, get_year, get_years, is_ambiguous_title_album_context,
     is_self_titled_album_context, normalize_title, read_comparable_album_name, score_text_match,
-    split_words, VariantProfile, AUDIO_EXTENSIONS,
+    VariantProfile, AUDIO_EXTENSIONS,
 };
-use crate::slskd::types::{FlowTrackContext, MatcherOptions, PeerStatsEntry, RawSearchResult};
+use crate::slskd::types::{FlowTrackContext, MatcherOptions, RawSearchResult};
 
 #[derive(Debug, Clone)]
 pub struct VariantMatch {
