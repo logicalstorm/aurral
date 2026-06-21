@@ -146,9 +146,6 @@ export function enqueueDiscoveryRefresh(options = {}) {
 
   if (!scheduleOnly) {
     if (isHonkerLockHeld(DISCOVERY_GLOBAL_REFRESH_LOCK)) {
-      if (force) {
-        return { enqueued: true, reason: "already_updating" };
-      }
       return { enqueued: false, reason: "updating" };
     }
     if (!force && isDiscoveryRefreshQueueLocked()) {

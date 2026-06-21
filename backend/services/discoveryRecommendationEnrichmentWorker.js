@@ -36,7 +36,7 @@ async function runLoop() {
   idleController.arm();
   try {
     for await (const job of queue.claim(workerId, {
-      idlePollS: 10,
+      idlePollS: 1,
       signal: idleController.signal,
     })) {
       idleController.disarm();

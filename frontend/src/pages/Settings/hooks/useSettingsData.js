@@ -159,12 +159,20 @@ export function useSettingsData(showSuccess, showError, showInfo) {
           "Discovery refresh is running",
       );
       if (typeof healthData.discovery.updateProgress === "number") {
-        setDiscoveryProgress(healthData.discovery.updateProgress);
+        setDiscoveryProgress((current) =>
+          Math.max(
+            typeof current === "number" ? current : 0,
+            healthData.discovery.updateProgress,
+          ),
+        );
       }
-    } else {
-      setRefreshingDiscovery(false);
-      setDiscoveryProgress(null);
+      return;
     }
+
+    setRefreshingDiscovery(false);
+    setDiscoveryProgress((current) =>
+      typeof current === "number" && current > 0 ? 100 : null,
+    );
   }, []);
 
   const refreshHealth = useCallback(async () => {
@@ -189,25 +197,50 @@ export function useSettingsData(showSuccess, showError, showInfo) {
       return;
     }
 
-    if (msg.isUpdating) {
+    if (msg.phase === "completed") {
+      setRefreshingDiscovery(false);
+      setDiscoveryProgress(
+        typeof msg.progress === "number" ? msg.progress : 100,
+      );
+      setDiscoveryProgressMessage(
+        msg.progressMessage || "Discovery refresh completed",
+      );
+      return;
+    }
+
+    if (
+      msg.isUpdating ||
+      msg.isEnriching ||
+      msg.phase === "enriching_recommendations" ||
+      msg.recommendationQuality === "enriching"
+    ) {
       setRefreshingDiscovery(true);
-      if (msg.progressMessage) {
-        setDiscoveryProgressMessage(msg.progressMessage);
+      if (msg.progressMessage || msg.enrichmentProgressMessage) {
+        setDiscoveryProgressMessage(
+          msg.progressMessage || msg.enrichmentProgressMessage,
+        );
       }
       if (typeof msg.progress === "number") {
-        setDiscoveryProgress(msg.progress);
+        setDiscoveryProgress((current) =>
+          msg.refreshReset === true
+            ? msg.progress
+            : Math.max(typeof current === "number" ? current : 0, msg.progress),
+        );
       }
       return;
     }
 
-    if (msg.phase === "completed" || Array.isArray(msg.recommendations)) {
+    if (
+      Array.isArray(msg.recommendations) &&
+      msg.recommendationQuality === "enriched"
+    ) {
       setRefreshingDiscovery(false);
-      setDiscoveryProgress(100);
+      setDiscoveryProgress(
+        typeof msg.progress === "number" ? msg.progress : 100,
+      );
       setDiscoveryProgressMessage(
         msg.progressMessage || "Discovery refresh completed",
       );
-      refreshHealth();
-      return;
     }
   });
 
@@ -261,6 +294,10 @@ export function useSettingsData(showSuccess, showError, showInfo) {
       try {
         const healthData = await refreshHealth();
         if (!healthData?.discovery?.isUpdating) {
+          setRefreshingDiscovery(false);
+          setDiscoveryProgress((current) =>
+            typeof current === "number" && current > 0 ? 100 : current,
+          );
           setDiscoveryProgressMessage(
             (current) => current || "Discovery refresh completed",
           );
@@ -309,6 +346,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
   const handleRefreshDiscovery = useCallback(async () => {
     if (refreshingDiscovery) return;
     setRefreshingDiscovery(true);
+    setDiscoveryProgress(0);
     setDiscoveryProgressMessage("Submitting discovery refresh request");
     try {
       await api.post("/discover/refresh");

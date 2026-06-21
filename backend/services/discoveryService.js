@@ -154,6 +154,429 @@ const applyProxiedRecommendationImages = (recommendations = []) => {
   return list;
 };
 
+let discoveryPlaylistsBuilding = false;
+let discoveryPlaylistBuildPromise = null;
+
+const DISCOVERY_REFRESH_PROGRESS = {
+  START: 0,
+  LOADING: 8,
+  SEEDS: 12,
+  ENRICHING: 15,
+  PREPARING: 18,
+  ENRICHING_MAX: 88,
+  SCORING_DONE: 92,
+  SAVING: 96,
+  COMPLETE: 100,
+};
+
+const startDiscoveryProgressHeartbeat = (
+  onTick,
+  {
+    startProgress = 30,
+    endProgress = 70,
+    intervalMs = 2500,
+    estimatedMs = 90000,
+  } = {},
+) => {
+  const startedAt = Date.now();
+  let lastProgress = startProgress;
+  const timer = setInterval(() => {
+    const ratio = Math.min(1, (Date.now() - startedAt) / estimatedMs);
+    const progress = Math.round(
+      startProgress + (endProgress - startProgress) * ratio,
+    );
+    if (progress <= lastProgress) return;
+    lastProgress = progress;
+    onTick(progress);
+  }, intervalMs);
+  return () => clearInterval(timer);
+};
+
+const runDiscoveryPlaylistPlanWithRust = async ({
+  rustResult = {},
+  latestCache = {},
+  allLibraryArtists = [],
+  existingArtistKeys = [],
+  historyTopArtists = [],
+  libraryMixArtists = [],
+  releaseAlbums = [],
+  onProgress = null,
+} = {}) => {
+  const { runRustWorkerJob } = await import("./rustWorkerRunner.js");
+  const { buildRustPlaylistPlanPayload } = await import(
+    "./rustDiscoveryBridge.js"
+  );
+  const { getDiscoverPlaylistPresetsForBuild } = await import(
+    "./discoverPlaylistService.js"
+  );
+
+  const emitStep = (phase, message, progress) => {
+    if (typeof onProgress === "function") {
+      onProgress({ phase, progressMessage: message, progress });
+    }
+  };
+
+  const presets = getDiscoverPlaylistPresetsForBuild({
+    topGenres: rustResult.topGenres || latestCache.topGenres || [],
+    topTags: rustResult.topTags || latestCache.topTags || [],
+    basedOn: latestCache.basedOn || [],
+    recommendations: rustResult.recommendations || [],
+    historyTopArtists,
+  });
+  const playlistPayload = await buildRustPlaylistPlanPayload({
+    presets,
+    existingArtistKeys,
+    recommendations: rustResult.recommendations || [],
+    globalTop: rustResult.globalTop || [],
+    basedOn: latestCache.basedOn || [],
+    topGenres: rustResult.topGenres || [],
+    topTags: rustResult.topTags || [],
+    libraryArtists: allLibraryArtists,
+    libraryMixArtists,
+    releaseRadarReleases: releaseAlbums,
+  });
+
+  emitStep("playlists_building", "Building discover playlists", 82);
+  const stopHeartbeat = onProgress
+    ? startDiscoveryProgressHeartbeat(
+        (progress) => {
+          onProgress({
+            phase: "playlists_building",
+            progressMessage: "Building discover playlists",
+            progress,
+          });
+        },
+        { startProgress: 82, endProgress: 96, estimatedMs: 150000 },
+      )
+    : () => {};
+
+  try {
+    const playlistStarted = Date.now();
+    const playlistResponse = await runRustWorkerJob(
+      "playlist-plan",
+      playlistPayload,
+      { useDaemon: false },
+    );
+    console.log(
+      `[Discovery] Playlist plan finished in ${Date.now() - playlistStarted}ms`,
+    );
+    return playlistResponse?.result?.playlists || [];
+  } finally {
+    stopHeartbeat();
+  }
+};
+
+const applyDiscoveryPlaylistsResult = (playlists = [], cacheNamespace = null) => {
+  const latestCache = getDiscoveryCache(cacheNamespace);
+  const discoverPlaylists = Array.isArray(playlists) ? playlists : [];
+  dbOps.updateDiscoveryCache({ discoverPlaylists }, cacheNamespace);
+  if (!cacheNamespace) {
+    Object.assign(discoveryCache, { discoverPlaylists });
+    emitDiscoveryDataUpdate(
+      { ...getDiscoveryCache(null), discoverPlaylists },
+      {
+        phase: "playlists_completed",
+        progress: 100,
+        progressMessage: "Discover playlists updated",
+      },
+    );
+  }
+  websocketService.emitDiscoveryUpdate({
+    isUpdating: false,
+    configured: true,
+    playlistsUpdating: false,
+    phase: "playlists_completed",
+    progress: 100,
+    progressMessage: "Discover playlists updated",
+    discoverPlaylists,
+  });
+};
+
+const scheduleDiscoveryPlaylistBuild = (context = {}) => {
+  if (discoveryPlaylistBuildPromise) return discoveryPlaylistBuildPromise;
+
+  discoveryPlaylistsBuilding = true;
+  websocketService.emitDiscoveryUpdate({
+    isUpdating: false,
+    configured: true,
+    playlistsUpdating: true,
+    phase: "playlists_building",
+    progressMessage: "Building discover playlists",
+  });
+
+  discoveryPlaylistBuildPromise = runDiscoveryPlaylistPlanWithRust(context)
+    .then((playlists) => {
+      applyDiscoveryPlaylistsResult(playlists, context.cacheNamespace || null);
+      return playlists;
+    })
+    .catch((error) => {
+      console.error(
+        "[Discovery] Background playlist build failed:",
+        error.message,
+      );
+      websocketService.emitDiscoveryUpdate({
+        isUpdating: false,
+        configured: true,
+        playlistsUpdating: false,
+        phase: "playlists_error",
+        progressMessage: "Discover playlist build failed",
+        error: error.message,
+      });
+      throw error;
+    })
+    .finally(() => {
+      discoveryPlaylistsBuilding = false;
+      discoveryPlaylistBuildPromise = null;
+    });
+
+  return discoveryPlaylistBuildPromise;
+};
+
+const runDiscoveryPipelineWithRust = async ({
+  recentLibraryArtists = [],
+  allLibraryArtists = [],
+  historyArtists = [],
+  existingArtistKeys = [],
+  includeGlobalTop = false,
+  cacheNamespace = null,
+  discoveryRunId,
+  recommendationRunStartedAt,
+  existingRecommendations = [],
+  feedback = [],
+  historyTopArtists = [],
+  discoveryMode,
+  seedLimit = null,
+  libraryMixPromise = null,
+  onProgress = null,
+  buildPlaylists = true,
+} = {}) => {
+  const emitStep = (phase, message, progress) => {
+    if (typeof onProgress === "function") {
+      onProgress({ phase, progressMessage: message, progress });
+    }
+  };
+  const { runRustDiscoveryPipeline } = await import("./rustWorkerRunner.js");
+  const { buildRustDiscoveryPipelinePayload } = await import(
+    "./rustDiscoveryBridge.js"
+  );
+  const { getRecentMissingReleases } = await import("./recentReleasesService.js");
+  const latestCache = getDiscoveryCache(cacheNamespace);
+  emitStep("preparing_pipeline", "Preparing recommendation pipeline", DISCOVERY_REFRESH_PROGRESS.PREPARING);
+  const payloadStarted = Date.now();
+  console.log("[Discovery] Building pipeline payload...");
+
+  const mixPromise =
+    libraryMixPromise ||
+    import("./weeklyFlowPlaylistSource.js").then(({ playlistSource }) =>
+      playlistSource.buildLibraryMixContext(allLibraryArtists),
+    );
+  const releaseRadarPromise = getRecentMissingReleases(30, {
+    artists: allLibraryArtists,
+    includeFuture: false,
+  });
+
+  const rustPayload = await buildRustDiscoveryPipelinePayload({
+    recentLibraryArtists,
+    allLibraryArtists,
+    historyArtists,
+    existingArtistKeys,
+    seedLimit,
+    includeGlobalTop,
+    payload: {
+      discoveryRunId,
+      recommendationRunStartedAt,
+      discoveryMode: discoveryMode || getDiscoveryMode(),
+    },
+    existingRecommendations,
+    feedback,
+    limits: {
+      poolCap: getDiscoveryRecommendationPoolLimit(),
+      perRefresh: getDiscoveryRecommendationsPerRefresh(),
+    },
+    baseDiscoveryData: latestCache,
+    libraryArtists: allLibraryArtists,
+    historyTopArtists,
+    imageHydration: {
+      freshLimit: getDiscoveryRecommendationsPerRefresh(),
+      poolLimit: getDiscoveryRecommendationResolveLimit(
+        existingRecommendations.length ||
+          latestCache.recommendations?.length ||
+          0,
+      ),
+    },
+    skipPlaylistPlan: true,
+  });
+  console.log(
+    `[Discovery] Pipeline payload ready in ${Date.now() - payloadStarted}ms (${(Buffer.byteLength(JSON.stringify(rustPayload), "utf8") / 1024 / 1024).toFixed(2)} MiB)`,
+  );
+
+  emitStep(
+    "enriching_recommendations",
+    "Finding similar artists and tags",
+    DISCOVERY_REFRESH_PROGRESS.ENRICHING,
+  );
+  const rustStarted = Date.now();
+  console.log("[Discovery] Running rust enrichment pipeline...");
+  const stopHeartbeat = onProgress
+    ? startDiscoveryProgressHeartbeat(
+        (progress) => {
+          onProgress({
+            phase: "enriching_recommendations",
+            progressMessage: "Finding similar artists and tags",
+            progress,
+          });
+        },
+        {
+          startProgress: DISCOVERY_REFRESH_PROGRESS.ENRICHING,
+          endProgress: DISCOVERY_REFRESH_PROGRESS.ENRICHING_MAX,
+          estimatedMs: 120000,
+        },
+      )
+    : () => {};
+
+  let rustResponse;
+  let libraryMixArtists;
+  let releaseAlbums;
+  try {
+    [rustResponse, libraryMixArtists, releaseAlbums] = await Promise.all([
+      runRustDiscoveryPipeline(rustPayload),
+      mixPromise,
+      releaseRadarPromise,
+    ]);
+  } finally {
+    stopHeartbeat();
+  }
+  const rustStats = rustResponse?.stats || {};
+  const rustResult = rustResponse?.result || {};
+  console.log(
+    `[Discovery] Rust enrichment finished in ${Date.now() - rustStarted}ms (lastfm=${rustStats.lastfmCalls || 0}, metadata=${rustStats.musicbrainzCalls || 0})`,
+  );
+  emitStep(
+    "enriching_recommendations",
+    "Recommendation scoring complete",
+    DISCOVERY_REFRESH_PROGRESS.SCORING_DONE,
+  );
+
+  if (!buildPlaylists) {
+    return {
+      ...rustResponse,
+      libraryMixArtists,
+      releaseAlbums,
+    };
+  }
+
+  const playlists = await runDiscoveryPlaylistPlanWithRust({
+    rustResult,
+    latestCache,
+    allLibraryArtists,
+    existingArtistKeys,
+    historyTopArtists,
+    libraryMixArtists,
+    releaseAlbums,
+    onProgress,
+  });
+  emitStep("building_playlists", "Discover playlists ready", 95);
+
+  return {
+    ...rustResponse,
+    libraryMixArtists,
+    releaseAlbums,
+    result: {
+      ...rustResult,
+      playlists,
+    },
+    stats: {
+      lastfmCalls: rustStats.lastfmCalls || 0,
+      musicbrainzCalls: rustStats.musicbrainzCalls || 0,
+      durationMs: rustStats.durationMs || 0,
+    },
+  };
+};
+
+const finalizeDiscoveryEnrichmentResult = ({
+  rustResult = {},
+  discoveryRunId,
+  cacheNamespace = null,
+  latestCache = {},
+  recommendationRunStartedAt = null,
+  completionPhase = "playlists_completed",
+  completionMessage = "Discovery recommendations and playlists updated",
+}) => {
+  let recommendationsArray = rustResult.recommendations || [];
+  let discoverPlaylists = rustResult.playlists || [];
+  const pipelineSeeds = Array.isArray(rustResult.seeds) ? rustResult.seeds : [];
+
+  recommendationsArray = applyProxiedRecommendationImages(recommendationsArray);
+  const globalTop = applyProxiedRecommendationImages(rustResult.globalTop || []);
+
+  const poolGenres = deriveDiscoveryGenresFromPool(recommendationsArray);
+  const poolTags = deriveDiscoveryTagsFromPool(recommendationsArray);
+
+  const enrichedAt = new Date().toISOString();
+  const enrichedData = {
+    recommendations: recommendationsArray,
+    basedOn: pipelineSeeds.map((seed) => ({
+      name: seed.artistName || seed.name,
+      id: seed.mbid || seed.id || null,
+      source: seed.source || "library",
+      profileBucket: seed.profileBucket || null,
+    })),
+    topTags:
+      poolTags.length > 0
+        ? poolTags
+        : rustResult.topTags || latestCache.topTags || [],
+    topGenres:
+      poolGenres.length > 0
+        ? poolGenres
+        : rustResult.topGenres || latestCache.topGenres || [],
+    globalTop: globalTop.length > 0 ? globalTop : latestCache.globalTop || [],
+    fallbackGenres: latestCache.fallbackGenres || [],
+    fallbackGenrePools: latestCache.fallbackGenrePools || {},
+    discoverPlaylists,
+    provider: latestCache.provider || DISCOVERY_PROVIDER_LASTFM,
+    capabilities:
+      latestCache.capabilities ||
+      getDiscoveryCapabilities(
+        (latestCache.provider || DISCOVERY_PROVIDER_LASTFM) ===
+          DISCOVERY_PROVIDER_LASTFM,
+      ),
+    lastUpdated: recommendationRunStartedAt || latestCache.lastUpdated || enrichedAt,
+    recommendationQuality: DISCOVERY_QUALITY_ENRICHED,
+    isEnriching: false,
+    discoveryRunId,
+    enrichmentStartedAt: latestCache.enrichmentStartedAt || enrichedAt,
+    enrichmentCompletedAt: enrichedAt,
+    enrichmentProgressMessage: null,
+  };
+
+  if (!cacheNamespace) {
+    Object.assign(discoveryCache, enrichedData, { isUpdating: false });
+  }
+  dbOps.updateDiscoveryCache(enrichedData, cacheNamespace);
+  if (!cacheNamespace) {
+    emitDiscoveryDataUpdate(enrichedData, {
+      phase: completionPhase,
+      progress: DISCOVERY_REFRESH_PROGRESS.COMPLETE,
+      progressMessage: completionMessage,
+    });
+  } else {
+    websocketService.emitDiscoveryUpdate({
+      isUpdating: false,
+      configured: true,
+      phase: completionPhase,
+      progress: DISCOVERY_REFRESH_PROGRESS.COMPLETE,
+      progressMessage: completionMessage,
+    });
+  }
+
+  return {
+    enriched: true,
+    recommendationCount: recommendationsArray.length,
+    playlistCount: discoverPlaylists.length,
+    enrichedData,
+  };
+};
+
 const runDiscoveryPhase1WithRust = async ({
   recentLibraryArtists = [],
   allLibraryArtists = [],
@@ -358,6 +781,40 @@ export const recordDiscoveryUpdateProgress = (
     0,
     Math.min(100, Math.round(Number(progress) || 0)),
   );
+  if (phase === "completed") {
+    discoveryCache.isUpdating = false;
+    discoveryCache.updatePhase = "completed";
+    discoveryCache.updateProgress = normalizedProgress;
+    discoveryCache.updateProgressMessage = progressMessage || "";
+    websocketService.emitDiscoveryUpdate({
+      phase: "completed",
+      progress: normalizedProgress,
+      progressMessage: discoveryCache.updateProgressMessage,
+      isUpdating: false,
+      configured: true,
+    });
+    clearDiscoveryUpdateProgress();
+    return;
+  }
+  const reset =
+    extra?.refreshReset === true || phase === "starting" || phase === "queued";
+  if (
+    phase !== "queued" &&
+    discoveryCache.isUpdating !== true &&
+    !reset
+  ) {
+    return;
+  }
+  if (!reset) {
+    const currentProgress =
+      typeof discoveryCache.updateProgress === "number"
+        ? discoveryCache.updateProgress
+        : 0;
+    if (normalizedProgress < currentProgress) {
+      return;
+    }
+  }
+  discoveryCache.isUpdating = true;
   discoveryCache.updatePhase = phase || null;
   discoveryCache.updateProgress = normalizedProgress;
   discoveryCache.updateProgressMessage = progressMessage || "";
@@ -367,6 +824,17 @@ export const recordDiscoveryUpdateProgress = (
     progressMessage: discoveryCache.updateProgressMessage,
     isUpdating: true,
     configured: true,
+    ...(reset ? { refreshReset: true } : {}),
+    ...extra,
+  });
+};
+
+export const beginDiscoveryRefreshProgress = (
+  progressMessage = "Preparing discovery refresh",
+  extra = {},
+) => {
+  recordDiscoveryUpdateProgress("starting", progressMessage, DISCOVERY_REFRESH_PROGRESS.START, {
+    refreshReset: true,
     ...extra,
   });
 };
@@ -388,7 +856,7 @@ export const getDiscoveryUpdateStatus = () => ({
 
 export const getDiscoveryPlaylistBuildStatus = (cacheNamespace = null) => {
   const cached = getDiscoveryCache(cacheNamespace);
-  const updating = cached.isEnriching === true;
+  const updating = cached.isEnriching === true || discoveryPlaylistsBuilding;
   return {
     playlistsUpdating: updating,
     playlistsUpdateMessage: updating
@@ -792,16 +1260,11 @@ const buildDiscoveryUpdatePayload = (
     phase = "completed",
     progress = 100,
     progressMessage = "Discovery refresh completed",
+    isUpdating = false,
+    partial = false,
   } = {},
 ) => {
-  return {
-    recommendations: discoveryData.recommendations || [],
-    globalTop: discoveryData.globalTop || [],
-    basedOn: discoveryData.basedOn || [],
-    topTags: discoveryData.topTags || [],
-    topGenres: discoveryData.topGenres || [],
-    fallbackGenres: discoveryData.fallbackGenres || [],
-    discoverPlaylists: discoveryData.discoverPlaylists || [],
+  const base = {
     provider: discoveryData.provider || DISCOVERY_PROVIDER_LASTFM,
     capabilities:
       discoveryData.capabilities ||
@@ -833,12 +1296,27 @@ const buildDiscoveryUpdatePayload = (
       discoveryData.enrichmentProgressMessage ||
       discoveryData.metadata?.enrichmentProgressMessage ||
       null,
-    isUpdating: false,
+    isUpdating,
     configured: true,
     phase,
     progress,
     progressMessage,
     discoveryMode: getDiscoveryMode(),
+  };
+
+  if (partial) {
+    return base;
+  }
+
+  return {
+    ...base,
+    recommendations: discoveryData.recommendations || [],
+    globalTop: discoveryData.globalTop || [],
+    basedOn: discoveryData.basedOn || [],
+    topTags: discoveryData.topTags || [],
+    topGenres: discoveryData.topGenres || [],
+    fallbackGenres: discoveryData.fallbackGenres || [],
+    discoverPlaylists: discoveryData.discoverPlaylists || [],
   };
 };
 
@@ -927,11 +1405,14 @@ export const runDiscoveryRecommendationEnrichment = async (payload = {}) => {
         recommendationQuality: DISCOVERY_QUALITY_ENRICHING,
         isEnriching: true,
         discoveryRunId,
-        enrichmentProgressMessage: "Improving recommendations",
+        enrichmentProgressMessage: "Finding similar artists and tags",
       },
       {
         phase: "enriching_recommendations",
-        progressMessage: "Improving discovery recommendations",
+        progress: 30,
+        progressMessage: "Finding similar artists and tags",
+        isUpdating: true,
+        partial: true,
       },
     );
   } else {
@@ -1006,72 +1487,22 @@ export const runDiscoveryRecommendationEnrichment = async (payload = {}) => {
     return { skipped: true, reason: "stale_run" };
   }
 
-  recommendationsArray = applyProxiedRecommendationImages(recommendationsArray);
-  freshRecommendations = applyProxiedRecommendationImages(freshRecommendations);
-
-  const { attachArtworkToDiscoverPlaylists } = await import(
-    "./discoverPlaylistArtworkService.js"
-  );
-  discoverPlaylists = await attachArtworkToDiscoverPlaylists(discoverPlaylists);
-
-  const poolGenres = deriveDiscoveryGenresFromPool(recommendationsArray);
-  const poolTags = deriveDiscoveryTagsFromPool(recommendationsArray);
-
-  const enrichedAt = new Date().toISOString();
-  const enrichedData = {
-    recommendations: recommendationsArray,
-    basedOn: latestCache.basedOn || [],
-    topTags:
-      poolTags.length > 0
-        ? poolTags
-        : rustResult.topTags || latestCache.topTags || [],
-    topGenres:
-      poolGenres.length > 0
-        ? poolGenres
-        : rustResult.topGenres || latestCache.topGenres || [],
-    globalTop: latestCache.globalTop || [],
-    fallbackGenres: latestCache.fallbackGenres || [],
-    fallbackGenrePools: latestCache.fallbackGenrePools || {},
-    discoverPlaylists,
-    provider: latestCache.provider || DISCOVERY_PROVIDER_LASTFM,
-    capabilities:
-      latestCache.capabilities ||
-      getDiscoveryCapabilities(
-        (latestCache.provider || DISCOVERY_PROVIDER_LASTFM) ===
-          DISCOVERY_PROVIDER_LASTFM,
-      ),
-    lastUpdated: latestCache.lastUpdated || enrichedAt,
-    recommendationQuality: DISCOVERY_QUALITY_ENRICHED,
-    isEnriching: false,
+  const finalizeResult = finalizeDiscoveryEnrichmentResult({
+    rustResult: {
+      ...rustResult,
+      recommendations: recommendationsArray,
+      playlists: rustResult.playlists || [],
+    },
     discoveryRunId,
-    enrichmentStartedAt: latestCache.enrichmentStartedAt || null,
-    enrichmentCompletedAt: enrichedAt,
-    enrichmentProgressMessage: null,
-  };
-
-  if (!cacheNamespace) {
-    Object.assign(discoveryCache, enrichedData, { isUpdating: false });
-  }
-  dbOps.updateDiscoveryCache(enrichedData, cacheNamespace);
-  if (!cacheNamespace) {
-    emitDiscoveryDataUpdate(enrichedData, {
-      phase: "playlists_completed",
-      progressMessage: "Discovery recommendations and playlists updated",
-    });
-  } else {
-    websocketService.emitDiscoveryUpdate({
-      isUpdating: false,
-      configured: true,
-      phase: "completed",
-      progress: 100,
-      progressMessage: "Discovery recommendations and playlists updated",
-    });
-  }
+    cacheNamespace,
+    latestCache,
+    recommendationRunStartedAt: latestCache.lastUpdated,
+  });
 
   return {
     enriched: true,
-    recommendationCount: recommendationsArray.length,
-    playlistCount: discoverPlaylists.length,
+    recommendationCount: finalizeResult.recommendationCount,
+    playlistCount: finalizeResult.playlistCount,
   };
 };
 
@@ -1123,7 +1554,7 @@ export const updateDiscoveryCache = async (options = {}) => {
   }
   discoveryCache.isUpdating = true;
   console.log("Starting background update of discovery recommendations...");
-  emitDiscoveryProgress("starting", "Preparing discovery refresh", 5);
+  beginDiscoveryRefreshProgress("Preparing discovery refresh");
   import("./aurralHistoryService.js")
     .then(({ recordDiscoveryRefreshStarted }) =>
       recordDiscoveryRefreshStarted(),
@@ -1132,7 +1563,7 @@ export const updateDiscoveryCache = async (options = {}) => {
 
   try {
     const { libraryManager } = await import("./libraryManager.js");
-    emitDiscoveryProgress("loading_sources", "Loading library artists", 12);
+    emitDiscoveryProgress("loading_sources", "Loading library artists", DISCOVERY_REFRESH_PROGRESS.LOADING);
     const [recentLibraryArtists, allLibraryArtistsRaw] = await Promise.all([
       libraryManager.getRecentArtists(40),
       libraryManager.getAllArtists(),
@@ -1145,6 +1576,10 @@ export const updateDiscoveryCache = async (options = {}) => {
         ? recentLibraryArtists
         : allLibraryArtists.slice(0, 40);
     console.log(`Found ${allLibraryArtists.length} artists in library.`);
+
+    const { playlistSource } = await import("./weeklyFlowPlaylistSource.js");
+    const libraryMixPromise =
+      playlistSource.buildLibraryMixContext(allLibraryArtists);
 
     const hasLastfmKey = !!getLastfmApiKey();
     const lastfmHealth = createLastfmHealth();
@@ -1195,7 +1630,7 @@ export const updateDiscoveryCache = async (options = {}) => {
     emitDiscoveryProgress(
       "collecting_seeds",
       "Collecting recommendation seed artists",
-      20,
+      DISCOVERY_REFRESH_PROGRESS.SEEDS,
     );
 
     const historyArtists = [];
@@ -1230,109 +1665,113 @@ export const updateDiscoveryCache = async (options = {}) => {
 
     const existingArtistKeys = buildExistingArtistKeySet(allLibraryArtists);
 
-    if (getLastfmApiKey()) {
-      emitDiscoveryProgress(
-        "fetching_trending",
-        "Fetching global trending artists",
-        50,
-      );
-    }
+    const recommendationRunStartedAt = new Date().toISOString();
+    const discoveryRunId = createDiscoveryRunId();
+    const seedLimit = getDiscoveryRecommendationSeedLimit(
+      allLibraryArtists.length + historyArtists.length,
+      getLastfmFailureRatio(lastfmHealth),
+    );
+    const recommendationsArray = discoveryCache.recommendations || [];
 
-    const phase1 = await runDiscoveryPhase1WithRust({
+    applyDiscoveryCacheMetadata(null, {
+      recommendationQuality: DISCOVERY_QUALITY_ENRICHING,
+      isEnriching: true,
+      discoveryRunId,
+      enrichmentStartedAt: recommendationRunStartedAt,
+      enrichmentProgressMessage: "Finding similar artists and tags",
+      lastUpdated: recommendationRunStartedAt,
+    });
+    emitDiscoveryDataUpdate(
+      {
+        ...getDiscoveryCache(null),
+        recommendationQuality: DISCOVERY_QUALITY_ENRICHING,
+        isEnriching: true,
+        discoveryRunId,
+        enrichmentProgressMessage: "Finding similar artists and tags",
+      },
+      {
+        phase: "enriching_recommendations",
+        progress: DISCOVERY_REFRESH_PROGRESS.ENRICHING,
+        progressMessage: "Finding similar artists and tags",
+        isUpdating: true,
+        partial: true,
+      },
+    );
+
+    const rustResponse = await runDiscoveryPipelineWithRust({
       recentLibraryArtists,
       allLibraryArtists,
       historyArtists,
       existingArtistKeys,
       includeGlobalTop: Boolean(getLastfmApiKey()),
-      lastfmHealth,
+      discoveryRunId,
+      recommendationRunStartedAt,
+      existingRecommendations: recommendationsArray,
+      feedback: getDiscoveryFeedback("global"),
+      historyTopArtists: historyArtists
+        .slice(0, 3)
+        .map((artist) => artist.artistName)
+        .filter(Boolean),
+      seedLimit,
+      libraryMixPromise,
+      buildPlaylists: false,
+      onProgress: ({ phase, progressMessage, progress }) =>
+        emitDiscoveryProgress(phase, progressMessage, progress),
     });
-    const recSample = phase1.recSample;
-    discoveryCache.globalTop = phase1.globalTop;
-    if (phase1.globalTop.length > 0) {
+    const rustResult = rustResponse?.result || {};
+    if ((rustResult.globalTop || []).length > 0) {
       console.log(
-        `Found ${discoveryCache.globalTop.length} trending artists (from top tracks).`,
+        `Found ${rustResult.globalTop.length} trending artists (from top tracks).`,
       );
     }
 
-    const recommendationRunStartedAt = new Date().toISOString();
-    const discoveryRunId = createDiscoveryRunId();
-
-    console.log(
-      `Preparing recommendation enrichment from ${recSample.length} seed artists...`,
-    );
     emitDiscoveryProgress(
-      "preparing_enrichment",
-      "Preparing recommendation enrichment",
-      65,
+      "saving_recommendations",
+      "Saving recommendations",
+      DISCOVERY_REFRESH_PROGRESS.SAVING,
     );
-
-    const recommendationsArray = discoveryCache.recommendations || [];
-
-    const discoveryData = {
-      provider: DISCOVERY_PROVIDER_LASTFM,
-      capabilities: getDiscoveryCapabilities(true),
-      recommendations: recommendationsArray,
-      basedOn: recSample.map((a) => ({
-        name: a.artistName,
-        id: a.mbid,
-        source: a.source || "library",
-        profileBucket: a.profileBucket || null,
-      })),
-      topTags: discoveryCache.topTags || [],
-      topGenres: discoveryCache.topGenres || [],
-      globalTop: discoveryCache.globalTop || [],
-      fallbackGenres: [],
-      fallbackGenrePools: {},
-      discoverPlaylists: discoveryCache.discoverPlaylists || [],
-      lastUpdated: recommendationRunStartedAt,
-      recommendationQuality: DISCOVERY_QUALITY_INITIAL,
-      isEnriching: recSample.length > 0,
+    const finalizeResult = finalizeDiscoveryEnrichmentResult({
+      rustResult: {
+        ...rustResult,
+        playlists: discoveryCache.discoverPlaylists || [],
+      },
       discoveryRunId,
-      enrichmentStartedAt: recSample.length > 0 ? recommendationRunStartedAt : null,
-      enrichmentCompletedAt: null,
-      enrichmentProgressMessage:
-        recSample.length > 0 ? "Improving recommendations" : null,
-    };
+      cacheNamespace: null,
+      latestCache: getDiscoveryCache(null),
+      recommendationRunStartedAt,
+      completionPhase: "completed",
+      completionMessage: "Recommendations updated",
+    });
 
-    Object.assign(discoveryCache, discoveryData, { isUpdating: false });
-    dbOps.updateDiscoveryCache(discoveryData);
     emitDiscoveryProgress(
-      "saving_results",
-      "Saving initial discovery recommendations",
-      96,
+      "completed",
+      "Recommendations updated",
+      DISCOVERY_REFRESH_PROGRESS.COMPLETE,
     );
+
+    scheduleDiscoveryPlaylistBuild({
+      rustResult,
+      latestCache: finalizeResult.enrichedData,
+      allLibraryArtists,
+      existingArtistKeys,
+      historyTopArtists: historyArtists
+        .slice(0, 3)
+        .map((artist) => artist.artistName)
+        .filter(Boolean),
+      libraryMixArtists: rustResponse.libraryMixArtists || [],
+      releaseAlbums: rustResponse.releaseAlbums || [],
+    });
+
     const { notifyDiscoveryUpdated } = await import("./notificationService.js");
     notifyDiscoveryUpdated().catch((err) =>
       console.warn("[Discovery] Notification failed:", err.message),
     );
     console.log(
-      `Discovery data written to database: ${discoveryData.recommendations.length} recommendations, ${discoveryData.topGenres.length} genres, ${discoveryData.globalTop.length} trending`,
+      `Discovery data written to database: ${finalizeResult.recommendationCount} recommendations, ${finalizeResult.enrichedData.topGenres.length} genres, ${finalizeResult.enrichedData.globalTop.length} trending`,
     );
-
     console.log("Discovery cache updated successfully.");
-    console.log(
-      `Summary: ${recommendationsArray.length} recommendations, ${discoveryCache.topGenres.length} genres, ${discoveryCache.globalTop.length} trending artists`,
-    );
-    discoveryCache.isUpdating = false;
-    clearDiscoveryUpdateProgress();
-
-    const enrichmentJobId = scheduleDiscoveryRecommendationEnrichment({
-      discoveryRunId,
-      recommendationRunStartedAt,
-      seeds: recSample,
-      historyTopArtists: historyArtists
-        .slice(0, 3)
-        .map((artist) => artist.artistName)
-        .filter(Boolean),
-      discoveryMode: getDiscoveryMode(),
-    });
 
     if (listeningHistoryUsersConfigured) {
-      emitDiscoveryDataUpdate(discoveryData, {
-        progressMessage: enrichmentJobId
-          ? "Discovery refresh queued"
-          : "Discovery refresh completed",
-      });
       const queuedUserRefreshes = enqueueListeningHistoryUserRefreshes({
         reason: "global_refresh_completed",
       });
@@ -1343,19 +1782,13 @@ export const updateDiscoveryCache = async (options = {}) => {
           } after global refresh.`,
         );
       }
-    } else {
-      emitDiscoveryDataUpdate(discoveryData, {
-        progressMessage: enrichmentJobId
-          ? "Discovery refresh queued"
-          : "Discovery refresh completed",
-      });
     }
 
     const { recordDiscoveryUpdated } =
       await import("./aurralHistoryService.js");
     recordDiscoveryUpdated({
-      recommendationCount: discoveryData.recommendations?.length || 0,
-      genreCount: discoveryData.topGenres?.length || 0,
+      recommendationCount: finalizeResult.recommendationCount,
+      genreCount: finalizeResult.enrichedData.topGenres?.length || 0,
     });
 
     try {
@@ -1469,6 +1902,9 @@ export const updateUserDiscoveryCache = async (
       ? allLibraryArtistsRaw
       : [];
     const existingArtistKeys = buildExistingArtistKeySet(allLibraryArtists);
+    const { playlistSource } = await import("./weeklyFlowPlaylistSource.js");
+    const libraryMixPromise =
+      playlistSource.buildLibraryMixContext(allLibraryArtists);
 
     const lastfmHealth = createLastfmHealth();
     const discoveryPeriod = getLastfmDiscoveryPeriod();
@@ -1500,56 +1936,63 @@ export const updateUserDiscoveryCache = async (
       }
     }
 
-    const phase1 = await runDiscoveryPhase1WithRust({
+    const recommendationRunStartedAt = new Date().toISOString();
+    const discoveryRunId = createDiscoveryRunId();
+    const recommendationsArray =
+      dbOps.getDiscoveryCache(cacheNamespace).recommendations || [];
+    const seedLimit = getDiscoveryRecommendationSeedLimit(
+      allLibraryArtists.length + historyArtists.length,
+      getLastfmFailureRatio(lastfmHealth),
+    );
+
+    applyDiscoveryCacheMetadata(cacheNamespace, {
+      recommendationQuality: DISCOVERY_QUALITY_ENRICHING,
+      isEnriching: true,
+      discoveryRunId,
+      enrichmentStartedAt: recommendationRunStartedAt,
+      enrichmentProgressMessage: "Finding similar artists and tags",
+    });
+    if (shouldPublishRefreshState) {
+      websocketService.emitDiscoveryUpdate({
+        isUpdating: false,
+        configured: true,
+        phase: "enriching_recommendations",
+        progressMessage: "Improving discovery recommendations",
+      });
+    }
+
+    const feedback = options.feedbackUserId
+      ? getDiscoveryFeedback(options.feedbackUserId)
+      : [];
+    const rustResponse = await runDiscoveryPipelineWithRust({
       recentLibraryArtists,
       allLibraryArtists,
       historyArtists,
       existingArtistKeys,
       includeGlobalTop: false,
-      lastfmHealth,
-    });
-    const recSample = phase1.recSample;
-    const recommendationRunStartedAt = new Date().toISOString();
-    const discoveryRunId = createDiscoveryRunId();
-    const recommendationsArray =
-      dbOps.getDiscoveryCache(cacheNamespace).recommendations || [];
-
-    const userData = {
-      recommendations: recommendationsArray,
-      basedOn: recSample.map((a) => ({
-        name: a.artistName,
-        id: a.mbid,
-        source: a.source || "library",
-        profileBucket: a.profileBucket || null,
-      })),
-      topTags: [],
-      topGenres: [],
-      recommendationQuality: DISCOVERY_QUALITY_INITIAL,
-      isEnriching: recSample.length > 0,
-      discoveryRunId,
-      enrichmentStartedAt: recSample.length > 0 ? recommendationRunStartedAt : null,
-      enrichmentCompletedAt: null,
-      enrichmentProgressMessage:
-        recSample.length > 0 ? "Improving recommendations" : null,
-    };
-
-    dbOps.updateDiscoveryCache(userData, cacheNamespace);
-    const enrichmentJobId = scheduleDiscoveryRecommendationEnrichment({
       cacheNamespace,
       discoveryRunId,
       recommendationRunStartedAt,
-      seeds: recSample,
-      listenHistoryProfile: profile,
-      feedbackUserId: options.feedbackUserId || null,
+      existingRecommendations: recommendationsArray,
+      feedback,
       historyTopArtists: historyArtists
         .slice(0, 3)
         .map((artist) => artist.artistName)
         .filter(Boolean),
-      discoveryMode: getDiscoveryMode(),
+      seedLimit,
+      libraryMixPromise,
+    });
+    const rustResult = rustResponse?.result || {};
+    const finalizeResult = finalizeDiscoveryEnrichmentResult({
+      rustResult,
+      discoveryRunId,
+      cacheNamespace,
+      latestCache: getDiscoveryCache(cacheNamespace),
+      recommendationRunStartedAt,
     });
 
     console.log(
-      `[Discovery] ${profile.listenHistoryProvider}:${profile.listenHistoryUsername} initial refresh complete: ${recommendationsArray.length} recommendations queued.`,
+      `[Discovery] ${profile.listenHistoryProvider}:${profile.listenHistoryUsername} refresh complete: ${finalizeResult.recommendationCount} recommendations.`,
     );
     if (shouldPublishRefreshState) {
       websocketService.emitDiscoveryUpdate({
@@ -1557,12 +2000,10 @@ export const updateUserDiscoveryCache = async (
         configured: true,
         phase: "completed",
         progress: 100,
-        progressMessage: enrichmentJobId
-          ? "Initial discovery recommendations ready"
-          : "Discovery refresh completed",
+        progressMessage: "Discovery refresh completed",
       });
     }
-    return userData;
+    return finalizeResult.enrichedData;
   } catch (error) {
     console.error(
       `[Discovery] Failed to update cache for ${profile.listenHistoryProvider}:${profile.listenHistoryUsername}: ${error.message}`,

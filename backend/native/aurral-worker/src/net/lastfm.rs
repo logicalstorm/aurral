@@ -1,5 +1,6 @@
 use reqwest::Client;
 use serde_json::Value;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Semaphore;
@@ -37,17 +38,59 @@ impl LastfmHealth {
     }
 }
 
+struct RateSchedule {
+    spacing: Duration,
+    next_slot: tokio::sync::Mutex<Instant>,
+}
+
+impl RateSchedule {
+    fn new(spacing: Duration) -> Self {
+        Self {
+            spacing,
+            next_slot: tokio::sync::Mutex::new(Instant::now()),
+        }
+    }
+
+    async fn acquire(&self) {
+        let wait = {
+            let mut next = self.next_slot.lock().await;
+            let now = Instant::now();
+            let slot = if now < *next { *next } else { now };
+            *next = slot + self.spacing;
+            if slot > now { Some(slot - now) } else { None }
+        };
+        if let Some(duration) = wait {
+            sleep(duration).await;
+        }
+    }
+}
+
+fn tag_cache_key(artist: &str, mbid: Option<&str>) -> String {
+    if let Some(mbid) = mbid {
+        let trimmed = mbid.trim();
+        if !trimmed.is_empty() {
+            return format!("mbid:{}", trimmed.to_lowercase());
+        }
+    }
+    format!("name:{}", artist.trim().to_lowercase())
+}
+
 pub struct LastfmClient {
     http: Client,
     api_key: String,
     semaphore: Arc<Semaphore>,
-    min_interval: Duration,
-    last_request: tokio::sync::Mutex<Instant>,
+    rate_schedule: RateSchedule,
+    tag_cache: tokio::sync::Mutex<HashMap<String, Vec<String>>>,
     pub calls: tokio::sync::Mutex<u64>,
 }
 
 impl LastfmClient {
     pub fn new(api_key: String, concurrency: usize) -> Self {
+        let spacing_ms = std::env::var("AURRAL_LASTFM_REQUEST_SPACING_MS")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(100)
+            .clamp(50, 500);
         Self {
             http: Client::builder()
                 .timeout(Duration::from_secs(20))
@@ -55,22 +98,15 @@ impl LastfmClient {
                 .expect("http client"),
             api_key,
             semaphore: Arc::new(Semaphore::new(concurrency.max(1))),
-            min_interval: Duration::from_millis(200),
-            last_request: tokio::sync::Mutex::new(Instant::now() - Duration::from_secs(1)),
+            rate_schedule: RateSchedule::new(Duration::from_millis(spacing_ms)),
+            tag_cache: tokio::sync::Mutex::new(HashMap::new()),
             calls: tokio::sync::Mutex::new(0),
         }
     }
 
     pub async fn request(&self, method: &str, params: &[(&str, String)]) -> Option<Value> {
         let _permit = self.semaphore.acquire().await.ok()?;
-        {
-            let mut last = self.last_request.lock().await;
-            let elapsed = last.elapsed();
-            if elapsed < self.min_interval {
-                sleep(self.min_interval - elapsed).await;
-            }
-            *last = Instant::now();
-        }
+        self.rate_schedule.acquire().await;
 
         let mut query: Vec<(&str, String)> = vec![
             ("method", method.to_string()),
@@ -92,6 +128,18 @@ impl LastfmClient {
         artist: &str,
         mbid: Option<&str>,
     ) -> Vec<String> {
+        let key = tag_cache_key(artist, mbid);
+        if let Some(cached) = self.tag_cache.lock().await.get(&key) {
+            return cached.clone();
+        }
+        let tags = self.fetch_artist_top_tags(artist, mbid).await;
+        if !tags.is_empty() {
+            self.tag_cache.lock().await.insert(key, tags.clone());
+        }
+        tags
+    }
+
+    async fn fetch_artist_top_tags(&self, artist: &str, mbid: Option<&str>) -> Vec<String> {
         let params = if let Some(mbid) = mbid {
             vec![("mbid", mbid.to_string())]
         } else {

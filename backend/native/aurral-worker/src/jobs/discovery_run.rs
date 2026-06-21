@@ -1,6 +1,6 @@
 use crate::discovery::image_hydrate::hydrate_recommendation_images;
-use crate::discovery::tag_harvest::collect_seed_tags;
-use crate::jobs::discovery_enrich::{run as run_discovery_enrich, DiscoveryEnrichResult};
+use crate::discovery::tag_harvest::{collect_seed_tags, TagHarvestResult};
+use crate::jobs::discovery_enrich::{run_with_clients as run_discovery_enrich, DiscoveryEnrichResult};
 use crate::jobs::playlist_plan::{run as run_playlist_plan, PlaylistPlanResult};
 use crate::net::lastfm::LastfmClient;
 use crate::net::metadata::MetadataClient;
@@ -45,20 +45,16 @@ impl DiscoveryRunResult {
     }
 }
 
-pub async fn run(job: DiscoveryRunJob) -> Result<DiscoveryRunResult, String> {
+pub async fn run_with_clients(
+    job: DiscoveryRunJob,
+    lastfm: Arc<LastfmClient>,
+    metadata: Arc<MetadataClient>,
+    harvest: Option<TagHarvestResult>,
+) -> Result<DiscoveryRunResult, String> {
     let started = Instant::now();
-
-    let harvest = {
-        let api_key = env::var("LASTFM_API_KEY")
-            .or_else(|_| env::var("AURRAL_LASTFM_API_KEY"))
-            .map_err(|_| "LASTFM_API_KEY is not configured".to_string())?;
-        let concurrency = env::var("AURRAL_LASTFM_CONCURRENCY")
-            .ok()
-            .and_then(|value| value.parse::<usize>().ok())
-            .unwrap_or(12)
-            .clamp(1, 16);
-        let lastfm = Arc::new(LastfmClient::new(api_key, concurrency));
-        collect_seed_tags(&job.seeds, lastfm).await
+    let harvest = match harvest {
+        Some(value) => value,
+        None => collect_seed_tags(&job.seeds, lastfm.clone()).await,
     };
 
     let enrich_job = DiscoveryEnrichJob {
@@ -77,42 +73,51 @@ pub async fn run(job: DiscoveryRunJob) -> Result<DiscoveryRunResult, String> {
         mut recommendations,
         mut fresh_recommendations,
         stats: enrich_stats,
-    } = run_discovery_enrich(enrich_job).await?;
-
-    let playlist_job = PlaylistPlanJob {
-        presets: job.presets,
-        existing_artist_keys: job.existing_artist_keys,
-        recommendations: recommendations.clone(),
-        global_top: job.global_top,
-        based_on: job.based_on,
-        top_genres: if job.top_genres.is_empty() {
-            harvest.top_genres.clone()
-        } else {
-            job.top_genres
-        },
-        top_tags: if job.top_tags.is_empty() {
-            harvest.top_tags.clone()
-        } else {
-            job.top_tags
-        },
-        library_mix_artists: job.library_mix_artists,
-        release_radar_releases: job.release_radar_releases,
-        release_radar_size: job.release_radar_size,
-    };
+    } = run_discovery_enrich(enrich_job, lastfm.clone(), metadata.clone()).await?;
 
     let PlaylistPlanResult {
         playlists,
         stats: playlist_stats,
-    } = run_playlist_plan(playlist_job).await?;
+    } = if job.skip_playlist_plan {
+        PlaylistPlanResult {
+            playlists: Vec::new(),
+            stats: crate::types::WorkerStats {
+                lastfm_calls: 0,
+                musicbrainz_calls: 0,
+                duration_ms: 0,
+            },
+        }
+    } else {
+        let playlist_job = PlaylistPlanJob {
+            presets: job.presets,
+            existing_artist_keys: job.existing_artist_keys,
+            recommendations: recommendations.clone(),
+            global_top: job.global_top,
+            based_on: job.based_on,
+            top_genres: if job.top_genres.is_empty() {
+                harvest.top_genres.clone()
+            } else {
+                job.top_genres
+            },
+            top_tags: if job.top_tags.is_empty() {
+                harvest.top_tags.clone()
+            } else {
+                job.top_tags
+            },
+            library_mix_artists: job.library_mix_artists,
+            release_radar_releases: job.release_radar_releases,
+            release_radar_size: job.release_radar_size,
+        };
+        run_playlist_plan(playlist_job).await?
+    };
 
-    let metadata = MetadataClient::new();
     let hydration = job.image_hydration.unwrap_or_default();
     let fresh_limit = hydration
         .fresh_limit
         .unwrap_or(fresh_recommendations.len());
     let pool_limit = hydration.pool_limit.unwrap_or(recommendations.len());
-    hydrate_recommendation_images(&metadata, &mut fresh_recommendations, fresh_limit).await;
-    hydrate_recommendation_images(&metadata, &mut recommendations, pool_limit).await;
+    hydrate_recommendation_images(metadata.clone(), &mut fresh_recommendations, fresh_limit).await;
+    hydrate_recommendation_images(metadata.clone(), &mut recommendations, pool_limit).await;
     let hydration_metadata_calls = *metadata.calls.lock().await;
 
     Ok(DiscoveryRunResult {
@@ -129,4 +134,16 @@ pub async fn run(job: DiscoveryRunJob) -> Result<DiscoveryRunResult, String> {
             duration_ms: started.elapsed().as_millis() as u64,
         },
     })
+}
+
+pub async fn run(job: DiscoveryRunJob) -> Result<DiscoveryRunResult, String> {
+    let api_key = env::var("LASTFM_API_KEY")
+        .or_else(|_| env::var("AURRAL_LASTFM_API_KEY"))
+        .map_err(|_| "LASTFM_API_KEY is not configured".to_string())?;
+    let lastfm = Arc::new(LastfmClient::new(
+        api_key,
+        crate::util::network_concurrency(),
+    ));
+    let metadata = Arc::new(MetadataClient::new());
+    run_with_clients(job, lastfm, metadata, None).await
 }

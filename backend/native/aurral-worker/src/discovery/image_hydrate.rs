@@ -1,5 +1,8 @@
 use crate::net::metadata::MetadataClient;
 use crate::types::{normalize_mbid, Recommendation};
+use crate::util::concurrency::map_with_concurrency;
+use crate::util::metadata_concurrency;
+use std::sync::Arc;
 
 const LASTFM_IMAGE_PATTERN: [&str; 2] = ["lastfm", "audioscrobbler"];
 
@@ -21,7 +24,7 @@ fn recommendation_mbid(recommendation: &Recommendation) -> Option<String> {
 }
 
 pub async fn hydrate_recommendation_images(
-    metadata: &MetadataClient,
+    metadata: Arc<MetadataClient>,
     recommendations: &mut [Recommendation],
     limit: usize,
 ) -> u64 {
@@ -29,10 +32,9 @@ pub async fn hydrate_recommendation_images(
         return 0;
     }
 
-    let mut hydrated = 0u64;
-    let mut resolved = 0usize;
-    for recommendation in recommendations.iter_mut() {
-        if resolved >= limit {
+    let mut jobs: Vec<(usize, String)> = Vec::new();
+    for (index, recommendation) in recommendations.iter().enumerate() {
+        if jobs.len() >= limit {
             break;
         }
         if recommendation
@@ -45,9 +47,30 @@ pub async fn hydrate_recommendation_images(
         let Some(mbid) = recommendation_mbid(recommendation) else {
             continue;
         };
-        resolved += 1;
-        if let Some(image) = metadata.get_artist_image_url(&mbid).await {
-            recommendation.image = Some(image);
+        jobs.push((index, mbid));
+    }
+
+    if jobs.is_empty() {
+        return 0;
+    }
+
+    let images = map_with_concurrency(
+        jobs,
+        metadata_concurrency(),
+        move |(index, mbid)| {
+            let metadata = metadata.clone();
+            async move {
+                let image = metadata.get_artist_image_url(&mbid).await;
+                (index, image)
+            }
+        },
+    )
+    .await;
+
+    let mut hydrated = 0u64;
+    for (index, image) in images {
+        if let Some(image) = image {
+            recommendations[index].image = Some(image);
             hydrated += 1;
         }
     }

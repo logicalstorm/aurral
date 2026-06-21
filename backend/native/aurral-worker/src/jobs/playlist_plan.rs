@@ -9,9 +9,25 @@ use std::collections::HashSet;
 use std::env;
 use std::time::Instant;
 
+use serde::Serialize;
+
 pub struct PlaylistPlanResult {
     pub playlists: Vec<PlaylistPreview>,
     pub stats: crate::types::WorkerStats,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaylistPlanPayload {
+    pub playlists: Vec<PlaylistPreview>,
+}
+
+impl PlaylistPlanResult {
+    pub fn to_payload(&self) -> PlaylistPlanPayload {
+        PlaylistPlanPayload {
+            playlists: self.playlists.clone(),
+        }
+    }
 }
 
 fn preset_type_for(preset: &PlaylistPreset) -> &'static str {

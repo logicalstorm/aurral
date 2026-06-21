@@ -1,10 +1,29 @@
 import { getDiscoveryCache } from "./discoveryService.js";
 
 const LIBRARY_OWNERSHIP_CACHE_TTL_MS = 10 * 60 * 1000;
+const LIBRARY_MIX_ARTIST_CONCURRENCY = 12;
+const LIBRARY_ALBUM_TRACK_CONCURRENCY = 8;
+
+async function mapConcurrent(items, concurrency, worker) {
+  if (!Array.isArray(items) || items.length === 0) return [];
+  const limit = Math.max(1, Math.min(concurrency, items.length));
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const runners = Array.from({ length: limit }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await worker(items[index], index);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
 
 export class WeeklyFlowPlaylistSource {
   constructor() {
     this.libraryOwnershipCache = new Map();
+    this.libraryMixContextCache = new Map();
   }
 
   _resolveDiscoveryCache(options = {}) {
@@ -57,8 +76,11 @@ export class WeeklyFlowPlaylistSource {
     if (cached?.expiresAt > Date.now()) {
       return cached.value;
     }
-    const ownedTitles = await this.getLibraryTrackTitles(libraryManager, artistId);
-    const ownedAlbums = await this.getLibraryAlbumNames(libraryManager, artistId);
+    const albums = (await libraryManager.getAlbums(artistId)) || [];
+    const [ownedTitles, ownedAlbums] = await Promise.all([
+      this.getLibraryTrackTitles(libraryManager, artistId, albums),
+      Promise.resolve(this.getLibraryAlbumNames(artistId, albums)),
+    ]);
     const value = { ownedTitles, ownedAlbums };
     this.libraryOwnershipCache.set(cacheKey, {
       value,
@@ -69,10 +91,14 @@ export class WeeklyFlowPlaylistSource {
 
   async getLibraryTrackTitles(libraryManager, artistId, knownAlbums = null) {
     const albums =
-      knownAlbums || (await libraryManager.getArtistAlbums(artistId)) || [];
+      knownAlbums || (await libraryManager.getAlbums(artistId)) || [];
     const titles = new Set();
-    for (const album of albums) {
-      const tracks = await libraryManager.getAlbumTracks(album.id);
+    const trackLists = await mapConcurrent(
+      albums,
+      LIBRARY_ALBUM_TRACK_CONCURRENCY,
+      (album) => libraryManager.getTracks(album.id),
+    );
+    for (const tracks of trackLists) {
       for (const track of tracks || []) {
         const title = String(track?.title || track?.trackName || "").trim();
         if (title) titles.add(title.toLowerCase());
@@ -81,9 +107,8 @@ export class WeeklyFlowPlaylistSource {
     return titles;
   }
 
-  async getLibraryAlbumNames(libraryManager, artistId, knownAlbums = null) {
-    const albums =
-      knownAlbums || (await libraryManager.getArtistAlbums(artistId)) || [];
+  getLibraryAlbumNames(artistId, knownAlbums = null) {
+    const albums = knownAlbums || [];
     const names = new Set();
     for (const album of albums) {
       const title = String(album?.title || album?.albumName || "").trim();
@@ -97,22 +122,48 @@ export class WeeklyFlowPlaylistSource {
     const artists = Array.isArray(libraryArtists)
       ? libraryArtists
       : await libraryManager.getAllArtists();
-    const entries = [];
-    for (const artist of artists) {
-      const artistName = String(artist?.artistName || artist?.name || "").trim();
-      if (!artistName) continue;
-      const { ownedTitles, ownedAlbums } = await this._getLibraryOwnership(
-        libraryManager,
-        artist.id,
-      );
-      entries.push({
-        artistName,
-        artistMbid: artist?.mbid || artist?.foreignArtistId || null,
-        ownedTitles: [...ownedTitles],
-        ownedAlbums: [...ownedAlbums],
-      });
+    const cacheKey = artists
+      .map((artist) =>
+        String(
+          artist?.id ||
+            artist?.mbid ||
+            artist?.foreignArtistId ||
+            artist?.artistName ||
+            artist?.name ||
+            "",
+        ).trim(),
+      )
+      .filter(Boolean)
+      .sort()
+      .join("|");
+    const cached = this.libraryMixContextCache.get(cacheKey);
+    if (cached?.expiresAt > Date.now()) {
+      return cached.value;
     }
-    return entries;
+    const entries = await mapConcurrent(
+      artists,
+      LIBRARY_MIX_ARTIST_CONCURRENCY,
+      async (artist) => {
+        const artistName = String(artist?.artistName || artist?.name || "").trim();
+        if (!artistName) return null;
+        const { ownedTitles, ownedAlbums } = await this._getLibraryOwnership(
+          libraryManager,
+          artist.id,
+        );
+        return {
+          artistName,
+          artistMbid: artist?.mbid || artist?.foreignArtistId || null,
+          ownedTitles: [...ownedTitles],
+          ownedAlbums: [...ownedAlbums],
+        };
+      },
+    );
+    const value = entries.filter(Boolean);
+    this.libraryMixContextCache.set(cacheKey, {
+      value,
+      expiresAt: Date.now() + LIBRARY_OWNERSHIP_CACHE_TTL_MS,
+    });
+    return value;
   }
 }
 

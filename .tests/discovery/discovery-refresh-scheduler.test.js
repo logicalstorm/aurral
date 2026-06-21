@@ -115,11 +115,11 @@ test("requestDiscoveryRefresh returns a plain result object", () => {
   assert.equal(result?.then, undefined);
 });
 
-test("enqueueDiscoveryRefresh treats force as success when already updating", () => {
+test("enqueueDiscoveryRefresh rejects force while global refresh lock is held", () => {
   holdGlobalRefreshLock();
   const result = enqueueDiscoveryRefresh({ reason: "manual", force: true });
-  assert.equal(result.enqueued, true);
-  assert.equal(result.reason, "already_updating");
+  assert.equal(result.enqueued, false);
+  assert.equal(result.reason, "updating");
 });
 
 test("enqueueDiscoveryRefresh deduplicates when refresh queue lock is held", () => {

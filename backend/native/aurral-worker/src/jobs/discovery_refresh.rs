@@ -8,6 +8,7 @@ use crate::types::{
 };
 use serde::Serialize;
 use std::env;
+use std::sync::Arc;
 use std::time::Instant;
 
 pub struct DiscoveryRefreshResult {
@@ -37,14 +38,10 @@ pub async fn run(job: DiscoveryRefreshJob) -> Result<DiscoveryRefreshResult, Str
     let api_key = env::var("LASTFM_API_KEY")
         .or_else(|_| env::var("AURRAL_LASTFM_API_KEY"))
         .map_err(|_| "LASTFM_API_KEY is not configured".to_string())?;
-    let concurrency = env::var("AURRAL_LASTFM_CONCURRENCY")
-        .ok()
-        .and_then(|value| value.parse::<usize>().ok())
-        .unwrap_or(12)
-        .clamp(1, 16);
+    let concurrency = crate::util::network_concurrency();
 
     let lastfm = LastfmClient::new(api_key, concurrency);
-    let metadata = MetadataClient::new();
+    let metadata = Arc::new(MetadataClient::new());
     let existing_keys = existing_key_set(&job.existing_artist_keys);
 
     let (library_seeds, history_seeds) = build_taste_profile_seeds(
@@ -66,14 +63,14 @@ pub async fn run(job: DiscoveryRefreshJob) -> Result<DiscoveryRefreshResult, Str
         };
         global_top = fetch_global_top(
             &lastfm,
-            &metadata,
+            metadata.clone(),
             &existing_keys,
             &mut health,
             concurrency,
         )
         .await;
         let hydrate_limit = global_top.len().min(32);
-        hydrate_recommendation_images(&metadata, &mut global_top, hydrate_limit).await;
+        hydrate_recommendation_images(metadata.clone(), &mut global_top, hydrate_limit).await;
         metadata_calls = *metadata.calls.lock().await;
     }
 

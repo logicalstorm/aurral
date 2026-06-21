@@ -8,6 +8,7 @@ use crate::net::metadata::MetadataClient;
 use crate::types::{
     existing_key_set, DiscoveryEnrichJob, Recommendation, WorkerStats,
 };
+use crate::util::network_concurrency;
 use std::env;
 use std::sync::Arc;
 use std::time::Instant;
@@ -18,18 +19,12 @@ pub struct DiscoveryEnrichResult {
     pub stats: WorkerStats,
 }
 
-pub async fn run(job: DiscoveryEnrichJob) -> Result<DiscoveryEnrichResult, String> {
-    let api_key = env::var("LASTFM_API_KEY")
-        .or_else(|_| env::var("AURRAL_LASTFM_API_KEY"))
-        .map_err(|_| "LASTFM_API_KEY is not configured".to_string())?;
-    let concurrency = env::var("AURRAL_LASTFM_CONCURRENCY")
-        .ok()
-        .and_then(|value| value.parse::<usize>().ok())
-        .unwrap_or(12)
-        .clamp(1, 16);
+pub async fn run_with_clients(
+    job: DiscoveryEnrichJob,
+    lastfm: Arc<LastfmClient>,
+    metadata: Arc<MetadataClient>,
+) -> Result<DiscoveryEnrichResult, String> {
     let started = Instant::now();
-    let lastfm = Arc::new(LastfmClient::new(api_key, concurrency));
-    let metadata = MetadataClient::new();
     let existing_artist_keys = existing_key_set(&job.existing_artist_keys);
     let discovery_mode = job.discovery_mode.as_deref().unwrap_or("balanced");
     let run_started_at = job
@@ -37,7 +32,7 @@ pub async fn run(job: DiscoveryEnrichJob) -> Result<DiscoveryEnrichResult, Strin
         .clone()
         .unwrap_or_else(|| "now".to_string());
 
-    let (raw_recommendations, _, _failure_ratio_seed) = build_recommendations_from_seeds(
+    let (raw_recommendations, _, _) = build_recommendations_from_seeds(
         &job.seeds,
         &existing_artist_keys,
         &job.profile_tag_weights,
@@ -54,7 +49,7 @@ pub async fn run(job: DiscoveryEnrichJob) -> Result<DiscoveryEnrichResult, Strin
         raw_recommendations,
         &existing_artist_keys,
         resolve_limit,
-        &metadata,
+        metadata.clone(),
     )
     .await;
 
@@ -88,4 +83,13 @@ pub async fn run(job: DiscoveryEnrichJob) -> Result<DiscoveryEnrichResult, Strin
         fresh_recommendations,
         stats,
     })
+}
+
+pub async fn run(job: DiscoveryEnrichJob) -> Result<DiscoveryEnrichResult, String> {
+    let api_key = env::var("LASTFM_API_KEY")
+        .or_else(|_| env::var("AURRAL_LASTFM_API_KEY"))
+        .map_err(|_| "LASTFM_API_KEY is not configured".to_string())?;
+    let lastfm = Arc::new(LastfmClient::new(api_key, network_concurrency()));
+    let metadata = Arc::new(MetadataClient::new());
+    run_with_clients(job, lastfm, metadata).await
 }

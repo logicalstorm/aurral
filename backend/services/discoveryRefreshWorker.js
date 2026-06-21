@@ -2,7 +2,6 @@ import { getDiscoveryRefreshQueue, getWorkerId } from "./honkerDb.js";
 import {
   clearDiscoveryUpdateProgress,
   getDiscoveryCache,
-  recordDiscoveryUpdateProgress,
   updateDiscoveryCache,
 } from "./discoveryService.js";
 import {
@@ -44,15 +43,7 @@ async function runDiscoveryRefresh(payload) {
   }
 
   const cache = getDiscoveryCache();
-  if (!cache.isUpdating) {
-    cache.isUpdating = true;
-    recordDiscoveryUpdateProgress(
-      "starting",
-      "Starting discovery refresh",
-      2,
-      { reason: payload?.reason || "scheduled" },
-    );
-  }
+  cache.isUpdating = true;
 
   await updateDiscoveryCache();
 }

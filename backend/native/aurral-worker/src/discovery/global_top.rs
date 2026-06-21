@@ -2,8 +2,11 @@ use crate::discovery::scoring::merge_resolved_recommendations;
 use crate::net::lastfm::{LastfmClient, LastfmHealth};
 use crate::net::metadata::MetadataClient;
 use crate::types::Recommendation;
+use crate::util::concurrency::map_with_concurrency;
+use crate::util::metadata_concurrency;
 use serde_json::Value;
 use std::collections::HashSet;
+use std::sync::Arc;
 
 fn pick_lastfm_image(images: &Value) -> Option<String> {
     let list = if images.is_array() {
@@ -50,29 +53,48 @@ fn build_trending_artist_entry(artist: &Value, image_override: Option<String>) -
 }
 
 async fn resolve_global_top_mbids(
-    metadata: &MetadataClient,
+    metadata: Arc<MetadataClient>,
     items: &mut [Recommendation],
 ) {
-    for item in items.iter_mut() {
-        if item.id.is_some() {
-            continue;
-        }
-        let Some(name) = item.name.as_deref() else {
-            continue;
-        };
-        if name.trim().is_empty() {
-            continue;
-        }
-        if let Some(mbid) = metadata.resolve_artist_mbid(name).await {
-            item.id = Some(mbid.clone());
-            item.navigate_to = Some(mbid);
+    let resolve_jobs: Vec<(usize, String)> = items
+        .iter()
+        .enumerate()
+        .filter_map(|(index, item)| {
+            if item.id.is_some() {
+                return None;
+            }
+            let name = item.name.as_deref()?.trim();
+            if name.is_empty() {
+                return None;
+            }
+            Some((index, name.to_string()))
+        })
+        .collect();
+
+    let resolved = map_with_concurrency(
+        resolve_jobs,
+        metadata_concurrency(),
+        move |(index, name)| {
+            let metadata = metadata.clone();
+            async move {
+                let mbid = metadata.resolve_artist_mbid(&name).await;
+                (index, mbid)
+            }
+        },
+    )
+    .await;
+
+    for (index, mbid) in resolved {
+        if let Some(mbid) = mbid {
+            items[index].id = Some(mbid.clone());
+            items[index].navigate_to = Some(mbid);
         }
     }
 }
 
 pub async fn fetch_global_top(
     lastfm: &LastfmClient,
-    metadata: &MetadataClient,
+    metadata: Arc<MetadataClient>,
     existing_artist_keys: &HashSet<String>,
     health: &mut LastfmHealth,
     _concurrency: usize,
@@ -132,7 +154,9 @@ pub async fn fetch_global_top(
     }
 
     let resolve_count = global_top.len().min(max_resolve);
-    resolve_global_top_mbids(metadata, &mut global_top[..resolve_count]).await;
+    if resolve_count > 0 {
+        resolve_global_top_mbids(metadata.clone(), &mut global_top[..resolve_count]).await;
+    }
 
     global_top
         .into_iter()

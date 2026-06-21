@@ -120,7 +120,11 @@ function AppContent() {
       return;
     }
 
-    if (msg.phase === "completed" || Array.isArray(msg.recommendations)) {
+    if (
+      msg.phase === "completed" ||
+      (Array.isArray(msg.recommendations) &&
+        msg.recommendationQuality === "enriched")
+    ) {
       if (discoveryToastShownRef.current) return;
       discoveryToastShownRef.current = true;
       localStorage.removeItem(DISCOVERY_MANUAL_REFRESH_KEY);

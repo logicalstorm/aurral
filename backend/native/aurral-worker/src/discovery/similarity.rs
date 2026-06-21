@@ -1,12 +1,31 @@
 use crate::discovery::scoring::{merge_resolved_recommendations, rerank_recommendations};
+use crate::discovery::tag_harvest::discovery_seed_tag_map_key;
 use crate::net::lastfm::LastfmClient;
 use crate::net::metadata::MetadataClient;
 use crate::types::{
     normalize_mbid, normalize_text, DiscoverySeed, Recommendation, SupportingSeed,
 };
+use crate::util::concurrency::map_with_concurrency;
+use crate::util::{metadata_concurrency, network_concurrency};
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+
+struct SeedSimilarHarvest {
+    seed: DiscoverySeed,
+    source_tags: Vec<String>,
+    similar: Vec<(String, Option<String>, Option<String>, f64)>,
+    tag_cached: bool,
+    tag_fetch_failed: bool,
+    similar_failed: bool,
+}
+
+struct BridgeSimilarHarvest {
+    bridge_seed: DiscoverySeed,
+    bridge_tags: Vec<String>,
+    similar: Vec<(String, Option<String>, Option<String>, f64)>,
+    similar_failed: bool,
+}
 
 struct CandidateEntry {
     id: Option<String>,
@@ -409,58 +428,85 @@ pub async fn build_recommendations_from_seeds(
     let (similar_limit, max_per_seed) = similar_sampling(per_refresh, ratio);
 
     let mut direct = IndexMap::new();
-    for seed in seeds {
-        let seed_key = seed
-            .mbid
-            .clone()
-            .map(|mbid| format!("mbid:{mbid}"))
-            .unwrap_or_else(|| format!("name:{}", normalize_text(&seed.artist_name)));
-        let mut source_tags = seed_tag_map
-            .get(&seed_key)
-            .cloned()
-            .unwrap_or_default()
-            .into_iter()
-            .map(|tag| normalize_text(&tag))
-            .filter(|tag| !tag.is_empty())
-            .collect::<Vec<_>>();
-        if source_tags.is_empty() {
-            let fetched = lastfm
-                .artist_top_tags(&seed.artist_name, seed.mbid.as_deref())
-                .await;
-            if fetched.is_empty() {
-                failure += 1;
-            } else {
-                success += 1;
-                source_tags = fetched
+    let seed_tag_map = seed_tag_map.clone();
+    let similar_limit = similar_limit;
+    let lastfm_for_seeds = lastfm.clone();
+    let seed_harvests = map_with_concurrency(
+        seeds.to_vec(),
+        network_concurrency(),
+        move |seed| {
+            let lastfm = lastfm_for_seeds.clone();
+            let seed_tag_map = seed_tag_map.clone();
+            async move {
+                let seed_key = discovery_seed_tag_map_key(&seed);
+                let mut source_tags = seed_tag_map
+                    .get(&seed_key)
+                    .cloned()
+                    .unwrap_or_default()
                     .into_iter()
                     .map(|tag| normalize_text(&tag))
-                    .collect();
+                    .filter(|tag| !tag.is_empty())
+                    .collect::<Vec<_>>();
+                let mut tag_cached = false;
+                let mut tag_fetch_failed = false;
+                if source_tags.is_empty() {
+                    let fetched = lastfm
+                        .artist_top_tags(&seed.artist_name, seed.mbid.as_deref())
+                        .await;
+                    if fetched.is_empty() {
+                        tag_fetch_failed = true;
+                    } else {
+                        source_tags = fetched
+                            .into_iter()
+                            .map(|tag| normalize_text(&tag))
+                            .collect();
+                    }
+                } else {
+                    tag_cached = true;
+                }
+                let similar = lastfm
+                    .artist_similar(
+                        &seed.artist_name,
+                        seed.mbid.as_deref(),
+                        similar_limit,
+                    )
+                    .await;
+                let similar_failed = similar.is_empty();
+                SeedSimilarHarvest {
+                    seed,
+                    source_tags,
+                    similar,
+                    tag_cached,
+                    tag_fetch_failed,
+                    similar_failed,
+                }
             }
+        },
+    )
+    .await;
+
+    for harvest in seed_harvests {
+        if harvest.tag_cached {
+            success += 1;
+        } else if harvest.tag_fetch_failed {
+            failure += 1;
         } else {
             success += 1;
         }
-
-        let similar = lastfm
-            .artist_similar(
-                &seed.artist_name,
-                seed.mbid.as_deref(),
-                similar_limit,
-            )
-            .await;
-        if similar.is_empty() {
+        if harvest.similar_failed {
             failure += 1;
             continue;
         }
         success += 1;
-        for (name, mbid, image, match_score) in similar.into_iter().take(max_per_seed) {
+        for (name, mbid, image, match_score) in harvest.similar.into_iter().take(max_per_seed) {
             add_candidate(
                 &mut direct,
                 &name,
                 mbid,
                 image,
                 match_score,
-                seed,
-                &source_tags,
+                &harvest.seed,
+                &harvest.source_tags,
                 profile_tag_weights,
                 existing_artist_keys,
                 1,
@@ -473,9 +519,30 @@ pub async fn build_recommendations_from_seeds(
     let mut direct_list = finalize_accumulator(direct, candidate_limit, discovery_mode);
     let hydration_limit = (per_refresh as f64 * 1.5).max(per_refresh as f64) as usize;
     let hydration_take = hydration_limit.min(direct_list.len());
-    for index in 0..hydration_take {
-        let item = hydrate_tags(lastfm.as_ref(), &direct_list[index], profile_tag_weights, 1).await;
-        direct_list[index] = item;
+    if hydration_take > 0 {
+        let hydration_items: Vec<(usize, Recommendation)> = (0..hydration_take)
+            .map(|index| (index, direct_list[index].clone()))
+            .collect();
+        let profile_weights = profile_tag_weights.clone();
+        let lastfm_for_hydration = lastfm.clone();
+        let hydrated = map_with_concurrency(
+            hydration_items,
+            network_concurrency(),
+            move |(index, item)| {
+                let lastfm = lastfm_for_hydration.clone();
+                let profile_weights = profile_weights.clone();
+                async move {
+                    (
+                        index,
+                        hydrate_tags(lastfm.as_ref(), &item, &profile_weights, 1).await,
+                    )
+                }
+            },
+        )
+        .await;
+        for (index, item) in hydrated {
+            direct_list[index] = item;
+        }
     }
     direct_list = rerank_recommendations(direct_list, candidate_limit, discovery_mode, &[]);
 
@@ -496,53 +563,91 @@ pub async fn build_recommendations_from_seeds(
         .collect();
 
     let mut second_hop = IndexMap::new();
-    for bridge in bridge_seeds {
-        let bridge_tags: Vec<String> = if !bridge.matched_tags.is_empty() {
-            bridge.matched_tags.clone()
-        } else {
-            bridge.tags.clone()
-        };
-        if bridge_tags.is_empty() {
+    let hop_similar_limit = hop_similar_limit;
+    let lastfm_for_bridges = lastfm.clone();
+    let bridge_harvests = map_with_concurrency(
+        bridge_seeds,
+        network_concurrency(),
+        move |bridge| {
+            let lastfm = lastfm_for_bridges.clone();
+            async move {
+                let bridge_tags: Vec<String> = if !bridge.matched_tags.is_empty() {
+                    bridge.matched_tags.clone()
+                } else {
+                    bridge.tags.clone()
+                };
+                if bridge_tags.is_empty() {
+                    return BridgeSimilarHarvest {
+                        bridge_seed: DiscoverySeed {
+                            mbid: bridge.id.clone(),
+                            artist_name: bridge.name.clone().unwrap_or_default(),
+                            source: Some("lastfm_related".to_string()),
+                            weight: None,
+                            affinity_weight: None,
+                            profile_bucket: Some("two_hop_bridge".to_string()),
+                            discovery_depth: Some(2),
+                            similarity_multiplier: Some(0.55),
+                            tag_affinity_multiplier: Some(0.55),
+                        },
+                        bridge_tags,
+                        similar: Vec::new(),
+                        similar_failed: true,
+                    };
+                }
+                let bridge_weight = clamp(
+                    0.42 + bridge.best_match.unwrap_or(0.0) * 0.25
+                        + bridge.seed_count.unwrap_or(0).min(3) as f64 * 0.04,
+                    0.45,
+                    0.78,
+                );
+                let bridge_seed = DiscoverySeed {
+                    mbid: bridge.id.clone(),
+                    artist_name: bridge.name.clone().unwrap_or_default(),
+                    source: Some("lastfm_related".to_string()),
+                    weight: Some(bridge_weight),
+                    affinity_weight: Some(bridge_weight),
+                    profile_bucket: Some("two_hop_bridge".to_string()),
+                    discovery_depth: Some(2),
+                    similarity_multiplier: Some(0.55),
+                    tag_affinity_multiplier: Some(0.55),
+                };
+                let similar = lastfm
+                    .artist_similar(
+                        bridge_seed.artist_name.as_str(),
+                        bridge_seed.mbid.as_deref(),
+                        hop_similar_limit,
+                    )
+                    .await;
+                let similar_failed = similar.is_empty();
+                BridgeSimilarHarvest {
+                    bridge_seed,
+                    bridge_tags,
+                    similar,
+                    similar_failed,
+                }
+            }
+        },
+    )
+    .await;
+
+    for harvest in bridge_harvests {
+        if harvest.bridge_tags.is_empty() {
             continue;
         }
-        let bridge_weight = clamp(
-            0.42 + bridge.best_match.unwrap_or(0.0) * 0.25
-                + bridge.seed_count.unwrap_or(0).min(3) as f64 * 0.04,
-            0.45,
-            0.78,
-        );
-        let bridge_seed = DiscoverySeed {
-            mbid: bridge.id.clone(),
-            artist_name: bridge.name.clone().unwrap_or_default(),
-            source: Some("lastfm_related".to_string()),
-            weight: Some(bridge_weight),
-            affinity_weight: Some(bridge_weight),
-            profile_bucket: Some("two_hop_bridge".to_string()),
-            discovery_depth: Some(2),
-            similarity_multiplier: Some(0.55),
-            tag_affinity_multiplier: Some(0.55),
-        };
-        let similar = lastfm
-            .artist_similar(
-                bridge_seed.artist_name.as_str(),
-                bridge_seed.mbid.as_deref(),
-                hop_similar_limit,
-            )
-            .await;
-        if similar.is_empty() {
+        if harvest.similar_failed {
             failure += 1;
             continue;
         }
         success += 1;
-        for (name, mbid, image, match_score) in similar.into_iter().take(hop_max_per_seed) {
+        for (name, mbid, image, match_score) in harvest.similar.into_iter().take(hop_max_per_seed) {
             add_candidate(
                 &mut second_hop,
                 &name,
                 mbid,
                 image,
                 match_score,
-                &bridge_seed,
-                &bridge_tags,
+                &harvest.bridge_seed,
+                &harvest.bridge_tags,
                 profile_tag_weights,
                 existing_artist_keys,
                 2,
@@ -557,9 +662,30 @@ pub async fn build_recommendations_from_seeds(
         finalize_accumulator(second_hop, second_hop_limit, discovery_mode);
     let second_hydration = second_hop_limit;
     let second_hydration_take = second_hydration.min(second_hop_list.len());
-    for index in 0..second_hydration_take {
-        let item = hydrate_tags(lastfm.as_ref(), &second_hop_list[index], profile_tag_weights, 2).await;
-        second_hop_list[index] = item;
+    if second_hydration_take > 0 {
+        let hydration_items: Vec<(usize, Recommendation)> = (0..second_hydration_take)
+            .map(|index| (index, second_hop_list[index].clone()))
+            .collect();
+        let profile_weights = profile_tag_weights.clone();
+        let lastfm_for_second_hydration = lastfm.clone();
+        let hydrated = map_with_concurrency(
+            hydration_items,
+            network_concurrency(),
+            move |(index, item)| {
+                let lastfm = lastfm_for_second_hydration.clone();
+                let profile_weights = profile_weights.clone();
+                async move {
+                    (
+                        index,
+                        hydrate_tags(lastfm.as_ref(), &item, &profile_weights, 2).await,
+                    )
+                }
+            },
+        )
+        .await;
+        for (index, item) in hydrated {
+            second_hop_list[index] = item;
+        }
     }
     second_hop_list =
         rerank_recommendations(second_hop_list, second_hop_limit, discovery_mode, &[]);
@@ -582,19 +708,42 @@ pub async fn resolve_recommendation_candidates(
     mut recommendations: Vec<Recommendation>,
     existing_artist_keys: &HashSet<String>,
     resolve_limit: usize,
-    metadata: &MetadataClient,
+    metadata: Arc<MetadataClient>,
 ) -> Vec<Recommendation> {
     let shortlist_len = recommendations.len().min(resolve_limit);
-    for item in recommendations.iter_mut().take(shortlist_len) {
-        if item.id.is_some() || item.name.as_deref().unwrap_or("").is_empty() {
-            continue;
-        }
-        if let Some(mbid) = metadata
-            .resolve_artist_mbid(item.name.as_deref().unwrap_or(""))
-            .await
-        {
-            item.id = Some(mbid.clone());
-            item.navigate_to = Some(mbid);
+    let resolve_jobs: Vec<(usize, String)> = recommendations
+        .iter()
+        .enumerate()
+        .take(shortlist_len)
+        .filter_map(|(index, item)| {
+            if item.id.is_some() {
+                return None;
+            }
+            let name = item.name.as_deref()?.trim();
+            if name.is_empty() {
+                return None;
+            }
+            Some((index, name.to_string()))
+        })
+        .collect();
+
+    let resolved_pairs = map_with_concurrency(
+        resolve_jobs,
+        metadata_concurrency(),
+        move |(index, name)| {
+            let metadata = metadata.clone();
+            async move {
+                let mbid = metadata.resolve_artist_mbid(&name).await;
+                (index, mbid)
+            }
+        },
+    )
+    .await;
+
+    for (index, mbid) in resolved_pairs {
+        if let Some(mbid) = mbid {
+            recommendations[index].id = Some(mbid.clone());
+            recommendations[index].navigate_to = Some(mbid);
         }
     }
 

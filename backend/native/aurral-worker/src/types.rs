@@ -190,6 +190,51 @@ pub struct PlaylistPlanJob {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DiscoveryPipelineJob {
+    #[serde(default)]
+    pub recent_library_artists: Vec<TasteArtistInput>,
+    #[serde(default)]
+    pub all_library_artists: Vec<TasteArtistInput>,
+    #[serde(default)]
+    pub history_artists: Vec<TasteArtistInput>,
+    #[serde(default)]
+    pub existing_artist_keys: Vec<String>,
+    #[serde(default)]
+    pub seed_limit: Option<usize>,
+    #[serde(default)]
+    pub include_global_top: bool,
+    #[serde(default)]
+    pub discovery_mode: Option<String>,
+    #[serde(default)]
+    pub existing_recommendations: Vec<Recommendation>,
+    #[serde(default)]
+    pub feedback: Vec<FeedbackEntry>,
+    #[serde(default)]
+    pub limits: JobLimits,
+    #[serde(default)]
+    pub recommendation_run_started_at: Option<String>,
+    #[serde(default)]
+    pub presets: Vec<PlaylistPreset>,
+    #[serde(default)]
+    pub based_on: Vec<Value>,
+    #[serde(default)]
+    pub top_genres: Vec<String>,
+    #[serde(default)]
+    pub top_tags: Vec<String>,
+    #[serde(default)]
+    pub library_mix_artists: Vec<LibraryMixArtist>,
+    #[serde(default)]
+    pub release_radar_releases: Vec<ReleaseRadarRelease>,
+    #[serde(default)]
+    pub release_radar_size: Option<usize>,
+    #[serde(default)]
+    pub image_hydration: Option<ImageHydrationLimits>,
+    #[serde(default)]
+    pub skip_playlist_plan: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DiscoveryRunJob {
     pub seeds: Vec<DiscoverySeed>,
     #[serde(default)]
@@ -222,6 +267,8 @@ pub struct DiscoveryRunJob {
     pub release_radar_size: Option<usize>,
     #[serde(default)]
     pub image_hydration: Option<ImageHydrationLimits>,
+    #[serde(default)]
+    pub skip_playlist_plan: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]

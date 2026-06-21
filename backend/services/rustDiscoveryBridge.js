@@ -97,6 +97,8 @@ const buildRustPlaylistPlanPayload = async ({
   topGenres = [],
   topTags = [],
   libraryArtists = [],
+  libraryMixArtists = null,
+  releaseRadarReleases = null,
   releaseRadarSize = 30,
 } = {}) => {
   const keySet =
@@ -107,14 +109,18 @@ const buildRustPlaylistPlanPayload = async ({
         : [...buildExistingArtistKeySet(existingArtistKeys || [])];
 
   const { playlistSource } = await import("./weeklyFlowPlaylistSource.js");
-  const libraryMixArtists =
-    await playlistSource.buildLibraryMixContext(libraryArtists);
-
   const { getRecentMissingReleases } = await import("./recentReleasesService.js");
-  const releaseAlbums = await getRecentMissingReleases(releaseRadarSize, {
-    artists: libraryArtists,
-    includeFuture: false,
-  });
+  const [resolvedLibraryMix, releaseAlbums] = await Promise.all([
+    libraryMixArtists != null
+      ? Promise.resolve(libraryMixArtists)
+      : playlistSource.buildLibraryMixContext(libraryArtists),
+    releaseRadarReleases != null
+      ? Promise.resolve(releaseRadarReleases)
+      : getRecentMissingReleases(releaseRadarSize, {
+          artists: libraryArtists,
+          includeFuture: false,
+        }),
+  ]);
 
   return {
     presets: presets.map((preset) => ({
@@ -133,7 +139,7 @@ const buildRustPlaylistPlanPayload = async ({
     basedOn,
     topGenres,
     topTags,
-    libraryMixArtists,
+    libraryMixArtists: resolvedLibraryMix,
     releaseRadarReleases: releaseAlbums.map((album) => ({
       artistName: album.artistName,
       albumName: album.albumName,
@@ -147,6 +153,8 @@ const buildRustPlaylistPlanPayload = async ({
   };
 };
 
+export { buildRustPlaylistPlanPayload };
+
 export async function buildRustDiscoveryRunPayload({
   payload = {},
   seeds = [],
@@ -158,7 +166,8 @@ export async function buildRustDiscoveryRunPayload({
   libraryArtists = [],
   historyTopArtists = [],
   imageHydration = {},
-} = {}) {
+  skipPlaylistPlan = false,
+}) {
   const enrich = buildRustDiscoveryEnrichPayload({
     payload,
     seeds,
@@ -179,16 +188,28 @@ export async function buildRustDiscoveryRunPayload({
       baseDiscoveryData.recommendations || existingRecommendations || [],
     historyTopArtists,
   });
-  const playlist = await buildRustPlaylistPlanPayload({
-    presets,
-    existingArtistKeys,
-    recommendations: existingRecommendations,
-    globalTop: baseDiscoveryData.globalTop || [],
-    basedOn: baseDiscoveryData.basedOn || [],
-    topGenres: baseDiscoveryData.topGenres || [],
-    topTags: baseDiscoveryData.topTags || [],
-    libraryArtists,
-  });
+
+  const playlist = skipPlaylistPlan
+    ? {
+        presets,
+        globalTop: baseDiscoveryData.globalTop || [],
+        basedOn: baseDiscoveryData.basedOn || [],
+        topGenres: baseDiscoveryData.topGenres || [],
+        topTags: baseDiscoveryData.topTags || [],
+        libraryMixArtists: [],
+        releaseRadarReleases: [],
+        releaseRadarSize: 30,
+      }
+    : await buildRustPlaylistPlanPayload({
+        presets,
+        existingArtistKeys,
+        recommendations: existingRecommendations,
+        globalTop: baseDiscoveryData.globalTop || [],
+        basedOn: baseDiscoveryData.basedOn || [],
+        topGenres: baseDiscoveryData.topGenres || [],
+        topTags: baseDiscoveryData.topTags || [],
+        libraryArtists,
+      });
 
   return {
     ...enrich,
@@ -200,6 +221,7 @@ export async function buildRustDiscoveryRunPayload({
     libraryMixArtists: playlist.libraryMixArtists,
     releaseRadarReleases: playlist.releaseRadarReleases,
     releaseRadarSize: playlist.releaseRadarSize,
+    skipPlaylistPlan,
     imageHydration: {
       freshLimit:
         imageHydration.freshLimit != null
@@ -210,6 +232,63 @@ export async function buildRustDiscoveryRunPayload({
           ? Number(imageHydration.poolLimit)
           : null,
     },
+  };
+}
+
+export async function buildRustDiscoveryPipelinePayload({
+  recentLibraryArtists = [],
+  allLibraryArtists = [],
+  historyArtists = [],
+  existingArtistKeys = [],
+  seedLimit = null,
+  includeGlobalTop = false,
+  payload = {},
+  existingRecommendations = [],
+  feedback = [],
+  limits = {},
+  baseDiscoveryData = {},
+  libraryArtists = [],
+  historyTopArtists = [],
+  imageHydration = {},
+  skipPlaylistPlan = false,
+} = {}) {
+  const refresh = buildRustDiscoveryRefreshPayload({
+    recentLibraryArtists,
+    allLibraryArtists,
+    historyArtists,
+    existingArtistKeys,
+    seedLimit,
+    includeGlobalTop,
+  });
+  const run = await buildRustDiscoveryRunPayload({
+    payload,
+    seeds: [],
+    existingArtistKeys,
+    existingRecommendations,
+    feedback,
+    limits,
+    baseDiscoveryData,
+    libraryArtists,
+    historyTopArtists,
+    imageHydration,
+    skipPlaylistPlan,
+  });
+  return {
+    ...refresh,
+    discoveryMode: run.discoveryMode,
+    existingRecommendations: run.existingRecommendations,
+    feedback: run.feedback,
+    limits: run.limits,
+    recommendationRunStartedAt: run.recommendationRunStartedAt,
+    presets: run.presets,
+    basedOn: run.basedOn,
+    topGenres: run.topGenres,
+    topTags: run.topTags,
+    libraryMixArtists: run.libraryMixArtists,
+    releaseRadarReleases: run.releaseRadarReleases,
+    releaseRadarSize: run.releaseRadarSize,
+    imageHydration: run.imageHydration,
+    skipPlaylistPlan: run.skipPlaylistPlan,
   };
 }
 

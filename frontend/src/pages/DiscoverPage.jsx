@@ -280,6 +280,61 @@ const normalizeDiscoveryData = (value) => {
   };
 };
 
+const mergeDiscoveryPollResult = (previous, incoming) => {
+  const next = normalizeDiscoveryData(incoming);
+  const prev = previous ? normalizeDiscoveryData(previous) : null;
+  if (!next) return prev;
+  if (!prev) return next;
+
+  const refreshActiveOnClient =
+    prev.isUpdating ||
+    prev.isEnriching ||
+    prev.recommendationQuality === "enriching";
+  const refreshFinishedOnServer =
+    next.recommendationQuality === "enriched" && !next.isUpdating;
+  const stalePollDuringRefresh =
+    refreshActiveOnClient &&
+    !refreshFinishedOnServer &&
+    !next.isUpdating &&
+    !next.isEnriching &&
+    next.recommendationQuality !== "enriching";
+
+  if (!stalePollDuringRefresh) {
+    return next;
+  }
+
+  return normalizeDiscoveryData({
+    ...next,
+    isUpdating: prev.isUpdating,
+    isEnriching: prev.isEnriching,
+    updatePhase: next.updatePhase || prev.updatePhase,
+    updateProgress:
+      typeof next.updateProgress === "number" &&
+      typeof prev.updateProgress === "number"
+        ? Math.max(prev.updateProgress, next.updateProgress)
+        : typeof next.updateProgress === "number"
+          ? next.updateProgress
+          : prev.updateProgress,
+    updateProgressMessage:
+      next.updateProgressMessage || prev.updateProgressMessage,
+    recommendationQuality: prev.recommendationQuality || next.recommendationQuality,
+    enrichmentProgressMessage:
+      next.enrichmentProgressMessage || prev.enrichmentProgressMessage,
+    discoveryRunId: next.discoveryRunId || prev.discoveryRunId,
+    enrichmentStartedAt: next.enrichmentStartedAt || prev.enrichmentStartedAt,
+  });
+};
+
+const resolveDiscoveryProgress = (previous, message, reset = false) => {
+  if (typeof message?.progress !== "number") {
+    return typeof previous === "number" ? previous : null;
+  }
+  if (message.refreshReset === true || reset) {
+    return message.progress;
+  }
+  return Math.max(typeof previous === "number" ? previous : 0, message.progress);
+};
+
 const readStoredDiscoveryData = (userId) => {
   const fromStorage = (raw) => {
     const normalized = normalizeDiscoveryData(raw);
@@ -492,7 +547,10 @@ function DiscoverPage() {
               msg.playlistsUpdateMessage ||
               msg.progressMessage ||
               "Updating recommended playlists...",
-            isUpdating: false,
+            isUpdating:
+              msg.isUpdating === true ||
+              (prev?.isUpdating === true && prev?.recommendationQuality !== "enriched"),
+            isEnriching: false,
             configured: true,
             stale: false,
           }),
@@ -517,7 +575,11 @@ function DiscoverPage() {
         );
         getDiscovery(true)
           .then((discoveryData) => {
-            applyDiscoveryData(discoveryData);
+            setData((prev) => {
+              const merged = mergeDiscoveryPollResult(prev, discoveryData);
+              if (merged) writeStoredDiscoveryData(merged, authUser?.id);
+              return merged;
+            });
             setError(null);
           })
           .catch(() => {});
@@ -535,19 +597,34 @@ function DiscoverPage() {
         return;
       }
 
-      if (msg.isUpdating) {
+      if (
+        msg.isUpdating ||
+        msg.isEnriching ||
+        msg.phase === "enriching_recommendations" ||
+        msg.recommendationQuality === "enriching"
+      ) {
         lastDiscoveryWsMessageAtRef.current = Date.now();
         setData((prev) =>
           normalizeDiscoveryData({
             ...(prev || {}),
-            isUpdating: true,
+            isUpdating: msg.isUpdating === true || prev?.isUpdating === true,
             updatePhase: msg.phase || prev?.updatePhase || null,
-            updateProgress:
-              typeof msg.progress === "number"
-                ? msg.progress
-                : prev?.updateProgress ?? null,
+            updateProgress: resolveDiscoveryProgress(prev?.updateProgress, msg),
             updateProgressMessage:
-              msg.progressMessage || prev?.updateProgressMessage || null,
+              msg.progressMessage ||
+              msg.enrichmentProgressMessage ||
+              prev?.updateProgressMessage ||
+              null,
+            recommendationQuality:
+              msg.recommendationQuality || prev?.recommendationQuality || null,
+            isEnriching: msg.isEnriching === true || prev?.isEnriching === true,
+            discoveryRunId: msg.discoveryRunId || prev?.discoveryRunId || null,
+            enrichmentStartedAt:
+              msg.enrichmentStartedAt || prev?.enrichmentStartedAt || null,
+            enrichmentProgressMessage:
+              msg.enrichmentProgressMessage ??
+              prev?.enrichmentProgressMessage ??
+              null,
             provider: msg.provider || prev?.provider || "lastfm",
             capabilities: msg.capabilities || prev?.capabilities || null,
             configured: true,
@@ -557,7 +634,12 @@ function DiscoverPage() {
         return;
       }
 
-      if (msg.phase === "completed" || Array.isArray(msg.recommendations)) {
+      const hasCompletedDiscoveryPayload =
+        msg.phase === "completed" ||
+        (Array.isArray(msg.recommendations) &&
+          msg.recommendationQuality === "enriched");
+
+      if (hasCompletedDiscoveryPayload) {
         lastDiscoveryWsMessageAtRef.current = Date.now();
         if (Array.isArray(msg.recommendations)) {
           setData((prev) => {
@@ -587,9 +669,7 @@ function DiscoverPage() {
               recommendationQuality:
                 msg.recommendationQuality || prev?.recommendationQuality || null,
               isEnriching:
-                typeof msg.isEnriching === "boolean"
-                  ? msg.isEnriching
-                  : prev?.isEnriching === true,
+                typeof msg.isEnriching === "boolean" ? msg.isEnriching : false,
               discoveryRunId: msg.discoveryRunId || prev?.discoveryRunId || null,
               enrichmentStartedAt:
                 msg.enrichmentStartedAt || prev?.enrichmentStartedAt || null,
@@ -626,9 +706,7 @@ function DiscoverPage() {
               recommendationQuality:
                 msg.recommendationQuality || prev?.recommendationQuality || null,
               isEnriching:
-                typeof msg.isEnriching === "boolean"
-                  ? msg.isEnriching
-                  : prev?.isEnriching === true,
+                typeof msg.isEnriching === "boolean" ? msg.isEnriching : false,
               discoveryRunId: msg.discoveryRunId || prev?.discoveryRunId || null,
               enrichmentStartedAt:
                 msg.enrichmentStartedAt || prev?.enrichmentStartedAt || null,
@@ -644,7 +722,11 @@ function DiscoverPage() {
         }
         getDiscovery(true)
           .then((discoveryData) => {
-            applyDiscoveryData(discoveryData);
+            setData((prev) => {
+              const merged = mergeDiscoveryPollResult(prev, discoveryData);
+              if (merged) writeStoredDiscoveryData(merged, authUser?.id);
+              return merged;
+            });
             setError(null);
           })
           .catch(() => {});
@@ -655,11 +737,13 @@ function DiscoverPage() {
   useEffect(() => {
     if (!isDiscoverySocketConnected) return;
     if (!data?.isUpdating && !data?.isEnriching && !data?.stale) return;
-    getDiscovery()
+    getDiscovery(true)
       .then((discoveryData) => {
-        const normalizedData = normalizeDiscoveryData(discoveryData);
-        setData(normalizedData);
-        writeStoredDiscoveryData(normalizedData, authUser?.id);
+        setData((prev) => {
+          const merged = mergeDiscoveryPollResult(prev, discoveryData);
+          if (merged) writeStoredDiscoveryData(merged, authUser?.id);
+          return merged;
+        });
         setError(null);
       })
       .catch(() => {});
@@ -676,9 +760,11 @@ function DiscoverPage() {
     if (!data?.playlistsUpdating) return;
     getDiscovery(true)
       .then((discoveryData) => {
-        const normalizedData = normalizeDiscoveryData(discoveryData);
-        setData(normalizedData);
-        writeStoredDiscoveryData(normalizedData, authUser?.id);
+        setData((prev) => {
+          const merged = mergeDiscoveryPollResult(prev, discoveryData);
+          if (merged) writeStoredDiscoveryData(merged, authUser?.id);
+          return merged;
+        });
         setError(null);
       })
       .catch(() => {});
@@ -694,9 +780,11 @@ function DiscoverPage() {
       discoveryPollInFlightRef.current = true;
       getDiscovery(true)
         .then((next) => {
-          const normalizedData = normalizeDiscoveryData(next);
-          setData(normalizedData);
-          writeStoredDiscoveryData(normalizedData, authUser?.id);
+          setData((prev) => {
+            const merged = mergeDiscoveryPollResult(prev, next);
+            if (merged) writeStoredDiscoveryData(merged, authUser?.id);
+            return merged;
+          });
           setError(null);
         })
         .catch(() => {})
@@ -1069,7 +1157,9 @@ function DiscoverPage() {
     capabilities,
     lastUpdated,
     isUpdating,
+    isEnriching,
     updateProgressMessage,
+    enrichmentProgressMessage,
     playlistsUpdating,
     playlistsUpdateMessage,
     configured = true,
@@ -1077,6 +1167,11 @@ function DiscoverPage() {
   const [adoptedFlowIds, setAdoptedFlowIds] = useState({});
   const [adoptedStaticPlaylistIds, setAdoptedStaticPlaylistIds] = useState({});
   const isListenBrainzFallback = provider === "listenbrainz-fallback";
+  const isDiscoveryRefreshing = isUpdating || isEnriching;
+  const discoveryRefreshMessage =
+    updateProgressMessage ||
+    enrichmentProgressMessage ||
+    "Refreshing discovery...";
 
   const nearbyShows = nearbyShowsData?.shows || [];
   const nearbyLocationLabel =
@@ -1583,11 +1678,11 @@ function DiscoverPage() {
         );
       }
 
-      const recommendedStatusTitle = isUpdating
+      const recommendedStatusTitle = isDiscoveryRefreshing
         ? "Building your recommendations"
         : "Not enough listening data yet";
-      const recommendedStatusMessage = isUpdating
-        ? updateProgressMessage ||
+      const recommendedStatusMessage = isDiscoveryRefreshing
+        ? discoveryRefreshMessage ||
           "Scanning your library and Last.fm history. The first setup can take up to 10 minutes."
         : provider === "lastfm"
           ? "Add artists to your library or keep scrobbling on Last.fm. Recommendations improve as Aurral learns your taste."
@@ -1604,9 +1699,9 @@ function DiscoverPage() {
             </span>
           </h2>
           <div
-            className={`discover-recommended-status${isUpdating ? " discover-recommended-status--loading" : ""}`}
+            className={`discover-recommended-status${isDiscoveryRefreshing ? " discover-recommended-status--loading" : ""}`}
           >
-            {isUpdating ? (
+            {isDiscoveryRefreshing ? (
               <Loader className="discover-recommended-status__spinner animate-spin" />
             ) : (
               <div
@@ -1622,7 +1717,7 @@ function DiscoverPage() {
             <p className="discover-recommended-status__message">
               {recommendedStatusMessage}
             </p>
-            {!isUpdating ? (
+            {!isDiscoveryRefreshing ? (
               <div className="discover-recommended-status__actions">
                 <button
                   type="button"
@@ -1969,17 +2064,17 @@ function DiscoverPage() {
             <div className="artist-discover-hero__title-wrap">
               <div className="artist-discover-hero__title-row">
                 <h1 className="page-title">Discover</h1>
-                {(isUpdating || lastUpdated) && (
+                {(isDiscoveryRefreshing || lastUpdated) && (
                   <span
-                    className={`artist-discover-hero__updated${isUpdating ? " artist-discover-hero__updated--refreshing" : ""}`}
+                    className={`artist-discover-hero__updated${isDiscoveryRefreshing ? " artist-discover-hero__updated--refreshing" : ""}`}
                   >
-                    {isUpdating ? (
+                    {isDiscoveryRefreshing ? (
                       <Loader className="artist-discover-hero__updated-icon animate-spin" />
                     ) : (
                       <Clock className="artist-discover-hero__updated-icon" />
                     )}
-                    {isUpdating
-                      ? updateProgressMessage || "Refreshing discovery..."
+                    {isDiscoveryRefreshing
+                      ? discoveryRefreshMessage
                       : `Updated ${new Date(lastUpdated).toLocaleDateString()}`}
                   </span>
                 )}

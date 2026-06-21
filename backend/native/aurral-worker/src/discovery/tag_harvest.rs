@@ -1,5 +1,7 @@
 use crate::net::lastfm::LastfmClient;
-use crate::types::DiscoverySeed;
+use crate::types::{normalize_mbid, normalize_text, DiscoverySeed};
+use crate::util::concurrency::map_with_concurrency;
+use crate::util::network_concurrency;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -15,14 +17,15 @@ pub struct TagHarvestResult {
     pub top_genres: Vec<String>,
 }
 
-fn seed_tag_map_key(seed: &DiscoverySeed) -> String {
-    if let Some(mbid) = seed.mbid.as_deref() {
-        let trimmed = mbid.trim();
-        if !trimmed.is_empty() {
-            return trimmed.to_lowercase();
-        }
+pub fn discovery_seed_tag_map_key(seed: &DiscoverySeed) -> String {
+    if let Some(mbid) = normalize_mbid(seed.mbid.as_deref()) {
+        return format!("mbid:{mbid}");
     }
-    seed.artist_name.trim().to_lowercase()
+    let normalized = normalize_text(&seed.artist_name);
+    if normalized.is_empty() {
+        return String::new();
+    }
+    format!("name:{normalized}")
 }
 
 fn normalize_tag(value: &str) -> String {
@@ -53,14 +56,28 @@ pub async fn collect_seed_tags(
     let mut genre_counts: HashMap<String, f64> = HashMap::new();
     let mut seed_tag_map: HashMap<String, Vec<String>> = HashMap::new();
 
-    for seed in seeds {
-        let name = seed.artist_name.trim();
-        if name.is_empty() {
-            continue;
-        }
-        let tags = lastfm
-            .artist_top_tags(name, seed.mbid.as_deref())
-            .await;
+    let valid_seeds: Vec<DiscoverySeed> = seeds
+        .iter()
+        .filter(|seed| !seed.artist_name.trim().is_empty())
+        .cloned()
+        .collect();
+
+    let harvests = map_with_concurrency(
+        valid_seeds,
+        network_concurrency(),
+        move |seed| {
+            let lastfm = lastfm.clone();
+            async move {
+                let tags = lastfm
+                    .artist_top_tags(&seed.artist_name, seed.mbid.as_deref())
+                    .await;
+                (seed, tags)
+            }
+        },
+    )
+    .await;
+
+    for (seed, tags) in harvests {
         if tags.is_empty() {
             continue;
         }
@@ -74,7 +91,7 @@ pub async fn collect_seed_tags(
         if names.is_empty() {
             continue;
         }
-        let map_key = seed_tag_map_key(seed);
+        let map_key = discovery_seed_tag_map_key(&seed);
         if !map_key.is_empty() {
             seed_tag_map.insert(map_key, names.clone());
         }

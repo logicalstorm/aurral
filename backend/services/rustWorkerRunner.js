@@ -50,7 +50,7 @@ export function getRustWorkerStatus() {
     path: binaryPath,
     required: lastfmConfigured,
     daemonRunning: Boolean(daemonProcess && !daemonProcess.killed),
-    jobs: ["discovery-refresh", "discovery-run", "flow-plan"],
+    jobs: ["discovery-refresh", "discovery-run", "discovery-pipeline", "playlist-plan", "flow-plan"],
   };
 }
 
@@ -72,8 +72,20 @@ const buildRustWorkerEnv = async () => {
 const rejectAllPending = (error) => {
   for (const [id, entry] of daemonPending.entries()) {
     clearTimeout(entry.timer);
-    entry.reject(error);
     daemonPending.delete(id);
+    if (!entry.jobType) {
+      entry.reject(error || new Error("aurral-worker daemon connection closed"));
+      continue;
+    }
+    runRustWorkerProcess(entry.jobType, entry.payload, entry.timeoutMs)
+      .then(entry.resolve)
+      .catch((fallbackError) => {
+        entry.reject(
+          fallbackError ||
+            error ||
+            new Error("aurral-worker daemon connection closed"),
+        );
+      });
   }
 };
 
@@ -95,7 +107,9 @@ const resetDaemonProcess = (error = null) => {
 };
 
 const isBrokenPipeError = (error) =>
-  error?.code === "EPIPE" || error?.code === "ERR_STREAM_DESTROYED";
+  error?.code === "EPIPE" ||
+  error?.code === "ERR_STREAM_DESTROYED" ||
+  /EPIPE/i.test(String(error?.message || ""));
 
 const writeDaemonRequest = (child, request) =>
   new Promise((resolve, reject) => {
@@ -215,7 +229,7 @@ const ensureDaemonProcess = async () => {
   return daemonProcess;
 };
 
-const runRustWorkerDaemonJob = (jobType, payload, timeoutMs, retried = false) =>
+const runRustWorkerDaemonJob = (jobType, payload, timeoutMs) =>
   new Promise(async (resolve, reject) => {
     try {
       const child = await ensureDaemonProcess();
@@ -233,31 +247,30 @@ const runRustWorkerDaemonJob = (jobType, payload, timeoutMs, retried = false) =>
             }, timeoutMs)
           : null;
 
-      daemonPending.set(id, { resolve, reject, timer });
+      daemonPending.set(id, {
+        resolve,
+        reject,
+        timer,
+        jobType,
+        payload,
+        timeoutMs,
+      });
       const request = `${JSON.stringify({ id, job: jobType, payload })}\n`;
       try {
         await writeDaemonRequest(child, request);
       } catch (error) {
         if (timer) clearTimeout(timer);
         daemonPending.delete(id);
-        if (!retried && isBrokenPipeError(error)) {
-          resetDaemonProcess(error);
-          try {
-            const value = await runRustWorkerDaemonJob(
-              jobType,
-              payload,
-              timeoutMs,
-              true,
-            );
-            resolve(value);
-            return;
-          } catch (retryError) {
-            reject(retryError);
-            return;
-          }
-        }
         if (isBrokenPipeError(error)) {
           resetDaemonProcess(error);
+          try {
+            const value = await runRustWorkerProcess(jobType, payload, timeoutMs);
+            resolve(value);
+            return;
+          } catch (fallbackError) {
+            reject(fallbackError);
+            return;
+          }
         }
         reject(error);
       }
@@ -382,8 +395,16 @@ export async function runRustDiscoveryRun(payload) {
   return runRustWorkerJob("discovery-run", payload);
 }
 
+export async function runRustDiscoveryPipeline(payload) {
+  return runRustWorkerJob("discovery-pipeline", payload, { useDaemon: false });
+}
+
 export async function runRustFlowPlan(payload) {
   return runRustWorkerJob("flow-plan", payload);
+}
+
+export async function runRustPlaylistPlan(payload) {
+  return runRustWorkerJob("playlist-plan", payload, { useDaemon: false });
 }
 
 export function shutdownRustWorkerDaemon() {
