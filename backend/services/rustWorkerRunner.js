@@ -360,12 +360,10 @@ const runRustWorkerProcess = (jobType, payload, timeoutMs) =>
           }
         });
 
-        child.stdin.write(JSON.stringify(payload), (error) => {
+        child.stdin.end(JSON.stringify(payload), "utf8", (error) => {
           if (error && !settled) {
             finish(error);
-            return;
           }
-          child.stdin.end();
         });
       })
       .catch(reject);

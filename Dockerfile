@@ -30,6 +30,7 @@ ENV APP_VERSION=$APP_VERSION
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
     gosu \
     fontconfig \
     fonts-dejavu-core \
