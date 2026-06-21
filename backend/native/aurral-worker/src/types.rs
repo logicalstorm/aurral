@@ -165,6 +165,40 @@ pub struct ReleaseRadarRelease {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct LidarrConfig {
+    pub url: String,
+    pub api_key: String,
+    #[serde(default)]
+    pub api_path: Option<String>,
+    #[serde(default)]
+    pub insecure: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrepArtistInput {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub artist_name: String,
+    #[serde(default)]
+    pub artist_mbid: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveryPrepJob {
+    #[serde(default)]
+    pub lidarr: Option<LidarrConfig>,
+    #[serde(default)]
+    pub artists: Vec<PrepArtistInput>,
+    #[serde(default)]
+    pub release_radar_limit: Option<usize>,
+    #[serde(default)]
+    pub include_future: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PlaylistPlanJob {
     #[serde(default)]
     pub presets: Vec<PlaylistPreset>,

@@ -1,9 +1,10 @@
 use crate::jobs::discovery_pipeline::run as run_discovery_pipeline;
+use crate::jobs::discovery_prep::run as run_discovery_prep;
 use crate::jobs::discovery_refresh::run as run_discovery_refresh;
 use crate::jobs::discovery_run::run as run_discovery_run;
 use crate::jobs::playlist_plan::run as run_playlist_plan;
 use crate::jobs::flow_plan::run as run_flow_plan;
-use crate::types::{DiscoveryPipelineJob, DiscoveryRefreshJob, DiscoveryRunJob, ErrorResponse, FlowPlanJob, PlaylistPlanJob};
+use crate::types::{DiscoveryPipelineJob, DiscoveryPrepJob, DiscoveryRefreshJob, DiscoveryRunJob, ErrorResponse, FlowPlanJob, PlaylistPlanJob};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
@@ -52,6 +53,12 @@ async fn dispatch_job(job_type: &str, payload: Value) -> Result<(Value, crate::t
         "discovery-pipeline" => {
             let job: DiscoveryPipelineJob = parse_payload(payload)?;
             let result = run_discovery_pipeline(job).await?;
+            let stats = result.stats.clone();
+            Ok((serde_json::to_value(result.to_payload()).map_err(|e| e.to_string())?, stats))
+        }
+        "discovery-prep" => {
+            let job: DiscoveryPrepJob = parse_payload(payload)?;
+            let result = run_discovery_prep(job).await?;
             let stats = result.stats.clone();
             Ok((serde_json::to_value(result.to_payload()).map_err(|e| e.to_string())?, stats))
         }

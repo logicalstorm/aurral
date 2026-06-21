@@ -359,21 +359,33 @@ const runDiscoveryPipelineWithRust = async ({
   const { buildRustDiscoveryPipelinePayload } = await import(
     "./rustDiscoveryBridge.js"
   );
-  const { getRecentMissingReleases } = await import("./recentReleasesService.js");
+  const { resolveDiscoveryPrep } = await import("./rustDiscoveryBridge.js");
   const latestCache = getDiscoveryCache(cacheNamespace);
   emitStep("preparing_pipeline", "Preparing recommendation pipeline", DISCOVERY_REFRESH_PROGRESS.PREPARING);
   const payloadStarted = Date.now();
   console.log("[Discovery] Building pipeline payload...");
 
-  const mixPromise =
-    libraryMixPromise ||
-    import("./weeklyFlowPlaylistSource.js").then(({ playlistSource }) =>
-      playlistSource.buildLibraryMixContext(allLibraryArtists),
-    );
-  const releaseRadarPromise = getRecentMissingReleases(30, {
-    artists: allLibraryArtists,
-    includeFuture: false,
-  });
+  const prepPromise =
+    libraryMixPromise != null
+      ? libraryMixPromise.then(async (libraryMixArtists) => {
+          const { getRecentMissingReleases } = await import(
+            "./recentReleasesService.js"
+          );
+          const releaseAlbums = await getRecentMissingReleases(30, {
+            artists: allLibraryArtists,
+            includeFuture: false,
+          });
+          return {
+            libraryMixArtists,
+            releaseAlbums,
+            source: "node-mix-only",
+          };
+        })
+      : resolveDiscoveryPrep({
+          libraryArtists: allLibraryArtists,
+          releaseRadarLimit: 30,
+          includeFuture: false,
+        });
 
   const rustPayload = await buildRustDiscoveryPipelinePayload({
     recentLibraryArtists,
@@ -437,19 +449,23 @@ const runDiscoveryPipelineWithRust = async ({
   let rustResponse;
   let libraryMixArtists;
   let releaseAlbums;
+  let prepSource = "unknown";
   try {
-    [rustResponse, libraryMixArtists, releaseAlbums] = await Promise.all([
+    const [pipelineResponse, prepResult] = await Promise.all([
       runRustDiscoveryPipeline(rustPayload),
-      mixPromise,
-      releaseRadarPromise,
+      prepPromise,
     ]);
+    rustResponse = pipelineResponse;
+    libraryMixArtists = prepResult.libraryMixArtists || [];
+    releaseAlbums = prepResult.releaseAlbums || prepResult.releaseRadarReleases || [];
+    prepSource = prepResult.source || "unknown";
   } finally {
     stopHeartbeat();
   }
   const rustStats = rustResponse?.stats || {};
   const rustResult = rustResponse?.result || {};
   console.log(
-    `[Discovery] Rust enrichment finished in ${Date.now() - rustStarted}ms (lastfm=${rustStats.lastfmCalls || 0}, metadata=${rustStats.musicbrainzCalls || 0})`,
+    `[Discovery] Rust enrichment finished in ${Date.now() - rustStarted}ms (lastfm=${rustStats.lastfmCalls || 0}, metadata=${rustStats.musicbrainzCalls || 0}, prep=${prepSource})`,
   );
   emitStep(
     "enriching_recommendations",

@@ -50,7 +50,7 @@ export function getRustWorkerStatus() {
     path: binaryPath,
     required: lastfmConfigured,
     daemonRunning: Boolean(daemonProcess && !daemonProcess.killed),
-    jobs: ["discovery-refresh", "discovery-run", "discovery-pipeline", "playlist-plan", "flow-plan"],
+    jobs: ["discovery-refresh", "discovery-run", "discovery-pipeline", "discovery-prep", "playlist-plan", "flow-plan"],
   };
 }
 
@@ -397,6 +397,10 @@ export async function runRustDiscoveryRun(payload) {
 
 export async function runRustDiscoveryPipeline(payload) {
   return runRustWorkerJob("discovery-pipeline", payload, { useDaemon: false });
+}
+
+export async function runRustDiscoveryPrep(payload) {
+  return runRustWorkerJob("discovery-prep", payload, { useDaemon: false });
 }
 
 export async function runRustFlowPlan(payload) {

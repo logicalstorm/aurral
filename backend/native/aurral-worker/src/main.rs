@@ -1,12 +1,13 @@
 use aurral_worker::daemon;
+use aurral_worker::jobs::discovery_prep::run as run_discovery_prep;
 use aurral_worker::jobs::discovery_pipeline::run as run_discovery_pipeline;
 use aurral_worker::jobs::discovery_refresh::run as run_discovery_refresh;
 use aurral_worker::jobs::discovery_run::run as run_discovery_run;
 use aurral_worker::jobs::playlist_plan::run as run_playlist_plan;
 use aurral_worker::jobs::flow_plan::run as run_flow_plan;
 use aurral_worker::types::{
-    DiscoveryPipelineJob, DiscoveryRefreshJob, DiscoveryRunJob, ErrorResponse, FlowPlanJob,
-    PlaylistPlanJob, SuccessResponse,
+    DiscoveryPipelineJob, DiscoveryPrepJob, DiscoveryRefreshJob, DiscoveryRunJob, ErrorResponse,
+    FlowPlanJob, PlaylistPlanJob, SuccessResponse,
 };
 use serde::de::DeserializeOwned;
 use std::io::{self, Read};
@@ -95,6 +96,28 @@ async fn run_job(job_type: &str) {
                 }
             }
         }
+        "discovery-prep" => {
+            let job: DiscoveryPrepJob = match read_stdin_json() {
+                Ok(job) => job,
+                Err(error) => {
+                    write_json(&ErrorResponse { ok: false, error });
+                    process::exit(1);
+                }
+            };
+            match run_discovery_prep(job).await {
+                Ok(result) => {
+                    write_json(&SuccessResponse {
+                        ok: true,
+                        result: result.to_payload(),
+                        stats: result.stats,
+                    });
+                }
+                Err(error) => {
+                    write_json(&ErrorResponse { ok: false, error });
+                    process::exit(1);
+                }
+            }
+        }
         "flow-plan" => {
             let job: FlowPlanJob = match read_stdin_json() {
                 Ok(job) => job,
@@ -159,7 +182,7 @@ async fn main() {
     if job_type.is_empty() {
         write_json(&ErrorResponse {
             ok: false,
-            error: "usage: aurral-worker <daemon|discovery-refresh|discovery-run|discovery-pipeline|playlist-plan|flow-plan>".to_string(),
+            error: "usage: aurral-worker <daemon|discovery-refresh|discovery-run|discovery-pipeline|discovery-prep|playlist-plan|flow-plan>".to_string(),
         });
         process::exit(1);
     }

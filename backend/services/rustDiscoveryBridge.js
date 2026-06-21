@@ -108,19 +108,15 @@ const buildRustPlaylistPlanPayload = async ({
         ? existingArtistKeys
         : [...buildExistingArtistKeySet(existingArtistKeys || [])];
 
-  const { playlistSource } = await import("./weeklyFlowPlaylistSource.js");
-  const { getRecentMissingReleases } = await import("./recentReleasesService.js");
-  const [resolvedLibraryMix, releaseAlbums] = await Promise.all([
-    libraryMixArtists != null
-      ? Promise.resolve(libraryMixArtists)
-      : playlistSource.buildLibraryMixContext(libraryArtists),
-    releaseRadarReleases != null
-      ? Promise.resolve(releaseRadarReleases)
-      : getRecentMissingReleases(releaseRadarSize, {
-          artists: libraryArtists,
-          includeFuture: false,
-        }),
-  ]);
+  const prep = await resolveDiscoveryPrep({
+    libraryArtists,
+    releaseRadarLimit: releaseRadarSize,
+    includeFuture: false,
+    libraryMixArtists,
+    releaseRadarReleases,
+  });
+  const resolvedLibraryMix = prep.libraryMixArtists;
+  const releaseAlbums = prep.releaseAlbums;
 
   return {
     presets: presets.map((preset) => ({
@@ -143,17 +139,131 @@ const buildRustPlaylistPlanPayload = async ({
     releaseRadarReleases: releaseAlbums.map((album) => ({
       artistName: album.artistName,
       albumName: album.albumName,
-      albumMbid: album.mbid || album.foreignAlbumId || null,
+      albumMbid: album.albumMbid || album.mbid || album.foreignAlbumId || null,
       artistMbid: album.artistMbid || album.foreignArtistId || null,
-      releaseYear: album.releaseDate
-        ? String(album.releaseDate).slice(0, 4)
-        : null,
+      releaseYear:
+        album.releaseYear ||
+        (album.releaseDate ? String(album.releaseDate).slice(0, 4) : null),
     })),
     releaseRadarSize,
   };
 };
 
 export { buildRustPlaylistPlanPayload };
+
+const mapPrepArtist = (artist = {}) => ({
+  id:
+    artist?.id != null
+      ? String(artist.id)
+      : artist?.artistId != null
+        ? String(artist.artistId)
+        : null,
+  artistName: String(artist?.artistName || artist?.name || "").trim(),
+  artistMbid: artist?.mbid || artist?.foreignArtistId || null,
+});
+
+export async function buildRustDiscoveryPrepPayload({
+  libraryArtists = [],
+  releaseRadarLimit = 30,
+  includeFuture = false,
+} = {}) {
+  const { lidarrClient } = await import("./lidarrClient.js");
+  const configured = lidarrClient.isConfigured();
+  const config = configured ? lidarrClient.getConfig() : null;
+  const artists = (Array.isArray(libraryArtists) ? libraryArtists : [])
+    .map(mapPrepArtist)
+    .filter((artist) => artist.artistName);
+  return {
+    lidarr: configured
+      ? {
+          url: config.url,
+          apiKey: config.apiKey,
+          insecure: config.insecure === true,
+        }
+      : null,
+    artists,
+    releaseRadarLimit:
+      releaseRadarLimit != null && Number.isFinite(Number(releaseRadarLimit))
+        ? Math.max(1, Math.round(Number(releaseRadarLimit)))
+        : 30,
+    includeFuture: includeFuture === true,
+  };
+}
+
+export async function resolveDiscoveryPrep({
+  libraryArtists = [],
+  releaseRadarLimit = 30,
+  includeFuture = false,
+  libraryMixArtists = null,
+  releaseRadarReleases = null,
+} = {}) {
+  if (libraryMixArtists != null && releaseRadarReleases != null) {
+    return {
+      libraryMixArtists,
+      releaseRadarReleases,
+      releaseAlbums: releaseRadarReleases,
+      source: "provided",
+    };
+  }
+  const { isRustWorkerAvailable, runRustDiscoveryPrep } = await import(
+    "./rustWorkerRunner.js"
+  );
+  if (isRustWorkerAvailable()) {
+    try {
+      const payload = await buildRustDiscoveryPrepPayload({
+        libraryArtists,
+        releaseRadarLimit,
+        includeFuture,
+      });
+      const response = await runRustDiscoveryPrep(payload);
+      const result = response?.result || {};
+      const libraryMix = Array.isArray(result.libraryMixArtists)
+        ? result.libraryMixArtists
+        : [];
+      const releases = Array.isArray(result.releaseRadarReleases)
+        ? result.releaseRadarReleases
+        : [];
+      return {
+        libraryMixArtists: libraryMix,
+        releaseRadarReleases: releases,
+        releaseAlbums: releases,
+        source: "rust",
+        stats: response?.stats || {},
+      };
+    } catch (error) {
+      console.warn(
+        `[Discovery] Rust discovery-prep failed, falling back to Node: ${error?.message || error}`,
+      );
+    }
+  }
+  const { playlistSource } = await import("./weeklyFlowPlaylistSource.js");
+  const { getRecentMissingReleases } = await import("./recentReleasesService.js");
+  const [resolvedLibraryMix, releaseAlbums] = await Promise.all([
+    libraryMixArtists != null
+      ? Promise.resolve(libraryMixArtists)
+      : playlistSource.buildLibraryMixContext(libraryArtists),
+    releaseRadarReleases != null
+      ? Promise.resolve(releaseRadarReleases)
+      : getRecentMissingReleases(releaseRadarLimit, {
+          artists: libraryArtists,
+          includeFuture,
+        }),
+  ]);
+  return {
+    libraryMixArtists: resolvedLibraryMix,
+    releaseRadarReleases: releaseAlbums.map((album) => ({
+      artistName: album.artistName,
+      albumName: album.albumName,
+      albumMbid: album.mbid || album.foreignAlbumId || null,
+      artistMbid: album.artistMbid || album.foreignArtistId || null,
+      releaseYear: album.releaseDate
+        ? String(album.releaseDate).slice(0, 4)
+        : null,
+    })),
+    releaseAlbums,
+    source: "node",
+  };
+}
 
 export async function buildRustDiscoveryRunPayload({
   payload = {},
@@ -294,29 +404,27 @@ export async function buildRustDiscoveryPipelinePayload({
 
 export async function buildRustFlowPlanPayload(flow = {}, options = {}) {
   const { libraryManager } = await import("./libraryManager.js");
+  const { playlistSource } = await import("./weeklyFlowPlaylistSource.js");
   const allLibraryArtistsRaw =
     options.libraryArtists || (await libraryManager.getAllArtists());
   const allLibraryArtists = Array.isArray(allLibraryArtistsRaw)
     ? allLibraryArtistsRaw
     : [];
   const existingArtistKeys = buildExistingArtistKeySet(allLibraryArtists);
-  const { playlistSource } = await import("./weeklyFlowPlaylistSource.js");
   const discoveryCache = playlistSource._resolveDiscoveryCache(options);
-  const libraryMixArtists =
-    await playlistSource.buildLibraryMixContext(allLibraryArtists);
   const requestedSize = Number(flow?.size || 0);
   const targetSize =
     Number.isFinite(requestedSize) && requestedSize > 0
       ? Math.round(requestedSize)
       : 30;
-  let releaseRadarReleases = [];
-  if (flow?.discoverPresetId === "release-radar") {
-    const { getRecentMissingReleases } = await import("./recentReleasesService.js");
-    releaseRadarReleases = await getRecentMissingReleases(targetSize, {
-      artists: allLibraryArtists,
-      includeFuture: false,
-    });
-  }
+  const prep = await resolveDiscoveryPrep({
+    libraryArtists: allLibraryArtists,
+    releaseRadarLimit: targetSize,
+    includeFuture: false,
+  });
+  const libraryMixArtists = prep.libraryMixArtists;
+  const releaseRadarReleases =
+    flow?.discoverPresetId === "release-radar" ? prep.releaseRadarReleases : [];
 
   return {
     flow: {
@@ -336,11 +444,11 @@ export async function buildRustFlowPlanPayload(flow = {}, options = {}) {
     releaseRadarReleases: releaseRadarReleases.map((album) => ({
       artistName: album.artistName,
       albumName: album.albumName,
-      albumMbid: album.mbid || album.foreignAlbumId || null,
+      albumMbid: album.albumMbid || album.mbid || album.foreignAlbumId || null,
       artistMbid: album.artistMbid || album.foreignArtistId || null,
-      releaseYear: album.releaseDate
-        ? String(album.releaseDate).slice(0, 4)
-        : null,
+      releaseYear:
+        album.releaseYear ||
+        (album.releaseDate ? String(album.releaseDate).slice(0, 4) : null),
     })),
     releaseRadarSize: targetSize,
   };
