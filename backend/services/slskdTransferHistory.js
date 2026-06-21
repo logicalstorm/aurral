@@ -184,7 +184,7 @@ export function recordSlskdTransferOutcome({
   return rowId;
 }
 
-export function buildSlskdRankingHistoryOptions() {
+function loadPeerStatsMap() {
   const cutoff = Date.now() - RECENT_HISTORY_WINDOW_MS;
   const peerStats = new Map();
   for (const row of recentPeerRowsStmt.all(cutoff)) {
@@ -206,8 +206,13 @@ export function buildSlskdRankingHistoryOptions() {
     stats.active = Number(row.active || 0);
     peerStats.set(key, stats);
   }
+  return peerStats;
+}
 
+export function buildSlskdRankingHistoryOptions() {
+  const peerStats = loadPeerStatsMap();
   return {
+    peerStats: Object.fromEntries(peerStats.entries()),
     isUserBlacklisted: (username) => {
       const stats = peerStats.get(normalizeUsername(username));
       if (!stats) return false;
@@ -225,6 +230,10 @@ export function buildSlskdRankingHistoryOptions() {
       return Math.max(0, Math.min(220, penalty));
     },
   };
+}
+
+export function buildSlskdPeerStatsSnapshot() {
+  return Object.fromEntries(loadPeerStatsMap().entries());
 }
 
 export function getSlskdCleanupTargets() {

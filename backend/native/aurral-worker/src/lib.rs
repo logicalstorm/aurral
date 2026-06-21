@@ -3,6 +3,7 @@ pub mod flow;
 pub mod jobs;
 pub mod net;
 pub mod prep;
+pub mod slskd;
 pub mod types;
 pub mod daemon;
 pub mod util;

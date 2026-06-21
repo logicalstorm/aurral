@@ -5,3 +5,4 @@ pub mod discovery_refresh;
 pub mod discovery_run;
 pub mod flow_plan;
 pub mod playlist_plan;
+pub mod slskd_matcher;

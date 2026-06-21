@@ -1,5 +1,7 @@
 use aurral_worker::daemon;
 use aurral_worker::jobs::discovery_prep::run as run_discovery_prep;
+use aurral_worker::jobs::slskd_matcher::run_sync as run_slskd_matcher;
+use aurral_worker::slskd::types::SlskdMatcherJob;
 use aurral_worker::jobs::discovery_pipeline::run as run_discovery_pipeline;
 use aurral_worker::jobs::discovery_refresh::run as run_discovery_refresh;
 use aurral_worker::jobs::discovery_run::run as run_discovery_run;
@@ -118,6 +120,28 @@ async fn run_job(job_type: &str) {
                 }
             }
         }
+        "slskd-matcher" => {
+            let job: SlskdMatcherJob = match read_stdin_json() {
+                Ok(job) => job,
+                Err(error) => {
+                    write_json(&ErrorResponse { ok: false, error });
+                    process::exit(1);
+                }
+            };
+            match run_slskd_matcher(job) {
+                Ok((result, stats)) => {
+                    write_json(&SuccessResponse {
+                        ok: true,
+                        result,
+                        stats,
+                    });
+                }
+                Err(error) => {
+                    write_json(&ErrorResponse { ok: false, error });
+                    process::exit(1);
+                }
+            }
+        }
         "flow-plan" => {
             let job: FlowPlanJob = match read_stdin_json() {
                 Ok(job) => job,
@@ -182,7 +206,7 @@ async fn main() {
     if job_type.is_empty() {
         write_json(&ErrorResponse {
             ok: false,
-            error: "usage: aurral-worker <daemon|discovery-refresh|discovery-run|discovery-pipeline|discovery-prep|playlist-plan|flow-plan>".to_string(),
+            error: "usage: aurral-worker <daemon|discovery-refresh|discovery-run|discovery-pipeline|discovery-prep|slskd-matcher|playlist-plan|flow-plan>".to_string(),
         });
         process::exit(1);
     }

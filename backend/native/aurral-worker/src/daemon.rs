@@ -1,9 +1,11 @@
 use crate::jobs::discovery_pipeline::run as run_discovery_pipeline;
+use crate::jobs::slskd_matcher::run_sync as run_slskd_matcher;
 use crate::jobs::discovery_prep::run as run_discovery_prep;
 use crate::jobs::discovery_refresh::run as run_discovery_refresh;
 use crate::jobs::discovery_run::run as run_discovery_run;
 use crate::jobs::playlist_plan::run as run_playlist_plan;
 use crate::jobs::flow_plan::run as run_flow_plan;
+use crate::slskd::types::SlskdMatcherJob;
 use crate::types::{DiscoveryPipelineJob, DiscoveryPrepJob, DiscoveryRefreshJob, DiscoveryRunJob, ErrorResponse, FlowPlanJob, PlaylistPlanJob};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -61,6 +63,11 @@ async fn dispatch_job(job_type: &str, payload: Value) -> Result<(Value, crate::t
             let result = run_discovery_prep(job).await?;
             let stats = result.stats.clone();
             Ok((serde_json::to_value(result.to_payload()).map_err(|e| e.to_string())?, stats))
+        }
+        "slskd-matcher" => {
+            let job: SlskdMatcherJob = parse_payload(payload)?;
+            let (result, stats) = run_slskd_matcher(job)?;
+            Ok((result, stats))
         }
         "flow-plan" => {
             let job: FlowPlanJob = parse_payload(payload)?;

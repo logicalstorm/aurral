@@ -50,7 +50,7 @@ export function getRustWorkerStatus() {
     path: binaryPath,
     required: lastfmConfigured,
     daemonRunning: Boolean(daemonProcess && !daemonProcess.killed),
-    jobs: ["discovery-refresh", "discovery-run", "discovery-pipeline", "discovery-prep", "playlist-plan", "flow-plan"],
+    jobs: ["discovery-refresh", "discovery-run", "discovery-pipeline", "discovery-prep", "slskd-matcher", "playlist-plan", "flow-plan"],
   };
 }
 

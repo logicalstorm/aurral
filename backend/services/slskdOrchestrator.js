@@ -7,6 +7,7 @@ import { enqueuePipelineJob } from "./honkerDb.js";
 import { downloadTracker } from "./playlistDownloadTracker.js";
 import {
   buildFlowSearchTiers,
+  countPreDownloadValidCandidates,
   rankFlowSearchResults,
   selectRankedMatchAttempts,
   validateDownloadedTrack,
@@ -77,9 +78,11 @@ const MAX_POLL_ATTEMPTS = 600;
 
 async function getWorkerSearchOptions() {
   const { getSlskdSearchFormatOptions } = await import("./slskdClient.js");
+  const format = getSlskdSearchFormatOptions();
+  const history = buildSlskdRankingHistoryOptions();
   return {
-    ...getSlskdSearchFormatOptions(),
-    ...buildSlskdRankingHistoryOptions(),
+    ...format,
+    peerStats: history.peerStats,
   };
 }
 
@@ -690,10 +693,6 @@ async function cleanupEmptyAncestors(dir, rootBoundary) {
   }
 }
 
-function countPreDownloadValidCandidates(results, resolvedTrack, searchOptions) {
-  const ranked = rankFlowSearchResults(results, resolvedTrack, searchOptions);
-  return ranked.filter((entry) => entry.preDownloadValid).length;
-}
 
 function recordPayloadOutcome(job, payload, status, reason, details = {}) {
   recordSlskdTransferOutcome({
