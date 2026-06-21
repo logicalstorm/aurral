@@ -508,16 +508,6 @@ function DiscoverPage() {
     showError,
   });
 
-  const applyDiscoveryData = useCallback(
-    (nextValue) => {
-      const normalizedData = normalizeDiscoveryData(nextValue);
-      if (!normalizedData) return;
-      setData(normalizedData);
-      writeStoredDiscoveryData(normalizedData, authUser?.id);
-    },
-    [authUser?.id],
-  );
-
   const { isConnected: isDiscoverySocketConnected } = useWebSocketChannel(
     "discovery",
     (msg) => {
