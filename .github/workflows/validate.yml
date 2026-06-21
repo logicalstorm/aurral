@@ -40,6 +40,18 @@ jobs:
 
       - run: npm ci
 
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend/native/aurral-worker
+
+      - name: Build aurral-worker
+        working-directory: backend/native/aurral-worker
+        run: cargo build --release
+
       - run: npm run lint
         working-directory: frontend
 
