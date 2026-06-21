@@ -1,0 +1,22 @@
+[package]
+name = "aurral-worker"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "aurral_worker"
+path = "src/lib.rs"
+
+[[bin]]
+name = "aurral-worker"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
+regex = "1"
+indexmap = { version = "2", features = ["serde"] }
+thiserror = "2"
+rand = "0.8"

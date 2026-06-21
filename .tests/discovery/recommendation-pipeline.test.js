@@ -9,6 +9,7 @@ import {
   mergeRetainedRecommendationPool,
   mergeResolvedRecommendations,
   rerankRecommendations,
+  deriveDiscoveryGenresFromPool,
 } from "../../backend/services/discoveryRecommendations.js";
 
 test("buildDiscoverySeedList prefers listening-history weight when the same artist exists in library and history", () => {
@@ -300,4 +301,46 @@ test("mergeRetainedRecommendationPool preserves repeats and trims stale low scor
     merged.some((item) => item.name === "Stale Weak Pick"),
     false,
   );
+});
+
+test("deriveDiscoveryGenresFromPool ranks common genre tags from the recommendation pool", () => {
+  const recommendations = [
+    {
+      id: "1",
+      name: "A",
+      matchedTags: ["indie rock", "seen live"],
+    },
+    {
+      id: "2",
+      name: "B",
+      matchedTags: ["indie rock", "post-punk"],
+    },
+    {
+      id: "3",
+      name: "C",
+      matchedTags: ["indie rock", "alternative"],
+    },
+    {
+      id: "4",
+      name: "D",
+      matchedTags: ["indie rock", "folk punk"],
+    },
+    {
+      id: "5",
+      name: "E",
+      matchedTags: ["jazz", "soul"],
+    },
+    {
+      id: "6",
+      name: "F",
+      matchedTags: ["jazz", "blues"],
+    },
+  ];
+
+  const genres = deriveDiscoveryGenresFromPool(recommendations, {
+    limit: 8,
+    minArtists: 3,
+  });
+
+  assert.deepEqual(genres, ["indie rock"]);
 });

@@ -14,6 +14,11 @@ import {
   registerHonkerWorker,
   withJobHeartbeat,
 } from "./honkerWorkerRuntime.js";
+import {
+  HEAVY_WORK_TYPES,
+  withHeavyWorkBudget,
+} from "./resourceBudget.js";
+import { withWorkerPerfSpan } from "./workerPerfMetrics.js";
 
 const WORKER_NAME = "discovery-recommendation-enrichment";
 
@@ -38,7 +43,16 @@ async function runLoop() {
       if (!running || stopRequested) break;
       try {
         await withJobHeartbeat(job, queue, () =>
-          runDiscoveryRecommendationEnrichment(job.payload),
+          withHeavyWorkBudget(
+            HEAVY_WORK_TYPES.DISCOVERY_ENRICHMENT,
+            () =>
+              withWorkerPerfSpan(
+                "discovery-enrichment",
+                () => runDiscoveryRecommendationEnrichment(job.payload),
+                job.payload?.discoveryRunId || null,
+              ),
+            job.payload?.discoveryRunId || "discovery-enrichment",
+          ),
         );
         job.ack();
       } catch (error) {

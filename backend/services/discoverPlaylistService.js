@@ -1,6 +1,4 @@
-import { getLastfmApiKey } from "./apiClients.js";
-import { getDiscoveryCache, getMaxFocusPlaylists } from "./discoveryService.js";
-import { playlistSource } from "./weeklyFlowPlaylistSource.js";
+import { getMaxFocusPlaylists } from "./discoveryService.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import {
   DISCOVER_PLAYLIST_PRESETS,
@@ -9,15 +7,6 @@ import {
 } from "../config/discoverPlaylistPresets.js";
 
 const FOCUS_PLAYLIST_SIZE = 20;
-const PLAYLIST_BUILD_CONCURRENCY = Math.max(
-  1,
-  Math.min(
-    3,
-    Math.floor(
-      Number(process.env.AURRAL_DISCOVERY_PLAYLIST_BUILD_CONCURRENCY) || 1,
-    ),
-  ),
-);
 const FOCUS_MIX = { discover: 0, mix: 0, trending: 0, focus: 100 };
 const LISTENING_HISTORY_PLAYLIST_ID = "focus-listening-history";
 
@@ -419,92 +408,13 @@ const buildFocusedPlaylistCandidates = ({
   return candidates;
 };
 
-const buildFlowConfigFromPreset = (preset) => ({
-  name: preset.name,
-  mix: preset.mix,
-  size: preset.size,
-  deepDive: preset.deepDive === true,
-  tags: preset.tags || [],
-  relatedArtists: preset.relatedArtists || [],
-});
-
-async function buildPlaylistFromPreset(preset, options = {}) {
-  const { listenHistoryProfile = null, plannerOptions = {} } = options;
-  const flow = buildFlowConfigFromPreset(preset);
-  const plan = await playlistSource.buildFlowRunPlan(flow, {
-    ...plannerOptions,
-    listenHistoryProfile,
-  });
-  const tracks = Array.isArray(plan?.primaryTracks) ? plan.primaryTracks : [];
-  if (tracks.length === 0) return null;
-  return buildPlaylistPreview(preset, tracks, plan);
-}
-
-async function buildPlaylistsFromPresets(presets, options, onProgress) {
-  const playlists = [];
-  const items = Array.isArray(presets) ? presets : [];
-  const totalSteps = items.length + 1;
-  let completed = 0;
-  for (
-    let index = 0;
-    index < items.length;
-    index += PLAYLIST_BUILD_CONCURRENCY
-  ) {
-    const batch = items.slice(index, index + PLAYLIST_BUILD_CONCURRENCY);
-    const batchResults = await Promise.all(
-      batch.map(async (preset) => {
-        try {
-          return await buildPlaylistFromPreset(preset, options);
-        } catch (error) {
-          console.warn(
-            `[DiscoverPlaylists] Failed to build ${preset.id}: ${error.message}`,
-          );
-          return null;
-        }
-      }),
-    );
-    playlists.push(...batchResults.filter(Boolean));
-    completed = Math.min(items.length, index + batch.length);
-    onProgress?.({ completed, total: totalSteps });
-  }
-  return { playlists, totalSteps, completedBeforeReleaseRadar: completed };
-}
-
-async function buildReleaseRadarPlaylist(options = {}) {
-  const {
-    listenHistoryProfile = null,
-    basedOn = [],
-    libraryArtists = null,
-  } = options;
-  try {
-    const tracks = await playlistSource.getReleaseRadarTracks(
-      RELEASE_RADAR_PRESET.size,
-      { listenHistoryProfile, basedOn, libraryArtists },
-    );
-    if (tracks.length > 0) {
-      return buildPlaylistPreview(RELEASE_RADAR_PRESET, tracks);
-    }
-  } catch (error) {
-    console.warn(`[DiscoverPlaylists] Release radar failed: ${error.message}`);
-  }
-  return null;
-}
-
-export async function generateDiscoverPlaylists({
-  listenHistoryProfile = null,
-  basedOn = [],
+export function getDiscoverPlaylistPresetsForBuild({
   topGenres = [],
   topTags = [],
+  basedOn = [],
   recommendations = [],
-  globalTop = [],
-  libraryArtists = null,
-  libraryArtistKeys = null,
-  discoveryCache = null,
   historyTopArtists = [],
-  onProgress,
 } = {}) {
-  if (!getLastfmApiKey()) return [];
-
   const focusCandidates = buildFocusedPlaylistCandidates({
     topGenres,
     topTags,
@@ -512,47 +422,7 @@ export async function generateDiscoverPlaylists({
     recommendations,
     historyTopArtists,
   });
-  const baseDiscoveryCache =
-    discoveryCache || getDiscoveryCache(listenHistoryProfile);
-  const plannerOptions = {
-    discoveryCache: {
-      ...baseDiscoveryCache,
-      basedOn,
-      topGenres,
-      topTags,
-      recommendations,
-      globalTop:
-        Array.isArray(globalTop) && globalTop.length > 0
-          ? globalTop
-          : baseDiscoveryCache?.globalTop || [],
-    },
-    libraryArtists,
-    libraryArtistKeys,
-  };
-  const playlistPresets = [...DISCOVER_PLAYLIST_PRESETS, ...focusCandidates];
-  const { playlists: presetPlaylists, totalSteps } =
-    await buildPlaylistsFromPresets(
-      playlistPresets,
-      { listenHistoryProfile, plannerOptions },
-      onProgress,
-    );
-
-  const playlists = [...presetPlaylists];
-
-  const releaseRadarPlaylist = await buildReleaseRadarPlaylist({
-    listenHistoryProfile,
-    basedOn,
-    libraryArtists,
-  });
-  if (releaseRadarPlaylist) {
-    playlists.push(releaseRadarPlaylist);
-  }
-
-  onProgress?.({ completed: totalSteps, total: totalSteps });
-
-  const { attachArtworkToDiscoverPlaylists } =
-    await import("./discoverPlaylistArtworkService.js");
-  return attachArtworkToDiscoverPlaylists(playlists);
+  return [...DISCOVER_PLAYLIST_PRESETS, ...focusCandidates];
 }
 
 export function annotateDiscoverPlaylistsForUser(playlists, user) {

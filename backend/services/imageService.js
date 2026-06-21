@@ -324,15 +324,14 @@ export const getArtistImage = async (
       if (directArtistImage?.url) {
         const images = await buildDirectArtistImagePayload(directArtistImages);
         const primaryImage = images.find((image) => image.front) || images[0];
-        if (!primaryImage?.image) {
-          throw new Error("Artist images could not be proxied");
+        if (primaryImage?.image) {
+          negativeImageCache.delete(mbid);
+          dbOps.setImage(mbid, primaryImage.image);
+          return {
+            url: primaryImage.image,
+            images,
+          };
         }
-        negativeImageCache.delete(mbid);
-        dbOps.setImage(mbid, primaryImage.image);
-        return {
-          url: primaryImage.image,
-          images,
-        };
       }
 
       const resolvedArtistName =

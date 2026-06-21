@@ -36,13 +36,6 @@ const QUEUE_DEFINITIONS = [
     worker: "playlist-retry",
   },
   {
-    queue: "playlist-reserve-build",
-    label: "Reserve Playlist Builds",
-    workerLabel: "Reserve Playlist Builder",
-    description: "Builds backup candidate tracks for playlists before they are needed.",
-    worker: "playlist-reserve-build",
-  },
-  {
     queue: "playlist-mbid-enrichment",
     label: "Playlist MBID Enrichment",
     workerLabel: "Playlist MBID Worker",
@@ -62,13 +55,6 @@ const QUEUE_DEFINITIONS = [
     workerLabel: "Discovery Refresh Worker",
     description: "Refreshes discovery recommendations from library and listening data.",
     worker: "discovery-refresh",
-  },
-  {
-    queue: "discovery-playlist-build",
-    label: "Discovery Playlist Builds",
-    workerLabel: "Discovery Playlist Builder",
-    description: "Creates generated discovery playlists in the background.",
-    worker: "discovery-playlist-build",
   },
   {
     queue: "discovery-recommendation-enrichment",
@@ -385,12 +371,6 @@ export function describeHonkerTask(queue, payloadValue) {
       : "Playlist Retry";
   }
 
-  if (safeQueue === "playlist-reserve-build") {
-    return payload?.playlistType
-      ? `Reserve Build: ${formatPayloadLabel(payload.playlistType)}`
-      : "Reserve Build";
-  }
-
   if (safeQueue === "playlist-mbid-enrichment") {
     return payload?.playlistId
       ? `Playlist MBID Enrichment: ${formatPayloadLabel(payload.playlistId)}`
@@ -403,12 +383,6 @@ export function describeHonkerTask(queue, payloadValue) {
 
   if (safeQueue === "discovery-refresh") {
     return discoveryRefreshInfo(payload).label;
-  }
-
-  if (safeQueue === "discovery-playlist-build") {
-    return payload?.playlistId
-      ? `Discovery Playlist Build: ${formatPayloadLabel(payload.playlistId)}`
-      : "Discovery Playlist Build";
   }
 
   if (safeQueue === "discovery-recommendation-enrichment") {
@@ -465,11 +439,6 @@ function describeHonkerTaskDetail(queue, payloadValue) {
       ? `Retries incomplete tracks for ${formatPayloadLabel(payload.playlistType)}.`
       : queueDescription(safeQueue);
   }
-  if (safeQueue === "playlist-reserve-build") {
-    return payload?.playlistType
-      ? `Builds reserve tracks for ${formatPayloadLabel(payload.playlistType)}.`
-      : queueDescription(safeQueue);
-  }
   if (safeQueue === "playlist-mbid-enrichment") {
     return payload?.playlistId
       ? `Finds missing MusicBrainz IDs for ${formatPayloadLabel(payload.playlistId)}.`
@@ -479,9 +448,6 @@ function describeHonkerTaskDetail(queue, payloadValue) {
     return payload?.force
       ? "Refreshes Aurral's library view after startup or a forced scan."
       : queueDescription(safeQueue);
-  }
-  if (safeQueue === "discovery-playlist-build") {
-    return queueDescription(safeQueue);
   }
   if (safeQueue === "discovery-recommendation-enrichment") {
     return payload?.discoveryRunId
@@ -1296,5 +1262,11 @@ export async function getHonkerTaskStatus() {
     scheduled: normalizeScheduledRows(scheduledRows, latestRunsByTask),
     workers,
     queue,
+    workerPerf: (await import("./workerPerfMetrics.js")).summarizeWorkerPerfHistory(),
+    resourceBudget: (await import("./resourceBudget.js")).getResourceBudgetStatus(),
+    rustWorker: await (async () => {
+      const { getRustWorkerStatus } = await import("./rustWorkerRunner.js");
+      return getRustWorkerStatus();
+    })(),
   };
 }

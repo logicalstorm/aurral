@@ -14,12 +14,10 @@ let honkerDb = null;
 let openedHonkerDbPath = null;
 let pipelineQueue = null;
 let discoveryRefreshQueue = null;
-let discoveryPlaylistBuildQueue = null;
 let discoveryRecommendationEnrichmentQueue = null;
 let discoveryUserRefreshQueue = null;
 let weeklyFlowOperationQueue = null;
 let playlistRetryQueue = null;
-let playlistReserveBuildQueue = null;
 let playlistMbidEnrichmentQueue = null;
 let systemTaskQueue = null;
 let libraryScanQueue = null;
@@ -151,39 +149,6 @@ export function enqueueDiscoveryRefreshJob(payload, options = {}) {
   return jobId;
 }
 
-export function getDiscoveryPlaylistBuildQueue() {
-  if (!discoveryPlaylistBuildQueue) {
-    discoveryPlaylistBuildQueue = getHonkerDb().queue(
-      "discovery-playlist-build",
-      {
-        visibilityTimeoutS: 3600,
-        maxAttempts: 4,
-      },
-    );
-  }
-  return discoveryPlaylistBuildQueue;
-}
-
-export function enqueueDiscoveryPlaylistBuildJob(payload, options = {}) {
-  const queue = getDiscoveryPlaylistBuildQueue();
-  const runAt =
-    options.runAt != null
-      ? Math.floor(Number(options.runAt) / 1000)
-      : options.delaySeconds != null
-        ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
-        : null;
-  const jobId = queue.enqueue(payload, {
-    priority: Number(options.priority || 0),
-    runAt,
-  });
-  import("./discoveryPlaylistBuildWorker.js")
-    .then(({ startDiscoveryPlaylistBuildWorker }) =>
-      startDiscoveryPlaylistBuildWorker(),
-    )
-    .catch(() => {});
-  return jobId;
-}
-
 export function getDiscoveryRecommendationEnrichmentQueue() {
   if (!discoveryRecommendationEnrichmentQueue) {
     discoveryRecommendationEnrichmentQueue = getHonkerDb().queue(
@@ -305,36 +270,6 @@ export function enqueuePlaylistRetryJob(payload, options = {}) {
   import("./weeklyFlowPlaylistRetryWorker.js")
     .then(({ startWeeklyFlowPlaylistRetryWorker }) =>
       startWeeklyFlowPlaylistRetryWorker(),
-    )
-    .catch(() => {});
-  return jobId;
-}
-
-export function getPlaylistReserveBuildQueue() {
-  if (!playlistReserveBuildQueue) {
-    playlistReserveBuildQueue = getHonkerDb().queue("playlist-reserve-build", {
-      visibilityTimeoutS: 1800,
-      maxAttempts: 4,
-    });
-  }
-  return playlistReserveBuildQueue;
-}
-
-export function enqueuePlaylistReserveBuildJob(payload, options = {}) {
-  const queue = getPlaylistReserveBuildQueue();
-  const runAt =
-    options.runAt != null
-      ? Math.floor(Number(options.runAt) / 1000)
-      : options.delaySeconds != null
-        ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
-        : null;
-  const jobId = queue.enqueue(payload, {
-    priority: Number(options.priority || 0),
-    runAt,
-  });
-  import("./weeklyFlowPlaylistReserveBuildWorker.js")
-    .then(({ startWeeklyFlowPlaylistReserveBuildWorker }) =>
-      startWeeklyFlowPlaylistReserveBuildWorker(),
     )
     .catch(() => {});
   return jobId;
@@ -563,12 +498,10 @@ export function closeHonkerDb() {
   openedHonkerDbPath = null;
   pipelineQueue = null;
   discoveryRefreshQueue = null;
-  discoveryPlaylistBuildQueue = null;
   discoveryRecommendationEnrichmentQueue = null;
   discoveryUserRefreshQueue = null;
   weeklyFlowOperationQueue = null;
   playlistRetryQueue = null;
-  playlistReserveBuildQueue = null;
   playlistMbidEnrichmentQueue = null;
   systemTaskQueue = null;
   libraryScanQueue = null;
@@ -715,11 +648,9 @@ export const HONKER_QUEUE_NAMES = [
   "weekly-flow-operation",
   "slskd-pipeline",
   "playlist-retry",
-  "playlist-reserve-build",
   "playlist-mbid-enrichment",
   "library-scan",
   "discovery-refresh",
-  "discovery-playlist-build",
   "discovery-recommendation-enrichment",
   "discovery-user-refresh",
   "image-prefetch",
@@ -744,8 +675,6 @@ export function getHonkerQueueByName(queueName) {
       return getPipelineQueue();
     case "discovery-refresh":
       return getDiscoveryRefreshQueue();
-    case "discovery-playlist-build":
-      return getDiscoveryPlaylistBuildQueue();
     case "discovery-recommendation-enrichment":
       return getDiscoveryRecommendationEnrichmentQueue();
     case "discovery-user-refresh":
@@ -754,8 +683,6 @@ export function getHonkerQueueByName(queueName) {
       return getWeeklyFlowOperationQueue();
     case "playlist-retry":
       return getPlaylistRetryQueue();
-    case "playlist-reserve-build":
-      return getPlaylistReserveBuildQueue();
     case "playlist-mbid-enrichment":
       return getPlaylistMbidEnrichmentQueue();
     case "system-task":

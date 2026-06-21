@@ -15,6 +15,12 @@ import {
   registerHonkerWorker,
   withJobHeartbeat,
 } from "./honkerWorkerRuntime.js";
+import {
+  HEAVY_WORK_TYPES,
+  isFlowHarvestOperation,
+  withHeavyWorkBudget,
+} from "./resourceBudget.js";
+import { withWorkerPerfSpan } from "./workerPerfMetrics.js";
 
 const WORKER_NAME = "weekly-flow-operation";
 
@@ -53,8 +59,20 @@ async function runLoop() {
       currentLabel = job.payload?.label || job.payload?.kind || null;
       syncWorkerState();
       try {
+        const runOperation = () =>
+          withWorkerPerfSpan(
+            "weekly-flow-operation",
+            () => processWeeklyFlowOperation(job.payload),
+            currentLabel,
+          );
         const result = await withJobHeartbeat(job, queue, () =>
-          processWeeklyFlowOperation(job.payload),
+          isFlowHarvestOperation(job.payload)
+            ? withHeavyWorkBudget(
+                HEAVY_WORK_TYPES.FLOW_HARVEST,
+                runOperation,
+                currentLabel,
+              )
+            : runOperation(),
         );
         job.ack();
         resolveWeeklyFlowOperationResult(job.id, result);

@@ -95,6 +95,8 @@ const getFallbackGenreFromSectionId = (id) =>
 const DISCOVER_NEARBY_MODE_KEY = "discoverNearbyMode";
 const DISCOVER_NEARBY_ZIP_KEY = "discoverNearbyZip";
 const DISCOVER_PREVIEW_ITEM_LIMIT = 12;
+const DISCOVER_GENRE_SECTION_LIMIT = 12;
+const DISCOVER_GENRE_SECTION_MIN_ARTISTS = 4;
 const getArtistId = (artist) => getArtistRecordId(artist);
 const getDiscoverLayoutStorageKey = (userId) =>
   userId ? `${DISCOVER_LAYOUT_KEY}:${userId}` : DISCOVER_LAYOUT_KEY;
@@ -971,6 +973,26 @@ function DiscoverPage() {
 
     if (!data?.topGenres || !data?.recommendations) return [];
 
+    const tagArtistCounts = new Map();
+    for (const artist of data.recommendations) {
+      const artistId = getArtistId(artist);
+      if (!artistId) continue;
+      const tags = [
+        ...(Array.isArray(artist.matchedTags) ? artist.matchedTags : []),
+        ...(Array.isArray(artist.tags) ? artist.tags : []),
+      ];
+      const seenTags = new Set();
+      for (const tag of tags) {
+        const normalized = String(tag || "").trim().toLowerCase();
+        if (!normalized || seenTags.has(normalized)) continue;
+        seenTags.add(normalized);
+        if (!tagArtistCounts.has(normalized)) {
+          tagArtistCounts.set(normalized, new Set());
+        }
+        tagArtistCounts.get(normalized).add(artistId);
+      }
+    }
+
     const sections = [];
     const usedArtistIds = new Set(
       (data.recommendations || [])
@@ -979,11 +1001,18 @@ function DiscoverPage() {
         .filter(Boolean),
     );
 
-    const sortedGenres = [...data.topGenres];
-    const candidatePool = [...(data.recommendations || [])].slice(8);
+    const sortedGenres = [...data.topGenres].sort((left, right) => {
+      const leftCount =
+        tagArtistCounts.get(String(left || "").trim().toLowerCase())?.size || 0;
+      const rightCount =
+        tagArtistCounts.get(String(right || "").trim().toLowerCase())?.size || 0;
+      if (rightCount !== leftCount) return rightCount - leftCount;
+      return String(left || "").localeCompare(String(right || ""));
+    });
+    const candidatePool = [...(data.recommendations || [])];
 
     for (const genre of sortedGenres) {
-      if (sections.length >= 4) break;
+      if (sections.length >= DISCOVER_GENRE_SECTION_LIMIT) break;
 
       const genreArtists = candidatePool.filter((artist) => {
         const artistId = getArtistId(artist);
@@ -995,7 +1024,7 @@ function DiscoverPage() {
         );
       });
 
-      if (genreArtists.length >= 4) {
+      if (genreArtists.length >= DISCOVER_GENRE_SECTION_MIN_ARTISTS) {
         const selectedArtists = genreArtists
           .sort((left, right) => {
             const leftScore = Number(left.scoreTotal || left.score || 0);

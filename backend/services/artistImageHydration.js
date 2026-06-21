@@ -1,10 +1,36 @@
 import { dbOps } from "../config/db-helpers.js";
 import { enqueueImagePrefetchJob } from "./honkerDb.js";
 import { getArtistImage } from "./imageService.js";
-import { buildImageProxyUrl } from "./imageProxyService.js";
+import { buildImageProxyUrl, isImageProxyLocalUrlReady } from "./imageProxyService.js";
 
-const DEFAULT_BATCH_SIZE = 6;
-const DEFAULT_DELAY_MS = 25;
+const DEFAULT_BATCH_SIZE = 12;
+const DEFAULT_DELAY_MS = 15;
+
+const LASTFM_IMAGE_PATTERN = /lastfm|audioscrobbler/i;
+
+export const shouldReplaceExistingImage = (imageUrl) => {
+  const image = String(imageUrl || "").trim();
+  if (!image) return false;
+  if (LASTFM_IMAGE_PATTERN.test(image)) return true;
+  if (image.includes("/api/image-proxy/") && image.includes("?src=")) {
+    return true;
+  }
+  if (image.includes("/api/image-proxy/") && !isImageProxyLocalUrlReady(image)) {
+    return true;
+  }
+  return false;
+};
+
+const clearReplaceableImages = (artist) => {
+  if (!artist || typeof artist !== "object") return artist;
+  const existing = artist.imageUrl || artist.image;
+  if (!shouldReplaceExistingImage(existing)) return artist;
+  return {
+    ...artist,
+    image: null,
+    imageUrl: null,
+  };
+};
 
 const getArtistId = (artist) =>
   artist?.id || artist?.mbid || artist?.foreignArtistId || null;
@@ -34,14 +60,21 @@ const applyCachedImages = (artists = []) => {
   const cachedImages = dbOps.getImages(ids);
   return list.map((artist) => {
     if (!artist || typeof artist !== "object") return artist;
-    if (artist.image || artist.imageUrl) return withProxiedImageFields(artist);
+    const cleared = clearReplaceableImages(artist);
+    if (cleared.image || cleared.imageUrl) {
+      return withProxiedImageFields(cleared);
+    }
 
-    const cachedImage = cachedImages[getArtistId(artist)]?.imageUrl;
-    if (!cachedImage || cachedImage === "NOT_FOUND") {
-      return artist;
+    const cachedImage = cachedImages[getArtistId(cleared)]?.imageUrl;
+    if (
+      !cachedImage ||
+      cachedImage === "NOT_FOUND" ||
+      shouldReplaceExistingImage(cachedImage)
+    ) {
+      return cleared;
     }
     return withProxiedImageFields({
-      ...artist,
+      ...cleared,
       image: cachedImage,
       imageUrl: cachedImage,
     });
@@ -57,6 +90,8 @@ export const hydrateArtistImages = async (
 
   for (const artist of withCached) {
     if (!artist || typeof artist !== "object") continue;
+    const cleared = clearReplaceableImages(artist);
+    Object.assign(artist, cleared);
     if (artist.image || artist.imageUrl) continue;
     const id = getArtistId(artist);
     if (!id) continue;
@@ -72,7 +107,9 @@ export const hydrateArtistImages = async (
           const cached = dbOps.getImage(id);
           const cover = await getArtistImage(id, {
             artistName: artist.name || artist.sortName || null,
-            forceRefresh: cached?.imageUrl === "NOT_FOUND",
+            forceRefresh:
+              cached?.imageUrl === "NOT_FOUND" ||
+              shouldReplaceExistingImage(cached?.imageUrl),
           });
           if (!cover?.url) return;
           const proxiedImage = buildImageProxyUrl(cover.url) || cover.url;

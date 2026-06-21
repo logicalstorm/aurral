@@ -19,6 +19,11 @@ import {
   registerHonkerWorker,
   withJobHeartbeat,
 } from "./honkerWorkerRuntime.js";
+import {
+  HEAVY_WORK_TYPES,
+  withHeavyWorkBudget,
+} from "./resourceBudget.js";
+import { withWorkerPerfSpan } from "./workerPerfMetrics.js";
 
 const WORKER_NAME = "discovery-refresh";
 
@@ -68,7 +73,18 @@ async function runLoop() {
       if (!running || stopRequested) break;
       markDiscoveryRefreshDequeued();
       try {
-        await withJobHeartbeat(job, queue, () => runDiscoveryRefresh(job.payload));
+        await withJobHeartbeat(job, queue, () =>
+          withHeavyWorkBudget(
+            HEAVY_WORK_TYPES.DISCOVERY_REFRESH,
+            () =>
+              withWorkerPerfSpan(
+                "discovery-refresh",
+                () => runDiscoveryRefresh(job.payload),
+                job.payload?.reason || "scheduled",
+              ),
+            job.payload?.reason || "discovery-refresh",
+          ),
+        );
         job.ack();
         scheduleNextDiscoveryRefresh();
       } catch (error) {

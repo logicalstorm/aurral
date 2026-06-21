@@ -10,7 +10,7 @@ const SHARP_CONCURRENCY = clampInteger(
   process.env.AURRAL_SHARP_CONCURRENCY,
   1,
   8,
-  1,
+  3,
 );
 const SHARP_CACHE_MEMORY_MB = clampInteger(
   process.env.AURRAL_SHARP_CACHE_MEMORY_MB,

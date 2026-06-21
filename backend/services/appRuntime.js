@@ -11,12 +11,10 @@ import { startImagePrefetchWorker } from "./imagePrefetchWorker.js";
 import { startNotificationOutboxWorker } from "./notificationOutboxWorker.js";
 import { startSlskdOrchestratorWorker } from "./slskdOrchestratorWorker.js";
 import { startDiscoveryRefreshWorker } from "./discoveryRefreshWorker.js";
-import { startDiscoveryPlaylistBuildWorker } from "./discoveryPlaylistBuildWorker.js";
 import { startDiscoveryRecommendationEnrichmentWorker } from "./discoveryRecommendationEnrichmentWorker.js";
 import { startDiscoveryUserRefreshWorker } from "./discoveryUserRefreshWorker.js";
 import { startWeeklyFlowOperationWorker } from "./weeklyFlowOperationWorker.js";
 import { startWeeklyFlowPlaylistRetryWorker } from "./weeklyFlowPlaylistRetryWorker.js";
-import { startWeeklyFlowPlaylistReserveBuildWorker } from "./weeklyFlowPlaylistReserveBuildWorker.js";
 import { startPlaylistMbidEnrichmentWorker } from "./playlistMbidEnrichmentWorker.js";
 import { registerHonkerShutdownHandler } from "./honkerWorkerRuntime.js";
 
@@ -37,7 +35,6 @@ const QUEUE_WORKERS = [
   { queue: "_outbox:notifications", start: startNotificationOutboxWorker },
   { queue: "slskd-pipeline", start: startSlskdOrchestratorWorker },
   { queue: "discovery-refresh", start: startDiscoveryRefreshWorker },
-  { queue: "discovery-playlist-build", start: startDiscoveryPlaylistBuildWorker },
   {
     queue: "discovery-recommendation-enrichment",
     start: startDiscoveryRecommendationEnrichmentWorker,
@@ -45,10 +42,6 @@ const QUEUE_WORKERS = [
   { queue: "discovery-user-refresh", start: startDiscoveryUserRefreshWorker },
   { queue: "weekly-flow-operation", start: startWeeklyFlowOperationWorker },
   { queue: "playlist-retry", start: startWeeklyFlowPlaylistRetryWorker },
-  {
-    queue: "playlist-reserve-build",
-    start: startWeeklyFlowPlaylistReserveBuildWorker,
-  },
   { queue: "playlist-mbid-enrichment", start: startPlaylistMbidEnrichmentWorker },
 ];
 
@@ -124,6 +117,9 @@ function stopWorkerSupervisor() {
 
 registerHonkerShutdownHandler(() => {
   stopWorkerSupervisor();
+  import("./rustWorkerRunner.js")
+    .then(({ shutdownRustWorkerDaemon }) => shutdownRustWorkerDaemon())
+    .catch(() => {});
 });
 
 export function startBackgroundWorkers({ logger = console } = {}) {
@@ -162,6 +158,16 @@ export function startBackgroundWorkers({ logger = console } = {}) {
     });
   enqueueHonkerStartupTasks();
   startWorkerSupervisor();
+  import("./rustWorkerRunner.js")
+    .then(({ getRustWorkerStatus }) => {
+      const status = getRustWorkerStatus();
+      if (status.required && !status.available) {
+        logger.warn?.(
+          "[AppRuntime] aurral-worker is unavailable; discovery enrichment will fail until the binary is built (cd backend/native/aurral-worker && cargo build --release)",
+        );
+      }
+    })
+    .catch(() => {});
   return true;
 }
 

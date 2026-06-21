@@ -1,3 +1,9 @@
+FROM rust:1-bookworm AS rust-builder
+
+WORKDIR /build
+COPY backend/native/aurral-worker/ ./
+RUN cargo build --release
+
 FROM node:26-bookworm-slim AS builder
 
 WORKDIR /app
@@ -46,9 +52,10 @@ RUN npm ci --workspace backend --omit=dev --include=optional --include-workspace
 COPY backend/ ./backend/
 COPY lib/ ./lib/
 COPY --from=builder /app/frontend/dist ./frontend/dist
+COPY --from=rust-builder /build/target/release/aurral-worker /usr/local/bin/aurral-worker
 COPY backend/docker-entrypoint.sh /usr/local/bin/
 
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh && \
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/aurral-worker && \
     chown -R nodejs:nodejs /app
 
 EXPOSE 3001

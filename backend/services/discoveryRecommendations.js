@@ -1,3 +1,6 @@
+import { shouldReplaceExistingImage } from "./artistImageHydration.js";
+import { GENRE_KEYWORDS } from "../config/constants.js";
+
 const MBID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -878,6 +881,29 @@ const getRecommendationPoolKeys = (recommendation) => {
   return name ? [`name:${name}`] : [];
 };
 
+export const syncRecommendationImages = (target = [], sources = []) => {
+  const imageByKey = new Map();
+  for (const recommendation of Array.isArray(sources) ? sources : []) {
+    const image = recommendation?.image || recommendation?.imageUrl;
+    if (!image) continue;
+    if (shouldReplaceExistingImage(image)) continue;
+    for (const key of getRecommendationPoolKeys(recommendation)) {
+      imageByKey.set(key, image);
+    }
+  }
+  for (const recommendation of Array.isArray(target) ? target : []) {
+    if (recommendation?.image || recommendation?.imageUrl) continue;
+    for (const key of getRecommendationPoolKeys(recommendation)) {
+      const image = imageByKey.get(key);
+      if (!image) continue;
+      recommendation.image = image;
+      recommendation.imageUrl = image;
+      break;
+    }
+  }
+  return target;
+};
+
 const buildRecommendationPoolMetadataMap = (recommendations = []) => {
   const metadata = new Map();
   for (const recommendation of Array.isArray(recommendations)
@@ -1202,6 +1228,72 @@ export const mergeResolvedRecommendations = (
       ? entry.supportingSeeds
           .sort((left, right) => Number(right.weight || 0) - Number(left.weight || 0))
           .slice(0, 4)
-      : [],
+          : [],
   }));
 };
+
+const collectRecommendationTags = (recommendation) => {
+  const seen = new Set();
+  const tags = [];
+  for (const tag of [
+    ...(Array.isArray(recommendation?.matchedTags)
+      ? recommendation.matchedTags
+      : []),
+    ...(Array.isArray(recommendation?.tags) ? recommendation.tags : []),
+  ]) {
+    const normalized = normalizeText(tag);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    tags.push(normalized);
+  }
+  return tags;
+};
+
+const recommendationArtistKey = (recommendation) =>
+  normalizeMbid(recommendation?.id || recommendation?.mbid) ||
+  normalizeText(recommendation?.name || recommendation?.artistName);
+
+const isGenreLikeTag = (tag) => {
+  const normalized = normalizeText(tag);
+  if (!normalized) return false;
+  return GENRE_KEYWORDS.some((keyword) => normalized.includes(keyword));
+};
+
+const deriveTagArtistCounts = (recommendations = []) => {
+  const counts = new Map();
+  for (const recommendation of recommendations) {
+    const artistKey = recommendationArtistKey(recommendation);
+    if (!artistKey) continue;
+    for (const tag of collectRecommendationTags(recommendation)) {
+      if (!counts.has(tag)) counts.set(tag, new Set());
+      counts.get(tag).add(artistKey);
+    }
+  }
+  return counts;
+};
+
+export const deriveDiscoveryTagsFromPool = (
+  recommendations = [],
+  { limit = 30, minArtists = 2 } = {},
+) =>
+  sortByValueThenName(
+    [...deriveTagArtistCounts(recommendations).entries()].map(
+      ([tag, artists]) => [tag, artists.size],
+    ),
+  )
+    .filter(([, count]) => count >= minArtists)
+    .slice(0, limit)
+    .map(([tag]) => tag);
+
+export const deriveDiscoveryGenresFromPool = (
+  recommendations = [],
+  { limit = 32, minArtists = 4 } = {},
+) =>
+  sortByValueThenName(
+    [...deriveTagArtistCounts(recommendations).entries()]
+      .filter(([tag]) => isGenreLikeTag(tag))
+      .map(([tag, artists]) => [tag, artists.size]),
+  )
+    .filter(([, count]) => count >= minArtists)
+    .slice(0, limit)
+    .map(([tag]) => tag);

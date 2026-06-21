@@ -197,6 +197,18 @@ const getCachedEntryFromKey = (cacheKey) => {
   };
 };
 
+export const isImageProxyLocalUrlReady = (value) => {
+  const cacheKey = getCacheKeyFromLocalUrl(value);
+  if (!cacheKey) return true;
+  const cached = getCachedEntryFromKey(cacheKey);
+  if (!cached?.imagePath) return false;
+  try {
+    return fs.existsSync(cached.imagePath);
+  } catch {
+    return false;
+  }
+};
+
 const getCachedEntry = (sourceUrl) => {
   const normalizedSourceUrl = normalizeKnownImageUrl(sourceUrl);
   if (!normalizedSourceUrl) return null;

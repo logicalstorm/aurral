@@ -51,7 +51,6 @@ export class WeeklyFlowWorker {
     this.playlistRunDiagnostics = new Map();
     this.playlistFailureMemory = new Map();
     this.playlistFinalizing = new Set();
-    this.reserveBuildsInFlight = new Set();
     this.downloadMetrics = {
       completedTracks: 0,
       completedTrackAttempts: 0,
@@ -382,7 +381,6 @@ export class WeeklyFlowWorker {
     this.playlistRunDiagnostics.delete(key);
     this.playlistFailureMemory.delete(key);
     this.playlistFinalizing.delete(key);
-    this.reserveBuildsInFlight.delete(key);
   }
 
   _normalizeReserveTracks(tracks = []) {
@@ -428,10 +426,6 @@ export class WeeklyFlowWorker {
     if (!Number.isFinite(ownerUserId)) return null;
     const owner = userOps.getUserById(ownerUserId);
     return owner ? getListenHistoryProfile(owner) : null;
-  }
-
-  async runQueuedReserveBuild() {
-    return { skipped: true };
   }
 
   async seedFlowRunWithTracks(playlistType, flow, tracks, options = {}) {
@@ -493,7 +487,6 @@ export class WeeklyFlowWorker {
   _maybeStopWhenIdle() {
     if (!this.running) return;
     if (this.activeJobs.size > 0) return;
-    if (this.reserveBuildsInFlight.size > 0) return;
     if (downloadTracker.getNextPending()) return;
     this.stop();
   }
@@ -815,7 +808,6 @@ export class WeeklyFlowWorker {
     this.playlistRunDiagnostics.clear();
     this.playlistFailureMemory.clear();
     this.playlistFinalizing.clear();
-    this.reserveBuildsInFlight.clear();
     console.log("[WeeklyFlowWorker] Worker stopped");
     return true;
   }
@@ -1022,11 +1014,9 @@ export class WeeklyFlowWorker {
       if (activePlaylistIds.has(playlistId)) continue;
       this.clearIncompleteRetry(playlistId);
     }
-    for (const set of [this.playlistFinalizing, this.reserveBuildsInFlight]) {
-      for (const playlistId of [...set]) {
-        if (activePlaylistIds.has(playlistId)) continue;
-        set.delete(playlistId);
-      }
+    for (const playlistId of [...this.playlistFinalizing]) {
+      if (activePlaylistIds.has(playlistId)) continue;
+      this.playlistFinalizing.delete(playlistId);
     }
   }
 

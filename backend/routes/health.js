@@ -32,6 +32,7 @@ import { noCache } from "../middleware/cache.js";
 import { requireAuth } from "../middleware/requirePermission.js";
 import { getImageProxyCacheSizeBytes } from "../services/imageProxyService.js";
 import { getDownloadSourceStatus } from "../services/downloadSourceService.js";
+import { getRustWorkerStatus } from "../services/rustWorkerRunner.js";
 import {
   DISCOVERY_PROVIDER_LASTFM,
   DISCOVERY_PROVIDER_LISTENBRAINZ_FALLBACK,
@@ -246,6 +247,7 @@ function buildBootstrapPayload(req) {
     downloadSources,
     metadataProviders: getMetadataProviderHealthSnapshot(),
     localNetworkBypass,
+    rustWorker: getRustWorkerStatus(),
   };
 
   if (currentUser) {
