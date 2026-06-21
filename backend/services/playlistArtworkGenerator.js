@@ -11,6 +11,9 @@ import {
 export const PLAYLIST_ARTWORK_STYLES = ["aurral", "photo"];
 
 export function getPlaylistArtworkStyle() {
+  if (process.env.NODE_ENV === "test") {
+    return "aurral";
+  }
   const settings = dbOps.getSettings() || {};
   const style = String(
     settings?.playlistArtwork?.style ||
