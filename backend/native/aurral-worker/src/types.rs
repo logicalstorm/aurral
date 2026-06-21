@@ -195,6 +195,8 @@ pub struct DiscoveryPrepJob {
     pub release_radar_limit: Option<usize>,
     #[serde(default)]
     pub include_future: bool,
+    #[serde(default)]
+    pub include_release_radar: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -42,14 +42,18 @@ pub async fn run(job: DiscoveryPrepJob) -> Result<DiscoveryPrepResult, String> {
         &lidarr_config,
         crate::util::network_concurrency(),
     )?);
-    let (library_mix_artists, release_radar_releases) = tokio::join!(
-        library_mix::build_library_mix_context(client.clone(), job.artists),
+    let library_mix_artists =
+        library_mix::build_library_mix_context(client.clone(), job.artists).await;
+    let release_radar_releases = if job.include_release_radar {
         release_radar::collect_recent_missing_releases(
             client.clone(),
             release_limit,
-            job.include_future
+            job.include_future,
         )
-    );
+        .await
+    } else {
+        Vec::new()
+    };
     let lidarr_calls = client.call_count();
     let duration_ms = started.elapsed().as_millis() as u64;
     Ok(DiscoveryPrepResult {

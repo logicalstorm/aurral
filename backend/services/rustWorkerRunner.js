@@ -404,7 +404,7 @@ export async function runRustDiscoveryPrep(payload) {
 }
 
 export async function runRustFlowPlan(payload) {
-  return runRustWorkerJob("flow-plan", payload);
+  return runRustWorkerJob("flow-plan", payload, { useDaemon: false });
 }
 
 export async function runRustPlaylistPlan(payload) {

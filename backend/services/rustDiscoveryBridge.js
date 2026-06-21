@@ -166,6 +166,7 @@ export async function buildRustDiscoveryPrepPayload({
   libraryArtists = [],
   releaseRadarLimit = 30,
   includeFuture = false,
+  includeReleaseRadar = true,
 } = {}) {
   const { lidarrClient } = await import("./lidarrClient.js");
   const configured = lidarrClient.isConfigured();
@@ -187,6 +188,7 @@ export async function buildRustDiscoveryPrepPayload({
         ? Math.max(1, Math.round(Number(releaseRadarLimit)))
         : 30,
     includeFuture: includeFuture === true,
+    includeReleaseRadar: includeReleaseRadar === true,
   };
 }
 
@@ -194,6 +196,7 @@ export async function resolveDiscoveryPrep({
   libraryArtists = [],
   releaseRadarLimit = 30,
   includeFuture = false,
+  includeReleaseRadar = true,
   libraryMixArtists = null,
   releaseRadarReleases = null,
 } = {}) {
@@ -214,6 +217,7 @@ export async function resolveDiscoveryPrep({
         libraryArtists,
         releaseRadarLimit,
         includeFuture,
+        includeReleaseRadar,
       });
       const response = await runRustDiscoveryPrep(payload);
       const result = response?.result || {};
@@ -421,6 +425,7 @@ export async function buildRustFlowPlanPayload(flow = {}, options = {}) {
     libraryArtists: allLibraryArtists,
     releaseRadarLimit: targetSize,
     includeFuture: false,
+    includeReleaseRadar: flow?.discoverPresetId === "release-radar",
   });
   const libraryMixArtists = prep.libraryMixArtists;
   const releaseRadarReleases =
