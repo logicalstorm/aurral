@@ -134,16 +134,21 @@ export async function startServerProcess({
     Number.isInteger(port) && port > 0
       ? port
       : 4100 + Math.floor(Math.random() * 1000);
-  const child = spawn("npx", ["tsx", "backend/server.ts"], {
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      PORT: String(chosenPort),
-      AURRAL_TEST_SERVER: "1",
-      ...extraEnv,
+  const child = spawn(
+    "npx",
+    ["tsx", "backend/server.ts"],
+    {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        PORT: String(chosenPort),
+        AURRAL_TEST_SERVER: "1",
+        ...extraEnv,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: true,
     },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  );
   let logs = "";
   child.stdout.on("data", (chunk) => {
     logs += chunk.toString();
@@ -154,7 +159,7 @@ export async function startServerProcess({
   try {
     await waitForServer(chosenPort, child);
   } catch (error) {
-    child.kill("SIGTERM");
+    try { process.kill(-child.pid, "SIGTERM"); } catch { child.kill("SIGTERM"); }
     throw new Error(`${error.message}\n${logs}`.trim());
   }
   return {
@@ -163,10 +168,18 @@ export async function startServerProcess({
     logs: () => logs,
     async stop() {
       if (child.exitCode != null) return;
-      child.kill("SIGTERM");
+      try {
+        process.kill(-child.pid, "SIGTERM");
+      } catch {
+        child.kill("SIGTERM");
+      }
       await new Promise((resolve) => {
         const timeout = setTimeout(() => {
-          child.kill("SIGKILL");
+          try {
+            process.kill(-child.pid, "SIGKILL");
+          } catch {
+            child.kill("SIGKILL");
+          }
         }, 5000);
         child.once("exit", () => {
           clearTimeout(timeout);
