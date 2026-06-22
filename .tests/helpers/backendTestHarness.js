@@ -238,13 +238,8 @@ export async function prepareIntegrationTestServer(
   { admin = false, onboardingComplete = true, settings = {} } = {},
 ) {
   applyIsolatedBackendEnv(paths);
-  try {
-    const honkerDb = await importFromRepo("backend/services/honkerDb.ts");
-    honkerDb.closeHonkerDb();
-  } catch {}
-
-  const bootstrapServer = await startServerProcess();
-  await bootstrapServer.stop();
+  closeHonkerDbSync();
+  const sqlite = await importFromRepo("backend/config/db-sqlite.ts");
   await seedIntegrationDatabase(paths, {
     admin,
     onboardingComplete,
